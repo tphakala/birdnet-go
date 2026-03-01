@@ -33,6 +33,7 @@
     settingsActions,
     privacyFilterSettings,
     dogBarkFilterSettings,
+    daylightFilterSettings,
     realtimeSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -66,12 +67,23 @@
         species: [],
       };
 
+      const daylightBase = $daylightFilterSettings || {
+        enabled: false,
+        debug: false,
+        offset: 0,
+        species: ['Strigiformes'],
+      };
+
       // Ensure species is always an array even if dogBarkFilterSettings exists but has undefined/null species
       return {
         privacy: privacyBase,
         dogBark: {
           ...dogBarkBase,
           species: dogBarkBase.species ?? [], // Always ensures species is an array
+        },
+        daylight: {
+          ...daylightBase,
+          species: daylightBase.species ?? [],
         },
       };
     })()
@@ -94,6 +106,13 @@
     )
   );
 
+  let daylightFilterHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.daylightFilter,
+      store.formData.realtime?.daylightFilter
+    )
+  );
+
   // Tab state
   let activeTab = $state('filters');
 
@@ -104,7 +123,7 @@
       label: t('settings.filters.title'),
       icon: Filter,
       content: filtersTabContent,
-      hasChanges: privacyFilterHasChanges || dogBarkFilterHasChanges,
+      hasChanges: privacyFilterHasChanges || dogBarkFilterHasChanges || daylightFilterHasChanges,
     },
   ]);
 
@@ -122,10 +141,15 @@
     data: [],
   });
 
-  // Species management state
+  // Species management state (Dog Bark)
   let newSpecies = $state('');
   let editIndex = $state<number | null>(null);
   let editSpecies = $state('');
+
+  // Species management state (Daylight)
+  let daylightNewSpecies = $state('');
+  let daylightEditIndex = $state<number | null>(null);
+  let daylightEditSpecies = $state('');
 
   // PERFORMANCE OPTIMIZATION: Load species list with proper state management
   $effect(() => {
@@ -258,6 +282,83 @@
     } else if (event.key === 'Escape') {
       event.preventDefault();
       cancelEdit();
+    }
+  }
+
+  // Daylight filter update handlers
+  function updateDaylightEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      daylightFilter: { ...settings.daylight, enabled },
+    });
+  }
+
+  function updateDaylightOffset(offset: number) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      daylightFilter: { ...settings.daylight, offset },
+    });
+  }
+
+  // Daylight species management functions
+  function handleDaylightSpeciesInput(value: string) {
+    daylightNewSpecies = value;
+  }
+
+  function addDaylightSpecies(species: string) {
+    if (!species.trim()) return;
+
+    const trimmedSpecies = species.trim();
+    if (settings.daylight.species.includes(trimmedSpecies)) return;
+
+    const updatedSpecies = [...settings.daylight.species, trimmedSpecies];
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      daylightFilter: { ...settings.daylight, species: updatedSpecies },
+    });
+  }
+
+  function removeDaylightSpecies(index: number) {
+    const updatedSpecies = settings.daylight.species.filter((_: string, i: number) => i !== index);
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      daylightFilter: { ...settings.daylight, species: updatedSpecies },
+    });
+  }
+
+  function startDaylightEdit(index: number) {
+    daylightEditIndex = index;
+    daylightEditSpecies = safeArrayAccess(settings.daylight.species, index) || '';
+  }
+
+  function saveDaylightEdit() {
+    if (daylightEditIndex === null || !daylightEditSpecies.trim()) return;
+
+    const updatedSpecies = [...settings.daylight.species];
+    if (daylightEditIndex >= 0 && daylightEditIndex < updatedSpecies.length) {
+      updatedSpecies.splice(daylightEditIndex, 1, daylightEditSpecies.trim());
+    }
+
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      daylightFilter: { ...settings.daylight, species: updatedSpecies },
+    });
+
+    cancelDaylightEdit();
+  }
+
+  function cancelDaylightEdit() {
+    daylightEditIndex = null;
+    daylightEditSpecies = '';
+  }
+
+  function handleDaylightEditKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      saveDaylightEdit();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      cancelDaylightEdit();
     }
   }
 </script>
@@ -449,6 +550,145 @@
 
               <!-- Unsaved Changes Indicator -->
               {#if dogBarkFilterHasChanges}
+                <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
+                  <Info class="size-4" />
+                  <span>{t('settings.actions.unsavedChanges')}</span>
+                </div>
+              {/if}
+            </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+
+    <!-- Daylight Filter Section -->
+    <SettingsSection
+      title={t('settings.filters.daylightFilter.title')}
+      description={t('settings.filters.daylightFilter.description')}
+      defaultOpen={true}
+      hasChanges={daylightFilterHasChanges}
+    >
+      <div class="space-y-4">
+        <!-- Enable Daylight Filter -->
+        <Checkbox
+          checked={settings.daylight.enabled}
+          label={t('settings.filters.daylightFilter.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={enabled => updateDaylightEnabled(enabled)}
+        />
+
+        <!-- Fieldset for accessible disabled state - all inputs greyed out when feature disabled -->
+        <fieldset
+          disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="daylight-filter-status"
+        >
+          <span id="daylight-filter-status" class="sr-only">
+            {settings.daylight.enabled
+              ? t('settings.filters.daylightFilter.enable')
+              : t('settings.filters.daylightFilter.disabled')}
+          </span>
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!settings.daylight.enabled}
+          >
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+              <!-- Daylight Window Offset -->
+              <NumberField
+                label={t('settings.filters.daylightFilter.offsetLabel')}
+                value={settings.daylight.offset}
+                onUpdate={updateDaylightOffset}
+                min={-12}
+                max={12}
+                step={1}
+                disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
+                helpText={t('settings.filters.daylightFilter.offsetHelp')}
+              />
+            </div>
+
+            <!-- Nocturnal Species List -->
+            <div class="mt-6">
+              <div class="flex justify-start mb-1">
+                <span class="text-sm text-[var(--color-base-content)]"
+                  >{t('settings.filters.daylightFilter.speciesListLabel')}</span
+                >
+              </div>
+
+              <!-- Species List -->
+              {#if settings.daylight.species.length > 0}
+                <div class="space-y-2 mb-4">
+                  {#each settings.daylight.species as species, index (species)}
+                    <div class="flex items-center gap-2 p-3 bg-[var(--color-base-200)] rounded-lg">
+                      {#if daylightEditIndex === index}
+                        <input
+                          type="text"
+                          bind:value={daylightEditSpecies}
+                          class="flex-1 h-8 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
+                          onkeydown={handleDaylightEditKeydown}
+                          placeholder={t('settings.filters.speciesNamePlaceholder')}
+                        />
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-success)] text-[var(--color-success-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-success)] focus-visible:ring-offset-2 transition-colors"
+                          onclick={saveDaylightEdit}
+                          aria-label={t('common.aria.saveChanges')}
+                        >
+                          <Check class="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
+                          onclick={cancelDaylightEdit}
+                          aria-label={t('common.aria.cancelEdit')}
+                        >
+                          <X class="size-4" />
+                        </button>
+                      {:else}
+                        <span class="flex-1 text-sm">{species}</span>
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          onclick={() => startDaylightEdit(index)}
+                          disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
+                          aria-label={t('common.aria.editSpecies')}
+                        >
+                          <SquarePen class="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-error)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          onclick={() => removeDaylightSpecies(index)}
+                          disabled={!settings.daylight.enabled || store.isLoading || store.isSaving}
+                          aria-label={t('common.aria.removeSpecies')}
+                        >
+                          <Trash2 class="size-4" />
+                        </button>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+
+              <!-- Add New Species -->
+              <SpeciesInput
+                bind:value={daylightNewSpecies}
+                label={t('settings.filters.daylightFilter.addSpeciesLabel')}
+                placeholder={t('settings.filters.typeSpeciesName')}
+                helpText={t('settings.filters.daylightFilter.addSpeciesHelp')}
+                disabled={!settings.daylight.enabled ||
+                  store.isLoading ||
+                  store.isSaving ||
+                  speciesListState.loading}
+                predictions={speciesListState.data}
+                size="sm"
+                buttonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+                buttonIcon={true}
+                onInput={handleDaylightSpeciesInput}
+                onAdd={addDaylightSpecies}
+              />
+
+              <!-- Unsaved Changes Indicator -->
+              {#if daylightFilterHasChanges}
                 <div class="mt-2 text-xs text-[var(--color-info)] flex items-center gap-1">
                   <Info class="size-4" />
                   <span>{t('settings.actions.unsavedChanges')}</span>

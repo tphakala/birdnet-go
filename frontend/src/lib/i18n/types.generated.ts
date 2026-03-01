@@ -1602,6 +1602,15 @@ export type TranslationKey =
   | 'settings.filters.speciesNamePlaceholder'
   | 'settings.filters.typeSpeciesName'
   | 'settings.filters.dogBarkSpeciesList'
+  | 'settings.filters.daylightFilter.title'
+  | 'settings.filters.daylightFilter.description'
+  | 'settings.filters.daylightFilter.enable'
+  | 'settings.filters.daylightFilter.disabled'
+  | 'settings.filters.daylightFilter.offsetLabel'
+  | 'settings.filters.daylightFilter.offsetHelp'
+  | 'settings.filters.daylightFilter.speciesListLabel'
+  | 'settings.filters.daylightFilter.addSpeciesLabel'
+  | 'settings.filters.daylightFilter.addSpeciesHelp'
   | 'settings.filters.errors.speciesLoadFailed'
   | 'settings.integration.birdweather.title'
   | 'settings.integration.birdweather.description'
@@ -1750,6 +1759,23 @@ export type TranslationKey =
   | 'settings.audio.audioCapture.availableDevices'
   | 'settings.audio.audioCapture.active'
   | 'settings.audio.audioCapture.streamsConfigured' // params: count
+  | 'settings.audio.quietHours.title'
+  | 'settings.audio.quietHours.sectionTitle'
+  | 'settings.audio.quietHours.sectionDescription'
+  | 'settings.audio.quietHours.modeLabel'
+  | 'settings.audio.quietHours.modeFixed'
+  | 'settings.audio.quietHours.modeSolar'
+  | 'settings.audio.quietHours.startTime'
+  | 'settings.audio.quietHours.endTime'
+  | 'settings.audio.quietHours.startEvent'
+  | 'settings.audio.quietHours.endEvent'
+  | 'settings.audio.quietHours.offsetMinutes'
+  | 'settings.audio.quietHours.sunrise'
+  | 'settings.audio.quietHours.sunset'
+  | 'settings.audio.quietHours.fixedHint'
+  | 'settings.audio.quietHours.solarHint'
+  | 'settings.audio.quietHours.badge'
+  | 'settings.audio.quietHours.enabledBadge'
   | 'settings.audio.rtspStreams.title'
   | 'settings.audio.rtspStreams.description'
   | 'settings.audio.rtspStreams.noStreamsConfigured'
@@ -1775,6 +1801,7 @@ export type TranslationKey =
   | 'settings.audio.streams.status.connecting'
   | 'settings.audio.streams.status.error'
   | 'settings.audio.streams.status.idle'
+  | 'settings.audio.streams.status.suppressed'
   | 'settings.audio.streams.status.unknown'
   | 'settings.audio.streams.emptyState.title'
   | 'settings.audio.streams.emptyState.description'
@@ -2563,6 +2590,7 @@ export type TranslationKey =
   | 'detection.actions.back'
   | 'detection.actions.review'
   | 'detection.actions.download'
+  | 'quietHours.indicator.tooltip' // params: count
   | 'errors.auth.tooManyAttempts'
   | 'errors.auth.credentialsRequired'
   | 'errors.auth.invalidCredentials'
@@ -2873,6 +2901,7 @@ export type TranslationParams = {
   'components.datePicker.aria.dayUnavailable': { day: string | number };
   'components.datePicker.aria.todayButton': { today: string | number };
   'components.audioPlayer.errors.generationFailedStatus': { status: string | number };
+  'quietHours.indicator.tooltip': { count: string | number };
   'errors.detection.invalidDate': { paramName: string | number };
   'errors.backup.insufficientSpace': { needed: string | number; available: string | number };
 };

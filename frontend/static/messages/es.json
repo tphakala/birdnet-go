@@ -2248,6 +2248,17 @@
       "speciesNamePlaceholder": "Nombre de la especie",
       "typeSpeciesName": "Escribe el nombre de la especie...",
       "dogBarkSpeciesList": "Lista de especies de ladrido de perro",
+      "daylightFilter": {
+        "title": "Filtro de luz diurna",
+        "description": "Filtrar detecciones de especies nocturnas durante las horas de luz. Utiliza los límites del amanecer/atardecer civil de su ubicación configurada.",
+        "enable": "Activar filtro de luz diurna",
+        "disabled": "El filtro de luz diurna está desactivado",
+        "offsetLabel": "Desplazamiento de ventana de luz diurna (Horas)",
+        "offsetHelp": "Ajustar la ventana de luz diurna. Los valores positivos la reducen (más permisivo, ej. +1 = comienza 1h después del amanecer). Los valores negativos la amplían (más estricto, ej. -1 = comienza 1h antes del amanecer).",
+        "speciesListLabel": "Lista de especies nocturnas",
+        "addSpeciesLabel": "Agregar especie nocturna",
+        "addSpeciesHelp": "Buscar y agregar especies, géneros, familias u órdenes para filtrar durante el día. Predeterminado: Strigiformes (todos los búhos). Advertencia: una lista vacía filtra TODAS las especies durante el día."
+      },
       "errors": {
         "speciesLoadFailed": "Error al cargar la lista de especies. Por favor, inténtalo de nuevo."
       },

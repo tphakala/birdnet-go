@@ -2248,6 +2248,17 @@
       "speciesNamePlaceholder": "Soorten naam",
       "typeSpeciesName": "Typ soorten naam...",
       "dogBarkSpeciesList": "Hondengeblaf Soorten Lijst",
+      "daylightFilter": {
+        "title": "Daglichtfilter",
+        "description": "Filter detecties van nachtelijke soorten tijdens daglichturen. Gebruikt de burgerlijke schemering/dageraad grenzen van uw geconfigureerde locatie.",
+        "enable": "Daglichtfilter inschakelen",
+        "disabled": "Daglichtfilter is uitgeschakeld",
+        "offsetLabel": "Daglichtvenster Offset (Uren)",
+        "offsetHelp": "Pas het daglichtvenster aan. Positieve waarden verkleinen het (soepeler, bijv. +1 = begint 1u na dageraad). Negatieve waarden vergroten het (strenger, bijv. -1 = begint 1u voor dageraad).",
+        "speciesListLabel": "Nachtelijke Soortenlijst",
+        "addSpeciesLabel": "Nachtelijke Soort Toevoegen",
+        "addSpeciesHelp": "Zoek en voeg soorten, geslachten, families of ordes toe om te filteren bij daglicht. Standaard: Strigiformes (alle uilen). Waarschuwing: een lege lijst filtert ALLE soorten bij daglicht."
+      },
       "errors": {
         "speciesLoadFailed": "Laden van soorten lijst mislukt. Probeer het opnieuw."
       },

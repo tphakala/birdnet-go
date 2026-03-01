@@ -2285,6 +2285,17 @@
       "speciesNamePlaceholder": "Species name",
       "typeSpeciesName": "Type species name...",
       "dogBarkSpeciesList": "Dog Bark Species List",
+      "daylightFilter": {
+        "title": "Daylight Filter",
+        "description": "Filter out detections of nocturnal species during daylight hours. Uses civil dawn/dusk boundaries from your configured location.",
+        "enable": "Enable Daylight Filter",
+        "disabled": "Daylight filter is disabled",
+        "offsetLabel": "Daylight Window Offset (Hours)",
+        "offsetHelp": "Adjust the daylight window. Positive values shrink it (more lenient, e.g. +1 = starts 1h after dawn). Negative values expand it (stricter, e.g. -1 = starts 1h before dawn).",
+        "speciesListLabel": "Nocturnal Species List",
+        "addSpeciesLabel": "Add Nocturnal Species",
+        "addSpeciesHelp": "Search and add species, genera, families, or orders to filter during daylight. Default: Strigiformes (all owls). Warning: an empty list filters ALL species during daylight."
+      },
       "errors": {
         "speciesLoadFailed": "Failed to load species list. Please try again."
       }

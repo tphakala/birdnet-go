@@ -2052,6 +2052,17 @@
       "speciesNamePlaceholder": "Nome specie",
       "typeSpeciesName": "Digita nome specie...",
       "dogBarkSpeciesList": "Lista Specie Abbaio Cane",
+      "daylightFilter": {
+        "title": "Filtro luce diurna",
+        "description": "Filtra i rilevamenti di specie notturne durante le ore diurne. Utilizza i confini dell'alba/tramonto civile dalla posizione configurata.",
+        "enable": "Abilita filtro luce diurna",
+        "disabled": "Il filtro luce diurna è disabilitato",
+        "offsetLabel": "Offset finestra di luce diurna (Ore)",
+        "offsetHelp": "Regola la finestra di luce diurna. Valori positivi la riducono (più permissivo, es. +1 = inizia 1h dopo l'alba). Valori negativi la ampliano (più rigoroso, es. -1 = inizia 1h prima dell'alba).",
+        "speciesListLabel": "Lista specie notturne",
+        "addSpeciesLabel": "Aggiungi specie notturna",
+        "addSpeciesHelp": "Cerca e aggiungi specie, generi, famiglie o ordini da filtrare durante il giorno. Predefinito: Strigiformes (tutti i gufi). Avviso: una lista vuota filtra TUTTE le specie durante il giorno."
+      },
       "errors": {
         "speciesLoadFailed": "Impossibile caricare lista specie. Riprova."
       }

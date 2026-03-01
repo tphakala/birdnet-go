@@ -266,6 +266,13 @@ export interface DogBarkFilterSettings {
   species: string[];
 }
 
+export interface DaylightFilterSettings {
+  enabled: boolean;
+  debug: boolean;
+  offset: number;
+  species: string[];
+}
+
 export interface IntegrationSettings {
   birdweather: BirdWeatherSettings;
   mqtt: MQTTSettings;
@@ -449,6 +456,7 @@ export interface RealtimeSettings {
   birdweather?: BirdWeatherSettings;
   privacyFilter?: PrivacyFilterSettings;
   dogBarkFilter?: DogBarkFilterSettings;
+  daylightFilter?: DaylightFilterSettings;
   rtsp?: RTSPSettings;
   mqtt?: MQTTSettings;
   telemetry?: TelemetrySettings;
@@ -902,6 +910,11 @@ export const privacyFilterSettings = derived(
 export const dogBarkFilterSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.dogBarkFilter
+);
+
+export const daylightFilterSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.daylightFilter
 );
 
 export const birdweatherSettings = derived(

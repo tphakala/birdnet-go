@@ -2086,6 +2086,17 @@
       "speciesNamePlaceholder": "Názov druhu",
       "typeSpeciesName": "Zadajte názov druhu...",
       "dogBarkSpeciesList": "Zoznam druhov so štekaním",
+      "daylightFilter": {
+        "title": "Filter denného svetla",
+        "description": "Odfiltrovať detekcie nočných druhov počas denného svetla. Používa hranice občianskeho úsvitu/súmraku z vašej nakonfigurovanej polohy.",
+        "enable": "Povoliť filter denného svetla",
+        "disabled": "Filter denného svetla je vypnutý",
+        "offsetLabel": "Posun okna denného svetla (Hodiny)",
+        "offsetHelp": "Upraviť okno denného svetla. Kladné hodnoty ho zmenšujú (tolerantnejšie, napr. +1 = začína 1h po úsvite). Záporné hodnoty ho rozširujú (prísnejšie, napr. -1 = začína 1h pred úsvitom).",
+        "speciesListLabel": "Zoznam nočných druhov",
+        "addSpeciesLabel": "Pridať nočný druh",
+        "addSpeciesHelp": "Vyhľadajte a pridajte druhy, rody, čeľade alebo rady na filtrovanie počas dňa. Predvolené: Strigiformes (všetky sovy). Upozornenie: prázdny zoznam filtruje VŠETKY druhy počas dňa."
+      },
       "errors": {
         "speciesLoadFailed": "Nepodarilo sa načítať zoznam druhov. Skúste to znova."
       }
