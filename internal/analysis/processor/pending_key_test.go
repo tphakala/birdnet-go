@@ -52,3 +52,19 @@ func TestPendingDetectionKey_Format(t *testing.T) {
 	key := pendingDetectionKey("rtsp_cam1", "eurasian eagle-owl")
 	assert.Equal(t, "rtsp_cam1:eurasian eagle-owl", key)
 }
+
+func TestPendingDetectionKey_RTSPUrlWithColons(t *testing.T) {
+	t.Parallel()
+
+	// RTSP URLs contain colons — verify keys are unique and species isolation works
+	sourceID := "rtsp://user:pass@192.168.1.100:554/stream"
+	species := "eurasian eagle-owl"
+
+	key := pendingDetectionKey(sourceID, species)
+	assert.Contains(t, key, species)
+	assert.Contains(t, key, sourceID)
+
+	// Two different RTSP sources with same species must produce different keys
+	key2 := pendingDetectionKey("rtsp://cam2:554/alt", species)
+	assert.NotEqual(t, key, key2)
+}

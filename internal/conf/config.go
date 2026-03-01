@@ -572,6 +572,14 @@ func (e *ExtendedCaptureSettings) Validate(preCapture int) error {
 		e.MaxDuration = DefaultExtendedCaptureMaxDuration
 	}
 
+	if e.MaxDuration < 0 {
+		return fmt.Errorf("maxDuration must be non-negative, got %d", e.MaxDuration)
+	}
+
+	if e.CaptureBufferSeconds < 0 {
+		return fmt.Errorf("captureBufferSeconds must be non-negative, got %d", e.CaptureBufferSeconds)
+	}
+
 	if e.MaxDuration > MaxExtendedCaptureDuration {
 		return fmt.Errorf("maxDuration %d exceeds maximum of %d (1200 seconds / 20 minutes)", e.MaxDuration, MaxExtendedCaptureDuration)
 	}

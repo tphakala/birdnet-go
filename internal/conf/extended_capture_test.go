@@ -55,6 +55,20 @@ func TestExtendedCaptureSettings_Validate(t *testing.T) {
 			preCapture: 6,
 			wantError:  false,
 		},
+		{
+			name:        "negative maxDuration rejected",
+			settings:    ExtendedCaptureSettings{Enabled: true, MaxDuration: -500},
+			preCapture:  6,
+			wantError:   true,
+			errContains: "non-negative",
+		},
+		{
+			name:        "negative captureBufferSeconds rejected",
+			settings:    ExtendedCaptureSettings{Enabled: true, MaxDuration: 120, CaptureBufferSeconds: -10},
+			preCapture:  6,
+			wantError:   true,
+			errContains: "non-negative",
+		},
 	}
 
 	for _, tt := range tests {

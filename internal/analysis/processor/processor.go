@@ -1141,11 +1141,9 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			continue
 		}
 
-		// Extract species name from composite key (sourceID:speciesName)
-		speciesName := mapKey
-		if _, after, found := strings.Cut(mapKey, ":"); found {
-			speciesName = after
-		}
+		// Get species name from the detection data (not the map key,
+		// since source IDs like RTSP URLs may contain colons).
+		speciesName := item.Detection.Result.Species.CommonName
 
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
