@@ -407,6 +407,9 @@ func TestInitDaylightFilterUnconfiguredLocation(t *testing.T) {
 			},
 		},
 		sunCalc: newTestSunCalc(),
+		// Pre-populate to verify they get cleared
+		daylightFilterAll:     true,
+		daylightFilterSpecies: map[string]bool{"strix aluco": true},
 	}
 
 	p.initDaylightFilter()
@@ -414,7 +417,7 @@ func TestInitDaylightFilterUnconfiguredLocation(t *testing.T) {
 	p.daylightFilterMu.RLock()
 	defer p.daylightFilterMu.RUnlock()
 	assert.Nil(t, p.daylightFilterSpecies,
-		"species should not be resolved with unconfigured location")
+		"species should be cleared with unconfigured location")
 	assert.False(t, p.daylightFilterAll,
 		"all-species flag should be false with unconfigured location")
 }
