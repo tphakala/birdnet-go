@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -118,6 +120,21 @@ func TestResolveExtendedCaptureFilter(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
+	t.Parallel()
+
+	db, err := birdnet.LoadTaxonomyDatabase()
+	require.NoError(t, err)
+
+	// Resolve "Strigidae" (owl family) via taxonomy DB
+	isAll, resolved := resolveSpeciesFilter([]string{"Strigidae"}, nil, db)
+	assert.False(t, isAll)
+	assert.NotEmpty(t, resolved)
+	// Should include well-known owls
+	assert.True(t, resolved["strix aluco"] || resolved["bubo bubo"] || len(resolved) > 5,
+		"Strigidae should resolve to multiple owl species, got %d", len(resolved))
 }
 
 func TestCalculateExtendedFlushDeadline(t *testing.T) {
