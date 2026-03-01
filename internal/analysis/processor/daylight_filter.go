@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -56,24 +57,30 @@ func (p *Processor) initDaylightFilter() {
 	}
 
 	isAll, resolved := resolveSpeciesFilter(
-		p.Settings.Realtime.DaylightFilter.Species, labels, taxonomyDB,
+		p.Settings.Realtime.DaylightFilter.Species, labels, taxonomyDB, "daylight_filter",
 	)
 
+	// For an exclusionary filter, empty species list means "filter nothing",
+	// not "filter everything". Override the isAll=true default from resolveSpeciesFilter.
+	if isAll {
+		GetLogger().Warn("Daylight filter has empty species list, no species will be filtered",
+			logger.String("operation", "daylight_filter_init"))
+		p.daylightFilterMu.Lock()
+		p.daylightFilterAll = false
+		p.daylightFilterSpecies = nil
+		p.daylightFilterMu.Unlock()
+		return
+	}
+
 	p.daylightFilterMu.Lock()
-	p.daylightFilterAll = isAll
+	p.daylightFilterAll = false
 	p.daylightFilterSpecies = resolved
 	p.daylightFilterMu.Unlock()
 
-	if isAll {
-		GetLogger().Info("Daylight filter enabled for all species",
-			logger.Int("offset_hours", p.Settings.Realtime.DaylightFilter.Offset),
-			logger.String("operation", "daylight_filter_init"))
-	} else {
-		GetLogger().Info("Daylight filter enabled for filtered species",
-			logger.Int("species_count", len(resolved)),
-			logger.Int("offset_hours", p.Settings.Realtime.DaylightFilter.Offset),
-			logger.String("operation", "daylight_filter_init"))
-	}
+	GetLogger().Info("Daylight filter enabled for filtered species",
+		logger.Int("species_count", len(resolved)),
+		logger.Int("offset_hours", p.Settings.Realtime.DaylightFilter.Offset),
+		logger.String("operation", "daylight_filter_init"))
 }
 
 // isDaylightFilterSpecies checks if a species is in the daylight filter set.
@@ -96,6 +103,10 @@ func (p *Processor) isDaylightFilterSpecies(scientificName string) bool {
 // The daylight window is defined as [CivilDawn + offset, CivilDusk - offset).
 // A positive offset shrinks the window (more lenient), a negative offset expands it (stricter).
 func (p *Processor) isDaylight(t time.Time) (bool, error) {
+	if p.sunCalc == nil {
+		return false, fmt.Errorf("sun calculator not initialized")
+	}
+
 	sunTimes, err := p.sunCalc.GetSunEventTimes(t)
 	if err != nil {
 		return false, err

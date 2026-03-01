@@ -376,7 +376,7 @@ func TestInitDaylightFilterWithTaxonomy(t *testing.T) {
 	require.NoError(t, err, "failed to load taxonomy database")
 
 	// "Strigiformes" is the order containing all owls.
-	isAll, resolved := resolveSpeciesFilter([]string{"Strigiformes"}, nil, db)
+	isAll, resolved := resolveSpeciesFilter([]string{"Strigiformes"}, nil, db, "daylight_filter")
 	assert.False(t, isAll, "Strigiformes should not resolve to all species")
 	assert.Greater(t, len(resolved), 100,
 		"Strigiformes should resolve to >100 species, got %d", len(resolved))

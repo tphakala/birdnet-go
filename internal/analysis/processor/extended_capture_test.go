@@ -110,7 +110,7 @@ func TestResolveExtendedCaptureFilter(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			isAll, resolved := resolveSpeciesFilter(tt.configSpecies, tt.labels, nil)
+			isAll, resolved := resolveSpeciesFilter(tt.configSpecies, tt.labels, nil, "test")
 			assert.Equal(t, tt.expectAll, isAll)
 			if !tt.expectAll {
 				for _, expected := range tt.expectSpecies {
@@ -129,7 +129,7 @@ func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
 	require.NoError(t, err)
 
 	// Resolve "Strigidae" (owl family) via taxonomy DB
-	isAll, resolved := resolveSpeciesFilter([]string{"Strigidae"}, nil, db)
+	isAll, resolved := resolveSpeciesFilter([]string{"Strigidae"}, nil, db, "test")
 	assert.False(t, isAll)
 	assert.NotEmpty(t, resolved)
 	// Should include well-known owls
@@ -144,7 +144,7 @@ func TestResolveExtendedCaptureFilter_WithGenus(t *testing.T) {
 	require.NoError(t, err)
 
 	// Resolve "Strix" (genus) via taxonomy DB — should include Tawny Owl, Ural Owl, etc.
-	isAll, resolved := resolveSpeciesFilter([]string{"Strix"}, nil, db)
+	isAll, resolved := resolveSpeciesFilter([]string{"Strix"}, nil, db, "test")
 	assert.False(t, isAll)
 	assert.NotEmpty(t, resolved)
 	assert.True(t, resolved["strix aluco"],

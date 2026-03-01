@@ -774,6 +774,12 @@ function createEmptySettings(): SettingsFormData {
         debug: false,
         species: [],
       },
+      daylightFilter: {
+        enabled: false,
+        debug: false,
+        offset: 0,
+        species: [],
+      },
       birdweather: {
         enabled: false,
         id: '',
