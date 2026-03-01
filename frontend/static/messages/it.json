@@ -2061,7 +2061,7 @@
         "offsetHelp": "Regola la finestra di luce diurna. Valori positivi la riducono (più permissivo, es. +1 = inizia 1h dopo l'alba). Valori negativi la ampliano (più rigoroso, es. -1 = inizia 1h prima dell'alba).",
         "speciesListLabel": "Lista specie notturne",
         "addSpeciesLabel": "Aggiungi specie notturna",
-        "addSpeciesHelp": "Cerca e aggiungi specie, generi, famiglie o ordini da filtrare durante il giorno. Predefinito: Strigiformes (tutti i gufi). Avviso: una lista vuota filtra TUTTE le specie durante il giorno."
+        "addSpeciesHelp": "Cerca e aggiungi specie, generi, famiglie o ordini da filtrare durante il giorno. Predefinito: Strigiformes (tutti i gufi). Nota: una lista vuota non filtra nessuna specie durante il giorno."
       },
       "errors": {
         "speciesLoadFailed": "Impossibile caricare lista specie. Riprova."

@@ -2095,7 +2095,7 @@
         "offsetHelp": "Upraviť okno denného svetla. Kladné hodnoty ho zmenšujú (tolerantnejšie, napr. +1 = začína 1h po úsvite). Záporné hodnoty ho rozširujú (prísnejšie, napr. -1 = začína 1h pred úsvitom).",
         "speciesListLabel": "Zoznam nočných druhov",
         "addSpeciesLabel": "Pridať nočný druh",
-        "addSpeciesHelp": "Vyhľadajte a pridajte druhy, rody, čeľade alebo rady na filtrovanie počas dňa. Predvolené: Strigiformes (všetky sovy). Upozornenie: prázdny zoznam filtruje VŠETKY druhy počas dňa."
+        "addSpeciesHelp": "Vyhľadajte a pridajte druhy, rody, čeľade alebo rady na filtrovanie počas dňa. Predvolené: Strigiformes (všetky sovy). Upozornenie: prázdny zoznam nefiltruje žiadne druhy počas dňa."
       },
       "errors": {
         "speciesLoadFailed": "Nepodarilo sa načítať zoznam druhov. Skúste to znova."

@@ -2257,7 +2257,7 @@
         "offsetHelp": "Tageslichtfenster anpassen. Positive Werte verkleinern es (toleranter, z.B. +1 = beginnt 1h nach Morgendämmerung). Negative Werte erweitern es (strenger, z.B. -1 = beginnt 1h vor Morgendämmerung).",
         "speciesListLabel": "Liste nachtaktiver Arten",
         "addSpeciesLabel": "Nachtaktive Art hinzufügen",
-        "addSpeciesHelp": "Suchen und Hinzufügen von Arten, Gattungen, Familien oder Ordnungen zum Filtern bei Tageslicht. Standard: Strigiformes (alle Eulen). Warnung: Eine leere Liste filtert ALLE Arten bei Tageslicht."
+        "addSpeciesHelp": "Suchen und Hinzufügen von Arten, Gattungen, Familien oder Ordnungen zum Filtern bei Tageslicht. Standard: Strigiformes (alle Eulen). Hinweis: Eine leere Liste filtert KEINE Arten bei Tageslicht."
       },
       "errors": {
         "speciesLoadFailed": "Fehler beim Laden der Artenliste. Bitte versuchen Sie es erneut."

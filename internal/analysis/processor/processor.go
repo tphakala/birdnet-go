@@ -103,7 +103,7 @@ type Processor struct {
 
 	// Daylight filter fields
 	daylightFilterSpecies map[string]bool  // Resolved set of scientific names to filter during daylight
-	daylightFilterAll     bool             // True if all species should be filtered (empty list)
+	daylightFilterAll     bool             // Currently unused; empty species list resolves to filter-nothing
 	daylightFilterMu      sync.RWMutex     // Protects daylightFilterSpecies and daylightFilterAll
 	sunCalc               *suncalc.SunCalc // Injected sun calculator for daylight determination
 }

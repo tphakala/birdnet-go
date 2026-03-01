@@ -2260,7 +2260,7 @@
         "offsetHelp": "Ajustar a janela de luz do dia. Valores positivos reduzem-na (mais permissivo, ex. +1 = começa 1h após o amanhecer). Valores negativos expandem-na (mais rigoroso, ex. -1 = começa 1h antes do amanhecer).",
         "speciesListLabel": "Lista de espécies noturnas",
         "addSpeciesLabel": "Adicionar espécie noturna",
-        "addSpeciesHelp": "Pesquisar e adicionar espécies, géneros, famílias ou ordens para filtrar durante o dia. Predefinição: Strigiformes (todas as corujas). Aviso: uma lista vazia filtra TODAS as espécies durante o dia."
+        "addSpeciesHelp": "Pesquisar e adicionar espécies, géneros, famílias ou ordens para filtrar durante o dia. Predefinição: Strigiformes (todas as corujas). Nota: uma lista vazia não filtra nenhuma espécie durante o dia."
       },
       "title": "Filtros"
     },

@@ -339,9 +339,16 @@
   function saveDaylightEdit() {
     if (daylightEditIndex === null || !daylightEditSpecies.trim()) return;
 
+    const trimmedSpecies = daylightEditSpecies.trim();
+    const isDuplicate = settings.daylight.species.some(
+      (s: string, i: number) =>
+        i !== daylightEditIndex && s.toLowerCase() === trimmedSpecies.toLowerCase()
+    );
+    if (isDuplicate) return;
+
     const updatedSpecies = [...settings.daylight.species];
     if (daylightEditIndex >= 0 && daylightEditIndex < updatedSpecies.length) {
-      updatedSpecies.splice(daylightEditIndex, 1, daylightEditSpecies.trim());
+      updatedSpecies.splice(daylightEditIndex, 1, trimmedSpecies);
     }
 
     settingsActions.updateSection('realtime', {

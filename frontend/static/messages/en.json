@@ -2294,7 +2294,7 @@
         "offsetHelp": "Adjust the daylight window. Positive values shrink it (more lenient, e.g. +1 = starts 1h after dawn). Negative values expand it (stricter, e.g. -1 = starts 1h before dawn).",
         "speciesListLabel": "Nocturnal Species List",
         "addSpeciesLabel": "Add Nocturnal Species",
-        "addSpeciesHelp": "Search and add species, genera, families, or orders to filter during daylight. Default: Strigiformes (all owls). Warning: an empty list filters ALL species during daylight."
+        "addSpeciesHelp": "Search and add species, genera, families, or orders to filter during daylight. Default: Strigiformes (all owls). Note: an empty list disables daylight species filtering."
       },
       "errors": {
         "speciesLoadFailed": "Failed to load species list. Please try again."

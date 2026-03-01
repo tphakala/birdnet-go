@@ -2263,7 +2263,7 @@
         "offsetHelp": "Dostosuj okno światła dziennego. Wartości dodatnie zmniejszają je (bardziej liberalne, np. +1 = zaczyna się 1h po świcie). Wartości ujemne rozszerzają je (bardziej rygorystyczne, np. -1 = zaczyna się 1h przed świtem).",
         "speciesListLabel": "Lista gatunków nocnych",
         "addSpeciesLabel": "Dodaj gatunek nocny",
-        "addSpeciesHelp": "Wyszukaj i dodaj gatunki, rodzaje, rodziny lub rzędy na filtrovanie počas dňa. Domyślnie: Strigiformes (wszystkie sowy). Ostrzeżenie: pusta lista filtruje WSZYSTKIE gatunki w ciągu dnia."
+        "addSpeciesHelp": "Wyszukaj i dodaj gatunki, rodzaje, rodziny lub rzędy do filtrowania w ciągu dnia. Domyślnie: Strigiformes (wszystkie sowy). Uwaga: pusta lista nie filtruje żadnych gatunków w ciągu dnia."
       },
       "errors": {
         "speciesLoadFailed": "Nie udało się załadować listy gatunków. Spróbuj ponownie."
