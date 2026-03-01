@@ -928,6 +928,26 @@ func (p *Processor) generateClipName(scientificName string, confidence float32) 
 	return clipName
 }
 
+// generateClipNameWithDuration creates a clip filename with duration suffix.
+// Format: year/month/scientific_name_CONFp_TIMESTAMP_DURs.ext
+// detectionTime should be the original detection timestamp (not flush time).
+func (p *Processor) generateClipNameWithDuration(scientificName string, confidence float32, durationSeconds int, detectionTime time.Time) string {
+	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
+	normalizedConfidence := confidence * 100
+	formattedConfidence := fmt.Sprintf("%.0fp", normalizedConfidence)
+
+	timestamp := detectionTime.Format("20060102T150405Z")
+	year := detectionTime.Format("2006")
+	month := detectionTime.Format("01")
+
+	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
+
+	clipName := filepath.ToSlash(filepath.Join(year, month,
+		fmt.Sprintf("%s_%s_%s_%ds.%s", formattedName, formattedConfidence, timestamp, durationSeconds, fileType)))
+
+	return clipName
+}
+
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
@@ -1014,6 +1034,22 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
 	}
+
+	// Regenerate clip name with actual duration (duration is unknown at createDetection time)
+	preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+	var durationSeconds int
+	if item.ExtendedCapture {
+		durationSeconds = int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
+	} else {
+		durationSeconds = p.Settings.Realtime.Audio.Export.Length
+	}
+	item.Detection.Result.ClipName = p.generateClipNameWithDuration(
+		item.Detection.Result.Species.ScientificName,
+		float32(item.Confidence),
+		durationSeconds,
+		item.Detection.Result.Timestamp,
+	)
+
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
