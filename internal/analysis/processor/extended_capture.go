@@ -16,6 +16,22 @@ const (
 	extendedCaptureLongWait        = 60 * time.Second
 )
 
+// isExtendedCaptureSpecies checks if a species qualifies for extended capture.
+func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
+	if !p.Settings.Realtime.ExtendedCapture.Enabled {
+		return false
+	}
+
+	p.extendedCaptureMu.RLock()
+	defer p.extendedCaptureMu.RUnlock()
+
+	if p.extendedCaptureAll {
+		return true
+	}
+
+	return p.extendedCaptureSpecies[strings.ToLower(scientificName)]
+}
+
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.

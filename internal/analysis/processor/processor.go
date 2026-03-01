@@ -94,6 +94,11 @@ type Processor struct {
 
 	// Log deduplication (extracted to separate type for SRP)
 	logDedup *LogDeduplicator // Handles log deduplication logic
+
+	// Extended capture fields
+	extendedCaptureSpecies map[string]bool // Resolved set of scientific names eligible for extended capture
+	extendedCaptureAll     bool            // True when all species qualify (empty species list)
+	extendedCaptureMu      sync.RWMutex    // Protects extendedCaptureSpecies and extendedCaptureAll
 }
 
 type Detections struct {
@@ -106,13 +111,15 @@ type Detections struct {
 // PendingDetection struct represents a single detection held in memory,
 // including its last updated timestamp and a deadline for flushing it to the worker queue.
 type PendingDetection struct {
-	Detection     Detections // The detection data
-	Confidence    float64    // Confidence level of the detection
-	Source        string     // Audio source of the detection, RTSP URL or audio card name
-	FirstDetected time.Time  // Time the detection was first detected
-	LastUpdated   time.Time  // Last time this detection was updated
-	FlushDeadline time.Time  // Deadline by which the detection must be processed
-	Count         int        // Number of times this detection has been updated
+	Detection       Detections // The detection data
+	Confidence      float64    // Confidence level of the detection
+	Source          string     // Audio source of the detection, RTSP URL or audio card name
+	FirstDetected   time.Time  // Time the detection was first detected
+	LastUpdated     time.Time  // Last time this detection was updated
+	FlushDeadline   time.Time  // Deadline by which the detection must be processed
+	Count           int        // Number of times this detection has been updated
+	ExtendedCapture bool       // Whether this detection uses extended capture
+	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration)
 }
 
 // pendingDetectionKey creates a composite key for the pendingDetections map

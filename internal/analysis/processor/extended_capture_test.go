@@ -5,7 +5,67 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+func TestIsExtendedCaptureSpecies(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		enabled        bool
+		allSpecies     bool
+		speciesMap     map[string]bool
+		scientificName string
+		expected       bool
+	}{
+		{
+			name:           "disabled returns false",
+			enabled:        false,
+			scientificName: "Strix aluco",
+			expected:       false,
+		},
+		{
+			name:           "all species mode returns true",
+			enabled:        true,
+			allSpecies:     true,
+			scientificName: "Strix aluco",
+			expected:       true,
+		},
+		{
+			name:           "matching species returns true",
+			enabled:        true,
+			allSpecies:     false,
+			speciesMap:     map[string]bool{"strix aluco": true},
+			scientificName: "Strix aluco",
+			expected:       true,
+		},
+		{
+			name:           "non-matching species returns false",
+			enabled:        true,
+			allSpecies:     false,
+			speciesMap:     map[string]bool{"strix aluco": true},
+			scientificName: "Parus major",
+			expected:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p := &Processor{
+				Settings: &conf.Settings{
+					Realtime: conf.RealtimeSettings{
+						ExtendedCapture: conf.ExtendedCaptureSettings{Enabled: tt.enabled},
+					},
+				},
+				extendedCaptureAll:     tt.allSpecies,
+				extendedCaptureSpecies: tt.speciesMap,
+			}
+			assert.Equal(t, tt.expected, p.isExtendedCaptureSpecies(tt.scientificName))
+		})
+	}
+}
 
 func TestResolveExtendedCaptureFilter(t *testing.T) {
 	t.Parallel()
