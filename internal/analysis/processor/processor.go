@@ -115,6 +115,13 @@ type PendingDetection struct {
 	Count         int        // Number of times this detection has been updated
 }
 
+// pendingDetectionKey creates a composite key for the pendingDetections map
+// that includes the source ID to prevent cross-source data corruption when
+// multiple audio sources detect the same species concurrently.
+func pendingDetectionKey(sourceID, speciesName string) string {
+	return sourceID + ":" + speciesName
+}
+
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
 // when filtering is disabled (level 0). It analyzes current overlap settings
 // and suggests an appropriate filter level that matches the user's configuration.
@@ -472,7 +479,9 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		// Lock the mutex to ensure thread-safe access to shared resources
 		p.pendingMutex.Lock()
 
-		if existing, exists := p.pendingDetections[commonName]; exists {
+		mapKey := pendingDetectionKey(item.Source.ID, commonName)
+
+		if existing, exists := p.pendingDetections[mapKey]; exists {
 			// Update the existing detection if it's already in pendingDetections map
 			oldConfidence := existing.Confidence
 			if confidence > existing.Confidence {
@@ -489,7 +498,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 					logger.String("operation", "update_pending_detection"))
 			}
 			existing.Count++
-			p.pendingDetections[commonName] = existing
+			p.pendingDetections[mapKey] = existing
 		} else {
 			// Create a new pending detection if it doesn't exist
 			// Add structured logging for new pending detection
@@ -499,7 +508,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				logger.String("source", item.Source.DisplayName),
 				logger.Time("flush_deadline", time.Now().Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
-			p.pendingDetections[commonName] = PendingDetection{
+			p.pendingDetections[mapKey] = PendingDetection{
 				Detection:     det,
 				Confidence:    confidence,
 				Source:        item.Source.ID,
@@ -1126,33 +1135,39 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 
 	pendingCount = len(p.pendingDetections)
 
-	for species := range p.pendingDetections {
-		item := p.pendingDetections[species]
+	for mapKey := range p.pendingDetections {
+		item := p.pendingDetections[mapKey]
 		if !now.After(item.FlushDeadline) {
 			continue
 		}
 
+		// Extract species name from composite key (sourceID:speciesName)
+		speciesName := mapKey
+		if _, after, found := strings.Cut(mapKey, ":"); found {
+			speciesName = after
+		}
+
 		if shouldDiscard, reason := p.shouldDiscardDetection(&item, minDetections); shouldDiscard {
 			GetLogger().Info("discarding detection",
-				logger.String("species", species),
+				logger.String("species", speciesName),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
 				logger.String("reason", reason),
 				logger.Int("count", item.Count),
 				logger.String("operation", "discard_detection"))
-			delete(p.pendingDetections, species)
+			delete(p.pendingDetections, mapKey)
 			continue
 		}
 
 		GetLogger().Info("Flushing detection",
-			logger.String("species", species),
+			logger.String("species", speciesName),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
 			logger.Bool("deadline_reached", true),
 			logger.Int("count", item.Count),
 			logger.Int("required", minDetections),
 			logger.String("operation", "flush_detection"))
 
-		p.processApprovedDetection(&item, species)
-		delete(p.pendingDetections, species)
+		p.processApprovedDetection(&item, speciesName)
+		delete(p.pendingDetections, mapKey)
 		flushedCount++
 	}
 
