@@ -1046,6 +1046,29 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 		}
 	}
 
+	// Check daylight filter
+	if p.Settings.Realtime.DaylightFilter.Enabled {
+		if p.Settings.Realtime.DaylightFilter.Debug {
+			GetLogger().Debug("Daylight filter check",
+				logger.String("species", item.Detection.Result.Species.CommonName),
+				logger.String("scientific_name", item.Detection.Result.Species.ScientificName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "daylight_filter_debug"))
+		}
+		if p.checkDaylightFilter(
+			item.Detection.Result.Species.ScientificName,
+			item.FirstDetected,
+		) {
+			GetLogger().Debug("Detection discarded by daylight filter",
+				logger.String("species", item.Detection.Result.Species.CommonName),
+				logger.Time("detection_time", item.FirstDetected),
+				logger.String("source", p.getDisplayNameForSource(item.Source)),
+				logger.String("operation", "daylight_filter"))
+			return true, "daylight filter"
+		}
+	}
+
 	return false, ""
 }
 
