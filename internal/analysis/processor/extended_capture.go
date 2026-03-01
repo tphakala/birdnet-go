@@ -34,10 +34,14 @@ func (p *Processor) initExtendedCapture() {
 		labels = p.Bn.Settings.BirdNET.Labels
 	}
 
-	// Load taxonomy database for family/order resolution
+	// Load taxonomy database for genus/family/order resolution
 	var taxonomyDB *birdnet.TaxonomyDatabase
 	if db, err := birdnet.LoadTaxonomyDatabase(); err == nil {
 		taxonomyDB = db
+	} else {
+		GetLogger().Warn("Failed to load taxonomy database, genus/family/order filtering unavailable",
+			logger.Any("error", err),
+			logger.String("operation", "extended_capture_init"))
 	}
 
 	isAll, resolved := resolveSpeciesFilter(
@@ -104,6 +108,14 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 
 		// Try taxonomy lookups if database is available
 		if taxonomyDB != nil {
+			// Try as genus name
+			if genusSpecies, err := taxonomyDB.GetAllSpeciesInGenus(entry); err == nil {
+				for _, sp := range genusSpecies {
+					resolved[strings.ToLower(sp)] = true
+				}
+				continue
+			}
+
 			// Try as family name
 			if familySpecies, err := taxonomyDB.GetAllSpeciesInFamily(entry); err == nil {
 				for _, sp := range familySpecies {

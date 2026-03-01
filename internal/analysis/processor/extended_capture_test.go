@@ -137,6 +137,20 @@ func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
 		"Strigidae should resolve to multiple owl species, got %d", len(resolved))
 }
 
+func TestResolveExtendedCaptureFilter_WithGenus(t *testing.T) {
+	t.Parallel()
+
+	db, err := birdnet.LoadTaxonomyDatabase()
+	require.NoError(t, err)
+
+	// Resolve "Strix" (genus) via taxonomy DB — should include Tawny Owl, Ural Owl, etc.
+	isAll, resolved := resolveSpeciesFilter([]string{"Strix"}, nil, db)
+	assert.False(t, isAll)
+	assert.NotEmpty(t, resolved)
+	assert.True(t, resolved["strix aluco"],
+		"Strix genus should include Strix aluco (Tawny Owl), got %v", resolved)
+}
+
 func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
 	t.Parallel()
 
