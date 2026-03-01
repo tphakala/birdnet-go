@@ -18,7 +18,7 @@ const (
 )
 
 // initExtendedCapture resolves the extended capture species filter at startup.
-// Called from Processor.New() and on settings/range-filter refresh.
+// Called from Processor.New(). Safe to re-call on settings refresh.
 func (p *Processor) initExtendedCapture() {
 	if !p.Settings.Realtime.ExtendedCapture.Enabled {
 		p.extendedCaptureMu.Lock()
