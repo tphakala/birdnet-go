@@ -9,7 +9,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.18.1/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.18.2/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -24,7 +24,7 @@ Source: Apache-2.0
 
 ### filippo.io/edwards25519
 
-License: https://github.com/FiloSottile/edwards25519/blob/v1.1.1/LICENSE
+License: https://github.com/FiloSottile/edwards25519/blob/v1.2.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/antonholmquist/jason
@@ -79,7 +79,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.42.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.43.0/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -139,7 +139,7 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.11/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.12/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
@@ -209,7 +209,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.15.0/LICENSE
+License: https://github.com/labstack/echo/blob/v4.15.1/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -299,7 +299,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.19.2/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.20.0/LICENSE
 Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
@@ -424,22 +424,22 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 
-License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.61.0/instrumentation/net/http/otelhttp/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.65.0/instrumentation/net/http/otelhttp/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.39.0/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.40.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/metric
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.39.0/metric/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.40.0/metric/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/trace
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.39.0/trace/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.40.0/trace/LICENSE
 Source: Apache-2.0
 
 ### go.uber.org/goleak
@@ -464,7 +464,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.50.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.51.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -499,17 +499,17 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.266.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.269.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/546029d2fa20/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/2f722ef697dc/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.78.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.79.1/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
