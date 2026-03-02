@@ -73,17 +73,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   const config = { ...DEFAULT_CONFIG, ...userConfig };
 
   // Reactive state (Svelte 5 runes)
-   
   let state = $state<SpectrogramLoadState>('idle');
-   
   let spectrogramUrl = $state('');
-   
   let showSpinner = $state(false);
-   
   let hasError = $state(false);
-   
   let currentDetectionId = $state<number | undefined>(undefined);
-   
   let serverStatus = $state<SpectrogramStatus | undefined>(undefined);
 
   // Internal state (not reactive)

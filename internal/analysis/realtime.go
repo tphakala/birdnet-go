@@ -358,6 +358,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	GetLogger().Info("starting HTTP server")
 	oauth2Server := security.NewOAuth2Server()
 	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	proc.SetSunCalc(sunCalc)
 	apiServer, err := api.New(
 		settings,
 		api.WithDataStore(dataStore),
@@ -1328,8 +1329,11 @@ func initializeBuffers(sources []string) error {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
 	}
 
-	// Initialize capture buffers
-	const captureBufferSize = 120 // Capture buffer size of 120 seconds
+	// Initialize capture buffers using default or extended capture buffer size
+	captureBufferSize := conf.DefaultCaptureBufferSeconds
+	if conf.Setting().Realtime.ExtendedCapture.Enabled && conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		captureBufferSize = conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds
+	}
 	if err := myaudio.InitCaptureBuffers(captureBufferSize, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
 	}

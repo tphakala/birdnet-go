@@ -142,6 +142,8 @@ export default [
       globals: {
         ...browserGlobals,
         ...svelteRuneGlobals,
+        // Vite define constants injected at build time
+        __I18N_CACHE_VERSION__: 'readonly',
       },
     },
     plugins: {

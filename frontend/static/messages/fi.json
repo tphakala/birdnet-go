@@ -2248,6 +2248,17 @@
       "speciesNamePlaceholder": "Lajin nimi",
       "typeSpeciesName": "Kirjoita lajin nimi...",
       "dogBarkSpeciesList": "Koiran haukunnan lajiluettelo",
+      "daylightFilter": {
+        "title": "Päivänvalosuodatin",
+        "description": "Suodata yöaktiivisten lajien havainnot päivänvalossa. Käyttää siviiliaamunkoiton/-hämärän rajoja määritetyn sijainnin perusteella.",
+        "enable": "Ota päivänvalosuodatin käyttöön",
+        "disabled": "Päivänvalosuodatin on pois käytöstä",
+        "offsetLabel": "Päivänvaloikkunan siirtymä (Tunnit)",
+        "offsetHelp": "Säädä päivänvaloikkunaa. Positiiviset arvot pienentävät sitä (sallivampi, esim. +1 = alkaa 1h aamunkoiton jälkeen). Negatiiviset arvot laajentavat sitä (tiukempi, esim. -1 = alkaa 1h ennen aamunkoittoa).",
+        "speciesListLabel": "Yöaktiivisten lajien luettelo",
+        "addSpeciesLabel": "Lisää yöaktiivinen laji",
+        "addSpeciesHelp": "Hae ja lisää lajeja, sukuja, heimoja tai lahkoja suodatettavaksi päivänvalossa. Oletus: Strigiformes (kaikki pöllöt). Huom: tyhjä lista ei suodata mitään lajeja päivänvalossa."
+      },
       "errors": {
         "speciesLoadFailed": "Lajiluettelon lataus epäonnistui. Yritä uudelleen."
       },

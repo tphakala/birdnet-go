@@ -2251,6 +2251,17 @@
       "speciesNamePlaceholder": "Nome da espécie",
       "typeSpeciesName": "Digite o nome da espécie...",
       "dogBarkSpeciesList": "Lista de espécies de latido de cão",
+      "daylightFilter": {
+        "title": "Filtro de luz do dia",
+        "description": "Filtrar deteções de espécies noturnas durante as horas de luz do dia. Utiliza os limites do amanhecer/anoitecer civil da sua localização configurada.",
+        "enable": "Ativar filtro de luz do dia",
+        "disabled": "O filtro de luz do dia está desativado",
+        "offsetLabel": "Deslocamento da janela de luz do dia (Horas)",
+        "offsetHelp": "Ajustar a janela de luz do dia. Valores positivos reduzem-na (mais permissivo, ex. +1 = começa 1h após o amanhecer). Valores negativos expandem-na (mais rigoroso, ex. -1 = começa 1h antes do amanhecer).",
+        "speciesListLabel": "Lista de espécies noturnas",
+        "addSpeciesLabel": "Adicionar espécie noturna",
+        "addSpeciesHelp": "Pesquisar e adicionar espécies, géneros, famílias ou ordens para filtrar durante o dia. Predefinição: Strigiformes (todas as corujas). Nota: uma lista vazia não filtra nenhuma espécie durante o dia."
+      },
       "title": "Filtros"
     },
     "audio": {

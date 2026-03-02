@@ -53,11 +53,8 @@ export function useDelayedLoading(options: DelayedLoadingOptions = {}) {
   const { delayMs = 150, timeoutMs = 15000, onTimeout } = options;
 
   // State management
-   
   let loading = $state(false);
-   
   let showSpinner = $state(false);
-   
   let error = $state(false);
 
   // Timeout tracking

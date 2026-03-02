@@ -2248,6 +2248,17 @@
       "speciesNamePlaceholder": "Nom de l'espèce",
       "typeSpeciesName": "Tapez le nom de l'espèce...",
       "dogBarkSpeciesList": "Liste des espèces d'aboiement de chien",
+      "daylightFilter": {
+        "title": "Filtre de lumière du jour",
+        "description": "Filtrer les détections d'espèces nocturnes pendant les heures de jour. Utilise les limites de l'aube/crépuscule civil de votre emplacement configuré.",
+        "enable": "Activer le filtre de lumière du jour",
+        "disabled": "Le filtre de lumière du jour est désactivé",
+        "offsetLabel": "Décalage de la fenêtre de lumière du jour (Heures)",
+        "offsetHelp": "Ajuster la fenêtre de lumière du jour. Les valeurs positives la réduisent (plus permissif, ex. +1 = commence 1h après l'aube). Les valeurs négatives l'élargissent (plus strict, ex. -1 = commence 1h avant l'aube).",
+        "speciesListLabel": "Liste des espèces nocturnes",
+        "addSpeciesLabel": "Ajouter une espèce nocturne",
+        "addSpeciesHelp": "Rechercher et ajouter des espèces, genres, familles ou ordres à filtrer pendant la journée. Par défaut : Strigiformes (tous les hiboux). Remarque : une liste vide ne filtre aucune espèce pendant la journée."
+      },
       "errors": {
         "speciesLoadFailed": "Échec du chargement de la liste des espèces. Veuillez réessayer."
       },

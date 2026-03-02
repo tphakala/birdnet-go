@@ -324,6 +324,40 @@ func (cl *CentralLogger) getModuleLevelLocked(module string) slog.Level {
 	return parseLogLevel(cl.config.DefaultLevel)
 }
 
+// GetOutputPath returns the file path configured for a given module.
+// Returns empty string if the module writes only to console.
+func (cl *CentralLogger) GetOutputPath(module string) string {
+	if cl == nil {
+		return ""
+	}
+
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
+
+	if modOut, ok := cl.config.ModuleOutputs[module]; ok && modOut.Enabled {
+		return modOut.FilePath
+	}
+
+	return ""
+}
+
+// GetDefaultOutputPath returns the default file output path (application.log).
+// Returns empty string if file output is not configured.
+func (cl *CentralLogger) GetDefaultOutputPath() string {
+	if cl == nil {
+		return ""
+	}
+
+	cl.mu.RLock()
+	defer cl.mu.RUnlock()
+
+	if cl.config.FileOutput != nil && cl.config.FileOutput.Enabled {
+		return cl.config.FileOutput.Path
+	}
+
+	return ""
+}
+
 // Close closes all buffered writers and their underlying files
 func (cl *CentralLogger) Close() error {
 	if cl == nil {

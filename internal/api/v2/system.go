@@ -311,6 +311,9 @@ func (c *Controller) initSystemRoutes() {
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
 
+	// Events routes (detection lifecycle + operational logs)
+	c.registerEventsRoutes(protectedGroup)
+
 	// Initialize database overview route
 	c.initDatabaseOverviewRoutes()
 

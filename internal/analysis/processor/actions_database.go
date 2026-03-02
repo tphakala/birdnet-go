@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -145,6 +146,34 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// Home Assistant want the detection event regardless of audio export status.
 	if a.Settings.Realtime.Audio.Export.Enabled {
 		captureLength := a.Settings.Realtime.Audio.Export.Length
+		if !a.Result.EndTime.IsZero() && !a.Result.BeginTime.IsZero() {
+			// Duration = EndTime - BeginTime + PreCapture (audio starts PreCapture seconds before BeginTime)
+			preCapture := a.Settings.Realtime.Audio.Export.PreCapture
+			derivedLength := int(a.Result.EndTime.Sub(a.Result.BeginTime).Seconds()) + preCapture
+			if derivedLength > captureLength {
+				captureLength = derivedLength
+				GetLogger().Info("Using extended capture duration for audio export",
+					logger.String("detection_id", a.CorrelationID),
+					logger.String("species", a.Result.Species.CommonName),
+					logger.Int("duration_seconds", captureLength),
+					logger.String("operation", "extended_capture_audio_export"))
+			}
+		}
+		// Cap at capture buffer size to prevent reading beyond buffer bounds.
+		// Determine actual buffer size: use extended capture buffer if configured,
+		// otherwise fall back to the default capture buffer.
+		bufferCap := conf.DefaultCaptureBufferSeconds
+		if a.Settings.Realtime.ExtendedCapture.Enabled && a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+			bufferCap = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+		}
+		if captureLength > bufferCap {
+			GetLogger().Warn("Capping capture length at buffer size",
+				logger.String("detection_id", a.CorrelationID),
+				logger.Int("requested_seconds", captureLength),
+				logger.Int("buffer_seconds", bufferCap),
+				logger.String("operation", "capture_buffer_cap"))
+			captureLength = bufferCap
+		}
 
 		// debug log note begin, end and capture length
 		GetLogger().Debug("Saving detection audio clip",
