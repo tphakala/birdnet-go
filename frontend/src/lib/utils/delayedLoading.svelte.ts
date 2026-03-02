@@ -53,11 +53,11 @@ export function useDelayedLoading(options: DelayedLoadingOptions = {}) {
   const { delayMs = 150, timeoutMs = 15000, onTimeout } = options;
 
   // State management
-  // eslint-disable-next-line no-undef
+   
   let loading = $state(false);
-  // eslint-disable-next-line no-undef
+   
   let showSpinner = $state(false);
-  // eslint-disable-next-line no-undef
+   
   let error = $state(false);
 
   // Timeout tracking

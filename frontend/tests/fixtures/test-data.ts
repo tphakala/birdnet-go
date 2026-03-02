@@ -49,7 +49,7 @@ async function apiCall<T>(path: string, options: RequestInit = {}): Promise<T> {
     return (await response.json()) as T;
   } catch (error) {
     if (error instanceof TypeError && error.message.includes('fetch')) {
-      throw new Error(`Network error calling ${url}: ${error.message}`);
+      throw new Error(`Network error calling ${url}: ${error.message}`, { cause: error });
     }
     throw error;
   }

@@ -77,7 +77,8 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
     } catch (error) {
       const responseText = await response.text();
       throw new Error(
-        `Failed to parse JSON response. Status: ${response.status()}, Body: ${responseText}, Error: ${error}`
+        `Failed to parse JSON response. Status: ${response.status()}, Body: ${responseText}, Error: ${error}`,
+        { cause: error }
       );
     }
 
@@ -95,7 +96,7 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
       expect(healthData.status).toBeTruthy();
     } else {
       // Log unexpected status for debugging
-      // eslint-disable-next-line no-console -- Test debugging output
+       
       console.warn('Unexpected health status:', healthData.status);
     }
 

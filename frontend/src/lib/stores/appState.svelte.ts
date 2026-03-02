@@ -22,7 +22,6 @@
  *   // For API utilities:
  *   const token = getCsrfToken();
  */
-/* eslint-disable no-undef */
 import type { AuthConfig } from '../../app.d';
 import { getLogger } from '../utils/logger';
 import { buildAppUrl, setBasePath } from '../utils/urlHelpers';
