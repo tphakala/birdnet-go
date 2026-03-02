@@ -432,8 +432,8 @@ test.describe('Alert Rules Settings Page', () => {
 
       // Each card should have 4 action buttons
       const actionButtons = firstRuleCard.locator('button[aria-label]');
-      const buttonCount = await actionButtons.count();
-      expect(buttonCount, 'Rule card should have 4 action buttons').toBe(4);
+      const buttonCount = actionButtons;
+      await expect(buttonCount, 'Rule card should have 4 action buttons').toHaveCount(4);
     });
 
     test('toggle button changes rule enabled state', async ({ page }) => {
@@ -944,8 +944,8 @@ test.describe('Alert Rules Settings Page', () => {
         await removeButton.click();
 
         // Count should decrease
-        const countAfter = await conditionRows.count();
-        expect(countAfter).toBe(countBefore - 1);
+        const countAfter = conditionRows;
+        await expect(countAfter).toHaveCount(countBefore - 1);
       } finally {
         await deleteTestRule(request, testRuleId);
       }
@@ -1193,8 +1193,8 @@ test.describe('Alert Rules Settings Page', () => {
 
       // Rules should still be present
       await expect(ruleCards.first()).toBeVisible({ timeout: 5000 });
-      const afterCount = await ruleCards.count();
-      expect(afterCount).toBe(initialCount);
+      const afterCount = ruleCards;
+      await expect(afterCount).toHaveCount(initialCount);
     });
 
     test('history shows count', async ({ page }) => {

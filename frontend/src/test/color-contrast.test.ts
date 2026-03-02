@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /**
  * Color contrast testing for WCAG 2.1 Level AA compliance
  * Tests color combinations from the actual Tailwind v4 theme (src/styles/tailwind.css)

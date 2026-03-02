@@ -368,7 +368,6 @@ describe('Frontend Accessibility Tests', () => {
         typeof globalThis.process !== 'undefined' ? globalThis.process.env.CI : undefined;
 
       if (nodeEnv === 'development' || (nodeEnv === 'test' && !isCI)) {
-        // eslint-disable-next-line no-console
         console.log('Dashboard Accessibility Report:\n', report);
       }
 

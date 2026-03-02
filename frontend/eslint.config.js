@@ -80,6 +80,7 @@ const sharedTypeScriptRules = {
   'no-console': 'warn',
   'prefer-const': 'error',
   'no-var': 'error',
+  'no-useless-assignment': 'off',
   '@typescript-eslint/no-explicit-any': 'error',
   '@typescript-eslint/prefer-nullish-coalescing': 'error',
   '@typescript-eslint/prefer-optional-chain': 'error',
@@ -124,6 +125,7 @@ export default [
       // Allow console for now
       'no-console': 'warn',
       'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+      'no-useless-assignment': 'off',
     },
   },
   
@@ -277,6 +279,7 @@ export default [
       'no-console': 'warn',
       'prefer-const': 'error',
       'no-var': 'error',
+      'no-useless-assignment': 'off',
     },
   },
   
@@ -292,6 +295,7 @@ export default [
       'vitest/no-identical-title': 'error',
       'vitest/no-focused-tests': 'error',
       'vitest/no-disabled-tests': 'warn',
+      'no-console': 'off',
     },
     languageOptions: {
       globals: {
