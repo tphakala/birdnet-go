@@ -96,7 +96,7 @@ test.describe('Dashboard Smoke Tests - New UI Only', () => {
       expect(healthData.status).toBeTruthy();
     } else {
       // Log unexpected status for debugging
-       
+
       console.warn('Unexpected health status:', healthData.status);
     }
 

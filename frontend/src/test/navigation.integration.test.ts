@@ -16,7 +16,6 @@
  * 2. The fix works (tests pass after fix)
  */
 
- 
 /* eslint-disable @typescript-eslint/no-unnecessary-condition -- Dynamic DOM queries may return null */
 /* eslint-disable security/detect-non-literal-regexp -- Dynamic route patterns are intentional */
 

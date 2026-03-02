@@ -61,7 +61,6 @@ test.describe('New UI Routing - /ui/ paths only', () => {
             href.startsWith('#');
 
           if (!isValidRoute) {
-             
             console.warn(`Found potential legacy route link: ${href}`);
           }
         }
@@ -101,7 +100,6 @@ test.describe('New UI Routing - /ui/ paths only', () => {
     const htmxCount = await htmxElements.count();
 
     if (htmxCount > 0) {
-       
       console.warn(`Found ${htmxCount} potential HTMX elements - ensure tests focus on new UI`);
     }
   });
