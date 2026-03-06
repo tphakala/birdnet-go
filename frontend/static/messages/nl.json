@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
         "detectionOccurred": "{species_name} gedetecteerd met {confidence}% betrouwbaarheid",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} verbroken"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} verbroken",
+        "error": {
+          "authError": "Authenticatie mislukt — controleer je API-sleutel of inloggegevens",
+          "rateLimited": "Snelheidslimiet bereikt — verzoeken worden automatisch vertraagd",
+          "gatewayTimeout": "Service heeft mogelijk een hoge belasting",
+          "serverError": "Service is tijdelijk niet beschikbaar",
+          "connectionRefused": "Service onbereikbaar — controleer het adres en of deze draait",
+          "dnsError": "Hostnaam kon niet worden opgelost — controleer het adres",
+          "tlsError": "TLS/certificaatfout — controleer je beveiligingsinstellingen",
+          "timeout": "Verbinding verlopen — de service is mogelijk traag of onbereikbaar",
+          "connectionInterrupted": "Verbinding onderbroken — wordt automatisch opnieuw geprobeerd",
+          "diskFull": "Schijf vol — maak ruimte vrij",
+          "permissionDenied": "Toegang geweigerd — controleer bestands- of servicemachtigingen"
+        }
       }
     },
     "loading": "Meldingen laden..."

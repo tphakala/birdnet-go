@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
         "detectionOccurred": "{species_name} havaittu {confidence}% varmuudella",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} yhteys katkaistu"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} yhteys katkaistu",
+        "error": {
+          "authError": "Tunnistautuminen epäonnistui — tarkista API-avain tai tunnistetiedot",
+          "rateLimited": "Pyyntöraja saavutettu — pyyntöjä hidastetaan automaattisesti",
+          "gatewayTimeout": "Palvelu saattaa olla ylikuormitettu",
+          "serverError": "Palvelu on tilapäisesti poissa käytöstä",
+          "connectionRefused": "Palveluun ei saada yhteyttä — tarkista osoite ja että palvelu on käynnissä",
+          "dnsError": "Isäntänimeä ei voitu selvittää — tarkista osoite",
+          "tlsError": "TLS/varmennevirhe — tarkista suojausasetukset",
+          "timeout": "Yhteys aikakatkaistiin — palvelu voi olla hidas tai tavoittamattomissa",
+          "connectionInterrupted": "Yhteys katkesi — yritetään automaattisesti uudelleen",
+          "diskFull": "Levy on täynnä — vapauta tilaa",
+          "permissionDenied": "Käyttö estetty — tarkista tiedosto- tai palveluoikeudet"
+        }
       }
     },
     "loading": "Ladataan ilmoituksia..."

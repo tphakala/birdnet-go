@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
         "detectionOccurred": "{species_name} détecté avec {confidence}% de confiance",
-        "errorOccurred": "{source_name} : {error}",
-        "disconnected": "{source_name} déconnecté"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} déconnecté",
+        "error": {
+          "authError": "Échec de l'authentification — vérifiez votre clé API ou vos identifiants",
+          "rateLimited": "Limite de requêtes atteinte — les requêtes seront ralenties automatiquement",
+          "gatewayTimeout": "Le service est peut-être surchargé",
+          "serverError": "Service temporairement indisponible",
+          "connectionRefused": "Service inaccessible — vérifiez l'adresse et qu'il est en cours d'exécution",
+          "dnsError": "Impossible de résoudre le nom d'hôte — vérifiez l'adresse",
+          "tlsError": "Erreur TLS/certificat — vérifiez vos paramètres de sécurité",
+          "timeout": "Délai de connexion expiré — le service est peut-être lent ou inaccessible",
+          "connectionInterrupted": "Connexion interrompue — une nouvelle tentative sera effectuée automatiquement",
+          "diskFull": "Disque plein — libérez de l'espace",
+          "permissionDenied": "Permission refusée — vérifiez les permissions du fichier ou du service"
+        }
       }
     },
     "loading": "Chargement des notifications..."

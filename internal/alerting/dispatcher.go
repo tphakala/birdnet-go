@@ -210,16 +210,29 @@ func errorMessage(event *AlertEvent) (key string, params map[string]any, fallbac
 		"source_name": sourceName,
 		"error":       errMsg,
 	}
-	if sourceName != "" {
-		if errMsg != "" {
-			fallback = fmt.Sprintf("%s: %s", sourceName, errMsg)
-		} else {
-			fallback = sourceName
-		}
-	} else {
-		fallback = errMsg
+
+	// Try to classify the error for a user-friendly message.
+	if classified := classifyError(errMsg); classified != nil {
+		key = MsgAlertErrorPrefix + "." + classified.Key
+		fallback = formatErrorFallback(sourceName, classified.Fallback)
+		return key, params, fallback
 	}
+
+	// Unrecognized error: fall back to the generic key with raw error.
+	fallback = formatErrorFallback(sourceName, errMsg)
 	return MsgAlertErrorOccurred, params, fallback
+}
+
+// formatErrorFallback builds the English fallback string, prepending the
+// source name when available.
+func formatErrorFallback(sourceName, message string) string {
+	if sourceName == "" {
+		return message
+	}
+	if message == "" {
+		return sourceName
+	}
+	return fmt.Sprintf("%s: %s", sourceName, message)
 }
 
 func disconnectMessage(event *AlertEvent) (key string, params map[string]any, fallback string) {

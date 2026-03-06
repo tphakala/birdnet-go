@@ -115,4 +115,8 @@ const (
 	MsgAlertDetectionOccurred = "notifications.content.alert.detectionOccurred"
 	MsgAlertErrorOccurred     = "notifications.content.alert.errorOccurred"
 	MsgAlertDisconnected      = "notifications.content.alert.disconnected"
+
+	// MsgAlertErrorPrefix is the i18n key prefix for classified error messages.
+	// Full key is MsgAlertErrorPrefix + "." + ErrorClass.Key.
+	MsgAlertErrorPrefix = "notifications.content.alert.error"
 )
