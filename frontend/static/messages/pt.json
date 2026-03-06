@@ -1918,7 +1918,23 @@
         "saveError": "Erro: {message}",
         "availableVariables": "Variáveis de modelo disponíveis",
         "variablesDescription": "Use essas variáveis em seus modelos com a sintaxe",
-        "loading": "Carregando..."
+        "loading": "Carregando...",
+        "fields": {
+          "commonName": "Nome comum da ave (ex., \"Cardeal-do-norte\")",
+          "scientificName": "Nome científico (ex., \"Cardinalis cardinalis\")",
+          "confidence": "Valor de confiança (0,0 a 1,0)",
+          "confidencePercent": "Confiança em porcentagem (ex., \"99\")",
+          "detectionTime": "Hora da detecção (ex., \"14:30:45\")",
+          "detectionDate": "Data da detecção (ex., \"2024-10-05\")",
+          "latitude": "Coordenada GPS de latitude",
+          "longitude": "Coordenada GPS de longitude",
+          "location": "Coordenadas formatadas (ex., \"42.360100, -71.058900\")",
+          "detectionId": "Número de ID da detecção (ex., \"1234\")",
+          "detectionPath": "Caminho relativo para a detecção (ex., \"/ui/detections/1234\")",
+          "detectionUrl": "URL completa para a detecção",
+          "imageUrl": "Link para imagem da espécie",
+          "daysSinceFirstSeen": "Número de dias desde a primeira detecção"
+        }
       },
       "push": {
         "title": "Notificações Push",
@@ -3186,8 +3202,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "Histórico de alertas",
-          "description": "Veja eventos de alerta anteriores e seus resultados."
+          "title": "Histórico de notificações",
+          "description": "Veja eventos de notificação anteriores e seus resultados."
         }
       },
       "filters": {
@@ -3209,7 +3225,7 @@
       "noActions": "Sem ações",
       "noRules": "Nenhuma regra de alerta configurada.",
       "noMatchingRules": "Nenhuma regra corresponde aos filtros atuais.",
-      "noHistory": "Sem histórico de alertas.",
+      "noHistory": "Sem histórico de notificações.",
       "confirmDelete": "Tem certeza de que deseja excluir a regra \"{name}\"?",
       "newRule": "Nova regra",
       "resetDefaults": "Restaurar padrões",
@@ -3239,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Falha ao carregar regras de alerta",
-        "historyFailed": "Falha ao carregar histórico de alertas",
+        "historyFailed": "Falha ao carregar histórico de notificações",
         "toggleFailed": "Falha ao alternar regra",
         "deleteFailed": "Falha ao excluir regra",
         "testFailed": "Falha ao testar regra",

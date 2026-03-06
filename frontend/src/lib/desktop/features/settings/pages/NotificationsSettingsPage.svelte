@@ -11,7 +11,7 @@
   - Notification template customization
   - Alert rule list with toggle, test, edit, delete
   - Inline rule editor (AlertRuleEditor component)
-  - Alert history with clear functionality
+  - Notification history with clear functionality
   - Export/Import/Reset for alert rules
 
   Props: None - This is a page component
@@ -90,7 +90,15 @@
 
   const SECONDS_PER_MINUTE = 60;
   const STATUS_DISMISS_MS = 3000;
+  const STATUS_DISMISS_ERROR_MS = 5000;
+  const STATUS_DISMISS_LONG_MS = 10000;
   const HISTORY_FETCH_LIMIT = 50;
+
+  // Timeout refs for status message dismissal (prevents race conditions on rapid clicks)
+  let templateStatusTimeout: ReturnType<typeof setTimeout>;
+  let channelStatusTimeout: ReturnType<typeof setTimeout>;
+  let pushStatusTimeout: ReturnType<typeof setTimeout>;
+  let ruleStatusTimeout: ReturnType<typeof setTimeout>;
 
   // ============================================================
   // Tab state
@@ -246,25 +254,46 @@
       JSON.stringify(pushSettings) !== JSON.stringify(originalPushSettings)
   );
 
-  const templateFields = [
-    { name: 'CommonName', description: 'Bird common name (e.g., "Northern Cardinal")' },
-    { name: 'ScientificName', description: 'Scientific name (e.g., "Cardinalis cardinalis")' },
-    { name: 'Confidence', description: 'Confidence value (0.0 to 1.0)' },
-    { name: 'ConfidencePercent', description: 'Confidence as percentage (e.g., "99")' },
-    { name: 'DetectionTime', description: 'Time of detection (e.g., "14:30:45")' },
-    { name: 'DetectionDate', description: 'Date of detection (e.g., "2024-10-05")' },
-    { name: 'Latitude', description: 'GPS latitude coordinate' },
-    { name: 'Longitude', description: 'GPS longitude coordinate' },
-    { name: 'Location', description: 'Formatted coordinates (e.g., "42.360100, -71.058900")' },
-    { name: 'DetectionID', description: 'Detection ID number (e.g., "1234")' },
-    {
-      name: 'DetectionPath',
-      description: 'Relative path to detection (e.g., "/ui/detections/1234")',
-    },
-    { name: 'DetectionURL', description: 'Full URL to detection in UI' },
-    { name: 'ImageURL', description: 'Link to species image' },
-    { name: 'DaysSinceFirstSeen', description: 'Number of days since first detected' },
-  ];
+  const templateFieldKeys = [
+    'commonName',
+    'scientificName',
+    'confidence',
+    'confidencePercent',
+    'detectionTime',
+    'detectionDate',
+    'latitude',
+    'longitude',
+    'location',
+    'detectionId',
+    'detectionPath',
+    'detectionUrl',
+    'imageUrl',
+    'daysSinceFirstSeen',
+  ] as const;
+
+  const templateFieldNames: Record<(typeof templateFieldKeys)[number], string> = {
+    commonName: 'CommonName',
+    scientificName: 'ScientificName',
+    confidence: 'Confidence',
+    confidencePercent: 'ConfidencePercent',
+    detectionTime: 'DetectionTime',
+    detectionDate: 'DetectionDate',
+    latitude: 'Latitude',
+    longitude: 'Longitude',
+    location: 'Location',
+    detectionId: 'DetectionID',
+    detectionPath: 'DetectionPath',
+    detectionUrl: 'DetectionURL',
+    imageUrl: 'ImageURL',
+    daysSinceFirstSeen: 'DaysSinceFirstSeen',
+  };
+
+  let templateFields = $derived(
+    templateFieldKeys.map(key => ({
+      name: templateFieldNames[key],
+      description: t(`settings.notifications.templates.fields.${key}`),
+    }))
+  );
 
   const defaultTemplate = {
     title: 'New Species: {{.CommonName}}',
@@ -275,7 +304,7 @@
   let isServiceFormValid = $derived.by(() => {
     switch (selectedService) {
       case 'discord':
-        return /discord\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+/.test(
+        return /^https?:\/\/(?:\w+\.)?discord\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(
           serviceFormData.discordWebhookUrl
         );
       case 'telegram':
@@ -291,7 +320,7 @@
           serviceFormData.pushoverApiToken.length > 0 && serviceFormData.pushoverUserKey.length > 0
         );
       case 'slack':
-        return /hooks\.slack\.com\/services\/[^/]+\/[^/]+\/[^/]+/.test(
+        return /^https?:\/\/hooks\.slack\.com\/services\/[^/]+\/[^/]+\/[^/]+$/.test(
           serviceFormData.slackWebhookUrl
         );
       case 'ifttt':
@@ -312,7 +341,7 @@
         return true;
       }
       case 'custom':
-        return /^[a-z]+:\/\/.+/i.test(serviceFormData.customUrl);
+        return /^[a-z]+:\/\/.+$/i.test(serviceFormData.customUrl);
       default:
         return false;
     }
@@ -561,18 +590,20 @@
       templateStatusMessage = t('settings.notifications.templates.saveSuccess');
       templateStatusType = 'success';
 
-      setTimeout(() => {
+      clearTimeout(templateStatusTimeout);
+      templateStatusTimeout = setTimeout(() => {
         templateStatusMessage = '';
-      }, 3000);
+      }, STATUS_DISMISS_MS);
     } catch (error) {
       templateStatusMessage = t('settings.notifications.templates.saveError', {
         message: (error as Error).message,
       });
       templateStatusType = 'error';
 
-      setTimeout(() => {
+      clearTimeout(templateStatusTimeout);
+      templateStatusTimeout = setTimeout(() => {
         templateStatusMessage = '';
-      }, 5000);
+      }, STATUS_DISMISS_ERROR_MS);
     } finally {
       savingTemplate = false;
     }
@@ -618,10 +649,11 @@
         'success'
       );
 
-      setTimeout(() => {
+      clearTimeout(channelStatusTimeout);
+      channelStatusTimeout = setTimeout(() => {
         channelStatusMessage = '';
         channelStatusType = 'info';
-      }, 5000);
+      }, STATUS_DISMISS_ERROR_MS);
     } catch (error) {
       generating = false;
       if (error instanceof ApiError && error.status === 503) {
@@ -638,10 +670,11 @@
         );
       }
 
-      setTimeout(() => {
+      clearTimeout(channelStatusTimeout);
+      channelStatusTimeout = setTimeout(() => {
         channelStatusMessage = '';
         channelStatusType = 'info';
-      }, 10000);
+      }, STATUS_DISMISS_LONG_MS);
     }
   }
 
@@ -891,18 +924,20 @@
       pushStatusMessage = t('settings.notifications.templates.saveSuccess');
       pushStatusType = 'success';
 
-      setTimeout(() => {
+      clearTimeout(pushStatusTimeout);
+      pushStatusTimeout = setTimeout(() => {
         pushStatusMessage = '';
-      }, 3000);
+      }, STATUS_DISMISS_MS);
     } catch (error) {
       pushStatusMessage = t('settings.notifications.templates.saveError', {
         message: (error as Error).message,
       });
       pushStatusType = 'error';
 
-      setTimeout(() => {
+      clearTimeout(pushStatusTimeout);
+      pushStatusTimeout = setTimeout(() => {
         pushStatusMessage = '';
-      }, 5000);
+      }, STATUS_DISMISS_ERROR_MS);
     } finally {
       savingPush = false;
     }
@@ -924,18 +959,20 @@
       pushStatusMessage = t('settings.notifications.push.test.success');
       pushStatusType = 'success';
 
-      setTimeout(() => {
+      clearTimeout(pushStatusTimeout);
+      pushStatusTimeout = setTimeout(() => {
         pushStatusMessage = '';
-      }, 5000);
+      }, STATUS_DISMISS_ERROR_MS);
     } catch (error) {
       pushStatusMessage = t('settings.notifications.push.test.error', {
         message: (error as Error).message,
       });
       pushStatusType = 'error';
 
-      setTimeout(() => {
+      clearTimeout(pushStatusTimeout);
+      pushStatusTimeout = setTimeout(() => {
         pushStatusMessage = '';
-      }, 5000);
+      }, STATUS_DISMISS_ERROR_MS);
     } finally {
       testingProvider = false;
     }
@@ -985,7 +1022,8 @@
   function showRuleStatus(msg: string, type: 'info' | 'success' | 'error') {
     ruleStatusMessage = msg;
     ruleStatusType = type;
-    setTimeout(() => {
+    clearTimeout(ruleStatusTimeout);
+    ruleStatusTimeout = setTimeout(() => {
       ruleStatusMessage = '';
     }, STATUS_DISMISS_MS);
   }
@@ -1031,7 +1069,7 @@
         v2Available = false;
         return;
       }
-      logger.error('Failed to load alert history', err, {
+      logger.error('Failed to load notification history', err, {
         component: 'NotificationsSettingsPage',
       });
       showRuleStatus(t('settings.alerts.errors.historyFailed'), 'error');
@@ -1491,12 +1529,14 @@
                         />
                         <button
                           type="button"
-                          class="btn btn-sm btn-outline"
+                          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-lg border border-base-300 text-base-content hover:bg-base-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={serviceFormData.ntfyCheckStatus === 'checking'}
                           onclick={checkNtfyServer}
                         >
                           {#if serviceFormData.ntfyCheckStatus === 'checking'}
-                            <span class="loading loading-spinner loading-xs"></span>
+                            <span
+                              class="size-3 animate-spin rounded-full border-2 border-current border-t-transparent"
+                            ></span>
                           {/if}
                           {t('settings.notifications.push.services.ntfy.testConnection')}
                         </button>
@@ -2178,15 +2218,9 @@
     class="mb-4 px-1"
   />
 
-  <!-- Action buttons: New Rule + Export, Import, Reset -->
+  <!-- Action buttons: Export, Import, Reset + New Rule -->
   <div class="mb-4 flex items-center gap-2 flex-wrap">
-    {#if !editorOpen}
-      <SettingsButton variant="primary" onclick={() => openEditor()} disabled={!v2Available}>
-        <Plus class="mr-1.5 size-4" />
-        {t('settings.alerts.newRule')}
-      </SettingsButton>
-    {/if}
-    <div class="ml-auto flex items-center gap-2">
+    <div class="flex items-center gap-2">
       <SettingsButton
         variant="secondary"
         onclick={handleExport}
@@ -2218,6 +2252,17 @@
         {t('settings.alerts.resetDefaults')}
       </SettingsButton>
     </div>
+    {#if !editorOpen}
+      <SettingsButton
+        className="ml-auto"
+        variant="primary"
+        onclick={() => openEditor()}
+        disabled={!v2Available}
+      >
+        <Plus class="mr-1.5 size-4" />
+        {t('settings.alerts.newRule')}
+      </SettingsButton>
+    {/if}
   </div>
 
   <!-- Editor panel (conditional) -->
@@ -2246,7 +2291,7 @@
       {t('settings.alerts.noRules')}
     </div>
   {:else}
-    <div class="card bg-base-100 shadow-xs overflow-hidden">
+    <div class="rounded-xl bg-base-100 shadow-xs overflow-hidden">
       {#each rules as rule (rule.id)}
         {@const OtIcon = objectTypeIcon(rule.object_type)}
         {@const otColor = objectTypeColor(rule.object_type)}
@@ -2258,7 +2303,7 @@
           <!-- Toggle switch -->
           <input
             type="checkbox"
-            class="toggle toggle-sm toggle-primary mt-1"
+            class="appearance-none w-8 h-4 rounded-full cursor-pointer transition-all relative bg-base-300 before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-3 before:h-3 before:rounded-full before:bg-base-100 before:shadow-sm before:transition-transform checked:bg-primary checked:before:translate-x-4 disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             checked={rule.enabled}
             disabled={togglingId === rule.id}
             onchange={() => handleToggleRule(rule)}
@@ -2273,7 +2318,9 @@
               <span class="text-sm font-medium" class:opacity-50={!rule.enabled}>{displayName}</span
               >
               {#if rule.built_in}
-                <span class="badge badge-sm badge-ghost gap-1">
+                <span
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-base-200 text-base-content/70"
+                >
                   <Shield class="size-2.5" />
                   {t('settings.alerts.builtIn')}
                 </span>
@@ -2330,7 +2377,7 @@
           <!-- Action buttons -->
           <div class="flex items-center gap-1 flex-shrink-0">
             <button
-              class="btn btn-ghost btn-xs btn-square"
+              class="inline-flex items-center justify-center size-7 rounded-md text-base-content/70 hover:bg-base-200 hover:text-base-content transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.test')}
               disabled={testingId === rule.id}
               onclick={() => handleTestRule(rule)}
@@ -2338,7 +2385,7 @@
               <Play class="size-3.5" />
             </button>
             <button
-              class="btn btn-ghost btn-xs btn-square"
+              class="inline-flex items-center justify-center size-7 rounded-md text-base-content/70 hover:bg-base-200 hover:text-base-content transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.edit')}
               disabled={editorOpen}
               onclick={() => openEditor(rule)}

@@ -1918,7 +1918,23 @@
         "saveError": "Virhe: {message}",
         "availableVariables": "Käytettävissä olevat pohjamuuttujat",
         "variablesDescription": "Käytä näitä muuttujia pohjissasi syntaksilla",
-        "loading": "Ladataan..."
+        "loading": "Ladataan...",
+        "fields": {
+          "commonName": "Linnun yleisnimi (esim. \"Punakardinaali\")",
+          "scientificName": "Tieteellinen nimi (esim. \"Cardinalis cardinalis\")",
+          "confidence": "Luottamusarvo (0,0–1,0)",
+          "confidencePercent": "Luottamus prosentteina (esim. \"99\")",
+          "detectionTime": "Havainnon aika (esim. \"14:30:45\")",
+          "detectionDate": "Havainnon päivämäärä (esim. \"2024-10-05\")",
+          "latitude": "GPS-leveysaste",
+          "longitude": "GPS-pituusaste",
+          "location": "Muotoillut koordinaatit (esim. \"42.360100, -71.058900\")",
+          "detectionId": "Havainnon tunnistenumero (esim. \"1234\")",
+          "detectionPath": "Suhteellinen polku havaintoon (esim. \"/ui/detections/1234\")",
+          "detectionUrl": "Täydellinen URL havaintoon",
+          "imageUrl": "Linkki lajikuvaan",
+          "daysSinceFirstSeen": "Päivien lukumäärä ensimmäisestä havainnosta"
+        }
       },
       "push": {
         "title": "Push-ilmoitukset",
@@ -3186,8 +3202,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "Hälytysten historia",
-          "description": "Tarkastele aiempia hälytyksiä ja niiden tuloksia."
+          "title": "Ilmoitushistoria",
+          "description": "Tarkastele aiempia ilmoituksia ja niiden tuloksia."
         }
       },
       "filters": {
@@ -3209,7 +3225,7 @@
       "noActions": "Ei toimintoja",
       "noRules": "Hälytyssääntöjä ei ole määritetty.",
       "noMatchingRules": "Yksikään sääntö ei vastaa nykyisiä suodattimia.",
-      "noHistory": "Ei hälytysten historiaa.",
+      "noHistory": "Ei ilmoitushistoriaa.",
       "confirmDelete": "Haluatko varmasti poistaa säännön \"{name}\"?",
       "newRule": "Uusi sääntö",
       "resetDefaults": "Palauta oletukset",
@@ -3239,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Hälytyssääntöjen lataus epäonnistui",
-        "historyFailed": "Hälytysten historian lataus epäonnistui",
+        "historyFailed": "Ilmoitushistorian lataus epäonnistui",
         "toggleFailed": "Säännön tilan vaihto epäonnistui",
         "deleteFailed": "Säännön poistaminen epäonnistui",
         "testFailed": "Säännön testaus epäonnistui",

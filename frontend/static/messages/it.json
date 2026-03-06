@@ -1721,7 +1721,23 @@
         "saveError": "Errore: {message}",
         "availableVariables": "Variabili Modello Disponibili",
         "variablesDescription": "Usa queste variabili nei tuoi modelli con la sintassi",
-        "loading": "Caricamento..."
+        "loading": "Caricamento...",
+        "fields": {
+          "commonName": "Nome comune dell'uccello (es., \"Cardinale rosso\")",
+          "scientificName": "Nome scientifico (es., \"Cardinalis cardinalis\")",
+          "confidence": "Valore di affidabilità (0,0 a 1,0)",
+          "confidencePercent": "Affidabilità in percentuale (es., \"99\")",
+          "detectionTime": "Ora del rilevamento (es., \"14:30:45\")",
+          "detectionDate": "Data del rilevamento (es., \"2024-10-05\")",
+          "latitude": "Coordinata GPS latitudine",
+          "longitude": "Coordinata GPS longitudine",
+          "location": "Coordinate formattate (es., \"42.360100, -71.058900\")",
+          "detectionId": "Numero ID del rilevamento (es., \"1234\")",
+          "detectionPath": "Percorso relativo al rilevamento (es., \"/ui/detections/1234\")",
+          "detectionUrl": "URL completo al rilevamento",
+          "imageUrl": "Link all'immagine della specie",
+          "daysSinceFirstSeen": "Numero di giorni dal primo rilevamento"
+        }
       },
       "testNotification": {
         "title": "Invia Notifica Test Nuova Specie",
@@ -2983,8 +2999,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "Cronologia allerte",
-          "description": "Visualizza gli eventi di allerta passati e i relativi risultati."
+          "title": "Cronologia notifiche",
+          "description": "Visualizza gli eventi di notifica passati e i relativi risultati."
         }
       },
       "filters": {
@@ -3006,7 +3022,7 @@
       "noActions": "Nessuna azione",
       "noRules": "Nessuna regola di allerta configurata.",
       "noMatchingRules": "Nessuna regola corrisponde ai filtri correnti.",
-      "noHistory": "Nessuna cronologia allerte.",
+      "noHistory": "Nessuna cronologia notifiche.",
       "confirmDelete": "Sei sicuro di voler eliminare la regola \"{name}\"?",
       "newRule": "Nuova regola",
       "resetDefaults": "Ripristina predefiniti",
@@ -3036,7 +3052,7 @@
       },
       "errors": {
         "loadFailed": "Caricamento delle regole di allerta non riuscito",
-        "historyFailed": "Caricamento della cronologia allerte non riuscito",
+        "historyFailed": "Caricamento della cronologia notifiche non riuscito",
         "toggleFailed": "Attivazione/disattivazione della regola non riuscita",
         "deleteFailed": "Eliminazione della regola non riuscita",
         "testFailed": "Test della regola non riuscito",

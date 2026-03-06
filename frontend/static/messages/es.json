@@ -1918,7 +1918,23 @@
         "saveError": "Error: {message}",
         "availableVariables": "Variables de plantilla disponibles",
         "variablesDescription": "Usa estas variables en tus plantillas con la sintaxis",
-        "loading": "Cargando..."
+        "loading": "Cargando...",
+        "fields": {
+          "commonName": "Nombre común del ave (ej., \"Cardenal norteño\")",
+          "scientificName": "Nombre científico (ej., \"Cardinalis cardinalis\")",
+          "confidence": "Valor de confianza (0.0 a 1.0)",
+          "confidencePercent": "Confianza como porcentaje (ej., \"99\")",
+          "detectionTime": "Hora de detección (ej., \"14:30:45\")",
+          "detectionDate": "Fecha de detección (ej., \"2024-10-05\")",
+          "latitude": "Coordenada GPS de latitud",
+          "longitude": "Coordenada GPS de longitud",
+          "location": "Coordenadas formateadas (ej., \"42.360100, -71.058900\")",
+          "detectionId": "Número de ID de detección (ej., \"1234\")",
+          "detectionPath": "Ruta relativa a la detección (ej., \"/ui/detections/1234\")",
+          "detectionUrl": "URL completa a la detección",
+          "imageUrl": "Enlace a imagen de la especie",
+          "daysSinceFirstSeen": "Número de días desde la primera detección"
+        }
       },
       "testNotification": {
         "title": "Enviar notificación de prueba de nueva especie",
@@ -3186,8 +3202,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "Historial de alertas",
-          "description": "Ver eventos de alerta pasados y sus resultados."
+          "title": "Historial de notificaciones",
+          "description": "Ver eventos de notificación pasados y sus resultados."
         }
       },
       "filters": {
@@ -3209,7 +3225,7 @@
       "noActions": "Sin acciones",
       "noRules": "No hay reglas de alerta configuradas.",
       "noMatchingRules": "Ninguna regla coincide con los filtros actuales.",
-      "noHistory": "Sin historial de alertas.",
+      "noHistory": "Sin historial de notificaciones.",
       "confirmDelete": "¿Está seguro de que desea eliminar la regla \"{name}\"?",
       "newRule": "Nueva regla",
       "resetDefaults": "Restablecer valores predeterminados",
@@ -3239,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Error al cargar las reglas de alerta",
-        "historyFailed": "Error al cargar el historial de alertas",
+        "historyFailed": "Error al cargar el historial de notificaciones",
         "toggleFailed": "Error al alternar la regla",
         "deleteFailed": "Error al eliminar la regla",
         "testFailed": "Error al probar la regla",

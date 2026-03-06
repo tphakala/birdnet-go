@@ -1918,7 +1918,23 @@
         "saveError": "Erreur : {message}",
         "availableVariables": "Variables de modèle disponibles",
         "variablesDescription": "Utilisez ces variables dans vos modèles avec la syntaxe",
-        "loading": "Chargement..."
+        "loading": "Chargement...",
+        "fields": {
+          "commonName": "Nom commun de l'oiseau (ex., \"Cardinal rouge\")",
+          "scientificName": "Nom scientifique (ex., \"Cardinalis cardinalis\")",
+          "confidence": "Valeur de confiance (0,0 à 1,0)",
+          "confidencePercent": "Confiance en pourcentage (ex., \"99\")",
+          "detectionTime": "Heure de détection (ex., \"14:30:45\")",
+          "detectionDate": "Date de détection (ex., \"2024-10-05\")",
+          "latitude": "Coordonnée GPS latitude",
+          "longitude": "Coordonnée GPS longitude",
+          "location": "Coordonnées formatées (ex., \"42.360100, -71.058900\")",
+          "detectionId": "Numéro d'identification de détection (ex., \"1234\")",
+          "detectionPath": "Chemin relatif vers la détection (ex., \"/ui/detections/1234\")",
+          "detectionUrl": "URL complète vers la détection",
+          "imageUrl": "Lien vers l'image de l'espèce",
+          "daysSinceFirstSeen": "Nombre de jours depuis la première détection"
+        }
       },
       "push": {
         "title": "Notifications Push",
@@ -3186,8 +3202,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "Historique des alertes",
-          "description": "Consulter les événements d'alerte passés et leurs résultats."
+          "title": "Historique des notifications",
+          "description": "Consulter les événements de notification passés et leurs résultats."
         }
       },
       "filters": {
@@ -3209,7 +3225,7 @@
       "noActions": "Aucune action",
       "noRules": "Aucune règle d'alerte configurée.",
       "noMatchingRules": "Aucune règle ne correspond aux filtres actuels.",
-      "noHistory": "Aucun historique d'alertes.",
+      "noHistory": "Aucun historique de notifications.",
       "confirmDelete": "Êtes-vous sûr de vouloir supprimer la règle \"{name}\" ?",
       "newRule": "Nouvelle règle",
       "resetDefaults": "Réinitialiser les valeurs par défaut",
@@ -3239,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Échec du chargement des règles d'alerte",
-        "historyFailed": "Échec du chargement de l'historique des alertes",
+        "historyFailed": "Échec du chargement de l'historique des notifications",
         "toggleFailed": "Échec de l'activation/désactivation de la règle",
         "deleteFailed": "Échec de la suppression de la règle",
         "testFailed": "Échec du test de la règle",
