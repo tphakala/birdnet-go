@@ -419,15 +419,15 @@ func (s *Server) StartWithGracefulShutdown() error {
 
 	s.slogger.Info("Shutdown signal received, initiating graceful shutdown")
 
-	return s.Shutdown()
-}
-
-// Shutdown gracefully stops the server.
-func (s *Server) Shutdown() error {
-	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), s.config.ShutdownTimeout)
 	defer cancel()
 
+	return s.ShutdownWithContext(ctx)
+}
+
+// ShutdownWithContext gracefully stops the server using the provided context
+// for timeout control. Use this when the caller manages the shutdown budget.
+func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	// Shutdown API controller first (waits for its background goroutines)
 	if s.apiController != nil {
 		s.apiController.Shutdown()
