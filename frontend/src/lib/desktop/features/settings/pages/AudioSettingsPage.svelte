@@ -38,6 +38,8 @@
     settingsActions,
     audioSettings,
     rtspSettings,
+    realtimeSettings,
+    extendedCaptureSettings,
     defaultQuietHoursConfig,
     type EqualizerFilterType,
     type QuietHoursConfig,
@@ -51,6 +53,7 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
+  import SpeciesListEditor from '$lib/desktop/components/forms/SpeciesListEditor.svelte';
   import { t } from '$lib/i18n';
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -63,8 +66,9 @@
     Clock,
     RefreshCw,
     Info,
+    TriangleAlert,
   } from '@lucide/svelte';
-  import { api } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
 
   const logger = loggers.audio;
 
@@ -262,8 +266,18 @@
     )
   );
 
+  // Extended capture section changes
+  let extendedCaptureHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.realtime?.extendedCapture,
+      store.formData.realtime?.extendedCapture
+    )
+  );
+
   // Combined recording tab changes (for tab indicator) - normalization moved to Processing
-  let recordingTabHasChanges = $derived(clipRecordingHasChanges || fileSettingsHasChanges);
+  let recordingTabHasChanges = $derived(
+    clipRecordingHasChanges || extendedCaptureHasChanges || fileSettingsHasChanges
+  );
 
   // Retention tab changes
   let retentionTabHasChanges = $derived(
@@ -313,6 +327,68 @@
       audioDevices.loading = false;
     }
   }
+
+  // Extended capture constants
+  const EXTENDED_CAPTURE_MIN_DURATION = 30;
+  const EXTENDED_CAPTURE_MAX_DURATION = 1200;
+  const EXTENDED_CAPTURE_DURATION_STEP = 30;
+
+  // Species list API state for extended capture (reuses ApiState<T>)
+  interface SpeciesListResponse {
+    species?: Array<{ label: string; commonName?: string }>;
+  }
+
+  let speciesListState = $state<ApiState<string[]>>({
+    loading: true,
+    error: null,
+    data: [],
+  });
+
+  $effect(() => {
+    loadSpeciesList();
+  });
+
+  async function loadSpeciesList() {
+    speciesListState.loading = true;
+    speciesListState.error = null;
+
+    try {
+      const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
+      if (data?.species && Array.isArray(data.species)) {
+        speciesListState.data = data.species.map(
+          (species: { label: string; commonName?: string }) => species.commonName || species.label
+        );
+      } else {
+        speciesListState.data = [];
+      }
+    } catch (error) {
+      if (error instanceof ApiError) {
+        logger.warn('Failed to load species list for extended capture', error, {
+          component: 'AudioSettingsPage',
+          action: 'loadSpeciesList',
+        });
+      }
+      speciesListState.error = t('settings.filters.errors.speciesLoadFailed');
+      speciesListState.data = [];
+    } finally {
+      speciesListState.loading = false;
+    }
+  }
+
+  let extendedCaptureSettingsLocal = $derived(
+    (() => {
+      const base = $extendedCaptureSettings ?? {
+        enabled: false,
+        maxDuration: 120,
+        captureBufferSeconds: 0,
+        species: [],
+      };
+      return {
+        ...base,
+        species: base.species ?? [],
+      };
+    })()
+  );
 
   // Check if ffmpeg is available
   let ffmpegAvailable = $state(true); // Assume true for now
@@ -438,6 +514,28 @@
           retention: { ...retentionSettings, keepSpectrograms },
         },
       },
+    });
+  }
+
+  // Extended capture update handlers
+  function updateExtendedCaptureEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      extendedCapture: { ...extendedCaptureSettingsLocal, enabled },
+    });
+  }
+
+  function updateExtendedCaptureMaxDuration(maxDuration: number) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      extendedCapture: { ...extendedCaptureSettingsLocal, maxDuration },
+    });
+  }
+
+  function handleExtendedCaptureSpeciesChange(updatedSpecies: string[]) {
+    settingsActions.updateSection('realtime', {
+      ...$realtimeSettings,
+      extendedCapture: { ...extendedCaptureSettingsLocal, species: updatedSpecies },
     });
   }
 
@@ -1053,7 +1151,90 @@
       </div>
     </SettingsSection>
 
-    <!-- Card 2: File Settings -->
+    <!-- Card 2: Extended Capture Settings -->
+    <SettingsSection
+      title={t('settings.audio.extendedCapture.title')}
+      description={t('settings.audio.extendedCapture.description')}
+      originalData={store.originalData.realtime?.extendedCapture}
+      currentData={store.formData.realtime?.extendedCapture}
+    >
+      <div class="space-y-4">
+        <!-- RAM Warning Note -->
+        <div
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]"
+        >
+          <TriangleAlert class="size-5 shrink-0 mt-0.5" />
+          <p class="text-sm">{t('settings.audio.extendedCapture.ramWarning')}</p>
+        </div>
+
+        <!-- Enable Extended Capture -->
+        <Checkbox
+          checked={extendedCaptureSettingsLocal.enabled}
+          label={t('settings.audio.extendedCapture.enable')}
+          helpText={t('settings.audio.extendedCapture.enableHelp')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={enabled => updateExtendedCaptureEnabled(enabled)}
+        />
+
+        <!-- Fieldset for accessible disabled state -->
+        <fieldset
+          disabled={!extendedCaptureSettingsLocal.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="extended-capture-status"
+        >
+          <span id="extended-capture-status" class="sr-only">
+            {extendedCaptureSettingsLocal.enabled
+              ? t('settings.audio.extendedCapture.enable')
+              : t('settings.audio.extendedCapture.disabled')}
+          </span>
+          <div
+            class="space-y-4 transition-opacity duration-200"
+            class:opacity-50={!extendedCaptureSettingsLocal.enabled}
+          >
+            <div class="settings-form-grid">
+              <!-- Max Duration Slider -->
+              <InlineSlider
+                label={t('settings.audio.extendedCapture.maxDurationLabel')}
+                value={extendedCaptureSettingsLocal.maxDuration}
+                onUpdate={updateExtendedCaptureMaxDuration}
+                min={EXTENDED_CAPTURE_MIN_DURATION}
+                max={EXTENDED_CAPTURE_MAX_DURATION}
+                step={EXTENDED_CAPTURE_DURATION_STEP}
+                size="sm"
+                unit="s"
+                disabled={!extendedCaptureSettingsLocal.enabled ||
+                  store.isLoading ||
+                  store.isSaving}
+                formatValue={(v: number) => {
+                  const minutes = Math.floor(v / 60);
+                  const seconds = v % 60;
+                  if (seconds === 0) return `${minutes}m`;
+                  return `${minutes}m ${seconds}s`;
+                }}
+                helpText={t('settings.audio.extendedCapture.maxDurationHelp')}
+              />
+            </div>
+
+            <!-- Species List -->
+            <SpeciesListEditor
+              species={extendedCaptureSettingsLocal.species}
+              disabled={!extendedCaptureSettingsLocal.enabled || store.isLoading || store.isSaving}
+              predictions={speciesListState.data}
+              predictionsLoading={speciesListState.loading}
+              listLabel={t('settings.audio.extendedCapture.speciesListLabel')}
+              addLabel={t('settings.audio.extendedCapture.addSpeciesLabel')}
+              addPlaceholder={t('settings.filters.typeSpeciesName')}
+              addHelpText={t('settings.audio.extendedCapture.addSpeciesHelp')}
+              addButtonText={t('settings.audio.extendedCapture.addSpeciesButton')}
+              hasChanges={extendedCaptureHasChanges}
+              onSpeciesChange={handleExtendedCaptureSpeciesChange}
+            />
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+
+    <!-- Card 3: File Settings -->
     <SettingsSection
       title={t('settings.audio.fileSettings.title')}
       description={t('settings.audio.fileSettings.description')}
