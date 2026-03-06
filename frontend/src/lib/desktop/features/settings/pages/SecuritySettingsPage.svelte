@@ -30,6 +30,7 @@
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -41,7 +42,7 @@
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { TriangleAlert, ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -821,13 +822,14 @@
               onchange={updateSubnetBypassSubnet}
             />
 
-            <div class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]">
-              <TriangleAlert class="size-5 shrink-0" />
-              <span>
-                <strong>{t('settings.security.securityWarningTitle')}</strong>
-                {t('settings.security.subnetWarningText')}
-              </span>
-            </div>
+            <ErrorAlert type="warning">
+              {#snippet children()}
+                <span>
+                  <strong>{t('settings.security.securityWarningTitle')}</strong>
+                  {t('settings.security.subnetWarningText')}
+                </span>
+              {/snippet}
+            </ErrorAlert>
           </div>
         </fieldset>
       </div>
@@ -838,10 +840,11 @@
 {#snippet terminalTabContent()}
   <div class="space-y-6">
     <SettingsSection title={t('settings.security.terminal.title')}>
-      <div class="flex items-start gap-3 p-3 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] mb-4">
-        <TriangleAlert class="size-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
-        <p class="text-sm text-[var(--color-base-content)] opacity-80">{t('settings.security.terminal.securityWarning')}</p>
-      </div>
+      <ErrorAlert type="warning" className="mb-4">
+        {#snippet children()}
+          {t('settings.security.terminal.securityWarning')}
+        {/snippet}
+      </ErrorAlert>
       <Checkbox
         label={t('settings.security.terminal.enableLabel')}
         helpText={t('settings.security.terminal.enableHelpText')}

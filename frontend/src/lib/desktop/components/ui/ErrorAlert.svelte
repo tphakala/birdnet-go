@@ -35,18 +35,29 @@
   let isVisible = $state(true);
 
   // Base alert classes using native Tailwind
-  const baseClasses = 'flex items-start gap-3 p-4 rounded-lg';
+  const baseClasses =
+    'flex items-start gap-3 p-3 rounded-lg text-sm text-[var(--color-base-content)] opacity-90';
 
   // Type-specific classes using native Tailwind with CSS custom properties
   const typeClasses: Record<AlertType, string> = {
-    error: 'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]',
+    error:
+      'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
     warning:
-      'bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]',
-    info: 'bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]',
+      'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]',
+    info: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-info)_30%,transparent)]',
     success:
-      'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]',
+      'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]',
     check:
-      'bg-[color-mix(in_srgb,var(--color-success)_15%,transparent)] text-[var(--color-success)]',
+      'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-success)_30%,transparent)]',
+  };
+
+  // Icon color classes per type
+  const iconColorClasses: Record<AlertType, string> = {
+    error: 'text-[var(--color-error)]',
+    warning: 'text-[var(--color-warning)]',
+    info: 'text-[var(--color-info)]',
+    success: 'text-[var(--color-success)]',
+    check: 'text-[var(--color-success)]',
   };
 
   function handleDismiss() {
@@ -66,13 +77,21 @@
     {...rest}
   >
     {#if type === 'error'}
-      <XCircle class="size-6 shrink-0" />
+      <XCircle
+        class="size-5 shrink-0 mt-0.5 {safeGet(iconColorClasses, type, iconColorClasses.error)}"
+      />
     {:else if type === 'warning'}
-      <TriangleAlert class="size-6 shrink-0" />
+      <TriangleAlert
+        class="size-5 shrink-0 mt-0.5 {safeGet(iconColorClasses, type, iconColorClasses.warning)}"
+      />
     {:else if type === 'info'}
-      <Info class="size-6 shrink-0" />
+      <Info
+        class="size-5 shrink-0 mt-0.5 {safeGet(iconColorClasses, type, iconColorClasses.info)}"
+      />
     {:else if type === 'success' || type === 'check'}
-      <CircleCheck class="size-6 shrink-0" />
+      <CircleCheck
+        class="size-5 shrink-0 mt-0.5 {safeGet(iconColorClasses, type, iconColorClasses.success)}"
+      />
     {/if}
 
     <span class="min-w-0">

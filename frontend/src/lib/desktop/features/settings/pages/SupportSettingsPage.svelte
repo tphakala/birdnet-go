@@ -21,6 +21,7 @@
 -->
 <script lang="ts">
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -30,7 +31,6 @@
     ShieldCheck,
     Info,
     Download,
-    TriangleAlert,
     XCircle,
     CircleCheck,
     Wrench,
@@ -258,19 +258,18 @@
                 {@html t('settings.support.supportReport.description.intro')}
               </p>
 
-              <div
-                class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)] shadow-sm text-sm"
-              >
-                <TriangleAlert class="size-5 shrink-0" />
-                <div class="min-w-0">
-                  <span class="font-semibold">
-                    {t('settings.support.supportReport.githubRequired.title')}
-                  </span>
-                  <div class="mt-1">
-                    {@html t('settings.support.supportReport.githubRequired.description')}
+              <ErrorAlert type="warning">
+                {#snippet children()}
+                  <div class="min-w-0">
+                    <span class="font-semibold">
+                      {t('settings.support.supportReport.githubRequired.title')}
+                    </span>
+                    <div class="mt-1">
+                      {@html t('settings.support.supportReport.githubRequired.description')}
+                    </div>
                   </div>
-                </div>
-              </div>
+                {/snippet}
+              </ErrorAlert>
 
               <div
                 class="bg-[var(--color-base-100)] rounded-lg p-3 border border-[var(--border-200)]"
