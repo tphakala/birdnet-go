@@ -1462,13 +1462,13 @@ Responsive Breakpoints:
 
     50% {
       transform: scale(1.3);
-      background-color: oklch(var(--su) / 0.3);
-      box-shadow: 0 0 10px oklch(var(--su) / 0.5);
+      background-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+      box-shadow: 0 0 10px color-mix(in srgb, var(--color-success) 50%, transparent);
     }
 
     100% {
       transform: scale(1);
-      background-color: transparent;
+      background-color: color-mix(in srgb, var(--color-success) 0%, transparent);
     }
   }
 
@@ -1481,13 +1481,13 @@ Responsive Breakpoints:
     0% {
       transform: translateY(-30px);
       opacity: 0;
-      background-color: oklch(var(--p) / 0.15);
+      background-color: color-mix(in srgb, var(--color-primary) 15%, transparent);
     }
 
     100% {
       transform: translateY(0);
       opacity: 1;
-      background-color: transparent;
+      background-color: color-mix(in srgb, var(--color-primary) 0%, transparent);
     }
   }
 
@@ -1499,32 +1499,32 @@ Responsive Breakpoints:
   @keyframes heartPulse {
     0% {
       transform: scale(1);
-      box-shadow: 0 0 0 0 oklch(var(--p) / 0.7);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 70%, transparent);
     }
 
     15% {
       transform: scale(1.15);
-      box-shadow: 0 0 0 4px oklch(var(--p) / 0.5);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary) 50%, transparent);
     }
 
     25% {
       transform: scale(1.05);
-      box-shadow: 0 0 0 6px oklch(var(--p) / 0.3);
+      box-shadow: 0 0 0 6px color-mix(in srgb, var(--color-primary) 30%, transparent);
     }
 
     35% {
       transform: scale(1.12);
-      box-shadow: 0 0 0 8px oklch(var(--p) / 0.1);
+      box-shadow: 0 0 0 8px color-mix(in srgb, var(--color-primary) 10%, transparent);
     }
 
     45% {
       transform: scale(1);
-      box-shadow: 0 0 0 10px oklch(var(--p) / 0);
+      box-shadow: 0 0 0 10px color-mix(in srgb, var(--color-primary) 0%, transparent);
     }
 
     100% {
       transform: scale(1);
-      box-shadow: 0 0 0 0 oklch(var(--p) / 0);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
     }
   }
 

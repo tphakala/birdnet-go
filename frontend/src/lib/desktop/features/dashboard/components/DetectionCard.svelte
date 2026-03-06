@@ -334,11 +334,11 @@
 
   @keyframes cardHighlight {
     0% {
-      box-shadow: 0 0 0 2px oklch(var(--p) / 0.4);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 40%, transparent);
     }
 
     100% {
-      box-shadow: 0 0 0 0 oklch(var(--p) / 0);
+      box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-primary) 0%, transparent);
     }
   }
 </style>
