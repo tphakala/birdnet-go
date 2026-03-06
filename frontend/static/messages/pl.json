@@ -3294,6 +3294,7 @@
         "actionPush": "Powiadomienie push",
         "optionsSection": "Opcje",
         "cooldownMinutes": "Czas odnowienia (minuty)",
+        "cooldownSeconds": "Czas odnowienia (sekundy)",
         "templateTitle": "Szablon tytułu",
         "templateTitlePlaceholder": "Pozostaw puste dla domyślnego",
         "templateMessage": "Szablon wiadomości",

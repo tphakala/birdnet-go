@@ -3294,6 +3294,7 @@
         "actionPush": "Notificação push",
         "optionsSection": "Opções",
         "cooldownMinutes": "Tempo de espera (minutos)",
+        "cooldownSeconds": "Tempo de espera (segundos)",
         "templateTitle": "Modelo de título",
         "templateTitlePlaceholder": "Deixe vazio para o padrão",
         "templateMessage": "Modelo de mensagem",

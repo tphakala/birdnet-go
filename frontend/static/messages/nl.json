@@ -3294,6 +3294,7 @@
         "actionPush": "Pushmelding",
         "optionsSection": "Opties",
         "cooldownMinutes": "Wachttijd (minuten)",
+        "cooldownSeconds": "Wachttijd (seconden)",
         "templateTitle": "Titelsjabloon",
         "templateTitlePlaceholder": "Laat leeg voor standaard",
         "templateMessage": "Berichtsjabloon",

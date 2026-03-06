@@ -61,7 +61,7 @@
   let triggerType = $state<'event' | 'metric'>('event');
   let eventName = $state('');
   let metricName = $state('');
-  let cooldownMin = $state(5);
+  let cooldownSec = $state(300);
   interface EditorCondition {
     id: string;
     property: string;
@@ -96,7 +96,7 @@
       triggerType = (rule.trigger_type as 'event' | 'metric') || 'event';
       eventName = rule.event_name;
       metricName = rule.metric_name;
-      cooldownMin = Math.floor(rule.cooldown_sec / 60);
+      cooldownSec = rule.cooldown_sec;
       conditions =
         rule.conditions?.map(c => ({
           id: newConditionId(),
@@ -115,11 +115,14 @@
       name = '';
       description = '';
       enabled = true;
-      objectType = schema.objectTypes[0]?.name ?? '';
-      triggerType = 'event';
+      const defaultOt = schema.objectTypes[0];
+      objectType = defaultOt?.name ?? '';
+      const defaultHasEvents = (defaultOt?.events?.length ?? 0) > 0;
+      const defaultHasMetrics = (defaultOt?.metrics?.length ?? 0) > 0;
+      triggerType = defaultHasMetrics && !defaultHasEvents ? 'metric' : 'event';
       eventName = '';
       metricName = '';
-      cooldownMin = 5;
+      cooldownSec = 300;
       conditions = [];
       actions = [{ target: 'bell', template_title: '', template_message: '' }];
     }
@@ -274,7 +277,7 @@
       trigger_type: triggerType,
       event_name: triggerType === 'event' ? eventName : '',
       metric_name: triggerType === 'metric' ? metricName : '',
-      cooldown_sec: cooldownMin * 60,
+      cooldown_sec: cooldownSec,
       conditions: conditions.map((c, i) => ({
         id: 0,
         rule_id: 0,
@@ -728,16 +731,16 @@
       <!-- Cooldown -->
       <div>
         <label for="rule-cooldown" class="block text-xs font-medium text-base-content/60 mb-1">
-          {t('settings.alerts.editor.cooldownMinutes')}
+          {t('settings.alerts.editor.cooldownSeconds')}
         </label>
         <input
           id="rule-cooldown"
           type="number"
           min="0"
           class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors tabular-nums"
-          value={cooldownMin}
+          value={cooldownSec}
           onchange={e => {
-            cooldownMin = Number(e.currentTarget.value);
+            cooldownSec = Number(e.currentTarget.value);
           }}
         />
       </div>

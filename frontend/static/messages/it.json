@@ -1725,8 +1725,8 @@
         "fields": {
           "commonName": "Nome comune dell'uccello (es., \"Cardinale rosso\")",
           "scientificName": "Nome scientifico (es., \"Cardinalis cardinalis\")",
-          "confidence": "Valore di affidabilità (0,0 a 1,0)",
-          "confidencePercent": "Affidabilità in percentuale (es., \"99\")",
+          "confidence": "Valore di confidenza (0,0 a 1,0)",
+          "confidencePercent": "Confidenza in percentuale (es., \"99\")",
           "detectionTime": "Ora del rilevamento (es., \"14:30:45\")",
           "detectionDate": "Data del rilevamento (es., \"2024-10-05\")",
           "latitude": "Coordinata GPS latitudine",
@@ -3091,6 +3091,7 @@
         "actionPush": "Notifica push",
         "optionsSection": "Opzioni",
         "cooldownMinutes": "Tempo di attesa (minuti)",
+        "cooldownSeconds": "Tempo di attesa (secondi)",
         "templateTitle": "Modello titolo",
         "templateTitlePlaceholder": "Lascia vuoto per il predefinito",
         "templateMessage": "Modello messaggio",

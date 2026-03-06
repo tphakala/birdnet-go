@@ -3294,6 +3294,7 @@
         "actionPush": "Notification push",
         "optionsSection": "Options",
         "cooldownMinutes": "Temps de recharge (minutes)",
+        "cooldownSeconds": "Temps de recharge (secondes)",
         "templateTitle": "Modèle de titre",
         "templateTitlePlaceholder": "Laisser vide pour la valeur par défaut",
         "templateMessage": "Modèle de message",

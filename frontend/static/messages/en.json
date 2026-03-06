@@ -3355,6 +3355,7 @@
         "actionPush": "Push notification",
         "optionsSection": "Options",
         "cooldownMinutes": "Cooldown (minutes)",
+        "cooldownSeconds": "Cooldown (seconds)",
         "templateTitle": "Title Template",
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",

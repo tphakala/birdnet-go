@@ -3294,6 +3294,7 @@
         "actionPush": "Push-Benachrichtigung",
         "optionsSection": "Optionen",
         "cooldownMinutes": "Abklingzeit (Minuten)",
+        "cooldownSeconds": "Abklingzeit (Sekunden)",
         "templateTitle": "Titelvorlage",
         "templateTitlePlaceholder": "Leer lassen für Standard",
         "templateMessage": "Nachrichtenvorlage",

@@ -3294,6 +3294,7 @@
         "actionPush": "Push-ilmoitus",
         "optionsSection": "Asetukset",
         "cooldownMinutes": "Odotusaika (minuuttia)",
+        "cooldownSeconds": "Odotusaika (sekuntia)",
         "templateTitle": "Otsikkopohja",
         "templateTitlePlaceholder": "Jätä tyhjäksi oletusarvolle",
         "templateMessage": "Viestipohja",

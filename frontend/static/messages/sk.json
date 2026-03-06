@@ -3033,8 +3033,8 @@
     "alerts": {
       "sections": {
         "history": {
-          "title": "História oznámení",
-          "description": "Zobrazte predchádzajúce udalosti oznámení a ich výsledky."
+          "title": "História upozornení",
+          "description": "Zobrazte predchádzajúce udalosti upozornení a ich výsledky."
         }
       },
       "filters": {
@@ -3056,7 +3056,7 @@
       "noActions": "Žiadne akcie",
       "noRules": "Žiadne pravidlá upozornení nie sú nakonfigurované.",
       "noMatchingRules": "Žiadne pravidlá nezodpovedajú aktuálnym filtrom.",
-      "noHistory": "Žiadna história oznámení.",
+      "noHistory": "Žiadna história upozornení.",
       "confirmDelete": "Ste si istí, že chcete odstrániť pravidlo \"{name}\"?",
       "newRule": "Nové pravidlo",
       "resetDefaults": "Obnoviť predvolené",
@@ -3086,7 +3086,7 @@
       },
       "errors": {
         "loadFailed": "Nepodarilo sa načítať pravidlá upozornení",
-        "historyFailed": "Nepodarilo sa načítať históriu oznámení",
+        "historyFailed": "Nepodarilo sa načítať históriu upozornení",
         "toggleFailed": "Nepodarilo sa prepnúť pravidlo",
         "deleteFailed": "Nepodarilo sa odstrániť pravidlo",
         "testFailed": "Nepodarilo sa otestovať pravidlo",
@@ -3125,6 +3125,7 @@
         "actionPush": "Push upozornenie",
         "optionsSection": "Možnosti",
         "cooldownMinutes": "Doba čakania (minúty)",
+        "cooldownSeconds": "Doba čakania (sekundy)",
         "templateTitle": "Šablóna titulku",
         "templateTitlePlaceholder": "Ponechajte prázdne pre predvolené",
         "templateMessage": "Šablóna správy",
