@@ -551,7 +551,7 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					log.Info("shutdown step 5: shutting down HTTP server",
 						logger.Int("step", 5),
 						logger.String("operation", "shutdown_http_server"))
-					if err := httpServerRef.Shutdown(); err != nil {
+					if err := httpServerRef.ShutdownWithContext(ctx); err != nil {
 						log.Warn("error shutting down HTTP server",
 							logger.Error(err),
 							logger.Int("step", 5),

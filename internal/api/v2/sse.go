@@ -233,6 +233,24 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	}
 }
 
+// CloseAllClients disconnects all SSE clients during shutdown.
+// This must be called before echo.Shutdown() so the HTTP server
+// has no active connections to wait for.
+func (m *SSEManager) CloseAllClients() {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	for id, client := range m.clients {
+		close(client.Channel)
+		if client.SoundLevelChan != nil {
+			close(client.SoundLevelChan)
+		}
+		close(client.Done)
+		delete(m.clients, id)
+	}
+	GetLogger().Info("SSE shutdown: closed all clients",
+		logger.String("operation", "sse_close_all_clients"))
+}
+
 // GetClientCount returns the number of connected clients
 func (m *SSEManager) GetClientCount() int {
 	m.mutex.RLock()
