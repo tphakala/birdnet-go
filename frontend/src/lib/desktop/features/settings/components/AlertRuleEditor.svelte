@@ -413,17 +413,9 @@
             >
               <OIcon class="w-3 h-3 {oColor.text}" />
             </div>
-            <div class="flex-1 min-w-0">
-              <span class="text-base-content truncate block">
-                {schemaObjectTypeLabel(selectedObjectType.name, selectedObjectType.label)}
-              </span>
-              <span class="text-[11px] text-base-content/40">
-                {selectedObjectType.events?.length ?? 0}
-                {t('settings.alerts.editor.eventsCount')} &middot; {selectedObjectType.metrics
-                  ?.length ?? 0}
-                {t('settings.alerts.editor.metricsCount')}
-              </span>
-            </div>
+            <span class="flex-1 min-w-0 text-base-content truncate">
+              {schemaObjectTypeLabel(selectedObjectType.name, selectedObjectType.label)}
+            </span>
           {/if}
           <ChevronDown
             class="w-3.5 h-3.5 flex-shrink-0 text-base-content/40 transition-transform {objDropOpen
