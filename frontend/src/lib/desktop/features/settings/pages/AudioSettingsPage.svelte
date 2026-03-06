@@ -68,7 +68,7 @@
     Info,
     TriangleAlert,
   } from '@lucide/svelte';
-  import { api, ApiError } from '$lib/utils/api';
+  import { api } from '$lib/utils/api';
 
   const logger = loggers.audio;
 
@@ -362,12 +362,10 @@
         speciesListState.data = [];
       }
     } catch (error) {
-      if (error instanceof ApiError) {
-        logger.warn('Failed to load species list for extended capture', error, {
-          component: 'AudioSettingsPage',
-          action: 'loadSpeciesList',
-        });
-      }
+      logger.warn('Failed to load species list for extended capture', error, {
+        component: 'AudioSettingsPage',
+        action: 'loadSpeciesList',
+      });
       speciesListState.error = t('settings.filters.errors.speciesLoadFailed');
       speciesListState.data = [];
     } finally {
