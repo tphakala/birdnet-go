@@ -507,7 +507,7 @@
   <!-- Help Text -->
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-[var(--color-base-content)] opacity-70">{helpText}</span>
+      <span class="help-text">{helpText}</span>
     </div>
   {/if}
 

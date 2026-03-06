@@ -194,10 +194,10 @@
       <!-- Feedback -->
       {#if passwordStrength?.feedback && passwordStrength.feedback.length > 0}
         <div class="mt-2">
-          <div class="text-xs text-[var(--color-base-content)] opacity-70 mb-1">
+          <div class="help-text mb-1">
             {t('forms.password.strength.suggestions.title')}
           </div>
-          <ul class="text-xs text-[var(--color-base-content)] opacity-70 space-y-1">
+          <ul class="help-text space-y-1">
             {#each passwordStrength.feedback as suggestion, index (index)}
               <li class="flex items-center gap-1">
                 <div class="shrink-0">

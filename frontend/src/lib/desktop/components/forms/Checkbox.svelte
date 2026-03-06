@@ -137,10 +137,7 @@
   </label>
 
   {#if helpText}
-    <span
-      id={helpTextId}
-      class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block pl-5">{helpText}</span
-    >
+    <span id={helpTextId} class="help-text mt-1 block pl-5">{helpText}</span>
   {/if}
 
   {#if tooltip && showTooltip}
