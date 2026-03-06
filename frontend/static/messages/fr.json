@@ -405,7 +405,7 @@
         "failedMessage": "Impossible de supprimer l'ancienne base de données. Consultez les journaux pour plus de détails."
       },
       "alert": {
-        "firedTitle": "Alerte : {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Valeur actuelle : {value}% (seuil : {threshold}%)",
         "detectionOccurred": "{species_name} détecté avec {confidence}% de confiance",
         "errorOccurred": "{source_name} : {error}",
@@ -3394,6 +3394,10 @@
         "mqttDisconnected": {
           "name": "MQTT déconnecté",
           "description": "Notifie lorsque la connexion au broker MQTT est perdue"
+        },
+        "mqttPublishFailed": {
+          "name": "Publication MQTT échouée",
+          "description": "Notifie lorsque la publication d'un message MQTT échoue"
         },
         "birdWeatherFailed": {
           "name": "Envoi BirdWeather échoué",

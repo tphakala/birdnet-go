@@ -32,6 +32,7 @@ const (
 	EventBirdWeatherFailed = "integration.birdweather_failed"
 	EventMQTTConnected     = "integration.mqtt_connected"
 	EventMQTTDisconnected  = "integration.mqtt_disconnected"
+	EventMQTTPublishFailed = "integration.mqtt_publish_failed"
 
 	EventDeviceStarted = "device.started"
 	EventDeviceStopped = "device.stopped"
@@ -97,6 +98,8 @@ const (
 	RuleKeyLowDiskDesc     = "settings.alerts.builtInRules.lowDisk.description"
 	RuleKeyMQTTDiscName    = "settings.alerts.builtInRules.mqttDisconnected.name"
 	RuleKeyMQTTDiscDesc    = "settings.alerts.builtInRules.mqttDisconnected.description"
+	RuleKeyMQTTPublishName = "settings.alerts.builtInRules.mqttPublishFailed.name"
+	RuleKeyMQTTPublishDesc = "settings.alerts.builtInRules.mqttPublishFailed.description"
 	RuleKeyBirdWeatherName = "settings.alerts.builtInRules.birdWeatherFailed.name"
 	RuleKeyBirdWeatherDesc = "settings.alerts.builtInRules.birdWeatherFailed.description"
 )

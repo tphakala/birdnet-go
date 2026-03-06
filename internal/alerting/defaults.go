@@ -123,6 +123,21 @@ func DefaultRules() []entities.AlertRule {
 			},
 		},
 		{
+			Name:           "MQTT publish failed",
+			Description:    "Notifies when an MQTT message publish fails",
+			NameKey:        RuleKeyMQTTPublishName,
+			DescriptionKey: RuleKeyMQTTPublishDesc,
+			Enabled:        true,
+			BuiltIn:        true,
+			ObjectType:     ObjectTypeIntegration,
+			TriggerType:    TriggerTypeEvent,
+			EventName:      EventMQTTPublishFailed,
+			CooldownSec:    300,
+			Actions: []entities.AlertAction{
+				{Target: TargetBell, SortOrder: 0},
+			},
+		},
+		{
 			Name:           "MQTT disconnected",
 			Description:    "Notifies when the MQTT broker connection is lost",
 			NameKey:        RuleKeyMQTTDiscName,

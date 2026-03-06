@@ -17,7 +17,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -855,8 +854,9 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 		},
 	})
 
-	// Send notification for connection lost
-	notification.NotifyIntegrationFailure("MQTT", enhancedErr)
+	// MQTT disconnect notifications are handled by the alerting rule engine
+	// via the TryPublish call above (integration.mqtt_disconnected).
+
 	// Check if we should attempt to reconnect or if Disconnect was called
 	select {
 	case <-c.reconnectStop:

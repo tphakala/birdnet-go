@@ -578,14 +578,9 @@ func (m *SystemMonitor) sendNotificationWithPath(resource ResourceType, current,
 		)
 	}
 
-	// Fallback to direct notification if event bus unavailable or failed
-	if !notification.IsInitialized() {
-		return
-	}
-
-	notification.NotifyResourceAlert(string(resource), current, threshold, "%")
-
-	m.log.Warn("Resource threshold exceeded",
+	// Resource threshold notifications are handled by the alerting rule engine
+	// (system.cpu_usage, system.memory_usage, system.disk_usage metric rules).
+	m.log.Warn("Resource threshold exceeded (event bus unavailable)",
 		logger.String("resource", string(resource)),
 		logger.String("current", fmt.Sprintf("%.1f%%", current)),
 		logger.String("threshold", fmt.Sprintf("%.1f%%", threshold)),
@@ -790,12 +785,8 @@ func (m *SystemMonitor) sendNotificationWithGroup(resource ResourceType, current
 		}
 	}
 
-	// Fallback to direct notification
-	if !notification.IsInitialized() {
-		return
-	}
-
-	notification.NotifyResourceAlert(string(resource), current, threshold, "%")
+	// Resource threshold notifications are handled by the alerting rule engine
+	// (system.disk_usage metric rule).
 	state.LastNotificationTime = time.Now()
 }
 

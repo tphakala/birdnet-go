@@ -20,7 +20,7 @@ func (a *notificationAdapter) CreateAndBroadcast(title, message string) error {
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	_, err := svc.Create(notification.TypeSystem, notification.PriorityHigh, title, message)
+	_, err := svc.Create(notification.TypeWarning, notification.PriorityHigh, title, message)
 	return err
 }
 
@@ -32,7 +32,7 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	notif := notification.NewNotification(notification.TypeSystem, notification.PriorityHigh, title, message).
+	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, title, message).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)

@@ -405,7 +405,7 @@
         "failedMessage": "Failed to remove legacy database. Check logs for details."
       },
       "alert": {
-        "firedTitle": "Alert: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
         "detectionOccurred": "{species_name} detected with {confidence}% confidence",
         "errorOccurred": "{source_name}: {error}",
@@ -3455,6 +3455,10 @@
         "mqttDisconnected": {
           "name": "MQTT disconnected",
           "description": "Notifies when the MQTT broker connection is lost"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT publish failed",
+          "description": "Notifies when an MQTT message publish fails"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather upload failed",

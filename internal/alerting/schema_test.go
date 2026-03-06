@@ -31,7 +31,7 @@ func TestGetSchema_AllEventsPresent(t *testing.T) {
 		EventStreamConnected, EventStreamDisconnected, EventStreamError,
 		EventDetectionNewSpecies, EventDetectionOccurred,
 		EventApplicationStarted, EventApplicationStopped,
-		EventBirdWeatherFailed, EventMQTTConnected, EventMQTTDisconnected,
+		EventBirdWeatherFailed, EventMQTTConnected, EventMQTTDisconnected, EventMQTTPublishFailed,
 		EventDeviceStarted, EventDeviceStopped, EventDeviceError,
 	}
 	assert.ElementsMatch(t, expectedEvents, allEvents)

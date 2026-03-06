@@ -405,7 +405,7 @@
         "failedMessage": "Alte Datenbank konnte nicht entfernt werden. Überprüfen Sie die Protokolle für Details."
       },
       "alert": {
-        "firedTitle": "Alarm: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
         "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
         "errorOccurred": "{source_name}: {error}",
@@ -3394,6 +3394,10 @@
         "mqttDisconnected": {
           "name": "MQTT getrennt",
           "description": "Benachrichtigt, wenn die Verbindung zum MQTT-Broker verloren geht"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT-Veröffentlichung fehlgeschlagen",
+          "description": "Benachrichtigt, wenn die Veröffentlichung einer MQTT-Nachricht fehlschlägt"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather-Upload fehlgeschlagen",

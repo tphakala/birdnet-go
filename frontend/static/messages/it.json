@@ -405,7 +405,7 @@
         "failedMessage": "Impossibile rimuovere il vecchio database. Controlla i log per i dettagli."
       },
       "alert": {
-        "firedTitle": "Avviso: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
         "detectionOccurred": "{species_name} rilevato con {confidence}% di confidenza",
         "errorOccurred": "{source_name}: {error}",
@@ -3191,6 +3191,10 @@
         "mqttDisconnected": {
           "name": "MQTT disconnesso",
           "description": "Notifica quando la connessione al broker MQTT viene persa"
+        },
+        "mqttPublishFailed": {
+          "name": "Pubblicazione MQTT fallita",
+          "description": "Notifica quando la pubblicazione di un messaggio MQTT fallisce"
         },
         "birdWeatherFailed": {
           "name": "Caricamento BirdWeather fallito",

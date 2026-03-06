@@ -10,11 +10,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -110,10 +110,8 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 			logger.String("clip_name", a.Result.ClipName),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "birdweather_upload"))
-		if !a.RetryConfig.Enabled {
-			// Send notification for non-retryable failures
-			notification.NotifyIntegrationFailure("BirdWeather", err)
-		}
+		// BirdWeather failures are handled by the alerting rule engine
+		// (integration.birdweather_failed), so no explicit notification here.
 		// Network and API errors are typically transient and may succeed on retry:
 		// - Temporary network outages
 		// - API rate limiting
@@ -256,10 +254,16 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.Bool("is_eof_error", isEOFErr),
 			logger.String("operation", "mqtt_publish"))
-		// Only send notification for non-EOF errors when retries are disabled
-		// EOF errors are typically transient connection issues
-		if !a.RetryConfig.Enabled && !isEOFErr {
-			notification.NotifyIntegrationFailure("MQTT", err)
+		// Publish MQTT publish failed alert event for non-EOF errors
+		if !isEOFErr {
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeIntegration,
+				EventName:  alerting.EventMQTTPublishFailed,
+				Properties: map[string]any{
+					alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+					alerting.PropertyError:  sanitizedErr.Error(),
+				},
+			})
 		}
 
 		// Enhance error context with EOF detection

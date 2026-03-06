@@ -93,7 +93,7 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "CPU High", mock.keyCalls[0].titleParams["rule_name"])
 	assert.Equal(t, RuleKeyHighCPUName, mock.keyCalls[0].titleParams["rule_name_key"])
-	assert.Equal(t, "Alert: CPU High", mock.keyCalls[0].title)
+	assert.Equal(t, "CPU High", mock.keyCalls[0].title)
 	assert.Empty(t, mock.keyCalls[0].message, "default message should be empty, not duplicate the title")
 }
 
@@ -121,7 +121,7 @@ func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 	assert.Equal(t, MsgAlertFiredTitle, mock.keyCalls[0].titleKey)
 	assert.Equal(t, "Species Alert", mock.keyCalls[0].titleParams["rule_name"])
 	assert.Equal(t, RuleKeyNewSpeciesName, mock.keyCalls[0].titleParams["rule_name_key"])
-	assert.Equal(t, "Alert: Species Alert", mock.keyCalls[0].title)
+	assert.Equal(t, "Species Alert", mock.keyCalls[0].title)
 	assert.Empty(t, mock.keyCalls[0].message, "default message should be empty, not duplicate the title")
 }
 

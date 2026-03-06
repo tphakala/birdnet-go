@@ -861,6 +861,13 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 				logger.String("timestamp", timestamp),
 				logger.Any("note", note),
 				logger.Error(err))
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeIntegration,
+				EventName:  alerting.EventBirdWeatherFailed,
+				Properties: map[string]any{
+					alerting.PropertyError: err.Error(),
+				},
+			})
 		}
 		return fmt.Errorf("failed to post detection to Birdweather: %w", err)
 	}
