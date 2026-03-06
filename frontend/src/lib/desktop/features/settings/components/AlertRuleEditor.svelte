@@ -204,7 +204,12 @@
       integration: { bg: 'bg-amber-500/10', text: 'text-amber-500' },
       application: { bg: 'bg-sky-500/10', text: 'text-sky-500' },
     };
-    return colors[typeName] ?? { bg: 'bg-base-300', text: 'text-base-content' };
+    return (
+      colors[typeName] ?? {
+        bg: 'bg-[var(--color-base-300)]',
+        text: 'text-[var(--color-base-content)]',
+      }
+    );
   }
 
   // Condition management
@@ -346,18 +351,20 @@
 <svelte:document onclick={handleClickOutside} />
 
 <!-- Card container -->
-<div class="rounded-lg bg-base-100 border border-primary overflow-hidden">
+<div
+  class="rounded-lg bg-[var(--color-base-100)] border border-[var(--color-primary)] overflow-hidden"
+>
   <!-- Header bar -->
-  <div class="px-5 py-3 border-b border-base-300 flex items-center justify-between">
-    <h3 class="text-sm font-semibold text-base-content">
+  <div class="px-5 py-3 border-b border-[var(--color-base-300)] flex items-center justify-between">
+    <h3 class="text-sm font-semibold text-[var(--color-base-content)]">
       {rule ? t('settings.alerts.editor.editTitle') : t('settings.alerts.editor.createTitle')}
     </h3>
     <button
-      class="w-7 h-7 rounded-md flex items-center justify-center hover:bg-base-200 transition-colors cursor-pointer"
+      class="w-7 h-7 rounded-md flex items-center justify-center hover:bg-[var(--color-base-200)] transition-colors cursor-pointer"
       aria-label={t('common.close')}
       onclick={onClose}
     >
-      <X class="w-4 h-4 text-base-content/60" />
+      <X class="w-4 h-4 text-[var(--color-base-content)]/60" />
     </button>
   </div>
 
@@ -365,7 +372,10 @@
     <!-- Row 1: Name + Description -->
     <div class="grid grid-cols-2 gap-3">
       <div>
-        <label for="rule-name" class="block text-xs font-medium text-base-content/60 mb-1">
+        <label
+          for="rule-name"
+          class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1"
+        >
           {t('settings.alerts.editor.name')}
         </label>
         <input
@@ -373,11 +383,14 @@
           type="text"
           bind:value={name}
           placeholder={t('settings.alerts.editor.namePlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
       <div>
-        <label for="rule-desc" class="block text-xs font-medium text-base-content/60 mb-1">
+        <label
+          for="rule-desc"
+          class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1"
+        >
           {t('settings.alerts.editor.description')}
         </label>
         <input
@@ -385,7 +398,7 @@
           type="text"
           bind:value={description}
           placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
         />
       </div>
     </div>
@@ -394,7 +407,7 @@
     <div class="grid grid-cols-2 gap-3">
       <!-- Object Type custom dropdown -->
       <div class="relative" data-dropdown>
-        <span class="block text-xs font-medium text-base-content/60 mb-1">
+        <span class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1">
           {t('settings.alerts.editor.objectType')}
         </span>
         <button
@@ -402,9 +415,9 @@
           aria-haspopup="listbox"
           aria-expanded={objDropOpen}
           aria-label={t('settings.alerts.editor.objectType')}
-          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {objDropOpen
-            ? 'ring-2 ring-primary/20 border-primary'
-            : 'border-base-300'}"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border text-left flex items-center gap-2 cursor-pointer transition-all {objDropOpen
+            ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)]'
+            : 'border-[var(--color-base-300)]'}"
           onclick={() => {
             objDropOpen = !objDropOpen;
             eventDropOpen = false;
@@ -418,12 +431,12 @@
             >
               <OIcon class="w-3 h-3 {oColor.text}" />
             </div>
-            <span class="flex-1 min-w-0 text-base-content truncate">
+            <span class="flex-1 min-w-0 text-[var(--color-base-content)] truncate">
               {schemaObjectTypeLabel(selectedObjectType.name, selectedObjectType.label)}
             </span>
           {/if}
           <ChevronDown
-            class="w-3.5 h-3.5 flex-shrink-0 text-base-content/40 transition-transform {objDropOpen
+            class="w-3.5 h-3.5 flex-shrink-0 text-[var(--color-base-content)]/40 transition-transform {objDropOpen
               ? 'rotate-180'
               : ''}"
           />
@@ -431,7 +444,7 @@
         {#if objDropOpen}
           <div
             role="listbox"
-            class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden"
+            class="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg rounded-lg overflow-hidden"
           >
             {#each schema.objectTypes as ot (ot.name)}
               {@const OIcon = objectTypeIcon(ot.name)}
@@ -440,9 +453,9 @@
                 type="button"
                 role="option"
                 aria-selected={objectType === ot.name}
-                class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {objectType ===
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-[var(--color-base-200)] {objectType ===
                 ot.name
-                  ? 'bg-primary/5'
+                  ? 'bg-[var(--color-primary)]/5'
                   : ''}"
                 onclick={() => handleObjectTypeChange(ot.name)}
               >
@@ -452,17 +465,17 @@
                   <OIcon class="w-3.5 h-3.5 {oColor.text}" />
                 </div>
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm font-medium text-base-content">
+                  <div class="text-sm font-medium text-[var(--color-base-content)]">
                     {schemaObjectTypeLabel(ot.name, ot.label)}
                   </div>
-                  <div class="text-[11px] text-base-content/40">
+                  <div class="text-[11px] text-[var(--color-base-content)]/40">
                     {ot.events?.length ?? 0}
                     {t('settings.alerts.editor.eventsCount')} &middot; {ot.metrics?.length ?? 0}
                     {t('settings.alerts.editor.metricsCount')}
                   </div>
                 </div>
                 {#if objectType === ot.name}
-                  <Check class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                  <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
                 {/if}
               </button>
             {/each}
@@ -472,7 +485,7 @@
 
       <!-- Trigger type toggle -->
       <div>
-        <span class="block text-xs font-medium text-base-content/60 mb-1">
+        <span class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1">
           {t('settings.alerts.editor.triggerSection')}
         </span>
         {#if hasEvents && hasMetrics}
@@ -481,11 +494,13 @@
               type="button"
               class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {triggerType ===
               'event'
-                ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
-                : 'bg-base-200 border-base-300'}"
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)]'}"
               onclick={() => handleTriggerTypeChange('event')}
             >
-              <span class="flex items-center gap-1.5 justify-center text-base-content">
+              <span
+                class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]"
+              >
                 <Zap class="w-3.5 h-3.5" />
                 {t('settings.alerts.editor.triggerEvent')}
               </span>
@@ -494,11 +509,13 @@
               type="button"
               class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {triggerType ===
               'metric'
-                ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
-                : 'bg-base-200 border-base-300'}"
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)]'}"
               onclick={() => handleTriggerTypeChange('metric')}
             >
-              <span class="flex items-center gap-1.5 justify-center text-base-content">
+              <span
+                class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]"
+              >
                 <Gauge class="w-3.5 h-3.5" />
                 {t('settings.alerts.editor.triggerMetric')}
               </span>
@@ -506,7 +523,7 @@
           </div>
         {:else}
           <div
-            class="px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content"
+            class="px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)]"
           >
             <span class="flex items-center gap-1.5">
               {#if hasEvents}
@@ -524,7 +541,7 @@
 
     <!-- Row 3: Event/Metric selector (full width) -->
     <div class="relative" data-dropdown>
-      <span class="block text-xs font-medium text-base-content/60 mb-1">
+      <span class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1">
         {triggerType === 'event'
           ? t('settings.alerts.editor.event')
           : t('settings.alerts.editor.metric')}
@@ -536,22 +553,22 @@
         aria-label={triggerType === 'event'
           ? t('settings.alerts.editor.event')
           : t('settings.alerts.editor.metric')}
-        class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {eventDropOpen
-          ? 'ring-2 ring-primary/20 border-primary'
-          : 'border-base-300'}"
+        class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border text-left flex items-center gap-2 cursor-pointer transition-all {eventDropOpen
+          ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)]'
+          : 'border-[var(--color-base-300)]'}"
         onclick={() => {
           eventDropOpen = !eventDropOpen;
           objDropOpen = false;
         }}
       >
-        <span class="flex-1 truncate text-base-content">
+        <span class="flex-1 truncate text-[var(--color-base-content)]">
           {selectedTriggerLabel ||
             (triggerType === 'event'
               ? t('settings.alerts.editor.event')
               : t('settings.alerts.editor.metric'))}
         </span>
         <ChevronDown
-          class="w-3.5 h-3.5 flex-shrink-0 text-base-content/40 transition-transform {eventDropOpen
+          class="w-3.5 h-3.5 flex-shrink-0 text-[var(--color-base-content)]/40 transition-transform {eventDropOpen
             ? 'rotate-180'
             : ''}"
         />
@@ -560,7 +577,7 @@
         {@const items = triggerType === 'event' ? eventOptions : metricOptions}
         <div
           role="listbox"
-          class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-60 overflow-y-auto"
+          class="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg rounded-lg overflow-hidden max-h-60 overflow-y-auto"
         >
           {#each items as item (item.value)}
             {@const isSelected = (triggerType === 'event' ? eventName : metricName) === item.value}
@@ -568,8 +585,8 @@
               type="button"
               role="option"
               aria-selected={isSelected}
-              class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {isSelected
-                ? 'bg-primary/5'
+              class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-[var(--color-base-200)] {isSelected
+                ? 'bg-[var(--color-primary)]/5'
                 : ''}"
               onclick={() => {
                 if (triggerType === 'event') eventName = item.value;
@@ -579,13 +596,13 @@
               }}
             >
               <div class="flex-1 min-w-0">
-                <div class="text-sm font-medium text-base-content">{item.label}</div>
-                <div class="text-[11px] font-mono text-base-content/40">
+                <div class="text-sm font-medium text-[var(--color-base-content)]">{item.label}</div>
+                <div class="text-[11px] font-mono text-[var(--color-base-content)]/40">
                   {item.value}
                 </div>
               </div>
               {#if isSelected}
-                <Check class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <Check class="w-3.5 h-3.5 text-[var(--color-primary)] flex-shrink-0" />
               {/if}
             </button>
           {/each}
@@ -596,7 +613,7 @@
     <!-- Row 4: Conditions (full width) -->
     <div>
       <div class="flex items-center justify-between mb-1.5">
-        <span class="text-xs font-medium text-base-content/60">
+        <span class="text-xs font-medium text-[var(--color-base-content)]/60">
           {t('settings.alerts.editor.conditionsSection')}
           {#if conditions.length > 0}
             ({conditions.length})
@@ -605,7 +622,7 @@
         {#if availableProperties.length > 0}
           <button
             type="button"
-            class="flex items-center gap-1 text-[11px] font-medium text-primary hover:bg-primary/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
+            class="flex items-center gap-1 text-[11px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
             onclick={addCondition}
           >
             <Plus class="w-3 h-3" />
@@ -614,7 +631,9 @@
         {/if}
       </div>
       {#if conditions.length === 0}
-        <div class="px-3 py-2.5 rounded-lg text-xs bg-base-200 text-base-content/40">
+        <div
+          class="px-3 py-2.5 rounded-lg text-xs bg-[var(--color-base-200)] text-[var(--color-base-content)]/40"
+        >
           {triggerType === 'event'
             ? t('settings.alerts.editor.noConditionsEvent')
             : t('settings.alerts.editor.noConditionsMetric')}
@@ -623,13 +642,13 @@
         <div class="space-y-2">
           {#each conditions as condition, index (condition.id)}
             <div
-              class="flex items-center gap-2 p-2.5 rounded-lg border border-base-300 bg-base-200"
+              class="flex items-center gap-2 p-2.5 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)]"
             >
               <!-- Property -->
               <select
                 bind:value={condition.property}
                 aria-label={t('settings.alerts.editor.property')}
-                class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
               >
                 {#each propertyOptions as prop (prop.value)}
                   <option value={prop.value}>{prop.label}</option>
@@ -639,7 +658,7 @@
               <select
                 bind:value={condition.operator}
                 aria-label={t('settings.alerts.editor.operator')}
-                class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content font-mono cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
+                class="px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] font-mono cursor-pointer outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30"
               >
                 {#each operatorsForProperty(condition.property ?? '') as op (op.value)}
                   <option value={op.value}>{op.label}</option>
@@ -651,12 +670,12 @@
                 bind:value={condition.value}
                 aria-label={t('settings.alerts.editor.value')}
                 placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none focus:ring-1 focus:ring-primary/30 tabular-nums placeholder:text-base-content/40"
+                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none focus:ring-1 focus:ring-[var(--color-primary)]/30 tabular-nums placeholder:text-[var(--color-base-content)]/40"
               />
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
                 <div class="flex items-center gap-1">
-                  <span class="text-[10px] text-base-content/40"
+                  <span class="text-[10px] text-[var(--color-base-content)]/40"
                     >{t('settings.alerts.editor.durationFor')}</span
                   >
                   <input
@@ -664,14 +683,14 @@
                     min="0"
                     step="1"
                     aria-label={t('settings.alerts.editor.duration')}
-                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none tabular-nums focus:ring-1 focus:ring-primary/30"
+                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] outline-none tabular-nums focus:ring-1 focus:ring-[var(--color-primary)]/30"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       const v = Number(e.currentTarget.value);
                       condition.duration_sec = Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 0;
                     }}
                   />
-                  <span class="text-[10px] text-base-content/40"
+                  <span class="text-[10px] text-[var(--color-base-content)]/40"
                     >{t('settings.alerts.editor.durationSec')}</span
                   >
                 </div>
@@ -679,11 +698,11 @@
               <!-- Remove -->
               <button
                 type="button"
-                class="w-6 h-6 rounded-md flex items-center justify-center hover:bg-error/10 transition-colors cursor-pointer"
+                class="w-6 h-6 rounded-md flex items-center justify-center hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
                 aria-label={t('settings.alerts.editor.removeCondition')}
                 onclick={() => removeCondition(index)}
               >
-                <X class="w-3.5 h-3.5 text-error" />
+                <X class="w-3.5 h-3.5 text-[var(--color-error)]" />
               </button>
             </div>
           {/each}
@@ -695,7 +714,7 @@
     <div class="grid grid-cols-2 gap-3">
       <!-- Actions toggle buttons -->
       <div>
-        <span class="block text-xs font-medium text-base-content/60 mb-1">
+        <span class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1">
           {t('settings.alerts.editor.actionsSection')}
         </span>
         <div class="flex gap-2">
@@ -704,14 +723,16 @@
             class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer {isActionSelected(
               'bell'
             )
-              ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
-              : 'bg-base-200 border-base-300 opacity-50'}"
+              ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+              : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
             onclick={() => toggleAction('bell')}
           >
-            <Bell class="w-3.5 h-3.5 text-base-content" />
-            <span class="text-base-content">{t('settings.alerts.editor.actionBell')}</span>
+            <Bell class="w-3.5 h-3.5 text-[var(--color-base-content)]" />
+            <span class="text-[var(--color-base-content)]"
+              >{t('settings.alerts.editor.actionBell')}</span
+            >
             {#if isActionSelected('bell')}
-              <Check class="w-3 h-3 text-primary ml-auto" />
+              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
             {/if}
           </button>
           <button
@@ -719,14 +740,16 @@
             class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer {isActionSelected(
               'push'
             )
-              ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
-              : 'bg-base-200 border-base-300 opacity-50'}"
+              ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+              : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
             onclick={() => toggleAction('push')}
           >
-            <Send class="w-3.5 h-3.5 text-base-content" />
-            <span class="text-base-content">{t('settings.alerts.editor.actionPush')}</span>
+            <Send class="w-3.5 h-3.5 text-[var(--color-base-content)]" />
+            <span class="text-[var(--color-base-content)]"
+              >{t('settings.alerts.editor.actionPush')}</span
+            >
             {#if isActionSelected('push')}
-              <Check class="w-3 h-3 text-primary ml-auto" />
+              <Check class="w-3 h-3 text-[var(--color-primary)] ml-auto" />
             {/if}
           </button>
         </div>
@@ -734,14 +757,17 @@
 
       <!-- Cooldown -->
       <div>
-        <label for="rule-cooldown" class="block text-xs font-medium text-base-content/60 mb-1">
+        <label
+          for="rule-cooldown"
+          class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1"
+        >
           {t('settings.alerts.editor.cooldownSeconds')}
         </label>
         <input
           id="rule-cooldown"
           type="number"
           min="0"
-          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors tabular-nums"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums"
           value={cooldownSec}
           step="1"
           onchange={e => {
@@ -757,11 +783,11 @@
       {#if isActionSelected(target)}
         {@const action = actions.find(a => a.target === target)}
         {#if action}
-          <div class="grid grid-cols-2 gap-3 pl-1 border-l-2 border-primary/20 ml-1">
+          <div class="grid grid-cols-2 gap-3 pl-1 border-l-2 border-[var(--color-primary)]/20 ml-1">
             <div>
               <label
                 for="template-title-{target}"
-                class="block text-xs font-medium text-base-content/60 mb-1"
+                class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1"
               >
                 {t('settings.alerts.editor.templateTitle')} ({target === 'bell'
                   ? t('settings.alerts.editor.actionBell')
@@ -772,13 +798,13 @@
                 type="text"
                 bind:value={action.template_title}
                 placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
             <div>
               <label
                 for="template-msg-{target}"
-                class="block text-xs font-medium text-base-content/60 mb-1"
+                class="block text-xs font-medium text-[var(--color-base-content)]/60 mb-1"
               >
                 {t('settings.alerts.editor.templateMessage')}
               </label>
@@ -787,7 +813,7 @@
                 type="text"
                 bind:value={action.template_message}
                 placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
-                class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors"
               />
             </div>
           </div>
@@ -801,7 +827,7 @@
         {#if rule && !rule.built_in && onDelete}
           <button
             type="button"
-            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-error hover:bg-error/10 transition-colors cursor-pointer"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors cursor-pointer"
             onclick={() => onDelete?.(rule)}
           >
             <Trash2 class="w-3.5 h-3.5" />
@@ -812,7 +838,7 @@
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="px-4 py-1.5 rounded-lg text-xs font-medium text-base-content/60 hover:bg-base-200 transition-colors cursor-pointer"
+          class="px-4 py-1.5 rounded-lg text-xs font-medium text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)] transition-colors cursor-pointer"
           onclick={onClose}
         >
           {t('common.buttons.cancel')}
@@ -821,7 +847,7 @@
           type="button"
           onclick={handleSave}
           disabled={!isValid}
-          class="px-4 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-content hover:opacity-90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {rule ? t('common.buttons.save') : t('common.buttons.create')}
         </button>

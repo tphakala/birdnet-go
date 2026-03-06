@@ -429,13 +429,13 @@
       {#each equalizerSettings.filters || [] as filter, index (index)}
         {@const filterParams = getEqFilterParameters(filter.type)}
         <div
-          class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-base-200 rounded-lg border border-base-300"
+          class="grid grid-cols-1 md:grid-cols-5 gap-4 items-end p-4 bg-[var(--color-base-200)] rounded-lg border border-[var(--color-base-300)]"
         >
           <!-- Filter Type Display -->
           <div class="flex items-end">
             <button
               type="button"
-              class="btn btn-sm w-full pointer-events-none bg-base-300 border-base-300 gap-2"
+              class="btn btn-sm w-full pointer-events-none bg-[var(--color-base-300)] border-[var(--color-base-300)] gap-2"
             >
               {#if filter.type === 'LowPass'}
                 <LowPassIcon class="size-4" />

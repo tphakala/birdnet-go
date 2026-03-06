@@ -27,7 +27,7 @@
   let { icon: Icon, label, value, valueClass = '', children }: Props = $props();
 </script>
 
-<div class="card bg-base-100 shadow-sm border border-base-300">
+<div class="card bg-[var(--color-base-100)] shadow-sm border border-[var(--color-base-300)]">
   <div class="card-body p-3">
     <div class="flex items-center gap-2 text-[color:var(--color-base-content)] opacity-60">
       <Icon class="size-4" />

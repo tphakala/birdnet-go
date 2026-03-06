@@ -116,7 +116,7 @@
 <div class={cn('settings-tabs', className)}>
   <!-- Tab Navigation -->
   <div
-    class="tabs border-b border-base-300 mb-6"
+    class="tabs border-b border-[var(--color-base-300)] mb-6"
     role="tablist"
     aria-label={t('settings.tabs.navigation')}
   >
@@ -130,8 +130,8 @@
           'tab gap-2 transition-all duration-200 font-medium -mb-px',
           'hover:text-[color:var(--color-primary)]',
           isActive
-            ? 'tab-active text-primary border-b-2 border-primary'
-            : 'text-base-content/75 hover:text-base-content'
+            ? 'tab-active text-[var(--color-primary)] border-b-2 border-[var(--color-primary)]'
+            : 'text-[var(--color-base-content)]/75 hover:text-[var(--color-base-content)]'
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"

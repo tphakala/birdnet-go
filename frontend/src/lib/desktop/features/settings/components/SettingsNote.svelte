@@ -5,7 +5,7 @@
   the consistent styling used throughout the application.
   
   Features:
-  - Standard note styling (mt-4 p-4 bg-base-200 text-sm rounded-lg)
+  - Standard note styling (mt-4 p-4 bg-[var(--color-base-200)] text-sm rounded-lg)
   - Support for rich content via Svelte 5 snippets
   - Optional icon support
   - Consistent spacing and typography
@@ -33,7 +33,7 @@
   let { className = '', icon, children }: Props = $props();
 </script>
 
-<div class="mt-4 p-4 bg-base-200 text-sm rounded-lg {className}">
+<div class="mt-4 p-4 bg-[var(--color-base-200)] text-sm rounded-lg {className}">
   {#if icon}
     <div class="flex gap-3">
       <div class="shrink-0">

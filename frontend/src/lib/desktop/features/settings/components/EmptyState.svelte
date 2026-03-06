@@ -62,33 +62,33 @@
   )}
 >
   <!-- Icon -->
-  <div class="mb-4 p-4 rounded-full bg-base-200/50">
-    <Icon class="size-10 text-base-content opacity-40" aria-hidden="true" />
+  <div class="mb-4 p-4 rounded-full bg-[var(--color-base-200)]/50">
+    <Icon class="size-10 text-[var(--color-base-content)] opacity-40" aria-hidden="true" />
   </div>
 
   <!-- Title -->
-  <h3 class="text-lg font-semibold text-base-content mb-2">
+  <h3 class="text-lg font-semibold text-[var(--color-base-content)] mb-2">
     {title}
   </h3>
 
   <!-- Description -->
-  <p class="text-base-content opacity-70 max-w-md mb-6">
+  <p class="text-[var(--color-base-content)] opacity-70 max-w-md mb-6">
     {description}
   </p>
 
   <!-- Hints Box -->
   {#if hints && hints.length > 0}
-    <div class="bg-base-200/50 rounded-lg p-4 mb-6 max-w-md text-left">
+    <div class="bg-[var(--color-base-200)]/50 rounded-lg p-4 mb-6 max-w-md text-left">
       <div class="flex items-center gap-2 mb-2">
-        <Lightbulb class="size-4 text-info" aria-hidden="true" />
-        <span class="text-sm font-medium text-base-content opacity-80">
+        <Lightbulb class="size-4 text-[var(--color-info)]" aria-hidden="true" />
+        <span class="text-sm font-medium text-[var(--color-base-content)] opacity-80">
           {hintsTitle || 'Tips'}
         </span>
       </div>
-      <ul class="space-y-1.5 text-sm text-base-content opacity-70">
+      <ul class="space-y-1.5 text-sm text-[var(--color-base-content)] opacity-70">
         {#each hints as hint, index (index)}
           <li class="flex items-start gap-2">
-            <span class="text-base-content opacity-40 mt-0.5">•</span>
+            <span class="text-[var(--color-base-content)] opacity-40 mt-0.5">•</span>
             <span>{hint}</span>
           </li>
         {/each}
