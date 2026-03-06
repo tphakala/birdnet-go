@@ -123,7 +123,6 @@
     '/security': 'settings.sections.security',
     '/species': 'settings.sections.species',
     '/notifications': 'settings.sections.notifications',
-    '/alertrules': 'settings.sections.alertrules',
     '/support': 'settings.sections.support',
   };
 
