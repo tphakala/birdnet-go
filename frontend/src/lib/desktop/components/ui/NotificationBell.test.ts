@@ -476,7 +476,7 @@ describe('NotificationBell Component', () => {
       await tick();
 
       // Should maintain read status (not add to unread count)
-      const unreadBadge = container.querySelector('.bg-error');
+      const unreadBadge = container.querySelector('.bg-\\[var\\(--color-error\\)\\]');
       const unreadCount = unreadBadge?.textContent;
 
       // Original test data has 1 unread, we added 1 and marked it read, so should be 1

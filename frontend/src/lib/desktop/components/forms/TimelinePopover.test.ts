@@ -401,8 +401,14 @@ describe('TimelinePopover', () => {
       });
 
       const popover = screen.getByRole('dialog');
-      // Uses theme-aware colors (bg-base-200 instead of bg-gray-800)
-      expect(popover).toHaveClass('absolute', 'z-20', 'bg-base-200', 'border', 'rounded-lg');
+      // Uses theme-aware colors (bg-[var(--color-base-200)] instead of bg-gray-800)
+      expect(popover).toHaveClass(
+        'absolute',
+        'z-20',
+        'bg-[var(--color-base-200)]',
+        'border',
+        'rounded-lg'
+      );
     });
   });
 });

@@ -272,7 +272,7 @@ describe('NotificationGroup', () => {
     });
 
     // Error type should have error styling
-    expect(container.querySelector('.bg-error\\/20')).toBeInTheDocument();
+    expect(container.querySelector('.bg-\\[var\\(--color-error\\)\\]\\/20')).toBeInTheDocument();
   });
 
   it('renders correct icon for warning type', () => {
@@ -282,7 +282,7 @@ describe('NotificationGroup', () => {
       },
     });
 
-    expect(container.querySelector('.bg-warning\\/20')).toBeInTheDocument();
+    expect(container.querySelector('.bg-\\[var\\(--color-warning\\)\\]\\/20')).toBeInTheDocument();
   });
 
   it('renders correct icon for detection type', () => {
@@ -292,7 +292,7 @@ describe('NotificationGroup', () => {
       },
     });
 
-    expect(container.querySelector('.bg-success\\/20')).toBeInTheDocument();
+    expect(container.querySelector('.bg-\\[var\\(--color-success\\)\\]\\/20')).toBeInTheDocument();
   });
 
   it('handles detection notification click', async () => {
@@ -351,7 +351,7 @@ describe('NotificationGroup', () => {
     });
 
     // Should have primary border for unread
-    expect(container.querySelector('.border-primary')).toBeInTheDocument();
+    expect(container.querySelector('.border-\\[var\\(--color-primary\\)\\]')).toBeInTheDocument();
   });
 
   it('shows just now for very recent notifications', () => {

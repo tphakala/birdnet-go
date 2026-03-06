@@ -310,7 +310,7 @@ describe('SpeciesFilterForm', () => {
     });
 
     const card = screen.getByText('Filter Data').closest('.card');
-    expect(card).toHaveClass('bg-base-100', 'shadow-xs');
+    expect(card).toHaveClass('bg-[var(--color-base-100)]', 'shadow-xs');
 
     const filtersGrid = document.querySelector('.filters-grid');
     expect(filtersGrid).toBeInTheDocument();

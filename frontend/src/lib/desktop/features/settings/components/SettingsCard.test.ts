@@ -30,7 +30,7 @@ describe('SettingsCard', () => {
 
       const card = screen.getByTestId('settings-card');
       expect(card).toBeInTheDocument();
-      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs');
+      expect(card).toHaveClass('card', 'bg-[var(--color-base-100)]', 'shadow-2xs');
     });
 
     it('renders with title and description', () => {
@@ -192,7 +192,7 @@ describe('SettingsCard', () => {
       // Check that footer container doesn't exist (footer uses border-t class)
       const footerContainer = screen
         .getByTestId('settings-card')
-        .querySelector('.border-t.border-base-200');
+        .querySelector('.border-t.border-\\[var\\(--color-base-200\\)\\]');
       expect(footerContainer).not.toBeInTheDocument();
     });
   });
@@ -250,7 +250,7 @@ describe('SettingsCard', () => {
       // Get the card element again after rerender
       card = screen.getByTestId('settings-card');
       // The component should maintain base classes and update custom class
-      expect(card).toHaveClass('card', 'bg-base-100', 'shadow-2xs', 'updated-class');
+      expect(card).toHaveClass('card', 'bg-[var(--color-base-100)]', 'shadow-2xs', 'updated-class');
     });
   });
 
