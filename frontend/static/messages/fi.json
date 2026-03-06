@@ -1899,6 +1899,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Kanavat",
+        "rules": "Säännöt",
+        "history": "Historia"
+      },
+      "rules": {
+        "summary": {
+          "active": "aktiivisia",
+          "builtIn": "sisäänrakennettuja",
+          "total": "yhteensä"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Testi-ilmoitukset",

@@ -1899,6 +1899,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Kanalen",
+        "rules": "Regels",
+        "history": "Geschiedenis"
+      },
+      "rules": {
+        "summary": {
+          "active": "actief",
+          "builtIn": "ingebouwd",
+          "total": "totaal"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Test Meldingen",

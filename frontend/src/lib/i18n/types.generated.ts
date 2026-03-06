@@ -346,8 +346,19 @@ export type TranslationKey =
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
-  | 'notifications.content.alert.errorOccurred' // params: source_name, error
+  | 'notifications.content.alert.errorOccurred' // params: error
   | 'notifications.content.alert.disconnected' // params: source_name
+  | 'notifications.content.alert.error.authError'
+  | 'notifications.content.alert.error.rateLimited'
+  | 'notifications.content.alert.error.gatewayTimeout'
+  | 'notifications.content.alert.error.serverError'
+  | 'notifications.content.alert.error.connectionRefused'
+  | 'notifications.content.alert.error.dnsError'
+  | 'notifications.content.alert.error.tlsError'
+  | 'notifications.content.alert.error.timeout'
+  | 'notifications.content.alert.error.connectionInterrupted'
+  | 'notifications.content.alert.error.diskFull'
+  | 'notifications.content.alert.error.permissionDenied'
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -1102,7 +1113,6 @@ export type TranslationKey =
   | 'settings.sections.species'
   | 'settings.sections.notifications'
   | 'settings.sections.support'
-  | 'settings.sections.alertrules'
   | 'settings.notFound.title'
   | 'settings.notFound.message' // params: section
   | 'settings.actions.save'
@@ -1364,6 +1374,12 @@ export type TranslationKey =
   | 'settings.support.supportReport.statusMessages.generateFailed' // params: message
   | 'settings.support.supportReport.statusMessages.error' // params: message
   | 'settings.support.supportReport.statusMessages.githubIssueRequired'
+  | 'settings.notifications.tabs.channels'
+  | 'settings.notifications.tabs.rules'
+  | 'settings.notifications.tabs.history'
+  | 'settings.notifications.rules.summary.active'
+  | 'settings.notifications.rules.summary.builtIn'
+  | 'settings.notifications.rules.summary.total'
   | 'settings.notifications.sections.testing.title'
   | 'settings.notifications.sections.testing.description'
   | 'settings.notifications.sections.info.title'
@@ -1390,6 +1406,20 @@ export type TranslationKey =
   | 'settings.notifications.templates.availableVariables'
   | 'settings.notifications.templates.variablesDescription'
   | 'settings.notifications.templates.loading'
+  | 'settings.notifications.templates.fields.commonName'
+  | 'settings.notifications.templates.fields.scientificName'
+  | 'settings.notifications.templates.fields.confidence'
+  | 'settings.notifications.templates.fields.confidencePercent'
+  | 'settings.notifications.templates.fields.detectionTime'
+  | 'settings.notifications.templates.fields.detectionDate'
+  | 'settings.notifications.templates.fields.latitude'
+  | 'settings.notifications.templates.fields.longitude'
+  | 'settings.notifications.templates.fields.location'
+  | 'settings.notifications.templates.fields.detectionId'
+  | 'settings.notifications.templates.fields.detectionPath'
+  | 'settings.notifications.templates.fields.detectionUrl'
+  | 'settings.notifications.templates.fields.imageUrl'
+  | 'settings.notifications.templates.fields.daysSinceFirstSeen'
   | 'settings.notifications.testNotification.title'
   | 'settings.notifications.testNotification.description'
   | 'settings.notifications.testNotification.whatHappens'
@@ -1907,6 +1937,18 @@ export type TranslationKey =
   | 'settings.audio.clipRecording.bitrateHelp' // params: min, max
   | 'settings.audio.clipRecording.losslessNote'
   | 'settings.audio.clipRecording.disabledInfo'
+  | 'settings.audio.extendedCapture.title'
+  | 'settings.audio.extendedCapture.description'
+  | 'settings.audio.extendedCapture.ramWarning'
+  | 'settings.audio.extendedCapture.enable'
+  | 'settings.audio.extendedCapture.enableHelp'
+  | 'settings.audio.extendedCapture.maxDurationLabel'
+  | 'settings.audio.extendedCapture.maxDurationHelp'
+  | 'settings.audio.extendedCapture.speciesListLabel'
+  | 'settings.audio.extendedCapture.addSpeciesLabel'
+  | 'settings.audio.extendedCapture.addSpeciesHelp'
+  | 'settings.audio.extendedCapture.addSpeciesButton'
+  | 'settings.audio.extendedCapture.disabled'
   | 'settings.audio.fileSettings.title'
   | 'settings.audio.fileSettings.description'
   | 'settings.audio.fileSettings.pathLabel'
@@ -2271,10 +2313,6 @@ export type TranslationKey =
   | 'settings.database.sqlitePlaceholder'
   | 'settings.database.mysqlHostPlaceholder'
   | 'settings.database.mysqlUsernamePlaceholder'
-  | 'settings.alerts.tabs.rules'
-  | 'settings.alerts.tabs.history'
-  | 'settings.alerts.sections.rules.title'
-  | 'settings.alerts.sections.rules.description'
   | 'settings.alerts.sections.history.title'
   | 'settings.alerts.sections.history.description'
   | 'settings.alerts.filters.objectType'
@@ -2355,11 +2393,17 @@ export type TranslationKey =
   | 'settings.alerts.editor.actionBell'
   | 'settings.alerts.editor.actionPush'
   | 'settings.alerts.editor.optionsSection'
-  | 'settings.alerts.editor.cooldownMinutes'
+  | 'settings.alerts.editor.cooldownSeconds'
   | 'settings.alerts.editor.templateTitle'
   | 'settings.alerts.editor.templateTitlePlaceholder'
   | 'settings.alerts.editor.templateMessage'
   | 'settings.alerts.editor.templateMessagePlaceholder'
+  | 'settings.alerts.editor.noConditionsEvent'
+  | 'settings.alerts.editor.noConditionsMetric'
+  | 'settings.alerts.editor.eventsCount'
+  | 'settings.alerts.editor.metricsCount'
+  | 'settings.alerts.editor.durationFor'
+  | 'settings.alerts.editor.durationSec'
   | 'settings.alerts.export'
   | 'settings.alerts.import'
   | 'settings.alerts.exporting'
@@ -2380,6 +2424,7 @@ export type TranslationKey =
   | 'settings.alerts.schema.events.integration_birdweather_failed'
   | 'settings.alerts.schema.events.integration_mqtt_connected'
   | 'settings.alerts.schema.events.integration_mqtt_disconnected'
+  | 'settings.alerts.schema.events.integration_mqtt_publish_failed'
   | 'settings.alerts.schema.events.device_started'
   | 'settings.alerts.schema.events.device_stopped'
   | 'settings.alerts.schema.events.device_error'
@@ -2421,6 +2466,8 @@ export type TranslationKey =
   | 'settings.alerts.builtInRules.lowDisk.description'
   | 'settings.alerts.builtInRules.mqttDisconnected.name'
   | 'settings.alerts.builtInRules.mqttDisconnected.description'
+  | 'settings.alerts.builtInRules.mqttPublishFailed.name'
+  | 'settings.alerts.builtInRules.mqttPublishFailed.description'
   | 'settings.alerts.builtInRules.birdWeatherFailed.name'
   | 'settings.alerts.builtInRules.birdWeatherFailed.description'
   | 'auth.login'
@@ -2710,10 +2757,7 @@ export type TranslationParams = {
     species_name: string | number;
     confidence: string | number;
   };
-  'notifications.content.alert.errorOccurred': {
-    source_name: string | number;
-    error: string | number;
-  };
+  'notifications.content.alert.errorOccurred': { error: string | number };
   'notifications.content.alert.disconnected': { source_name: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };

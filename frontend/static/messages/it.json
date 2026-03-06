@@ -1702,6 +1702,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Canali",
+        "rules": "Regole",
+        "history": "Cronologia"
+      },
+      "rules": {
+        "summary": {
+          "active": "attive",
+          "builtIn": "integrate",
+          "total": "totale"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Notifiche Test",
