@@ -45,13 +45,15 @@
   role="dialog"
   aria-modal="true"
 >
-  <div class="w-full rounded-t-3xl shadow-2xl relative overflow-hidden bg-base-100">
+  <div class="w-full rounded-t-3xl shadow-2xl relative overflow-hidden bg-[var(--color-base-100)]">
     <!-- Header -->
-    <div class="flex items-center justify-between p-4 border-b border-base-300">
+    <div class="flex items-center justify-between p-4 border-b border-[var(--color-base-300)]">
       <div class="flex-1 min-w-0">
         <h3 class="font-bold text-sm truncate">{speciesName}</h3>
         {#if detectionTime}
-          <p class="text-xs text-base-content opacity-60 truncate">{detectionTime}</p>
+          <p class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
+            {detectionTime}
+          </p>
         {/if}
       </div>
       <button

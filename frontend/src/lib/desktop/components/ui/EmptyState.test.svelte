@@ -15,7 +15,12 @@
 <EmptyState {title} {description} {action} {...rest}>
   {#snippet icon()}
     {#if showCustomIcon}
-      <svg data-testid="custom-icon" class="h-20 w-20 text-primary" fill="none" viewBox="0 0 24 24">
+      <svg
+        data-testid="custom-icon"
+        class="h-20 w-20 text-[var(--color-primary)]"
+        fill="none"
+        viewBox="0 0 24 24"
+      >
         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" />
       </svg>
     {/if}

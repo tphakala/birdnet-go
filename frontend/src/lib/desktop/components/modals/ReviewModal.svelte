@@ -125,7 +125,7 @@
         <!-- Left Column: Species info and Audio/Spectrogram -->
         <div class="lg:col-span-2 space-y-4">
           <!-- Species info with thumbnail - 4 column layout -->
-          <div class="bg-base-200/50 rounded-lg p-4">
+          <div class="bg-[var(--color-base-200)]/50 rounded-lg p-4">
             <!-- Single Row Layout: All 4 segments in one row using flex -->
             <div class="flex gap-4 items-start">
               <!-- Section 1: Thumbnail + Species Names (flex-grow for more space) -->
@@ -136,10 +136,10 @@
                   size="lg"
                 />
                 <div class="flex-1 min-w-0">
-                  <h3 class="text-2xl font-semibold text-base-content mb-1 truncate">
+                  <h3 class="text-2xl font-semibold text-[var(--color-base-content)] mb-1 truncate">
                     {detection.commonName}
                   </h3>
-                  <p class="text-base text-base-content/60 italic truncate">
+                  <p class="text-base text-[var(--color-base-content)]/60 italic truncate">
                     {detection.scientificName}
                   </p>
                   <div class="mt-2">
@@ -150,13 +150,13 @@
 
               <!-- Section 2: Date & Time (fixed width) -->
               <div class="shrink-0 text-center" style:min-width="120px">
-                <div class="text-sm text-base-content/60 mb-2">
+                <div class="text-sm text-[var(--color-base-content)]/60 mb-2">
                   {t('detections.headers.dateTime')}
                 </div>
-                <div class="text-base text-base-content">{detection.date}</div>
-                <div class="text-base text-base-content">{detection.time}</div>
+                <div class="text-base text-[var(--color-base-content)]">{detection.date}</div>
+                <div class="text-base text-[var(--color-base-content)]">{detection.time}</div>
                 {#if detection.timeOfDay}
-                  <div class="text-sm text-base-content/60 mt-1 capitalize">
+                  <div class="text-sm text-[var(--color-base-content)]/60 mt-1 capitalize">
                     {detection.timeOfDay}
                   </div>
                 {/if}
@@ -164,7 +164,7 @@
 
               <!-- Section 3: Weather Conditions (fixed width) -->
               <div class="shrink-0 text-center" style:min-width="180px">
-                <div class="text-sm text-base-content/60 mb-2">
+                <div class="text-sm text-[var(--color-base-content)]/60 mb-2">
                   {t('detections.headers.weather')}
                 </div>
                 {#if detection.weather}
@@ -181,7 +181,7 @@
                     />
                   </div>
                 {:else}
-                  <div class="text-sm text-base-content/40 italic">
+                  <div class="text-sm text-[var(--color-base-content)]/40 italic">
                     {t('detections.weather.noData')}
                   </div>
                 {/if}
@@ -189,7 +189,7 @@
 
               <!-- Section 4: Confidence (fixed width) -->
               <div class="shrink-0 flex flex-col items-center" style:min-width="100px">
-                <div class="text-sm text-base-content/60 mb-2">
+                <div class="text-sm text-[var(--color-base-content)]/60 mb-2">
                   {t('search.tableHeaders.confidence')}
                 </div>
                 <ConfidenceCircle confidence={detection.confidence} size="lg" />
@@ -198,7 +198,7 @@
           </div>
 
           <!-- Audio and Spectrogram -->
-          <div class="relative bg-base-200 rounded-lg p-4">
+          <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
             <AudioPlayer
               audioUrl="/api/v2/audio/{detection.id}"
               detectionId={detection.id.toString()}
@@ -214,7 +214,7 @@
         <!-- Right Column: Review Controls -->
         <div class="space-y-4">
           <!-- Review Form -->
-          <div class="form-control bg-base-100 rounded-lg p-4">
+          <div class="form-control bg-[var(--color-base-100)] rounded-lg p-4">
             <h4 class="text-lg font-semibold mb-4">
               {t('common.review.form.reviewDetectionTitle')}
             </h4>
@@ -241,7 +241,7 @@
             </label>
 
             {#if detection.locked}
-              <div class="text-sm text-base-content/70 mt-2">
+              <div class="text-sm text-[var(--color-base-content)]/70 mt-2">
                 <TriangleAlert class="inline-block size-4 mr-1" />
                 {t('common.review.form.detectionLocked')}
               </div>
@@ -250,7 +250,7 @@
 
           <!-- Lock/Unlock Controls -->
           {#if reviewStatus === 'correct' && !detection.locked}
-            <div class="form-control bg-base-100 rounded-lg p-4">
+            <div class="form-control bg-[var(--color-base-100)] rounded-lg p-4">
               <label class="label cursor-pointer justify-start gap-4">
                 <input
                   type="checkbox"
@@ -260,14 +260,17 @@
                 />
                 <span class="label-text">{t('common.review.form.lockDetection')}</span>
               </label>
-              <div id="lock-detection-help" class="text-sm text-base-content/70 ml-8">
+              <div
+                id="lock-detection-help"
+                class="text-sm text-[var(--color-base-content)]/70 ml-8"
+              >
                 {t('common.review.form.lockDetectionHelp')}
               </div>
             </div>
           {/if}
 
           {#if detection.locked}
-            <div class="form-control bg-base-100 rounded-lg p-4">
+            <div class="form-control bg-[var(--color-base-100)] rounded-lg p-4">
               <label class="label cursor-pointer justify-start gap-4">
                 <input
                   type="checkbox"
@@ -277,7 +280,10 @@
                 />
                 <span class="label-text">{t('common.review.form.unlockDetection')}</span>
               </label>
-              <div id="unlock-detection-help" class="text-sm text-base-content/70 ml-8">
+              <div
+                id="unlock-detection-help"
+                class="text-sm text-[var(--color-base-content)]/70 ml-8"
+              >
                 {t('common.review.form.unlockDetectionHelp')}
               </div>
             </div>
@@ -285,7 +291,7 @@
 
           <!-- Ignore Species -->
           {#if !detection.locked && reviewStatus === 'false_positive'}
-            <div class="form-control bg-base-100 rounded-lg p-4">
+            <div class="form-control bg-[var(--color-base-100)] rounded-lg p-4">
               <label class="label cursor-pointer justify-start gap-4">
                 <input
                   type="checkbox"
@@ -294,14 +300,14 @@
                 />
                 <span class="label-text">{t('common.review.form.ignoreSpecies')}</span>
               </label>
-              <div class="text-sm text-base-content/70 ml-8">
+              <div class="text-sm text-[var(--color-base-content)]/70 ml-8">
                 {t('common.review.form.ignoreSpeciesHelp')}
               </div>
             </div>
           {/if}
 
           <!-- Comment Section -->
-          <div class="form-control bg-base-100 rounded-lg p-4">
+          <div class="form-control bg-[var(--color-base-100)] rounded-lg p-4">
             <button
               type="button"
               class="btn btn-ghost btn-sm justify-start gap-2 p-2"
@@ -315,7 +321,7 @@
                   ? t('common.review.form.hideComment')
                   : t('common.review.form.addComment')}
                 {#if comment && !showCommentSection}
-                  <span class="text-xs text-base-content/60"
+                  <span class="text-xs text-[var(--color-base-content)]/60"
                     >{t('common.review.form.commentCount', { chars: comment.length })}</span
                   >
                 {/if}

@@ -63,7 +63,7 @@
   );
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)}>
+<div class={cn('card bg-[var(--color-base-100)] shadow-xs', className)}>
   <div class="card-body card-padding">
     <h2 class="card-title" id="system-info-heading">{title}</h2>
     <div class="divider"></div>
@@ -131,7 +131,7 @@
 
         <!-- Error state for temperature -->
         {#if temperatureError && !temperatureLoading}
-          <div class="text-error text-sm" role="alert">{temperatureError}</div>
+          <div class="text-[var(--color-error)] text-sm" role="alert">{temperatureError}</div>
         {/if}
 
         <!-- System Model Row -->

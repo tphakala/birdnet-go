@@ -187,7 +187,10 @@
       <!-- Weather Description - conditionally visible -->
       {#if showWeatherDescription}
         <span
-          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+          class={cn(
+            safeGet(textSizeClasses, size, ''),
+            'text-[var(--color-base-content)]/70 whitespace-nowrap'
+          )}
         >
           {weatherDesc}
         </span>
@@ -208,7 +211,10 @@
           />
         {/if}
         <span
-          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+          class={cn(
+            safeGet(textSizeClasses, size, ''),
+            'text-[var(--color-base-content)]/70 whitespace-nowrap'
+          )}
         >
           {displayTemperature.toFixed(1)}{temperatureUnit}
         </span>
@@ -226,7 +232,10 @@
           />
         {/if}
         <span
-          class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/70 whitespace-nowrap')}
+          class={cn(
+            safeGet(textSizeClasses, size, ''),
+            'text-[var(--color-base-content)]/70 whitespace-nowrap'
+          )}
         >
           {displayWindSpeed.toFixed(0)}{displayWindGust !== undefined &&
           displayWindGust > displayWindSpeed

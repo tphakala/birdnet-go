@@ -69,7 +69,7 @@
 
   {#if showTooltip && mounted}
     <div
-      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 mt-2 w-auto whitespace-nowrap bg-neutral text-neutral-content text-sm rounded-md px-2 py-1 z-50 shadow-md"
+      class="invisible group-hover:visible absolute left-1/2 transform -translate-x-1/2 mt-2 w-auto whitespace-nowrap bg-[var(--color-neutral)] text-[var(--color-neutral)]-content text-sm rounded-md px-2 py-1 z-50 shadow-md"
       role="tooltip"
       aria-hidden="true"
     >

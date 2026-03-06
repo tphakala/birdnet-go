@@ -101,17 +101,17 @@
   function getNotificationIconClass(notification: Notification): string {
     switch (notification.type) {
       case 'error':
-        return 'bg-error/20 text-error';
+        return 'bg-[var(--color-error)]/20 text-[var(--color-error)]';
       case 'warning':
-        return 'bg-warning/20 text-warning';
+        return 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]';
       case 'detection':
-        return 'bg-success/20 text-success';
+        return 'bg-[var(--color-success)]/20 text-[var(--color-success)]';
       case 'system':
-        return 'bg-primary/20 text-primary';
+        return 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]';
       case 'info':
-        return 'bg-info/20 text-info';
+        return 'bg-[var(--color-info)]/20 text-[var(--color-info)]';
       default:
-        return 'bg-base-300 text-base-content';
+        return 'bg-[var(--color-base-300)] text-[var(--color-base-content)]';
     }
   }
 
@@ -440,7 +440,7 @@
     <!-- Unread badge -->
     {#if !loading && unreadCount > 0}
       <span
-        class="absolute -top-1 -right-1 bg-error text-error-content text-xs rounded-full px-1 min-w-5 h-5 flex items-center justify-center font-bold"
+        class="absolute -top-1 -right-1 bg-[var(--color-error)] text-[var(--color-error)]-content text-xs rounded-full px-1 min-w-5 h-5 flex items-center justify-center font-bold"
         aria-live="polite"
         aria-atomic="true"
       >
@@ -455,11 +455,11 @@
       bind:this={dropdownRef}
       id="notification-dropdown"
       role={!loading && formattedNotifications.length > 0 ? 'menu' : undefined}
-      class="notification-dropdown absolute top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-128 bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col"
+      class="notification-dropdown absolute top-full mt-2 w-80 sm:w-96 max-w-[calc(100vw-2rem)] max-h-128 bg-[var(--color-base-100)] rounded-lg shadow-xl border border-[var(--color-base-300)] overflow-hidden flex flex-col"
       style:z-index={DROPDOWN_Z_INDEX}
     >
       <!-- Header -->
-      <div class="flex items-center justify-between p-4 border-b border-base-300">
+      <div class="flex items-center justify-between p-4 border-b border-[var(--color-base-300)]">
         <h3 class="text-lg font-semibold">{t('notifications.title')}</h3>
         {#if formattedNotifications.length > 0}
           <button
@@ -483,7 +483,7 @@
           </div>
         {:else if formattedNotifications.length === 0}
           <!-- Empty state -->
-          <div class="p-8 text-center text-base-content/60">
+          <div class="p-8 text-center text-[var(--color-base-content)]/60">
             <div
               class="mx-auto mb-2 opacity-50"
               role="img"
@@ -499,8 +499,8 @@
             <div
               role="menuitem"
               class={cn(
-                'border-b border-base-300 p-4 hover:bg-base-200 transition-colors cursor-pointer',
-                !notification.read && 'bg-base-200/50'
+                'border-b border-[var(--color-base-300)] p-4 hover:bg-[var(--color-base-200)] transition-colors cursor-pointer',
+                !notification.read && 'bg-[var(--color-base-200)]/50'
               )}
               onclick={() => handleNotificationClick(notification)}
               onkeydown={e => {
@@ -537,13 +537,13 @@
                   <div class="flex items-start justify-between gap-2">
                     <h4 class="font-medium text-sm truncate">{notification.title}</h4>
                     <time
-                      class="text-xs text-base-content/60 whitespace-nowrap"
+                      class="text-xs text-[var(--color-base-content)]/60 whitespace-nowrap"
                       datetime={notification.timestamp}
                     >
                       {notification.timeAgo}
                     </time>
                   </div>
-                  <p class="text-sm text-base-content/80 mt-1">
+                  <p class="text-sm text-[var(--color-base-content)]/80 mt-1">
                     {sanitizeNotificationMessage(notification.message)}
                   </p>
                   <div class="flex items-center gap-2 mt-2">
@@ -562,7 +562,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="p-4 border-t border-base-300">
+      <div class="p-4 border-t border-[var(--color-base-300)]">
         <button onclick={navigateToNotifications} class="btn btn-sm btn-block btn-ghost">
           {t('notifications.actions.viewAll')}
         </button>

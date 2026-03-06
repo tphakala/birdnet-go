@@ -208,7 +208,7 @@
   </label>
 
   <!-- Add new RTSP URL form -->
-  <div class="border border-base-300 rounded-lg p-4 mb-4">
+  <div class="border border-[var(--color-base-300)] rounded-lg p-4 mb-4">
     <h4 class="font-medium mb-3">Add New RTSP Stream</h4>
 
     <div class="space-y-3">
@@ -225,7 +225,7 @@
         inputClassName={newNameError ? 'input-error' : ''}
       />
       {#if newNameError}
-        <div class="text-error text-sm">{newNameError}</div>
+        <div class="text-[var(--color-error)] text-sm">{newNameError}</div>
       {/if}
 
       <!-- RTSP URL -->
@@ -257,7 +257,7 @@
         </div>
       </div>
       {#if newUrlError}
-        <div class="text-error text-sm">{newUrlError}</div>
+        <div class="text-[var(--color-error)] text-sm">{newUrlError}</div>
       {/if}
     </div>
   </div>
@@ -273,7 +273,7 @@
   {#if urls.length > 0}
     <div class="space-y-3">
       <div class="flex items-center justify-between">
-        <div class="text-sm font-medium text-base-content opacity-70">
+        <div class="text-sm font-medium text-[var(--color-base-content)] opacity-70">
           Configured RTSP Streams ({urls.length}/{maxItems}):
         </div>
         {#if urls.length > 1}
@@ -282,7 +282,7 @@
       </div>
 
       {#each urls as rtspUrl, index (rtspUrl.id)}
-        <div class="card bg-base-200 p-4">
+        <div class="card bg-[var(--color-base-200)] p-4">
           <div class="space-y-3">
             <!-- Header with name and controls -->
             <div class="flex items-center justify-between">
@@ -295,7 +295,7 @@
               <div class="flex items-center gap-2">
                 <button
                   type="button"
-                  class="btn btn-ghost btn-sm btn-square text-error"
+                  class="btn btn-ghost btn-sm btn-square text-[var(--color-error)]"
                   onclick={() => removeUrl(rtspUrl.id)}
                   {disabled}
                   aria-label="Remove RTSP stream"
@@ -319,7 +319,9 @@
                   inputClassName={errors.get(`${rtspUrl.id}-name`) ? 'input-error' : ''}
                 />
                 {#if errors.get(`${rtspUrl.id}-name`)}
-                  <div class="text-error text-sm mt-1">{errors.get(`${rtspUrl.id}-name`)}</div>
+                  <div class="text-[var(--color-error)] text-sm mt-1">
+                    {errors.get(`${rtspUrl.id}-name`)}
+                  </div>
                 {/if}
               </div>
 
@@ -335,7 +337,7 @@
                   inputClassName={errors.get(rtspUrl.id) ? 'input-error' : ''}
                 />
                 {#if errors.get(rtspUrl.id)}
-                  <div class="text-error text-sm mt-1">{errors.get(rtspUrl.id)}</div>
+                  <div class="text-[var(--color-error)] text-sm mt-1">{errors.get(rtspUrl.id)}</div>
                 {/if}
               </div>
             </div>
@@ -350,7 +352,7 @@
                 {disabled}
               />
 
-              <div class="text-xs text-base-content opacity-60">
+              <div class="text-xs text-[var(--color-base-content)] opacity-60">
                 Stream {index + 1} of {urls.length}
               </div>
             </div>
@@ -359,7 +361,9 @@
       {/each}
     </div>
   {:else}
-    <div class="text-center py-8 text-base-content opacity-60 bg-base-200 rounded-lg">
+    <div
+      class="text-center py-8 text-[var(--color-base-content)] opacity-60 bg-[var(--color-base-200)] rounded-lg"
+    >
       <div class="mb-2 flex justify-center">
         <Video class="size-5" />
       </div>
@@ -379,7 +383,7 @@
   <!-- Main error display -->
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-error">{error}</span>
+      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
     </div>
   {/if}
 </div>

@@ -51,7 +51,7 @@
   <div class={cn('relative', className)}>
     <button
       type="button"
-      class="btn btn-ghost btn-sm p-1 relative text-warning"
+      class="btn btn-ghost btn-sm p-1 relative text-[var(--color-warning)]"
       aria-label={tooltipText}
       title={tooltipText}
     >

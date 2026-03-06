@@ -983,10 +983,10 @@
     <!-- Loading spinner overlay -->
     {#if spectrogramLoader.showSpinner}
       <div
-        class="absolute inset-0 flex items-center justify-center bg-base-200/75 rounded-md border border-base-300"
+        class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md border border-[var(--color-base-300)]"
       >
         <div
-          class="loading loading-spinner loading-sm md:loading-md text-primary"
+          class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
           role="status"
           aria-label={t('components.audio.spectrogramLoadingAria')}
         ></div>
@@ -996,14 +996,17 @@
     {#if spectrogramLoader.error}
       <!-- Error placeholder for failed spectrogram -->
       <div
-        class="flex items-center justify-center bg-base-200 rounded-md border border-base-300"
+        class="flex items-center justify-center bg-[var(--color-base-200)] rounded-md border border-[var(--color-base-300)]"
         style={responsive
           ? 'height: 80px;'
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
       >
         <div class="text-center p-2">
-          <XCircle class="size-6 sm:size-8 mx-auto mb-1 text-base-content/30" aria-hidden="true" />
-          <span class="text-xs sm:text-sm text-base-content/50"
+          <XCircle
+            class="size-6 sm:size-8 mx-auto mb-1 text-[var(--color-base-content)]/30"
+            aria-hidden="true"
+          />
+          <span class="text-xs sm:text-sm text-[var(--color-base-content)]/50"
             >{t('components.audio.spectrogramUnavailable')}</span
           >
         </div>
@@ -1011,14 +1014,18 @@
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
       <!-- Show generation status -->
       <div
-        class="absolute inset-0 flex flex-col items-center justify-center bg-base-200/90 rounded-md border border-base-300 p-2"
+        class="absolute inset-0 flex flex-col items-center justify-center bg-[var(--color-base-200)]/90 rounded-md border border-[var(--color-base-300)] p-2"
       >
         <div
           class="loading loading-spinner loading-xs sm:loading-sm md:loading-md"
           role="status"
           aria-label={t('components.audio.spectrogramGeneratingAria')}
         ></div>
-        <div class="text-xs sm:text-sm text-base-content mt-1" role="status" aria-live="polite">
+        <div
+          class="text-xs sm:text-sm text-[var(--color-base-content)] mt-1"
+          role="status"
+          aria-live="polite"
+        >
           {#if spectrogramStatus.status === 'queued'}
             <span
               >{t('components.audio.queuePosition', {
@@ -1030,7 +1037,7 @@
           {/if}
         </div>
         {#if spectrogramStatus.message}
-          <div class="text-xs sm:text-sm text-base-content/70 mt-0.5">
+          <div class="text-xs sm:text-sm text-[var(--color-base-content)]/70 mt-0.5">
             {spectrogramStatus.message}
           </div>
         {/if}
@@ -1045,8 +1052,8 @@
         decoding="async"
         fetchpriority="low"
         class={responsive
-          ? 'w-full h-auto object-contain rounded-md border border-base-300'
-          : 'w-full h-full object-cover rounded-md border border-base-300'}
+          ? 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
+          : 'w-full h-full object-cover rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
         style={responsive
           ? ''

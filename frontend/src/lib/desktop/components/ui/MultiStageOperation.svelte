@@ -29,28 +29,28 @@
   function getStatusColor(status: Stage['status']): string {
     switch (status) {
       case 'completed':
-        return 'text-success';
+        return 'text-[var(--color-success)]';
       case 'error':
-        return 'text-error';
+        return 'text-[var(--color-error)]';
       case 'in_progress':
-        return 'text-info';
+        return 'text-[var(--color-info)]';
       case 'skipped':
-        return 'text-base-content/60';
+        return 'text-[var(--color-base-content)]/60';
       default:
-        return 'text-base-content/30';
+        return 'text-[var(--color-base-content)]/30';
     }
   }
 
   function getProgressBarColor(status: Stage['status']): string {
     switch (status) {
       case 'completed':
-        return 'bg-success';
+        return 'bg-[var(--color-success)]';
       case 'error':
-        return 'bg-error';
+        return 'bg-[var(--color-error)]';
       case 'in_progress':
-        return 'bg-info';
+        return 'bg-[var(--color-info)]';
       default:
-        return 'bg-base-300';
+        return 'bg-[var(--color-base-300)]';
     }
   }
 
@@ -66,11 +66,11 @@
     <div class="mb-6">
       <div class="flex justify-between text-sm mb-2">
         <span class="font-medium">Overall Progress</span>
-        <span class="text-base-content/70">{overallProgress}%</span>
+        <span class="text-[var(--color-base-content)]/70">{overallProgress}%</span>
       </div>
-      <div class="w-full bg-base-300 rounded-full h-2 overflow-hidden">
+      <div class="w-full bg-[var(--color-base-300)] rounded-full h-2 overflow-hidden">
         <div
-          class="bg-primary h-full transition-all duration-300 ease-out"
+          class="bg-[var(--color-primary)] h-full transition-all duration-300 ease-out"
           style:width="{overallProgress}%"
         ></div>
       </div>
@@ -83,7 +83,7 @@
         <div class="flex gap-4 pb-8 last:pb-0">
           <!-- Timeline line -->
           {#if index < stages.length - 1}
-            <div class="absolute left-6 top-12 bottom-0 w-0.5 bg-base-300"></div>
+            <div class="absolute left-6 top-12 bottom-0 w-0.5 bg-[var(--color-base-300)]"></div>
           {/if}
 
           <!-- Icon -->
@@ -91,12 +91,12 @@
             class={cn(
               'relative z-10 shrink-0 w-12 h-12 rounded-full flex items-center justify-center transition-colors',
               stage.status === 'completed'
-                ? 'bg-success/20'
+                ? 'bg-[var(--color-success)]/20'
                 : stage.status === 'error'
-                  ? 'bg-error/20'
+                  ? 'bg-[var(--color-error)]/20'
                   : stage.status === 'in_progress'
-                    ? 'bg-info/20'
-                    : 'bg-base-200'
+                    ? 'bg-[var(--color-info)]/20'
+                    : 'bg-[var(--color-base-200)]'
             )}
           >
             {#if stage.status === 'completed'}
@@ -120,29 +120,37 @@
               disabled={!onStageClick}
               class={cn(
                 'text-left w-full',
-                onStageClick && 'hover:bg-base-200 rounded-lg p-2 -m-2 transition-colors'
+                onStageClick &&
+                  'hover:bg-[var(--color-base-200)] rounded-lg p-2 -m-2 transition-colors'
               )}
             >
-              <h3 class={cn('font-medium', stage.status === 'in_progress' ? 'text-primary' : '')}>
+              <h3
+                class={cn(
+                  'font-medium',
+                  stage.status === 'in_progress' ? 'text-[var(--color-primary)]' : ''
+                )}
+              >
                 {stage.title}
               </h3>
 
               {#if stage.description}
-                <p class="text-sm text-base-content/70 mt-1">{stage.description}</p>
+                <p class="text-sm text-[var(--color-base-content)]/70 mt-1">{stage.description}</p>
               {/if}
 
               {#if stage.message}
                 <p
                   class={cn(
                     'text-sm mt-2',
-                    stage.status === 'error' ? 'text-error' : 'text-base-content/60'
+                    stage.status === 'error'
+                      ? 'text-[var(--color-error)]'
+                      : 'text-[var(--color-base-content)]/60'
                   )}
                 >
                   {stage.message}
                 </p>
               {/if}
               {#if stage.error && stage.error !== stage.message}
-                <p class="text-sm mt-1 text-error">
+                <p class="text-sm mt-1 text-[var(--color-error)]">
                   <strong>Error:</strong>
                   {stage.error}
                 </p>
@@ -150,9 +158,9 @@
 
               {#if stage.status === 'in_progress' && stage.progress !== undefined}
                 <div class="mt-2">
-                  <div class="w-full bg-base-300 rounded-full h-1.5 overflow-hidden">
+                  <div class="w-full bg-[var(--color-base-300)] rounded-full h-1.5 overflow-hidden">
                     <div
-                      class="bg-info h-full transition-all duration-300 ease-out"
+                      class="bg-[var(--color-info)] h-full transition-all duration-300 ease-out"
                       style:width="{stage.progress}%"
                     ></div>
                   </div>
@@ -172,8 +180,8 @@
           disabled={!onStageClick}
           class={cn(
             'flex items-center gap-3 w-full p-3 rounded-lg transition-colors',
-            stage.status === 'in_progress' ? 'bg-base-200' : '',
-            onStageClick && 'hover:bg-base-200'
+            stage.status === 'in_progress' ? 'bg-[var(--color-base-200)]' : '',
+            onStageClick && 'hover:bg-[var(--color-base-200)]'
           )}
         >
           {#if stage.status === 'completed'}
@@ -194,21 +202,23 @@
               <div
                 class={cn(
                   'text-xs mt-0.5',
-                  stage.status === 'error' ? 'text-error' : 'text-base-content/60'
+                  stage.status === 'error'
+                    ? 'text-[var(--color-error)]'
+                    : 'text-[var(--color-base-content)]/60'
                 )}
               >
                 {stage.message}
               </div>
             {/if}
             {#if stage.error && stage.error !== stage.message}
-              <div class="text-xs mt-0.5 text-error">
+              <div class="text-xs mt-0.5 text-[var(--color-error)]">
                 {stage.error}
               </div>
             {/if}
           </div>
 
           {#if stage.status === 'in_progress' && stage.progress !== undefined}
-            <div class="text-xs text-base-content/60">{stage.progress}%</div>
+            <div class="text-xs text-[var(--color-base-content)]/60">{stage.progress}%</div>
           {/if}
         </button>
       {/each}
@@ -217,14 +227,19 @@
     <!-- Default variant -->
     <div class="space-y-4">
       {#each stages as stage, index (stage.id)}
-        <div class={cn('card', stage.status === 'in_progress' ? 'ring-2 ring-primary' : '')}>
+        <div
+          class={cn(
+            'card',
+            stage.status === 'in_progress' ? 'ring-2 ring-[var(--color-primary)]' : ''
+          )}
+        >
           <button
             type="button"
             onclick={() => handleStageClick(stage.id)}
             disabled={!onStageClick}
             class={cn(
               'card-body p-4 text-left w-full',
-              onStageClick && 'hover:bg-base-200 transition-colors'
+              onStageClick && 'hover:bg-[var(--color-base-200)] transition-colors'
             )}
           >
             <div class="flex items-start gap-4">
@@ -232,12 +247,12 @@
                 class={cn(
                   'shrink-0 w-10 h-10 rounded-full flex items-center justify-center',
                   stage.status === 'completed'
-                    ? 'bg-success/20'
+                    ? 'bg-[var(--color-success)]/20'
                     : stage.status === 'error'
-                      ? 'bg-error/20'
+                      ? 'bg-[var(--color-error)]/20'
                       : stage.status === 'in_progress'
-                        ? 'bg-info/20'
-                        : 'bg-base-200'
+                        ? 'bg-[var(--color-info)]/20'
+                        : 'bg-[var(--color-base-200)]'
                 )}
               >
                 {#if stage.status === 'completed'}
@@ -256,13 +271,15 @@
               <div class="flex-1">
                 <div class="flex items-center justify-between">
                   <h3 class="font-medium">{stage.title}</h3>
-                  <span class="text-xs text-base-content/60">
+                  <span class="text-xs text-[var(--color-base-content)]/60">
                     Step {index + 1} of {stages.length}
                   </span>
                 </div>
 
                 {#if stage.description}
-                  <p class="text-sm text-base-content/70 mt-1">{stage.description}</p>
+                  <p class="text-sm text-[var(--color-base-content)]/70 mt-1">
+                    {stage.description}
+                  </p>
                 {/if}
 
                 {#if stage.error}
@@ -271,16 +288,16 @@
                     <span class="text-sm">{stage.error}</span>
                   </div>
                 {:else if stage.message}
-                  <p class="text-sm text-base-content/60 mt-2">{stage.message}</p>
+                  <p class="text-sm text-[var(--color-base-content)]/60 mt-2">{stage.message}</p>
                 {/if}
 
                 {#if stage.status === 'in_progress' && stage.progress !== undefined}
                   <div class="mt-3">
                     <div class="flex justify-between text-xs mb-1">
-                      <span class="text-base-content/60">Progress</span>
-                      <span class="text-base-content/70">{stage.progress}%</span>
+                      <span class="text-[var(--color-base-content)]/60">Progress</span>
+                      <span class="text-[var(--color-base-content)]/70">{stage.progress}%</span>
                     </div>
-                    <div class="w-full bg-base-300 rounded-full h-2 overflow-hidden">
+                    <div class="w-full bg-[var(--color-base-300)] rounded-full h-2 overflow-hidden">
                       <div
                         class={cn(
                           'h-full transition-all duration-300 ease-out',

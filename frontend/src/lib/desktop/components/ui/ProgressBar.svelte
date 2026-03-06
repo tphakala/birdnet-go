@@ -77,18 +77,18 @@
   };
 
   const variantClasses: Record<ProgressVariant, string> = {
-    primary: 'bg-primary',
-    secondary: 'bg-secondary',
-    accent: 'bg-accent',
-    info: 'bg-info',
-    success: 'bg-success',
-    warning: 'bg-warning',
-    error: 'bg-error',
+    primary: 'bg-[var(--color-primary)]',
+    secondary: 'bg-[var(--color-secondary)]',
+    accent: 'bg-[var(--color-accent)]',
+    info: 'bg-[var(--color-info)]',
+    success: 'bg-[var(--color-success)]',
+    warning: 'bg-[var(--color-warning)]',
+    error: 'bg-[var(--color-error)]',
   };
 
   const containerClasses = $derived(
     cn(
-      'w-full bg-base-300 rounded-full overflow-hidden relative',
+      'w-full bg-[var(--color-base-300)] rounded-full overflow-hidden relative',
       safeGet(sizeClasses, size, 'h-2'),
       className
     )
@@ -97,7 +97,7 @@
   let progressBarClasses = $derived(
     cn(
       'h-full transition-all duration-300 ease-out',
-      safeGet(variantClasses, currentVariant, 'bg-primary'),
+      safeGet(variantClasses, currentVariant, 'bg-[var(--color-primary)]'),
       {
         'bg-stripes': striped,
         'animate-stripes': striped && animated,
@@ -109,7 +109,7 @@
   let labelClasses = $derived(
     cn('absolute inset-0 flex items-center justify-center text-xs font-medium', {
       'text-white mix-blend-difference': percentage > 50,
-      'text-base-content': percentage <= 50,
+      'text-[var(--color-base-content)]': percentage <= 50,
     })
   );
 </script>

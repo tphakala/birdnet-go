@@ -437,10 +437,10 @@
           <button
             type="button"
             onclick={clearSearch}
-            class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-base-200 rounded-full"
+            class="absolute inset-y-0 right-8 sm:right-10 flex items-center pr-2 hover:bg-[var(--color-base-200)] rounded-full"
             aria-label="Clear search"
           >
-            <X class="size-4 text-base-content/60" />
+            <X class="size-4 text-[var(--color-base-content)]/60" />
           </button>
         {/if}
 
@@ -459,7 +459,7 @@
         <!-- Filter chips -->
         {#if showFilterChips}
           <div
-            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-xs z-40 p-3"
+            class="absolute top-full left-0 right-0 bg-[var(--color-base-100)] border border-[var(--color-base-300)] border-t-0 rounded-b-lg shadow-xs z-40 p-3"
           >
             <!-- Active filters -->
             {#if parsedSearch.filters.length > 0}
@@ -494,7 +494,9 @@
 
             <!-- Syntax help -->
             {#if showSyntaxHelp}
-              <div class="text-xs text-base-content/60 border-t border-base-300 pt-2">
+              <div
+                class="text-xs text-[var(--color-base-content)]/60 border-t border-[var(--color-base-300)] pt-2"
+              >
                 <p class="font-medium mb-1">Filter Syntax:</p>
                 <p>confidence:>85, time:dawn, date:today, verified:true</p>
               </div>
@@ -505,13 +507,13 @@
         <!-- Search suggestions dropdown -->
         {#if showDropdown && suggestions.length > 0}
           <div
-            class="absolute top-full left-0 right-0 bg-base-100 border border-base-300 border-t-0 rounded-b-lg shadow-lg z-50 max-h-80 overflow-y-auto"
+            class="absolute top-full left-0 right-0 bg-[var(--color-base-100)] border border-[var(--color-base-300)] border-t-0 rounded-b-lg shadow-lg z-50 max-h-80 overflow-y-auto"
           >
             {#each suggestions as suggestion, index (`suggestion-${index}`)}
               <div
                 class={cn(
-                  'w-full flex items-center gap-3 border-b border-base-200 last:border-b-0 group hover:bg-base-200',
-                  selectedIndex === index && 'bg-base-200'
+                  'w-full flex items-center gap-3 border-b border-[var(--color-base-200)] last:border-b-0 group hover:bg-[var(--color-base-200)]',
+                  selectedIndex === index && 'bg-[var(--color-base-200)]'
                 )}
               >
                 <!-- Main suggestion button -->
@@ -523,10 +525,10 @@
                   <!-- Icon - Filter or History -->
                   {#if showSyntaxHelp}
                     <!-- Filter icon for syntax suggestions -->
-                    <Filter class="size-4 text-primary/80 shrink-0" />
+                    <Filter class="size-4 text-[var(--color-primary)]/80 shrink-0" />
                   {:else}
                     <!-- History icon for search history -->
-                    <Clock class="size-4 text-base-content/60 shrink-0" />
+                    <Clock class="size-4 text-[var(--color-base-content)]/60 shrink-0" />
                   {/if}
                   <span class="grow text-sm">{suggestion}</span>
                 </button>
@@ -539,7 +541,7 @@
                       e.stopPropagation();
                       removeFromHistory(suggestion);
                     }}
-                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-base-300 rounded-sm"
+                    class="opacity-0 group-hover:opacity-100 hover:opacity-100 p-2 mr-2 hover:bg-[var(--color-base-300)] rounded-sm"
                     aria-label="Remove from history"
                   >
                     <X class="size-4" />

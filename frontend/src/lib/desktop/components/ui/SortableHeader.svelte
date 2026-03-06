@@ -43,7 +43,7 @@
 >
   <button
     type="button"
-    class="inline-flex items-center gap-1 hover:text-primary transition-colors"
+    class="inline-flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors"
     onclick={() => onSort(field)}
     aria-label={srOnly ?? t('dataDisplay.table.sortBy', { column: label })}
     data-testid={`sort-${field}`}

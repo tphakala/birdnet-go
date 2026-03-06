@@ -155,21 +155,27 @@
   {#if loading}
     <div class="animate-pulse space-y-2">
       <div class="flex items-center gap-2">
-        <div class={cn('rounded-full bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded-sm w-24"></div>
+        <div
+          class={cn('rounded-full bg-[var(--color-base-300)]', safeGet(iconSizeClasses, size, ''))}
+        ></div>
+        <div class="h-4 bg-[var(--color-base-300)] rounded-sm w-24"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded-sm bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded-sm w-16"></div>
+        <div
+          class={cn('rounded-sm bg-[var(--color-base-300)]', safeGet(iconSizeClasses, size, ''))}
+        ></div>
+        <div class="h-4 bg-[var(--color-base-300)] rounded-sm w-16"></div>
       </div>
       <div class="flex items-center gap-2">
-        <div class={cn('rounded-sm bg-base-300', safeGet(iconSizeClasses, size, ''))}></div>
-        <div class="h-4 bg-base-300 rounded-sm w-20"></div>
+        <div
+          class={cn('rounded-sm bg-[var(--color-base-300)]', safeGet(iconSizeClasses, size, ''))}
+        ></div>
+        <div class="h-4 bg-[var(--color-base-300)] rounded-sm w-20"></div>
       </div>
     </div>
     <!-- Error State -->
   {:else if error}
-    <div class="text-error text-sm">
+    <div class="text-[var(--color-error)] text-sm">
       {error}
     </div>
     <!-- Weather Condition with Icon and Description -->
@@ -181,7 +187,12 @@
       >
         {weatherEmoji}
       </span>
-      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content font-medium')}>
+      <span
+        class={cn(
+          safeGet(textSizeClasses, size, ''),
+          'text-[var(--color-base-content)] font-medium'
+        )}
+      >
         {weatherDesc}
       </span>
     </div>
@@ -194,7 +205,7 @@
         class={cn(safeGet(iconSizeClasses, size, ''), 'shrink-0')}
         aria-label={`Temperature: ${displayTemperature.toFixed(1)}${temperatureUnit}`}
       />
-      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
+      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-[var(--color-base-content)]')}>
         {displayTemperature.toFixed(1)}{temperatureUnit}
       </span>
     </div>
@@ -207,7 +218,7 @@
         class={cn(safeGet(iconSizeClasses, size, ''), windOpacity, 'shrink-0')}
         aria-label={`Wind speed: ${displayWindSpeed.toFixed(0)} ${windSpeedUnit}`}
       />
-      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content')}>
+      <span class={cn(safeGet(textSizeClasses, size, ''), 'text-[var(--color-base-content)]')}>
         {displayWindSpeed.toFixed(0)}{displayWindGust !== undefined &&
         displayWindGust > displayWindSpeed
           ? `(${displayWindGust.toFixed(0)})`
@@ -217,7 +228,9 @@
     </div>
   {:else}
     <!-- No Data State -->
-    <div class={cn(safeGet(textSizeClasses, size, ''), 'text-base-content/40 italic')}>
+    <div
+      class={cn(safeGet(textSizeClasses, size, ''), 'text-[var(--color-base-content)]/40 italic')}
+    >
       {t('detections.weather.noData')}
     </div>
   {/if}

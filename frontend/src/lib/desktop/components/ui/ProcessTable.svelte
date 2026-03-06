@@ -146,13 +146,15 @@
   }
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)}>
+<div class={cn('card bg-[var(--color-base-100)] shadow-xs', className)}>
   <div class="card-body card-padding">
     <div class="flex justify-between items-center mb-2">
       <h2 class="card-title" id="process-info-heading">{title}</h2>
 
       <!-- Enhanced toggle for showing all processes -->
-      <div class="flex items-center gap-2 bg-base-200 px-3 py-1.5 rounded-lg shadow-xs">
+      <div
+        class="flex items-center gap-2 bg-[var(--color-base-200)] px-3 py-1.5 rounded-lg shadow-xs"
+      >
         <span class="text-sm font-medium">{t('system.processInfo.table.showAllProcesses')}</span>
         <input
           type="checkbox"
@@ -185,11 +187,11 @@
       <div class="overflow-x-auto" aria-labelledby="process-info-heading">
         <table class="table table-zebra w-full">
           <thead>
-            <tr class="bg-base-200">
+            <tr class="bg-[var(--color-base-200)]">
               <th scope="col">
                 <button
                   type="button"
-                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-full"
                   onclick={() => handleSort('name')}
                   aria-label="Sort by process name"
                 >
@@ -208,7 +210,7 @@
               <th scope="col">
                 <button
                   type="button"
-                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-full"
                   onclick={() => handleSort('status')}
                   aria-label="Sort by status"
                 >
@@ -227,7 +229,7 @@
               <th scope="col">
                 <button
                   type="button"
-                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-full"
                   onclick={() => handleSort('cpu')}
                   aria-label="Sort by CPU usage"
                 >
@@ -246,7 +248,7 @@
               <th scope="col">
                 <button
                   type="button"
-                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-full"
                   onclick={() => handleSort('memory')}
                   aria-label="Sort by memory usage"
                 >
@@ -265,7 +267,7 @@
               <th scope="col">
                 <button
                   type="button"
-                  class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer w-full"
+                  class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-full"
                   onclick={() => handleSort('uptime')}
                   aria-label="Sort by uptime"
                 >
@@ -296,10 +298,12 @@
               </tr>
             {:else}
               {#each sortedProcesses as process (process.pid)}
-                <tr class="hover:bg-base-200/50 transition-colors duration-150">
+                <tr class="hover:bg-[var(--color-base-200)]/50 transition-colors duration-150">
                   <td>
                     <div class="flex items-start gap-2">
-                      <div class="p-1.5 bg-primary/10 rounded-md text-primary">
+                      <div
+                        class="p-1.5 bg-[var(--color-primary)]/10 rounded-md text-[var(--color-primary)]"
+                      >
                         <Terminal class="size-4" />
                       </div>
                       <div>
@@ -320,7 +324,7 @@
                   <td>
                     <div class="flex items-center gap-2">
                       <div
-                        class="w-16 h-2 bg-base-200 rounded-full overflow-hidden"
+                        class="w-16 h-2 bg-[var(--color-base-200)] rounded-full overflow-hidden"
                         role="progressbar"
                         aria-valuenow={Math.min(Math.round(process.cpu), 100)}
                         aria-valuemin="0"
@@ -328,7 +332,7 @@
                         aria-valuetext="{Math.round(process.cpu)}% CPU usage"
                       >
                         <div
-                          class="h-full rounded-full bg-primary"
+                          class="h-full rounded-full bg-[var(--color-primary)]"
                           style:width="{Math.min(Math.round(process.cpu), 100)}%"
                         ></div>
                       </div>
