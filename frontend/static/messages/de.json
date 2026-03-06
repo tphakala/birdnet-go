@@ -1899,6 +1899,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Kanäle",
+        "rules": "Regeln",
+        "history": "Verlauf"
+      },
+      "rules": {
+        "summary": {
+          "active": "aktiv",
+          "builtIn": "integriert",
+          "total": "gesamt"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Test-Benachrichtigungen",

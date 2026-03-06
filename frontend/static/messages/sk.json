@@ -1736,6 +1736,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Kanály",
+        "rules": "Pravidlá",
+        "history": "História"
+      },
+      "rules": {
+        "summary": {
+          "active": "aktívne",
+          "builtIn": "zabudované",
+          "total": "celkom"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Testovacie upozornenia",

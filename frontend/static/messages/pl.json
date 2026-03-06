@@ -1905,6 +1905,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Kanały",
+        "rules": "Reguły",
+        "history": "Historia"
+      },
+      "rules": {
+        "summary": {
+          "active": "aktywne",
+          "builtIn": "wbudowane",
+          "total": "łącznie"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Testuj Powiadomienia",
