@@ -563,7 +563,7 @@
   </div>
 
   {#if helpText}
-    <div class="flex items-center py-2 text-sm" id="{fieldId}-help">
+    <div class="flex items-center py-2" id="{fieldId}-help">
       <span class="help-text">{helpText}</span>
     </div>
   {/if}
