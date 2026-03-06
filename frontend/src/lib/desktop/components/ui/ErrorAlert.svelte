@@ -36,7 +36,7 @@
 
   // Base alert classes using native Tailwind
   const baseClasses =
-    'flex items-start gap-3 p-3 rounded-lg text-sm text-[var(--color-base-content)] opacity-90';
+    'flex items-start gap-3 p-3 rounded-lg text-sm text-[var(--color-base-content)]';
 
   // Type-specific classes using native Tailwind with CSS custom properties
   const typeClasses: Record<AlertType, string> = {
