@@ -255,11 +255,11 @@ func TestResourceEventWorker_SkipsWhenAlertEngineActive(t *testing.T) {
 	SetAlertEngineActive(true)
 
 	service := NewService(DefaultServiceConfig())
-	defer service.Stop()
+	t.Cleanup(service.Stop)
 
 	worker, err := NewResourceEventWorker(service, nil)
 	require.NoError(t, err)
-	defer worker.Stop()
+	t.Cleanup(worker.Stop)
 
 	// Process a valid resource event
 	event := events.NewResourceEvent(events.ResourceCPU, 90.0, 80.0, events.SeverityWarning)

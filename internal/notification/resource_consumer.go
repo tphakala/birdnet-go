@@ -114,6 +114,12 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 	// When the alert engine is active, it handles system resource notifications
 	// via configurable rules. Skip to avoid duplicate notifications.
 	if IsAlertEngineActive() {
+		w.suppressedCount.Add(1)
+		if w.logger != nil {
+			w.logger.Debug("skipping resource notification because alert engine is active",
+				logger.String("resource_type", event.GetResourceType()),
+				logger.String("severity", event.GetSeverity()))
+		}
 		return nil
 	}
 
