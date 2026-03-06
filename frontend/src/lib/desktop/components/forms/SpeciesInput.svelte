@@ -535,8 +535,8 @@
 <style>
   .species-prediction-item:focus {
     /* Custom focus styles for better visibility */
-    background-color: hsl(var(--b2));
-    outline: 2px solid hsl(var(--p));
+    background-color: var(--color-base-200);
+    outline: 2px solid var(--color-primary);
     outline-offset: -2px;
   }
 

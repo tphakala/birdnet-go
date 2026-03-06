@@ -53,7 +53,7 @@
   .view-toggle {
     display: inline-flex;
     border-radius: 0.5rem;
-    border: 1px solid oklch(var(--b3));
+    border: 1px solid var(--color-base-300);
     overflow: hidden;
   }
 
@@ -65,26 +65,26 @@
     background: transparent;
     border: none;
     cursor: pointer;
-    color: oklch(var(--bc) / 0.5);
+    color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
     transition: all 150ms ease;
   }
 
   .view-toggle-btn:hover:not(.view-toggle-btn-active) {
-    color: oklch(var(--bc) / 0.75);
-    background-color: oklch(var(--b2) / 0.5);
+    color: color-mix(in srgb, var(--color-base-content) 75%, transparent);
+    background-color: color-mix(in srgb, var(--color-base-200) 50%, transparent);
   }
 
   .view-toggle-btn-active {
-    background-color: oklch(var(--p));
-    color: oklch(var(--pc));
+    background-color: var(--color-primary);
+    color: var(--color-primary-content);
   }
 
   .view-toggle-btn + .view-toggle-btn {
-    border-left: 1px solid oklch(var(--b3));
+    border-left: 1px solid var(--color-base-300);
   }
 
   .view-toggle-btn-active + .view-toggle-btn,
   .view-toggle-btn + .view-toggle-btn-active {
-    border-left-color: oklch(var(--p));
+    border-left-color: var(--color-primary);
   }
 </style>

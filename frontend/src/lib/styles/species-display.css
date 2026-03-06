@@ -39,8 +39,8 @@
   --sp-scientific-style: italic;
 
   /* Species colors */
-  --sp-hover-color: hsl(var(--p));
-  --sp-scientific-color: oklch(var(--bc) / 0.7);
+  --sp-hover-color: var(--color-primary);
+  --sp-scientific-color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
 
   /* Species layout */
   --sp-thumbnail-mobile-size: 35%;
@@ -103,7 +103,7 @@
   font-size: var(--sp-scientific-size);
   line-height: var(--sp-common-line-height);
   font-style: var(--sp-scientific-style);
-  color: var(--sp-scientific-color, oklch(var(--bc) / 0.4));
+  color: var(--sp-scientific-color, color-mix(in srgb, var(--color-base-content) 40%, transparent));
   overflow-wrap: break-word;
   hyphens: auto;
 }
@@ -215,16 +215,16 @@
 
 @keyframes sp-highlight-new {
   0% {
-    background-color: oklch(var(--p) / 0.2);
+    background-color: color-mix(in srgb, var(--color-primary) 20%, transparent);
     transform: scale(1.02);
   }
 
   50% {
-    background-color: oklch(var(--p) / 0.1);
+    background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
   }
 
   100% {
-    background-color: transparent;
+    background-color: color-mix(in srgb, var(--color-primary) 0%, transparent);
     transform: scale(1);
   }
 }
@@ -236,11 +236,11 @@
 
 @keyframes sp-highlight-update {
   0% {
-    background-color: oklch(var(--a) / 0.15);
+    background-color: color-mix(in srgb, var(--color-accent) 15%, transparent);
   }
 
   100% {
-    background-color: transparent;
+    background-color: color-mix(in srgb, var(--color-accent) 0%, transparent);
   }
 }
 
@@ -250,13 +250,11 @@
 
 [data-theme='dark'] {
   /* Override scientific name color for better contrast in dark mode */
-  --sp-scientific-color: oklch(var(--bc) / 0.5);
+  --sp-scientific-color: color-mix(in srgb, var(--color-base-content) 50%, transparent);
 }
 
-/* Remove duplicate - already defined above */
-
 [data-theme='dark'] .sp-species-common-name:hover {
-  color: oklch(var(--p) / 0.9);
+  color: color-mix(in srgb, var(--color-primary) 90%, transparent);
 }
 
 /* ========================================================================
@@ -281,7 +279,7 @@
 }
 
 .detection-grid-dashboard:hover {
-  background-color: oklch(var(--b2) / 0.3);
+  background-color: color-mix(in srgb, var(--color-base-200) 30%, transparent);
 }
 
 /* Detection list table layout */
@@ -291,7 +289,7 @@ tbody tr {
 }
 
 tbody tr:hover {
-  background-color: oklch(var(--b2) / 0.2);
+  background-color: color-mix(in srgb, var(--color-base-200) 20%, transparent);
 }
 
 /* Table cell alignment and padding */
@@ -316,8 +314,8 @@ tbody td {
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: oklch(var(--bc) / 0.7);
-  border-bottom: 1px solid oklch(var(--bc) / 0.1);
+  color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 10%, transparent);
 }
 
 /* Table header styles */
@@ -325,9 +323,9 @@ tbody td {
   padding: 0.5rem 1rem;
   font-size: 0.75rem;
   font-weight: 500;
-  color: oklch(var(--bc) / 0.7);
+  color: color-mix(in srgb, var(--color-base-content) 70%, transparent);
   text-align: left;
-  border-bottom: 1px solid oklch(var(--bc) / 0.2);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-base-content) 20%, transparent);
 }
 
 /* Actions column content alignment for all types */

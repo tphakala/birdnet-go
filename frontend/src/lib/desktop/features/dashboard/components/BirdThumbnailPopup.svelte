@@ -283,9 +283,9 @@
     left: 0;
     background: linear-gradient(
       90deg,
-      oklch(var(--b2) / 0.5) 0%,
-      oklch(var(--b2) / 0.3) 50%,
-      oklch(var(--b2) / 0.5) 100%
+      color-mix(in srgb, var(--color-base-200) 50%, transparent) 0%,
+      color-mix(in srgb, var(--color-base-200) 30%, transparent) 50%,
+      color-mix(in srgb, var(--color-base-200) 50%, transparent) 100%
     );
     background-size: 200% 100%;
     animation: shimmer 1.5s infinite;
@@ -305,7 +305,7 @@
   .thumbnail-image {
     position: relative;
     z-index: 1;
-    background-color: oklch(var(--b1));
+    background-color: var(--color-base-100);
   }
 
   /* Ensure popup appears above other elements */
@@ -317,7 +317,7 @@
   #bird-popup {
     animation: popupFadeIn 0.2s ease-out;
     backdrop-filter: blur(8px);
-    background-color: hsl(var(--b1) / 0.95);
+    background-color: color-mix(in srgb, var(--color-base-100) 95%, transparent);
   }
 
   @keyframes popupFadeIn {
@@ -345,7 +345,7 @@
   @media (prefers-reduced-motion: reduce) {
     .thumbnail-placeholder {
       animation: none;
-      background: oklch(var(--b2) / 0.4);
+      background: color-mix(in srgb, var(--color-base-200) 40%, transparent);
     }
   }
 </style>

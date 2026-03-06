@@ -398,7 +398,7 @@
     position: relative;
     overflow: hidden;
     border-radius: 0.375rem;
-    background-color: oklch(var(--b2) / 0.3);
+    background-color: color-mix(in srgb, var(--color-base-200) 30%, transparent);
   }
 
   /* Thumbnail image */

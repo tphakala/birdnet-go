@@ -37,5 +37,26 @@ if [ -n "$MATCHES" ]; then
   exit 1
 else
   echo "No bare daisyUI-style color classes found."
-  exit 0
+fi
+
+# --- Check 2: Legacy daisyUI CSS variable tokens in <style> blocks and CSS files ---
+# These used oklch(var(--p)) or hsl(var(--b2)) syntax from daisyUI's token system.
+# All must use var(--color-*) or color-mix(in srgb, var(--color-*) N%, transparent).
+
+LEGACY_PATTERN='oklch\(var\(--|hsl\(var\(--'
+LEGACY_MATCHES=$(grep -rnE "$LEGACY_PATTERN" "$SEARCH_DIR" --include="*.svelte" --include="*.css" || true)
+
+if [ -n "$LEGACY_MATCHES" ]; then
+  echo "ERROR: Found legacy daisyUI CSS variable tokens. Use new token syntax instead."
+  echo ""
+  echo "Examples:"
+  echo "  oklch(var(--p))          -> var(--color-primary)"
+  echo "  oklch(var(--bc) / 0.7)   -> color-mix(in srgb, var(--color-base-content) 70%, transparent)"
+  echo "  hsl(var(--b2))           -> var(--color-base-200)"
+  echo ""
+  echo "Found in:"
+  echo "$LEGACY_MATCHES"
+  exit 1
+else
+  echo "No legacy daisyUI CSS variable tokens found."
 fi
