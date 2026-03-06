@@ -1045,10 +1045,6 @@
     try {
       await toggleAlertRule(rule.id, !rule.enabled);
       rule.enabled = !rule.enabled;
-      showRuleStatus(
-        rule.enabled ? t('settings.alerts.status.enabled') : t('settings.alerts.status.disabled'),
-        'success'
-      );
     } catch (err) {
       logger.error('Failed to toggle rule', err, { component: 'NotificationsSettingsPage' });
       showRuleStatus(t('settings.alerts.errors.toggleFailed'), 'error');
