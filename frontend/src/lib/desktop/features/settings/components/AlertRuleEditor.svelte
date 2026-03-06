@@ -245,7 +245,8 @@
       objectType !== '' &&
       ((triggerType === 'event' && eventName !== '') ||
         (triggerType === 'metric' && metricName !== '')) &&
-      actions.length > 0
+      actions.length > 0 &&
+      conditions.every(c => c.property !== '' && c.operator !== '')
   );
 
   function handleSave() {
@@ -323,8 +324,9 @@
 
   // Close dropdowns on click outside
   function handleClickOutside(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (!target.closest('[data-dropdown]')) {
+    const target = event.target as Node | null;
+    const el = target instanceof HTMLElement ? target : null;
+    if (!el?.closest('[data-dropdown]')) {
       objDropOpen = false;
       eventDropOpen = false;
     }
@@ -660,11 +662,13 @@
                   <input
                     type="number"
                     min="0"
+                    step="1"
                     aria-label={t('settings.alerts.editor.duration')}
                     class="w-16 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none tabular-nums focus:ring-1 focus:ring-primary/30"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
-                      condition.duration_sec = Number(e.currentTarget.value);
+                      const v = Number(e.currentTarget.value);
+                      condition.duration_sec = Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 0;
                     }}
                   />
                   <span class="text-[10px] text-base-content/40"
@@ -739,8 +743,10 @@
           min="0"
           class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors tabular-nums"
           value={cooldownSec}
+          step="1"
           onchange={e => {
-            cooldownSec = Number(e.currentTarget.value);
+            const v = Number(e.currentTarget.value);
+            cooldownSec = Number.isFinite(v) ? Math.max(0, Math.trunc(v)) : 0;
           }}
         />
       </div>

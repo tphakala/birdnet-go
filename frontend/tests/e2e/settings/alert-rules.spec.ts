@@ -114,7 +114,7 @@ test.describe('Alert Rules Settings Page', () => {
 
       await navigateToAlertRules(page);
 
-      await expect(page).toHaveURL(/.*\/ui\/settings\/alertrules/);
+      await expect(page).toHaveURL(/.*\/ui\/settings\/notifications/);
 
       const mainContent = page.locator('main, [role="main"], [data-testid="main-content"]').first();
       await expect(mainContent).toBeVisible();
