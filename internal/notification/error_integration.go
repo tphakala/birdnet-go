@@ -81,8 +81,8 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 		return PriorityLow // Transient issues - don't bother users with these
 	case string(errors.CategoryCancellation), string(errors.CategoryBroadcast), string(errors.CategoryIntegration):
 		return PriorityMedium // General operational issues
-	case string(errors.CategoryValidation):
-		return PriorityLow // User input issues
+	case string(errors.CategoryValidation), string(errors.CategoryNotFound):
+		return PriorityLow // User input issues / expected lookup misses
 	case string(errors.CategorySoundLevel), string(errors.CategoryEventTracking):
 		return PriorityLow // Monitoring/tracking issues
 	default:
