@@ -2510,7 +2510,7 @@
         "maxDurationHelp": "Lunghezza massima di un clip di cattura estesa. La registrazione cresce con il proseguire dei rilevamenti, fino a questo limite.",
         "speciesListLabel": "Specie per cattura estesa",
         "addSpeciesLabel": "Aggiungi specie",
-        "addSpeciesHelp": "Specie che attivano la cattura estesa. Supporta nomi comuni, nomi scientifici e corrispondenza a livello di genere (es. \"Turdus\" include tutti i tordi).",
+        "addSpeciesHelp": "Specie che attivano la cattura estesa. Supporta nomi comuni, nomi scientifici e corrispondenza a livello di genere (es. \"Strix\" include tutti i gufi Strix).",
         "addSpeciesButton": "Aggiungi",
         "disabled": "La cattura estesa è disattivata"
       },

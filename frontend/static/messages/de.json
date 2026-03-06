@@ -2587,7 +2587,7 @@
         "maxDurationHelp": "Maximale Länge eines erweiterten Aufnahmeclips. Die Aufnahme wächst mit fortlaufenden Erkennungen bis zu diesem Limit.",
         "speciesListLabel": "Arten für erweiterte Aufnahme",
         "addSpeciesLabel": "Art hinzufügen",
-        "addSpeciesHelp": "Arten, die die erweiterte Aufnahme auslösen. Unterstützt gebräuchliche Namen, wissenschaftliche Namen und Gattungsabgleich (z.B. \"Turdus\" erfasst alle Drosseln).",
+        "addSpeciesHelp": "Arten, die die erweiterte Aufnahme auslösen. Unterstützt gebräuchliche Namen, wissenschaftliche Namen und Gattungsabgleich (z.B. \"Strix\" erfasst alle Strix-Eulen).",
         "addSpeciesButton": "Hinzufügen",
         "disabled": "Erweiterte Aufnahme ist deaktiviert"
       },

@@ -2587,7 +2587,7 @@
         "maxDurationHelp": "Longueur maximale d'un clip de capture étendue. L'enregistrement s'allonge au fil des détections, jusqu'à cette limite.",
         "speciesListLabel": "Espèces en capture étendue",
         "addSpeciesLabel": "Ajouter une espèce",
-        "addSpeciesHelp": "Espèces déclenchant la capture étendue. Prend en charge les noms communs, les noms scientifiques et la correspondance au niveau du genre (par ex. « Turdus » inclut toutes les grives).",
+        "addSpeciesHelp": "Espèces déclenchant la capture étendue. Prend en charge les noms communs, les noms scientifiques et la correspondance au niveau du genre (par ex. « Strix » inclut toutes les chouettes Strix).",
         "addSpeciesButton": "Ajouter",
         "disabled": "La capture étendue est désactivée"
       },

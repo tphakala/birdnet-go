@@ -2593,7 +2593,7 @@
         "maxDurationHelp": "Maksymalna długość klipu rozszerzonego nagrywania. Nagranie rośnie wraz z kolejnymi wykryciami, aż do tego limitu.",
         "speciesListLabel": "Gatunki rozszerzonego nagrywania",
         "addSpeciesLabel": "Dodaj gatunek",
-        "addSpeciesHelp": "Gatunki wyzwalające rozszerzone nagrywanie. Obsługuje nazwy pospolite, nazwy naukowe i dopasowanie na poziomie rodzaju (np. „Turdus” obejmuje wszystkie drozdy).",
+        "addSpeciesHelp": "Gatunki wyzwalające rozszerzone nagrywanie. Obsługuje nazwy pospolite, nazwy naukowe i dopasowanie na poziomie rodzaju (np. „Strix” obejmuje wszystkie sowy Strix).",
         "addSpeciesButton": "Dodaj",
         "disabled": "Rozszerzone nagrywanie jest wyłączone"
       },

@@ -2587,7 +2587,7 @@
         "maxDurationHelp": "Maximale lengte van een uitgebreide opnameclip. De opname groeit naarmate detecties doorgaan, tot deze limiet.",
         "speciesListLabel": "Soorten voor uitgebreide opname",
         "addSpeciesLabel": "Soort toevoegen",
-        "addSpeciesHelp": "Soorten die uitgebreide opname activeren. Ondersteunt gewone namen, wetenschappelijke namen en matching op genusniveau (bijv. \"Turdus\" omvat alle lijsters).",
+        "addSpeciesHelp": "Soorten die uitgebreide opname activeren. Ondersteunt gewone namen, wetenschappelijke namen en matching op genusniveau (bijv. \"Strix\" omvat alle Strix-uilen).",
         "addSpeciesButton": "Toevoegen",
         "disabled": "Uitgebreide opname is uitgeschakeld"
       },

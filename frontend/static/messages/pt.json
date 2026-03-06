@@ -2416,7 +2416,7 @@
         "maxDurationHelp": "Comprimento máximo de um clipe de captura estendida. A gravação cresce à medida que as deteções continuam, até este limite.",
         "speciesListLabel": "Espécies de captura estendida",
         "addSpeciesLabel": "Adicionar espécie",
-        "addSpeciesHelp": "Espécies que acionam a captura estendida. Suporta nomes comuns, nomes científicos e correspondência ao nível do género (ex.: \"Turdus\" inclui todos os tordos).",
+        "addSpeciesHelp": "Espécies que acionam a captura estendida. Suporta nomes comuns, nomes científicos e correspondência ao nível do género (ex.: \"Strix\" inclui todas as corujas Strix).",
         "addSpeciesButton": "Adicionar",
         "disabled": "A captura estendida está desativada"
       },

@@ -2416,7 +2416,7 @@
         "maxDurationHelp": "Laajennetun tallennuksen leikkeen enimmäispituus. Tallennus kasvaa havaintojen jatkuessa tähän rajaan asti.",
         "speciesListLabel": "Laajennetun tallennuksen lajit",
         "addSpeciesLabel": "Lisää laji",
-        "addSpeciesHelp": "Lajit, jotka käynnistävät laajennetun tallennuksen. Tukee yleisnimiä, tieteellisiä nimiä ja sukutason vastaavuutta (esim. \"Turdus\" kattaa kaikki rastaat).",
+        "addSpeciesHelp": "Lajit, jotka käynnistävät laajennetun tallennuksen. Tukee yleisnimiä, tieteellisiä nimiä ja sukutason vastaavuutta (esim. \"Strix\" kattaa kaikki Strix-pöllöt).",
         "addSpeciesButton": "Lisää",
         "disabled": "Laajennettu tallennus on pois käytöstä"
       },

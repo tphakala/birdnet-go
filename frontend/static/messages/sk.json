@@ -2544,7 +2544,7 @@
         "maxDurationHelp": "Maximálna dĺžka klipu rozšíreného nahrávania. Nahrávka rastie s pokračujúcimi detekciami až po tento limit.",
         "speciesListLabel": "Druhy pre rozšírené nahrávanie",
         "addSpeciesLabel": "Pridať druh",
-        "addSpeciesHelp": "Druhy, ktoré spúšťajú rozšírené nahrávanie. Podporuje bežné názvy, vedecké názvy a zhodu na úrovni rodu (napr. „Turdus“ zahŕňa všetky drozdy).",
+        "addSpeciesHelp": "Druhy, ktoré spúšťajú rozšírené nahrávanie. Podporuje bežné názvy, vedecké názvy a zhodu na úrovni rodu (napr. „Strix“ zahŕňa všetky sovy Strix).",
         "addSpeciesButton": "Pridať",
         "disabled": "Rozšírené nahrávanie je vypnuté"
       },

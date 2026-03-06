@@ -335,8 +335,11 @@
 
   // Species list API state for extended capture (reuses ApiState<T>)
   interface SpeciesListResponse {
-    species?: Array<{ label: string; commonName?: string }>;
+    species?: Array<{ label: string; scientificName?: string; commonName?: string }>;
   }
+
+  // Suffix appended to genus entries in the predictions list for display
+  const GENUS_SUFFIX = ' (Genus)';
 
   let speciesListState = $state<ApiState<string[]>>({
     loading: true,
@@ -355,9 +358,29 @@
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       if (data?.species && Array.isArray(data.species)) {
-        speciesListState.data = data.species.map(
-          (species: { label: string; commonName?: string }) => species.commonName || species.label
-        );
+        // Build clean species predictions using common names for display
+        // and extract unique genera for genus-level matching
+        const speciesNames: string[] = [];
+        const generaSet = new Set<string>();
+
+        for (const sp of data.species) {
+          const common = sp.commonName ?? sp.label.replace('_', ' - ');
+          speciesNames.push(common);
+
+          // Extract genus (first word of scientific name)
+          const sci = sp.scientificName ?? sp.label.split('_')[0];
+          if (sci) {
+            const genus = sci.split(' ')[0];
+            if (genus && genus.length > 1) {
+              generaSet.add(genus);
+            }
+          }
+        }
+
+        // Append genus entries with suffix so they appear in autocomplete
+        // (e.g. "Strix (Genus)" — the suffix is stripped before storing)
+        const generaEntries = [...generaSet].map(g => `${g}${GENUS_SUFFIX}`);
+        speciesListState.data = [...generaEntries, ...speciesNames];
       } else {
         speciesListState.data = [];
       }
@@ -375,15 +398,16 @@
 
   let extendedCaptureSettingsLocal = $derived(
     (() => {
-      const base = $extendedCaptureSettings ?? {
+      const defaults = {
         enabled: false,
         maxDuration: 120,
         captureBufferSeconds: 0,
-        species: [],
+        species: [] as string[],
       };
+      const merged = { ...defaults, ...($extendedCaptureSettings ?? {}) };
       return {
-        ...base,
-        species: base.species ?? [],
+        ...merged,
+        species: Array.isArray(merged.species) ? merged.species : [],
       };
     })()
   );
@@ -516,24 +540,33 @@
   }
 
   // Extended capture update handlers
+  // Always override captureBufferSeconds to 0 so backend auto-calculates the buffer size
   function updateExtendedCaptureEnabled(enabled: boolean) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      extendedCapture: { ...extendedCaptureSettingsLocal, enabled },
+      extendedCapture: { ...extendedCaptureSettingsLocal, captureBufferSeconds: 0, enabled },
     });
   }
 
   function updateExtendedCaptureMaxDuration(maxDuration: number) {
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      extendedCapture: { ...extendedCaptureSettingsLocal, maxDuration },
+      extendedCapture: { ...extendedCaptureSettingsLocal, captureBufferSeconds: 0, maxDuration },
     });
   }
 
   function handleExtendedCaptureSpeciesChange(updatedSpecies: string[]) {
+    // Strip " (Genus)" suffix from any genus entries added via autocomplete
+    const cleaned = updatedSpecies.map(s =>
+      s.endsWith(GENUS_SUFFIX) ? s.slice(0, -GENUS_SUFFIX.length) : s
+    );
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
-      extendedCapture: { ...extendedCaptureSettingsLocal, species: updatedSpecies },
+      extendedCapture: {
+        ...extendedCaptureSettingsLocal,
+        captureBufferSeconds: 0,
+        species: cleaned,
+      },
     });
   }
 
@@ -1224,7 +1257,7 @@
               addPlaceholder={t('settings.filters.typeSpeciesName')}
               addHelpText={t('settings.audio.extendedCapture.addSpeciesHelp')}
               addButtonText={t('settings.audio.extendedCapture.addSpeciesButton')}
-              hasChanges={extendedCaptureHasChanges}
+              hasChanges={false}
               onSpeciesChange={handleExtendedCaptureSpeciesChange}
             />
           </div>

@@ -2774,7 +2774,7 @@
         "maxDurationHelp": "Maximum length of an extended capture clip. The recording grows as detections continue, up to this limit.",
         "speciesListLabel": "Extended Capture Species",
         "addSpeciesLabel": "Add Species",
-        "addSpeciesHelp": "Species that trigger extended capture. Supports common names, scientific names, and genus-level matching (e.g. \"Turdus\" matches all thrushes).",
+        "addSpeciesHelp": "Species that trigger extended capture. Supports common names, scientific names, and genus-level matching (e.g. \"Strix\" matches all Strix owls).",
         "addSpeciesButton": "Add",
         "disabled": "Extended capture is disabled"
       },
