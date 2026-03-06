@@ -150,7 +150,7 @@
   });
 
   // Apply theme changes to SVG — use transparent background so the chart
-  // inherits the card/page background (bg-base-100) like the Chart.js graphs
+  // inherits the card/page background (bg-[var(--color-base-100)]) like the Chart.js graphs
   $effect(() => {
     if (svg && currentTheme) {
       svg.style('background-color', 'transparent').style('color', currentTheme.text);

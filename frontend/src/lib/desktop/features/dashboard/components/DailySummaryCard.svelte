@@ -816,15 +816,17 @@ Responsive Breakpoints:
   />
 {:else if loadingPhase === 'error'}
   <section
-    class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
+    class="daily-summary-card card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
-    <div class="px-6 py-4 border-b border-base-200 overflow-visible">
+    <div class="px-6 py-4 border-b border-[var(--color-base-200)] overflow-visible">
       <div
         class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
       >
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
+          <p class="text-sm text-[var(--color-base-content)]/60">
+            {t('dashboard.dailySummary.subtitle')}
+          </p>
         </div>
         {@render navigationControls()}
       </div>
@@ -838,16 +840,18 @@ Responsive Breakpoints:
   </section>
 {:else if loadingPhase === 'loaded'}
   <section
-    class="daily-summary-card card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-visible"
+    class="daily-summary-card card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
     <!-- Card Header with Date Navigation -->
-    <div class="px-6 py-4 border-b border-base-200 overflow-visible">
+    <div class="px-6 py-4 border-b border-[var(--color-base-200)] overflow-visible">
       <div
         class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
       >
         <div class="flex flex-col">
           <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm text-base-content/60">{t('dashboard.dailySummary.subtitle')}</p>
+          <p class="text-sm text-[var(--color-base-content)]/60">
+            {t('dashboard.dailySummary.subtitle')}
+          </p>
         </div>
         {@render navigationControls()}
       </div>
@@ -912,7 +916,8 @@ Responsive Breakpoints:
           <!-- Daylight visualization row -->
           <div class="flex mb-1">
             <div class="species-label-col shrink-0 flex items-center">
-              <span class="text-xs text-base-content/60 font-normal whitespace-nowrap"
+              <span
+                class="text-xs text-[var(--color-base-content)]/60 font-normal whitespace-nowrap"
                 >{t('dashboard.dailySummary.daylight.label')}</span
               >
             </div>
@@ -978,7 +983,7 @@ Responsive Breakpoints:
               {#each Array(24) as _, hour (hour)}
                 <a
                   href={urlBuilders.hourly(hour, 1)}
-                  class="text-center hover:text-primary cursor-pointer"
+                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewHourly', {
                     hour: hour.toString().padStart(2, '0'),
@@ -994,7 +999,7 @@ Responsive Breakpoints:
                 {@const hour = i * 2}
                 <a
                   href={urlBuilders.hourly(hour, 2)}
-                  class="text-center hover:text-primary cursor-pointer"
+                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewBiHourly', {
                     startHour: hour.toString().padStart(2, '0'),
@@ -1011,7 +1016,7 @@ Responsive Breakpoints:
                 {@const hour = i * 6}
                 <a
                   href={urlBuilders.hourly(hour, 6)}
-                  class="text-center hover:text-primary cursor-pointer"
+                  class="text-center hover:text-[var(--color-primary)] cursor-pointer"
                   style:color="color-mix(in srgb, var(--color-base-content) 50%, transparent)"
                   title={t('dashboard.dailySummary.tooltips.viewSixHourly', {
                     startHour: hour.toString().padStart(2, '0'),
@@ -1055,13 +1060,13 @@ Responsive Breakpoints:
                   {/if}
                   <a
                     href={urlBuilders.species(item)}
-                    class="text-sm hover:text-primary cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
+                    class="text-sm hover:text-[var(--color-primary)] cursor-pointer font-medium leading-tight flex items-center gap-1 overflow-hidden"
                     title={item.common_name}
                   >
                     <span class="truncate flex-1">{item.common_name}</span>
                     {#if item.is_new_species}
                       <span
-                        class="text-warning inline-block shrink-0"
+                        class="text-[var(--color-warning)] inline-block shrink-0"
                         title={`New species (first seen ${item.days_since_first_seen ?? 0} day${(item.days_since_first_seen ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         <Star class="size-3 fill-current" />
@@ -1069,7 +1074,7 @@ Responsive Breakpoints:
                     {/if}
                     {#if item.is_new_this_year && !item.is_new_species}
                       <span
-                        class="text-info shrink-0"
+                        class="text-[var(--color-info)] shrink-0"
                         title={`First time this year (${item.days_this_year ?? 0} day${(item.days_this_year ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         📅
@@ -1077,7 +1082,7 @@ Responsive Breakpoints:
                     {/if}
                     {#if item.is_new_this_season && !item.is_new_species && !item.is_new_this_year}
                       <span
-                        class="text-success shrink-0"
+                        class="text-[var(--color-success)] shrink-0"
                         title={`First time this ${item.current_season || 'season'} (${item.days_this_season ?? 0} day${(item.days_this_season ?? 0) === 1 ? '' : 's'} ago)`}
                       >
                         🌿
@@ -1179,7 +1184,9 @@ Responsive Breakpoints:
 
         <!-- Heatmap Legend -->
         {#if sortedData.length > 0}
-          <div class="flex justify-end items-center gap-1.5 mt-3 text-xs text-base-content/60">
+          <div
+            class="flex justify-end items-center gap-1.5 mt-3 text-xs text-[var(--color-base-content)]/60"
+          >
             <span>{t('dashboard.dailySummary.legend.less')}</span>
             <div class="flex gap-0.5">
               {#each [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as intensity (intensity)}

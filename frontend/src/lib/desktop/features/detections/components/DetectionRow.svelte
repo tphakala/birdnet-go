@@ -240,7 +240,7 @@
       />
     </div>
   {:else}
-    <div class="text-base-content opacity-50 text-xs">
+    <div class="text-[var(--color-base-content)] opacity-50 text-xs">
       {t('detections.weather.noData')}
     </div>
   {/if}
@@ -261,16 +261,20 @@
 
         <!-- Loading spinner overlay -->
         {#if thumbnailLoader.showSpinner}
-          <div class="absolute inset-0 flex items-center justify-center bg-base-200/75 rounded-md">
-            <div class="loading loading-spinner loading-sm text-primary"></div>
+          <div
+            class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md"
+          >
+            <div class="loading loading-spinner loading-sm text-[var(--color-primary)]"></div>
           </div>
         {/if}
 
         {#if thumbnailLoader.error}
           <!-- Error placeholder -->
-          <div class="absolute inset-0 flex items-center justify-center bg-base-200 rounded-md">
+          <div
+            class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)] rounded-md"
+          >
             <svg
-              class="w-8 h-8 text-base-content opacity-30"
+              class="w-8 h-8 text-[var(--color-base-content)] opacity-30"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"

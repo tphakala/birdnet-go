@@ -36,12 +36,13 @@
     const target = event.target as globalThis.HTMLImageElement;
     target.style.display = 'none';
     if (target.parentElement) {
-      target.parentElement.innerHTML = '<div class="rounded-xl h-40 w-full bg-base-300"></div>';
+      target.parentElement.innerHTML =
+        '<div class="rounded-xl h-40 w-full bg-[var(--color-base-300)]"></div>';
     }
   }
 </script>
 
-<div class={cn('card bg-base-200', className)}>
+<div class={cn('card bg-[var(--color-base-200)]', className)}>
   <figure class="px-4 pt-4">
     {#if species.thumbnail_url}
       <img
@@ -51,24 +52,32 @@
         onerror={handleImageError}
       />
     {:else}
-      <div class="rounded-xl h-40 w-full bg-base-300"></div>
+      <div class="rounded-xl h-40 w-full bg-[var(--color-base-300)]"></div>
     {/if}
   </figure>
   <div class="card-body p-4">
     <h3 class="card-title text-base">{species.common_name}</h3>
-    <p class="text-sm text-base-content opacity-60 italic">{species.scientific_name}</p>
+    <p class="text-sm text-[var(--color-base-content)] opacity-60 italic">
+      {species.scientific_name}
+    </p>
     <div class="text-sm space-y-1 mt-2">
       <div class="flex justify-between">
-        <span class="text-base-content opacity-60">{t('analytics.species.card.detections')}</span>
+        <span class="text-[var(--color-base-content)] opacity-60"
+          >{t('analytics.species.card.detections')}</span
+        >
         <span class="font-semibold">{species.count}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-base-content opacity-60">{t('analytics.species.card.confidence')}</span>
+        <span class="text-[var(--color-base-content)] opacity-60"
+          >{t('analytics.species.card.confidence')}</span
+        >
         <span class="font-semibold">{formatPercentage(species.avg_confidence)}</span>
       </div>
       {#if species.first_heard}
         <div class="flex justify-between">
-          <span class="text-base-content opacity-60">{t('analytics.species.card.first')}</span>
+          <span class="text-[var(--color-base-content)] opacity-60"
+            >{t('analytics.species.card.first')}</span
+          >
           <span class="text-xs">{formatDate(species.first_heard)}</span>
         </div>
       {/if}

@@ -178,16 +178,18 @@
 
 <section
   class={cn(
-    'card col-span-12 bg-base-100 shadow-sm rounded-2xl border border-border-100 overflow-hidden',
+    'card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-hidden',
     className
   )}
 >
   <!-- Card Header -->
-  <div class="px-6 py-4 border-b border-base-200">
+  <div class="px-6 py-4 border-b border-[var(--color-base-200)]">
     <div class="flex items-center justify-between">
       <div class="flex flex-col">
         <h3 class="font-semibold">{t('dashboard.recentDetections.title')}</h3>
-        <p class="text-sm text-base-content/60">{t('dashboard.recentDetections.subtitle')}</p>
+        <p class="text-sm text-[var(--color-base-content)]/60">
+          {t('dashboard.recentDetections.subtitle')}
+        </p>
       </div>
       <div class="flex items-center gap-3">
         <!-- Custom Show Limit Dropdown -->
@@ -264,7 +266,7 @@
         <!-- Loading overlay -->
         {#if loading}
           <div
-            class="absolute inset-0 bg-base-100/80 z-20 flex items-center justify-center rounded-lg pointer-events-none"
+            class="absolute inset-0 bg-[var(--color-base-100)]/80 z-20 flex items-center justify-center rounded-lg pointer-events-none"
           >
             <span class="loading loading-spinner loading-md"></span>
           </div>
@@ -288,7 +290,7 @@
         </div>
 
         {#if data.length === 0}
-          <div class="text-center py-8 text-base-content/60">
+          <div class="text-center py-8 text-[var(--color-base-content)]/60">
             {t('dashboard.recentDetections.noDetections')}
           </div>
         {/if}

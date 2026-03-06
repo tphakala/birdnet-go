@@ -26,12 +26,12 @@
   }: Props = $props();
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)}>
+<div class={cn('card bg-[var(--color-base-100)] shadow-xs', className)}>
   <div class="card-body p-4 md:p-6">
     <h2 class="card-title">{title}</h2>
 
     {#if showEmpty && !isLoading}
-      <div class="text-center py-4 text-base-content opacity-50">
+      <div class="text-center py-4 text-[var(--color-base-content)] opacity-50">
         {emptyMessage}
       </div>
     {:else}
@@ -41,7 +41,7 @@
         </div>
         {#if isLoading}
           <div class="absolute inset-0 flex justify-center items-center">
-            <span class="loading loading-spinner loading-lg text-primary"></span>
+            <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
           </div>
         {/if}
       </div>
