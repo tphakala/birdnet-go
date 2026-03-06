@@ -563,8 +563,8 @@
   </div>
 
   {#if helpText}
-    <div class="flex items-center py-2 text-sm" id="{fieldId}-help">
-      <span class="text-xs opacity-70 text-[var(--color-base-content)]">{helpText}</span>
+    <div class="flex items-center py-2" id="{fieldId}-help">
+      <span class="help-text">{helpText}</span>
     </div>
   {/if}
 </div>

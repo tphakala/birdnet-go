@@ -17,8 +17,9 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import { Moon } from '@lucide/svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import NumberField from './NumberField.svelte';
+  import Checkbox from './Checkbox.svelte';
   import type { QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
@@ -47,9 +48,8 @@
     onChange({ ...safeConfig, ...partial });
   }
 
-  function handleEnabledToggle(event: Event) {
-    const target = event.target as HTMLInputElement;
-    update({ enabled: target.checked });
+  function handleEnabledToggle(enabled: boolean) {
+    update({ enabled });
   }
 
   function handleModeChange(value: string | string[]) {
@@ -75,22 +75,12 @@
     update({ endEvent: value as 'sunrise' | 'sunset' });
   }
 
-  function clampOffset(val: number): number {
-    return Math.max(MIN_SOLAR_OFFSET_MINUTES, Math.min(MAX_SOLAR_OFFSET_MINUTES, val));
+  function handleStartOffsetChange(value: number) {
+    update({ startOffset: value });
   }
 
-  function handleStartOffsetChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    if (target.value === '' || target.value === '-') return;
-    const val = parseInt(target.value, 10);
-    if (!isNaN(val)) update({ startOffset: clampOffset(val) });
-  }
-
-  function handleEndOffsetChange(event: Event) {
-    const target = event.target as HTMLInputElement;
-    if (target.value === '' || target.value === '-') return;
-    const val = parseInt(target.value, 10);
-    if (!isNaN(val)) update({ endOffset: clampOffset(val) });
+  function handleEndOffsetChange(value: number) {
+    update({ endOffset: value });
   }
 
   const modeOptions = $derived([
@@ -102,41 +92,19 @@
     { value: 'sunset', label: t('settings.audio.quietHours.sunset') },
     { value: 'sunrise', label: t('settings.audio.quietHours.sunrise') },
   ]);
-
-  // Toggle styling (matching ToggleField pattern)
-  const toggleClasses = `
-    appearance-none w-10 h-5 rounded-full cursor-pointer transition-all relative
-    bg-[var(--color-base-300)]
-    before:content-[''] before:absolute before:top-0.5 before:left-0.5
-    before:w-4 before:h-4 before:rounded-full before:bg-[var(--color-base-100)]
-    before:shadow-sm before:transition-transform
-    checked:bg-[var(--color-primary)] checked:before:translate-x-5
-    focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2
-    disabled:opacity-50 disabled:cursor-not-allowed
-  `.trim();
 </script>
 
 <div class="space-y-3">
-  <!-- Enable Toggle -->
-  <div class="flex items-center justify-between">
-    <label for="{idPrefix}-enabled" class="flex items-center gap-2 cursor-pointer">
-      <Moon class="size-4 text-[var(--color-base-content)] opacity-60" />
-      <span class="text-xs font-medium text-[var(--color-base-content)]">
-        {t('settings.audio.quietHours.title')}
-      </span>
-    </label>
-    <input
-      id="{idPrefix}-enabled"
-      type="checkbox"
-      class={toggleClasses}
-      checked={safeConfig.enabled}
-      {disabled}
-      onchange={handleEnabledToggle}
-    />
-  </div>
+  <!-- Enable Quiet Hours -->
+  <Checkbox
+    checked={safeConfig.enabled}
+    label={t('settings.audio.quietHours.title')}
+    {disabled}
+    onchange={handleEnabledToggle}
+  />
 
   {#if safeConfig.enabled}
-    <div class="space-y-3 pl-6 border-l-2 border-[var(--border-200)]">
+    <div class="space-y-4 transition-opacity duration-200">
       <!-- Mode Selector -->
       <SelectDropdown
         value={safeConfig.mode}
@@ -151,10 +119,10 @@
 
       {#if safeConfig.mode === 'fixed'}
         <!-- Fixed Time Inputs -->
-        <div class="grid grid-cols-2 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block py-0.5" for="{idPrefix}-start-time">
-              <span class="text-xs font-medium text-[var(--color-base-content)]">
+            <label class="block py-1" for="{idPrefix}-start-time">
+              <span class="text-sm font-medium text-[var(--color-base-content)]">
                 {t('settings.audio.quietHours.startTime')}
               </span>
             </label>
@@ -164,12 +132,13 @@
               value={safeConfig.startTime}
               {disabled}
               oninput={handleStartTimeChange}
+              aria-describedby="{idPrefix}-fixed-hint"
               class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             />
           </div>
           <div>
-            <label class="block py-0.5" for="{idPrefix}-end-time">
-              <span class="text-xs font-medium text-[var(--color-base-content)]">
+            <label class="block py-1" for="{idPrefix}-end-time">
+              <span class="text-sm font-medium text-[var(--color-base-content)]">
                 {t('settings.audio.quietHours.endTime')}
               </span>
             </label>
@@ -179,18 +148,19 @@
               value={safeConfig.endTime}
               {disabled}
               oninput={handleEndTimeChange}
+              aria-describedby="{idPrefix}-fixed-hint"
               class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             />
           </div>
         </div>
-        <p class="text-xs text-[var(--color-base-content)] opacity-50">
+        <p id="{idPrefix}-fixed-hint" class="help-text">
           {t('settings.audio.quietHours.fixedHint')}
         </p>
       {:else}
         <!-- Solar Mode -->
-        <div class="space-y-3">
+        <div class="space-y-4">
           <!-- Start Event -->
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SelectDropdown
               value={safeConfig.startEvent}
               label={t('settings.audio.quietHours.startEvent')}
@@ -201,27 +171,20 @@
               menuSize="sm"
               size="sm"
             />
-            <div>
-              <label class="block py-0.5" for="{idPrefix}-start-offset">
-                <span class="text-xs font-medium text-[var(--color-base-content)]">
-                  {t('settings.audio.quietHours.offsetMinutes')}
-                </span>
-              </label>
-              <input
-                id="{idPrefix}-start-offset"
-                type="number"
-                value={safeConfig.startOffset}
-                min={MIN_SOLAR_OFFSET_MINUTES}
-                max={MAX_SOLAR_OFFSET_MINUTES}
-                {disabled}
-                oninput={handleStartOffsetChange}
-                class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-              />
-            </div>
+            <NumberField
+              label={t('settings.audio.quietHours.offsetMinutes')}
+              value={safeConfig.startOffset}
+              onUpdate={handleStartOffsetChange}
+              min={MIN_SOLAR_OFFSET_MINUTES}
+              max={MAX_SOLAR_OFFSET_MINUTES}
+              step={1}
+              placeholder="0"
+              {disabled}
+            />
           </div>
 
           <!-- End Event -->
-          <div class="grid grid-cols-2 gap-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <SelectDropdown
               value={safeConfig.endEvent}
               label={t('settings.audio.quietHours.endEvent')}
@@ -232,25 +195,18 @@
               menuSize="sm"
               size="sm"
             />
-            <div>
-              <label class="block py-0.5" for="{idPrefix}-end-offset">
-                <span class="text-xs font-medium text-[var(--color-base-content)]">
-                  {t('settings.audio.quietHours.offsetMinutes')}
-                </span>
-              </label>
-              <input
-                id="{idPrefix}-end-offset"
-                type="number"
-                value={safeConfig.endOffset}
-                min={MIN_SOLAR_OFFSET_MINUTES}
-                max={MAX_SOLAR_OFFSET_MINUTES}
-                {disabled}
-                oninput={handleEndOffsetChange}
-                class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-              />
-            </div>
+            <NumberField
+              label={t('settings.audio.quietHours.offsetMinutes')}
+              value={safeConfig.endOffset}
+              onUpdate={handleEndOffsetChange}
+              min={MIN_SOLAR_OFFSET_MINUTES}
+              max={MAX_SOLAR_OFFSET_MINUTES}
+              step={1}
+              placeholder="0"
+              {disabled}
+            />
           </div>
-          <p class="text-xs text-[var(--color-base-content)] opacity-50">
+          <p id="{idPrefix}-solar-hint" class="help-text">
             {t('settings.audio.quietHours.solarHint')}
           </p>
         </div>

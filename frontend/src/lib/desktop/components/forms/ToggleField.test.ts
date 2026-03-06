@@ -360,9 +360,9 @@ describe('ToggleField', () => {
     // Should only have the main label, no description
     expect(screen.getByText('Test Toggle')).toBeInTheDocument();
 
-    // Check that there's no element with description styling (text-xs opacity-70)
+    // Check that there's no element with description styling (help-text)
     const wrapper = container.querySelector('.min-w-0');
-    const description = wrapper?.querySelector('.text-xs.opacity-70');
+    const description = wrapper?.querySelector('.help-text');
     expect(description).toBeNull();
   });
 });
