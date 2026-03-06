@@ -773,6 +773,24 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
         );
       }
 
+      // Backfill extendedCapture defaults for legacy configs
+      const extendedCaptureDefaults = {
+        enabled: false,
+        maxDuration: 120,
+        captureBufferSeconds: 0,
+        species: [],
+      };
+      const rawExtended = data.extendedCapture;
+      const incoming: Record<string, unknown> =
+        rawExtended != null && typeof rawExtended === 'object' && !Array.isArray(rawExtended)
+          ? (rawExtended as Record<string, unknown>)
+          : {};
+      coercedRealtime.extendedCapture = {
+        ...extendedCaptureDefaults,
+        ...incoming,
+        species: Array.isArray(incoming.species) ? incoming.species : [],
+      };
+
       return coercedRealtime;
     }
     case 'security':

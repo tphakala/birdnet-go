@@ -2583,6 +2583,20 @@
         "normalizationDisabled": "Normalizacja audio jest wyłączona",
         "disabledInfo": "Włącz nagrywanie klipów powyżej, aby skonfigurować ustawienia klipów, format pliku i opcje przechowywania."
       },
+      "extendedCapture": {
+        "title": "Rozszerzone nagrywanie",
+        "description": "Nagrywa dłuższe klipy audio, gdy gatunek śpiewa wielokrotnie, tworząc jedno połączone nagranie zamiast wielu krótkich klipów.",
+        "ramWarning": "Rozszerzone nagrywanie wymaga dodatkowej pamięci RAM na bufory audio. Niezalecane dla urządzeń z 512 MB RAM lub mniej (np. Raspberry Pi Zero).",
+        "enable": "Włącz rozszerzone nagrywanie",
+        "enableHelp": "Po włączeniu powtarzające się wykrycia skonfigurowanych gatunków są łączone w jedno dłuższe nagranie.",
+        "maxDurationLabel": "Maksymalny czas trwania",
+        "maxDurationHelp": "Maksymalna długość klipu rozszerzonego nagrywania. Nagranie rośnie wraz z kolejnymi wykryciami, aż do tego limitu.",
+        "speciesListLabel": "Gatunki rozszerzonego nagrywania",
+        "addSpeciesLabel": "Dodaj gatunek",
+        "addSpeciesHelp": "Gatunki wyzwalające rozszerzone nagrywanie. Obsługuje nazwy pospolite, nazwy naukowe i dopasowanie na poziomie rodzaju (np. „Strix” obejmuje wszystkie sowy Strix).",
+        "addSpeciesButton": "Dodaj",
+        "disabled": "Rozszerzone nagrywanie jest wyłączone"
+      },
       "fileSettings": {
         "title": "Ustawienia Pliku",
         "description": "Konfiguruj lokalizację przechowywania i format audio dla zapisanych klipów.",

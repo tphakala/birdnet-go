@@ -2406,6 +2406,20 @@
         "normalizationDisabled": "Normalização de áudio está desativada",
         "disabledInfo": "Ative a gravação de clipes acima para configurar as definições de clipes, formato de arquivo e opções de armazenamento."
       },
+      "extendedCapture": {
+        "title": "Captura estendida",
+        "description": "Grava clipes de áudio mais longos quando uma espécie canta repetidamente, produzindo uma única gravação combinada em vez de muitos clipes curtos.",
+        "ramWarning": "A captura estendida requer RAM adicional para buffers de áudio. Não recomendado para dispositivos com 512 MB de RAM ou menos (ex.: Raspberry Pi Zero).",
+        "enable": "Ativar captura estendida",
+        "enableHelp": "Quando ativada, as deteções repetidas das espécies configuradas são combinadas numa única gravação mais longa.",
+        "maxDurationLabel": "Duração máxima",
+        "maxDurationHelp": "Comprimento máximo de um clipe de captura estendida. A gravação cresce à medida que as deteções continuam, até este limite.",
+        "speciesListLabel": "Espécies de captura estendida",
+        "addSpeciesLabel": "Adicionar espécie",
+        "addSpeciesHelp": "Espécies que acionam a captura estendida. Suporta nomes comuns, nomes científicos e correspondência ao nível do género (ex.: \"Strix\" inclui todas as corujas Strix).",
+        "addSpeciesButton": "Adicionar",
+        "disabled": "A captura estendida está desativada"
+      },
       "fileSettings": {
         "title": "Configurações de Arquivo",
         "description": "Configurar local de armazenamento e formato de áudio para clipes salvos.",

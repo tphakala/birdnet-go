@@ -2406,6 +2406,20 @@
         "normalizationDisabled": "Äänen normalisointi on poistettu käytöstä",
         "disabledInfo": "Ota leikkeiden tallennus käyttöön yllä määrittääksesi leikeasetuksia, tiedostomuotoa ja tallennusvaihtoehtoja."
       },
+      "extendedCapture": {
+        "title": "Laajennettu tallennus",
+        "description": "Tallentaa pidempiä äänileikkeitä, kun laji laulaa toistuvasti, ja tuottaa yhden yhdistetyn tallennuksen useiden lyhyiden leikkeiden sijaan.",
+        "ramWarning": "Laajennettu tallennus vaatii lisää RAM-muistia äänipuskureille. Ei suositella laitteille, joissa on 512 Mt RAM tai vähemmän (esim. Raspberry Pi Zero).",
+        "enable": "Ota laajennettu tallennus käyttöön",
+        "enableHelp": "Kun käytössä, määritettyjen lajien toistuvat havainnot yhdistetään yhdeksi pidemmäksi tallennukseksi.",
+        "maxDurationLabel": "Enimmäiskesto",
+        "maxDurationHelp": "Laajennetun tallennuksen leikkeen enimmäispituus. Tallennus kasvaa havaintojen jatkuessa tähän rajaan asti.",
+        "speciesListLabel": "Laajennetun tallennuksen lajit",
+        "addSpeciesLabel": "Lisää laji",
+        "addSpeciesHelp": "Lajit, jotka käynnistävät laajennetun tallennuksen. Tukee yleisnimiä, tieteellisiä nimiä ja sukutason vastaavuutta (esim. \"Strix\" kattaa kaikki Strix-pöllöt).",
+        "addSpeciesButton": "Lisää",
+        "disabled": "Laajennettu tallennus on pois käytöstä"
+      },
       "fileSettings": {
         "title": "Tiedostoasetukset",
         "description": "Määritä tallennuspaikka ja äänimuoto tallennetuille leikkeille.",

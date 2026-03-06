@@ -432,6 +432,14 @@ export interface SpeciesTrackingSettings {
   seasonalTracking: SeasonalTrackingSettings;
 }
 
+// Extended capture settings
+export interface ExtendedCaptureSettings {
+  enabled: boolean;
+  maxDuration: number;
+  captureBufferSeconds: number;
+  species: string[];
+}
+
 export interface SupportSettings {
   sentry: {
     enabled: boolean;
@@ -464,6 +472,7 @@ export interface RealtimeSettings {
   species?: SpeciesSettings;
   weather?: WeatherSettings;
   speciesTracking?: SpeciesTrackingSettings;
+  extendedCapture?: ExtendedCaptureSettings;
 }
 
 // WebServer settings
@@ -780,6 +789,12 @@ function createEmptySettings(): SettingsFormData {
         offset: 0,
         species: [],
       },
+      extendedCapture: {
+        enabled: false,
+        maxDuration: 120,
+        captureBufferSeconds: 0,
+        species: [],
+      },
       birdweather: {
         enabled: false,
         id: '',
@@ -981,6 +996,12 @@ export const dynamicThresholdSettings = derived(
 export const speciesTrackingSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.speciesTracking
+);
+
+// Extended capture settings derived store
+export const extendedCaptureSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.extendedCapture
 );
 
 // Settings actions

@@ -2764,6 +2764,20 @@
         "losslessNote": "Lossless formats preserve original audio quality without compression artifacts.",
         "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
       },
+      "extendedCapture": {
+        "title": "Extended Capture",
+        "description": "Record longer audio clips when a species calls repeatedly, producing a single combined recording instead of many short clips.",
+        "ramWarning": "Extended capture requires additional RAM for audio buffers. Not recommended for devices with 512 MB RAM or less (e.g. Raspberry Pi Zero).",
+        "enable": "Enable extended capture",
+        "enableHelp": "When enabled, repeated detections of configured species are merged into a single longer recording.",
+        "maxDurationLabel": "Max Duration",
+        "maxDurationHelp": "Maximum length of an extended capture clip. The recording grows as detections continue, up to this limit.",
+        "speciesListLabel": "Extended Capture Species",
+        "addSpeciesLabel": "Add Species",
+        "addSpeciesHelp": "Species that trigger extended capture. Supports common names, scientific names, and genus-level matching (e.g. \"Strix\" matches all Strix owls).",
+        "addSpeciesButton": "Add",
+        "disabled": "Extended capture is disabled"
+      },
       "fileSettings": {
         "title": "File Settings",
         "description": "Configure storage location and audio format for saved clips.",

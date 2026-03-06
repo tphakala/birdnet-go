@@ -2534,6 +2534,20 @@
         "losslessNote": "Bezstratové formáty zachovávajú pôvodnú kvalitu zvuku bez artefaktov kompresie.",
         "disabledInfo": "Povolte nahrávanie klipov vyššie, aby ste mohli konfigurovať nastavenia klipov, formát súboru a možnosti úložiska."
       },
+      "extendedCapture": {
+        "title": "Rozšírené nahrávanie",
+        "description": "Nahráva dlhšie zvukové klipy, keď druh opakovane spieva, a vytvára jednu kombinovanú nahrávku namiesto mnohých krátkych klipov.",
+        "ramWarning": "Rozšírené nahrávanie vyžaduje dodatočnú RAM pre zvukové vyrovnávacie pamäte. Neodporúča sa pre zariadenia s 512 MB RAM alebo menej (napr. Raspberry Pi Zero).",
+        "enable": "Povoliť rozšírené nahrávanie",
+        "enableHelp": "Keď je povolené, opakované detekcie nakonfigurovaných druhov sa zlúčia do jednej dlhšej nahrávky.",
+        "maxDurationLabel": "Maximálne trvanie",
+        "maxDurationHelp": "Maximálna dĺžka klipu rozšíreného nahrávania. Nahrávka rastie s pokračujúcimi detekciami až po tento limit.",
+        "speciesListLabel": "Druhy pre rozšírené nahrávanie",
+        "addSpeciesLabel": "Pridať druh",
+        "addSpeciesHelp": "Druhy, ktoré spúšťajú rozšírené nahrávanie. Podporuje bežné názvy, vedecké názvy a zhodu na úrovni rodu (napr. „Strix“ zahŕňa všetky sovy Strix).",
+        "addSpeciesButton": "Pridať",
+        "disabled": "Rozšírené nahrávanie je vypnuté"
+      },
       "fileSettings": {
         "title": "Nastavenia súborov",
         "description": "Konfigurácia umiestnenia úložiska a formátu zvuku pre uložené klipy.",
