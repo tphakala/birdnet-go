@@ -132,6 +132,7 @@
               value={safeConfig.startTime}
               {disabled}
               oninput={handleStartTimeChange}
+              aria-describedby="{idPrefix}-fixed-hint"
               class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             />
           </div>
@@ -147,11 +148,12 @@
               value={safeConfig.endTime}
               {disabled}
               oninput={handleEndTimeChange}
+              aria-describedby="{idPrefix}-fixed-hint"
               class="w-full h-8 px-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             />
           </div>
         </div>
-        <p class="help-text">
+        <p id="{idPrefix}-fixed-hint" class="help-text">
           {t('settings.audio.quietHours.fixedHint')}
         </p>
       {:else}
@@ -204,7 +206,7 @@
               {disabled}
             />
           </div>
-          <p class="help-text">
+          <p id="{idPrefix}-solar-hint" class="help-text">
             {t('settings.audio.quietHours.solarHint')}
           </p>
         </div>

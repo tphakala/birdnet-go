@@ -1666,7 +1666,7 @@
           </h4>
 
           <Checkbox
-            bind:checked={settings.dashboard.thumbnails.summary}
+            checked={settings.dashboard.thumbnails.summary}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
             helpText={t(
               'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
@@ -1676,7 +1676,7 @@
           />
 
           <Checkbox
-            bind:checked={settings.dashboard.thumbnails.recent}
+            checked={settings.dashboard.thumbnails.recent}
             label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
             helpText={t(
               'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
@@ -1908,7 +1908,7 @@
 
         <!-- Enable Error Tracking -->
         <Checkbox
-          bind:checked={settings.sentry.enabled}
+          checked={settings.sentry.enabled}
           label={t('settings.support.telemetry.enableTracking')}
           disabled={store.isLoading || store.isSaving}
           onchange={enabled => updateTelemetryEnabled(enabled)}
@@ -2200,7 +2200,7 @@
       currentData={store.formData.realtime?.dynamicThreshold}
     >
       <Checkbox
-        bind:checked={settings.dynamicThreshold.enabled}
+        checked={settings.dynamicThreshold.enabled}
         label={t('settings.main.sections.dynamicThreshold.enable.label')}
         helpText={t('settings.main.sections.dynamicThreshold.enable.helpText')}
         disabled={store.isLoading || store.isSaving}
