@@ -3290,7 +3290,10 @@
         "templateTitle": "Modèle de titre",
         "templateTitlePlaceholder": "Laisser vide pour la valeur par défaut",
         "templateMessage": "Modèle de message",
-        "templateMessagePlaceholder": "Laisser vide pour la valeur par défaut"
+        "templateMessagePlaceholder": "Laisser vide pour la valeur par défaut",
+        "noConditionsEvent": "Aucune condition — la règle se déclenche à chaque événement",
+        "noConditionsMetric": "Aucune condition — la règle se déclenche à chaque mise à jour de métrique",
+        "cooldownSeconds": "Temps de recharge (secondes)"
       },
       "export": "Exporter",
       "import": "Importer",

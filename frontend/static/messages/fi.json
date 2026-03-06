@@ -3290,7 +3290,10 @@
         "templateTitle": "Otsikkopohja",
         "templateTitlePlaceholder": "Jätä tyhjäksi oletusarvolle",
         "templateMessage": "Viestipohja",
-        "templateMessagePlaceholder": "Jätä tyhjäksi oletusarvolle"
+        "templateMessagePlaceholder": "Jätä tyhjäksi oletusarvolle",
+        "noConditionsEvent": "Ei ehtoja — sääntö laukeaa jokaisesta tapahtumasta",
+        "noConditionsMetric": "Ei ehtoja — sääntö laukeaa jokaisesta mittaripäivityksestä",
+        "cooldownSeconds": "Odotusaika (sekuntia)"
       },
       "export": "Vie",
       "import": "Tuo",

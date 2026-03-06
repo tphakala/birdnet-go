@@ -3339,7 +3339,10 @@
         "templateTitle": "Title Template",
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",
-        "templateMessagePlaceholder": "Leave empty for default"
+        "templateMessagePlaceholder": "Leave empty for default",
+        "noConditionsEvent": "No conditions \u2014 rule fires on every event",
+        "noConditionsMetric": "No conditions \u2014 rule fires on every metric update",
+        "cooldownSeconds": "Cooldown (seconds)"
       },
       "export": "Export",
       "import": "Import",

@@ -3290,7 +3290,10 @@
         "templateTitle": "Szablon tytułu",
         "templateTitlePlaceholder": "Pozostaw puste dla domyślnego",
         "templateMessage": "Szablon wiadomości",
-        "templateMessagePlaceholder": "Pozostaw puste dla domyślnego"
+        "templateMessagePlaceholder": "Pozostaw puste dla domyślnego",
+        "noConditionsEvent": "Brak warunków — reguła uruchamia się przy każdym zdarzeniu",
+        "noConditionsMetric": "Brak warunków — reguła uruchamia się przy każdej aktualizacji metryki",
+        "cooldownSeconds": "Czas odnowienia (sekundy)"
       },
       "export": "Eksportuj",
       "import": "Importuj",

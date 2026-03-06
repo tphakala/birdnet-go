@@ -1,9 +1,9 @@
 <!--
   Alert Rule Editor Component
 
-  Purpose: Inline form for creating and editing alert rules with dynamic
-  condition builder populated from the alerting schema. Renders as an
-  inline card matching the notification provider form pattern.
+  Purpose: Inline card form for creating and editing alert rules with dynamic
+  condition builder populated from the alerting schema. Compact 2-column layout
+  with custom dropdowns for object type and event/metric selection.
 
   Props:
   - rule: AlertRule | null - rule to edit, or null for new
@@ -14,11 +14,23 @@
   @component
 -->
 <script lang="ts">
-  import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
-  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
-  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
-  import { Plus, Trash2 } from '@lucide/svelte';
+  import {
+    Plus,
+    Trash2,
+    X,
+    ChevronDown,
+    Check,
+    Bird,
+    Activity,
+    Radio,
+    Cpu,
+    Globe,
+    Server,
+    Zap,
+    Gauge,
+    Bell,
+    Send,
+  } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { AlertRule, AlertSchema, ObjectTypeSchema } from '$lib/api/alerts';
   import {
@@ -68,6 +80,10 @@
   let conditions = $state<EditorCondition[]>([]);
   let actions = $state<EditorAction[]>([]);
 
+  // Dropdown state
+  let objDropOpen = $state(false);
+  let eventDropOpen = $state(false);
+
   // Initialize form state from rule prop
   $effect(() => {
     if (rule) {
@@ -108,13 +124,6 @@
   });
 
   // Schema-driven options
-  let objectTypeOptions = $derived<SelectOption[]>(
-    schema.objectTypes.map(ot => ({
-      value: ot.name,
-      label: schemaObjectTypeLabel(ot.name, ot.label),
-    }))
-  );
-
   let selectedObjectType = $derived<ObjectTypeSchema | undefined>(
     schema.objectTypes.find(ot => ot.name === objectType)
   );
@@ -123,25 +132,18 @@
 
   let hasMetrics = $derived((selectedObjectType?.metrics?.length ?? 0) > 0);
 
-  let triggerTypeOptions = $derived.by(() => {
-    const opts: SelectOption[] = [];
-    if (hasEvents) opts.push({ value: 'event', label: t('settings.alerts.editor.triggerEvent') });
-    if (hasMetrics)
-      opts.push({ value: 'metric', label: t('settings.alerts.editor.triggerMetric') });
-    return opts;
-  });
-
-  let eventOptions = $derived<SelectOption[]>(
+  let eventOptions = $derived(
     selectedObjectType?.events?.map(e => ({
       value: e.name,
       label: schemaEventLabel(e.name, e.label),
     })) ?? []
   );
 
-  let metricOptions = $derived<SelectOption[]>(
+  let metricOptions = $derived(
     selectedObjectType?.metrics?.map(m => ({
       value: m.name,
       label: `${schemaMetricLabel(m.name, m.label)} (${m.unit})`,
+      unit: m.unit,
     })) ?? []
   );
 
@@ -160,12 +162,12 @@
     }
   );
 
-  let propertyOptions = $derived<SelectOption[]>(
+  let propertyOptions = $derived(
     availableProperties.map(p => ({ value: p.name, label: schemaPropertyLabel(p.name, p.label) }))
   );
 
   // Get operators for a given property
-  function operatorsForProperty(propName: string): SelectOption[] {
+  function operatorsForProperty(propName: string) {
     const prop = availableProperties.find(p => p.name === propName);
     if (!prop) return [];
     return prop.operators.map(op => {
@@ -175,11 +177,30 @@
     });
   }
 
-  // Action target options
-  let actionTargets = $derived<SelectOption[]>([
-    { value: 'bell', label: t('settings.alerts.editor.actionBell') },
-    { value: 'push', label: t('settings.alerts.editor.actionPush') },
-  ]);
+  // Object type display helpers
+  function objectTypeIcon(typeName: string) {
+    const icons: Record<string, typeof Bird> = {
+      detection: Bird,
+      stream: Activity,
+      device: Radio,
+      system: Cpu,
+      integration: Globe,
+      application: Server,
+    };
+    return icons[typeName] ?? Cpu;
+  }
+
+  function objectTypeColor(typeName: string): { bg: string; text: string } {
+    const colors: Record<string, { bg: string; text: string }> = {
+      detection: { bg: 'bg-emerald-500/10', text: 'text-emerald-500' },
+      stream: { bg: 'bg-blue-500/10', text: 'text-blue-500' },
+      device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
+      system: { bg: 'bg-red-500/10', text: 'text-red-500' },
+      integration: { bg: 'bg-amber-500/10', text: 'text-amber-500' },
+      application: { bg: 'bg-sky-500/10', text: 'text-sky-500' },
+    };
+    return colors[typeName] ?? { bg: 'bg-base-300', text: 'text-base-content' };
+  }
 
   // Condition management
   function addCondition() {
@@ -273,214 +294,505 @@
   }
 
   // Reset trigger-specific fields when object type changes
-  function handleObjectTypeChange() {
+  function handleObjectTypeChange(newType: string) {
+    objectType = newType;
+    objDropOpen = false;
     eventName = '';
     metricName = '';
     conditions = [];
     // Auto-select trigger type based on available triggers
-    if (hasEvents && !hasMetrics) triggerType = 'event';
-    else if (hasMetrics && !hasEvents) triggerType = 'metric';
+    // Need to check against the new object type directly since derived hasn't updated yet
+    const newOt = schema.objectTypes.find(ot => ot.name === newType);
+    const newHasEvents = (newOt?.events?.length ?? 0) > 0;
+    const newHasMetrics = (newOt?.metrics?.length ?? 0) > 0;
+    if (newHasEvents && !newHasMetrics) triggerType = 'event';
+    else if (newHasMetrics && !newHasEvents) triggerType = 'metric';
   }
 
-  function handleTriggerTypeChange() {
+  function handleTriggerTypeChange(newType: 'event' | 'metric') {
+    triggerType = newType;
     eventName = '';
     metricName = '';
     conditions = [];
   }
+
+  // Close dropdowns on click outside
+  function handleClickOutside(event: MouseEvent) {
+    const target = event.target as HTMLElement;
+    if (!target.closest('[data-dropdown]')) {
+      objDropOpen = false;
+      eventDropOpen = false;
+    }
+  }
+
+  // Selected event/metric label for display
+  let selectedTriggerLabel = $derived.by(() => {
+    if (triggerType === 'event') {
+      const ev = eventOptions.find(e => e.value === eventName);
+      return ev?.label ?? '';
+    }
+    const mt = metricOptions.find(m => m.value === metricName);
+    return mt?.label ?? '';
+  });
 </script>
 
-<div class="rounded-lg bg-[var(--color-base-200)] border border-[var(--color-primary)]">
-  <div class="p-6">
-    <h3 class="text-base font-semibold mb-4">
+<svelte:document onclick={handleClickOutside} />
+
+<!-- Card container -->
+<div class="rounded-lg bg-base-100 border border-primary overflow-hidden">
+  <!-- Header bar -->
+  <div class="px-5 py-3 border-b border-base-300 flex items-center justify-between">
+    <h3 class="text-sm font-semibold text-base-content">
       {rule ? t('settings.alerts.editor.editTitle') : t('settings.alerts.editor.createTitle')}
     </h3>
+    <button
+      class="w-7 h-7 rounded-md flex items-center justify-center hover:bg-base-200 transition-colors cursor-pointer"
+      aria-label={t('common.close')}
+      onclick={onClose}
+    >
+      <X class="w-4 h-4 text-base-content/60" />
+    </button>
+  </div>
 
-    <div class="space-y-4">
-      <!-- Name & Description -->
-      <TextInput
-        label={t('settings.alerts.editor.name')}
-        bind:value={name}
-        placeholder={t('settings.alerts.editor.namePlaceholder')}
-      />
-      <TextInput
-        label={t('settings.alerts.editor.description')}
-        bind:value={description}
-        placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
-      />
-      <Checkbox label={t('settings.alerts.editor.enabled')} bind:checked={enabled} />
-
-      <!-- Trigger -->
-      <div class="space-y-3">
-        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-          {t('settings.alerts.editor.triggerSection')}
-        </h4>
-        <SelectDropdown
-          options={objectTypeOptions}
-          bind:value={objectType}
-          label={t('settings.alerts.editor.objectType')}
-          onChange={handleObjectTypeChange}
+  <div class="p-5 space-y-4">
+    <!-- Row 1: Name + Description -->
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label for="rule-name" class="block text-xs font-medium text-base-content/60 mb-1">
+          {t('settings.alerts.editor.name')}
+        </label>
+        <input
+          id="rule-name"
+          type="text"
+          bind:value={name}
+          placeholder={t('settings.alerts.editor.namePlaceholder')}
+          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
         />
-        {#if hasEvents && hasMetrics}
-          <SelectDropdown
-            options={triggerTypeOptions}
-            bind:value={triggerType}
-            label={t('settings.alerts.editor.triggerType')}
-            onChange={handleTriggerTypeChange}
+      </div>
+      <div>
+        <label for="rule-desc" class="block text-xs font-medium text-base-content/60 mb-1">
+          {t('settings.alerts.editor.description')}
+        </label>
+        <input
+          id="rule-desc"
+          type="text"
+          bind:value={description}
+          placeholder={t('settings.alerts.editor.descriptionPlaceholder')}
+          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+        />
+      </div>
+    </div>
+
+    <!-- Row 2: Object Type dropdown + Trigger type toggle -->
+    <div class="grid grid-cols-2 gap-3">
+      <!-- Object Type custom dropdown -->
+      <div class="relative" data-dropdown>
+        <span class="block text-xs font-medium text-base-content/60 mb-1">
+          {t('settings.alerts.editor.objectType')}
+        </span>
+        <button
+          type="button"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {objDropOpen
+            ? 'ring-2 ring-primary/20 border-primary'
+            : 'border-base-300'}"
+          onclick={() => {
+            objDropOpen = !objDropOpen;
+            eventDropOpen = false;
+          }}
+        >
+          {#if selectedObjectType}
+            {@const OIcon = objectTypeIcon(objectType)}
+            {@const oColor = objectTypeColor(objectType)}
+            <div
+              class="w-5 h-5 rounded-md flex items-center justify-center flex-shrink-0 {oColor.bg}"
+            >
+              <OIcon class="w-3 h-3 {oColor.text}" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <span class="text-base-content truncate block">
+                {schemaObjectTypeLabel(selectedObjectType.name, selectedObjectType.label)}
+              </span>
+              <span class="text-[11px] text-base-content/40">
+                {selectedObjectType.events?.length ?? 0} events &middot; {selectedObjectType.metrics
+                  ?.length ?? 0} metrics
+              </span>
+            </div>
+          {/if}
+          <ChevronDown
+            class="w-3.5 h-3.5 flex-shrink-0 text-base-content/40 transition-transform {objDropOpen
+              ? 'rotate-180'
+              : ''}"
           />
-        {/if}
-        {#if triggerType === 'event' && hasEvents}
-          <SelectDropdown
-            options={eventOptions}
-            bind:value={eventName}
-            label={t('settings.alerts.editor.event')}
-          />
-        {:else if triggerType === 'metric' && hasMetrics}
-          <SelectDropdown
-            options={metricOptions}
-            bind:value={metricName}
-            label={t('settings.alerts.editor.metric')}
-          />
+        </button>
+        {#if objDropOpen}
+          <div
+            class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden"
+          >
+            {#each schema.objectTypes as ot (ot.name)}
+              {@const OIcon = objectTypeIcon(ot.name)}
+              {@const oColor = objectTypeColor(ot.name)}
+              <button
+                type="button"
+                class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {objectType ===
+                ot.name
+                  ? 'bg-primary/5'
+                  : ''}"
+                onclick={() => handleObjectTypeChange(ot.name)}
+              >
+                <div
+                  class="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 {oColor.bg}"
+                >
+                  <OIcon class="w-3.5 h-3.5 {oColor.text}" />
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="text-sm font-medium text-base-content">
+                    {schemaObjectTypeLabel(ot.name, ot.label)}
+                  </div>
+                  <div class="text-[11px] text-base-content/40">
+                    {ot.events?.length ?? 0} events &middot; {ot.metrics?.length ?? 0} metrics
+                  </div>
+                </div>
+                {#if objectType === ot.name}
+                  <Check class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                {/if}
+              </button>
+            {/each}
+          </div>
         {/if}
       </div>
 
-      <!-- Conditions -->
-      {#if availableProperties.length > 0}
-        <div class="space-y-3">
-          <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-            {t('settings.alerts.editor.conditionsSection')}
-          </h4>
+      <!-- Trigger type toggle -->
+      <div>
+        <span class="block text-xs font-medium text-base-content/60 mb-1">
+          {t('settings.alerts.editor.triggerSection')}
+        </span>
+        {#if hasEvents && hasMetrics}
+          <div class="flex gap-2">
+            <button
+              type="button"
+              class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {triggerType ===
+              'event'
+                ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
+                : 'bg-base-200 border-base-300'}"
+              onclick={() => handleTriggerTypeChange('event')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-base-content">
+                <Zap class="w-3.5 h-3.5" />
+                {t('settings.alerts.editor.triggerEvent')}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {triggerType ===
+              'metric'
+                ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
+                : 'bg-base-200 border-base-300'}"
+              onclick={() => handleTriggerTypeChange('metric')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-base-content">
+                <Gauge class="w-3.5 h-3.5" />
+                {t('settings.alerts.editor.triggerMetric')}
+              </span>
+            </button>
+          </div>
+        {:else}
+          <div
+            class="px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content"
+          >
+            <span class="flex items-center gap-1.5">
+              {#if hasEvents}
+                <Zap class="w-3.5 h-3.5" />
+                {t('settings.alerts.editor.triggerEvent')}
+              {:else}
+                <Gauge class="w-3.5 h-3.5" />
+                {t('settings.alerts.editor.triggerMetric')}
+              {/if}
+            </span>
+          </div>
+        {/if}
+      </div>
+    </div>
+
+    <!-- Row 3: Event/Metric selector (full width) -->
+    <div class="relative" data-dropdown>
+      <span class="block text-xs font-medium text-base-content/60 mb-1">
+        {triggerType === 'event'
+          ? t('settings.alerts.editor.event')
+          : t('settings.alerts.editor.metric')}
+      </span>
+      <button
+        type="button"
+        class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {eventDropOpen
+          ? 'ring-2 ring-primary/20 border-primary'
+          : 'border-base-300'}"
+        onclick={() => {
+          eventDropOpen = !eventDropOpen;
+          objDropOpen = false;
+        }}
+      >
+        <span class="flex-1 truncate text-base-content">
+          {selectedTriggerLabel ||
+            (triggerType === 'event'
+              ? t('settings.alerts.editor.event')
+              : t('settings.alerts.editor.metric'))}
+        </span>
+        <ChevronDown
+          class="w-3.5 h-3.5 flex-shrink-0 text-base-content/40 transition-transform {eventDropOpen
+            ? 'rotate-180'
+            : ''}"
+        />
+      </button>
+      {#if eventDropOpen}
+        {@const items = triggerType === 'event' ? eventOptions : metricOptions}
+        <div
+          class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-60 overflow-y-auto"
+        >
+          {#each items as item (item.value)}
+            {@const isSelected = (triggerType === 'event' ? eventName : metricName) === item.value}
+            <button
+              type="button"
+              class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {isSelected
+                ? 'bg-primary/5'
+                : ''}"
+              onclick={() => {
+                if (triggerType === 'event') eventName = item.value;
+                else metricName = item.value;
+                conditions = [];
+                eventDropOpen = false;
+              }}
+            >
+              <div class="flex-1 min-w-0">
+                <div class="text-sm font-medium text-base-content">{item.label}</div>
+                <div class="text-[11px] font-mono text-base-content/40">
+                  {item.value}
+                </div>
+              </div>
+              {#if isSelected}
+                <Check class="w-3.5 h-3.5 text-primary flex-shrink-0" />
+              {/if}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Row 4: Conditions (full width) -->
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <span class="text-xs font-medium text-base-content/60">
+          {t('settings.alerts.editor.conditionsSection')}
+          {#if conditions.length > 0}
+            ({conditions.length})
+          {/if}
+        </span>
+        {#if availableProperties.length > 0}
+          <button
+            type="button"
+            class="flex items-center gap-1 text-[11px] font-medium text-primary hover:bg-primary/10 px-2 py-1 rounded-md transition-colors cursor-pointer"
+            onclick={addCondition}
+          >
+            <Plus class="w-3 h-3" />
+            {t('settings.alerts.editor.addCondition')}
+          </button>
+        {/if}
+      </div>
+      {#if conditions.length === 0}
+        <div class="px-3 py-2.5 rounded-lg text-xs bg-base-200 text-base-content/40">
+          {triggerType === 'event'
+            ? t('settings.alerts.editor.noConditionsEvent')
+            : t('settings.alerts.editor.noConditionsMetric')}
+        </div>
+      {:else}
+        <div class="space-y-2">
           {#each conditions as condition, index (condition.id)}
-            <div class="flex items-end gap-2">
-              <div class="flex-1">
-                <SelectDropdown
-                  options={propertyOptions}
-                  bind:value={condition.property}
-                  label={index === 0 ? t('settings.alerts.editor.property') : ''}
-                />
-              </div>
-              <div class="w-36">
-                <SelectDropdown
-                  options={operatorsForProperty(condition.property ?? '')}
-                  bind:value={condition.operator}
-                  label={index === 0 ? t('settings.alerts.editor.operator') : ''}
-                />
-              </div>
-              <div class="flex-1">
-                <TextInput
-                  bind:value={condition.value}
-                  label={index === 0 ? t('settings.alerts.editor.value') : ''}
-                  placeholder={t('settings.alerts.editor.valuePlaceholder')}
-                />
-              </div>
+            <div
+              class="flex items-center gap-2 p-2.5 rounded-lg border border-base-300 bg-base-200"
+            >
+              <!-- Property -->
+              <select
+                bind:value={condition.property}
+                class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
+              >
+                {#each propertyOptions as prop}
+                  <option value={prop.value}>{prop.label}</option>
+                {/each}
+              </select>
+              <!-- Operator -->
+              <select
+                bind:value={condition.operator}
+                class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content font-mono cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
+              >
+                {#each operatorsForProperty(condition.property ?? '') as op}
+                  <option value={op.value}>{op.label}</option>
+                {/each}
+              </select>
+              <!-- Value -->
+              <input
+                type="text"
+                bind:value={condition.value}
+                placeholder={t('settings.alerts.editor.valuePlaceholder')}
+                class="flex-1 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none focus:ring-1 focus:ring-primary/30 tabular-nums placeholder:text-base-content/40"
+              />
+              <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
-                <div class="w-24">
-                  <label
-                    for="condition-duration-{index}"
-                    class="block text-xs text-[var(--color-base-content)] opacity-60"
-                  >
-                    {#if index === 0}{t('settings.alerts.editor.duration')}{/if}
-                  </label>
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-base-content/40">for</span>
                   <input
-                    id="condition-duration-{index}"
                     type="number"
                     min="0"
-                    class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
+                    class="w-16 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none tabular-nums focus:ring-1 focus:ring-primary/30"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       condition.duration_sec = Number(e.currentTarget.value);
                     }}
                   />
+                  <span class="text-[10px] text-base-content/40">sec</span>
                 </div>
               {/if}
+              <!-- Remove -->
               <button
-                class="mb-0.5 rounded p-1.5 text-[var(--color-base-content)] opacity-60 hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] hover:text-[var(--color-error)] hover:opacity-100 transition-colors"
+                type="button"
+                class="w-6 h-6 rounded-md flex items-center justify-center hover:bg-error/10 transition-colors cursor-pointer"
                 aria-label={t('settings.alerts.editor.removeCondition')}
                 onclick={() => removeCondition(index)}
               >
-                <Trash2 class="size-4" />
+                <X class="w-3.5 h-3.5 text-error" />
               </button>
             </div>
           {/each}
-          <button
-            class="flex items-center gap-1.5 text-sm text-[var(--color-primary)] hover:opacity-80 transition-opacity"
-            onclick={addCondition}
-          >
-            <Plus class="size-4" />
-            {t('settings.alerts.editor.addCondition')}
-          </button>
         </div>
       {/if}
+    </div>
 
-      <!-- Actions -->
-      <div class="space-y-3">
-        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
+    <!-- Row 5: Actions + Cooldown -->
+    <div class="grid grid-cols-2 gap-3">
+      <!-- Actions toggle buttons -->
+      <div>
+        <span class="block text-xs font-medium text-base-content/60 mb-1">
           {t('settings.alerts.editor.actionsSection')}
-        </h4>
-        {#each actionTargets as target (target.value)}
-          <div>
-            <Checkbox
-              label={target.label}
-              checked={isActionSelected(target.value)}
-              onchange={() => toggleAction(target.value)}
-            />
-            {#if isActionSelected(target.value)}
-              {@const action = actions.find(a => a.target === target.value)}
-              {#if action}
-                <div class="ml-6 mt-2 space-y-2">
-                  <TextInput
-                    label={t('settings.alerts.editor.templateTitle')}
-                    bind:value={action.template_title}
-                    placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
-                  />
-                  <TextInput
-                    label={t('settings.alerts.editor.templateMessage')}
-                    bind:value={action.template_message}
-                    placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
-                  />
-                </div>
-              {/if}
+        </span>
+        <div class="flex gap-2">
+          <button
+            type="button"
+            class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer {isActionSelected(
+              'bell'
+            )
+              ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
+              : 'bg-base-200 border-base-300 opacity-50'}"
+            onclick={() => toggleAction('bell')}
+          >
+            <Bell class="w-3.5 h-3.5 text-base-content" />
+            <span class="text-base-content">{t('settings.alerts.editor.actionBell')}</span>
+            {#if isActionSelected('bell')}
+              <Check class="w-3 h-3 text-primary ml-auto" />
             {/if}
-          </div>
-        {/each}
+          </button>
+          <button
+            type="button"
+            class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium border transition-all cursor-pointer {isActionSelected(
+              'push'
+            )
+              ? 'ring-2 ring-primary/20 border-primary bg-primary/5'
+              : 'bg-base-200 border-base-300 opacity-50'}"
+            onclick={() => toggleAction('push')}
+          >
+            <Send class="w-3.5 h-3.5 text-base-content" />
+            <span class="text-base-content">{t('settings.alerts.editor.actionPush')}</span>
+            {#if isActionSelected('push')}
+              <Check class="w-3 h-3 text-primary ml-auto" />
+            {/if}
+          </button>
+        </div>
       </div>
 
       <!-- Cooldown -->
       <div>
-        <h4 class="text-sm font-semibold text-[var(--color-base-content)]">
-          {t('settings.alerts.editor.optionsSection')}
-        </h4>
-        <div class="mt-2 w-32">
-          <label
-            for="cooldown-minutes"
-            class="block text-xs text-[var(--color-base-content)] opacity-60"
-          >
-            {t('settings.alerts.editor.cooldownMinutes')}
-          </label>
-          <input
-            id="cooldown-minutes"
-            type="number"
-            class="w-full h-10 px-3 text-sm bg-[var(--color-base-100)] border border-[var(--border-200)] rounded-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
-            value={cooldownMin}
-            min="0"
-            onchange={e => {
-              cooldownMin = Number(e.currentTarget.value);
-            }}
-          />
-        </div>
+        <label for="rule-cooldown" class="block text-xs font-medium text-base-content/60 mb-1">
+          {t('settings.alerts.editor.cooldownMinutes')}
+        </label>
+        <input
+          id="rule-cooldown"
+          type="number"
+          min="0"
+          class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors tabular-nums"
+          value={cooldownMin}
+          onchange={e => {
+            cooldownMin = Number(e.currentTarget.value);
+          }}
+        />
       </div>
+    </div>
 
-      <!-- Form Actions -->
-      <div class="flex gap-2 justify-end">
+    <!-- Action template fields (shown below when actions are selected) -->
+    {#each ['bell', 'push'] as target (target)}
+      {#if isActionSelected(target)}
+        {@const action = actions.find(a => a.target === target)}
+        {#if action}
+          <div class="grid grid-cols-2 gap-3 pl-1 border-l-2 border-primary/20 ml-1">
+            <div>
+              <label
+                for="template-title-{target}"
+                class="block text-xs font-medium text-base-content/60 mb-1"
+              >
+                {t('settings.alerts.editor.templateTitle')} ({target === 'bell'
+                  ? t('settings.alerts.editor.actionBell')
+                  : t('settings.alerts.editor.actionPush')})
+              </label>
+              <input
+                id="template-title-{target}"
+                type="text"
+                bind:value={action.template_title}
+                placeholder={t('settings.alerts.editor.templateTitlePlaceholder')}
+                class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+              />
+            </div>
+            <div>
+              <label
+                for="template-msg-{target}"
+                class="block text-xs font-medium text-base-content/60 mb-1"
+              >
+                {t('settings.alerts.editor.templateMessage')}
+              </label>
+              <input
+                id="template-msg-{target}"
+                type="text"
+                bind:value={action.template_message}
+                placeholder={t('settings.alerts.editor.templateMessagePlaceholder')}
+                class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border border-base-300 text-base-content placeholder:text-base-content/40 outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+              />
+            </div>
+          </div>
+        {/if}
+      {/if}
+    {/each}
+
+    <!-- Row 6: Footer - Delete (left) + Cancel/Save (right) -->
+    <div class="flex items-center justify-between pt-2">
+      <div>
+        {#if rule && !rule.built_in}
+          <button
+            type="button"
+            class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-error hover:bg-error/10 transition-colors cursor-pointer"
+            onclick={onClose}
+          >
+            <Trash2 class="w-3.5 h-3.5" />
+            {t('settings.alerts.actionLabels.delete')}
+          </button>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2">
         <button
+          type="button"
+          class="px-4 py-1.5 rounded-lg text-xs font-medium text-base-content/60 hover:bg-base-200 transition-colors cursor-pointer"
           onclick={onClose}
-          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-[color-mix(in_srgb,var(--color-base-content)_5%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-base-content)] focus-visible:ring-offset-2 transition-colors"
         >
           {t('common.buttons.cancel')}
         </button>
         <button
+          type="button"
           onclick={handleSave}
           disabled={!isValid}
-          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          class="px-4 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-content hover:opacity-90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {rule ? t('common.buttons.save') : t('common.buttons.create')}
         </button>

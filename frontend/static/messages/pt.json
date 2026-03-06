@@ -3290,7 +3290,10 @@
         "templateTitle": "Modelo de título",
         "templateTitlePlaceholder": "Deixe vazio para o padrão",
         "templateMessage": "Modelo de mensagem",
-        "templateMessagePlaceholder": "Deixe vazio para o padrão"
+        "templateMessagePlaceholder": "Deixe vazio para o padrão",
+        "noConditionsEvent": "Sem condições — a regra dispara a cada evento",
+        "noConditionsMetric": "Sem condições — a regra dispara a cada atualização de métrica",
+        "cooldownSeconds": "Tempo de espera (segundos)"
       },
       "export": "Exportar",
       "import": "Importar",

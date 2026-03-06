@@ -3290,7 +3290,10 @@
         "templateTitle": "Titelvorlage",
         "templateTitlePlaceholder": "Leer lassen für Standard",
         "templateMessage": "Nachrichtenvorlage",
-        "templateMessagePlaceholder": "Leer lassen für Standard"
+        "templateMessagePlaceholder": "Leer lassen für Standard",
+        "noConditionsEvent": "Keine Bedingungen — Regel wird bei jedem Ereignis ausgelöst",
+        "noConditionsMetric": "Keine Bedingungen — Regel wird bei jeder Metrik-Aktualisierung ausgelöst",
+        "cooldownSeconds": "Abklingzeit (Sekunden)"
       },
       "export": "Exportieren",
       "import": "Importieren",

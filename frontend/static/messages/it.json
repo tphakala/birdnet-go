@@ -3087,7 +3087,10 @@
         "templateTitle": "Modello titolo",
         "templateTitlePlaceholder": "Lascia vuoto per il predefinito",
         "templateMessage": "Modello messaggio",
-        "templateMessagePlaceholder": "Lascia vuoto per il predefinito"
+        "templateMessagePlaceholder": "Lascia vuoto per il predefinito",
+        "noConditionsEvent": "Nessuna condizione — la regola si attiva ad ogni evento",
+        "noConditionsMetric": "Nessuna condizione — la regola si attiva ad ogni aggiornamento di metrica",
+        "cooldownSeconds": "Tempo di attesa (secondi)"
       },
       "export": "Esporta",
       "import": "Importa",

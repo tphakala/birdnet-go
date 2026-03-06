@@ -3121,7 +3121,10 @@
         "templateTitle": "Šablóna titulku",
         "templateTitlePlaceholder": "Ponechajte prázdne pre predvolené",
         "templateMessage": "Šablóna správy",
-        "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené"
+        "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené",
+        "noConditionsEvent": "Žiadne podmienky — pravidlo sa spustí pri každej udalosti",
+        "noConditionsMetric": "Žiadne podmienky — pravidlo sa spustí pri každej aktualizácii metriky",
+        "cooldownSeconds": "Doba čakania (sekundy)"
       },
       "export": "Exportovať",
       "import": "Importovať",

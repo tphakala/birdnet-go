@@ -3290,7 +3290,10 @@
         "templateTitle": "Titelsjabloon",
         "templateTitlePlaceholder": "Laat leeg voor standaard",
         "templateMessage": "Berichtsjabloon",
-        "templateMessagePlaceholder": "Laat leeg voor standaard"
+        "templateMessagePlaceholder": "Laat leeg voor standaard",
+        "noConditionsEvent": "Geen voorwaarden — regel wordt bij elke gebeurtenis geactiveerd",
+        "noConditionsMetric": "Geen voorwaarden — regel wordt bij elke metriekupdate geactiveerd",
+        "cooldownSeconds": "Wachttijd (seconden)"
       },
       "export": "Exporteren",
       "import": "Importeren",
