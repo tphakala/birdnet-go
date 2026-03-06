@@ -98,8 +98,9 @@ type SSEClient struct {
 
 // SSEManager manages SSE connections and broadcasts
 type SSEManager struct {
-	clients map[string]*SSEClient
-	mutex   sync.RWMutex
+	clients      map[string]*SSEClient
+	mutex        sync.RWMutex
+	shuttingDown atomic.Bool // blocks new registrations during shutdown
 }
 
 // NewSSEManager creates a new SSE manager
@@ -109,15 +110,23 @@ func NewSSEManager() *SSEManager {
 	}
 }
 
-// AddClient adds a new SSE client
-func (m *SSEManager) AddClient(client *SSEClient) {
+// AddClient adds a new SSE client. Returns false if the manager is
+// shutting down and no new registrations are accepted.
+func (m *SSEManager) AddClient(client *SSEClient) bool {
+	if m.shuttingDown.Load() {
+		return false
+	}
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if m.shuttingDown.Load() {
+		return false
+	}
 	m.clients[client.ID] = client
 	GetLogger().Debug("SSE client connected",
 		logger.String("client_id", client.ID),
 		logger.Int("total_clients", len(m.clients)),
 	)
+	return true
 }
 
 // RemoveClient removes an SSE client
@@ -237,6 +246,7 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 // This must be called before echo.Shutdown() so the HTTP server
 // has no active connections to wait for.
 func (m *SSEManager) CloseAllClients() {
+	m.shuttingDown.Store(true)
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for id, client := range m.clients {
@@ -410,8 +420,12 @@ func (c *Controller) handleSSEStream(ctx echo.Context, streamType, message, logP
 		setupFunc(client)
 	}
 
-	// Add client to manager
-	c.sseManager.AddClient(client)
+	// Add client to manager (rejected during shutdown)
+	if !c.sseManager.AddClient(client) {
+		return ctx.JSON(http.StatusServiceUnavailable, map[string]string{
+			"error": "Server is shutting down",
+		})
+	}
 
 	// Send initial connection message
 	if err := c.sendConnectionMessage(ctx, clientID, message, streamType); err != nil {
