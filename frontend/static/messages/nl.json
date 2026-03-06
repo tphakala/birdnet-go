@@ -1438,8 +1438,7 @@
       "security": "Beveiligings instellingen",
       "species": "Soorten filters",
       "notifications": "Meldings instellingen",
-      "support": "Ondersteuning",
-      "alertrules": "Waarschuwingsregels"
+      "support": "Ondersteuning"
     },
     "notFound": {
       "title": "Instellingen niet gevonden",
@@ -1919,7 +1918,23 @@
         "saveError": "Fout: {message}",
         "availableVariables": "Beschikbare Sjabloon Variabelen",
         "variablesDescription": "Gebruik deze variabelen in jouw sjablonen met de syntax",
-        "loading": "Inlezen..."
+        "loading": "Inlezen...",
+        "fields": {
+          "commonName": "Algemene vogelnaam (bijv. \"Kardinaal\")",
+          "scientificName": "Wetenschappelijke naam (bijv. \"Cardinalis cardinalis\")",
+          "confidence": "Betrouwbaarheidswaarde (0,0 tot 1,0)",
+          "confidencePercent": "Betrouwbaarheid als percentage (bijv. \"99\")",
+          "detectionTime": "Detectietijd (bijv. \"14:30:45\")",
+          "detectionDate": "Detectiedatum (bijv. \"2024-10-05\")",
+          "latitude": "GPS-breedtegraad",
+          "longitude": "GPS-lengtegraad",
+          "location": "Geformatteerde coördinaten (bijv. \"42.360100, -71.058900\")",
+          "detectionId": "Detectie-ID-nummer (bijv. \"1234\")",
+          "detectionPath": "Relatief pad naar detectie (bijv. \"/ui/detections/1234\")",
+          "detectionUrl": "Volledige URL naar detectie",
+          "imageUrl": "Link naar soortafbeelding",
+          "daysSinceFirstSeen": "Aantal dagen sinds eerste detectie"
+        }
       },
       "push": {
         "title": "Push Notifications",
@@ -3185,18 +3200,10 @@
       "defaultIndicator": "Standaard invoerbron"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Regels",
-        "history": "Geschiedenis"
-      },
       "sections": {
-        "rules": {
-          "title": "Waarschuwingsregels",
-          "description": "Configureer regels die meldingen activeren op basis van gebeurtenissen en metrieken."
-        },
         "history": {
-          "title": "Waarschuwingsgeschiedenis",
-          "description": "Bekijk eerdere waarschuwingen en hun resultaten."
+          "title": "Meldingsgeschiedenis",
+          "description": "Bekijk eerdere meldingen en hun resultaten."
         }
       },
       "filters": {
@@ -3218,7 +3225,7 @@
       "noActions": "Geen acties",
       "noRules": "Geen waarschuwingsregels geconfigureerd.",
       "noMatchingRules": "Geen regels komen overeen met de huidige filters.",
-      "noHistory": "Geen waarschuwingsgeschiedenis.",
+      "noHistory": "Geen meldingsgeschiedenis.",
       "confirmDelete": "Weet u zeker dat u de regel \"{name}\" wilt verwijderen?",
       "newRule": "Nieuwe regel",
       "resetDefaults": "Standaardwaarden herstellen",
@@ -3248,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Laden van waarschuwingsregels mislukt",
-        "historyFailed": "Laden van waarschuwingsgeschiedenis mislukt",
+        "historyFailed": "Laden van meldingsgeschiedenis mislukt",
         "toggleFailed": "In-/uitschakelen van regel mislukt",
         "deleteFailed": "Verwijderen van regel mislukt",
         "testFailed": "Testen van regel mislukt",
@@ -3286,11 +3293,17 @@
         "actionBell": "In-app melding",
         "actionPush": "Pushmelding",
         "optionsSection": "Opties",
-        "cooldownMinutes": "Wachttijd (minuten)",
+        "cooldownSeconds": "Wachttijd (seconden)",
         "templateTitle": "Titelsjabloon",
         "templateTitlePlaceholder": "Laat leeg voor standaard",
         "templateMessage": "Berichtsjabloon",
-        "templateMessagePlaceholder": "Laat leeg voor standaard"
+        "templateMessagePlaceholder": "Laat leeg voor standaard",
+        "noConditionsEvent": "Geen voorwaarden — regel wordt bij elke gebeurtenis geactiveerd",
+        "noConditionsMetric": "Geen voorwaarden — regel wordt bij elke metriekupdate geactiveerd",
+        "eventsCount": "gebeurtenissen",
+        "metricsCount": "metrieken",
+        "durationFor": "gedurende",
+        "durationSec": "sec"
       },
       "export": "Exporteren",
       "import": "Importeren",

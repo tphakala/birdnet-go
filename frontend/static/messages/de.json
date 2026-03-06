@@ -1438,8 +1438,7 @@
       "notifications": "Benachrichtigungen",
       "security": "Sicherheit",
       "species": "Arten",
-      "support": "Unterstützung",
-      "alertrules": "Alarmregeln"
+      "support": "Unterstützung"
     },
     "notFound": {
       "title": "Einstellungen nicht gefunden",
@@ -1919,7 +1918,23 @@
         "saveError": "Fehler: {message}",
         "availableVariables": "Verfügbare Vorlagenvariablen",
         "variablesDescription": "Verwenden Sie diese Variablen in Ihren Vorlagen mit der Syntax",
-        "loading": "Laden..."
+        "loading": "Laden...",
+        "fields": {
+          "commonName": "Vogelname (z.B. \"Kardinal\")",
+          "scientificName": "Wissenschaftlicher Name (z.B. \"Cardinalis cardinalis\")",
+          "confidence": "Konfidenzwert (0,0 bis 1,0)",
+          "confidencePercent": "Konfidenz als Prozent (z.B. \"99\")",
+          "detectionTime": "Erkennungszeit (z.B. \"14:30:45\")",
+          "detectionDate": "Erkennungsdatum (z.B. \"2024-10-05\")",
+          "latitude": "GPS-Breitengrad",
+          "longitude": "GPS-Längengrad",
+          "location": "Formatierte Koordinaten (z.B. \"42.360100, -71.058900\")",
+          "detectionId": "Erkennungs-ID-Nummer (z.B. \"1234\")",
+          "detectionPath": "Relativer Pfad zur Erkennung (z.B. \"/ui/detections/1234\")",
+          "detectionUrl": "Vollständige URL zur Erkennung",
+          "imageUrl": "Link zum Artbild",
+          "daysSinceFirstSeen": "Anzahl Tage seit der ersten Erkennung"
+        }
       },
       "testNotification": {
         "title": "Test-Benachrichtigung für neue Arten senden",
@@ -3185,18 +3200,10 @@
       "defaultIndicator": "Standard-Eingabequelle"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Regeln",
-        "history": "Verlauf"
-      },
       "sections": {
-        "rules": {
-          "title": "Alarmregeln",
-          "description": "Regeln konfigurieren, die Benachrichtigungen basierend auf Ereignissen und Metriken auslösen."
-        },
         "history": {
-          "title": "Alarmverlauf",
-          "description": "Vergangene Alarmereignisse und deren Ergebnisse anzeigen."
+          "title": "Benachrichtigungsverlauf",
+          "description": "Vergangene Benachrichtigungsereignisse und deren Ergebnisse anzeigen."
         }
       },
       "filters": {
@@ -3218,7 +3225,7 @@
       "noActions": "Keine Aktionen",
       "noRules": "Keine Alarmregeln konfiguriert.",
       "noMatchingRules": "Keine Regeln entsprechen den aktuellen Filtern.",
-      "noHistory": "Kein Alarmverlauf.",
+      "noHistory": "Kein Benachrichtigungsverlauf.",
       "confirmDelete": "Möchten Sie die Regel \"{name}\" wirklich löschen?",
       "newRule": "Neue Regel",
       "resetDefaults": "Standardwerte zurücksetzen",
@@ -3248,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Alarmregeln konnten nicht geladen werden",
-        "historyFailed": "Alarmverlauf konnte nicht geladen werden",
+        "historyFailed": "Benachrichtigungsverlauf konnte nicht geladen werden",
         "toggleFailed": "Regel konnte nicht umgeschaltet werden",
         "deleteFailed": "Regel konnte nicht gelöscht werden",
         "testFailed": "Regel konnte nicht getestet werden",
@@ -3286,11 +3293,17 @@
         "actionBell": "In-App-Benachrichtigung",
         "actionPush": "Push-Benachrichtigung",
         "optionsSection": "Optionen",
-        "cooldownMinutes": "Abklingzeit (Minuten)",
+        "cooldownSeconds": "Abklingzeit (Sekunden)",
         "templateTitle": "Titelvorlage",
         "templateTitlePlaceholder": "Leer lassen für Standard",
         "templateMessage": "Nachrichtenvorlage",
-        "templateMessagePlaceholder": "Leer lassen für Standard"
+        "templateMessagePlaceholder": "Leer lassen für Standard",
+        "noConditionsEvent": "Keine Bedingungen — Regel wird bei jedem Ereignis ausgelöst",
+        "noConditionsMetric": "Keine Bedingungen — Regel wird bei jeder Metrik-Aktualisierung ausgelöst",
+        "eventsCount": "Ereignisse",
+        "metricsCount": "Metriken",
+        "durationFor": "für",
+        "durationSec": "Sek"
       },
       "export": "Exportieren",
       "import": "Importieren",

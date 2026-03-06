@@ -1438,8 +1438,7 @@
       "security": "Bezpieczeństwo",
       "species": "Gatunki",
       "notifications": "Powiadomienia",
-      "support": "Wsparcie",
-      "alertrules": "Reguły alertów"
+      "support": "Wsparcie"
     },
     "notFound": {
       "title": "Nie Znaleziono Ustawień",
@@ -1925,7 +1924,23 @@
         "saveError": "Błąd: {message}",
         "availableVariables": "Dostępne Zmienne Szablonu",
         "variablesDescription": "Użyj tych zmiennych w swoich szablonach ze składnią",
-        "loading": "Ładowanie..."
+        "loading": "Ładowanie...",
+        "fields": {
+          "commonName": "Nazwa pospolita ptaka (np. \"Kardynał szkarłatny\")",
+          "scientificName": "Nazwa naukowa (np. \"Cardinalis cardinalis\")",
+          "confidence": "Wartość pewności (0,0 do 1,0)",
+          "confidencePercent": "Pewność jako procent (np. \"99\")",
+          "detectionTime": "Czas detekcji (np. \"14:30:45\")",
+          "detectionDate": "Data detekcji (np. \"2024-10-05\")",
+          "latitude": "Współrzędna GPS szerokości",
+          "longitude": "Współrzędna GPS długości",
+          "location": "Sformatowane współrzędne (np. \"42.360100, -71.058900\")",
+          "detectionId": "Numer ID detekcji (np. \"1234\")",
+          "detectionPath": "Ścieżka względna do detekcji (np. \"/ui/detections/1234\")",
+          "detectionUrl": "Pełny URL do detekcji",
+          "imageUrl": "Link do obrazu gatunku",
+          "daysSinceFirstSeen": "Liczba dni od pierwszej detekcji"
+        }
       },
       "push": {
         "title": "Push Notifications",
@@ -3185,18 +3200,10 @@
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Reguły",
-        "history": "Historia"
-      },
       "sections": {
-        "rules": {
-          "title": "Reguły alertów",
-          "description": "Konfiguruj reguły wyzwalające powiadomienia na podstawie zdarzeń i metryk."
-        },
         "history": {
-          "title": "Historia alertów",
-          "description": "Przeglądaj poprzednie zdarzenia alertów i ich rezultaty."
+          "title": "Historia powiadomień",
+          "description": "Przeglądaj poprzednie zdarzenia powiadomień i ich rezultaty."
         }
       },
       "filters": {
@@ -3218,7 +3225,7 @@
       "noActions": "Brak akcji",
       "noRules": "Nie skonfigurowano żadnych reguł alertów.",
       "noMatchingRules": "Żadne reguły nie pasują do bieżących filtrów.",
-      "noHistory": "Brak historii alertów.",
+      "noHistory": "Brak historii powiadomień.",
       "confirmDelete": "Czy na pewno chcesz usunąć regułę \"{name}\"?",
       "newRule": "Nowa reguła",
       "resetDefaults": "Przywróć domyślne",
@@ -3248,7 +3255,7 @@
       },
       "errors": {
         "loadFailed": "Nie udało się załadować reguł alertów",
-        "historyFailed": "Nie udało się załadować historii alertów",
+        "historyFailed": "Nie udało się załadować historii powiadomień",
         "toggleFailed": "Nie udało się przełączyć reguły",
         "deleteFailed": "Nie udało się usunąć reguły",
         "testFailed": "Nie udało się przetestować reguły",
@@ -3286,11 +3293,17 @@
         "actionBell": "Powiadomienie w aplikacji",
         "actionPush": "Powiadomienie push",
         "optionsSection": "Opcje",
-        "cooldownMinutes": "Czas odnowienia (minuty)",
+        "cooldownSeconds": "Czas odnowienia (sekundy)",
         "templateTitle": "Szablon tytułu",
         "templateTitlePlaceholder": "Pozostaw puste dla domyślnego",
         "templateMessage": "Szablon wiadomości",
-        "templateMessagePlaceholder": "Pozostaw puste dla domyślnego"
+        "templateMessagePlaceholder": "Pozostaw puste dla domyślnego",
+        "noConditionsEvent": "Brak warunków — reguła uruchamia się przy każdym zdarzeniu",
+        "noConditionsMetric": "Brak warunków — reguła uruchamia się przy każdej aktualizacji metryki",
+        "eventsCount": "zdarzenia",
+        "metricsCount": "metryki",
+        "durationFor": "przez",
+        "durationSec": "sek"
       },
       "export": "Eksportuj",
       "import": "Importuj",

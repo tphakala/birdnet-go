@@ -1462,8 +1462,7 @@
       "security": "Security",
       "species": "Species",
       "notifications": "Notifications",
-      "support": "Support",
-      "alertrules": "Alert Rules"
+      "support": "Support"
     },
     "notFound": {
       "title": "Settings Not Found",
@@ -1923,6 +1922,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Channels",
+        "rules": "Rules",
+        "history": "History"
+      },
+      "rules": {
+        "summary": {
+          "active": "active",
+          "builtIn": "built-in",
+          "total": "total"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Test Notifications",
@@ -1955,7 +1966,23 @@
         "saveError": "Error: {message}",
         "availableVariables": "Available Template Variables",
         "variablesDescription": "Use these variables in your templates with the syntax",
-        "loading": "Loading..."
+        "loading": "Loading...",
+        "fields": {
+          "commonName": "Bird common name (e.g., \"Northern Cardinal\")",
+          "scientificName": "Scientific name (e.g., \"Cardinalis cardinalis\")",
+          "confidence": "Confidence value (0.0 to 1.0)",
+          "confidencePercent": "Confidence as percentage (e.g., \"99\")",
+          "detectionTime": "Time of detection (e.g., \"14:30:45\")",
+          "detectionDate": "Date of detection (e.g., \"2024-10-05\")",
+          "latitude": "GPS latitude coordinate",
+          "longitude": "GPS longitude coordinate",
+          "location": "Formatted coordinates (e.g., \"42.360100, -71.058900\")",
+          "detectionId": "Detection ID number (e.g., \"1234\")",
+          "detectionPath": "Relative path to detection (e.g., \"/ui/detections/1234\")",
+          "detectionUrl": "Full URL to detection in UI",
+          "imageUrl": "Link to species image",
+          "daysSinceFirstSeen": "Number of days since first detected"
+        }
       },
       "testNotification": {
         "title": "Send Test New Species Notification",
@@ -3234,18 +3261,10 @@
       "mysqlUsernamePlaceholder": "Enter MySQL username"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Rules",
-        "history": "History"
-      },
       "sections": {
-        "rules": {
-          "title": "Alert Rules",
-          "description": "Configure rules that trigger notifications based on events and metrics."
-        },
         "history": {
-          "title": "Alert History",
-          "description": "View past alert events and their outcomes."
+          "title": "Notification History",
+          "description": "View past notification events and their outcomes."
         }
       },
       "filters": {
@@ -3267,7 +3286,7 @@
       "noActions": "No actions",
       "noRules": "No alert rules configured.",
       "noMatchingRules": "No rules match the current filters.",
-      "noHistory": "No alert history.",
+      "noHistory": "No notification history.",
       "confirmDelete": "Are you sure you want to delete the rule \"{name}\"?",
       "newRule": "New Rule",
       "resetDefaults": "Reset Defaults",
@@ -3297,7 +3316,7 @@
       },
       "errors": {
         "loadFailed": "Failed to load alert rules",
-        "historyFailed": "Failed to load alert history",
+        "historyFailed": "Failed to load notification history",
         "toggleFailed": "Failed to toggle rule",
         "deleteFailed": "Failed to delete rule",
         "testFailed": "Failed to test rule",
@@ -3335,11 +3354,17 @@
         "actionBell": "In-app notification",
         "actionPush": "Push notification",
         "optionsSection": "Options",
-        "cooldownMinutes": "Cooldown (minutes)",
+        "cooldownSeconds": "Cooldown (seconds)",
         "templateTitle": "Title Template",
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",
-        "templateMessagePlaceholder": "Leave empty for default"
+        "templateMessagePlaceholder": "Leave empty for default",
+        "noConditionsEvent": "No conditions — rule fires on every event",
+        "noConditionsMetric": "No conditions — rule fires on every metric update",
+        "eventsCount": "events",
+        "metricsCount": "metrics",
+        "durationFor": "for",
+        "durationSec": "sec"
       },
       "export": "Export",
       "import": "Import",

@@ -1269,8 +1269,7 @@
       "security": "Zabezpečenie",
       "species": "Druhy",
       "notifications": "Upozornenia",
-      "support": "Podpora",
-      "alertrules": "Pravidlá upozornení"
+      "support": "Podpora"
     },
     "notFound": {
       "title": "Nastavenia sa nenašli",
@@ -1756,7 +1755,23 @@
         "saveError": "Chyba: {message}",
         "availableVariables": "Dostupné premenné šablóny",
         "variablesDescription": "Použite tieto premenné vo svojich šablónach so syntaxou",
-        "loading": "Načítava sa..."
+        "loading": "Načítava sa...",
+        "fields": {
+          "commonName": "Bežný názov vtáka (napr. \"Kardinálik červený\")",
+          "scientificName": "Vedecký názov (napr. \"Cardinalis cardinalis\")",
+          "confidence": "Hodnota spoľahlivosti (0,0 až 1,0)",
+          "confidencePercent": "Spoľahlivosť v percentách (napr. \"99\")",
+          "detectionTime": "Čas detekcie (napr. \"14:30:45\")",
+          "detectionDate": "Dátum detekcie (napr. \"2024-10-05\")",
+          "latitude": "GPS zemepisná šírka",
+          "longitude": "GPS zemepisná dĺžka",
+          "location": "Formátované súradnice (napr. \"42.360100, -71.058900\")",
+          "detectionId": "Číslo ID detekcie (napr. \"1234\")",
+          "detectionPath": "Relatívna cesta k detekcii (napr. \"/ui/detections/1234\")",
+          "detectionUrl": "Úplná URL adresa detekcie",
+          "imageUrl": "Odkaz na obrázok druhu",
+          "daysSinceFirstSeen": "Počet dní od prvej detekcie"
+        }
       },
       "testNotification": {
         "title": "Odoslať testovacie upozornenie na nový druh",
@@ -3016,15 +3031,7 @@
       "mysqlUsernamePlaceholder": "Zadajte MySQL meno používateľa"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Pravidlá",
-        "history": "História"
-      },
       "sections": {
-        "rules": {
-          "title": "Pravidlá upozornení",
-          "description": "Nakonfigurujte pravidlá, ktoré spúšťajú upozornenia na základe udalostí a metrík."
-        },
         "history": {
           "title": "História upozornení",
           "description": "Zobrazte predchádzajúce udalosti upozornení a ich výsledky."
@@ -3117,11 +3124,17 @@
         "actionBell": "Upozornenie v aplikácii",
         "actionPush": "Push upozornenie",
         "optionsSection": "Možnosti",
-        "cooldownMinutes": "Doba čakania (minúty)",
+        "cooldownSeconds": "Doba čakania (sekundy)",
         "templateTitle": "Šablóna titulku",
         "templateTitlePlaceholder": "Ponechajte prázdne pre predvolené",
         "templateMessage": "Šablóna správy",
-        "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené"
+        "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené",
+        "noConditionsEvent": "Žiadne podmienky — pravidlo sa spustí pri každej udalosti",
+        "noConditionsMetric": "Žiadne podmienky — pravidlo sa spustí pri každej aktualizácii metriky",
+        "eventsCount": "udalostí",
+        "metricsCount": "metrík",
+        "durationFor": "počas",
+        "durationSec": "sek"
       },
       "export": "Exportovať",
       "import": "Importovať",

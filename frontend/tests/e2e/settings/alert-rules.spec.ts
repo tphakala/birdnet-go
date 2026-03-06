@@ -9,8 +9,11 @@ test.describe('Alert Rules Settings Page', () => {
    * Helper: navigate to alert rules settings page and wait for content.
    */
   async function navigateToAlertRules(page: Page) {
-    await page.goto('/ui/settings/alertrules', { timeout: 15000 });
+    await page.goto('/ui/settings/notifications', { timeout: 15000 });
     await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+    // Click the Rules tab to navigate to the rules section
+    const rulesTab = page.locator('button[role="tab"]:has-text("Rules")');
+    await rulesTab.click();
   }
 
   /**
@@ -111,7 +114,7 @@ test.describe('Alert Rules Settings Page', () => {
 
       await navigateToAlertRules(page);
 
-      await expect(page).toHaveURL(/.*\/ui\/settings\/alertrules/);
+      await expect(page).toHaveURL(/.*\/ui\/settings\/notifications/);
 
       const mainContent = page.locator('main, [role="main"], [data-testid="main-content"]').first();
       await expect(mainContent).toBeVisible();
