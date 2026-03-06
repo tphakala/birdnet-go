@@ -49,6 +49,7 @@
   import SettingsTabs, {
     type TabDefinition,
   } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -66,7 +67,6 @@
     Clock,
     RefreshCw,
     Info,
-    TriangleAlert,
   } from '@lucide/svelte';
   import { api } from '$lib/utils/api';
 
@@ -1197,12 +1197,11 @@
     >
       <div class="space-y-4">
         <!-- RAM Warning Note -->
-        <div
-          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]"
-        >
-          <TriangleAlert class="size-5 shrink-0 mt-0.5" />
-          <p class="text-sm">{t('settings.audio.extendedCapture.ramWarning')}</p>
-        </div>
+        <ErrorAlert type="warning">
+          {#snippet children()}
+            {t('settings.audio.extendedCapture.ramWarning')}
+          {/snippet}
+        </ErrorAlert>
 
         <!-- Enable Extended Capture -->
         <Checkbox

@@ -33,6 +33,7 @@
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
   import SettingsButton from '$lib/desktop/features/settings/components/SettingsButton.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
@@ -46,7 +47,7 @@
     type MQTTSettings,
     type SettingsFormData,
   } from '$lib/stores/settings';
-  import { TriangleAlert, Info, Send } from '@lucide/svelte';
+  import { Info, Send } from '@lucide/svelte';
   import { toastActions } from '$lib/stores/toast';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
@@ -751,18 +752,16 @@
       <div class="space-y-4">
         <!-- FFmpeg Warning -->
         {#if !ffmpegAvailable}
-          <div
-            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-amber-800 dark:text-[var(--color-warning)]"
-            role="alert"
-          >
-            <TriangleAlert class="size-5 shrink-0" />
-            <div>
-              <h3 class="font-bold">{t('settings.integration.birdweather.ffmpegWarning.title')}</h3>
-              <p class="text-sm">
-                {t('settings.integration.birdweather.ffmpegWarning.message')}
-              </p>
-            </div>
-          </div>
+          <ErrorAlert type="warning">
+            {#snippet children()}
+              <div>
+                <h3 class="font-bold">
+                  {t('settings.integration.birdweather.ffmpegWarning.title')}
+                </h3>
+                <p>{t('settings.integration.birdweather.ffmpegWarning.message')}</p>
+              </div>
+            {/snippet}
+          </ErrorAlert>
         {/if}
 
         <Checkbox
