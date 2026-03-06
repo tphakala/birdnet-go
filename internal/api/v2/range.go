@@ -118,6 +118,12 @@ type RangeFilterSpecies struct {
 	Score          *float64 `json:"score,omitempty"` // Nullable - only present when individual scores are available
 }
 
+// TaxonomyFamily represents a bird family with scientific and common names
+type TaxonomyFamily struct {
+	Name       string `json:"name"`       // Scientific name, e.g. "Strigidae"
+	CommonName string `json:"commonName"` // Common name, e.g. "Owls"
+}
+
 // RangeFilterSpeciesList represents the full list response for range filter species
 type RangeFilterSpeciesList struct {
 	Species     []RangeFilterSpecies `json:"species"`
@@ -125,6 +131,9 @@ type RangeFilterSpeciesList struct {
 	LastUpdated time.Time            `json:"lastUpdated"`
 	Threshold   float32              `json:"threshold"`
 	Location    Location             `json:"location"`
+	Genera      []string             `json:"genera"`
+	Families    []TaxonomyFamily     `json:"families"`
+	Orders      []string             `json:"orders"`
 }
 
 // RangeFilterTestRequest represents the request for testing range filter
