@@ -634,7 +634,7 @@
                 aria-label={t('settings.alerts.editor.property')}
                 class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
               >
-                {#each propertyOptions as prop}
+                {#each propertyOptions as prop (prop.value)}
                   <option value={prop.value}>{prop.label}</option>
                 {/each}
               </select>
@@ -644,7 +644,7 @@
                 aria-label={t('settings.alerts.editor.operator')}
                 class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content font-mono cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
               >
-                {#each operatorsForProperty(condition.property ?? '') as op}
+                {#each operatorsForProperty(condition.property ?? '') as op (op.value)}
                   <option value={op.value}>{op.label}</option>
                 {/each}
               </select>
