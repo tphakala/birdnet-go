@@ -192,7 +192,7 @@
 /* High contrast mode support */
 @media (prefers-contrast: more) {
   .sp-species-scientific-name {
-    color: var(--bc);
+    color: var(--color-base-content);
     opacity: 0.8;
   }
 }
