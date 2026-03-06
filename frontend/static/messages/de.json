@@ -1438,8 +1438,7 @@
       "notifications": "Benachrichtigungen",
       "security": "Sicherheit",
       "species": "Arten",
-      "support": "Unterstützung",
-      "alertrules": "Alarmregeln"
+      "support": "Unterstützung"
     },
     "notFound": {
       "title": "Einstellungen nicht gefunden",
@@ -3185,15 +3184,7 @@
       "defaultIndicator": "Standard-Eingabequelle"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Regeln",
-        "history": "Verlauf"
-      },
       "sections": {
-        "rules": {
-          "title": "Alarmregeln",
-          "description": "Regeln konfigurieren, die Benachrichtigungen basierend auf Ereignissen und Metriken auslösen."
-        },
         "history": {
           "title": "Alarmverlauf",
           "description": "Vergangene Alarmereignisse und deren Ergebnisse anzeigen."

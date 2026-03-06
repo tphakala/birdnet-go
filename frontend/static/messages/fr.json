@@ -1438,8 +1438,7 @@
       "notifications": "Notifications",
       "security": "Sécurité",
       "species": "Espèces",
-      "support": "Support",
-      "alertrules": "Règles d'alerte"
+      "support": "Support"
     },
     "notFound": {
       "title": "Paramètres non trouvés",
@@ -3185,15 +3184,7 @@
       "defaultIndicator": "Source d'entrée par défaut"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Règles",
-        "history": "Historique"
-      },
       "sections": {
-        "rules": {
-          "title": "Règles d'alerte",
-          "description": "Configurer des règles qui déclenchent des notifications en fonction des événements et des métriques."
-        },
         "history": {
           "title": "Historique des alertes",
           "description": "Consulter les événements d'alerte passés et leurs résultats."

@@ -1462,8 +1462,7 @@
       "security": "Security",
       "species": "Species",
       "notifications": "Notifications",
-      "support": "Support",
-      "alertrules": "Alert Rules"
+      "support": "Support"
     },
     "notFound": {
       "title": "Settings Not Found",
@@ -3246,15 +3245,7 @@
       "mysqlUsernamePlaceholder": "Enter MySQL username"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Rules",
-        "history": "History"
-      },
       "sections": {
-        "rules": {
-          "title": "Alert Rules",
-          "description": "Configure rules that trigger notifications based on events and metrics."
-        },
         "history": {
           "title": "Alert History",
           "description": "View past alert events and their outcomes."
@@ -3352,8 +3343,8 @@
         "templateTitlePlaceholder": "Leave empty for default",
         "templateMessage": "Message Template",
         "templateMessagePlaceholder": "Leave empty for default",
-        "noConditionsEvent": "No conditions \u2014 rule fires on every event",
-        "noConditionsMetric": "No conditions \u2014 rule fires on every metric update",
+        "noConditionsEvent": "No conditions — rule fires on every event",
+        "noConditionsMetric": "No conditions — rule fires on every metric update",
         "cooldownSeconds": "Cooldown (seconds)",
         "eventsCount": "events",
         "metricsCount": "metrics",

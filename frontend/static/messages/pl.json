@@ -1438,8 +1438,7 @@
       "security": "Bezpieczeństwo",
       "species": "Gatunki",
       "notifications": "Powiadomienia",
-      "support": "Wsparcie",
-      "alertrules": "Reguły alertów"
+      "support": "Wsparcie"
     },
     "notFound": {
       "title": "Nie Znaleziono Ustawień",
@@ -3185,15 +3184,7 @@
       "mysqlUsernamePlaceholder": "Wprowadź nazwę użytkownika MySQL"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Reguły",
-        "history": "Historia"
-      },
       "sections": {
-        "rules": {
-          "title": "Reguły alertów",
-          "description": "Konfiguruj reguły wyzwalające powiadomienia na podstawie zdarzeń i metryk."
-        },
         "history": {
           "title": "Historia alertów",
           "description": "Przeglądaj poprzednie zdarzenia alertów i ich rezultaty."

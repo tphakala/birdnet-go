@@ -1269,8 +1269,7 @@
       "security": "Zabezpečenie",
       "species": "Druhy",
       "notifications": "Upozornenia",
-      "support": "Podpora",
-      "alertrules": "Pravidlá upozornení"
+      "support": "Podpora"
     },
     "notFound": {
       "title": "Nastavenia sa nenašli",
@@ -3016,15 +3015,7 @@
       "mysqlUsernamePlaceholder": "Zadajte MySQL meno používateľa"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Pravidlá",
-        "history": "História"
-      },
       "sections": {
-        "rules": {
-          "title": "Pravidlá upozornení",
-          "description": "Nakonfigurujte pravidlá, ktoré spúšťajú upozornenia na základe udalostí a metrík."
-        },
         "history": {
           "title": "História upozornení",
           "description": "Zobrazte predchádzajúce udalosti upozornení a ich výsledky."

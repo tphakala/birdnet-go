@@ -1235,8 +1235,7 @@
       "security": "Sicurezza",
       "species": "Specie",
       "notifications": "Notifiche",
-      "support": "Supporto",
-      "alertrules": "Regole di allerta"
+      "support": "Supporto"
     },
     "notFound": {
       "title": "Impostazioni Non Trovate",
@@ -2982,15 +2981,7 @@
       "mysqlUsernamePlaceholder": "Inserisci nome utente MySQL"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Regole",
-        "history": "Cronologia"
-      },
       "sections": {
-        "rules": {
-          "title": "Regole di allerta",
-          "description": "Configura le regole che attivano notifiche in base a eventi e metriche."
-        },
         "history": {
           "title": "Cronologia allerte",
           "description": "Visualizza gli eventi di allerta passati e i relativi risultati."

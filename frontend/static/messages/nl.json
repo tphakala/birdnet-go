@@ -1438,8 +1438,7 @@
       "security": "Beveiligings instellingen",
       "species": "Soorten filters",
       "notifications": "Meldings instellingen",
-      "support": "Ondersteuning",
-      "alertrules": "Waarschuwingsregels"
+      "support": "Ondersteuning"
     },
     "notFound": {
       "title": "Instellingen niet gevonden",
@@ -3185,15 +3184,7 @@
       "defaultIndicator": "Standaard invoerbron"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Regels",
-        "history": "Geschiedenis"
-      },
       "sections": {
-        "rules": {
-          "title": "Waarschuwingsregels",
-          "description": "Configureer regels die meldingen activeren op basis van gebeurtenissen en metrieken."
-        },
         "history": {
           "title": "Waarschuwingsgeschiedenis",
           "description": "Bekijk eerdere waarschuwingen en hun resultaten."

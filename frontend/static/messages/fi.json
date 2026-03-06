@@ -1438,8 +1438,7 @@
       "notifications": "Ilmoitukset",
       "security": "Turvallisuus",
       "species": "Lajit",
-      "support": "Tuki",
-      "alertrules": "Hälytyssäännöt"
+      "support": "Tuki"
     },
     "notFound": {
       "title": "Asetuksia ei löytynyt",
@@ -3185,15 +3184,7 @@
       "defaultIndicator": "Oletuslähde"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Säännöt",
-        "history": "Historia"
-      },
       "sections": {
-        "rules": {
-          "title": "Hälytyssäännöt",
-          "description": "Määritä säännöt, jotka laukaisevat ilmoituksia tapahtumien ja mittareiden perusteella."
-        },
         "history": {
           "title": "Hälytysten historia",
           "description": "Tarkastele aiempia hälytyksiä ja niiden tuloksia."

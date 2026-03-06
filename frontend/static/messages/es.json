@@ -1438,8 +1438,7 @@
       "notifications": "Notificaciones",
       "security": "Seguridad",
       "species": "Especies",
-      "support": "Soporte",
-      "alertrules": "Reglas de alerta"
+      "support": "Soporte"
     },
     "notFound": {
       "title": "Configuración no encontrada",
@@ -3185,15 +3184,7 @@
       "defaultIndicator": "Fuente de entrada predeterminada"
     },
     "alerts": {
-      "tabs": {
-        "rules": "Reglas",
-        "history": "Historial"
-      },
       "sections": {
-        "rules": {
-          "title": "Reglas de alerta",
-          "description": "Configurar reglas que activan notificaciones basadas en eventos y métricas."
-        },
         "history": {
           "title": "Historial de alertas",
           "description": "Ver eventos de alerta pasados y sus resultados."
