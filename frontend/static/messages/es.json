@@ -2406,6 +2406,20 @@
         "normalizationDisabled": "La normalización de audio está deshabilitada",
         "disabledInfo": "Habilite la grabación de clips arriba para configurar ajustes de clips, formato de archivo y opciones de almacenamiento."
       },
+      "extendedCapture": {
+        "title": "Captura extendida",
+        "description": "Graba clips de audio más largos cuando una especie canta repetidamente, produciendo una única grabación combinada en lugar de muchos clips cortos.",
+        "ramWarning": "La captura extendida requiere RAM adicional para los búferes de audio. No recomendado para dispositivos con 512 MB de RAM o menos (p. ej., Raspberry Pi Zero).",
+        "enable": "Activar captura extendida",
+        "enableHelp": "Cuando está activada, las detecciones repetidas de las especies configuradas se fusionan en una única grabación más larga.",
+        "maxDurationLabel": "Duración máxima",
+        "maxDurationHelp": "Longitud máxima de un clip de captura extendida. La grabación crece a medida que continúan las detecciones, hasta este límite.",
+        "speciesListLabel": "Especies de captura extendida",
+        "addSpeciesLabel": "Añadir especie",
+        "addSpeciesHelp": "Especies que activan la captura extendida. Admite nombres comunes, nombres científicos y coincidencia a nivel de género (p. ej., \"Turdus\" incluye todos los tordos).",
+        "addSpeciesButton": "Añadir",
+        "disabled": "La captura extendida está desactivada"
+      },
       "fileSettings": {
         "title": "Configuración de archivo",
         "description": "Configurar la ubicación de almacenamiento y el formato de audio para los clips guardados.",

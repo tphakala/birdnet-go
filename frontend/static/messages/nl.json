@@ -2577,6 +2577,20 @@
         "normalizationDisabled": "Audio normalization is disabled",
         "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
       },
+      "extendedCapture": {
+        "title": "Uitgebreide opname",
+        "description": "Neemt langere audioclips op wanneer een soort herhaaldelijk roept, en maakt één gecombineerde opname in plaats van veel korte clips.",
+        "ramWarning": "Uitgebreide opname vereist extra RAM voor audiobuffers. Niet aanbevolen voor apparaten met 512 MB RAM of minder (bijv. Raspberry Pi Zero).",
+        "enable": "Uitgebreide opname inschakelen",
+        "enableHelp": "Wanneer ingeschakeld, worden herhaalde detecties van geconfigureerde soorten samengevoegd tot één langere opname.",
+        "maxDurationLabel": "Maximale duur",
+        "maxDurationHelp": "Maximale lengte van een uitgebreide opnameclip. De opname groeit naarmate detecties doorgaan, tot deze limiet.",
+        "speciesListLabel": "Soorten voor uitgebreide opname",
+        "addSpeciesLabel": "Soort toevoegen",
+        "addSpeciesHelp": "Soorten die uitgebreide opname activeren. Ondersteunt gewone namen, wetenschappelijke namen en matching op genusniveau (bijv. \"Turdus\" omvat alle lijsters).",
+        "addSpeciesButton": "Toevoegen",
+        "disabled": "Uitgebreide opname is uitgeschakeld"
+      },
       "fileSettings": {
         "title": "Bestand Instellingen",
         "description": "Configureer opslaglocatie en audio formaat voor opgeslagen clips.",

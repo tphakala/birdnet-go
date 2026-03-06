@@ -2577,6 +2577,20 @@
         "normalizationDisabled": "Audio-Normalisierung ist deaktiviert",
         "disabledInfo": "Aktivieren Sie die Clip-Aufnahme oben, um Clip-Einstellungen, Dateiformat und Speicheroptionen zu konfigurieren."
       },
+      "extendedCapture": {
+        "title": "Erweiterte Aufnahme",
+        "description": "Nimmt längere Audioclips auf, wenn eine Art wiederholt ruft, und erstellt eine einzelne kombinierte Aufnahme statt vieler kurzer Clips.",
+        "ramWarning": "Die erweiterte Aufnahme benötigt zusätzlichen RAM für Audio-Puffer. Nicht empfohlen für Geräte mit 512 MB RAM oder weniger (z.B. Raspberry Pi Zero).",
+        "enable": "Erweiterte Aufnahme aktivieren",
+        "enableHelp": "Wenn aktiviert, werden wiederholte Erkennungen konfigurierter Arten zu einer einzigen längeren Aufnahme zusammengeführt.",
+        "maxDurationLabel": "Maximale Dauer",
+        "maxDurationHelp": "Maximale Länge eines erweiterten Aufnahmeclips. Die Aufnahme wächst mit fortlaufenden Erkennungen bis zu diesem Limit.",
+        "speciesListLabel": "Arten für erweiterte Aufnahme",
+        "addSpeciesLabel": "Art hinzufügen",
+        "addSpeciesHelp": "Arten, die die erweiterte Aufnahme auslösen. Unterstützt gebräuchliche Namen, wissenschaftliche Namen und Gattungsabgleich (z.B. \"Turdus\" erfasst alle Drosseln).",
+        "addSpeciesButton": "Hinzufügen",
+        "disabled": "Erweiterte Aufnahme ist deaktiviert"
+      },
       "fileSettings": {
         "title": "Dateieinstellungen",
         "description": "Speicherort und Audioformat für gespeicherte Clips konfigurieren.",

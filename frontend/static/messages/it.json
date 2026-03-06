@@ -2500,6 +2500,20 @@
         "losslessNote": "Formati lossless preservano qualità audio originale senza artefatti compressione.",
         "disabledInfo": "Abilita registrazione clip sopra per configurare impostazioni clip, formato file e opzioni archiviazione."
       },
+      "extendedCapture": {
+        "title": "Cattura estesa",
+        "description": "Registra clip audio più lunghi quando una specie canta ripetutamente, producendo un'unica registrazione combinata invece di molti clip brevi.",
+        "ramWarning": "La cattura estesa richiede RAM aggiuntiva per i buffer audio. Non consigliata per dispositivi con 512 MB di RAM o meno (es. Raspberry Pi Zero).",
+        "enable": "Attiva cattura estesa",
+        "enableHelp": "Quando attivata, i rilevamenti ripetuti delle specie configurate vengono uniti in un'unica registrazione più lunga.",
+        "maxDurationLabel": "Durata massima",
+        "maxDurationHelp": "Lunghezza massima di un clip di cattura estesa. La registrazione cresce con il proseguire dei rilevamenti, fino a questo limite.",
+        "speciesListLabel": "Specie per cattura estesa",
+        "addSpeciesLabel": "Aggiungi specie",
+        "addSpeciesHelp": "Specie che attivano la cattura estesa. Supporta nomi comuni, nomi scientifici e corrispondenza a livello di genere (es. \"Turdus\" include tutti i tordi).",
+        "addSpeciesButton": "Aggiungi",
+        "disabled": "La cattura estesa è disattivata"
+      },
       "fileSettings": {
         "title": "Impostazioni File",
         "description": "Configura posizione archiviazione e formato audio per clip salvate.",
