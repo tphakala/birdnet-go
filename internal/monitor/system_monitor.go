@@ -586,6 +586,7 @@ func (m *SystemMonitor) sendNotificationWithPath(resource ResourceType, current,
 		logger.String("threshold", fmt.Sprintf("%.1f%%", threshold)),
 		logger.String("severity", severity),
 	)
+	state.LastNotificationTime = time.Now()
 }
 
 // sendRecoveryNotification sends a notification when resource usage returns to normal (backward compatibility)

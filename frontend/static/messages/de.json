@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "BirdWeather-Upload fehlgeschlagen",
           "integration_mqtt_connected": "MQTT verbunden",
           "integration_mqtt_disconnected": "MQTT getrennt",
+          "integration_mqtt_publish_failed": "MQTT-Veröffentlichung fehlgeschlagen",
           "device_started": "Gerät gestartet",
           "device_stopped": "Gerät gestoppt",
           "device_error": "Gerätefehler"

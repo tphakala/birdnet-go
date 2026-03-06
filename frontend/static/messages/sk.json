@@ -3160,6 +3160,7 @@
           "integration_birdweather_failed": "Odoslanie do BirdWeather zlyhalo",
           "integration_mqtt_connected": "MQTT pripojený",
           "integration_mqtt_disconnected": "MQTT odpojený",
+          "integration_mqtt_publish_failed": "Publikovanie MQTT zlyhalo",
           "device_started": "Zariadenie spustené",
           "device_stopped": "Zariadenie zastavené",
           "device_error": "Chyba zariadenia"

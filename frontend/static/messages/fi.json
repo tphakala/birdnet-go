@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "BirdWeather-lähetys epäonnistui",
           "integration_mqtt_connected": "MQTT yhdistetty",
           "integration_mqtt_disconnected": "MQTT-yhteys katkaistu",
+          "integration_mqtt_publish_failed": "MQTT-julkaisu epäonnistui",
           "device_started": "Laite käynnistetty",
           "device_stopped": "Laite pysäytetty",
           "device_error": "Laitevirhe"

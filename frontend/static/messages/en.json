@@ -3390,6 +3390,7 @@
           "integration_birdweather_failed": "BirdWeather Upload Failed",
           "integration_mqtt_connected": "MQTT Connected",
           "integration_mqtt_disconnected": "MQTT Disconnected",
+          "integration_mqtt_publish_failed": "MQTT Publish Failed",
           "device_started": "Device Started",
           "device_stopped": "Device Stopped",
           "device_error": "Device Error"
