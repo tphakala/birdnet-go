@@ -395,7 +395,7 @@
       label: t('settings.notifications.tabs.channels'),
       icon: Wifi,
       content: channelsContent,
-      hasChanges: hasPushChanges,
+      hasChanges: hasPushChanges || hasTemplateChanges,
     },
     {
       id: 'rules',
@@ -1134,7 +1134,7 @@
 
   async function handleEditorSave(data: Partial<AlertRule>) {
     try {
-      if (data.id) {
+      if (data.id != null) {
         await updateAlertRule(data.id, data);
         showRuleStatus(t('settings.alerts.status.updated'), 'success');
       } else {
@@ -2360,7 +2360,7 @@
               </code>
               <!-- Action badges -->
               {#if rule.actions}
-                {#each rule.actions as action (action.target)}
+                {#each rule.actions as action (action.id)}
                   <span
                     class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {action.target ===
                     'bell'
@@ -2381,7 +2381,8 @@
                 <span class="w-px h-3 bg-base-300"></span>
                 <span class="flex items-center gap-1">
                   <Clock class="size-3" />
-                  {formatCooldown(rule.cooldown_sec)} cooldown
+                  {formatCooldown(rule.cooldown_sec)}
+                  {t('settings.alerts.cooldown')}
                 </span>
               {/if}
             </div>
