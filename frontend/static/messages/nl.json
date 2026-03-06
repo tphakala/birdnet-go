@@ -2504,6 +2504,25 @@
         "active": "Actief",
         "streamsConfigured": "{count} stream(s) geconfigureerd"
       },
+      "quietHours": {
+        "title": "Stille uren",
+        "sectionTitle": "Stille uren",
+        "sectionDescription": "Pauzeer audio-opname tijdens geconfigureerde tijdvensters om het CPU-gebruik te verminderen wanneer vogels waarschijnlijk niet actief zijn.",
+        "modeLabel": "Planningsmodus",
+        "modeFixed": "Vaste tijden",
+        "modeSolar": "Zonsopgang/-ondergang",
+        "startTime": "Starttijd",
+        "endTime": "Eindtijd",
+        "startEvent": "Startgebeurtenis",
+        "endEvent": "Eindgebeurtenis",
+        "offsetMinutes": "Offset (min)",
+        "sunrise": "Zonsopgang",
+        "sunset": "Zonsondergang",
+        "fixedHint": "Opname wordt dagelijks gepauzeerd tussen start- en eindtijden. Nachtelijke vensters (bijv. 22:00 tot 06:00) worden ondersteund.",
+        "solarHint": "Tijden worden berekend op basis van zonsopgang/-ondergang op uw geconfigureerde locatie. Gebruik negatieve offsets voor vóór het evenement, positieve voor erna.",
+        "badge": "Stil",
+        "enabledBadge": "Stille uren ingeschakeld voor deze stream"
+      },
       "audioFilters": {
         "title": "Audiofilters",
         "description": "Configureer audio verwerkings filters",

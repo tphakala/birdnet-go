@@ -2386,6 +2386,25 @@
         "active": "Aktívne",
         "streamsConfigured": "{count} nakonfigurovaných streamov"
       },
+      "quietHours": {
+        "title": "Tiché hodiny",
+        "sectionTitle": "Tiché hodiny",
+        "sectionDescription": "Pozastaviť zachytávanie zvuku počas nakonfigurovaných časových okien na zníženie využitia CPU, keď vtáky pravdepodobne nie sú aktívne.",
+        "modeLabel": "Režim plánovania",
+        "modeFixed": "Pevné časy",
+        "modeSolar": "Východ/Západ slnka",
+        "startTime": "Čas začiatku",
+        "endTime": "Čas konca",
+        "startEvent": "Udalosť začiatku",
+        "endEvent": "Udalosť konca",
+        "offsetMinutes": "Posun (min)",
+        "sunrise": "Východ slnka",
+        "sunset": "Západ slnka",
+        "fixedHint": "Zachytávanie sa pozastavuje denne medzi časmi začiatku a konca. Nočné okná (napr. 22:00 do 06:00) sú podporované.",
+        "solarHint": "Časy sa vypočítavajú na základe východu/západu slnka vo vašej nakonfigurovanej polohe. Použite záporné posuny pred udalosťou, kladné po nej.",
+        "badge": "Ticho",
+        "enabledBadge": "Tiché hodiny povolené pre tento stream"
+      },
       "rtspStreams": {
         "title": "Konfigurácia zvukových streamov",
         "description": "Nakonfigurujte sieťové zvukové streamy pre vzdialené zachytávanie zvuku. Podporuje protokoly RTSP, HTTP, HLS, RTMP a UDP.",

@@ -2333,6 +2333,25 @@
         "active": "Ativo",
         "streamsConfigured": "{count} fluxo(s) configurado(s)"
       },
+      "quietHours": {
+        "title": "Horas silenciosas",
+        "sectionTitle": "Horas silenciosas",
+        "sectionDescription": "Pausar a captura de áudio durante janelas de tempo configuradas para reduzir o uso de CPU quando as aves provavelmente não estão ativas.",
+        "modeLabel": "Modo de agendamento",
+        "modeFixed": "Horários fixos",
+        "modeSolar": "Nascer/Pôr do sol",
+        "startTime": "Hora de início",
+        "endTime": "Hora de fim",
+        "startEvent": "Evento de início",
+        "endEvent": "Evento de fim",
+        "offsetMinutes": "Deslocamento (min)",
+        "sunrise": "Nascer do sol",
+        "sunset": "Pôr do sol",
+        "fixedHint": "A captura é pausada diariamente entre as horas de início e fim. Janelas noturnas (por exemplo, 22:00 às 06:00) são suportadas.",
+        "solarHint": "Os horários são calculados a partir do nascer/pôr do sol na sua localização configurada. Use deslocamentos negativos para antes do evento, positivos para depois.",
+        "badge": "Silêncio",
+        "enabledBadge": "Horas silenciosas habilitadas para este fluxo"
+      },
       "audioFilters": {
         "title": "Filtros de áudio",
         "description": "Configurar filtros de processamento de áudio",

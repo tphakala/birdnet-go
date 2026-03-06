@@ -2504,6 +2504,25 @@
         "active": "Aktiv",
         "streamsConfigured": "{count} Stream(s) konfiguriert"
       },
+      "quietHours": {
+        "title": "Ruhezeiten",
+        "sectionTitle": "Ruhezeiten",
+        "sectionDescription": "Audioaufnahme während konfigurierter Zeitfenster pausieren, um die CPU-Auslastung zu reduzieren, wenn Vögel voraussichtlich nicht aktiv sind.",
+        "modeLabel": "Planungsmodus",
+        "modeFixed": "Feste Zeiten",
+        "modeSolar": "Sonnenauf-/untergang",
+        "startTime": "Startzeit",
+        "endTime": "Endzeit",
+        "startEvent": "Startereignis",
+        "endEvent": "Endereignis",
+        "offsetMinutes": "Versatz (Min.)",
+        "sunrise": "Sonnenaufgang",
+        "sunset": "Sonnenuntergang",
+        "fixedHint": "Die Aufnahme wird täglich zwischen Start- und Endzeit pausiert. Über-Nacht-Fenster (z.B. 22:00 bis 06:00) werden unterstützt.",
+        "solarHint": "Zeiten werden aus Sonnenauf-/untergang an Ihrem konfigurierten Standort berechnet. Negative Versatzwerte für vor dem Ereignis, positive für danach.",
+        "badge": "Ruhe",
+        "enabledBadge": "Ruhezeiten für diesen Stream aktiviert"
+      },
       "audioFilters": {
         "title": "Audiofilter",
         "description": "Audioverarbeitungsfilter konfigurieren",

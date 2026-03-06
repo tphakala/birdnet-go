@@ -2333,6 +2333,25 @@
         "active": "Aktiivinen",
         "streamsConfigured": "{count} striimi(ä) määritetty"
       },
+      "quietHours": {
+        "title": "Hiljaiset tunnit",
+        "sectionTitle": "Hiljaiset tunnit",
+        "sectionDescription": "Keskeytä äänen tallennus määritettyinä aikajaksoina vähentääksesi suorittimen käyttöä, kun linnut eivät todennäköisesti ole aktiivisia.",
+        "modeLabel": "Aikataulutila",
+        "modeFixed": "Kiinteät ajat",
+        "modeSolar": "Auringonnousu/-lasku",
+        "startTime": "Alkamisaika",
+        "endTime": "Päättymisaika",
+        "startEvent": "Aloitustapahtuma",
+        "endEvent": "Lopetustapahtuma",
+        "offsetMinutes": "Poikkeama (min)",
+        "sunrise": "Auringonnousu",
+        "sunset": "Auringonlasku",
+        "fixedHint": "Tallennus keskeytyy päivittäin alku- ja loppuaikojen välillä. Yön yli -ikkunat (esim. 22:00–06:00) ovat tuettuja.",
+        "solarHint": "Ajat lasketaan auringonnousun/-laskun perusteella määritetyssä sijainnissasi. Käytä negatiivisia poikkeamia ennen tapahtumaa, positiivisia sen jälkeen.",
+        "badge": "Hiljainen",
+        "enabledBadge": "Hiljaiset tunnit käytössä tälle striimille"
+      },
       "audioFilters": {
         "title": "Äänisuodattimet",
         "description": "Määritä äänenkäsittelysuodattimet",

@@ -2510,6 +2510,25 @@
         "active": "Aktywne",
         "streamsConfigured": "{count, plural, one {Skonfigurowany # strumień} few {Skonfigurowane # strumienie} other {Skonfigurowanych # strumieni}}"
       },
+      "quietHours": {
+        "title": "Godziny ciszy",
+        "sectionTitle": "Godziny ciszy",
+        "sectionDescription": "Wstrzymaj przechwytywanie dźwięku w skonfigurowanych oknach czasowych, aby zmniejszyć użycie CPU, gdy ptaki prawdopodobnie nie są aktywne.",
+        "modeLabel": "Tryb harmonogramu",
+        "modeFixed": "Stałe godziny",
+        "modeSolar": "Wschód/Zachód słońca",
+        "startTime": "Czas rozpoczęcia",
+        "endTime": "Czas zakończenia",
+        "startEvent": "Zdarzenie początkowe",
+        "endEvent": "Zdarzenie końcowe",
+        "offsetMinutes": "Przesunięcie (min)",
+        "sunrise": "Wschód słońca",
+        "sunset": "Zachód słońca",
+        "fixedHint": "Przechwytywanie jest wstrzymywane codziennie między godziną rozpoczęcia a zakończenia. Obsługiwane są okna nocne (np. 22:00 do 06:00).",
+        "solarHint": "Godziny są obliczane na podstawie wschodu/zachodu słońca w skonfigurowanej lokalizacji. Użyj ujemnych przesunięć dla czasu przed zdarzeniem, dodatnich po nim.",
+        "badge": "Cisza",
+        "enabledBadge": "Godziny ciszy włączone dla tego strumienia"
+      },
       "audioFilters": {
         "title": "Filtry Audio",
         "description": "Konfiguruj filtry przetwarzania audio",

@@ -2352,6 +2352,25 @@
         "active": "Attivo",
         "streamsConfigured": "{count} flusso/i configurato/i"
       },
+      "quietHours": {
+        "title": "Ore silenziose",
+        "sectionTitle": "Ore silenziose",
+        "sectionDescription": "Metti in pausa la cattura audio durante le finestre temporali configurate per ridurre l'utilizzo della CPU quando è improbabile che gli uccelli siano attivi.",
+        "modeLabel": "Modalità pianificazione",
+        "modeFixed": "Orari fissi",
+        "modeSolar": "Alba/Tramonto",
+        "startTime": "Ora di inizio",
+        "endTime": "Ora di fine",
+        "startEvent": "Evento di inizio",
+        "endEvent": "Evento di fine",
+        "offsetMinutes": "Offset (min)",
+        "sunrise": "Alba",
+        "sunset": "Tramonto",
+        "fixedHint": "La cattura viene sospesa quotidianamente tra gli orari di inizio e fine. Sono supportate le finestre notturne (ad es. 22:00 - 06:00).",
+        "solarHint": "Gli orari vengono calcolati in base all'alba/tramonto nella posizione configurata. Usa offset negativi prima dell'evento, positivi dopo.",
+        "badge": "Silenzio",
+        "enabledBadge": "Ore silenziose abilitate per questo flusso"
+      },
       "rtspStreams": {
         "title": "Configurazione Flusso Audio",
         "description": "Configura flussi audio di rete per cattura audio remota. Supporta protocolli RTSP, HTTP, HLS, RTMP e UDP.",

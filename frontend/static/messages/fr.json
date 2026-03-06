@@ -2504,6 +2504,25 @@
         "active": "Actif",
         "streamsConfigured": "{count} flux configuré(s)"
       },
+      "quietHours": {
+        "title": "Heures calmes",
+        "sectionTitle": "Heures calmes",
+        "sectionDescription": "Mettre en pause la capture audio pendant les fenêtres de temps configurées pour réduire l'utilisation du CPU lorsque les oiseaux sont peu susceptibles d'être actifs.",
+        "modeLabel": "Mode de planification",
+        "modeFixed": "Horaires fixes",
+        "modeSolar": "Lever/Coucher du soleil",
+        "startTime": "Heure de début",
+        "endTime": "Heure de fin",
+        "startEvent": "Événement de début",
+        "endEvent": "Événement de fin",
+        "offsetMinutes": "Décalage (min)",
+        "sunrise": "Lever du soleil",
+        "sunset": "Coucher du soleil",
+        "fixedHint": "La capture est suspendue quotidiennement entre les heures de début et de fin. Les fenêtres nocturnes (par ex. 22h00 à 06h00) sont prises en charge.",
+        "solarHint": "Les horaires sont calculés à partir du lever/coucher du soleil à votre emplacement configuré. Utilisez des décalages négatifs avant l'événement, positifs après.",
+        "badge": "Calme",
+        "enabledBadge": "Heures calmes activées pour ce flux"
+      },
       "audioFilters": {
         "title": "Filtres audio",
         "description": "Configurer les filtres de traitement audio",
