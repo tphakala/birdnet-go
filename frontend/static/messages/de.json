@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
         "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} getrennt"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} getrennt",
+        "error": {
+          "authError": "Authentifizierung fehlgeschlagen — API-Schlüssel oder Zugangsdaten prüfen",
+          "rateLimited": "Ratenbegrenzung — Anfragen werden automatisch verlangsamt",
+          "gatewayTimeout": "Dienst ist möglicherweise überlastet",
+          "serverError": "Dienst ist vorübergehend nicht verfügbar",
+          "connectionRefused": "Dienst nicht erreichbar — Adresse prüfen und sicherstellen, dass er läuft",
+          "dnsError": "Hostname konnte nicht aufgelöst werden — Adresse prüfen",
+          "tlsError": "TLS-/Zertifikatsfehler — Sicherheitseinstellungen prüfen",
+          "timeout": "Zeitüberschreitung — Dienst ist möglicherweise langsam oder nicht erreichbar",
+          "connectionInterrupted": "Verbindung wurde unterbrochen — wird automatisch erneut versucht",
+          "diskFull": "Festplatte voll — Speicherplatz freigeben",
+          "permissionDenied": "Zugriff verweigert — Datei- oder Dienstberechtigungen prüfen"
+        }
       }
     },
     "loading": "Benachrichtigungen werden geladen..."

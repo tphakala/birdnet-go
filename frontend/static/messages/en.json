@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
         "detectionOccurred": "{species_name} detected with {confidence}% confidence",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} disconnected"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} disconnected",
+        "error": {
+          "authError": "Authentication failed — check your API key or credentials",
+          "rateLimited": "Rate limited — requests will slow down automatically",
+          "gatewayTimeout": "Service may be experiencing high load",
+          "serverError": "Service is temporarily unavailable",
+          "connectionRefused": "Service is unreachable — check the address and that it's running",
+          "dnsError": "Could not resolve hostname — check the address",
+          "tlsError": "TLS/certificate error — check your security settings",
+          "timeout": "Connection timed out — the service may be slow or unreachable",
+          "connectionInterrupted": "Connection was interrupted — will retry automatically",
+          "diskFull": "Disk is full — free some space",
+          "permissionDenied": "Permission denied — check file or service permissions"
+        }
       }
     },
     "loading": "Loading notifications..."

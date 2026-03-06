@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor atual: {value}% (limite: {threshold}%)",
         "detectionOccurred": "{species_name} detetado com {confidence}% de confiança",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} desligado"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} desligado",
+        "error": {
+          "authError": "Autenticação falhou — verifique a chave API ou credenciais",
+          "rateLimited": "Limite de pedidos atingido — os pedidos serão abrandados automaticamente",
+          "gatewayTimeout": "O serviço pode estar com carga elevada",
+          "serverError": "Serviço temporariamente indisponível",
+          "connectionRefused": "Serviço inacessível — verifique o endereço e se está em execução",
+          "dnsError": "Não foi possível resolver o nome do servidor — verifique o endereço",
+          "tlsError": "Erro de TLS/certificado — verifique as definições de segurança",
+          "timeout": "Tempo de ligação expirado — o serviço pode estar lento ou inacessível",
+          "connectionInterrupted": "Ligação interrompida — será tentada novamente automaticamente",
+          "diskFull": "Disco cheio — liberte espaço",
+          "permissionDenied": "Permissão negada — verifique as permissões do ficheiro ou serviço"
+        }
       }
     },
     "loading": "Carregando notificações..."

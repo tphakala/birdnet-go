@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
         "detectionOccurred": "{species_name} wykryto z {confidence}% pewnością",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} rozłączono"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} rozłączono",
+        "error": {
+          "authError": "Uwierzytelnianie nie powiodło się — sprawdź klucz API lub dane logowania",
+          "rateLimited": "Osiągnięto limit zapytań — zapytania zostaną automatycznie spowolnione",
+          "gatewayTimeout": "Usługa może być przeciążona",
+          "serverError": "Usługa tymczasowo niedostępna",
+          "connectionRefused": "Usługa nieosiągalna — sprawdź adres i czy jest uruchomiona",
+          "dnsError": "Nie można rozwiązać nazwy hosta — sprawdź adres",
+          "tlsError": "Błąd TLS/certyfikatu — sprawdź ustawienia zabezpieczeń",
+          "timeout": "Przekroczono limit czasu połączenia — usługa może być wolna lub nieosiągalna",
+          "connectionInterrupted": "Połączenie zostało przerwane — ponowna próba nastąpi automatycznie",
+          "diskFull": "Dysk jest pełny — zwolnij miejsce",
+          "permissionDenied": "Brak uprawnień — sprawdź uprawnienia pliku lub usługi"
+        }
       }
     },
     "loading": "Ładowanie powiadomień..."

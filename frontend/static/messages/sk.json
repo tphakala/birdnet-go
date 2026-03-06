@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
         "detectionOccurred": "{species_name} detegovaný s {confidence}% istotou",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} odpojený"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} odpojený",
+        "error": {
+          "authError": "Overenie zlyhalo — skontrolujte API kľúč alebo prihlasovacie údaje",
+          "rateLimited": "Dosiahnutý limit požiadaviek — požiadavky sa automaticky spomalia",
+          "gatewayTimeout": "Služba môže byť preťažená",
+          "serverError": "Služba je dočasne nedostupná",
+          "connectionRefused": "Služba nedostupná — skontrolujte adresu a či je spustená",
+          "dnsError": "Nepodarilo sa rozpoznať názov hostiteľa — skontrolujte adresu",
+          "tlsError": "Chyba TLS/certifikátu — skontrolujte nastavenia zabezpečenia",
+          "timeout": "Časový limit pripojenia vypršal — služba môže byť pomalá alebo nedostupná",
+          "connectionInterrupted": "Pripojenie bolo prerušené — automaticky sa pokúsi znova",
+          "diskFull": "Disk je plný — uvoľnite miesto",
+          "permissionDenied": "Prístup zamietnutý — skontrolujte oprávnenia súboru alebo služby"
+        }
       }
     },
     "loading": "Načítavam upozornenia..."

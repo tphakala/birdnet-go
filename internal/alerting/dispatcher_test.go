@@ -312,7 +312,7 @@ func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
 	assert.Contains(t, call.message, "92")
 }
 
-func TestDispatcher_DefaultTemplate_ErrorMessage(t *testing.T) {
+func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
 	mock := &mockNotifCreator{}
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
 
@@ -338,11 +338,44 @@ func TestDispatcher_DefaultTemplate_ErrorMessage(t *testing.T) {
 
 	require.Len(t, mock.keyCalls, 1)
 	call := mock.keyCalls[0]
-	assert.Equal(t, MsgAlertErrorOccurred, call.messageKey)
+	// "connection timeout" classifies as "timeout"
+	assert.Equal(t, MsgAlertErrorPrefix+".timeout", call.messageKey)
 	assert.Equal(t, "backyard-cam", call.messageParams["source_name"])
 	assert.Equal(t, "connection timeout", call.messageParams["error"])
+	// Fallback uses the friendly message, not the raw error
 	assert.Contains(t, call.message, "backyard-cam")
-	assert.Contains(t, call.message, "connection timeout")
+	assert.NotContains(t, call.message, "connection timeout", "should use friendly message, not raw error")
+}
+
+func TestDispatcher_DefaultTemplate_ErrorMessage_Unclassified(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "BirdWeather upload failed",
+		NameKey: RuleKeyBirdWeatherName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeIntegration,
+		EventName:  EventBirdWeatherFailed,
+		Properties: map[string]any{
+			PropertyError: "species not in taxonomy",
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	// Unrecognized error falls back to generic key with raw error
+	assert.Equal(t, MsgAlertErrorOccurred, call.messageKey)
+	assert.Equal(t, "species not in taxonomy", call.messageParams["error"])
+	assert.Contains(t, call.message, "species not in taxonomy")
 }
 
 func TestDispatcher_DefaultTemplate_DisconnectMessage(t *testing.T) {

@@ -408,8 +408,21 @@
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",
         "detectionOccurred": "{species_name} rilevato con {confidence}% di confidenza",
-        "errorOccurred": "{source_name}: {error}",
-        "disconnected": "{source_name} disconnesso"
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} disconnesso",
+        "error": {
+          "authError": "Autenticazione fallita — controlla la chiave API o le credenziali",
+          "rateLimited": "Limite di richieste raggiunto — le richieste verranno rallentate automaticamente",
+          "gatewayTimeout": "Il servizio potrebbe essere sotto carico elevato",
+          "serverError": "Servizio temporaneamente non disponibile",
+          "connectionRefused": "Servizio irraggiungibile — controlla l'indirizzo e che sia in esecuzione",
+          "dnsError": "Impossibile risolvere il nome host — controlla l'indirizzo",
+          "tlsError": "Errore TLS/certificato — controlla le impostazioni di sicurezza",
+          "timeout": "Connessione scaduta — il servizio potrebbe essere lento o irraggiungibile",
+          "connectionInterrupted": "Connessione interrotta — verrà ritentata automaticamente",
+          "diskFull": "Disco pieno — libera spazio",
+          "permissionDenied": "Permesso negato — controlla i permessi del file o del servizio"
+        }
       }
     },
     "loading": "Caricamento notifiche..."
