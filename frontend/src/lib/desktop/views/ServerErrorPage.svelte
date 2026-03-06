@@ -29,24 +29,26 @@
 </svelte:head>
 
 <div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
-  <div class="text-center p-8 rounded-lg bg-base-100 shadow-lg max-w-4xl w-full">
-    <h1 class="text-6xl font-bold text-base-content mb-4">{t('error.500.code')}</h1>
-    <h2 class="text-3xl font-semibold text-base-content opacity-70 mb-4">{t('error.500.title')}</h2>
+  <div class="text-center p-8 rounded-lg bg-[var(--color-base-100)] shadow-lg max-w-4xl w-full">
+    <h1 class="text-6xl font-bold text-[var(--color-base-content)] mb-4">{t('error.500.code')}</h1>
+    <h2 class="text-3xl font-semibold text-[var(--color-base-content)] opacity-70 mb-4">
+      {t('error.500.title')}
+    </h2>
 
     <!-- Error details including stack trace -->
     <div class="mt-8 text-left">
-      <h3 class="text-2xl font-semibold text-base-content mb-2">
+      <h3 class="text-2xl font-semibold text-[var(--color-base-content)] mb-2">
         {t('error.generic.errorDetails')}
       </h3>
       <pre
-        class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{message}</pre>
+        class="bg-[var(--color-base-200)] p-4 rounded-sm overflow-x-auto text-sm text-[var(--color-base-content)] font-mono">{message}</pre>
 
       {#if showDetails && stackTrace}
-        <h3 class="text-2xl font-semibold text-base-content mt-4 mb-2">
+        <h3 class="text-2xl font-semibold text-[var(--color-base-content)] mt-4 mb-2">
           {t('error.generic.stackTrace')}
         </h3>
         <pre
-          class="bg-base-200 p-4 rounded-sm overflow-x-auto text-sm text-base-content font-mono">{stackTrace}</pre>
+          class="bg-[var(--color-base-200)] p-4 rounded-sm overflow-x-auto text-sm text-[var(--color-base-content)] font-mono">{stackTrace}</pre>
       {/if}
     </div>
 

@@ -346,23 +346,23 @@
   function getNotificationIconClass(notification) {
     const baseClass = 'w-8 h-8 rounded-full flex items-center justify-center';
     const typeClasses = {
-      error: 'bg-error/20 text-error',
-      warning: 'bg-warning/20 text-warning',
-      info: 'bg-info/20 text-info',
-      detection: 'bg-success/20 text-success',
-      system: 'bg-primary/20 text-primary',
+      error: 'bg-[var(--color-error)]/20 text-[var(--color-error)]',
+      warning: 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]',
+      info: 'bg-[var(--color-info)]/20 text-[var(--color-info)]',
+      detection: 'bg-[var(--color-success)]/20 text-[var(--color-success)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
     };
-    return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-base-300')}`;
+    return `${baseClass} ${safeGet(typeClasses, notification.type, 'bg-[var(--color-base-300)]')}`;
   }
 
   // Get notification card class
   /** @param {import('$lib/utils/notifications').Notification} notification */
   function getNotificationCardClass(notification) {
     let classes =
-      'card bg-base-100 shadow-2xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
+      'card bg-[var(--color-base-100)] shadow-2xs hover:shadow-md transition-shadow focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
     if (!notification.read) {
       // Unread notifications get a subtle highlight, NOT opacity reduction
-      classes += ' border-l-4 border-primary';
+      classes += ' border-l-4 border-[var(--color-primary)]';
     } else {
       // Read notifications are slightly muted
       classes += ' opacity-70';
@@ -419,7 +419,9 @@
   <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
     <!-- Filters Group -->
     <div class="flex flex-wrap items-center gap-3">
-      <span class="text-sm font-medium text-base-content/70 flex items-center gap-1.5">
+      <span
+        class="text-sm font-medium text-[var(--color-base-content)]/70 flex items-center gap-1.5"
+      >
         <Filter class="size-4" />
         {t('notifications.filters.label')}
       </span>
@@ -512,7 +514,7 @@
   <!-- Notifications List -->
   <div class="space-y-3" role="region" aria-label="Notifications list">
     {#if ENABLE_LOADING_SPINNERS && loading}
-      <div class="card bg-base-100 shadow-2xs">
+      <div class="card bg-[var(--color-base-100)] shadow-2xs">
         <div class="card-body">
           <div class="flex justify-center">
             <div class="loading loading-spinner loading-lg"></div>
@@ -520,13 +522,17 @@
         </div>
       </div>
     {:else if notifications.length === 0}
-      <div class="card bg-base-100 shadow-2xs">
+      <div class="card bg-[var(--color-base-100)] shadow-2xs">
         <div class="card-body text-center py-12">
           <span class="opacity-30 mb-4" aria-hidden="true">
             <BellOff class="size-12" />
           </span>
-          <p class="text-sm text-base-content opacity-60">{t('notifications.empty.title')}</p>
-          <p class="text-xs text-base-content opacity-40">{t('notifications.empty.subtitle')}</p>
+          <p class="text-sm text-[var(--color-base-content)] opacity-60">
+            {t('notifications.empty.title')}
+          </p>
+          <p class="text-xs text-[var(--color-base-content)] opacity-40">
+            {t('notifications.empty.subtitle')}
+          </p>
         </div>
       </div>
     {:else if viewMode === 'grouped'}
@@ -590,7 +596,7 @@
                     <h3 class="font-medium text-sm truncate">
                       {translated.title}
                     </h3>
-                    <p class="text-xs text-base-content/80 mt-0.5 line-clamp-2">
+                    <p class="text-xs text-[var(--color-base-content)]/80 mt-0.5 line-clamp-2">
                       {sanitizeNotificationMessage(translated.message)}
                     </p>
 
@@ -602,7 +608,10 @@
                       <span class="badge badge-xs {getPriorityBadgeClass(notification.priority)}">
                         {notification.priority}
                       </span>
-                      <time class="text-xs text-base-content/50" datetime={notification.timestamp}>
+                      <time
+                        class="text-xs text-[var(--color-base-content)]/50"
+                        datetime={notification.timestamp}
+                      >
                         {formatTime(notification.timestamp)}
                       </time>
                     </div>

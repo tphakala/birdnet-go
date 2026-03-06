@@ -89,8 +89,8 @@
       {:else if currentSection === 'support'}
         <SupportSettingsSection />
       {:else}
-        <div class="card bg-base-100 shadow-xs p-6">
-          <div class="text-center py-12 text-base-content opacity-70">
+        <div class="card bg-[var(--color-base-100)] shadow-xs p-6">
+          <div class="text-center py-12 text-[var(--color-base-content)] opacity-70">
             <h2 class="text-xl font-semibold mb-2">{t('common.ui.settingsNotFound')}</h2>
             <p>{t('common.ui.sectionNotFound', { section: currentSection })}</p>
           </div>

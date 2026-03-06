@@ -296,7 +296,8 @@ Performance Optimizations:
   // Shared styles for menu items - inspired by modern sidebar designs
   const menuItemBase =
     'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 w-full text-left';
-  const menuItemDefault = 'text-base-content/80 hover:text-base-content hover:menu-hover';
+  const menuItemDefault =
+    'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover';
   const menuItemActive = 'menu-item-active';
 
   // Collapsed menu item styles
@@ -317,14 +318,14 @@ Performance Optimizations:
 
   <nav
     class={cn(
-      'relative z-10 flex flex-col h-dvh bg-base-100 border-r border-base-200/50 transition-all duration-200 ease-in-out',
+      'relative z-10 flex flex-col h-dvh bg-[var(--color-base-100)] border-r border-[var(--color-base-200)]/50 transition-all duration-200 ease-in-out',
       isCollapsed ? 'w-16' : 'w-64'
     )}
   >
     <!-- Logo Header -->
     <div
       class={cn(
-        'flex-none py-5 border-b border-base-200/50 relative',
+        'flex-none py-5 border-b border-[var(--color-base-200)]/50 relative',
         isCollapsed ? 'px-2' : 'px-4'
       )}
     >
@@ -336,14 +337,16 @@ Performance Optimizations:
         >
           <LogoBadge size="md" variant="ocean" />
           {#if !isCollapsed}
-            <span class="text-xl font-bold tracking-tight text-base-content">BirdNET-Go</span>
+            <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]"
+              >BirdNET-Go</span
+            >
           {/if}
         </button>
         <!-- Collapse toggle - desktop only -->
         {#if !isCollapsed}
           <button
             onclick={toggleSidebar}
-            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
+            class="hidden lg:flex items-center justify-center p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
             aria-label={t('navigation.collapseSidebar')}
             title={t('navigation.collapseSidebar')}
           >
@@ -355,7 +358,7 @@ Performance Optimizations:
       {#if isCollapsed}
         <button
           onclick={toggleSidebar}
-          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-base-content/60 hover:text-base-content hover:bg-base-content/10 transition-colors duration-150"
+          class="hidden lg:flex items-center justify-center w-full mt-3 p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
           aria-label={t('navigation.expandSidebar')}
           title={t('navigation.expandSidebar')}
         >
@@ -402,8 +405,10 @@ Performance Optimizations:
                 class={cn(
                   menuItemBase,
                   menuItemCollapsed,
-                  routeCache.analytics ? 'text-primary' : 'text-base-content/80',
-                  'hover:text-base-content hover:menu-hover'
+                  routeCache.analytics
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/80',
+                  'hover:text-[var(--color-base-content)] hover:menu-hover'
                 )}
                 aria-expanded={analyticsFlyoutOpen}
                 aria-label={t('navigation.analyticsSubmenu')}
@@ -414,12 +419,12 @@ Performance Optimizations:
             <!-- Flyout submenu (fixed positioning to escape overflow container) -->
             {#if analyticsFlyoutOpen}
               <div
-                class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                 style:top="{analyticsFlyoutPosition.top}px"
                 style:left="{analyticsFlyoutPosition.left}px"
               >
                 <div
-                  class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                  class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
                 >
                   {t('navigation.analytics')}
                 </div>
@@ -430,7 +435,7 @@ Performance Optimizations:
                       'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsExact
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <LineChart class="size-4 shrink-0" />{t('analytics.title')}
@@ -441,7 +446,7 @@ Performance Optimizations:
                       'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsSpecies
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
@@ -452,7 +457,7 @@ Performance Optimizations:
                       'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.analyticsAdvanced
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
@@ -466,8 +471,10 @@ Performance Optimizations:
               onclick={() => (analyticsExpanded = !analyticsExpanded)}
               class={cn(
                 menuItemBase,
-                routeCache.analytics ? 'text-primary' : 'text-base-content/80',
-                'hover:text-base-content hover:menu-hover'
+                routeCache.analytics
+                  ? 'text-[var(--color-primary)]'
+                  : 'text-[var(--color-base-content)]/80',
+                'hover:text-[var(--color-base-content)] hover:menu-hover'
               )}
               aria-expanded={analyticsExpanded}
             >
@@ -482,7 +489,7 @@ Performance Optimizations:
 
             {#if analyticsExpanded}
               <div
-                class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+                class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
                 style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
               >
                 <button
@@ -491,7 +498,7 @@ Performance Optimizations:
                     'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsExact
                       ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                   )}
                 >
                   <LineChart class="size-4 shrink-0" />{t('analytics.title')}
@@ -502,7 +509,7 @@ Performance Optimizations:
                     'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsSpecies
                       ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                   )}
                 >
                   <Bird class="size-4 shrink-0" />{t('analytics.species.title')}
@@ -513,7 +520,7 @@ Performance Optimizations:
                     'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                     routeCache.analyticsAdvanced
                       ? 'menu-subitem-active'
-                      : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                   )}
                 >
                   <TrendingUp class="size-4 shrink-0" />{t('analytics.advanced.title')}
@@ -565,7 +572,7 @@ Performance Optimizations:
 
         {#if !securityEnabled || accessAllowed}
           <!-- Divider -->
-          <div class="my-2 border-t border-base-200/50"></div>
+          <div class="my-2 border-t border-[var(--color-base-200)]/50"></div>
 
           <!-- System (Collapsible) -->
           <div class="flex flex-col relative flyout-container">
@@ -580,8 +587,10 @@ Performance Optimizations:
                   class={cn(
                     menuItemBase,
                     menuItemCollapsed,
-                    routeCache.system ? 'text-primary' : 'text-base-content/80',
-                    'hover:text-base-content hover:menu-hover'
+                    routeCache.system
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-[var(--color-base-content)]/80',
+                    'hover:text-[var(--color-base-content)] hover:menu-hover'
                   )}
                   aria-expanded={systemFlyoutOpen}
                   aria-label={t('navigation.systemSubmenu')}
@@ -592,12 +601,12 @@ Performance Optimizations:
               <!-- Flyout submenu (fixed positioning to escape overflow container) -->
               {#if systemFlyoutOpen}
                 <div
-                  class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                   style:top="{systemFlyoutPosition.top}px"
                   style:left="{systemFlyoutPosition.left}px"
                 >
                   <div
-                    class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
                   >
                     {t('navigation.system')}
                   </div>
@@ -608,7 +617,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemOverview
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
@@ -619,7 +628,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemDatabase
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Database class="size-4 shrink-0" />{t('system.sections.database')}
@@ -630,7 +639,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.systemTerminal
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
@@ -644,8 +653,10 @@ Performance Optimizations:
                 onclick={() => (systemExpanded = !systemExpanded)}
                 class={cn(
                   menuItemBase,
-                  routeCache.system ? 'text-primary' : 'text-base-content/80',
-                  'hover:text-base-content hover:menu-hover'
+                  routeCache.system
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/80',
+                  'hover:text-[var(--color-base-content)] hover:menu-hover'
                 )}
                 aria-expanded={systemExpanded}
               >
@@ -660,7 +671,7 @@ Performance Optimizations:
 
               {#if systemExpanded}
                 <div
-                  class="ml-4 pl-4 border-l-2 border-primary mt-1 flex flex-col gap-0.5"
+                  class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
                   style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
                 >
                   <button
@@ -669,7 +680,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemOverview
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Monitor class="size-4 shrink-0" />{t('system.sections.overview')}
@@ -680,7 +691,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemDatabase
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Database class="size-4 shrink-0" />{t('system.sections.database')}
@@ -691,7 +702,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.systemTerminal
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Terminal class="size-4 shrink-0" />{t('system.sections.terminal')}
@@ -715,8 +726,10 @@ Performance Optimizations:
                   class={cn(
                     menuItemBase,
                     menuItemCollapsed,
-                    routeCache.settings ? 'text-primary' : 'text-base-content/80',
-                    'hover:text-base-content hover:menu-hover'
+                    routeCache.settings
+                      ? 'text-[var(--color-primary)]'
+                      : 'text-[var(--color-base-content)]/80',
+                    'hover:text-[var(--color-base-content)] hover:menu-hover'
                   )}
                   aria-expanded={settingsFlyoutOpen}
                   aria-label={t('navigation.settingsSubmenu')}
@@ -727,12 +740,12 @@ Performance Optimizations:
               <!-- Flyout submenu (fixed positioning to escape overflow container) -->
               {#if settingsFlyoutOpen}
                 <div
-                  class="fixed bg-base-100 border border-base-200 rounded-lg shadow-xl min-w-48 z-[100]"
+                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                   style:top="{settingsFlyoutPosition.top}px"
                   style:left="{settingsFlyoutPosition.left}px"
                 >
                   <div
-                    class="px-3 py-2 border-b border-base-200 font-medium text-sm text-base-content"
+                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
                   >
                     {t('navigation.settings')}
                   </div>
@@ -743,7 +756,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsMain
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
@@ -754,7 +767,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsAudio
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
@@ -765,7 +778,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSpecies
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
@@ -776,7 +789,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsFilters
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
@@ -787,7 +800,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsNotifications
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
@@ -798,7 +811,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsIntegrations
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
@@ -809,7 +822,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSecurity
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
@@ -820,7 +833,7 @@ Performance Optimizations:
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
                         routeCache.settingsSupport
                           ? 'menu-subitem-active'
-                          : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
                       <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
@@ -834,8 +847,10 @@ Performance Optimizations:
                 onclick={() => (settingsExpanded = !settingsExpanded)}
                 class={cn(
                   menuItemBase,
-                  routeCache.settings ? 'text-primary' : 'text-base-content/80',
-                  'hover:text-base-content hover:menu-hover'
+                  routeCache.settings
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/80',
+                  'hover:text-[var(--color-base-content)] hover:menu-hover'
                 )}
                 aria-expanded={settingsExpanded}
               >
@@ -859,7 +874,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsMain
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
@@ -870,7 +885,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsAudio
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Volume2 class="size-4 shrink-0" />{t('settings.sections.audio')}
@@ -881,7 +896,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSpecies
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Bird class="size-4 shrink-0" />{t('settings.sections.species')}
@@ -892,7 +907,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsFilters
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Filter class="size-4 shrink-0" />{t('settings.sections.filters')}
@@ -903,7 +918,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsNotifications
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Bell class="size-4 shrink-0" />{t('settings.sections.notifications')}
@@ -914,7 +929,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsIntegrations
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Puzzle class="size-4 shrink-0" />{t('settings.sections.integration')}
@@ -925,7 +940,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSecurity
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <Shield class="size-4 shrink-0" />{t('settings.sections.security')}
@@ -936,7 +951,7 @@ Performance Optimizations:
                       'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
                       routeCache.settingsSupport
                         ? 'menu-subitem-active'
-                        : 'text-base-content/80 hover:text-base-content hover:menu-hover'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
                     <LifeBuoy class="size-4 shrink-0" />{t('settings.sections.support')}
@@ -950,7 +965,12 @@ Performance Optimizations:
     </div>
 
     <!-- Footer -->
-    <div class={cn('flex-none py-4 border-t border-base-200/50', isCollapsed ? 'px-2' : 'px-3')}>
+    <div
+      class={cn(
+        'flex-none py-4 border-t border-[var(--color-base-200)]/50',
+        isCollapsed ? 'px-2' : 'px-3'
+      )}
+    >
       {#if securityEnabled}
         {#if accessAllowed}
           <div class="relative">
@@ -959,7 +979,7 @@ Performance Optimizations:
               onmouseenter={e => isCollapsed && showTooltip(e, t('auth.logout'))}
               onmouseleave={hideTooltip}
               class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
                 isCollapsed && 'justify-center'
               )}
               aria-label={t('auth.logout')}
@@ -977,7 +997,7 @@ Performance Optimizations:
               onmouseenter={e => isCollapsed && showTooltip(e, t('auth.login'))}
               onmouseleave={hideTooltip}
               class={cn(
-                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-base-content/90 hover:text-base-content hover:bg-base-content/5 transition-colors duration-150',
+                'flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm font-medium text-[var(--color-base-content)]/90 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/5 transition-colors duration-150',
                 isCollapsed && 'justify-center'
               )}
               aria-label={t('auth.openLoginModal')}
@@ -998,7 +1018,7 @@ Performance Optimizations:
             href="https://github.com/tphakala/birdnet-go"
             target="_blank"
             rel="noopener noreferrer"
-            class="text-xs text-base-content/60 hover:text-base-content/80 transition-colors duration-150"
+            class="text-xs text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]/80 transition-colors duration-150"
             aria-label="View BirdNET-Go repository on GitHub (opens in new window)"
           >
             {version}
@@ -1011,7 +1031,7 @@ Performance Optimizations:
   <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers) -->
   {#if tooltipVisible && isCollapsed}
     <div
-      class="fixed px-2 py-1 bg-base-300 text-base-content text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
+      class="fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
       style:top="{tooltipPosition.top}px"
       style:left="{tooltipPosition.left}px"
     >
