@@ -405,7 +405,7 @@
         "failedMessage": "Nie udało się usunąć starej bazy danych. Sprawdź logi, aby uzyskać szczegóły."
       },
       "alert": {
-        "firedTitle": "Alert: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Bieżąca wartość: {value}% (próg: {threshold}%)",
         "detectionOccurred": "{species_name} wykryto z {confidence}% pewnością",
         "errorOccurred": "{source_name}: {error}",
@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "Wysyłanie do BirdWeather nie powiodło się",
           "integration_mqtt_connected": "MQTT połączony",
           "integration_mqtt_disconnected": "MQTT rozłączony",
+          "integration_mqtt_publish_failed": "Publikacja MQTT nie powiodła się",
           "device_started": "Urządzenie uruchomione",
           "device_stopped": "Urządzenie zatrzymane",
           "device_error": "Błąd urządzenia"
@@ -3394,6 +3395,10 @@
         "mqttDisconnected": {
           "name": "MQTT rozłączony",
           "description": "Powiadamia, gdy połączenie z brokerem MQTT zostanie utracone"
+        },
+        "mqttPublishFailed": {
+          "name": "Publikacja MQTT nie powiodła się",
+          "description": "Powiadamia, gdy publikacja wiadomości MQTT nie powiedzie się"
         },
         "birdWeatherFailed": {
           "name": "Przesyłanie do BirdWeather nie powiodło się",

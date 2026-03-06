@@ -405,7 +405,7 @@
         "failedMessage": "Failed to remove legacy database. Check logs for details."
       },
       "alert": {
-        "firedTitle": "Alert: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Current value: {value}% (threshold: {threshold}%)",
         "detectionOccurred": "{species_name} detected with {confidence}% confidence",
         "errorOccurred": "{source_name}: {error}",
@@ -3390,6 +3390,7 @@
           "integration_birdweather_failed": "BirdWeather Upload Failed",
           "integration_mqtt_connected": "MQTT Connected",
           "integration_mqtt_disconnected": "MQTT Disconnected",
+          "integration_mqtt_publish_failed": "MQTT Publish Failed",
           "device_started": "Device Started",
           "device_stopped": "Device Stopped",
           "device_error": "Device Error"
@@ -3455,6 +3456,10 @@
         "mqttDisconnected": {
           "name": "MQTT disconnected",
           "description": "Notifies when the MQTT broker connection is lost"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT publish failed",
+          "description": "Notifies when an MQTT message publish fails"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather upload failed",

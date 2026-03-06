@@ -405,7 +405,7 @@
         "failedMessage": "Vanhan tietokannan poisto epäonnistui. Tarkista lokit lisätietoja varten."
       },
       "alert": {
-        "firedTitle": "Hälytys: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
         "detectionOccurred": "{species_name} havaittu {confidence}% varmuudella",
         "errorOccurred": "{source_name}: {error}",
@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "BirdWeather-lähetys epäonnistui",
           "integration_mqtt_connected": "MQTT yhdistetty",
           "integration_mqtt_disconnected": "MQTT-yhteys katkaistu",
+          "integration_mqtt_publish_failed": "MQTT-julkaisu epäonnistui",
           "device_started": "Laite käynnistetty",
           "device_stopped": "Laite pysäytetty",
           "device_error": "Laitevirhe"
@@ -3394,6 +3395,10 @@
         "mqttDisconnected": {
           "name": "MQTT-yhteys katkennut",
           "description": "Ilmoittaa kun MQTT-välittäjän yhteys katkeaa"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT-julkaisu epäonnistui",
+          "description": "Ilmoittaa kun MQTT-viestin julkaisu epäonnistuu"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather-lähetys epäonnistui",

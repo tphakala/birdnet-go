@@ -5,6 +5,11 @@ output:
     - severity
     - file
 linters:
+  exclusions:
+    warn-unused: true
+    rules:
+      - path: frontend/
+        text: ".*"
   enable:
     # Existing linters
     - copyloopvar

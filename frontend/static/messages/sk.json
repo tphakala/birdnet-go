@@ -405,7 +405,7 @@
         "failedMessage": "Nepodarilo sa odstrániť starú databázu. Skontrolujte záznamy pre podrobnosti."
       },
       "alert": {
-        "firedTitle": "Upozornenie: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",
         "detectionOccurred": "{species_name} detegovaný s {confidence}% istotou",
         "errorOccurred": "{source_name}: {error}",
@@ -3160,6 +3160,7 @@
           "integration_birdweather_failed": "Odoslanie do BirdWeather zlyhalo",
           "integration_mqtt_connected": "MQTT pripojený",
           "integration_mqtt_disconnected": "MQTT odpojený",
+          "integration_mqtt_publish_failed": "Publikovanie MQTT zlyhalo",
           "device_started": "Zariadenie spustené",
           "device_stopped": "Zariadenie zastavené",
           "device_error": "Chyba zariadenia"
@@ -3225,6 +3226,10 @@
         "mqttDisconnected": {
           "name": "MQTT odpojený",
           "description": "Upozorní, keď sa stratí pripojenie k MQTT brokeru"
+        },
+        "mqttPublishFailed": {
+          "name": "Publikácia MQTT zlyhala",
+          "description": "Upozorní, keď zlyhá publikácia správy MQTT"
         },
         "birdWeatherFailed": {
           "name": "Nahrávanie do BirdWeather zlyhalo",

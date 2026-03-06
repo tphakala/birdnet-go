@@ -405,7 +405,7 @@
         "failedMessage": "Oude database kon niet worden verwijderd. Controleer de logs voor details."
       },
       "alert": {
-        "firedTitle": "Waarschuwing: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Huidige waarde: {value}% (drempelwaarde: {threshold}%)",
         "detectionOccurred": "{species_name} gedetecteerd met {confidence}% betrouwbaarheid",
         "errorOccurred": "{source_name}: {error}",
@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "BirdWeather-upload mislukt",
           "integration_mqtt_connected": "MQTT verbonden",
           "integration_mqtt_disconnected": "MQTT verbroken",
+          "integration_mqtt_publish_failed": "MQTT-publicatie mislukt",
           "device_started": "Apparaat gestart",
           "device_stopped": "Apparaat gestopt",
           "device_error": "Apparaatfout"
@@ -3394,6 +3395,10 @@
         "mqttDisconnected": {
           "name": "MQTT verbroken",
           "description": "Meldt wanneer de verbinding met de MQTT-broker verloren gaat"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT publicatie mislukt",
+          "description": "Meldt wanneer het publiceren van een MQTT-bericht mislukt"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather-upload mislukt",

@@ -86,6 +86,7 @@ func GetSchema() Schema {
 					{Name: EventBirdWeatherFailed, Label: "BirdWeather Upload Failed", Properties: errorProperties()},
 					{Name: EventMQTTConnected, Label: "MQTT Connected", Properties: mqttProperties()},
 					{Name: EventMQTTDisconnected, Label: "MQTT Disconnected", Properties: mqttProperties()},
+					{Name: EventMQTTPublishFailed, Label: "MQTT Publish Failed", Properties: mqttPublishProperties()},
 				},
 			},
 			{
@@ -151,6 +152,13 @@ func errorProperties() []PropertySchema {
 func mqttProperties() []PropertySchema {
 	return []PropertySchema{
 		{Name: PropertyBroker, Label: "Broker", Type: "string", Operators: stringOperators},
+	}
+}
+
+func mqttPublishProperties() []PropertySchema {
+	return []PropertySchema{
+		{Name: PropertyBroker, Label: "Broker", Type: "string", Operators: stringOperators},
+		{Name: PropertyError, Label: "Error Message", Type: "string", Operators: stringOperators},
 	}
 }
 

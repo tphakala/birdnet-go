@@ -95,7 +95,7 @@ func defaultTitleKey(rule *entities.AlertRule) (key string, params map[string]an
 // Falls back to a default title if the template is empty.
 func renderTitle(tmpl string, rule *entities.AlertRule, event *AlertEvent) string {
 	if tmpl == "" {
-		return fmt.Sprintf("Alert: %s", rule.Name)
+		return rule.Name
 	}
 	return renderTemplate(tmpl, rule, event)
 }
@@ -260,7 +260,7 @@ func isDetectionEvent(eventName string) bool {
 }
 
 func isErrorEvent(eventName string) bool {
-	return eventName == EventStreamError || eventName == EventDeviceError || eventName == EventBirdWeatherFailed
+	return eventName == EventStreamError || eventName == EventDeviceError || eventName == EventBirdWeatherFailed || eventName == EventMQTTPublishFailed
 }
 
 func isDisconnectEvent(eventName string) bool {

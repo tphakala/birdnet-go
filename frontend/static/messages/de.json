@@ -405,7 +405,7 @@
         "failedMessage": "Alte Datenbank konnte nicht entfernt werden. Überprüfen Sie die Protokolle für Details."
       },
       "alert": {
-        "firedTitle": "Alarm: {rule_name}",
+        "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
         "detectionOccurred": "{species_name} erkannt mit {confidence}% Konfidenz",
         "errorOccurred": "{source_name}: {error}",
@@ -3329,6 +3329,7 @@
           "integration_birdweather_failed": "BirdWeather-Upload fehlgeschlagen",
           "integration_mqtt_connected": "MQTT verbunden",
           "integration_mqtt_disconnected": "MQTT getrennt",
+          "integration_mqtt_publish_failed": "MQTT-Veröffentlichung fehlgeschlagen",
           "device_started": "Gerät gestartet",
           "device_stopped": "Gerät gestoppt",
           "device_error": "Gerätefehler"
@@ -3394,6 +3395,10 @@
         "mqttDisconnected": {
           "name": "MQTT getrennt",
           "description": "Benachrichtigt, wenn die Verbindung zum MQTT-Broker verloren geht"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT-Veröffentlichung fehlgeschlagen",
+          "description": "Benachrichtigt, wenn die Veröffentlichung einer MQTT-Nachricht fehlschlägt"
         },
         "birdWeatherFailed": {
           "name": "BirdWeather-Upload fehlgeschlagen",
