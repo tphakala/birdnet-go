@@ -567,7 +567,7 @@
             </span>
           </div>
           {#if speciesInfo.rarity.location_based}
-            <p class="text-xs text-base-content/40">
+            <p class="text-xs text-[var(--color-base-content)]/40">
               {t('species.rarity.basedOnLocation', {
                 latitude: speciesInfo.rarity.latitude.toFixed(2),
                 longitude: speciesInfo.rarity.longitude.toFixed(2),
@@ -587,13 +587,13 @@
             {#if det.isNewSpecies}
               <div class="metadata-row">
                 <dt>{t('species.tracking.newSpecies')}</dt>
-                <dd class="text-success font-medium">{t('common.values.yes')}</dd>
+                <dd class="text-[var(--color-success)] font-medium">{t('common.values.yes')}</dd>
               </div>
             {/if}
             {#if det.isNewThisYear}
               <div class="metadata-row">
                 <dt>{t('species.tracking.newThisYear')}</dt>
-                <dd class="text-success font-medium">{t('common.values.yes')}</dd>
+                <dd class="text-[var(--color-success)] font-medium">{t('common.values.yes')}</dd>
               </div>
             {/if}
             {#if det.isNewThisSeason && det.currentSeason}
@@ -623,8 +623,8 @@
           <div class="animate-pulse space-y-3">
             {#each Array(7) as _, i (i)}
               <div class="flex items-center gap-2">
-                <div class="h-3 rounded bg-base-300/60 w-14"></div>
-                <div class="h-3 rounded bg-base-300/60 w-24"></div>
+                <div class="h-3 rounded bg-[var(--color-base-300)]/60 w-14"></div>
+                <div class="h-3 rounded bg-[var(--color-base-300)]/60 w-24"></div>
               </div>
             {/each}
           </div>
@@ -682,7 +682,7 @@
 {#snippet historyTab()}
   <section aria-labelledby="history-heading">
     <h3 id="history-heading" class="section-heading">{t('detections.history.title')}</h3>
-    <p class="text-sm text-base-content/50 italic" role="status">
+    <p class="text-sm text-[var(--color-base-content)]/50 italic" role="status">
       {t('detections.history.comingSoon')}
     </p>
   </section>
@@ -696,14 +696,17 @@
         {#each det.comments as comment (comment.id ?? comment.createdAt)}
           <article class="content-panel" role="listitem">
             <p class="text-sm leading-relaxed" aria-label="Comment text">{comment.entry}</p>
-            <p class="text-xs text-base-content/40 mt-2" aria-label="Comment timestamp">
+            <p
+              class="text-xs text-[var(--color-base-content)]/40 mt-2"
+              aria-label="Comment timestamp"
+            >
               {formatLocalDateTime(new Date(comment.createdAt))}
             </p>
           </article>
         {/each}
       </div>
     {:else}
-      <p class="text-sm text-base-content/50 italic" role="status">
+      <p class="text-sm text-[var(--color-base-content)]/50 italic" role="status">
         {t('detections.notes.noComments')}
       </p>
     {/if}

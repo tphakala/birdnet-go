@@ -383,12 +383,12 @@
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('analytics.species.title')}>
   <!-- Page Header -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
       <div class="flex justify-between items-start">
         <div>
           <h1 class="card-title text-2xl">{t('analytics.species.title')}</h1>
-          <p class="text-base-content opacity-60">
+          <p class="text-[var(--color-base-content)] opacity-60">
             {t('analytics.species.subtitle')}
           </p>
         </div>
@@ -397,12 +397,12 @@
             title={t('analytics.stats.totalSpecies')}
             value={getTotalSpeciesCount()}
             subtitle={getTotalDetectionsText()}
-            iconClassName="bg-primary/20"
+            iconClassName="bg-[var(--color-primary)]/20"
           >
             {#snippet icon()}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 text-primary"
+                class="h-6 w-6 text-[var(--color-primary)]"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -417,12 +417,12 @@
             title={t('analytics.stats.avgConfidence')}
             value={getAverageConfidence()}
             subtitle={t('analytics.stats.overallAverage')}
-            iconClassName="bg-secondary/20"
+            iconClassName="bg-[var(--color-secondary)]/20"
           >
             {#snippet icon()}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                class="h-6 w-6 text-secondary"
+                class="h-6 w-6 text-[var(--color-secondary)]"
                 viewBox="0 0 20 20"
                 fill="currentColor"
               >
@@ -451,7 +451,7 @@
   />
 
   <!-- Species Grid/List -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
       <!-- View Toggle -->
       <div class="flex justify-between items-center mb-4">
@@ -499,7 +499,7 @@
       <!-- Loading State -->
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
+          <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
         </div>
       {/if}
 
@@ -537,13 +537,17 @@
             </thead>
             <tbody>
               {#each filteredSpecies as species, index (species.scientific_name)}
-                <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
+                <tr
+                  class={index % 2 === 0
+                    ? 'bg-[var(--color-base-100)]'
+                    : 'bg-[var(--color-base-200)]'}
+                >
                   <td>
                     <div class="flex items-center gap-3">
                       <div class="avatar">
                         <div
                           class="mask mask-squircle w-12 h-12"
-                          class:bg-base-300={!species.thumbnail_url}
+                          class:bg-[var(--color-base-300)]={!species.thumbnail_url}
                         >
                           {#if species.thumbnail_url}
                             <img
@@ -553,7 +557,7 @@
                                 const img = e.target as HTMLImageElement;
                                 if (img) {
                                   img.style.display = 'none';
-                                  img.parentElement?.classList.add('bg-base-300');
+                                  img.parentElement?.classList.add('bg-[var(--color-base-300)]');
                                 }
                               }}
                             />
@@ -599,7 +603,7 @@
 
       <!-- Empty State -->
       {#if !isLoading && filteredSpecies.length === 0}
-        <div class="text-center py-8 text-base-content opacity-50">
+        <div class="text-center py-8 text-[var(--color-base-content)] opacity-50">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             class="h-16 w-16 mx-auto mb-4 opacity-20"

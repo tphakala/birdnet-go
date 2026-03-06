@@ -150,7 +150,7 @@
       <!-- Connecting line between nodes -->
       {#if timelineEvents.length > 1}
         <div
-          class="absolute top-1.5 h-0.5 bg-base-content/50"
+          class="absolute top-1.5 h-0.5 bg-[var(--color-base-content)]/50"
           style:left="28px"
           style:right="28px"
         ></div>
@@ -167,7 +167,7 @@
               'relative z-10 w-3 h-3 rounded-full border-2 cursor-pointer',
               'hover:scale-125 transition-transform',
               colors.border,
-              hollow ? 'bg-base-100' : colors.bg
+              hollow ? 'bg-[var(--color-base-100)]' : colors.bg
             )}
             onclick={e => handleNodeClick(event, e.currentTarget)}
             aria-label={t('settings.audio.streams.timeline.eventAt', {
@@ -176,12 +176,12 @@
           ></button>
 
           <!-- Timestamp -->
-          <span class="text-xs text-base-content/60 mt-1.5 whitespace-nowrap">
+          <span class="text-xs text-[var(--color-base-content)]/60 mt-1.5 whitespace-nowrap">
             {formatTime(event.timestamp)}
           </span>
 
           <!-- State label (abbreviated) -->
-          <span class="text-xs text-base-content/60 truncate max-w-[60px]">
+          <span class="text-xs text-[var(--color-base-content)]/60 truncate max-w-[60px]">
             {#if event.type === 'error'}
               {t('settings.audio.streams.timeline.error')}
             {:else}
@@ -202,5 +202,7 @@
     {/if}
   </div>
 {:else}
-  <p class="text-xs text-base-content/50">{t('settings.audio.streams.timeline.noHistory')}</p>
+  <p class="text-xs text-[var(--color-base-content)]/50">
+    {t('settings.audio.streams.timeline.noHistory')}
+  </p>
 {/if}

@@ -48,14 +48,14 @@ describe('StatsCard', () => {
 
     expect(screen.getByText('+12% vs last week')).toBeInTheDocument();
     const svg = screen.getByText('+12% vs last week').previousElementSibling;
-    expect(svg).toHaveClass('text-success');
+    expect(svg).toHaveClass('text-[var(--color-success)]');
   });
 
   it('renders different trend directions', () => {
     const trends = [
-      { direction: 'up' as const, expectedClass: 'text-success' },
-      { direction: 'down' as const, expectedClass: 'text-error' },
-      { direction: 'neutral' as const, expectedClass: 'text-base-content/70' },
+      { direction: 'up' as const, expectedClass: 'text-[var(--color-success)]' },
+      { direction: 'down' as const, expectedClass: 'text-[var(--color-error)]' },
+      { direction: 'neutral' as const, expectedClass: 'text-[var(--color-base-content)]/70' },
     ];
 
     trends.forEach(({ direction, expectedClass }) => {
@@ -110,7 +110,8 @@ describe('StatsCard', () => {
       });
 
       const card = container.querySelector('.card');
-      const expectedClass = variant === 'default' ? 'bg-base-100' : `bg-${variant}`;
+      const expectedClass =
+        variant === 'default' ? 'bg-[var(--color-base-100)]' : `bg-[var(--color-${variant})]`;
       expect(card).toHaveClass(expectedClass);
       unmount();
     });

@@ -277,7 +277,7 @@ describe('DataTable', () => {
 
     const rows = container.querySelectorAll('tbody tr');
     rows.forEach(row => {
-      expect(row).toHaveClass('hover:bg-base-200/50', 'transition-colors');
+      expect(row).toHaveClass('hover:bg-[var(--color-base-200)]/50', 'transition-colors');
     });
   });
 });

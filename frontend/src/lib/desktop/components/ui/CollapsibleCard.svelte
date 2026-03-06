@@ -30,10 +30,16 @@
   }
 </script>
 
-<div class={cn('collapse bg-base-100 shadow-2xs', { 'collapse-open': isOpen }, className)}>
+<div
+  class={cn(
+    'collapse bg-[var(--color-base-100)] shadow-2xs',
+    { 'collapse-open': isOpen },
+    className
+  )}
+>
   <button
     type="button"
-    class="collapse-title px-6 py-4 min-h-0 text-left w-full cursor-pointer hover:bg-base-200/50 transition-colors"
+    class="collapse-title px-6 py-4 min-h-0 text-left w-full cursor-pointer hover:bg-[var(--color-base-200)]/50 transition-colors"
     onclick={toggleOpen}
     aria-expanded={isOpen}
     aria-controls="collapse-content-{title.toLowerCase().replace(/\s+/g, '-')}"

@@ -73,7 +73,7 @@
 
   function createSpottingEffect(x: number, y: number): void {
     const ring = document.createElement('div');
-    ring.className = 'spotting-ring text-base-content';
+    ring.className = 'spotting-ring text-[var(--color-base-content)]';
     ring.style.left = x + 'px';
     ring.style.top = y + 'px';
     gameContainer.appendChild(ring);
@@ -459,8 +459,8 @@
 </svelte:head>
 
 <div class={cn('col-span-12 min-h-[60vh] flex items-center justify-center', className)}>
-  <div class="text-center p-8 rounded-lg bg-base-100 shadow-lg">
-    <h1 class="text-6xl font-bold text-base-content mb-4">
+  <div class="text-center p-8 rounded-lg bg-[var(--color-base-100)] shadow-lg">
+    <h1 class="text-6xl font-bold text-[var(--color-base-content)] mb-4">
       4<span
         class="bird"
         bind:this={zeroElement}
@@ -470,7 +470,9 @@
         tabindex="0">0</span
       >4
     </h1>
-    <h2 class="text-3xl font-semibold text-base-content opacity-70 mb-8">{t('error.404.title')}</h2>
+    <h2 class="text-3xl font-semibold text-[var(--color-base-content)] opacity-70 mb-8">
+      {t('error.404.title')}
+    </h2>
 
     <!-- Link Button -->
     <a href="/" class="btn btn-primary normal-case text-base font-semibold transition duration-300">
@@ -480,7 +482,10 @@
 
   <!-- Game Container -->
   <div bind:this={gameContainer} id="game-container"></div>
-  <div bind:this={scoreDisplay} class="score-display bg-base-100 shadow-lg text-base-content">
+  <div
+    bind:this={scoreDisplay}
+    class="score-display bg-[var(--color-base-100)] shadow-lg text-[var(--color-base-content)]"
+  >
     <div bind:this={currentScoreDisplay} class="current-score">Birds Spotted: 0</div>
     <div bind:this={timerDisplay} class="timer">Time: 0:00</div>
     <div bind:this={highScoreDisplay} class="high-score">Best: 0 birds in 0:00</div>

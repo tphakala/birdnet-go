@@ -25,7 +25,7 @@
   }: Props = $props();
 </script>
 
-<section class="card col-span-12 bg-base-100 shadow-xs">
+<section class="card col-span-12 bg-[var(--color-base-100)] shadow-xs">
   <div class="card-body grow-0 p-2 sm:p-4 sm:pt-3">
     <DetectionsList
       {data}

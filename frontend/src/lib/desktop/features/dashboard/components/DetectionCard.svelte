@@ -192,18 +192,19 @@
     <div class="spectrogram-container">
       {#if loader.showSpinner}
         <div class="spectrogram-loading">
-          <span class="loading loading-spinner loading-md text-base-content/50"></span>
+          <span class="loading loading-spinner loading-md text-[var(--color-base-content)]/50"
+          ></span>
           {#if loader.isQueued}
-            <span class="text-xs text-base-content/40 mt-1">Waiting...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Waiting...</span>
           {:else if loader.isGenerating}
-            <span class="text-xs text-base-content/40 mt-1">Generating...</span>
+            <span class="text-xs text-[var(--color-base-content)]/40 mt-1">Generating...</span>
           {/if}
         </div>
       {/if}
 
       {#if loader.error}
         <div class="spectrogram-error">
-          <span class="text-sm text-base-content/50">Spectrogram unavailable</span>
+          <span class="text-sm text-[var(--color-base-content)]/50">Spectrogram unavailable</span>
         </div>
       {:else if loader.spectrogramUrl}
         <img

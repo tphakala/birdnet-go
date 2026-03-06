@@ -159,7 +159,7 @@
 
   <!-- New subnet input error -->
   {#if newSubnetError}
-    <div class="text-error text-sm mb-2">{newSubnetError}</div>
+    <div class="text-[var(--color-error)] text-sm mb-2">{newSubnetError}</div>
   {/if}
 
   <!-- Help text -->
@@ -172,12 +172,12 @@
   <!-- Subnet list -->
   {#if subnets.length > 0}
     <div class="space-y-2 mt-2">
-      <div class="text-sm font-medium text-base-content opacity-70">
+      <div class="text-sm font-medium text-[var(--color-base-content)] opacity-70">
         Allowed Subnets ({subnets.length}/{maxItems}):
       </div>
 
       {#each subnets as subnet, index (`${subnet}-${index}`)}
-        <div class="flex items-center gap-2 p-2 bg-base-200 rounded-lg">
+        <div class="flex items-center gap-2 p-2 bg-[var(--color-base-200)] rounded-lg">
           <input
             type="text"
             value={subnet}
@@ -187,7 +187,7 @@
           />
           <button
             type="button"
-            class="btn btn-ghost btn-sm btn-square text-error"
+            class="btn btn-ghost btn-sm btn-square text-[var(--color-error)]"
             onclick={() => removeSubnet(index)}
             {disabled}
             aria-label="Remove subnet"
@@ -197,12 +197,14 @@
         </div>
 
         {#if errors.getByIndex(index)}
-          <div class="text-error text-sm ml-2">{errors.getByIndex(index)}</div>
+          <div class="text-[var(--color-error)] text-sm ml-2">{errors.getByIndex(index)}</div>
         {/if}
       {/each}
     </div>
   {:else}
-    <div class="text-center py-4 text-base-content opacity-60 bg-base-200 rounded-lg mt-2">
+    <div
+      class="text-center py-4 text-[var(--color-base-content)] opacity-60 bg-[var(--color-base-200)] rounded-lg mt-2"
+    >
       <div class="text-sm">No subnets configured</div>
       <div class="text-xs">{emptyStateMessage}</div>
     </div>
@@ -219,7 +221,7 @@
   <!-- Main error display -->
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-error">{error}</span>
+      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
     </div>
   {/if}
 </div>

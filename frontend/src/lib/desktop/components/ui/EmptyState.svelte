@@ -40,7 +40,7 @@
   {/if}
 
   {#if title}
-    <h3 class="mt-4 text-lg font-semibold text-base-content">{title}</h3>
+    <h3 class="mt-4 text-lg font-semibold text-[var(--color-base-content)]">{title}</h3>
   {/if}
 
   {#if description}

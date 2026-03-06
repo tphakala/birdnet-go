@@ -141,7 +141,7 @@
 
 <div class={cn('weather-info', className)}>
   {#if showTitle}
-    <h3 class={cn('text-lg font-semibold text-base-content mb-3', titleClassName)}>
+    <h3 class={cn('text-lg font-semibold text-[var(--color-base-content)] mb-3', titleClassName)}>
       {t('detections.weather.title')}
     </h3>
   {/if}
@@ -149,13 +149,13 @@
   {#if loading}
     <!-- Loading state -->
     <div class="py-4 flex justify-center" role="status" aria-live="polite">
-      <span class="loading loading-spinner loading-md text-primary"></span>
+      <span class="loading loading-spinner loading-md text-[var(--color-primary)]"></span>
       <span class="sr-only">{t('detections.weather.loading')}</span>
     </div>
   {:else if error}
     <!-- Error state -->
     <div class="py-4" role="alert">
-      <div class="text-error flex items-center">
+      <div class="text-[var(--color-error)] flex items-center">
         <XCircle class="size-5 mr-2" />
         <span>{error}</span>
       </div>
@@ -177,7 +177,9 @@
         <div class="flex items-center">
           <Thermometer class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">{t('detections.weather.labels.temperature')}</div>
+            <div class="text-[var(--color-base-content)]/70">
+              {t('detections.weather.labels.temperature')}
+            </div>
             <div class="font-medium">{formatTemperature(weather.hourly?.temperature, units)}</div>
           </div>
         </div>
@@ -186,7 +188,9 @@
         <div class="flex items-center">
           <Sun class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">{t('detections.weather.labels.weather')}</div>
+            <div class="text-[var(--color-base-content)]/70">
+              {t('detections.weather.labels.weather')}
+            </div>
             <div class="font-medium">{weather.hourly?.weatherMain || 'N/A'}</div>
           </div>
         </div>
@@ -195,7 +199,9 @@
         <div class="flex items-center">
           <Wind class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">{t('detections.weather.labels.wind')}</div>
+            <div class="text-[var(--color-base-content)]/70">
+              {t('detections.weather.labels.wind')}
+            </div>
             <div class="font-medium">{formatWindSpeed(weather.hourly?.windSpeed, units)}</div>
           </div>
         </div>
@@ -204,7 +210,9 @@
         <div class="flex items-center">
           <Droplets class="size-5 mr-2" />
           <div>
-            <div class="text-base-content/70">{t('detections.weather.labels.humidity')}</div>
+            <div class="text-[var(--color-base-content)]/70">
+              {t('detections.weather.labels.humidity')}
+            </div>
             <div class="font-medium">{formatPercentage(weather.hourly?.humidity)}</div>
           </div>
         </div>
@@ -214,7 +222,9 @@
           <div class="flex items-center">
             <Gauge class="size-5 mr-2" />
             <div>
-              <div class="text-base-content/70">{t('detections.weather.labels.pressure')}</div>
+              <div class="text-[var(--color-base-content)]/70">
+                {t('detections.weather.labels.pressure')}
+              </div>
               <div class="font-medium">
                 {weather.hourly.pressure}
                 {t('detections.weather.units.pressure')}
@@ -228,7 +238,9 @@
           <div class="flex items-center">
             <Cloud class="size-5 mr-2" />
             <div>
-              <div class="text-base-content/70">{t('detections.weather.labels.cloudCover')}</div>
+              <div class="text-[var(--color-base-content)]/70">
+                {t('detections.weather.labels.cloudCover')}
+              </div>
               <div class="font-medium">{formatPercentage(weather.hourly.clouds)}</div>
             </div>
           </div>
@@ -237,7 +249,7 @@
     {/if}
   {:else}
     <!-- No data state -->
-    <div class="py-4 text-center text-base-content/60">
+    <div class="py-4 text-center text-[var(--color-base-content)]/60">
       {t('detections.weather.noDataAvailable')}
     </div>
   {/if}

@@ -276,7 +276,7 @@
         {#if startDateObj || endDateObj}
           <button
             type="button"
-            class="btn btn-sm btn-ghost text-error"
+            class="btn btn-sm btn-ghost text-[var(--color-error)]"
             {disabled}
             onclick={clearDates}
           >
@@ -288,7 +288,7 @@
   {/if}
 
   {#if startDateObj && endDateObj}
-    <div class="mt-2 text-sm text-base-content opacity-70">
+    <div class="mt-2 text-sm text-[var(--color-base-content)] opacity-70">
       {t('forms.dateRange.labels.selected', {
         startDate: formatDate(startDateObj),
         endDate: formatDate(endDateObj),

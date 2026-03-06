@@ -17,9 +17,15 @@ describe('ProgressBar', () => {
     expect(progressbar).toHaveAttribute('aria-valuemax', '100');
 
     // Check the inner bar element has correct classes and style
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary', 'h-full', 'transition-all', 'duration-300', 'ease-out');
+    expect(bar).toHaveClass(
+      'bg-[var(--color-primary)]',
+      'h-full',
+      'transition-all',
+      'duration-300',
+      'ease-out'
+    );
     expect(bar).toHaveAttribute('style', 'width: 50%;');
     expect(bar).not.toHaveClass('bg-stripes');
     expect(bar).not.toHaveClass('animate-stripes');
@@ -34,9 +40,9 @@ describe('ProgressBar', () => {
     const progressbar = screen.getByRole('progressbar');
     expect(progressbar).toHaveAttribute('aria-valuemax', '50');
 
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]');
     expect(bar).toHaveAttribute('style', 'width: 50%;'); // 25/50 = 50%
   });
 
@@ -80,10 +86,10 @@ describe('ProgressBar', () => {
         variant,
       });
 
-      const bar = container.querySelector(`.bg-${variant}`);
+      const bar = container.querySelector(`.bg-\\[var\\(--color-${variant}\\)\\]`);
       expect(bar).toBeInTheDocument();
       expect(bar).toHaveClass(
-        `bg-${variant}`,
+        `bg-[var(--color-${variant})]`,
         'h-full',
         'transition-all',
         'duration-300',
@@ -128,9 +134,9 @@ describe('ProgressBar', () => {
     });
 
     // Below first threshold - should use default variant
-    let bar = container.querySelector('.bg-primary');
+    let bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]');
     expect(bar).toHaveAttribute('style', 'width: 20%;');
 
     // Between 25-50 - should be warning
@@ -142,11 +148,11 @@ describe('ProgressBar', () => {
         { value: 75, variant: 'success' },
       ],
     });
-    bar = container.querySelector('.bg-warning');
+    bar = container.querySelector('.bg-\\[var\\(--color-warning\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-warning');
+    expect(bar).toHaveClass('bg-[var(--color-warning)]');
     expect(bar).toHaveAttribute('style', 'width: 30%;');
-    expect(bar).not.toHaveClass('bg-primary');
+    expect(bar).not.toHaveClass('bg-[var(--color-primary)]');
 
     // Between 50-75 - should be info
     await rerender({
@@ -157,11 +163,11 @@ describe('ProgressBar', () => {
         { value: 75, variant: 'success' },
       ],
     });
-    bar = container.querySelector('.bg-info');
+    bar = container.querySelector('.bg-\\[var\\(--color-info\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-info');
+    expect(bar).toHaveClass('bg-[var(--color-info)]');
     expect(bar).toHaveAttribute('style', 'width: 60%;');
-    expect(bar).not.toHaveClass('bg-warning');
+    expect(bar).not.toHaveClass('bg-[var(--color-warning)]');
 
     // Above 75 - should be success
     await rerender({
@@ -172,11 +178,11 @@ describe('ProgressBar', () => {
         { value: 75, variant: 'success' },
       ],
     });
-    bar = container.querySelector('.bg-success');
+    bar = container.querySelector('.bg-\\[var\\(--color-success\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-success');
+    expect(bar).toHaveClass('bg-[var(--color-success)]');
     expect(bar).toHaveAttribute('style', 'width: 80%;');
-    expect(bar).not.toHaveClass('bg-info');
+    expect(bar).not.toHaveClass('bg-[var(--color-info)]');
   });
 
   it('clamps value between 0 and max', () => {
@@ -185,9 +191,9 @@ describe('ProgressBar', () => {
       max: 100,
     });
 
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]');
     expect(bar).toHaveAttribute('style', 'width: 100%;');
 
     const { container: container2 } = progressTest.render({
@@ -195,9 +201,9 @@ describe('ProgressBar', () => {
       max: 100,
     });
 
-    const bar2 = container2.querySelector('.bg-primary');
+    const bar2 = container2.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar2).toBeInTheDocument();
-    expect(bar2).toHaveClass('bg-primary');
+    expect(bar2).toHaveClass('bg-[var(--color-primary)]');
     expect(bar2).toHaveAttribute('style', 'width: 0%;');
   });
 
@@ -207,9 +213,9 @@ describe('ProgressBar', () => {
       striped: true,
     });
 
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary', 'bg-stripes');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]', 'bg-stripes');
     expect(bar).not.toHaveClass('animate-stripes');
     expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
@@ -221,9 +227,9 @@ describe('ProgressBar', () => {
       animated: true,
     });
 
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary', 'bg-stripes', 'animate-stripes');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]', 'bg-stripes', 'animate-stripes');
     expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
 
@@ -237,9 +243,9 @@ describe('ProgressBar', () => {
     const progressbar = screen.getByRole('progressbar');
     expect(progressbar).toHaveClass('custom-container');
 
-    const bar = container.querySelector('.bg-primary');
+    const bar = container.querySelector('.bg-\\[var\\(--color-primary\\)\\]');
     expect(bar).toBeInTheDocument();
-    expect(bar).toHaveClass('bg-primary', 'custom-bar');
+    expect(bar).toHaveClass('bg-[var(--color-primary)]', 'custom-bar');
     expect(bar).toHaveAttribute('style', 'width: 50%;');
   });
 
@@ -271,7 +277,7 @@ describe('ProgressBar', () => {
       showLabel: true,
     });
 
-    let label = container.querySelector('.text-base-content');
+    let label = container.querySelector('.text-\\[var\\(--color-base-content\\)\\]');
     expect(label).toBeInTheDocument();
 
     const { container: container2 } = progressTest.render({

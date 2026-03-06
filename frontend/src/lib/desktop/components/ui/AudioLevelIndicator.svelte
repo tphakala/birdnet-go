@@ -614,17 +614,17 @@
         bind:this={dropdownRef}
         role="menu"
         aria-label="Audio Source Selection"
-        class="audio-dropdown absolute top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-base-100 rounded-lg shadow-xl border border-base-300 overflow-hidden flex flex-col z-50"
+        class="audio-dropdown absolute top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-[var(--color-base-100)] rounded-lg shadow-xl border border-[var(--color-base-300)] overflow-hidden flex flex-col z-50"
       >
         <!-- Header -->
-        <div class="flex items-center justify-between p-4 border-b border-base-300">
+        <div class="flex items-center justify-between p-4 border-b border-[var(--color-base-300)]">
           <h3 class="text-lg font-semibold">Audio Sources</h3>
         </div>
 
         <!-- Source list -->
         <div class="overflow-y-auto flex-1" role="menu" aria-orientation="vertical">
           {#if Object.keys(levels).length === 0}
-            <div class="p-8 text-center text-base-content/60">
+            <div class="p-8 text-center text-[var(--color-base-content)]/60">
               <div class="mx-auto mb-2 opacity-50">
                 <Mic class="size-12 mx-auto" />
               </div>
@@ -634,8 +634,9 @@
             {#each Object.entries(levels) as [source, _data] (source)}
               <div
                 class={cn(
-                  'border-b border-base-300 p-4 hover:bg-base-200 transition-colors',
-                  selectedSource === source && 'bg-primary/10 border-l-2 border-l-primary'
+                  'border-b border-[var(--color-base-300)] p-4 hover:bg-[var(--color-base-200)] transition-colors',
+                  selectedSource === source &&
+                    'bg-[var(--color-primary)]/10 border-l-2 border-l-primary'
                 )}
                 role="menuitem"
               >
@@ -646,8 +647,8 @@
                       class={cn(
                         'w-8 h-8 rounded-full flex items-center justify-center',
                         isInactive(source)
-                          ? 'bg-base-300 text-base-content/60'
-                          : 'bg-success/20 text-success'
+                          ? 'bg-[var(--color-base-300)] text-[var(--color-base-content)]/60'
+                          : 'bg-[var(--color-success)]/20 text-[var(--color-success)]'
                       )}
                     >
                       <Mic class="size-4" />
@@ -668,18 +669,20 @@
                       <span
                         class={cn(
                           'font-medium text-sm truncate',
-                          isInactive(source) ? 'text-base-content/60' : 'text-base-content',
-                          selectedSource === source && 'text-primary'
+                          isInactive(source)
+                            ? 'text-[var(--color-base-content)]/60'
+                            : 'text-[var(--color-base-content)]',
+                          selectedSource === source && 'text-[var(--color-primary)]'
                         )}
                       >
                         {getSourceDisplayName(source)}
                       </span>
                       {#if selectedSource === source}
-                        <Check class="size-4 text-primary shrink-0" />
+                        <Check class="size-4 text-[var(--color-primary)] shrink-0" />
                       {/if}
                     </div>
                     {#if isInactive(source)}
-                      <span class="text-xs text-base-content/60">(silent)</span>
+                      <span class="text-xs text-[var(--color-base-content)]/60">(silent)</span>
                     {/if}
                   </button>
 
@@ -691,7 +694,9 @@
                     }}
                     class={cn(
                       'btn btn-sm btn-circle btn-ghost shrink-0',
-                      playingSource === source ? 'text-error' : 'text-success'
+                      playingSource === source
+                        ? 'text-[var(--color-error)]'
+                        : 'text-[var(--color-success)]'
                     )}
                     aria-label={playingSource === source
                       ? 'Stop audio playback'
@@ -715,7 +720,7 @@
   <!-- Status message -->
   {#if showStatus}
     <div
-      class="fixed bottom-4 right-4 bg-primary text-primary-content p-2 rounded-sm shadow-lg z-50"
+      class="fixed bottom-4 right-4 bg-[var(--color-primary)] text-[var(--color-primary-content)] p-2 rounded-sm shadow-lg z-50"
       role="status"
       aria-live="polite"
     >

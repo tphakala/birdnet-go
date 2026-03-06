@@ -195,7 +195,7 @@
     {#if isOpen}
       <ul
         bind:this={menuElement}
-        class="fixed menu p-2 shadow-lg bg-base-100 rounded-box w-52 border border-base-300"
+        class="fixed menu p-2 shadow-lg bg-[var(--color-base-100)] rounded-box w-52 border border-[var(--color-base-300)]"
         role="menu"
       >
         <li>
@@ -262,7 +262,7 @@
           <li>
             <button
               onclick={() => handleAction(onDelete)}
-              class="text-sm w-full text-left text-error"
+              class="text-sm w-full text-left text-[var(--color-error)]"
               role="menuitem"
             >
               <div class="flex items-center gap-2">

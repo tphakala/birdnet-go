@@ -528,7 +528,9 @@
   {/if}
 
   <!-- Controls Section -->
-  <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+  <div
+    class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
+  >
     <div class="p-6 overflow-visible">
       <h2 class="text-lg font-semibold mb-4">{t('analytics.advanced.chartControls')}</h2>
 
@@ -608,7 +610,7 @@
               max: maxSpecies,
             })}</span
           >
-          <span class="label-text-alt text-xs text-base-content opacity-60">
+          <span class="label-text-alt text-xs text-[var(--color-base-content)] opacity-60">
             {t('analytics.advanced.speciesSelectionHint')}
           </span>
         </div>
@@ -645,13 +647,15 @@
                 <div class="flex items-center justify-between gap-2">
                   <div class="flex-1 min-w-0">
                     <div class="font-medium truncate">{species.commonName}</div>
-                    <div class="text-xs text-base-content opacity-60 truncate italic">
+                    <div
+                      class="text-xs text-[var(--color-base-content)] opacity-60 truncate italic"
+                    >
                       {species.scientificName}
                     </div>
                   </div>
                   {#if species.count !== undefined}
                     <div
-                      class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-base-200/50 text-base-content"
+                      class="inline-flex items-center px-2 py-1 text-xs font-medium rounded-full bg-[var(--color-base-200)]/50 text-[var(--color-base-content)]"
                     >
                       {t('analytics.advanced.detections', { count: species.count ?? 0 })}
                     </div>
@@ -668,10 +672,12 @@
   <!-- Charts Section -->
   <div class="grid grid-cols-1 gap-6">
     <!-- Time of Day Chart -->
-    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+    <div
+      class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
+    >
       <div class="p-6">
         <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.timeOfDay.title')}</h2>
-        <p class="text-sm text-base-content opacity-70 mb-4">
+        <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
           {t('analytics.advanced.charts.timeOfDay.description')}
         </p>
 
@@ -680,19 +686,19 @@
 
           {#if isLoading}
             <div
-              class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
+              class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
               aria-label={t('analytics.advanced.aria.loadingAnalytics')}
             >
               <div
-                class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+                class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
               ></div>
               <span class="sr-only">{t('analytics.advanced.aria.loadingAnalytics')}</span>
             </div>
           {:else if timeOfDayData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
               role="status"
               aria-label={t('analytics.advanced.charts.timeOfDay.noData')}
             >
@@ -707,10 +713,12 @@
     </div>
 
     <!-- Daily Trend Chart -->
-    <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+    <div
+      class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
+    >
       <div class="p-6">
         <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.dailyTrend.title')}</h2>
-        <p class="text-sm text-base-content opacity-70 mb-4">
+        <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
           {t('analytics.advanced.charts.dailyTrend.description')}
         </p>
 
@@ -729,19 +737,19 @@
 
           {#if isLoading}
             <div
-              class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
+              class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
               role="status"
               aria-busy="true"
               aria-label={t('analytics.advanced.aria.loadingTrends')}
             >
               <div
-                class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+                class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
               ></div>
               <span class="sr-only">{t('analytics.advanced.aria.loadingTrends')}</span>
             </div>
           {:else if dailyTrendData.length === 0}
             <div
-              class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
+              class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
               role="status"
               aria-label={t('analytics.advanced.charts.dailyTrend.noData')}
             >
@@ -757,10 +765,12 @@
   </div>
 
   <!-- Species Diversity Chart (Full Width) -->
-  <div class="bg-base-100 rounded-xl shadow-sm border border-base-200">
+  <div
+    class="bg-[var(--color-base-100)] rounded-xl shadow-sm border border-[var(--color-base-200)]"
+  >
     <div class="p-6">
       <h2 class="text-lg font-semibold">{t('analytics.advanced.charts.diversity.title')}</h2>
-      <p class="text-sm text-base-content opacity-70 mb-4">
+      <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
         {t('analytics.advanced.charts.diversity.description')}
       </p>
 
@@ -774,19 +784,19 @@
 
         {#if isLoading}
           <div
-            class="absolute inset-0 bg-base-100/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
+            class="absolute inset-0 bg-[var(--color-base-100)]/80 backdrop-blur-xs flex items-center justify-center rounded-lg"
             role="status"
             aria-busy="true"
             aria-label={t('analytics.advanced.aria.loadingDiversity')}
           >
             <div
-              class="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"
+              class="w-12 h-12 border-4 border-[var(--color-primary)] border-t-transparent rounded-full animate-spin"
             ></div>
             <span class="sr-only">{t('analytics.advanced.aria.loadingDiversity')}</span>
           </div>
         {:else if diversityData.length === 0}
           <div
-            class="absolute inset-0 flex items-center justify-center text-base-content opacity-60 rounded-lg"
+            class="absolute inset-0 flex items-center justify-center text-[var(--color-base-content)] opacity-60 rounded-lg"
             role="status"
             aria-label={t('analytics.advanced.charts.diversity.noData')}
           >
@@ -803,7 +813,7 @@
 
 <style>
   /* Card-like containers */
-  .bg-base-100 {
+  .bg-\[var\(--color-base-100\)\] {
     transition: box-shadow 0.2s ease;
   }
 </style>

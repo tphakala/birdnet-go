@@ -89,16 +89,16 @@
 
     if (score <= 1) {
       level = 'weak';
-      color = 'text-error';
+      color = 'text-[var(--color-error)]';
     } else if (score === 2) {
       level = 'fair';
-      color = 'text-warning';
+      color = 'text-[var(--color-warning)]';
     } else if (score === 3) {
       level = 'good';
-      color = 'text-info';
+      color = 'text-[var(--color-info)]';
     } else {
       level = 'strong';
-      color = 'text-success';
+      color = 'text-[var(--color-success)]';
     }
 
     return { score, level, color, feedback };
@@ -122,7 +122,7 @@
       <span class="label-text">
         {label}
         {#if required}
-          <span class="text-error">*</span>
+          <span class="text-[var(--color-error)]">*</span>
         {/if}
       </span>
     </label>
@@ -147,7 +147,7 @@
     {#if allowReveal}
       <button
         type="button"
-        class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-base-content/60 hover:text-base-content transition-colors disabled:opacity-50"
+        class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
         onclick={togglePasswordVisibility}
         {disabled}
         aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
@@ -179,13 +179,13 @@
       </div>
 
       <!-- Strength progress bar -->
-      <div class="w-full bg-base-200 rounded-full h-2">
+      <div class="w-full bg-[var(--color-base-200)] rounded-full h-2">
         <div
           class={cn('h-2 rounded-full transition-all duration-300', {
-            'bg-error': passwordStrength?.level === 'weak',
-            'bg-warning': passwordStrength?.level === 'fair',
-            'bg-info': passwordStrength?.level === 'good',
-            'bg-success': passwordStrength?.level === 'strong',
+            'bg-[var(--color-error)]': passwordStrength?.level === 'weak',
+            'bg-[var(--color-warning)]': passwordStrength?.level === 'fair',
+            'bg-[var(--color-info)]': passwordStrength?.level === 'good',
+            'bg-[var(--color-success)]': passwordStrength?.level === 'strong',
           })}
           style:width="{passwordStrength ? (passwordStrength.score / 4) * 100 : 0}%"
         ></div>
@@ -194,10 +194,10 @@
       <!-- Feedback -->
       {#if passwordStrength?.feedback && passwordStrength.feedback.length > 0}
         <div class="mt-2">
-          <div class="text-xs text-base-content opacity-70 mb-1">
+          <div class="text-xs text-[var(--color-base-content)] opacity-70 mb-1">
             {t('forms.password.strength.suggestions.title')}
           </div>
-          <ul class="text-xs text-base-content opacity-70 space-y-1">
+          <ul class="text-xs text-[var(--color-base-content)] opacity-70 space-y-1">
             {#each passwordStrength.feedback as suggestion, index (index)}
               <li class="flex items-center gap-1">
                 <div class="shrink-0">
@@ -215,7 +215,7 @@
   <!-- Error display -->
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-error">{error}</span>
+      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
     </div>
   {/if}
 </div>

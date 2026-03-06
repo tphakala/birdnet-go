@@ -93,14 +93,14 @@
       <span class="label-text capitalize">
         {label}
         {#if required}
-          <span class="text-error ml-1">*</span>
+          <span class="text-[var(--color-error)] ml-1">*</span>
         {/if}
       </span>
 
       {#if tooltip}
         <button
           type="button"
-          class="help-icon ml-1 text-info hover:text-info-focus transition-colors"
+          class="help-icon ml-1 text-[var(--color-info)] hover:text-[var(--color-info-hover)] transition-colors"
           onmouseenter={() => (showTooltip = true)}
           onmouseleave={() => (showTooltip = false)}
           onfocus={() => (showTooltip = true)}
@@ -134,7 +134,7 @@
   />
 
   {#if !isValid && touched}
-    <span class="text-sm text-error mt-1">
+    <span class="text-sm text-[var(--color-error)] mt-1">
       {validationMessage || `Please enter a valid ${label || 'value'}`}
     </span>
   {/if}
@@ -146,7 +146,7 @@
   {#if tooltip && showTooltip}
     <div
       id={tooltipId}
-      class="absolute z-50 p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
+      class="absolute z-50 p-2 mt-1 text-sm bg-[var(--color-base-300)] border border-[var(--color-base-content)]/20 rounded-sm shadow-lg max-w-xs text-[var(--color-base-content)]"
       role="tooltip"
     >
       {tooltip}

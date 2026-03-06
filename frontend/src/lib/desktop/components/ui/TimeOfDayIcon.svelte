@@ -112,7 +112,7 @@
   let svgClasses = $derived(
     cn(
       safeGet(sizeClasses, size, 'h-6 w-6'),
-      safeGet(colorClasses, currentTimeOfDay, 'text-base-content'),
+      safeGet(colorClasses, currentTimeOfDay, 'text-[var(--color-base-content)]'),
       className
     )
   );

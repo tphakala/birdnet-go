@@ -98,7 +98,7 @@
 
 <div
   class={cn(
-    'drawer lg:drawer-open min-h-screen bg-base-200 transition-all duration-200',
+    'drawer lg:drawer-open min-h-screen bg-[var(--color-base-200)] transition-all duration-200',
     isCollapsed ? 'sidebar-collapsed' : 'sidebar-expanded',
     className
   )}

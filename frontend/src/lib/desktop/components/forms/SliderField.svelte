@@ -68,7 +68,7 @@
       <span class="label-text font-medium">
         {label}
         {#if required}
-          <span class="text-error">*</span>
+          <span class="text-[var(--color-error)]">*</span>
         {/if}
       </span>
       <span class="badge badge-outline badge-sm font-mono">
@@ -112,7 +112,7 @@
 
   {#if error}
     <div class="label">
-      <span class="label-text-alt text-error">{error}</span>
+      <span class="label-text-alt text-[var(--color-error)]">{error}</span>
     </div>
   {/if}
 </div>

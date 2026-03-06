@@ -31,7 +31,13 @@ describe('SettingsNote', () => {
 
       const noteContainer =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(noteContainer).toHaveClass('mt-4', 'p-4', 'bg-base-200', 'text-sm', 'rounded-lg');
+      expect(noteContainer).toHaveClass(
+        'mt-4',
+        'p-4',
+        'bg-[var(--color-base-200)]',
+        'text-sm',
+        'rounded-lg'
+      );
     });
 
     it('applies custom className', () => {
@@ -44,7 +50,13 @@ describe('SettingsNote', () => {
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
       expect(noteContainer).toHaveClass('custom-note', 'warning-note');
       // Should still have base classes
-      expect(noteContainer).toHaveClass('mt-4', 'p-4', 'bg-base-200', 'text-sm', 'rounded-lg');
+      expect(noteContainer).toHaveClass(
+        'mt-4',
+        'p-4',
+        'bg-[var(--color-base-200)]',
+        'text-sm',
+        'rounded-lg'
+      );
     });
   });
 
@@ -117,14 +129,14 @@ describe('SettingsNote', () => {
       wrapperFactory.render({
         childContent: `
           <p>Use this command:</p>
-          <code data-testid="code-block" class="bg-base-300 px-2 py-1 rounded-sm">npm install</code>
+          <code data-testid="code-block" class="bg-[var(--color-base-300)] px-2 py-1 rounded-sm">npm install</code>
         `,
       });
 
       const codeBlock = screen.getByTestId('code-block');
       expect(codeBlock).toBeInTheDocument();
       expect(codeBlock).toHaveTextContent('npm install');
-      expect(codeBlock).toHaveClass('bg-base-300', 'px-2', 'py-1', 'rounded-sm');
+      expect(codeBlock).toHaveClass('bg-[var(--color-base-300)]', 'px-2', 'py-1', 'rounded-sm');
     });
 
     it('renders with lists', () => {
@@ -160,7 +172,7 @@ describe('SettingsNote', () => {
         div =>
           div.classList.contains('mt-4') &&
           div.classList.contains('p-4') &&
-          div.classList.contains('bg-base-200')
+          div.classList.contains('bg-[var(--color-base-200)]')
       );
       expect(noteContainer).toBeInTheDocument();
 
@@ -192,7 +204,13 @@ describe('SettingsNote', () => {
 
       let container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass('mt-4', 'p-4', 'bg-base-200', 'text-sm', 'rounded-lg');
+      expect(container).toHaveClass(
+        'mt-4',
+        'p-4',
+        'bg-[var(--color-base-200)]',
+        'text-sm',
+        'rounded-lg'
+      );
 
       // Test with undefined className
       rerender({
@@ -200,7 +218,13 @@ describe('SettingsNote', () => {
       });
 
       container = screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass('mt-4', 'p-4', 'bg-base-200', 'text-sm', 'rounded-lg');
+      expect(container).toHaveClass(
+        'mt-4',
+        'p-4',
+        'bg-[var(--color-base-200)]',
+        'text-sm',
+        'rounded-lg'
+      );
     });
   });
 
@@ -277,20 +301,20 @@ describe('SettingsNote', () => {
   describe('Integration Patterns', () => {
     it('works as an info note', () => {
       wrapperFactory.render({
-        className: 'text-info',
+        className: 'text-[var(--color-info)]',
         showIcon: true,
         childContent: '<p><strong>Info:</strong> This is an informational message.</p>',
       });
 
       const container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass('text-info');
+      expect(container).toHaveClass('text-[var(--color-info)]');
       expect(screen.getByText('Info:')).toBeInTheDocument();
     });
 
     it('works as a warning note', () => {
       wrapperFactory.render({
-        className: 'text-warning border border-warning',
+        className: 'text-[var(--color-warning)] border border-[var(--color-warning)]',
         childContent: `
           <p class="font-semibold">Warning</p>
           <p class="mt-1">This action cannot be undone.</p>
@@ -299,7 +323,11 @@ describe('SettingsNote', () => {
 
       const container =
         screen.getByTestId('note-content').parentElement?.parentElement?.parentElement;
-      expect(container).toHaveClass('text-warning', 'border', 'border-warning');
+      expect(container).toHaveClass(
+        'text-[var(--color-warning)]',
+        'border',
+        'border-[var(--color-warning)]'
+      );
       expect(screen.getByText('Warning')).toHaveClass('font-semibold');
     });
 
@@ -341,14 +369,18 @@ describe('SettingsNote', () => {
         childContent: `
           <p>
             <strong>Note:</strong> To fully enable authentication, ensure the 
-            <code class="bg-base-300 px-1 rounded-sm">redirectURI</code> is correctly configured 
+            <code class="bg-[var(--color-base-300)] px-1 rounded-sm">redirectURI</code> is correctly configured 
             in your OAuth provider settings.
           </p>
         `,
       });
 
       expect(screen.getByText('Note:')).toBeInTheDocument();
-      expect(screen.getByText('redirectURI')).toHaveClass('bg-base-300', 'px-1', 'rounded-sm');
+      expect(screen.getByText('redirectURI')).toHaveClass(
+        'bg-[var(--color-base-300)]',
+        'px-1',
+        'rounded-sm'
+      );
     });
 
     it('renders system requirement note', () => {

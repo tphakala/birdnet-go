@@ -295,7 +295,7 @@
 
 <div class="col-span-12 space-y-4" role="region" aria-label={t('search.title')}>
   <!-- Search Form -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
       <h2 class="card-title" id="search-filters-heading">{t('search.title')}</h2>
 
@@ -462,7 +462,7 @@
               </div>
               <!-- Confidence error message -->
               {#if hasConfidenceError}
-                <div class="text-error text-sm mt-1" role="alert">
+                <div class="text-[var(--color-error)] text-sm mt-1" role="alert">
                   {t('search.errors.minMaxConfidence')}
                 </div>
               {/if}
@@ -542,7 +542,7 @@
   </div>
 
   <!-- Results Area -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
       <div class="flex items-center justify-between">
         <h2 class="card-title" id="search-results-heading">{t('search.results')}</h2>
@@ -550,7 +550,7 @@
         <!-- Results Count & Sorting -->
         {#if formSubmitted}
           <div class="flex items-center gap-4">
-            <span class="text-sm text-base-content opacity-70" aria-live="polite"
+            <span class="text-sm text-[var(--color-base-content)] opacity-70" aria-live="polite"
               >{formatResultsCount(totalResults)}</span
             >
             <div class="dropdown dropdown-end">
@@ -567,7 +567,7 @@
               </div>
               <ul
                 tabindex="0"
-                class="dropdown-content z-1 menu p-2 shadow-xs bg-base-100 rounded-box w-52"
+                class="dropdown-content z-1 menu p-2 shadow-xs bg-[var(--color-base-100)] rounded-box w-52"
                 role="menu"
               >
                 <li role="menuitem">
@@ -618,16 +618,16 @@
       <!-- When no search performed yet -->
       {#if !formSubmitted}
         <div
-          class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
+          class="mt-6 bg-[var(--color-base-200)] rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-labelledby="search-results-heading"
         >
-          <span class="text-base-content opacity-30 text-[4rem]" aria-hidden="true">
+          <span class="text-[var(--color-base-content)] opacity-30 text-[4rem]" aria-hidden="true">
             <Search class="size-12" />
           </span>
-          <p class="text-base-content opacity-50 text-center mt-4">
+          <p class="text-[var(--color-base-content)] opacity-50 text-center mt-4">
             {t('search.noSearchPerformed')}
           </p>
-          <p class="text-base-content opacity-50 text-center text-sm">
+          <p class="text-[var(--color-base-content)] opacity-50 text-center text-sm">
             {t('search.noSearchPerformedHint')}
           </p>
         </div>
@@ -636,12 +636,17 @@
       <!-- Loading indicator -->
       {#if ENABLE_LOADING_SPINNERS && isLoading && formSubmitted}
         <div
-          class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
+          class="mt-6 bg-[var(--color-base-200)] rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
           aria-live="polite"
           aria-busy="true"
         >
-          <span class="loading loading-spinner loading-lg text-primary" aria-hidden="true"></span>
-          <p class="text-base-content opacity-50 text-center mt-4">{t('search.loadingResults')}</p>
+          <span
+            class="loading loading-spinner loading-lg text-[var(--color-primary)]"
+            aria-hidden="true"
+          ></span>
+          <p class="text-[var(--color-base-content)] opacity-50 text-center mt-4">
+            {t('search.loadingResults')}
+          </p>
         </div>
       {/if}
 
@@ -664,7 +669,11 @@
               <!-- Loop through results -->
               {#each results as result, index (result.id)}
                 <!-- Main row -->
-                <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
+                <tr
+                  class={index % 2 === 0
+                    ? 'bg-[var(--color-base-100)]'
+                    : 'bg-[var(--color-base-200)]'}
+                >
                   <td>{formatDate(result.timestamp)}</td>
                   <td>
                     <div class="flex items-center">
@@ -676,7 +685,7 @@
                     <div class="flex items-center gap-2">
                       <!-- Add bird image thumbnail -->
                       <div
-                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
+                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
                         onclick={() => toggleExpand(result.id)}
                         onkeydown={e => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -727,7 +736,7 @@
                     <div class="flex items-center">
                       <div class="flex items-center gap-2 w-full">
                         <div
-                          class="w-16 h-4 rounded-full overflow-hidden bg-base-200"
+                          class="w-16 h-4 rounded-full overflow-hidden bg-[var(--color-base-200)]"
                           role="progressbar"
                           aria-valuenow={Math.round(result.confidence * 100)}
                           aria-valuemin="0"
@@ -736,10 +745,10 @@
                         >
                           <div
                             class="h-full {result.confidence >= 0.8
-                              ? 'bg-success'
+                              ? 'bg-[var(--color-success)]'
                               : result.confidence >= 0.4
-                                ? 'bg-warning'
-                                : 'bg-error'}"
+                                ? 'bg-[var(--color-warning)]'
+                                : 'bg-[var(--color-error)]'}"
                             style:width="{result.confidence * 100}%"
                           ></div>
                         </div>
@@ -829,20 +838,24 @@
                 {#if isExpanded(result.id)}
                   <tr class="expanded-row" id="expanded-row-{result.id}">
                     <td colspan="6" class="p-0 border-t-0">
-                      <div class="p-4 {index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}">
+                      <div
+                        class="p-4 {index % 2 === 0
+                          ? 'bg-[var(--color-base-100)]'
+                          : 'bg-[var(--color-base-200)]'}"
+                      >
                         <!-- Expanded content -->
                         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
                           <!-- Weather Information Container -->
-                          <div class="bg-base-200 rounded-box p-4">
+                          <div class="bg-[var(--color-base-200)] rounded-box p-4">
                             <WeatherInfo detectionId={result.id} units={temperatureUnits} />
                           </div>
 
                           <!-- Bird Image Container (Middle Column) -->
                           <div
-                            class="bg-base-200 rounded-box p-4 flex flex-col justify-center items-center"
+                            class="bg-[var(--color-base-200)] rounded-box p-4 flex flex-col justify-center items-center"
                           >
                             <div
-                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-primary"
+                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
                               onclick={() => toggleExpand(result.id)}
                               onkeydown={e => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -879,7 +892,7 @@
                           </div>
 
                           <!-- Audio Player -->
-                          <div class="bg-base-200 rounded-box p-4">
+                          <div class="bg-[var(--color-base-200)] rounded-box p-4">
                             <h3 class="text-lg font-semibold mb-2">
                               {t('search.detailsPanel.audioPlayer')}
                             </h3>
@@ -905,7 +918,7 @@
         <!-- Mobile card list -->
         <div class="md:hidden mt-4 space-y-2" aria-labelledby="search-results-heading">
           {#each results as result (result.id)}
-            <section class="bg-base-100 rounded-lg p-3">
+            <section class="bg-[var(--color-base-100)] rounded-lg p-3">
               <div class="flex items-start gap-3">
                 <!-- Time of Day + Date/Time -->
                 <div class="w-16 shrink-0 text-sm opacity-80">
@@ -921,7 +934,9 @@
                 <!-- Thumbnail and names -->
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
-                    <div class="w-12 h-12 rounded-md overflow-hidden bg-base-200 shrink-0">
+                    <div
+                      class="w-12 h-12 rounded-md overflow-hidden bg-[var(--color-base-200)] shrink-0"
+                    >
                       <img
                         src="/api/v2/media/species-image?name={encodeURIComponent(
                           result.scientificName
@@ -1019,11 +1034,15 @@
       <!-- Empty state - when search returns no results -->
       {#if formSubmitted && !isLoading && results.length === 0 && !errorMessage}
         <div
-          class="mt-6 bg-base-200 rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
+          class="mt-6 bg-[var(--color-base-200)] rounded-lg p-4 flex flex-col items-center justify-center min-h-[200px]"
         >
           <FrownIcon class="size-12" />
-          <p class="mt-2 text-base-content opacity-70">{t('search.noResultsFound')}</p>
-          <p class="text-sm text-base-content opacity-50">{t('search.noResultsHint')}</p>
+          <p class="mt-2 text-[var(--color-base-content)] opacity-70">
+            {t('search.noResultsFound')}
+          </p>
+          <p class="text-sm text-[var(--color-base-content)] opacity-50">
+            {t('search.noResultsHint')}
+          </p>
         </div>
       {/if}
 

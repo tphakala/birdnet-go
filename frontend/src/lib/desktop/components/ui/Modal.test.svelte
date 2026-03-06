@@ -14,7 +14,7 @@
     {#if showCustomHeader}
       <div>
         <h3 class="text-lg font-bold">Custom Header</h3>
-        <p class="text-sm text-base-content/70">With subtitle</p>
+        <p class="text-sm text-[var(--color-base-content)]/70">With subtitle</p>
       </div>
     {/if}
   {/snippet}

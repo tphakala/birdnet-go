@@ -173,7 +173,7 @@
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
-    <div class="thumbnail-placeholder w-8 h-7 rounded-sm bg-base-200"></div>
+    <div class="thumbnail-placeholder w-8 h-7 rounded-sm bg-[var(--color-base-200)]"></div>
     <img
       src={thumbnailUrl}
       alt={commonName}
@@ -189,7 +189,7 @@
       <div
         bind:this={popupElement}
         id="bird-popup"
-        class="fixed z-50 bg-base-100 border border-base-300 rounded-lg shadow-xl p-4 transition-opacity duration-200"
+        class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4 transition-opacity duration-200"
         style:left="{popupX}px"
         style:top="{popupY}px"
         style:width="320px"
@@ -200,7 +200,7 @@
         <div class="space-y-3">
           <!-- Species information header -->
           <div class="text-center space-y-1">
-            <h3 class="font-semibold text-base-content text-sm leading-tight">
+            <h3 class="font-semibold text-[var(--color-base-content)] text-sm leading-tight">
               {commonName}
             </h3>
             <p
@@ -212,7 +212,7 @@
           </div>
 
           <!-- Large image container -->
-          <div class="relative w-full h-48 bg-base-200 rounded-lg overflow-hidden">
+          <div class="relative w-full h-48 bg-[var(--color-base-200)] rounded-lg overflow-hidden">
             {#if !imageLoaded && !imageError}
               <!-- Loading state -->
               <div class="absolute inset-0 flex items-center justify-center">
@@ -258,14 +258,14 @@
         {#if popupPosition === 'below'}
           <!-- Arrow at top of popup -->
           <div
-            class="absolute w-3 h-3 bg-base-100 border-l border-t border-base-300 rotate-45 -z-10"
+            class="absolute w-3 h-3 bg-[var(--color-base-100)] border-l border-t border-[var(--color-base-300)] rotate-45 -z-10"
             style:left="20px"
             style:top="-6px"
           ></div>
         {:else}
           <!-- Arrow at bottom of popup -->
           <div
-            class="absolute w-3 h-3 bg-base-100 border-r border-b border-base-300 rotate-45 -z-10"
+            class="absolute w-3 h-3 bg-[var(--color-base-100)] border-r border-b border-[var(--color-base-300)] rotate-45 -z-10"
             style:left="20px"
             style:bottom="-6px"
           ></div>

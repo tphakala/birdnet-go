@@ -58,7 +58,7 @@
   }: Props = $props();
 
   // Memoized class names for performance
-  let cardClasses = $derived(cn('card bg-base-100 shadow-2xs', className));
+  let cardClasses = $derived(cn('card bg-[var(--color-base-100)] shadow-2xs', className));
   let headerClasses = $derived(cn('px-6 py-4'));
   let bodyClasses = $derived(padding ? 'px-6 pb-7' : '');
 </script>
@@ -101,7 +101,7 @@
   </div>
 
   {#if footer}
-    <div class="px-6 pb-6 pt-4 border-t border-base-200">
+    <div class="px-6 pb-6 pt-4 border-t border-[var(--color-base-200)]">
       {@render footer()}
     </div>
   {/if}

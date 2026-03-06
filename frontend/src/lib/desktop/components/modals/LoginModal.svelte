@@ -348,14 +348,14 @@
         <!-- Header -->
         <div class="text-center space-y-2">
           <div class="flex justify-center mb-4">
-            <div class="p-3 bg-primary/10 rounded-full">
-              <ShieldCheck class="size-8 text-primary" />
+            <div class="p-3 bg-[var(--color-primary)]/10 rounded-full">
+              <ShieldCheck class="size-8 text-[var(--color-primary)]" />
             </div>
           </div>
           <h3 id="modal-title" class="text-2xl font-semibold">
             {t('auth.loginTitle')}
           </h3>
-          <p class="text-base-content/60 text-sm">
+          <p class="text-[var(--color-base-content)]/60 text-sm">
             {t('auth.loginSubtitle')}
           </p>
         </div>
@@ -369,7 +369,7 @@
               </label>
               <div class="relative">
                 <KeyRound
-                  class="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-base-content/40"
+                  class="absolute left-3 top-1/2 -translate-y-1/2 size-5 text-[var(--color-base-content)]/40"
                 />
                 <input
                   type="password"
@@ -387,7 +387,7 @@
               {#if error}
                 <div
                   id="loginError"
-                  class="text-error text-sm mt-2"
+                  class="text-[var(--color-error)] text-sm mt-2"
                   role="alert"
                   aria-live="polite"
                 >
@@ -412,7 +412,9 @@
 
         <!-- Divider -->
         {#if authConfig.basicEnabled && hasOAuthProviders}
-          <div class="divider text-base-content/40 text-xs uppercase">{t('auth.or')}</div>
+          <div class="divider text-[var(--color-base-content)]/40 text-xs uppercase">
+            {t('auth.or')}
+          </div>
         {/if}
 
         <!-- OAuth providers -->
@@ -423,7 +425,7 @@
               {@const isLoading = loadingState === provider.id}
               <button
                 type="button"
-                class="btn btn-outline w-full justify-start gap-3 font-normal hover:bg-base-200"
+                class="btn btn-outline w-full justify-start gap-3 font-normal hover:bg-[var(--color-base-200)]"
                 onclick={() => handleOAuthLogin(provider.id)}
                 disabled={isAnyLoading}
                 aria-label={t(provider.loginButtonKey)}

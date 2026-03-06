@@ -105,13 +105,13 @@
 
   function getIconClass(type: string): string {
     const classes: Record<string, string> = {
-      error: 'bg-error/20 text-error',
-      warning: 'bg-warning/20 text-warning',
-      info: 'bg-info/20 text-info',
-      detection: 'bg-success/20 text-success',
-      system: 'bg-primary/20 text-primary',
+      error: 'bg-[var(--color-error)]/20 text-[var(--color-error)]',
+      warning: 'bg-[var(--color-warning)]/20 text-[var(--color-warning)]',
+      info: 'bg-[var(--color-info)]/20 text-[var(--color-info)]',
+      detection: 'bg-[var(--color-success)]/20 text-[var(--color-success)]',
+      system: 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]',
     };
-    return safeGet(classes, type, 'bg-base-300');
+    return safeGet(classes, type, 'bg-[var(--color-base-300)]');
   }
 
   function getPriorityBadgeClass(priority: string): string {
@@ -137,13 +137,13 @@
 
 <div
   class={cn(
-    'card bg-base-100 shadow-2xs',
-    group.unreadCount > 0 && 'border-l-4 border-primary',
+    'card bg-[var(--color-base-100)] shadow-2xs',
+    group.unreadCount > 0 && 'border-l-4 border-[var(--color-primary)]',
     className
   )}
 >
   <!-- Group Header (always visible) -->
-  <div class="flex items-center gap-3 p-3 hover:bg-base-200/50 transition-colors">
+  <div class="flex items-center gap-3 p-3 hover:bg-[var(--color-base-200)]/50 transition-colors">
     <!-- Clickable area for toggle -->
     <button
       type="button"
@@ -175,7 +175,9 @@
             <span class="badge badge-sm badge-primary">{count}</span>
           {/if}
         </div>
-        <div class="flex flex-wrap items-center gap-2 mt-1 text-xs text-base-content/60">
+        <div
+          class="flex flex-wrap items-center gap-2 mt-1 text-xs text-[var(--color-base-content)]/60"
+        >
           {#if group.component}
             <span class="badge badge-ghost badge-xs">{group.component}</span>
           {/if}
@@ -184,7 +186,7 @@
           </span>
           <time datetime={group.latestTimestamp}>{timeRange}</time>
           {#if group.unreadCount > 0}
-            <span class="text-primary font-medium"
+            <span class="text-[var(--color-primary)] font-medium"
               >{t('notifications.groups.unread', { count: group.unreadCount })}</span
             >
           {/if}
@@ -224,13 +226,13 @@
 
   <!-- Expanded Content -->
   {#if isOpen}
-    <div id="group-content-{group.key}" class="border-t border-base-200">
+    <div id="group-content-{group.key}" class="border-t border-[var(--color-base-200)]">
       {#each group.notifications as notification (notification.id)}
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={cn(
-            'p-3 pl-14 border-b border-base-100 last:border-b-0 hover:bg-base-200/30 transition-colors',
-            !notification.read && 'bg-base-200/20',
+            'p-3 pl-14 border-b border-[var(--color-base-100)] last:border-b-0 hover:bg-[var(--color-base-200)]/30 transition-colors',
+            !notification.read && 'bg-[var(--color-base-200)]/20',
             isClickable(notification) && 'cursor-pointer'
           )}
           onclick={() => handleNotificationClick(notification)}
@@ -245,11 +247,11 @@
         >
           <div class="flex items-start justify-between gap-2">
             <div class="flex-1 min-w-0">
-              <p class="text-xs text-base-content/80">
+              <p class="text-xs text-[var(--color-base-content)]/80">
                 {sanitizeNotificationMessage(translateNotification(notification).message)}
               </p>
               <time
-                class="text-xs text-base-content/50 mt-1 block"
+                class="text-xs text-[var(--color-base-content)]/50 mt-1 block"
                 datetime={notification.timestamp}
               >
                 {formatTime(notification.timestamp)}

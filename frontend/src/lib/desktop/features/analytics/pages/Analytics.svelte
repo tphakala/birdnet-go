@@ -1185,13 +1185,13 @@
       title={t('analytics.stats.totalDetections')}
       value={formatNumber(summary.totalDetections)}
       subtitle={getPeriodLabel()}
-      iconClassName="bg-primary/20"
+      iconClassName="bg-[var(--color-primary)]/20"
       {isLoading}
     >
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-primary"
+          class="h-6 w-6 text-[var(--color-primary)]"
           viewBox="0 0 921.998 921.998"
           fill="currentColor"
           aria-hidden="true"
@@ -1223,13 +1223,13 @@
       title={t('analytics.stats.uniqueSpecies')}
       value={formatNumber(summary.uniqueSpecies)}
       subtitle={getPeriodLabel()}
-      iconClassName="bg-secondary/20"
+      iconClassName="bg-[var(--color-secondary)]/20"
       {isLoading}
     >
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-secondary"
+          class="h-6 w-6 text-[var(--color-secondary)]"
           viewBox="0 0 256 256"
           fill="currentColor"
           aria-hidden="true"
@@ -1246,13 +1246,13 @@
       title={t('analytics.stats.avgConfidence')}
       value={formatPercentage(summary.avgConfidence)}
       subtitle={getPeriodLabel()}
-      iconClassName="bg-accent/20"
+      iconClassName="bg-[var(--color-accent)]/20"
       {isLoading}
     >
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-accent"
+          class="h-6 w-6 text-[var(--color-accent)]"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -1273,14 +1273,14 @@
       subtitle={summary.mostCommonCount > 0
         ? formatNumber(summary.mostCommonCount) + ' ' + t('analytics.stats.detections')
         : ''}
-      iconClassName="bg-success/20"
+      iconClassName="bg-[var(--color-success)]/20"
       valueClassName="text-lg truncate max-w-[150px]"
       {isLoading}
     >
       {#snippet icon()}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6 text-success"
+          class="h-6 w-6 text-[var(--color-success)]"
           viewBox="0 0 20 20"
           fill="currentColor"
           aria-hidden="true"
@@ -1325,12 +1325,12 @@
   />
 
   <!-- Data Table for Recent Detections -->
-  <div class="card bg-base-100 shadow-xs">
+  <div class="card bg-[var(--color-base-100)] shadow-xs">
     <div class="card-body card-padding">
       <h2 class="card-title">{t('analytics.recentDetections.title')}</h2>
       {#if isLoading}
         <div class="flex justify-center items-center p-8">
-          <span class="loading loading-spinner loading-lg text-primary"></span>
+          <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
         </div>
       {:else}
         <!-- Desktop/tablet table -->
@@ -1346,11 +1346,15 @@
             </thead>
             <tbody>
               {#each recentDetections as detection, index (detection.id ?? index)}
-                <tr class={index % 2 === 0 ? 'bg-base-100' : 'bg-base-200'}>
+                <tr
+                  class={index % 2 === 0
+                    ? 'bg-[var(--color-base-100)]'
+                    : 'bg-[var(--color-base-200)]'}
+                >
                   <td>{detection.timestamp ? formatDateTime(detection.timestamp) : '-'}</td>
                   <td>
                     <div class="flex items-center gap-2">
-                      <div class="w-8 h-8 rounded-full bg-base-200 overflow-hidden">
+                      <div class="w-8 h-8 rounded-full bg-[var(--color-base-200)] overflow-hidden">
                         <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading for species thumbnails -->
                         <img
                           src="/api/v2/media/species-image?name={encodeURIComponent(
@@ -1374,13 +1378,13 @@
                   </td>
                   <td>
                     <div class="flex items-center gap-2">
-                      <div class="w-16 h-4 rounded-full overflow-hidden bg-base-200">
+                      <div class="w-16 h-4 rounded-full overflow-hidden bg-[var(--color-base-200)]">
                         <div
                           class="h-full {detection.confidence >= 0.8
-                            ? 'bg-success'
+                            ? 'bg-[var(--color-success)]'
                             : detection.confidence >= 0.4
-                              ? 'bg-warning'
-                              : 'bg-error'}"
+                              ? 'bg-[var(--color-warning)]'
+                              : 'bg-[var(--color-error)]'}"
                           style:width="{detection.confidence * 100}%"
                         ></div>
                       </div>
@@ -1391,7 +1395,9 @@
                 </tr>
               {:else}
                 <tr>
-                  <td colspan="4" class="text-center py-4 text-base-content opacity-50"
+                  <td
+                    colspan="4"
+                    class="text-center py-4 text-[var(--color-base-content)] opacity-50"
                     >{t('analytics.recentDetections.noRecentDetections')}</td
                   >
                 </tr>
@@ -1403,10 +1409,12 @@
         <!-- Mobile list -->
         <div class="md:hidden space-y-2">
           {#each recentDetections as detection, index (detection.id ?? index)}
-            <div class="bg-base-100 rounded-lg p-3">
+            <div class="bg-[var(--color-base-100)] rounded-lg p-3">
               <div class="flex items-start gap-3">
                 <!-- Thumbnail -->
-                <div class="w-10 h-10 rounded-full bg-base-200 overflow-hidden shrink-0">
+                <div
+                  class="w-10 h-10 rounded-full bg-[var(--color-base-200)] overflow-hidden shrink-0"
+                >
                   <img
                     src="/api/v2/media/species-image?name={encodeURIComponent(
                       detection.scientificName
@@ -1421,7 +1429,7 @@
                 </div>
                 <!-- Content -->
                 <div class="flex-1 min-w-0">
-                  <div class="text-sm text-base-content/70">
+                  <div class="text-sm text-[var(--color-base-content)]/70">
                     {detection.timestamp ? formatDateTime(detection.timestamp) : '-'}
                   </div>
                   <div class="font-medium leading-tight truncate">
@@ -1447,7 +1455,7 @@
               </div>
             </div>
           {:else}
-            <div class="text-center py-4 text-base-content opacity-50">
+            <div class="text-center py-4 text-[var(--color-base-content)] opacity-50">
               {t('analytics.recentDetections.noRecentDetections')}
             </div>
           {/each}

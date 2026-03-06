@@ -260,7 +260,7 @@
       <span class="label-text">
         {label}
         {#if required}
-          <span class="text-error">*</span>
+          <span class="text-[var(--color-error)]">*</span>
         {/if}
       </span>
     </label>
@@ -359,7 +359,7 @@
     {:else if type === 'radio'}
       <!-- Radio buttons would typically be used in a group, so this is a single radio option -->
       {#if !radioValue}
-        <div class="text-error text-sm">{t('forms.errors.radioValueRequired')}</div>
+        <div class="text-[var(--color-error)] text-sm">{t('forms.errors.radioValueRequired')}</div>
       {:else}
         <label class="label cursor-pointer justify-start gap-2">
           <input
@@ -438,7 +438,9 @@
 
   {#if error && (touched || externalError)}
     <div class="label">
-      <span id={errorId} class={cn('text-xs text-error', errorClassName)}>{displayError}</span>
+      <span id={errorId} class={cn('text-xs text-[var(--color-error)]', errorClassName)}
+        >{displayError}</span
+      >
     </div>
   {:else if helpText}
     <span id={helpTextId} class="help-text">{helpText}</span>

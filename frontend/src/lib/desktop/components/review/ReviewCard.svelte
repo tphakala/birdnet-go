@@ -98,7 +98,7 @@
   }
 </script>
 
-<div class="card bg-base-100 shadow-xs border border-base-300">
+<div class="card bg-[var(--color-base-100)] shadow-xs border border-[var(--color-base-300)]">
   <div class="card-body">
     <h3 class="card-title text-lg font-semibold mb-4">
       {t('common.review.form.reviewDetectionTitle')}
@@ -117,7 +117,7 @@
       <!-- Left Column: Review Form -->
       <div class="space-y-4">
         <!-- Review Status Form -->
-        <div class="bg-base-200 rounded-lg p-4">
+        <div class="bg-[var(--color-base-200)] rounded-lg p-4">
           <h4 class="font-medium mb-3">{t('common.review.form.detectionStatusTitle')}</h4>
 
           <label class="label cursor-pointer justify-start gap-4">
@@ -142,7 +142,7 @@
           </label>
 
           {#if detection.locked}
-            <div class="text-sm text-base-content/70 mt-2">
+            <div class="text-sm text-[var(--color-base-content)]/70 mt-2">
               <TriangleAlert class="inline-block size-4 mr-1" />
               {t('common.review.form.detectionLocked')}
             </div>
@@ -151,7 +151,7 @@
 
         <!-- Lock/Unlock Controls -->
         {#if reviewStatus === 'correct' && !detection.locked}
-          <div class="bg-base-200 rounded-lg p-4">
+          <div class="bg-[var(--color-base-200)] rounded-lg p-4">
             <label class="label cursor-pointer justify-start gap-4">
               <input
                 type="checkbox"
@@ -160,14 +160,14 @@
               />
               <span class="label-text">{t('common.review.form.lockDetection')}</span>
             </label>
-            <div class="text-sm text-base-content/70 ml-8">
+            <div class="text-sm text-[var(--color-base-content)]/70 ml-8">
               {t('common.review.form.lockDetectionHelp')}
             </div>
           </div>
         {/if}
 
         {#if detection.locked}
-          <div class="bg-base-200 rounded-lg p-4">
+          <div class="bg-[var(--color-base-200)] rounded-lg p-4">
             <label class="label cursor-pointer justify-start gap-4">
               <input
                 type="checkbox"
@@ -176,7 +176,7 @@
               />
               <span class="label-text">{t('common.review.form.unlockDetection')}</span>
             </label>
-            <div class="text-sm text-base-content/70 ml-8">
+            <div class="text-sm text-[var(--color-base-content)]/70 ml-8">
               {t('common.review.form.unlockDetectionHelp')}
             </div>
           </div>
@@ -184,7 +184,7 @@
 
         <!-- Ignore Species -->
         {#if !detection.locked && reviewStatus === 'false_positive'}
-          <div class="bg-base-200 rounded-lg p-4">
+          <div class="bg-[var(--color-base-200)] rounded-lg p-4">
             <label class="label cursor-pointer justify-start gap-4">
               <input
                 type="checkbox"
@@ -193,7 +193,7 @@
               />
               <span class="label-text">{t('common.review.form.ignoreSpecies')}</span>
             </label>
-            <div class="text-sm text-base-content/70 ml-8">
+            <div class="text-sm text-[var(--color-base-content)]/70 ml-8">
               {t('common.review.form.ignoreSpeciesHelp')}
             </div>
           </div>
@@ -203,7 +203,7 @@
       <!-- Right Column: Comment & Status -->
       <div class="space-y-4">
         <!-- Comment Section -->
-        <div class="bg-base-200 rounded-lg p-4">
+        <div class="bg-[var(--color-base-200)] rounded-lg p-4">
           <button
             type="button"
             class="btn btn-ghost btn-sm justify-start gap-2 p-2"
@@ -217,7 +217,7 @@
                 ? t('common.review.form.hideComment')
                 : t('common.review.form.addComment')}
               {#if comment && !showCommentSection}
-                <span class="text-xs text-base-content/60">
+                <span class="text-xs text-[var(--color-base-content)]/60">
                   ({comment.length}
                   {t('common.review.form.chars')})
                 </span>
@@ -241,11 +241,13 @@
         </div>
 
         <!-- Current Status Summary -->
-        <div class="bg-base-300 rounded-lg p-4">
+        <div class="bg-[var(--color-base-300)] rounded-lg p-4">
           <h4 class="font-medium mb-3">{t('common.review.form.currentStatusTitle')}</h4>
           <div class="space-y-2 text-sm">
             <div class="flex justify-between">
-              <span class="text-base-content/70">{t('common.review.form.reviewLabel')}:</span>
+              <span class="text-[var(--color-base-content)]/70"
+                >{t('common.review.form.reviewLabel')}:</span
+              >
               <span>
                 {#if detection.verified && detection.verified !== 'unverified'}
                   <span
@@ -265,7 +267,9 @@
               </span>
             </div>
             <div class="flex justify-between">
-              <span class="text-base-content/70">{t('common.review.form.lockLabel')}:</span>
+              <span class="text-[var(--color-base-content)]/70"
+                >{t('common.review.form.lockLabel')}:</span
+              >
               <span>
                 {#if detection.locked}
                   <span class="badge badge-warning badge-xs">{t('search.statusBadges.locked')}</span
@@ -278,7 +282,9 @@
             </div>
             {#if detection.comments && detection.comments.length > 0}
               <div class="flex justify-between">
-                <span class="text-base-content/70">{t('common.review.form.commentsLabel')}:</span>
+                <span class="text-[var(--color-base-content)]/70"
+                  >{t('common.review.form.commentsLabel')}:</span
+                >
                 <span>{detection.comments.length}</span>
               </div>
             {/if}
@@ -288,7 +294,7 @@
     </div>
 
     <!-- Action Buttons -->
-    <div class="card-actions justify-end mt-6 pt-4 border-t border-base-300">
+    <div class="card-actions justify-end mt-6 pt-4 border-t border-[var(--color-base-300)]">
       <button
         type="button"
         class="btn btn-primary"

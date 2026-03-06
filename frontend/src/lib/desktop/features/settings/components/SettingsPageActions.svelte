@@ -54,7 +54,7 @@
 
 <!-- Inline Settings Actions Bar -->
 <div
-  class="mt-6 pt-4 border-t border-base-300"
+  class="mt-6 pt-4 border-t border-[var(--color-base-300)]"
   role="toolbar"
   aria-label={t('settings.actions.toolbar')}
 >

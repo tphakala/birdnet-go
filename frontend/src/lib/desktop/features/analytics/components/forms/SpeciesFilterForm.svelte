@@ -75,7 +75,7 @@
   }
 </script>
 
-<div class="card bg-base-100 shadow-xs">
+<div class="card bg-[var(--color-base-100)] shadow-xs">
   <div class="card-body card-padding">
     <h2 class="card-title" id="species-filters-heading">{t('analytics.filters.title')}</h2>
 
@@ -136,7 +136,7 @@
       </div>
 
       <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div class="text-sm text-base-content opacity-60">
+        <div class="text-sm text-[var(--color-base-content)] opacity-60">
           <span>{filteredCount}</span>
           {t('analytics.filters.species')}
           {#if filters.searchTerm}

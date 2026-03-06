@@ -131,7 +131,7 @@
       {@render renderLoading()}
     {:else}
       <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg text-primary"></span>
+        <span class="loading loading-spinner loading-lg text-[var(--color-primary)]"></span>
       </div>
     {/if}
   {:else if error}
@@ -168,7 +168,7 @@
               >
                 <button
                   type="button"
-                  class="inline-flex items-center gap-1 hover:text-primary transition-colors"
+                  class="inline-flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors"
                   onclick={() => handleSort(column)}
                   aria-label={getAriaLabel()}
                   data-testid={`sort-${column.key}`}
@@ -200,7 +200,10 @@
       <tbody>
         {#if data.length === 0}
           <tr>
-            <td colspan={columns.length} class="text-center py-6 text-base-content/70">
+            <td
+              colspan={columns.length}
+              class="text-center py-6 text-[var(--color-base-content)]/70"
+            >
               {#if renderEmpty}
                 {@render renderEmpty()}
               {:else}
@@ -210,7 +213,7 @@
           </tr>
         {:else}
           {#each data as item, index (keyFn(item, index))}
-            <tr class={hoverable ? 'hover:bg-base-200/50 transition-colors' : ''}>
+            <tr class={hoverable ? 'hover:bg-[var(--color-base-200)]/50 transition-colors' : ''}>
               {#each columns as column (column.key)}
                 <td class={cn(getAlignClass(column.align), column.className)}>
                   {#if renderCell}

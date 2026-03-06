@@ -276,7 +276,9 @@
   <div class="block w-full overflow-x-auto relative">
     {#if loading && data}
       <!-- Loading overlay when updating existing data -->
-      <div class="absolute inset-0 bg-base-100/50 z-10 flex justify-center items-center">
+      <div
+        class="absolute inset-0 bg-[var(--color-base-100)]/50 z-10 flex justify-center items-center"
+      >
         <LoadingSpinner size="lg" />
       </div>
     {/if}
@@ -341,7 +343,7 @@
                 <th scope="col">{t('detections.headers.actions')}</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-base-200">
+            <tbody class="divide-y divide-[var(--color-base-200)]">
               {#each data.notes as detection (detection.id)}
                 <tr>
                   <DetectionRow
@@ -374,9 +376,9 @@
 
   <!-- Pagination Controls -->
   {#if data && data.totalResults > data.itemsPerPage}
-    <div class="border-t border-base-200">
+    <div class="border-t border-[var(--color-base-200)]">
       <div class="flex flex-col sm:flex-row justify-between items-center p-4 gap-4">
-        <div class="text-sm text-base-content opacity-70 order-2 sm:order-1">
+        <div class="text-sm text-[var(--color-base-content)] opacity-70 order-2 sm:order-1">
           {t('detections.pagination.showing', {
             from: data.showingFrom,
             to: data.showingTo,

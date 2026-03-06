@@ -48,22 +48,22 @@
   }
 
   function getProgressColor(percentage: number): string {
-    if (percentage > 90) return 'bg-error';
-    if (percentage > 70) return 'bg-warning';
-    return 'bg-success';
+    if (percentage > 90) return 'bg-[var(--color-error)]';
+    if (percentage > 70) return 'bg-[var(--color-warning)]';
+    return 'bg-[var(--color-success)]';
   }
 
   function getBufferColor(baseColor: string): string {
     // Return a lighter/muted version of the base color for buffers
     switch (baseColor) {
-      case 'bg-error':
-        return 'bg-error/50';
-      case 'bg-warning':
-        return 'bg-warning/50';
-      case 'bg-success':
-        return 'bg-success/50';
+      case 'bg-[var(--color-error)]':
+        return 'bg-[var(--color-error)]/50';
+      case 'bg-[var(--color-warning)]':
+        return 'bg-[var(--color-warning)]/50';
+      case 'bg-[var(--color-success)]':
+        return 'bg-[var(--color-success)]/50';
       default:
-        return 'bg-info/50';
+        return 'bg-[var(--color-info)]/50';
     }
   }
 
@@ -72,7 +72,7 @@
   let headingId = $derived(`${title.toLowerCase().replace(/\s+/g, '-')}-heading`);
 </script>
 
-<div class={cn('card bg-base-100 shadow-xs', className)}>
+<div class={cn('card bg-[var(--color-base-100)] shadow-xs', className)}>
   <div class="card-body card-padding">
     <h2 class="card-title" id={headingId}>{title}</h2>
     <div class="divider"></div>
@@ -101,12 +101,12 @@
             <!-- Title and usage - optimized for card width -->
             <div class="flex flex-col lg:flex-row lg:justify-between mb-2 gap-1">
               <span class="font-medium">{item.mountpoint || item.label}</span>
-              <span class="text-base-content/80 lg:text-base-content">
+              <span class="text-[var(--color-base-content)]/80 lg:text-[var(--color-base-content)]">
                 {formatStorage(item.used)} / {formatStorage(item.total)}
               </span>
             </div>
             <div
-              class="w-full bg-base-200 rounded-full h-2 relative overflow-hidden"
+              class="w-full bg-[var(--color-base-200)] rounded-full h-2 relative overflow-hidden"
               role="progressbar"
               aria-valuenow={item.usagePercent}
               aria-valuemin="0"
@@ -144,7 +144,7 @@
                 <div class="space-y-0.5">
                   <div>{Math.round(item.usagePercent)}% used</div>
                   {#if buffCachePercent > 0}
-                    <div class="text-base-content/70">
+                    <div class="text-[var(--color-base-content)]/70">
                       {Math.round(buffCachePercent)}% buff/cache
                     </div>
                   {/if}
@@ -163,14 +163,14 @@
           <div class="space-y-2 text-sm">
             <!-- Free memory -->
             <div class="flex justify-between items-center">
-              <span class="text-base-content/60 min-w-[80px]">Free:</span>
+              <span class="text-[var(--color-base-content)]/60 min-w-[80px]">Free:</span>
               <span class="font-semibold text-right"
                 >{formatStorage(item.free ?? item.total - item.used)}</span
               >
             </div>
             <!-- Available memory -->
             <div class="flex justify-between items-center">
-              <span class="text-base-content/60 min-w-[80px]">Available:</span>
+              <span class="text-[var(--color-base-content)]/60 min-w-[80px]">Available:</span>
               <span class="font-semibold text-right"
                 >{formatStorage(item.available ?? item.total - item.used)}</span
               >
@@ -178,7 +178,7 @@
             <!-- Buff/Cache combined (if available) -->
             {#if (item.buffers !== undefined || item.cached !== undefined) && (item.buffers ?? 0) + (item.cached ?? 0) > 0}
               <div class="flex justify-between items-center">
-                <span class="text-base-content/60 min-w-[80px]">Buff/Cache:</span>
+                <span class="text-[var(--color-base-content)]/60 min-w-[80px]">Buff/Cache:</span>
                 <span class="font-semibold text-right"
                   >{formatStorage((item.buffers ?? 0) + (item.cached ?? 0))}</span
                 >
@@ -191,7 +191,7 @@
 
     <!-- No data state -->
     {#if !isLoading && !error && items.length === 0}
-      <div class="text-center py-4 text-base-content/70">{emptyMessage}</div>
+      <div class="text-center py-4 text-[var(--color-base-content)]/70">{emptyMessage}</div>
     {/if}
   </div>
 </div>

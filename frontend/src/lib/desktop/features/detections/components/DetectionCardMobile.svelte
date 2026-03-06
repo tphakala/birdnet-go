@@ -41,7 +41,7 @@
   }
 </script>
 
-<section class={`card bg-base-100 shadow-xs relative overflow-hidden ${className}`}>
+<section class={`card bg-[var(--color-base-100)] shadow-xs relative overflow-hidden ${className}`}>
   {#if spectrogramUrl && !spectrogramError}
     <img
       src={spectrogramUrl}
@@ -49,7 +49,7 @@
       class="absolute inset-0 w-full h-full object-cover opacity-20"
       onerror={() => (spectrogramError = true)}
     />
-    <div class="absolute inset-0 bg-base-100/60"></div>
+    <div class="absolute inset-0 bg-[var(--color-base-100)]/60"></div>
   {/if}
   <div class="card-body p-3 space-y-3 relative">
     <!-- Header: Names and confidence -->

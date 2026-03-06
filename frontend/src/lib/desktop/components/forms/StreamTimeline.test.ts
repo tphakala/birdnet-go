@@ -171,7 +171,7 @@ describe('StreamTimeline', () => {
       const button = screen.getByRole('button');
       expect(button).toHaveClass('border-amber-400');
       // Hollow nodes have base background (theme-aware)
-      expect(button).toHaveClass('bg-base-100');
+      expect(button).toHaveClass('bg-[var(--color-base-100)]');
     });
 
     it('applies red color for error events', () => {

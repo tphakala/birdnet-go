@@ -177,7 +177,7 @@
     portalDropdown = document.createElement('div');
     portalDropdown.id = instanceId;
     portalDropdown.className =
-      'bg-base-100 border border-base-300 rounded-lg shadow-lg max-h-60 overflow-y-auto';
+      'bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-lg max-h-60 overflow-y-auto';
     portalDropdown.style.position = 'absolute';
     portalDropdown.style.zIndex = Z_INDEX.PORTAL_DROPDOWN.toString();
     portalDropdown.setAttribute('role', 'listbox');
@@ -218,7 +218,7 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className =
-          'species-prediction-item w-full text-left px-4 py-2 hover:bg-base-200 focus:bg-base-200 focus:outline-hidden border-none bg-transparent text-sm';
+          'species-prediction-item w-full text-left px-4 py-2 hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden border-none bg-transparent text-sm';
         // eslint-disable-next-line security/detect-object-injection
         button.textContent = filteredPredictions[i];
         button.setAttribute('role', 'option');
@@ -425,14 +425,14 @@
       <span class="label-text capitalize">
         {label}
         {#if required}
-          <span class="text-error ml-1">*</span>
+          <span class="text-[var(--color-error)] ml-1">*</span>
         {/if}
       </span>
 
       {#if tooltip}
         <button
           type="button"
-          class="help-icon ml-1 text-info hover:text-info-focus transition-colors"
+          class="help-icon ml-1 text-[var(--color-info)] hover:text-[var(--color-info-hover)] transition-colors"
           onmouseenter={() => (showTooltip = true)}
           onmouseleave={() => (showTooltip = false)}
           onfocus={() => (showTooltip = true)}
@@ -499,7 +499,7 @@
 
   <!-- Validation Message -->
   {#if !isValid && touched}
-    <span class="text-sm text-error mt-1">
+    <span class="text-sm text-[var(--color-error)] mt-1">
       {validationMessage || `Please enter a valid ${label || 'species'}`}
     </span>
   {/if}
@@ -507,14 +507,14 @@
   <!-- Help Text -->
   {#if helpText}
     <div class="label">
-      <span class="label-text-alt text-base-content opacity-70">{helpText}</span>
+      <span class="label-text-alt text-[var(--color-base-content)] opacity-70">{helpText}</span>
     </div>
   {/if}
 
   <!-- Tooltip -->
   {#if tooltip && showTooltip}
     <div
-      class="absolute p-2 mt-1 text-sm bg-base-300 border border-base-content/20 rounded-sm shadow-lg max-w-xs text-base-content"
+      class="absolute p-2 mt-1 text-sm bg-[var(--color-base-300)] border border-[var(--color-base-content)]/20 rounded-sm shadow-lg max-w-xs text-[var(--color-base-content)]"
       style:z-index={Z_INDEX.PORTAL_TOOLTIP}
       role="tooltip"
     >

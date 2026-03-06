@@ -267,13 +267,13 @@
 
         {#if predictions.length > 0}
           <div
-            class="absolute z-10 w-full mt-1 bg-base-100 rounded-lg shadow-lg border border-base-300 max-h-48 overflow-auto"
+            class="absolute z-10 w-full mt-1 bg-[var(--color-base-100)] rounded-lg shadow-lg border border-[var(--color-base-300)] max-h-48 overflow-auto"
           >
             {#each predictions as prediction, predictionIndex (`${prediction}-${predictionIndex}`)}
               <button
                 type="button"
                 onclick={() => selectPrediction(prediction)}
-                class="w-full px-4 py-2 text-left hover:bg-base-200 focus:bg-base-200 focus:outline-hidden"
+                class="w-full px-4 py-2 text-left hover:bg-[var(--color-base-200)] focus:bg-[var(--color-base-200)] focus:outline-hidden"
               >
                 {formatSpeciesName(prediction)}
               </button>
@@ -296,8 +296,8 @@
         <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
         <div
           class={cn(
-            'flex items-center gap-2 p-2 bg-base-200 rounded-lg',
-            dragOverIndex === index && 'ring-2 ring-primary'
+            'flex items-center gap-2 p-2 bg-[var(--color-base-200)] rounded-lg',
+            dragOverIndex === index && 'ring-2 ring-[var(--color-primary)]'
           )}
           draggable={editable && sortable}
           ondragstart={e => handleDragStart(e, index)}
@@ -345,7 +345,7 @@
               <button
                 type="button"
                 onclick={() => removeSpecies(index)}
-                class="btn btn-ghost btn-xs text-error"
+                class="btn btn-ghost btn-xs text-[var(--color-error)]"
                 aria-label={t('forms.species.aria.remove')}
               >
                 <X class="size-4" />
@@ -356,11 +356,11 @@
       {/each}
     </div>
   {:else if !editable}
-    <p class="text-base-content opacity-60 italic">{t('forms.species.empty')}</p>
+    <p class="text-[var(--color-base-content)] opacity-60 italic">{t('forms.species.empty')}</p>
   {/if}
 
   {#if maxItems && species.length >= maxItems}
-    <p class="text-sm text-warning mt-2">
+    <p class="text-sm text-[var(--color-warning)] mt-2">
       {t('forms.species.maxReached', { maxItems })}
     </p>
   {/if}

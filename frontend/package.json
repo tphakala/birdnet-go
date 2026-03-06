@@ -45,6 +45,7 @@
     "ast:test": "sg scan src/ --rule rules/simple-test.yml",
     "ast:fix": "sg scan -U src/",
     "ast:all": "npm run ast:security && npm run ast:svelte5 && npm run ast:migration && npm run ast:best-practices",
+    "lint:bare-colors": "bash scripts/check-bare-color-classes.sh",
     "test:a11y": "vitest run --reporter=verbose -t \"Accessibility\"",
     "test:a11y:watch": "vitest -t \"Accessibility\"",
     "test:e2e": "playwright test",

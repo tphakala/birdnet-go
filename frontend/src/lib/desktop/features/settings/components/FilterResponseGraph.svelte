@@ -469,7 +469,7 @@
       bind:this={canvas}
       width={canvasWidth}
       height={canvasHeight}
-      class="border border-base-300 rounded-lg cursor-crosshair shadow-lg"
+      class="border border-[var(--color-base-300)] rounded-lg cursor-crosshair shadow-lg"
       style:background-color={colors.background}
       onmousemove={handleMouseMove}
       onmouseleave={handleMouseLeave}
@@ -477,13 +477,19 @@
 
     {#if tooltip && tooltip.visible && tooltip.x != null && tooltip.y != null}
       <div
-        class="absolute z-10 px-3 py-2 text-xs bg-base-300 border border-base-content/20 rounded-lg shadow-lg pointer-events-none"
+        class="absolute z-10 px-3 py-2 text-xs bg-[var(--color-base-300)] border border-[var(--color-base-content)]/20 rounded-lg shadow-lg pointer-events-none"
         style:left="{(tooltip.x ?? 0) + 10}px"
         style:top="{(tooltip.y ?? 0) - 10}px"
         style:transform="translateY(-100%)"
       >
         <div class="font-semibold">{tooltip.freq} Hz</div>
-        <div class={tooltip.gain > 0 ? 'text-success' : tooltip.gain < -12 ? 'text-error' : ''}>
+        <div
+          class={tooltip.gain > 0
+            ? 'text-[var(--color-success)]'
+            : tooltip.gain < -12
+              ? 'text-[var(--color-error)]'
+              : ''}
+        >
           {tooltip.gain > 0 ? '+' : ''}{tooltip.gain} dB
         </div>
       </div>

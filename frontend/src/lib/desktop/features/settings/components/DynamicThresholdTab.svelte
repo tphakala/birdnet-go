@@ -228,7 +228,7 @@
 
 <div class="space-y-4">
   <!-- Description -->
-  <div class="text-sm text-base-content/70">
+  <div class="text-sm text-[var(--color-base-content)]/70">
     <p>{t('settings.species.dynamicThreshold.description')}</p>
   </div>
 
@@ -297,7 +297,7 @@
         <span class="loading loading-spinner loading-lg"></span>
       </div>
     {:else if filteredThresholds.length === 0}
-      <div class="text-center py-8 text-base-content/60">
+      <div class="text-center py-8 text-[var(--color-base-content)]/60">
         <Activity class="size-12 mx-auto mb-3 opacity-40" />
         <p class="font-medium">{t('settings.species.dynamicThreshold.empty.title')}</p>
         <p class="text-sm">{t('settings.species.dynamicThreshold.empty.description')}</p>
@@ -305,13 +305,13 @@
     {:else}
       <!-- Table Header -->
       <div
-        class="grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 items-center px-2 py-2 text-xs font-medium text-base-content/60 border-b border-base-300"
+        class="grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 items-center px-2 py-2 text-xs font-medium text-[var(--color-base-content)]/60 border-b border-[var(--color-base-300)]"
       >
         <div class="w-6"></div>
         <div class="w-10"></div>
         <button
           type="button"
-          class="flex items-center gap-1 hover:text-primary transition-colors cursor-pointer text-left"
+          class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer text-left"
           onclick={() => handleSort('species')}
           aria-label={t('dataDisplay.table.sortBy', {
             column: t('settings.species.dynamicThreshold.header.species'),
@@ -330,7 +330,7 @@
         </button>
         <button
           type="button"
-          class="flex items-center justify-center gap-1 hover:text-primary transition-colors cursor-pointer w-20"
+          class="flex items-center justify-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-20"
           onclick={() => handleSort('threshold')}
           aria-label={t('dataDisplay.table.sortBy', {
             column: t('settings.species.dynamicThreshold.header.threshold'),
@@ -349,7 +349,7 @@
         </button>
         <button
           type="button"
-          class="flex items-center justify-center gap-1 hover:text-primary transition-colors cursor-pointer w-20"
+          class="flex items-center justify-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-20"
           onclick={() => handleSort('expires')}
           aria-label={t('dataDisplay.table.sortBy', {
             column: t('settings.species.dynamicThreshold.header.expires'),
@@ -370,7 +370,7 @@
       </div>
 
       <!-- Table Body -->
-      <div class="divide-y divide-base-300">
+      <div class="divide-y divide-[var(--color-base-300)]">
         {#each filteredThresholds as threshold (threshold.speciesName)}
           {@const levelDisplay = getLevelDisplay(threshold.level as ThresholdLevel)}
           {@const isExpanded = expandedSpecies.has(threshold.speciesName)}
@@ -396,7 +396,7 @@
               </button>
 
               <!-- Thumbnail -->
-              <div class="w-10 h-8 rounded overflow-hidden bg-base-200 shrink-0">
+              <div class="w-10 h-8 rounded overflow-hidden bg-[var(--color-base-200)] shrink-0">
                 {#if threshold.scientificName}
                   <img
                     src="/api/v2/media/species-image?name={encodeURIComponent(
@@ -422,7 +422,9 @@
                 {#if threshold.isActive}
                   {getTimeRemaining(threshold.expiresAt)}
                 {:else}
-                  <span class="text-warning">{t('settings.species.dynamicThreshold.expired')}</span>
+                  <span class="text-[var(--color-warning)]"
+                    >{t('settings.species.dynamicThreshold.expired')}</span
+                  >
                 {/if}
               </div>
 
@@ -454,14 +456,14 @@
 
             <!-- Expanded Events -->
             {#if isExpanded}
-              <div class="mt-3 ml-8 pl-4 border-l-2 border-base-300">
+              <div class="mt-3 ml-8 pl-4 border-l-2 border-[var(--color-base-300)]">
                 {#if isLoadingEvents}
-                  <div class="flex items-center gap-2 py-2 text-base-content/60">
+                  <div class="flex items-center gap-2 py-2 text-[var(--color-base-content)]/60">
                     <span class="loading loading-spinner loading-xs"></span>
                     <span class="text-sm">{t('common.loading')}</span>
                   </div>
                 {:else if events.length === 0}
-                  <p class="text-sm text-base-content/60 py-2">
+                  <p class="text-sm text-[var(--color-base-content)]/60 py-2">
                     {t('settings.species.dynamicThreshold.noEvents')}
                   </p>
                 {:else}
@@ -482,11 +484,11 @@
                                 event.newValue * 100
                               ).toFixed(0)}%
                             </span>
-                            <span class="text-xs text-base-content/60">
+                            <span class="text-xs text-[var(--color-base-content)]/60">
                               ({t(getChangeReasonKey(event.changeReason))})
                             </span>
                           </div>
-                          <div class="text-xs text-base-content/60">
+                          <div class="text-xs text-[var(--color-base-content)]/60">
                             {formatDate(event.createdAt)}
                             {#if event.confidence && event.confidence > 0}
                               <span class="ml-2">
@@ -525,7 +527,7 @@
   <div class="modal modal-open">
     <div class="modal-box">
       <h3 class="font-bold text-lg flex items-center gap-2">
-        <AlertTriangle class="size-5 text-warning" />
+        <AlertTriangle class="size-5 text-[var(--color-warning)]" />
         {t('settings.species.dynamicThreshold.resetAllConfirm.title')}
       </h3>
       <p class="py-4">

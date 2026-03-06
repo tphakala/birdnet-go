@@ -83,31 +83,31 @@
   }: Props = $props();
 
   const variantClasses: Record<CardVariant, string> = {
-    default: 'bg-base-100',
-    primary: 'bg-primary text-primary-content',
-    secondary: 'bg-secondary text-secondary-content',
-    accent: 'bg-accent text-accent-content',
-    info: 'bg-info text-info-content',
-    success: 'bg-success text-success-content',
-    warning: 'bg-warning text-warning-content',
-    error: 'bg-error text-error-content',
+    default: 'bg-[var(--color-base-100)]',
+    primary: 'bg-[var(--color-primary)] text-[var(--color-primary-content)]',
+    secondary: 'bg-[var(--color-secondary)] text-[var(--color-secondary-content)]',
+    accent: 'bg-[var(--color-accent)] text-[var(--color-accent-content)]',
+    info: 'bg-[var(--color-info)] text-[var(--color-info-content)]',
+    success: 'bg-[var(--color-success)] text-[var(--color-success-content)]',
+    warning: 'bg-[var(--color-warning)] text-[var(--color-warning-content)]',
+    error: 'bg-[var(--color-error)] text-[var(--color-error-content)]',
   };
 
   const iconVariantClasses: Record<CardVariant, string> = {
-    default: 'bg-base-200 text-base-content',
-    primary: 'bg-primary-focus text-primary-content',
-    secondary: 'bg-secondary-focus text-secondary-content',
-    accent: 'bg-accent-focus text-accent-content',
-    info: 'bg-info-content/20 text-info-content',
-    success: 'bg-success-content/20 text-success-content',
-    warning: 'bg-warning-content/20 text-warning-content',
-    error: 'bg-error-content/20 text-error-content',
+    default: 'bg-[var(--color-base-200)] text-[var(--color-base-content)]',
+    primary: 'bg-[var(--color-primary-hover)] text-[var(--color-primary-content)]',
+    secondary: 'bg-[var(--color-secondary-hover)] text-[var(--color-secondary-content)]',
+    accent: 'bg-[var(--color-accent-hover)] text-[var(--color-accent-content)]',
+    info: 'bg-[var(--color-info-content)]/20 text-[var(--color-info-content)]',
+    success: 'bg-[var(--color-success-content)]/20 text-[var(--color-success-content)]',
+    warning: 'bg-[var(--color-warning-content)]/20 text-[var(--color-warning-content)]',
+    error: 'bg-[var(--color-error-content)]/20 text-[var(--color-error-content)]',
   };
 
   const trendClasses: Record<TrendDirection, string> = {
-    up: 'text-success',
-    down: 'text-error',
-    neutral: 'text-base-content/70',
+    up: 'text-[var(--color-success)]',
+    down: 'text-[var(--color-error)]',
+    neutral: 'text-[var(--color-base-content)]/70',
   };
 
   const cardClasses = $derived(
