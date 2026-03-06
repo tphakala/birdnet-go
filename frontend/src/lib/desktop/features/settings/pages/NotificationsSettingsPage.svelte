@@ -1266,863 +1266,886 @@
 <!-- CHANNELS TAB -->
 <!-- ============================================================ -->
 {#snippet channelsContent()}
-  <SettingsSection
-    title={t('settings.notifications.tabs.channels')}
-    description={t('settings.notifications.push.description')}
-    defaultOpen={true}
-  >
-    {#if loadingPush}
-      <div class="flex justify-center py-4">
-        <span
-          class="inline-block w-6 h-6 border-4 border-base-300 border-t-primary rounded-full animate-spin"
-        ></span>
-      </div>
-    {:else}
-      <div class="space-y-4">
-        <!-- Master Enable Toggle -->
-        <Checkbox
-          checked={pushSettings.enabled}
-          label={t('settings.notifications.push.enable')}
-          disabled={savingPush}
-          onchange={togglePushEnabled}
-        />
-
-        {#if pushSettings.enabled}
-          <p class="text-sm text-base-content/70">
-            {t('settings.notifications.push.enabledDescription')}
-          </p>
-        {:else}
-          <p class="text-sm text-base-content/50">
-            {t('settings.notifications.push.disabled')}
-          </p>
-        {/if}
-
-        <!-- Detection Filters Section -->
-        {#if pushSettings.enabled}
-          <div class="rounded-lg bg-base-200">
-            <div class="p-6">
-              <h3 class="text-base font-semibold mb-4">
-                {t('settings.notifications.push.filters.title')}
-              </h3>
-              <p class="text-sm text-base-content/70 mb-2">
-                {t('settings.notifications.push.filters.description')}
-              </p>
-
-              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <!-- Minimum Confidence Threshold -->
-                <div>
-                  <label for="min-confidence" class="block mb-1">
-                    <span class="text-sm font-semibold text-base-content">
-                      {t('settings.notifications.push.filters.minConfidence.label')}
-                    </span>
-                  </label>
-                  <div class="flex">
-                    <input
-                      id="min-confidence"
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="5"
-                      value={Math.round((pushSettings.minConfidenceThreshold ?? 0) * 100)}
-                      onchange={e => {
-                        const target = e.target as HTMLInputElement;
-                        pushSettings.minConfidenceThreshold =
-                          Math.max(0, Math.min(100, parseInt(target.value) || 0)) / 100;
-                      }}
-                      class="flex-1 h-10 px-3 text-sm bg-base-100 border border-base-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                      disabled={savingPush}
-                    />
-                    <span
-                      class="inline-flex items-center justify-center px-3 text-sm bg-base-300 border border-l-0 border-base-300 rounded-r-lg"
-                      >%</span
-                    >
-                  </div>
-                  <p class="text-xs text-base-content/60 mt-1">
-                    {t('settings.notifications.push.filters.minConfidence.helpText')}
-                  </p>
-                </div>
-
-                <!-- Species Cooldown -->
-                <div>
-                  <label for="species-cooldown" class="block mb-1">
-                    <span class="text-sm font-semibold text-base-content">
-                      {t('settings.notifications.push.filters.speciesCooldown.label')}
-                    </span>
-                  </label>
-                  <div class="flex">
-                    <input
-                      id="species-cooldown"
-                      type="number"
-                      min="0"
-                      max="1440"
-                      step="5"
-                      value={pushSettings.speciesCooldownMinutes ?? 0}
-                      onchange={e => {
-                        const target = e.target as HTMLInputElement;
-                        pushSettings.speciesCooldownMinutes = Math.max(
-                          0,
-                          Math.min(1440, parseInt(target.value) || 0)
-                        );
-                      }}
-                      class="flex-1 h-10 px-3 text-sm bg-base-100 border border-base-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                      disabled={savingPush}
-                    />
-                    <span
-                      class="inline-flex items-center justify-center px-3 text-sm bg-base-300 border border-l-0 border-base-300 rounded-r-lg"
-                      >{t('settings.notifications.push.filters.speciesCooldown.unit')}</span
-                    >
-                  </div>
-                  <p class="text-xs text-base-content/60 mt-1">
-                    {t('settings.notifications.push.filters.speciesCooldown.helpText')}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Provider Form Modal -->
-        {#if showProviderForm}
-          <div class="rounded-lg bg-base-200 border border-primary">
-            <div class="p-6">
-              <h3 class="text-base font-semibold mb-4">
-                {editingProviderIndex !== null
-                  ? t('settings.notifications.push.form.editTitle')
-                  : t('settings.notifications.push.form.addTitle')}
-              </h3>
-
-              <div class="space-y-4">
-                <!-- Service Selector with Icons -->
-                <SelectDropdown
-                  options={availableServices}
-                  bind:value={selectedService}
-                  label={t('settings.notifications.push.services.selectLabel')}
-                  helpText={t('settings.notifications.push.services.selectHelpText')}
-                  variant="select"
-                  groupBy={false}
-                  onChange={value => (selectedService = value as ServiceType)}
-                >
-                  {#snippet renderOption(option)}
-                    {@const serviceOption = option as ServiceOption}
-                    <div class="flex items-center gap-2">
-                      <ServiceIcon service={serviceOption.serviceId} className="size-4" />
-                      <span>{serviceOption.label}</span>
-                    </div>
-                  {/snippet}
-                  {#snippet renderSelected(options)}
-                    {@const serviceOption = options[0] as ServiceOption}
-                    <span class="flex items-center gap-2">
-                      <ServiceIcon service={serviceOption.serviceId} className="size-4" />
-                      <span>{serviceOption.label}</span>
-                    </span>
-                  {/snippet}
-                </SelectDropdown>
-
-                <!-- Service-Specific Inputs -->
-                {#if selectedService === 'discord'}
-                  <TextInput
-                    id="discord-webhook"
-                    value={serviceFormData.discordWebhookUrl}
-                    label={t('settings.notifications.push.services.discord.webhookUrl.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.discord.webhookUrl.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.discordWebhookUrl = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.discord.webhookUrl.helpText')}
-                  </p>
-                {:else if selectedService === 'telegram'}
-                  <TextInput
-                    id="telegram-token"
-                    value={serviceFormData.telegramBotToken}
-                    label={t('settings.notifications.push.services.telegram.botToken.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.telegram.botToken.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.telegramBotToken = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.telegram.botToken.helpText')}
-                  </p>
-                  <TextInput
-                    id="telegram-chat"
-                    value={serviceFormData.telegramChatId}
-                    label={t('settings.notifications.push.services.telegram.chatId.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.telegram.chatId.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.telegramChatId = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.telegram.chatId.helpText')}
-                  </p>
-                {:else if selectedService === 'ntfy'}
-                  <TextInput
-                    id="ntfy-server"
-                    value={serviceFormData.ntfyServer}
-                    label={t('settings.notifications.push.services.ntfy.server.label')}
-                    placeholder={t('settings.notifications.push.services.ntfy.server.placeholder')}
-                    onchange={value => {
-                      serviceFormData.ntfyServer = value;
-                      serviceFormData.ntfyCheckStatus = 'idle';
-                      serviceFormData.ntfyCheckHost = '';
-                      serviceFormData.ntfyUsername = '';
-                      serviceFormData.ntfyPassword = '';
-                    }}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.ntfy.server.helpText')}
-                  </p>
-
-                  {#if serviceFormData.ntfyServer && serviceFormData.ntfyServer !== 'ntfy.sh'}
-                    <!-- Protocol selector + Test Connection button -->
-                    <div class="flex items-center gap-2 mt-1 flex-wrap">
-                      <SelectDropdown
-                        bind:value={serviceFormData.ntfyProtocol}
-                        options={ntfyProtocolOptions}
-                        variant="select"
-                        size="sm"
-                        menuSize="sm"
-                        onChange={() => (serviceFormData.ntfyCheckStatus = 'idle')}
-                      />
-                      <button
-                        type="button"
-                        class="btn btn-sm btn-outline"
-                        disabled={serviceFormData.ntfyCheckStatus === 'checking'}
-                        onclick={checkNtfyServer}
-                      >
-                        {#if serviceFormData.ntfyCheckStatus === 'checking'}
-                          <span class="loading loading-spinner loading-xs"></span>
-                        {/if}
-                        {t('settings.notifications.push.services.ntfy.testConnection')}
-                      </button>
-                      {#if serviceFormData.ntfyCheckStatus === 'https'}
-                        <span class="text-xs text-success"
-                          >{t('settings.notifications.push.services.ntfy.connectionOk.https')}</span
-                        >
-                      {:else if serviceFormData.ntfyCheckStatus === 'http'}
-                        <span class="text-xs text-warning"
-                          >{t('settings.notifications.push.services.ntfy.connectionOk.http')}</span
-                        >
-                      {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
-                        <span class="text-xs text-error"
-                          >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
-                        >
-                      {/if}
-                    </div>
-
-                    <!-- Optional authentication -->
-                    <details class="mt-2">
-                      <summary
-                        class="text-sm cursor-pointer opacity-70 hover:opacity-100 select-none"
-                      >
-                        {t('settings.notifications.push.services.ntfy.auth.label')}
-                      </summary>
-                      <div class="mt-2 space-y-2">
-                        <TextInput
-                          id="ntfy-username"
-                          value={serviceFormData.ntfyUsername}
-                          label={t('settings.notifications.push.services.ntfy.auth.username.label')}
-                          placeholder={t(
-                            'settings.notifications.push.services.ntfy.auth.username.placeholder'
-                          )}
-                          onchange={value => (serviceFormData.ntfyUsername = value)}
-                        />
-                        <TextInput
-                          id="ntfy-password"
-                          type="password"
-                          value={serviceFormData.ntfyPassword}
-                          label={t('settings.notifications.push.services.ntfy.auth.password.label')}
-                          placeholder={t(
-                            'settings.notifications.push.services.ntfy.auth.password.placeholder'
-                          )}
-                          onchange={value => (serviceFormData.ntfyPassword = value)}
-                        />
-                      </div>
-                    </details>
-                  {/if}
-
-                  <TextInput
-                    id="ntfy-topic"
-                    value={serviceFormData.ntfyTopic}
-                    label={t('settings.notifications.push.services.ntfy.topic.label')}
-                    placeholder={t('settings.notifications.push.services.ntfy.topic.placeholder')}
-                    onchange={value => (serviceFormData.ntfyTopic = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.ntfy.topic.helpText')}
-                  </p>
-                {:else if selectedService === 'gotify'}
-                  <TextInput
-                    id="gotify-server"
-                    value={serviceFormData.gotifyServer}
-                    label={t('settings.notifications.push.services.gotify.server.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.gotify.server.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.gotifyServer = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.gotify.server.helpText')}
-                  </p>
-                  <TextInput
-                    id="gotify-token"
-                    value={serviceFormData.gotifyToken}
-                    label={t('settings.notifications.push.services.gotify.token.label')}
-                    placeholder={t('settings.notifications.push.services.gotify.token.placeholder')}
-                    onchange={value => (serviceFormData.gotifyToken = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.gotify.token.helpText')}
-                  </p>
-                {:else if selectedService === 'pushover'}
-                  <TextInput
-                    id="pushover-api"
-                    value={serviceFormData.pushoverApiToken}
-                    label={t('settings.notifications.push.services.pushover.apiToken.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.pushover.apiToken.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.pushoverApiToken = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.pushover.apiToken.helpText')}
-                  </p>
-                  <TextInput
-                    id="pushover-user"
-                    value={serviceFormData.pushoverUserKey}
-                    label={t('settings.notifications.push.services.pushover.userKey.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.pushover.userKey.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.pushoverUserKey = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.pushover.userKey.helpText')}
-                  </p>
-                {:else if selectedService === 'slack'}
-                  <TextInput
-                    id="slack-webhook"
-                    value={serviceFormData.slackWebhookUrl}
-                    label={t('settings.notifications.push.services.slack.webhookUrl.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.slack.webhookUrl.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.slackWebhookUrl = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.slack.webhookUrl.helpText')}
-                  </p>
-                {:else if selectedService === 'ifttt'}
-                  <TextInput
-                    id="ifttt-webhook-key"
-                    value={serviceFormData.iftttWebhookKey}
-                    label={t('settings.notifications.push.services.ifttt.webhookKey.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.ifttt.webhookKey.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.iftttWebhookKey = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.ifttt.webhookKey.helpText')}
-                  </p>
-                  <TextInput
-                    id="ifttt-event-name"
-                    value={serviceFormData.iftttEventName}
-                    label={t('settings.notifications.push.services.ifttt.eventName.label')}
-                    placeholder={t(
-                      'settings.notifications.push.services.ifttt.eventName.placeholder'
-                    )}
-                    onchange={value => (serviceFormData.iftttEventName = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.ifttt.eventName.helpText')}
-                  </p>
-                {:else if selectedService === 'webhook'}
-                  <TextInput
-                    id="webhook-url"
-                    value={serviceFormData.webhookUrl}
-                    label={t('settings.notifications.push.services.webhook.url.label')}
-                    placeholder={t('settings.notifications.push.services.webhook.url.placeholder')}
-                    onchange={value => (serviceFormData.webhookUrl = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.webhook.url.helpText')}
-                  </p>
-
-                  <SelectDropdown
-                    bind:value={serviceFormData.webhookMethod}
-                    options={webhookMethodOptions}
-                    label={t('settings.notifications.push.services.webhook.method.label')}
-                    helpText={t('settings.notifications.push.services.webhook.method.helpText')}
-                    variant="select"
-                    size="sm"
-                    menuSize="sm"
-                  />
-
-                  <SelectDropdown
-                    bind:value={serviceFormData.webhookAuthType}
-                    options={webhookAuthOptions}
-                    label={t('settings.notifications.push.services.webhook.auth.label')}
-                    helpText={t('settings.notifications.push.services.webhook.auth.helpText')}
-                    variant="select"
-                    size="sm"
-                    menuSize="sm"
-                  />
-
-                  {#if serviceFormData.webhookAuthType === 'bearer'}
-                    <TextInput
-                      id="webhook-bearer-token"
-                      value={serviceFormData.webhookBearerToken}
-                      label={t('settings.notifications.push.services.webhook.bearerToken.label')}
-                      placeholder={t(
-                        'settings.notifications.push.services.webhook.bearerToken.placeholder'
-                      )}
-                      onchange={value => (serviceFormData.webhookBearerToken = value)}
-                    />
-                    <p class="text-xs text-base-content/60 -mt-2">
-                      {t('settings.notifications.push.services.webhook.bearerToken.helpText')}
-                    </p>
-                  {/if}
-
-                  {#if serviceFormData.webhookAuthType === 'basic'}
-                    <TextInput
-                      id="webhook-basic-user"
-                      value={serviceFormData.webhookBasicUser}
-                      label={t('settings.notifications.push.services.webhook.basicUser.label')}
-                      placeholder={t(
-                        'settings.notifications.push.services.webhook.basicUser.placeholder'
-                      )}
-                      onchange={value => (serviceFormData.webhookBasicUser = value)}
-                    />
-                    <TextInput
-                      id="webhook-basic-pass"
-                      type="password"
-                      value={serviceFormData.webhookBasicPass}
-                      label={t('settings.notifications.push.services.webhook.basicPass.label')}
-                      placeholder={t(
-                        'settings.notifications.push.services.webhook.basicPass.placeholder'
-                      )}
-                      onchange={value => (serviceFormData.webhookBasicPass = value)}
-                    />
-                    <p class="text-xs text-base-content/60 -mt-2">
-                      {t('settings.notifications.push.services.webhook.basicAuth.helpText')}
-                    </p>
-                  {/if}
-                {:else if selectedService === 'custom'}
-                  <TextInput
-                    id="custom-url"
-                    value={serviceFormData.customUrl}
-                    label={t('settings.notifications.push.services.custom.url.label')}
-                    placeholder={t('settings.notifications.push.services.custom.url.placeholder')}
-                    onchange={value => (serviceFormData.customUrl = value)}
-                  />
-                  <p class="text-xs text-base-content/60 -mt-2">
-                    {t('settings.notifications.push.services.custom.url.helpText')}
-                  </p>
-                  <!-- URL Formats Help for Custom -->
-                  <details class="text-xs">
-                    <summary class="cursor-pointer text-base-content/60 hover:opacity-80">
-                      {t('settings.notifications.push.form.urlFormats.title')}
-                    </summary>
-                    <div class="mt-2 pl-2 space-y-1 font-mono text-base-content/70">
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.discord')}:</strong>
-                        {t('settings.notifications.push.form.urlFormats.discordFormat')}
-                      </p>
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.telegram')}:</strong
-                        >
-                        {t('settings.notifications.push.form.urlFormats.telegramFormat')}
-                      </p>
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.slack')}:</strong>
-                        {t('settings.notifications.push.form.urlFormats.slackFormat')}
-                      </p>
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.pushover')}:</strong
-                        >
-                        {t('settings.notifications.push.form.urlFormats.pushoverFormat')}
-                      </p>
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.gotify')}:</strong>
-                        {t('settings.notifications.push.form.urlFormats.gotifyFormat')}
-                      </p>
-                      <p>
-                        <strong>{t('settings.notifications.push.form.urlFormats.ntfy')}:</strong>
-                        {t('settings.notifications.push.form.urlFormats.ntfyFormat')}
-                      </p>
-                      <a
-                        href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        class="inline-flex items-center gap-1 mt-2 text-primary hover:underline"
-                      >
-                        {t('settings.notifications.push.form.urlFormats.moreServices')}
-                        <ExternalLink class="size-3" />
-                      </a>
-                    </div>
-                  </details>
-                {/if}
-
-                <!-- Service Validation Error -->
-                {#if serviceValidationError}
-                  <p class="text-xs text-error">{serviceValidationError}</p>
-                {/if}
-
-                <!-- Provider Name -->
-                <TextInput
-                  id="provider-name"
-                  value={providerFormData.name}
-                  label={t('settings.notifications.push.form.name.label')}
-                  placeholder={t('settings.notifications.push.form.name.placeholder')}
-                  onchange={value => (providerFormData.name = value)}
-                />
-                <p class="text-xs text-base-content/60 -mt-2">
-                  {t('settings.notifications.push.form.name.helpText')}
-                </p>
-
-                <!-- Notification Types -->
-                <fieldset class="">
-                  <legend class="text-sm font-semibold text-base-content mb-1">
-                    {t('settings.notifications.push.form.notificationTypes.label')}
-                  </legend>
-                  <p class="text-xs text-base-content/60 mb-2">
-                    {t('settings.notifications.push.form.notificationTypes.helpText')}
-                  </p>
-                  <div class="flex flex-wrap gap-4">
-                    <Checkbox
-                      checked={providerFormData.filterTypes.includes('detection')}
-                      label={t('settings.notifications.push.form.notificationTypes.detection')}
-                      onchange={() => toggleFilterType('detection')}
-                    />
-                    <Checkbox
-                      checked={providerFormData.filterTypes.includes('error')}
-                      label={t('settings.notifications.push.form.notificationTypes.error')}
-                      onchange={() => toggleFilterType('error')}
-                    />
-                    <Checkbox
-                      checked={providerFormData.filterTypes.includes('warning')}
-                      label={t('settings.notifications.push.form.notificationTypes.warning')}
-                      onchange={() => toggleFilterType('warning')}
-                    />
-                    <Checkbox
-                      checked={providerFormData.filterTypes.includes('info')}
-                      label={t('settings.notifications.push.form.notificationTypes.info')}
-                      onchange={() => toggleFilterType('info')}
-                    />
-                    <Checkbox
-                      checked={providerFormData.filterTypes.includes('system')}
-                      label={t('settings.notifications.push.form.notificationTypes.system')}
-                      onchange={() => toggleFilterType('system')}
-                    />
-                  </div>
-                </fieldset>
-
-                <!-- Enable Provider -->
-                <Checkbox
-                  checked={providerFormData.enabled}
-                  label={t('settings.notifications.push.providers.enableToggle')}
-                  onchange={checked => (providerFormData.enabled = checked)}
-                />
-
-                <!-- Form Actions -->
-                <div class="flex gap-2 justify-end">
-                  <button
-                    onclick={closeProviderForm}
-                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-base-content focus-visible:ring-offset-2 transition-colors"
-                  >
-                    {t('settings.notifications.push.form.cancelButton')}
-                  </button>
-                  <button
-                    onclick={saveProvider}
-                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={!isServiceFormValid}
-                  >
-                    {t('settings.notifications.push.form.saveButton')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        {/if}
-
-        <!-- Providers List -->
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <h3 class="font-semibold text-sm">
-              {t('settings.notifications.push.providers.title')}
-            </h3>
-            {#if !showProviderForm}
-              <button
-                onclick={openAddProviderForm}
-                class="inline-flex items-center justify-center gap-1 h-8 px-3 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
-              >
-                <Plus class="size-4" />
-                {t('settings.notifications.push.providers.addButton')}
-              </button>
-            {/if}
-          </div>
-
-          {#if pushSettings.providers && pushSettings.providers.length > 0}
-            <div class="space-y-2">
-              {#each pushSettings.providers as provider, index (`${provider.type}:${provider.name}:${index}`)}
-                <div
-                  class="rounded-lg bg-base-200"
-                  class:opacity-50={!provider.enabled || !pushSettings.enabled}
-                >
-                  <div class="py-3 px-4">
-                    <div class="flex items-center justify-between gap-4">
-                      <div class="flex items-center gap-3 min-w-0">
-                        <input
-                          type="checkbox"
-                          class="appearance-none w-10 h-5 rounded-full cursor-pointer transition-all relative bg-base-300 before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-4 before:h-4 before:rounded-full before:bg-base-100 before:shadow-sm before:transition-transform checked:bg-primary checked:before:translate-x-5 disabled:opacity-50 disabled:cursor-not-allowed"
-                          checked={provider.enabled}
-                          disabled={!pushSettings.enabled}
-                          onchange={() => toggleProviderEnabled(index)}
-                          aria-label={t('settings.notifications.push.providers.enableToggle')}
-                        />
-                        <div class="min-w-0">
-                          <div class="font-medium truncate">{provider.name}</div>
-                          <div class="text-xs text-base-content/60 truncate">
-                            {#if provider.type === 'webhook'}
-                              {provider.endpoints?.[0]?.url || ''}
-                            {:else}
-                              {t('settings.notifications.push.providers.urlsPreview', {
-                                count: provider.urls?.length || 0,
-                              })}
-                            {/if}
-                          </div>
-                        </div>
-                      </div>
-                      <div class="flex items-center gap-1 shrink-0">
-                        <span
-                          class="inline-flex items-center justify-center px-1.5 py-px text-xs font-medium rounded-full bg-black/5 dark:bg-white/5 text-base-content"
-                        >
-                          {provider.type === 'webhook'
-                            ? t('settings.notifications.push.providers.typeBadge.webhook')
-                            : t('settings.notifications.push.providers.typeBadge.shoutrrr')}
-                        </span>
-                        <button
-                          onclick={() => openEditProviderForm(index)}
-                          class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={t('settings.notifications.push.providers.editButton')}
-                          disabled={showProviderForm}
-                        >
-                          <Pencil class="size-3.5" />
-                        </button>
-                        <button
-                          onclick={() => deleteProvider(index)}
-                          class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-error transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          title={t('settings.notifications.push.providers.deleteButton')}
-                          disabled={showProviderForm}
-                        >
-                          <Trash2 class="size-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {:else if !showProviderForm}
-            <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
-              <Send class="size-10 mx-auto mb-3 opacity-50" />
-              <p class="text-sm font-medium">{t('settings.notifications.push.noProviders')}</p>
-              <p class="text-xs mt-1">
-                {t('settings.notifications.push.noProvidersDescription')}
-              </p>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Status Message -->
-        {#if pushStatusMessage}
-          <StatusBanner message={pushStatusMessage} type={pushStatusType} />
-        {/if}
-
-        <!-- Save and Test Buttons -->
-        {#if pushSettings.providers && pushSettings.providers.length > 0}
-          <div class="flex gap-2 justify-end">
-            <SettingsButton
-              onclick={savePushSettings}
-              loading={savingPush}
-              loadingText={t('settings.notifications.templates.savingButton')}
-              disabled={!hasPushChanges || savingPush}
-              variant={hasPushChanges ? 'primary' : 'ghost'}
-            >
-              {hasPushChanges
-                ? t('settings.notifications.templates.saveButtonUnsaved')
-                : t('settings.notifications.templates.saveButton')}
-            </SettingsButton>
-            <SettingsButton
-              onclick={testPushNotification}
-              loading={testingProvider}
-              loadingText={t('settings.notifications.push.form.testingButton')}
-              disabled={testingProvider || !pushSettings.enabled}
-              variant="secondary"
-            >
-              <Bell class="size-4" />
-              {t('settings.notifications.push.test.button')}
-            </SettingsButton>
-          </div>
-        {/if}
-      </div>
-    {/if}
-  </SettingsSection>
-
-  <!-- Templates Section (collapsible) -->
-  <SettingsSection
-    title={t('settings.notifications.templates.title')}
-    description={t('settings.notifications.templates.description')}
-    defaultOpen={false}
-  >
-    <div class="space-y-4">
-      {#if loadingTemplate}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.notifications.tabs.channels')}
+      description={t('settings.notifications.push.description')}
+      defaultOpen={true}
+    >
+      {#if loadingPush}
         <div class="flex justify-center py-4">
           <span
             class="inline-block w-6 h-6 border-4 border-base-300 border-t-primary rounded-full animate-spin"
           ></span>
         </div>
-      {:else if templateConfig}
-        <div class="rounded-lg bg-base-200">
-          <div class="p-6">
-            <h3 class="text-base font-semibold mb-4">
-              {t('settings.notifications.templates.newSpeciesTitle')}
-            </h3>
+      {:else}
+        <div class="space-y-4">
+          <!-- Master Enable Toggle -->
+          <Checkbox
+            checked={pushSettings.enabled}
+            label={t('settings.notifications.push.enable')}
+            disabled={savingPush}
+            onchange={togglePushEnabled}
+          />
 
-            <div class="space-y-4">
-              <div>
-                <label for="template-title" class="block mb-1">
-                  <span class="text-sm font-semibold text-base-content"
-                    >{t('settings.notifications.templates.titleLabel')}</span
-                  >
-                </label>
-                <input
-                  id="template-title"
-                  type="text"
-                  bind:value={editedTitle}
-                  class="w-full h-10 px-3 font-mono text-sm bg-base-100 border border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
-                  placeholder={t('settings.notifications.templates.titlePlaceholder')}
-                />
-              </div>
-
-              <div>
-                <label for="template-message" class="block mb-1">
-                  <span class="text-sm font-semibold text-base-content"
-                    >{t('settings.notifications.templates.messageLabel')}</span
-                  >
-                </label>
-                <textarea
-                  id="template-message"
-                  bind:value={editedMessage}
-                  class="w-full px-3 py-2 font-mono text-sm bg-base-100 border border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors resize-y"
-                  rows="6"
-                  placeholder={t('settings.notifications.templates.messagePlaceholder')}
-                ></textarea>
-              </div>
-
-              {#if templateStatusMessage}
-                <StatusBanner message={templateStatusMessage} type={templateStatusType} />
-              {/if}
-
-              {#if channelStatusMessage}
-                <StatusBanner message={channelStatusMessage} type={channelStatusType} />
-              {/if}
-
-              <div class="flex gap-2 justify-end">
-                <button
-                  onclick={resetTemplates}
-                  class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-base-content focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  disabled={savingTemplate || generating}
-                >
-                  {t('settings.notifications.templates.resetButton')}
-                </button>
-                <button
-                  onclick={saveTemplateConfig}
-                  class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed {hasTemplateChanges
-                    ? 'bg-primary text-primary-content hover:opacity-90 focus-visible:ring-primary'
-                    : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:ring-base-content'}"
-                  disabled={savingTemplate || generating || !hasTemplateChanges}
-                >
-                  {#if savingTemplate}
-                    <span
-                      class="inline-block w-3 h-3 border-2 border-base-300 border-t-current rounded-full animate-spin"
-                    ></span>
-                    <span>{t('settings.notifications.templates.savingButton')}</span>
-                  {:else}
-                    <span
-                      >{hasTemplateChanges
-                        ? t('settings.notifications.templates.saveButtonUnsaved')
-                        : t('settings.notifications.templates.saveButton')}</span
-                    >
-                  {/if}
-                </button>
-                <button
-                  onclick={sendTestNewSpeciesNotification}
-                  disabled={generating || savingTemplate}
-                  class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-secondary text-secondary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                  title={hasTemplateChanges
-                    ? t('settings.notifications.templates.testWithUnsavedChanges')
-                    : t('settings.notifications.templates.testNormal')}
-                >
-                  {#if generating}
-                    <span
-                      class="inline-block w-3 h-3 border-2 border-base-300 border-t-current rounded-full animate-spin"
-                    ></span>
-                    <span>{t('settings.notifications.templates.sendingButton')}</span>
-                  {:else}
-                    <span class="flex items-center gap-1">
-                      <Bell class="size-4" />
-                      <span>{t('settings.notifications.templates.testButton')}</span>
-                    </span>
-                  {/if}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="rounded-lg bg-base-200">
-          <div class="p-6">
-            <h3 class="text-base font-semibold mb-4">
-              {t('settings.notifications.templates.availableVariables')}
-            </h3>
-            <p class="text-sm text-base-content/80 mb-3">
-              {t('settings.notifications.templates.variablesDescription')}
-              <code class="bg-base-300 px-1 rounded-sm">&#123;&#123;.VariableName&#125;&#125;</code>
+          {#if pushSettings.enabled}
+            <p class="text-sm text-base-content/70">
+              {t('settings.notifications.push.enabledDescription')}
             </p>
+          {:else}
+            <p class="text-sm text-base-content/50">
+              {t('settings.notifications.push.disabled')}
+            </p>
+          {/if}
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
-              {#each templateFields as field (field.name)}
-                <div class="flex items-baseline gap-2">
-                  <code class="font-mono text-primary shrink-0"
-                    >&#123;&#123;.{field.name}&#125;&#125;</code
-                  >
-                  <span class="text-base-content/70">{field.description}</span>
+          <!-- Detection Filters Section -->
+          {#if pushSettings.enabled}
+            <div class="rounded-lg bg-base-200">
+              <div class="p-6">
+                <h3 class="text-base font-semibold mb-4">
+                  {t('settings.notifications.push.filters.title')}
+                </h3>
+                <p class="text-sm text-base-content/70 mb-2">
+                  {t('settings.notifications.push.filters.description')}
+                </p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <!-- Minimum Confidence Threshold -->
+                  <div>
+                    <label for="min-confidence" class="block mb-1">
+                      <span class="text-sm font-semibold text-base-content">
+                        {t('settings.notifications.push.filters.minConfidence.label')}
+                      </span>
+                    </label>
+                    <div class="flex">
+                      <input
+                        id="min-confidence"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="5"
+                        value={Math.round((pushSettings.minConfidenceThreshold ?? 0) * 100)}
+                        onchange={e => {
+                          const target = e.target as HTMLInputElement;
+                          pushSettings.minConfidenceThreshold =
+                            Math.max(0, Math.min(100, parseInt(target.value) || 0)) / 100;
+                        }}
+                        class="flex-1 h-10 px-3 text-sm bg-base-100 border border-base-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                        disabled={savingPush}
+                      />
+                      <span
+                        class="inline-flex items-center justify-center px-3 text-sm bg-base-300 border border-l-0 border-base-300 rounded-r-lg"
+                        >%</span
+                      >
+                    </div>
+                    <p class="text-xs text-base-content/60 mt-1">
+                      {t('settings.notifications.push.filters.minConfidence.helpText')}
+                    </p>
+                  </div>
+
+                  <!-- Species Cooldown -->
+                  <div>
+                    <label for="species-cooldown" class="block mb-1">
+                      <span class="text-sm font-semibold text-base-content">
+                        {t('settings.notifications.push.filters.speciesCooldown.label')}
+                      </span>
+                    </label>
+                    <div class="flex">
+                      <input
+                        id="species-cooldown"
+                        type="number"
+                        min="0"
+                        max="1440"
+                        step="5"
+                        value={pushSettings.speciesCooldownMinutes ?? 0}
+                        onchange={e => {
+                          const target = e.target as HTMLInputElement;
+                          pushSettings.speciesCooldownMinutes = Math.max(
+                            0,
+                            Math.min(1440, parseInt(target.value) || 0)
+                          );
+                        }}
+                        class="flex-1 h-10 px-3 text-sm bg-base-100 border border-base-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                        disabled={savingPush}
+                      />
+                      <span
+                        class="inline-flex items-center justify-center px-3 text-sm bg-base-300 border border-l-0 border-base-300 rounded-r-lg"
+                        >{t('settings.notifications.push.filters.speciesCooldown.unit')}</span
+                      >
+                    </div>
+                    <p class="text-xs text-base-content/60 mt-1">
+                      {t('settings.notifications.push.filters.speciesCooldown.helpText')}
+                    </p>
+                  </div>
                 </div>
-              {/each}
+              </div>
+            </div>
+          {/if}
+
+          <!-- Provider Form Modal -->
+          {#if showProviderForm}
+            <div class="rounded-lg bg-base-200 border border-primary">
+              <div class="p-6">
+                <h3 class="text-base font-semibold mb-4">
+                  {editingProviderIndex !== null
+                    ? t('settings.notifications.push.form.editTitle')
+                    : t('settings.notifications.push.form.addTitle')}
+                </h3>
+
+                <div class="space-y-4">
+                  <!-- Service Selector with Icons -->
+                  <SelectDropdown
+                    options={availableServices}
+                    bind:value={selectedService}
+                    label={t('settings.notifications.push.services.selectLabel')}
+                    helpText={t('settings.notifications.push.services.selectHelpText')}
+                    variant="select"
+                    groupBy={false}
+                    onChange={value => (selectedService = value as ServiceType)}
+                  >
+                    {#snippet renderOption(option)}
+                      {@const serviceOption = option as ServiceOption}
+                      <div class="flex items-center gap-2">
+                        <ServiceIcon service={serviceOption.serviceId} className="size-4" />
+                        <span>{serviceOption.label}</span>
+                      </div>
+                    {/snippet}
+                    {#snippet renderSelected(options)}
+                      {@const serviceOption = options[0] as ServiceOption}
+                      <span class="flex items-center gap-2">
+                        <ServiceIcon service={serviceOption.serviceId} className="size-4" />
+                        <span>{serviceOption.label}</span>
+                      </span>
+                    {/snippet}
+                  </SelectDropdown>
+
+                  <!-- Service-Specific Inputs -->
+                  {#if selectedService === 'discord'}
+                    <TextInput
+                      id="discord-webhook"
+                      value={serviceFormData.discordWebhookUrl}
+                      label={t('settings.notifications.push.services.discord.webhookUrl.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.discord.webhookUrl.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.discordWebhookUrl = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.discord.webhookUrl.helpText')}
+                    </p>
+                  {:else if selectedService === 'telegram'}
+                    <TextInput
+                      id="telegram-token"
+                      value={serviceFormData.telegramBotToken}
+                      label={t('settings.notifications.push.services.telegram.botToken.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.telegram.botToken.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.telegramBotToken = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.telegram.botToken.helpText')}
+                    </p>
+                    <TextInput
+                      id="telegram-chat"
+                      value={serviceFormData.telegramChatId}
+                      label={t('settings.notifications.push.services.telegram.chatId.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.telegram.chatId.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.telegramChatId = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.telegram.chatId.helpText')}
+                    </p>
+                  {:else if selectedService === 'ntfy'}
+                    <TextInput
+                      id="ntfy-server"
+                      value={serviceFormData.ntfyServer}
+                      label={t('settings.notifications.push.services.ntfy.server.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.ntfy.server.placeholder'
+                      )}
+                      onchange={value => {
+                        serviceFormData.ntfyServer = value;
+                        serviceFormData.ntfyCheckStatus = 'idle';
+                        serviceFormData.ntfyCheckHost = '';
+                        serviceFormData.ntfyUsername = '';
+                        serviceFormData.ntfyPassword = '';
+                      }}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.ntfy.server.helpText')}
+                    </p>
+
+                    {#if serviceFormData.ntfyServer && serviceFormData.ntfyServer !== 'ntfy.sh'}
+                      <!-- Protocol selector + Test Connection button -->
+                      <div class="flex items-center gap-2 mt-1 flex-wrap">
+                        <SelectDropdown
+                          bind:value={serviceFormData.ntfyProtocol}
+                          options={ntfyProtocolOptions}
+                          variant="select"
+                          size="sm"
+                          menuSize="sm"
+                          onChange={() => (serviceFormData.ntfyCheckStatus = 'idle')}
+                        />
+                        <button
+                          type="button"
+                          class="btn btn-sm btn-outline"
+                          disabled={serviceFormData.ntfyCheckStatus === 'checking'}
+                          onclick={checkNtfyServer}
+                        >
+                          {#if serviceFormData.ntfyCheckStatus === 'checking'}
+                            <span class="loading loading-spinner loading-xs"></span>
+                          {/if}
+                          {t('settings.notifications.push.services.ntfy.testConnection')}
+                        </button>
+                        {#if serviceFormData.ntfyCheckStatus === 'https'}
+                          <span class="text-xs text-success"
+                            >{t(
+                              'settings.notifications.push.services.ntfy.connectionOk.https'
+                            )}</span
+                          >
+                        {:else if serviceFormData.ntfyCheckStatus === 'http'}
+                          <span class="text-xs text-warning"
+                            >{t(
+                              'settings.notifications.push.services.ntfy.connectionOk.http'
+                            )}</span
+                          >
+                        {:else if serviceFormData.ntfyCheckStatus === 'unreachable'}
+                          <span class="text-xs text-error"
+                            >{t('settings.notifications.push.services.ntfy.connectionFailed')}</span
+                          >
+                        {/if}
+                      </div>
+
+                      <!-- Optional authentication -->
+                      <details class="mt-2">
+                        <summary
+                          class="text-sm cursor-pointer opacity-70 hover:opacity-100 select-none"
+                        >
+                          {t('settings.notifications.push.services.ntfy.auth.label')}
+                        </summary>
+                        <div class="mt-2 space-y-2">
+                          <TextInput
+                            id="ntfy-username"
+                            value={serviceFormData.ntfyUsername}
+                            label={t(
+                              'settings.notifications.push.services.ntfy.auth.username.label'
+                            )}
+                            placeholder={t(
+                              'settings.notifications.push.services.ntfy.auth.username.placeholder'
+                            )}
+                            onchange={value => (serviceFormData.ntfyUsername = value)}
+                          />
+                          <TextInput
+                            id="ntfy-password"
+                            type="password"
+                            value={serviceFormData.ntfyPassword}
+                            label={t(
+                              'settings.notifications.push.services.ntfy.auth.password.label'
+                            )}
+                            placeholder={t(
+                              'settings.notifications.push.services.ntfy.auth.password.placeholder'
+                            )}
+                            onchange={value => (serviceFormData.ntfyPassword = value)}
+                          />
+                        </div>
+                      </details>
+                    {/if}
+
+                    <TextInput
+                      id="ntfy-topic"
+                      value={serviceFormData.ntfyTopic}
+                      label={t('settings.notifications.push.services.ntfy.topic.label')}
+                      placeholder={t('settings.notifications.push.services.ntfy.topic.placeholder')}
+                      onchange={value => (serviceFormData.ntfyTopic = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.ntfy.topic.helpText')}
+                    </p>
+                  {:else if selectedService === 'gotify'}
+                    <TextInput
+                      id="gotify-server"
+                      value={serviceFormData.gotifyServer}
+                      label={t('settings.notifications.push.services.gotify.server.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.gotify.server.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.gotifyServer = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.gotify.server.helpText')}
+                    </p>
+                    <TextInput
+                      id="gotify-token"
+                      value={serviceFormData.gotifyToken}
+                      label={t('settings.notifications.push.services.gotify.token.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.gotify.token.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.gotifyToken = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.gotify.token.helpText')}
+                    </p>
+                  {:else if selectedService === 'pushover'}
+                    <TextInput
+                      id="pushover-api"
+                      value={serviceFormData.pushoverApiToken}
+                      label={t('settings.notifications.push.services.pushover.apiToken.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.pushover.apiToken.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.pushoverApiToken = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.pushover.apiToken.helpText')}
+                    </p>
+                    <TextInput
+                      id="pushover-user"
+                      value={serviceFormData.pushoverUserKey}
+                      label={t('settings.notifications.push.services.pushover.userKey.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.pushover.userKey.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.pushoverUserKey = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.pushover.userKey.helpText')}
+                    </p>
+                  {:else if selectedService === 'slack'}
+                    <TextInput
+                      id="slack-webhook"
+                      value={serviceFormData.slackWebhookUrl}
+                      label={t('settings.notifications.push.services.slack.webhookUrl.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.slack.webhookUrl.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.slackWebhookUrl = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.slack.webhookUrl.helpText')}
+                    </p>
+                  {:else if selectedService === 'ifttt'}
+                    <TextInput
+                      id="ifttt-webhook-key"
+                      value={serviceFormData.iftttWebhookKey}
+                      label={t('settings.notifications.push.services.ifttt.webhookKey.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.ifttt.webhookKey.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.iftttWebhookKey = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.ifttt.webhookKey.helpText')}
+                    </p>
+                    <TextInput
+                      id="ifttt-event-name"
+                      value={serviceFormData.iftttEventName}
+                      label={t('settings.notifications.push.services.ifttt.eventName.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.ifttt.eventName.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.iftttEventName = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.ifttt.eventName.helpText')}
+                    </p>
+                  {:else if selectedService === 'webhook'}
+                    <TextInput
+                      id="webhook-url"
+                      value={serviceFormData.webhookUrl}
+                      label={t('settings.notifications.push.services.webhook.url.label')}
+                      placeholder={t(
+                        'settings.notifications.push.services.webhook.url.placeholder'
+                      )}
+                      onchange={value => (serviceFormData.webhookUrl = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.webhook.url.helpText')}
+                    </p>
+
+                    <SelectDropdown
+                      bind:value={serviceFormData.webhookMethod}
+                      options={webhookMethodOptions}
+                      label={t('settings.notifications.push.services.webhook.method.label')}
+                      helpText={t('settings.notifications.push.services.webhook.method.helpText')}
+                      variant="select"
+                      size="sm"
+                      menuSize="sm"
+                    />
+
+                    <SelectDropdown
+                      bind:value={serviceFormData.webhookAuthType}
+                      options={webhookAuthOptions}
+                      label={t('settings.notifications.push.services.webhook.auth.label')}
+                      helpText={t('settings.notifications.push.services.webhook.auth.helpText')}
+                      variant="select"
+                      size="sm"
+                      menuSize="sm"
+                    />
+
+                    {#if serviceFormData.webhookAuthType === 'bearer'}
+                      <TextInput
+                        id="webhook-bearer-token"
+                        value={serviceFormData.webhookBearerToken}
+                        label={t('settings.notifications.push.services.webhook.bearerToken.label')}
+                        placeholder={t(
+                          'settings.notifications.push.services.webhook.bearerToken.placeholder'
+                        )}
+                        onchange={value => (serviceFormData.webhookBearerToken = value)}
+                      />
+                      <p class="text-xs text-base-content/60 -mt-2">
+                        {t('settings.notifications.push.services.webhook.bearerToken.helpText')}
+                      </p>
+                    {/if}
+
+                    {#if serviceFormData.webhookAuthType === 'basic'}
+                      <TextInput
+                        id="webhook-basic-user"
+                        value={serviceFormData.webhookBasicUser}
+                        label={t('settings.notifications.push.services.webhook.basicUser.label')}
+                        placeholder={t(
+                          'settings.notifications.push.services.webhook.basicUser.placeholder'
+                        )}
+                        onchange={value => (serviceFormData.webhookBasicUser = value)}
+                      />
+                      <TextInput
+                        id="webhook-basic-pass"
+                        type="password"
+                        value={serviceFormData.webhookBasicPass}
+                        label={t('settings.notifications.push.services.webhook.basicPass.label')}
+                        placeholder={t(
+                          'settings.notifications.push.services.webhook.basicPass.placeholder'
+                        )}
+                        onchange={value => (serviceFormData.webhookBasicPass = value)}
+                      />
+                      <p class="text-xs text-base-content/60 -mt-2">
+                        {t('settings.notifications.push.services.webhook.basicAuth.helpText')}
+                      </p>
+                    {/if}
+                  {:else if selectedService === 'custom'}
+                    <TextInput
+                      id="custom-url"
+                      value={serviceFormData.customUrl}
+                      label={t('settings.notifications.push.services.custom.url.label')}
+                      placeholder={t('settings.notifications.push.services.custom.url.placeholder')}
+                      onchange={value => (serviceFormData.customUrl = value)}
+                    />
+                    <p class="text-xs text-base-content/60 -mt-2">
+                      {t('settings.notifications.push.services.custom.url.helpText')}
+                    </p>
+                    <!-- URL Formats Help for Custom -->
+                    <details class="text-xs">
+                      <summary class="cursor-pointer text-base-content/60 hover:opacity-80">
+                        {t('settings.notifications.push.form.urlFormats.title')}
+                      </summary>
+                      <div class="mt-2 pl-2 space-y-1 font-mono text-base-content/70">
+                        <p>
+                          <strong
+                            >{t('settings.notifications.push.form.urlFormats.discord')}:</strong
+                          >
+                          {t('settings.notifications.push.form.urlFormats.discordFormat')}
+                        </p>
+                        <p>
+                          <strong
+                            >{t('settings.notifications.push.form.urlFormats.telegram')}:</strong
+                          >
+                          {t('settings.notifications.push.form.urlFormats.telegramFormat')}
+                        </p>
+                        <p>
+                          <strong>{t('settings.notifications.push.form.urlFormats.slack')}:</strong>
+                          {t('settings.notifications.push.form.urlFormats.slackFormat')}
+                        </p>
+                        <p>
+                          <strong
+                            >{t('settings.notifications.push.form.urlFormats.pushover')}:</strong
+                          >
+                          {t('settings.notifications.push.form.urlFormats.pushoverFormat')}
+                        </p>
+                        <p>
+                          <strong>{t('settings.notifications.push.form.urlFormats.gotify')}:</strong
+                          >
+                          {t('settings.notifications.push.form.urlFormats.gotifyFormat')}
+                        </p>
+                        <p>
+                          <strong>{t('settings.notifications.push.form.urlFormats.ntfy')}:</strong>
+                          {t('settings.notifications.push.form.urlFormats.ntfyFormat')}
+                        </p>
+                        <a
+                          href={t('settings.notifications.push.form.urlFormats.shoutrrrDocs')}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          class="inline-flex items-center gap-1 mt-2 text-primary hover:underline"
+                        >
+                          {t('settings.notifications.push.form.urlFormats.moreServices')}
+                          <ExternalLink class="size-3" />
+                        </a>
+                      </div>
+                    </details>
+                  {/if}
+
+                  <!-- Service Validation Error -->
+                  {#if serviceValidationError}
+                    <p class="text-xs text-error">{serviceValidationError}</p>
+                  {/if}
+
+                  <!-- Provider Name -->
+                  <TextInput
+                    id="provider-name"
+                    value={providerFormData.name}
+                    label={t('settings.notifications.push.form.name.label')}
+                    placeholder={t('settings.notifications.push.form.name.placeholder')}
+                    onchange={value => (providerFormData.name = value)}
+                  />
+                  <p class="text-xs text-base-content/60 -mt-2">
+                    {t('settings.notifications.push.form.name.helpText')}
+                  </p>
+
+                  <!-- Notification Types -->
+                  <fieldset class="">
+                    <legend class="text-sm font-semibold text-base-content mb-1">
+                      {t('settings.notifications.push.form.notificationTypes.label')}
+                    </legend>
+                    <p class="text-xs text-base-content/60 mb-2">
+                      {t('settings.notifications.push.form.notificationTypes.helpText')}
+                    </p>
+                    <div class="flex flex-wrap gap-4">
+                      <Checkbox
+                        checked={providerFormData.filterTypes.includes('detection')}
+                        label={t('settings.notifications.push.form.notificationTypes.detection')}
+                        onchange={() => toggleFilterType('detection')}
+                      />
+                      <Checkbox
+                        checked={providerFormData.filterTypes.includes('error')}
+                        label={t('settings.notifications.push.form.notificationTypes.error')}
+                        onchange={() => toggleFilterType('error')}
+                      />
+                      <Checkbox
+                        checked={providerFormData.filterTypes.includes('warning')}
+                        label={t('settings.notifications.push.form.notificationTypes.warning')}
+                        onchange={() => toggleFilterType('warning')}
+                      />
+                      <Checkbox
+                        checked={providerFormData.filterTypes.includes('info')}
+                        label={t('settings.notifications.push.form.notificationTypes.info')}
+                        onchange={() => toggleFilterType('info')}
+                      />
+                      <Checkbox
+                        checked={providerFormData.filterTypes.includes('system')}
+                        label={t('settings.notifications.push.form.notificationTypes.system')}
+                        onchange={() => toggleFilterType('system')}
+                      />
+                    </div>
+                  </fieldset>
+
+                  <!-- Enable Provider -->
+                  <Checkbox
+                    checked={providerFormData.enabled}
+                    label={t('settings.notifications.push.providers.enableToggle')}
+                    onchange={checked => (providerFormData.enabled = checked)}
+                  />
+
+                  <!-- Form Actions -->
+                  <div class="flex gap-2 justify-end">
+                    <button
+                      onclick={closeProviderForm}
+                      class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-base-content focus-visible:ring-offset-2 transition-colors"
+                    >
+                      {t('settings.notifications.push.form.cancelButton')}
+                    </button>
+                    <button
+                      onclick={saveProvider}
+                      class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={!isServiceFormValid}
+                    >
+                      {t('settings.notifications.push.form.saveButton')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {/if}
+
+          <!-- Providers List -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold text-sm">
+                {t('settings.notifications.push.providers.title')}
+              </h3>
+              {#if !showProviderForm}
+                <button
+                  onclick={openAddProviderForm}
+                  class="inline-flex items-center justify-center gap-1 h-8 px-3 text-sm font-medium rounded-lg bg-primary text-primary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 transition-colors"
+                >
+                  <Plus class="size-4" />
+                  {t('settings.notifications.push.providers.addButton')}
+                </button>
+              {/if}
             </div>
 
-            <!-- Privacy Note - Collapsible -->
-            <details class="mt-4 text-xs">
-              <summary
-                class="cursor-pointer text-base-content/60 hover:text-base-content hover:opacity-80 flex items-center gap-1"
-              >
-                <Info class="size-3.5" />
-                {t('settings.notifications.privacy.title')}
-              </summary>
-              <div class="mt-2 pl-5 text-base-content/60 space-y-1">
-                <p>{t('settings.notifications.privacy.description')}</p>
-                <p>{t('settings.notifications.privacy.recommendation')}</p>
+            {#if pushSettings.providers && pushSettings.providers.length > 0}
+              <div class="space-y-2">
+                {#each pushSettings.providers as provider, index (`${provider.type}:${provider.name}:${index}`)}
+                  <div
+                    class="rounded-lg bg-base-200"
+                    class:opacity-50={!provider.enabled || !pushSettings.enabled}
+                  >
+                    <div class="py-3 px-4">
+                      <div class="flex items-center justify-between gap-4">
+                        <div class="flex items-center gap-3 min-w-0">
+                          <input
+                            type="checkbox"
+                            class="appearance-none w-10 h-5 rounded-full cursor-pointer transition-all relative bg-base-300 before:content-[''] before:absolute before:top-0.5 before:left-0.5 before:w-4 before:h-4 before:rounded-full before:bg-base-100 before:shadow-sm before:transition-transform checked:bg-primary checked:before:translate-x-5 disabled:opacity-50 disabled:cursor-not-allowed"
+                            checked={provider.enabled}
+                            disabled={!pushSettings.enabled}
+                            onchange={() => toggleProviderEnabled(index)}
+                            aria-label={t('settings.notifications.push.providers.enableToggle')}
+                          />
+                          <div class="min-w-0">
+                            <div class="font-medium truncate">{provider.name}</div>
+                            <div class="text-xs text-base-content/60 truncate">
+                              {#if provider.type === 'webhook'}
+                                {provider.endpoints?.[0]?.url || ''}
+                              {:else}
+                                {t('settings.notifications.push.providers.urlsPreview', {
+                                  count: provider.urls?.length || 0,
+                                })}
+                              {/if}
+                            </div>
+                          </div>
+                        </div>
+                        <div class="flex items-center gap-1 shrink-0">
+                          <span
+                            class="inline-flex items-center justify-center px-1.5 py-px text-xs font-medium rounded-full bg-black/5 dark:bg-white/5 text-base-content"
+                          >
+                            {provider.type === 'webhook'
+                              ? t('settings.notifications.push.providers.typeBadge.webhook')
+                              : t('settings.notifications.push.providers.typeBadge.shoutrrr')}
+                          </span>
+                          <button
+                            onclick={() => openEditProviderForm(index)}
+                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={t('settings.notifications.push.providers.editButton')}
+                            disabled={showProviderForm}
+                          >
+                            <Pencil class="size-3.5" />
+                          </button>
+                          <button
+                            onclick={() => deleteProvider(index)}
+                            class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-error transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                            title={t('settings.notifications.push.providers.deleteButton')}
+                            disabled={showProviderForm}
+                          >
+                            <Trash2 class="size-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                {/each}
               </div>
-            </details>
+            {:else if !showProviderForm}
+              <div class="text-center py-8 text-base-content/60 bg-base-200 rounded-lg">
+                <Send class="size-10 mx-auto mb-3 opacity-50" />
+                <p class="text-sm font-medium">{t('settings.notifications.push.noProviders')}</p>
+                <p class="text-xs mt-1">
+                  {t('settings.notifications.push.noProvidersDescription')}
+                </p>
+              </div>
+            {/if}
           </div>
+
+          <!-- Status Message -->
+          {#if pushStatusMessage}
+            <StatusBanner message={pushStatusMessage} type={pushStatusType} />
+          {/if}
+
+          <!-- Save and Test Buttons -->
+          {#if pushSettings.providers && pushSettings.providers.length > 0}
+            <div class="flex gap-2 justify-end">
+              <SettingsButton
+                onclick={savePushSettings}
+                loading={savingPush}
+                loadingText={t('settings.notifications.templates.savingButton')}
+                disabled={!hasPushChanges || savingPush}
+                variant={hasPushChanges ? 'primary' : 'ghost'}
+              >
+                {hasPushChanges
+                  ? t('settings.notifications.templates.saveButtonUnsaved')
+                  : t('settings.notifications.templates.saveButton')}
+              </SettingsButton>
+              <SettingsButton
+                onclick={testPushNotification}
+                loading={testingProvider}
+                loadingText={t('settings.notifications.push.form.testingButton')}
+                disabled={testingProvider || !pushSettings.enabled}
+                variant="secondary"
+              >
+                <Bell class="size-4" />
+                {t('settings.notifications.push.test.button')}
+              </SettingsButton>
+            </div>
+          {/if}
         </div>
       {/if}
-    </div>
-  </SettingsSection>
+    </SettingsSection>
+
+    <!-- Templates Section (collapsible) -->
+    <SettingsSection
+      title={t('settings.notifications.templates.title')}
+      description={t('settings.notifications.templates.description')}
+      defaultOpen={false}
+    >
+      <div class="space-y-4">
+        {#if loadingTemplate}
+          <div class="flex justify-center py-4">
+            <span
+              class="inline-block w-6 h-6 border-4 border-base-300 border-t-primary rounded-full animate-spin"
+            ></span>
+          </div>
+        {:else if templateConfig}
+          <div class="rounded-lg bg-base-200">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
+                {t('settings.notifications.templates.newSpeciesTitle')}
+              </h3>
+
+              <div class="space-y-4">
+                <div>
+                  <label for="template-title" class="block mb-1">
+                    <span class="text-sm font-semibold text-base-content"
+                      >{t('settings.notifications.templates.titleLabel')}</span
+                    >
+                  </label>
+                  <input
+                    id="template-title"
+                    type="text"
+                    bind:value={editedTitle}
+                    class="w-full h-10 px-3 font-mono text-sm bg-base-100 border border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors"
+                    placeholder={t('settings.notifications.templates.titlePlaceholder')}
+                  />
+                </div>
+
+                <div>
+                  <label for="template-message" class="block mb-1">
+                    <span class="text-sm font-semibold text-base-content"
+                      >{t('settings.notifications.templates.messageLabel')}</span
+                    >
+                  </label>
+                  <textarea
+                    id="template-message"
+                    bind:value={editedMessage}
+                    class="w-full px-3 py-2 font-mono text-sm bg-base-100 border border-base-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-colors resize-y"
+                    rows="6"
+                    placeholder={t('settings.notifications.templates.messagePlaceholder')}
+                  ></textarea>
+                </div>
+
+                {#if templateStatusMessage}
+                  <StatusBanner message={templateStatusMessage} type={templateStatusType} />
+                {/if}
+
+                {#if channelStatusMessage}
+                  <StatusBanner message={channelStatusMessage} type={channelStatusType} />
+                {/if}
+
+                <div class="flex gap-2 justify-end">
+                  <button
+                    onclick={resetTemplates}
+                    class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-base-content focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={savingTemplate || generating}
+                  >
+                    {t('settings.notifications.templates.resetButton')}
+                  </button>
+                  <button
+                    onclick={saveTemplateConfig}
+                    class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed {hasTemplateChanges
+                      ? 'bg-primary text-primary-content hover:opacity-90 focus-visible:ring-primary'
+                      : 'bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:ring-base-content'}"
+                    disabled={savingTemplate || generating || !hasTemplateChanges}
+                  >
+                    {#if savingTemplate}
+                      <span
+                        class="inline-block w-3 h-3 border-2 border-base-300 border-t-current rounded-full animate-spin"
+                      ></span>
+                      <span>{t('settings.notifications.templates.savingButton')}</span>
+                    {:else}
+                      <span
+                        >{hasTemplateChanges
+                          ? t('settings.notifications.templates.saveButtonUnsaved')
+                          : t('settings.notifications.templates.saveButton')}</span
+                      >
+                    {/if}
+                  </button>
+                  <button
+                    onclick={sendTestNewSpeciesNotification}
+                    disabled={generating || savingTemplate}
+                    class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-secondary text-secondary-content hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    title={hasTemplateChanges
+                      ? t('settings.notifications.templates.testWithUnsavedChanges')
+                      : t('settings.notifications.templates.testNormal')}
+                  >
+                    {#if generating}
+                      <span
+                        class="inline-block w-3 h-3 border-2 border-base-300 border-t-current rounded-full animate-spin"
+                      ></span>
+                      <span>{t('settings.notifications.templates.sendingButton')}</span>
+                    {:else}
+                      <span class="flex items-center gap-1">
+                        <Bell class="size-4" />
+                        <span>{t('settings.notifications.templates.testButton')}</span>
+                      </span>
+                    {/if}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-lg bg-base-200">
+            <div class="p-6">
+              <h3 class="text-base font-semibold mb-4">
+                {t('settings.notifications.templates.availableVariables')}
+              </h3>
+              <p class="text-sm text-base-content/80 mb-3">
+                {t('settings.notifications.templates.variablesDescription')}
+                <code class="bg-base-300 px-1 rounded-sm"
+                  >&#123;&#123;.VariableName&#125;&#125;</code
+                >
+              </p>
+
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                {#each templateFields as field (field.name)}
+                  <div class="flex items-baseline gap-2">
+                    <code class="font-mono text-primary shrink-0"
+                      >&#123;&#123;.{field.name}&#125;&#125;</code
+                    >
+                    <span class="text-base-content/70">{field.description}</span>
+                  </div>
+                {/each}
+              </div>
+
+              <!-- Privacy Note - Collapsible -->
+              <details class="mt-4 text-xs">
+                <summary
+                  class="cursor-pointer text-base-content/60 hover:text-base-content hover:opacity-80 flex items-center gap-1"
+                >
+                  <Info class="size-3.5" />
+                  {t('settings.notifications.privacy.title')}
+                </summary>
+                <div class="mt-2 pl-5 text-base-content/60 space-y-1">
+                  <p>{t('settings.notifications.privacy.description')}</p>
+                  <p>{t('settings.notifications.privacy.recommendation')}</p>
+                </div>
+              </details>
+            </div>
+          </div>
+        {/if}
+      </div>
+    </SettingsSection>
+  </div>
 {/snippet}
 
 <!-- ============================================================ -->
