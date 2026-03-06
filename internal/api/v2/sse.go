@@ -134,7 +134,9 @@ func (m *SSEManager) RemoveClient(clientID string) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if client, exists := m.clients[clientID]; exists {
-		close(client.Channel)
+		if client.Channel != nil {
+			close(client.Channel)
+		}
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
 		}
@@ -250,7 +252,9 @@ func (m *SSEManager) CloseAllClients() {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for id, client := range m.clients {
-		close(client.Channel)
+		if client.Channel != nil {
+			close(client.Channel)
+		}
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
 		}
