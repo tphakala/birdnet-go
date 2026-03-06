@@ -151,7 +151,7 @@ routeInitializers := []struct {
 | Method | Route                  | Handler                      | Auth | Description                         |
 | ------ | ---------------------- | ---------------------------- | ---- | ----------------------------------- |
 | GET    | `/range/species/count` | `GetRangeFilterSpeciesCount` | ❌   | Species count with range filter     |
-| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with range filter      |
+| GET    | `/range/species/list`  | `GetRangeFilterSpeciesList`  | ❌   | Species list with taxonomy groups   |
 | GET    | `/range/species/csv`   | `GetRangeFilterSpeciesCSV`   | ❌   | Export species list as CSV download |
 | POST   | `/range/species/test`  | `TestRangeFilter`            | ❌   | Test range filter configuration     |
 | POST   | `/range/rebuild`       | `RebuildRangeFilter`         | ❌   | Rebuild range filter data           |
@@ -317,9 +317,9 @@ routeInitializers := []struct {
 
 ### Quiet Hours Status (`quiet_hours.go`)
 
-| Method | Route                            | Handler               | Auth | Description                                      |
-| ------ | -------------------------------- | --------------------- | ---- | ------------------------------------------------ |
-| GET    | `/streams/quiet-hours/status`    | `GetQuietHoursStatus` | ✅   | Get current quiet hours suppression state for all sources |
+| Method | Route                         | Handler               | Auth | Description                                               |
+| ------ | ----------------------------- | --------------------- | ---- | --------------------------------------------------------- |
+| GET    | `/streams/quiet-hours/status` | `GetQuietHoursStatus` | ✅   | Get current quiet hours suppression state for all sources |
 
 **Response Format:**
 
@@ -388,21 +388,21 @@ Registered under the system route group. All endpoints require authentication.
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
-| Method | Route                            | Handler                  | Auth | Description                    |
-| ------ | -------------------------------- | ------------------------ | ---- | ------------------------------ |
-| GET    | `/alerts/schema`                 | `GetAlertSchema`         | ❌   | Alert schema for UI            |
-| GET    | `/alerts/rules`                  | `ListAlertRules`         | ❌   | List rules (filterable)        |
-| GET    | `/alerts/rules/:id`              | `GetAlertRule`           | ❌   | Get single rule                |
-| GET    | `/alerts/rules/export`           | `ExportAlertRules`       | ✅   | Export rules as JSON           |
-| GET    | `/alerts/history`                | `ListAlertHistory`       | ❌   | List history (paginated)       |
-| POST   | `/alerts/rules`                  | `CreateAlertRule`        | ✅   | Create rule                    |
-| PUT    | `/alerts/rules/:id`              | `UpdateAlertRule`        | ✅   | Replace rule                   |
-| PATCH  | `/alerts/rules/:id/toggle`       | `ToggleAlertRule`        | ✅   | Enable/disable rule            |
-| DELETE | `/alerts/rules/:id`              | `DeleteAlertRule`        | ✅   | Delete rule                    |
-| POST   | `/alerts/rules/:id/test`         | `TestAlertRule`          | ✅   | Test-fire rule                 |
-| POST   | `/alerts/rules/reset-defaults`   | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules         |
-| POST   | `/alerts/rules/import`           | `ImportAlertRules`       | ✅   | Import rules from JSON         |
-| DELETE | `/alerts/history`                | `ClearAlertHistory`      | ✅   | Delete all history             |
+| Method | Route                          | Handler                  | Auth | Description              |
+| ------ | ------------------------------ | ------------------------ | ---- | ------------------------ |
+| GET    | `/alerts/schema`               | `GetAlertSchema`         | ❌   | Alert schema for UI      |
+| GET    | `/alerts/rules`                | `ListAlertRules`         | ❌   | List rules (filterable)  |
+| GET    | `/alerts/rules/:id`            | `GetAlertRule`           | ❌   | Get single rule          |
+| GET    | `/alerts/rules/export`         | `ExportAlertRules`       | ✅   | Export rules as JSON     |
+| GET    | `/alerts/history`              | `ListAlertHistory`       | ❌   | List history (paginated) |
+| POST   | `/alerts/rules`                | `CreateAlertRule`        | ✅   | Create rule              |
+| PUT    | `/alerts/rules/:id`            | `UpdateAlertRule`        | ✅   | Replace rule             |
+| PATCH  | `/alerts/rules/:id/toggle`     | `ToggleAlertRule`        | ✅   | Enable/disable rule      |
+| DELETE | `/alerts/rules/:id`            | `DeleteAlertRule`        | ✅   | Delete rule              |
+| POST   | `/alerts/rules/:id/test`       | `TestAlertRule`          | ✅   | Test-fire rule           |
+| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules   |
+| POST   | `/alerts/rules/import`         | `ImportAlertRules`       | ✅   | Import rules from JSON   |
+| DELETE | `/alerts/history`              | `ClearAlertHistory`      | ✅   | Delete all history       |
 
 **Query Parameters:**
 
@@ -826,6 +826,7 @@ Updates are sent only when changes are detected, reducing bandwidth compared to 
 ### Integration Tips
 
 1. **Choose the Right Endpoint**:
+
    - Use SSE (`/streams/health/stream`) for real-time monitoring dashboards
    - Use REST polling (`/streams/status`) for periodic background checks
    - Use REST (`/streams/health/:url`) for on-demand detailed diagnostics

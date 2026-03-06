@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"encoding/csv"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,6 +120,12 @@ type RangeFilterSpecies struct {
 	Score          *float64 `json:"score,omitempty"` // Nullable - only present when individual scores are available
 }
 
+// TaxonomyFamily represents a bird family with scientific and common names
+type TaxonomyFamily struct {
+	Name       string `json:"name"`       // Scientific name, e.g. "Strigidae"
+	CommonName string `json:"commonName"` // Common name, e.g. "Owls"
+}
+
 // RangeFilterSpeciesList represents the full list response for range filter species
 type RangeFilterSpeciesList struct {
 	Species     []RangeFilterSpecies `json:"species"`
@@ -125,6 +133,9 @@ type RangeFilterSpeciesList struct {
 	LastUpdated time.Time            `json:"lastUpdated"`
 	Threshold   float32              `json:"threshold"`
 	Location    Location             `json:"location"`
+	Genera      []string             `json:"genera"`
+	Families    []TaxonomyFamily     `json:"families"`
+	Orders      []string             `json:"orders"`
 }
 
 // RangeFilterTestRequest represents the request for testing range filter
@@ -226,6 +237,66 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 		speciesList = append(speciesList, species)
 	}
 
+	// Extract taxonomy groups from species list via taxonomy DB
+	var genera []string
+	var families []TaxonomyFamily
+	var orders []string
+
+	if c.TaxonomyDB != nil {
+		generaSet := make(map[string]struct{})
+		familyMap := make(map[string]TaxonomyFamily) // keyed by lowercase family name
+		orderSet := make(map[string]struct{})
+
+		for _, sp := range speciesList {
+			_, meta, err := c.TaxonomyDB.GetGenusByScientificName(sp.ScientificName)
+			if err != nil {
+				continue // Species not in taxonomy DB — skip gracefully
+			}
+
+			// Extract genus (first word of scientific name)
+			if genus, _, found := strings.Cut(sp.ScientificName, " "); found && len(genus) > 1 {
+				generaSet[genus] = struct{}{}
+			}
+
+			// Extract family (with common name)
+			familyKey := strings.ToLower(meta.Family)
+			if _, exists := familyMap[familyKey]; !exists && meta.Family != "" {
+				familyMap[familyKey] = TaxonomyFamily{
+					Name:       meta.Family,
+					CommonName: meta.FamilyCommon,
+				}
+			}
+
+			// Extract order
+			if meta.Order != "" {
+				orderSet[meta.Order] = struct{}{}
+			}
+		}
+
+		// Convert sets to sorted slices
+		genera = slices.Collect(maps.Keys(generaSet))
+		slices.Sort(genera)
+
+		families = slices.Collect(maps.Values(familyMap))
+		slices.SortFunc(families, func(a, b TaxonomyFamily) int {
+			return strings.Compare(a.Name, b.Name)
+		})
+
+		orders = slices.Collect(maps.Keys(orderSet))
+		slices.Sort(orders)
+	}
+
+	// Ensure non-nil slices for JSON ([] not null)
+	if genera == nil {
+		genera = []string{}
+	}
+	if families == nil {
+		families = []TaxonomyFamily{}
+	}
+	if orders == nil {
+		orders = []string{}
+	}
+
 	response := RangeFilterSpeciesList{
 		Species:     speciesList,
 		Count:       len(speciesList),
@@ -235,6 +306,9 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 			Latitude:  c.Settings.BirdNET.Latitude,
 			Longitude: c.Settings.BirdNET.Longitude,
 		},
+		Genera:   genera,
+		Families: families,
+		Orders:   orders,
 	}
 
 	return ctx.JSON(http.StatusOK, response)

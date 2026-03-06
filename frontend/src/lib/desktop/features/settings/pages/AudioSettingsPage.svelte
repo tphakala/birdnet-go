@@ -336,10 +336,15 @@
   // Species list API state for extended capture (reuses ApiState<T>)
   interface SpeciesListResponse {
     species?: Array<{ label: string; scientificName?: string; commonName?: string }>;
+    genera?: string[];
+    families?: Array<{ name: string; commonName: string }>;
+    orders?: string[];
   }
 
   // Suffix appended to genus entries in the predictions list for display
   const GENUS_SUFFIX = ' (Genus)';
+  const FAMILY_SUFFIX = ' (Family)';
+  const ORDER_SUFFIX = ' (Order)';
 
   let speciesListState = $state<ApiState<string[]>>({
     loading: true,
@@ -358,29 +363,22 @@
     try {
       const data = await api.get<SpeciesListResponse>('/api/v2/range/species/list');
       if (data?.species && Array.isArray(data.species)) {
-        // Build clean species predictions using common names for display
-        // and extract unique genera for genus-level matching
-        const speciesNames: string[] = [];
-        const generaSet = new Set<string>();
+        // Species common names
+        const speciesNames = data.species.map(sp => sp.commonName ?? sp.label.replace('_', ' - '));
 
-        for (const sp of data.species) {
-          const common = sp.commonName ?? sp.label.replace('_', ' - ');
-          speciesNames.push(common);
+        // Taxonomy group entries from server (with display suffixes)
+        const generaEntries = (data.genera ?? []).map(g => `${g}${GENUS_SUFFIX}`);
+        const familyEntries = (data.families ?? []).map(f =>
+          f.commonName ? `${f.name} — ${f.commonName}${FAMILY_SUFFIX}` : `${f.name}${FAMILY_SUFFIX}`
+        );
+        const orderEntries = (data.orders ?? []).map(o => `${o}${ORDER_SUFFIX}`);
 
-          // Extract genus (first word of scientific name)
-          const sci = sp.scientificName ?? sp.label.split('_')[0];
-          if (sci) {
-            const genus = sci.split(' ')[0];
-            if (genus && genus.length > 1) {
-              generaSet.add(genus);
-            }
-          }
-        }
-
-        // Append genus entries with suffix so they appear in autocomplete
-        // (e.g. "Strix (Genus)" — the suffix is stripped before storing)
-        const generaEntries = [...generaSet].map(g => `${g}${GENUS_SUFFIX}`);
-        speciesListState.data = [...generaEntries, ...speciesNames];
+        speciesListState.data = [
+          ...orderEntries,
+          ...familyEntries,
+          ...generaEntries,
+          ...speciesNames,
+        ];
       } else {
         speciesListState.data = [];
       }
@@ -556,10 +554,18 @@
   }
 
   function handleExtendedCaptureSpeciesChange(updatedSpecies: string[]) {
-    // Strip " (Genus)" suffix from any genus entries added via autocomplete
-    const cleaned = updatedSpecies.map(s =>
-      s.endsWith(GENUS_SUFFIX) ? s.slice(0, -GENUS_SUFFIX.length) : s
-    );
+    // Strip taxonomy suffixes and extract scientific names before storing
+    const cleaned = updatedSpecies.map(s => {
+      if (s.endsWith(GENUS_SUFFIX)) return s.slice(0, -GENUS_SUFFIX.length);
+      if (s.endsWith(FAMILY_SUFFIX)) {
+        // Extract scientific name from "Strigidae — Owls (Family)" or "Strigidae (Family)"
+        const withoutSuffix = s.slice(0, -FAMILY_SUFFIX.length);
+        const dashIdx = withoutSuffix.indexOf(' — ');
+        return dashIdx >= 0 ? withoutSuffix.slice(0, dashIdx) : withoutSuffix;
+      }
+      if (s.endsWith(ORDER_SUFFIX)) return s.slice(0, -ORDER_SUFFIX.length);
+      return s;
+    });
     settingsActions.updateSection('realtime', {
       ...$realtimeSettings,
       extendedCapture: {
