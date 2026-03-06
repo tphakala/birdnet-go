@@ -343,7 +343,7 @@
                 <th scope="col">{t('detections.headers.actions')}</th>
               </tr>
             </thead>
-            <tbody class="divide-y divide-base-200">
+            <tbody class="divide-y divide-[var(--color-base-200)]">
               {#each data.notes as detection (detection.id)}
                 <tr>
                   <DetectionRow

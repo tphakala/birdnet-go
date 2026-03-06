@@ -370,7 +370,7 @@
       </div>
 
       <!-- Table Body -->
-      <div class="divide-y divide-base-300">
+      <div class="divide-y divide-[var(--color-base-300)]">
         {#each filteredThresholds as threshold (threshold.speciesName)}
           {@const levelDisplay = getLevelDisplay(threshold.level as ThresholdLevel)}
           {@const isExpanded = expandedSpecies.has(threshold.speciesName)}

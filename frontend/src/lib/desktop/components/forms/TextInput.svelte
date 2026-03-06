@@ -100,7 +100,7 @@
       {#if tooltip}
         <button
           type="button"
-          class="help-icon ml-1 text-[var(--color-info)] hover:text-[var(--color-info)]-focus transition-colors"
+          class="help-icon ml-1 text-[var(--color-info)] hover:text-[var(--color-info-hover)] transition-colors"
           onmouseenter={() => (showTooltip = true)}
           onmouseleave={() => (showTooltip = false)}
           onfocus={() => (showTooltip = true)}

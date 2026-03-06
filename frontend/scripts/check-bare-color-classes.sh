@@ -18,7 +18,7 @@ COLORS='base-100|base-200|base-300|base-content|primary|primary-content|secondar
 # Match only direct Tailwind utility patterns (with optional variant prefix and opacity suffix)
 # e.g., bg-primary, text-error/60, hover:bg-base-200, checked:bg-primary
 # But NOT: btn-outline-primary, btn-primary (compound component classes)
-PATTERN="(^|[\" ])((hover|focus|active|checked|disabled|before|after|group-hover|peer-checked|focus-visible|focus-within):)?(bg|text|border|ring|outline|fill|stroke|caret|accent)-($COLORS)(/[0-9]+)?([\" ]|$)"
+PATTERN="(^|[\" ])((hover|focus|active|checked|disabled|before|after|group-hover|peer-checked|focus-visible|focus-within):)?(bg|text|border|ring|outline|fill|stroke|caret|accent|divide)-($COLORS)(/[0-9]+)?([\" ]|$)"
 
 # Exclude lines that are CSS var() references (e.g., style:color="var(--text-secondary)")
 MATCHES=$(grep -rnE "$PATTERN" "$SEARCH_DIR" --include="*.svelte" | grep -v 'var(--' || true)

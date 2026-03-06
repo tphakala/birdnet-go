@@ -86,22 +86,22 @@
     default: 'bg-[var(--color-base-100)]',
     primary: 'bg-[var(--color-primary)] text-[var(--color-primary-content)]',
     secondary: 'bg-[var(--color-secondary)] text-[var(--color-secondary-content)]',
-    accent: 'bg-[var(--color-accent)] text-[var(--color-accent)]-content',
-    info: 'bg-[var(--color-info)] text-[var(--color-info)]-content',
-    success: 'bg-[var(--color-success)] text-[var(--color-success)]-content',
-    warning: 'bg-[var(--color-warning)] text-[var(--color-warning)]-content',
-    error: 'bg-[var(--color-error)] text-[var(--color-error)]-content',
+    accent: 'bg-[var(--color-accent)] text-[var(--color-accent-content)]',
+    info: 'bg-[var(--color-info)] text-[var(--color-info-content)]',
+    success: 'bg-[var(--color-success)] text-[var(--color-success-content)]',
+    warning: 'bg-[var(--color-warning)] text-[var(--color-warning-content)]',
+    error: 'bg-[var(--color-error)] text-[var(--color-error-content)]',
   };
 
   const iconVariantClasses: Record<CardVariant, string> = {
     default: 'bg-[var(--color-base-200)] text-[var(--color-base-content)]',
-    primary: 'bg-[var(--color-primary)]-focus text-[var(--color-primary-content)]',
-    secondary: 'bg-[var(--color-secondary)]-focus text-[var(--color-secondary-content)]',
-    accent: 'bg-[var(--color-accent)]-focus text-[var(--color-accent)]-content',
-    info: 'bg-[var(--color-info)]-content/20 text-[var(--color-info)]-content',
-    success: 'bg-[var(--color-success)]-content/20 text-[var(--color-success)]-content',
-    warning: 'bg-[var(--color-warning)]-content/20 text-[var(--color-warning)]-content',
-    error: 'bg-[var(--color-error)]-content/20 text-[var(--color-error)]-content',
+    primary: 'bg-[var(--color-primary-hover)] text-[var(--color-primary-content)]',
+    secondary: 'bg-[var(--color-secondary-hover)] text-[var(--color-secondary-content)]',
+    accent: 'bg-[var(--color-accent-hover)] text-[var(--color-accent-content)]',
+    info: 'bg-[var(--color-info-content)]/20 text-[var(--color-info-content)]',
+    success: 'bg-[var(--color-success-content)]/20 text-[var(--color-success-content)]',
+    warning: 'bg-[var(--color-warning-content)]/20 text-[var(--color-warning-content)]',
+    error: 'bg-[var(--color-error-content)]/20 text-[var(--color-error-content)]',
   };
 
   const trendClasses: Record<TrendDirection, string> = {

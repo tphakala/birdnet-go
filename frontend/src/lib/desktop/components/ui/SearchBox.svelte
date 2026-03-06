@@ -564,6 +564,6 @@
 
   /* Optional: Add focus styles */
   input:focus {
-    box-shadow: 0 0 0 2px var(--p);
+    box-shadow: 0 0 0 2px var(--color-primary);
   }
 </style>

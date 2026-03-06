@@ -2454,7 +2454,7 @@
         {t('settings.alerts.noHistory')}
       </div>
     {:else}
-      <div class="divide-y divide-base-200">
+      <div class="divide-y divide-[var(--color-base-200)]">
         {#each historyData as entry (entry.id)}
           <div class="py-3">
             <div class="flex items-center justify-between">

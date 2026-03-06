@@ -440,7 +440,7 @@
     <!-- Unread badge -->
     {#if !loading && unreadCount > 0}
       <span
-        class="absolute -top-1 -right-1 bg-[var(--color-error)] text-[var(--color-error)]-content text-xs rounded-full px-1 min-w-5 h-5 flex items-center justify-center font-bold"
+        class="absolute -top-1 -right-1 bg-[var(--color-error)] text-[var(--color-error-content)] text-xs rounded-full px-1 min-w-5 h-5 flex items-center justify-center font-bold"
         aria-live="polite"
         aria-atomic="true"
       >
