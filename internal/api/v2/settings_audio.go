@@ -51,6 +51,26 @@ func getAudioBlockedFields() map[string]any {
 	}
 }
 
+// extendedCaptureSettingsChanged checks if extended capture settings have changed
+func extendedCaptureSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	old := oldSettings.Realtime.ExtendedCapture
+	cur := currentSettings.Realtime.ExtendedCapture
+
+	if old.Enabled != cur.Enabled {
+		return true
+	}
+
+	if old.MaxDuration != cur.MaxDuration {
+		return true
+	}
+
+	if !reflect.DeepEqual(old.Species, cur.Species) {
+		return true
+	}
+
+	return false
+}
+
 // handleAudioSettingsChanges checks for audio-related settings changes and triggers appropriate actions
 func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *conf.Settings) ([]string, error) {
 	var reconfigActions []string
@@ -70,6 +90,13 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		// Send toast notification about restart requirement
 		_ = c.SendToastWithKey("Audio device changed. Restart required to apply changes.", "warning", toastDurationExtended,
 			notification.MsgSettingsAudioDeviceRestart, nil)
+	}
+
+	// Check extended capture settings (requires restart to resize capture buffers)
+	if extendedCaptureSettingsChanged(oldSettings, currentSettings) {
+		c.Debug("Extended capture settings changed. A restart will be required.")
+		_ = c.SendToastWithKey("Extended capture settings changed. Restart required to apply changes.", "warning", toastDurationExtended,
+			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
 	// Check audio equalizer settings

@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
         "audioDeviceRestartRequired": "Zmieniono urządzenie audio. Wymagany restart.",
+        "extendedCaptureRestartRequired": "Zmieniono ustawienia rozszerzonego nagrywania. Wymagany restart.",
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
         "savedSuccessfully": "Ustawienia zapisane pomyślnie",

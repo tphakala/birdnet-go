@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "audioDeviceRestartRequired": "Äänilaite vaihdettu. Uudelleenkäynnistys vaaditaan.",
+        "extendedCaptureRestartRequired": "Laajennetun tallennuksen asetukset muuttuneet. Uudelleenkäynnistys vaaditaan.",
         "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
         "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
         "savedSuccessfully": "Asetukset tallennettu onnistuneesti",

@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Web server settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "extendedCaptureRestartRequired": "Extended capture settings changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
         "equalizerUpdated": "Audio equalizer settings updated",
         "savedSuccessfully": "Settings saved successfully",

@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
         "audioDeviceRestartRequired": "Dispositivo de áudio alterado. Reinício necessário.",
+        "extendedCaptureRestartRequired": "Definições de captura estendida alteradas. Reinício necessário.",
         "equalizerUpdateFailed": "Falha ao atualizar definições do equalizador de áudio",
         "equalizerUpdated": "Definições do equalizador de áudio atualizadas",
         "savedSuccessfully": "Definições guardadas com sucesso",

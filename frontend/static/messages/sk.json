@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
         "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
+        "extendedCaptureRestartRequired": "Nastavenia rozšíreného nahrávania zmenené. Vyžaduje sa reštart.",
         "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
         "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
         "savedSuccessfully": "Nastavenia úspešne uložené",

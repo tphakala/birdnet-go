@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Les paramètres du serveur web ont changé. Redémarrage requis.",
         "reconfiguringSoundLevel": "Mise à jour de la surveillance du niveau sonore...",
         "audioDeviceRestartRequired": "Périphérique audio modifié. Redémarrage requis.",
+        "extendedCaptureRestartRequired": "Paramètres de capture étendue modifiés. Redémarrage requis.",
         "equalizerUpdateFailed": "Échec de la mise à jour des paramètres de l'égaliseur audio",
         "equalizerUpdated": "Paramètres de l'égaliseur audio mis à jour",
         "savedSuccessfully": "Paramètres enregistrés avec succès",

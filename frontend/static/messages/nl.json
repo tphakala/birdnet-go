@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",
+        "extendedCaptureRestartRequired": "Instellingen voor uitgebreide opname gewijzigd. Herstart vereist.",
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
         "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
         "savedSuccessfully": "Instellingen succesvol opgeslagen",

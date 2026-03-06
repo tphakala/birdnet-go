@@ -381,6 +381,7 @@
         "webserverRestartRequired": "Impostazioni del server web modificate. Riavvio necessario.",
         "reconfiguringSoundLevel": "Aggiornamento del monitoraggio del livello sonoro...",
         "audioDeviceRestartRequired": "Dispositivo audio modificato. Riavvio necessario.",
+        "extendedCaptureRestartRequired": "Impostazioni di cattura estesa modificate. Riavvio necessario.",
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",
         "equalizerUpdated": "Impostazioni dell'equalizzatore audio aggiornate",
         "savedSuccessfully": "Impostazioni salvate con successo",
