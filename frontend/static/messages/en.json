@@ -3342,7 +3342,11 @@
         "templateMessagePlaceholder": "Leave empty for default",
         "noConditionsEvent": "No conditions \u2014 rule fires on every event",
         "noConditionsMetric": "No conditions \u2014 rule fires on every metric update",
-        "cooldownSeconds": "Cooldown (seconds)"
+        "cooldownSeconds": "Cooldown (seconds)",
+        "eventsCount": "events",
+        "metricsCount": "metrics",
+        "durationFor": "for",
+        "durationSec": "sec"
       },
       "export": "Export",
       "import": "Import",

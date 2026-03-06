@@ -3124,7 +3124,11 @@
         "templateMessagePlaceholder": "Ponechajte prázdne pre predvolené",
         "noConditionsEvent": "Žiadne podmienky — pravidlo sa spustí pri každej udalosti",
         "noConditionsMetric": "Žiadne podmienky — pravidlo sa spustí pri každej aktualizácii metriky",
-        "cooldownSeconds": "Doba čakania (sekundy)"
+        "cooldownSeconds": "Doba čakania (sekundy)",
+        "eventsCount": "udalostí",
+        "metricsCount": "metrík",
+        "durationFor": "počas",
+        "durationSec": "sek"
       },
       "export": "Exportovať",
       "import": "Importovať",

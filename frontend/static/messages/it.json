@@ -3090,7 +3090,11 @@
         "templateMessagePlaceholder": "Lascia vuoto per il predefinito",
         "noConditionsEvent": "Nessuna condizione — la regola si attiva ad ogni evento",
         "noConditionsMetric": "Nessuna condizione — la regola si attiva ad ogni aggiornamento di metrica",
-        "cooldownSeconds": "Tempo di attesa (secondi)"
+        "cooldownSeconds": "Tempo di attesa (secondi)",
+        "eventsCount": "eventi",
+        "metricsCount": "metriche",
+        "durationFor": "per",
+        "durationSec": "sec"
       },
       "export": "Esporta",
       "import": "Importa",

@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Laat leeg voor standaard",
         "noConditionsEvent": "Geen voorwaarden — regel wordt bij elke gebeurtenis geactiveerd",
         "noConditionsMetric": "Geen voorwaarden — regel wordt bij elke metriekupdate geactiveerd",
-        "cooldownSeconds": "Wachttijd (seconden)"
+        "cooldownSeconds": "Wachttijd (seconden)",
+        "eventsCount": "gebeurtenissen",
+        "metricsCount": "metrieken",
+        "durationFor": "gedurende",
+        "durationSec": "sec"
       },
       "export": "Exporteren",
       "import": "Importeren",

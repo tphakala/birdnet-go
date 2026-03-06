@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Laisser vide pour la valeur par défaut",
         "noConditionsEvent": "Aucune condition — la règle se déclenche à chaque événement",
         "noConditionsMetric": "Aucune condition — la règle se déclenche à chaque mise à jour de métrique",
-        "cooldownSeconds": "Temps de recharge (secondes)"
+        "cooldownSeconds": "Temps de recharge (secondes)",
+        "eventsCount": "événements",
+        "metricsCount": "métriques",
+        "durationFor": "pendant",
+        "durationSec": "sec"
       },
       "export": "Exporter",
       "import": "Importer",

@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Dejar vacío para usar el predeterminado",
         "noConditionsEvent": "Sin condiciones — la regla se activa en cada evento",
         "noConditionsMetric": "Sin condiciones — la regla se activa en cada actualización de métrica",
-        "cooldownSeconds": "Tiempo de espera (segundos)"
+        "cooldownSeconds": "Tiempo de espera (segundos)",
+        "eventsCount": "eventos",
+        "metricsCount": "métricas",
+        "durationFor": "durante",
+        "durationSec": "seg"
       },
       "export": "Exportar",
       "import": "Importar",

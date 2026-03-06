@@ -10,6 +10,7 @@
   - schema: AlertSchema - schema for populating dropdowns
   - onSave: (rule) => void - called on save
   - onClose: () => void - called on cancel/close
+  - onDelete?: (rule) => void - called on delete (optional)
 
   @component
 -->
@@ -47,9 +48,10 @@
     schema: AlertSchema;
     onSave: (_data: Partial<AlertRule>) => void;
     onClose: () => void;
+    onDelete?: (_rule: AlertRule) => void;
   }
 
-  let { rule, schema, onSave, onClose }: Props = $props();
+  let { rule, schema, onSave, onClose, onDelete }: Props = $props();
 
   // Form state
   let name = $state('');
@@ -392,6 +394,9 @@
         </span>
         <button
           type="button"
+          aria-haspopup="listbox"
+          aria-expanded={objDropOpen}
+          aria-label={t('settings.alerts.editor.objectType')}
           class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {objDropOpen
             ? 'ring-2 ring-primary/20 border-primary'
             : 'border-base-300'}"
@@ -413,8 +418,10 @@
                 {schemaObjectTypeLabel(selectedObjectType.name, selectedObjectType.label)}
               </span>
               <span class="text-[11px] text-base-content/40">
-                {selectedObjectType.events?.length ?? 0} events &middot; {selectedObjectType.metrics
-                  ?.length ?? 0} metrics
+                {selectedObjectType.events?.length ?? 0}
+                {t('settings.alerts.editor.eventsCount')} &middot; {selectedObjectType.metrics
+                  ?.length ?? 0}
+                {t('settings.alerts.editor.metricsCount')}
               </span>
             </div>
           {/if}
@@ -426,6 +433,7 @@
         </button>
         {#if objDropOpen}
           <div
+            role="listbox"
             class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden"
           >
             {#each schema.objectTypes as ot (ot.name)}
@@ -433,6 +441,8 @@
               {@const oColor = objectTypeColor(ot.name)}
               <button
                 type="button"
+                role="option"
+                aria-selected={objectType === ot.name}
                 class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {objectType ===
                 ot.name
                   ? 'bg-primary/5'
@@ -449,7 +459,9 @@
                     {schemaObjectTypeLabel(ot.name, ot.label)}
                   </div>
                   <div class="text-[11px] text-base-content/40">
-                    {ot.events?.length ?? 0} events &middot; {ot.metrics?.length ?? 0} metrics
+                    {ot.events?.length ?? 0}
+                    {t('settings.alerts.editor.eventsCount')} &middot; {ot.metrics?.length ?? 0}
+                    {t('settings.alerts.editor.metricsCount')}
                   </div>
                 </div>
                 {#if objectType === ot.name}
@@ -522,6 +534,11 @@
       </span>
       <button
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={eventDropOpen}
+        aria-label={triggerType === 'event'
+          ? t('settings.alerts.editor.event')
+          : t('settings.alerts.editor.metric')}
         class="w-full px-3 py-2 rounded-lg text-sm bg-base-200 border text-left flex items-center gap-2 cursor-pointer transition-all {eventDropOpen
           ? 'ring-2 ring-primary/20 border-primary'
           : 'border-base-300'}"
@@ -545,12 +562,15 @@
       {#if eventDropOpen}
         {@const items = triggerType === 'event' ? eventOptions : metricOptions}
         <div
+          role="listbox"
           class="absolute z-50 top-full left-0 right-0 mt-1 bg-base-100 border border-base-300 shadow-lg rounded-lg overflow-hidden max-h-60 overflow-y-auto"
         >
           {#each items as item (item.value)}
             {@const isSelected = (triggerType === 'event' ? eventName : metricName) === item.value}
             <button
               type="button"
+              role="option"
+              aria-selected={isSelected}
               class="w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors cursor-pointer hover:bg-base-200 {isSelected
                 ? 'bg-primary/5'
                 : ''}"
@@ -611,6 +631,7 @@
               <!-- Property -->
               <select
                 bind:value={condition.property}
+                aria-label={t('settings.alerts.editor.property')}
                 class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
               >
                 {#each propertyOptions as prop}
@@ -620,6 +641,7 @@
               <!-- Operator -->
               <select
                 bind:value={condition.operator}
+                aria-label={t('settings.alerts.editor.operator')}
                 class="px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content font-mono cursor-pointer outline-none focus:ring-1 focus:ring-primary/30"
               >
                 {#each operatorsForProperty(condition.property ?? '') as op}
@@ -630,23 +652,29 @@
               <input
                 type="text"
                 bind:value={condition.value}
+                aria-label={t('settings.alerts.editor.value')}
                 placeholder={t('settings.alerts.editor.valuePlaceholder')}
                 class="flex-1 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none focus:ring-1 focus:ring-primary/30 tabular-nums placeholder:text-base-content/40"
               />
               <!-- Duration (metric only) -->
               {#if triggerType === 'metric'}
                 <div class="flex items-center gap-1">
-                  <span class="text-[10px] text-base-content/40">for</span>
+                  <span class="text-[10px] text-base-content/40"
+                    >{t('settings.alerts.editor.durationFor')}</span
+                  >
                   <input
                     type="number"
                     min="0"
+                    aria-label={t('settings.alerts.editor.duration')}
                     class="w-16 px-2 py-1.5 rounded-md text-xs border border-base-300 bg-base-100 text-base-content outline-none tabular-nums focus:ring-1 focus:ring-primary/30"
                     value={condition.duration_sec ?? 0}
                     onchange={e => {
                       condition.duration_sec = Number(e.currentTarget.value);
                     }}
                   />
-                  <span class="text-[10px] text-base-content/40">sec</span>
+                  <span class="text-[10px] text-base-content/40"
+                    >{t('settings.alerts.editor.durationSec')}</span
+                  >
                 </div>
               {/if}
               <!-- Remove -->
@@ -769,11 +797,11 @@
     <!-- Row 6: Footer - Delete (left) + Cancel/Save (right) -->
     <div class="flex items-center justify-between pt-2">
       <div>
-        {#if rule && !rule.built_in}
+        {#if rule && !rule.built_in && onDelete}
           <button
             type="button"
             class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-error hover:bg-error/10 transition-colors cursor-pointer"
-            onclick={onClose}
+            onclick={() => onDelete?.(rule)}
           >
             <Trash2 class="w-3.5 h-3.5" />
             {t('settings.alerts.actionLabels.delete')}

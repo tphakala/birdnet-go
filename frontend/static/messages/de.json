@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Leer lassen für Standard",
         "noConditionsEvent": "Keine Bedingungen — Regel wird bei jedem Ereignis ausgelöst",
         "noConditionsMetric": "Keine Bedingungen — Regel wird bei jeder Metrik-Aktualisierung ausgelöst",
-        "cooldownSeconds": "Abklingzeit (Sekunden)"
+        "cooldownSeconds": "Abklingzeit (Sekunden)",
+        "eventsCount": "Ereignisse",
+        "metricsCount": "Metriken",
+        "durationFor": "für",
+        "durationSec": "Sek"
       },
       "export": "Exportieren",
       "import": "Importieren",

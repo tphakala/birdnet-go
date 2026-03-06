@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Deixe vazio para o padrão",
         "noConditionsEvent": "Sem condições — a regra dispara a cada evento",
         "noConditionsMetric": "Sem condições — a regra dispara a cada atualização de métrica",
-        "cooldownSeconds": "Tempo de espera (segundos)"
+        "cooldownSeconds": "Tempo de espera (segundos)",
+        "eventsCount": "eventos",
+        "metricsCount": "métricas",
+        "durationFor": "durante",
+        "durationSec": "seg"
       },
       "export": "Exportar",
       "import": "Importar",

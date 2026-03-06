@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Jätä tyhjäksi oletusarvolle",
         "noConditionsEvent": "Ei ehtoja — sääntö laukeaa jokaisesta tapahtumasta",
         "noConditionsMetric": "Ei ehtoja — sääntö laukeaa jokaisesta mittaripäivityksestä",
-        "cooldownSeconds": "Odotusaika (sekuntia)"
+        "cooldownSeconds": "Odotusaika (sekuntia)",
+        "eventsCount": "tapahtumaa",
+        "metricsCount": "mittaria",
+        "durationFor": "ajan",
+        "durationSec": "sek"
       },
       "export": "Vie",
       "import": "Tuo",

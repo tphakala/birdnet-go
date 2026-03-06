@@ -3293,7 +3293,11 @@
         "templateMessagePlaceholder": "Pozostaw puste dla domyślnego",
         "noConditionsEvent": "Brak warunków — reguła uruchamia się przy każdym zdarzeniu",
         "noConditionsMetric": "Brak warunków — reguła uruchamia się przy każdej aktualizacji metryki",
-        "cooldownSeconds": "Czas odnowienia (sekundy)"
+        "cooldownSeconds": "Czas odnowienia (sekundy)",
+        "eventsCount": "zdarzenia",
+        "metricsCount": "metryki",
+        "durationFor": "przez",
+        "durationSec": "sek"
       },
       "export": "Eksportuj",
       "import": "Importuj",
