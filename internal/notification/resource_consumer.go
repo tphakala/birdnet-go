@@ -111,6 +111,12 @@ func (w *ResourceEventWorker) ProcessResourceEvent(event events.ResourceEvent) e
 		return nil
 	}
 
+	// When the alert engine is active, it handles system resource notifications
+	// via configurable rules. Skip to avoid duplicate notifications.
+	if IsAlertEngineActive() {
+		return nil
+	}
+
 	alertKey := w.buildAlertKey(event)
 
 	if w.shouldThrottle(alertKey, event.GetResourceType()) {

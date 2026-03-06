@@ -247,6 +247,31 @@ func TestResourceEventWorker_InvalidService(t *testing.T) {
 	require.Error(t, err, "NewResourceEventWorker(nil, nil) should error")
 }
 
+func TestResourceEventWorker_SkipsWhenAlertEngineActive(t *testing.T) {
+	// Not parallel — modifies package-level alertEngineActive state
+	prev := IsAlertEngineActive()
+	t.Cleanup(func() { SetAlertEngineActive(prev) })
+
+	SetAlertEngineActive(true)
+
+	service := NewService(DefaultServiceConfig())
+	defer service.Stop()
+
+	worker, err := NewResourceEventWorker(service, nil)
+	require.NoError(t, err)
+	defer worker.Stop()
+
+	// Process a valid resource event
+	event := events.NewResourceEvent(events.ResourceCPU, 90.0, 80.0, events.SeverityWarning)
+	err = worker.ProcessResourceEvent(event)
+	require.NoError(t, err)
+
+	// No notification should be created
+	notifications, err := service.List(nil)
+	require.NoError(t, err)
+	assert.Empty(t, notifications, "No notifications should be created when alert engine is active")
+}
+
 // Helper function to get notification count
 func getNotificationCount(t *testing.T, service *Service) int {
 	t.Helper()
