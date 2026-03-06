@@ -1923,6 +1923,18 @@
       }
     },
     "notifications": {
+      "tabs": {
+        "channels": "Channels",
+        "rules": "Rules",
+        "history": "History"
+      },
+      "rules": {
+        "summary": {
+          "active": "active",
+          "builtIn": "built-in",
+          "total": "total"
+        }
+      },
       "sections": {
         "testing": {
           "title": "Test Notifications",
