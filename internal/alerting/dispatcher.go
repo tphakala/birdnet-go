@@ -226,13 +226,13 @@ func errorMessage(event *AlertEvent) (key string, params map[string]any, fallbac
 // formatErrorFallback builds the English fallback string, prepending the
 // source name when available.
 func formatErrorFallback(sourceName, message string) string {
-	if sourceName != "" && message != "" {
-		return fmt.Sprintf("%s: %s", sourceName, message)
+	if sourceName == "" {
+		return message
 	}
-	if sourceName != "" {
+	if message == "" {
 		return sourceName
 	}
-	return message
+	return fmt.Sprintf("%s: %s", sourceName, message)
 }
 
 func disconnectMessage(event *AlertEvent) (key string, params map[string]any, fallback string) {
