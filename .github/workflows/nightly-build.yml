@@ -113,7 +113,7 @@ jobs:
           tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *
 
       - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
           path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz

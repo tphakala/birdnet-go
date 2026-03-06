@@ -177,7 +177,7 @@ jobs:
           done
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: birdnet-go-vm-${{ matrix.arch }}-${{ steps.version.outputs.version }}
           path: vm-images/output-${{ matrix.arch }}/*
@@ -203,7 +203,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
