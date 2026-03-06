@@ -31,8 +31,6 @@
   import AlertRuleEditor from '$lib/desktop/features/settings/components/AlertRuleEditor.svelte';
   import {
     Info,
-    CircleCheck,
-    XCircle,
     Bell,
     Send,
     Plus,
@@ -54,6 +52,8 @@
     Clock,
     Wifi,
   } from '@lucide/svelte';
+  import StatusBanner from '$lib/desktop/components/ui/StatusBanner.svelte';
+  import StatsSummaryBar from '$lib/desktop/components/ui/StatsSummaryBar.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { api, ApiError } from '$lib/utils/api';
@@ -1256,37 +1256,13 @@
 <!-- ============================================================ -->
 {#snippet ruleStatusBanner()}
   {#if ruleStatusMessage}
-    <div
-      class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm {ruleStatusType === 'success'
-        ? 'bg-success/15 text-success'
-        : ruleStatusType === 'error'
-          ? 'bg-error/15 text-error'
-          : 'bg-info/15 text-info'}"
-      role={ruleStatusType === 'error' ? 'alert' : 'status'}
-      aria-live={ruleStatusType === 'error' ? 'assertive' : 'polite'}
-    >
-      {#if ruleStatusType === 'success'}
-        <CircleCheck class="size-4 shrink-0" />
-      {:else if ruleStatusType === 'error'}
-        <XCircle class="size-4 shrink-0" />
-      {:else}
-        <Info class="size-4 shrink-0" />
-      {/if}
-      <span>{ruleStatusMessage}</span>
-    </div>
+    <StatusBanner message={ruleStatusMessage} type={ruleStatusType} class="mb-4" />
   {/if}
 {/snippet}
 
 {#snippet v2RequiredBanner()}
   {#if !v2Available}
-    <div
-      class="mb-4 flex items-center gap-2 rounded-lg p-3 text-sm bg-warning/15 text-warning"
-      role="status"
-      aria-live="polite"
-    >
-      <Info class="size-4 shrink-0" />
-      <span>{t('settings.alerts.v2Required')}</span>
-    </div>
+    <StatusBanner message={t('settings.alerts.v2Required')} type="warning" class="mb-4" />
   {/if}
 {/snippet}
 
@@ -1967,23 +1943,7 @@
 
         <!-- Status Message -->
         {#if pushStatusMessage}
-          <div
-            class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {pushStatusType ===
-            'success'
-              ? 'bg-success/15 text-success'
-              : 'bg-error/15 text-error'}"
-            role="alert"
-            aria-live="assertive"
-          >
-            <div class="shrink-0">
-              {#if pushStatusType === 'success'}
-                <CircleCheck class="size-4" />
-              {:else if pushStatusType === 'error'}
-                <XCircle class="size-4" />
-              {/if}
-            </div>
-            <span>{pushStatusMessage}</span>
-          </div>
+          <StatusBanner message={pushStatusMessage} type={pushStatusType} />
         {/if}
 
         <!-- Save and Test Buttons -->
@@ -2068,47 +2028,11 @@
               </div>
 
               {#if templateStatusMessage}
-                <div
-                  class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {templateStatusType ===
-                  'success'
-                    ? 'bg-success/15 text-success'
-                    : 'bg-error/15 text-error'}"
-                  role="alert"
-                  aria-live="assertive"
-                >
-                  <div class="shrink-0">
-                    {#if templateStatusType === 'success'}
-                      <CircleCheck class="size-4" />
-                    {:else if templateStatusType === 'error'}
-                      <XCircle class="size-4" />
-                    {/if}
-                  </div>
-                  <span>{templateStatusMessage}</span>
-                </div>
+                <StatusBanner message={templateStatusMessage} type={templateStatusType} />
               {/if}
 
               {#if channelStatusMessage}
-                <div
-                  class="flex items-center gap-2 py-2 px-3 text-sm rounded-lg {channelStatusType ===
-                  'info'
-                    ? 'bg-info/15 text-info'
-                    : channelStatusType === 'success'
-                      ? 'bg-success/15 text-success'
-                      : 'bg-error/15 text-error'}"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <div class="shrink-0">
-                    {#if channelStatusType === 'info'}
-                      <Info class="size-4" />
-                    {:else if channelStatusType === 'success'}
-                      <CircleCheck class="size-4" />
-                    {:else if channelStatusType === 'error'}
-                      <XCircle class="size-4" />
-                    {/if}
-                  </div>
-                  <span>{channelStatusMessage}</span>
-                </div>
+                <StatusBanner message={channelStatusMessage} type={channelStatusType} />
               {/if}
 
               <div class="flex gap-2 justify-end">
@@ -2213,31 +2137,27 @@
   {@render ruleStatusBanner()}
 
   <!-- Summary stats bar -->
-  <div class="flex items-center gap-4 text-sm mb-4 px-1">
-    <div class="flex items-center gap-1.5">
-      <Zap class="size-3.5 text-primary" />
-      <span class="text-base-content/60">
-        <span class="font-semibold text-base-content tabular-nums">{activeCount}</span>
-        {t('settings.notifications.rules.summary.active')}
-      </span>
-    </div>
-    <span class="w-px h-3 bg-base-300"></span>
-    <div class="flex items-center gap-1.5">
-      <Shield class="size-3.5 text-base-content/40" />
-      <span class="text-base-content/60">
-        <span class="font-semibold text-base-content tabular-nums">{builtInCount}</span>
-        {t('settings.notifications.rules.summary.builtIn')}
-      </span>
-    </div>
-    <span class="w-px h-3 bg-base-300"></span>
-    <div class="flex items-center gap-1.5">
-      <Bell class="size-3.5 text-base-content/40" />
-      <span class="text-base-content/60">
-        <span class="font-semibold text-base-content tabular-nums">{rules.length}</span>
-        {t('settings.notifications.rules.summary.total')}
-      </span>
-    </div>
-  </div>
+  <StatsSummaryBar
+    stats={[
+      {
+        icon: Zap,
+        iconClass: 'text-primary',
+        count: activeCount,
+        label: t('settings.notifications.rules.summary.active'),
+      },
+      {
+        icon: Shield,
+        count: builtInCount,
+        label: t('settings.notifications.rules.summary.builtIn'),
+      },
+      {
+        icon: Bell,
+        count: rules.length,
+        label: t('settings.notifications.rules.summary.total'),
+      },
+    ]}
+    class="mb-4 px-1"
+  />
 
   <!-- Action buttons: New Rule + Export, Import, Reset -->
   <div class="mb-4 flex items-center gap-2 flex-wrap">
