@@ -12,11 +12,12 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name           string
-		input          []datastore.Results
-		expectedCount  int
-		expectedFirst  string
-		expectedFirstC float64
+		name                  string
+		input                 []datastore.Results
+		primaryScientificName string
+		expectedCount         int
+		expectedFirst         string
+		expectedFirstC        float64
 	}{
 		{
 			name: "duplicate_species_keeps_highest_confidence",
@@ -25,9 +26,10 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 				{Species: "Parus major_talitiainen", Confidence: 0.50},
 				{Species: "Periparus ater_kuusitiainen", Confidence: 0.92},
 			},
-			expectedCount:  2,
-			expectedFirst:  "Periparus ater",
-			expectedFirstC: 0.99,
+			primaryScientificName: "",
+			expectedCount:         2,
+			expectedFirst:         "Periparus ater",
+			expectedFirstC:        0.99,
 		},
 		{
 			name: "duplicate_lower_confidence_first",
@@ -36,9 +38,10 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 				{Species: "Parus major_talitiainen", Confidence: 0.30},
 				{Species: "Periparus ater_kuusitiainen", Confidence: 0.95},
 			},
-			expectedCount:  2,
-			expectedFirst:  "Periparus ater",
-			expectedFirstC: 0.95,
+			primaryScientificName: "",
+			expectedCount:         2,
+			expectedFirst:         "Periparus ater",
+			expectedFirstC:        0.95,
 		},
 		{
 			name: "multiple_different_duplicates",
@@ -49,9 +52,10 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 				{Species: "Periparus ater_kuusitiainen", Confidence: 0.92},
 				{Species: "Parus major_talitiainen", Confidence: 0.85},
 			},
-			expectedCount:  3,
-			expectedFirst:  "Periparus ater",
-			expectedFirstC: 0.99,
+			primaryScientificName: "",
+			expectedCount:         3,
+			expectedFirst:         "Periparus ater",
+			expectedFirstC:        0.99,
 		},
 		{
 			name: "no_duplicates_unchanged",
@@ -60,26 +64,53 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 				{Species: "Parus major_talitiainen", Confidence: 0.50},
 				{Species: "Corvus corax_korppi", Confidence: 0.30},
 			},
-			expectedCount:  3,
-			expectedFirst:  "Periparus ater",
-			expectedFirstC: 0.99,
+			primaryScientificName: "",
+			expectedCount:         3,
+			expectedFirst:         "Periparus ater",
+			expectedFirstC:        0.99,
 		},
 		{
-			name:          "empty_input",
-			input:         []datastore.Results{},
-			expectedCount: 0,
+			name: "excludes_primary_species",
+			input: []datastore.Results{
+				{Species: "Periparus ater_kuusitiainen", Confidence: 0.99},
+				{Species: "Parus major_talitiainen", Confidence: 0.50},
+				{Species: "Corvus corax_korppi", Confidence: 0.30},
+			},
+			primaryScientificName: "Periparus ater",
+			expectedCount:         2,
+			expectedFirst:         "Parus major",
+			expectedFirstC:        0.50,
 		},
 		{
-			name:          "nil_input",
-			input:         nil,
-			expectedCount: 0,
+			name: "excludes_primary_with_duplicates",
+			input: []datastore.Results{
+				{Species: "Periparus ater_kuusitiainen", Confidence: 0.99},
+				{Species: "Parus major_talitiainen", Confidence: 0.50},
+				{Species: "Periparus ater_kuusitiainen", Confidence: 0.92},
+			},
+			primaryScientificName: "Periparus ater",
+			expectedCount:         1,
+			expectedFirst:         "Parus major",
+			expectedFirstC:        0.50,
+		},
+		{
+			name:                  "empty_input",
+			input:                 []datastore.Results{},
+			primaryScientificName: "",
+			expectedCount:         0,
+		},
+		{
+			name:                  "nil_input",
+			input:                 nil,
+			primaryScientificName: "",
+			expectedCount:         0,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := convertToAdditionalResults(tt.input)
+			result := convertToAdditionalResults(tt.input, tt.primaryScientificName)
 			require.Len(t, result, tt.expectedCount)
 
 			if tt.expectedCount > 0 {

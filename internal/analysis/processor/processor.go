@@ -787,8 +787,9 @@ func (p *Processor) createDetection(item birdnet.Results, result datastore.Resul
 		item.Source, clipName,
 		item.ElapsedTime, occurrence)
 
-	// Convert additional results from datastore.Results to detection.AdditionalResult
-	additionalResults := convertToAdditionalResults(item.Results)
+	// Convert additional results from datastore.Results to detection.AdditionalResult.
+	// Exclude the primary species since it's already stored as Detection.LabelID.
+	additionalResults := convertToAdditionalResults(item.Results, scientificName)
 
 	// Update species tracker if enabled
 	p.speciesTrackerMu.RLock()
@@ -880,13 +881,17 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 
 // convertToAdditionalResults converts a slice of datastore.Results to detection.AdditionalResult,
 // deduplicating by scientific name and keeping the highest confidence for each species.
+// The primary species is excluded since it's already stored as Detection.LabelID.
 // Custom BirdNET classifiers can have the same species at multiple positions in the label file,
 // producing duplicate entries in prediction results that would cause UNIQUE constraint violations.
-func convertToAdditionalResults(results []datastore.Results) []detection.AdditionalResult {
+func convertToAdditionalResults(results []datastore.Results, primaryScientificName string) []detection.AdditionalResult {
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
 		sp := detection.ParseSpeciesString(r.Species)
+		if sp.ScientificName == primaryScientificName {
+			continue
+		}
 		if idx, exists := seen[sp.ScientificName]; exists {
 			// Keep the higher confidence entry
 			if float64(r.Confidence) > additional[idx].Confidence {
