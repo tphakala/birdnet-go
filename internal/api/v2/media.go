@@ -1973,32 +1973,10 @@ func (c *Controller) GetSpeciesImage(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("scientific name contains only whitespace"), "Valid scientific name is required", http.StatusBadRequest)
 	}
 
-	// Check if BirdImageCache is available
-	if c.BirdImageCache == nil {
-		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
-	}
-
-	// Fetch the image from cache (which will use AviCommons if available)
-	birdImage, err := c.BirdImageCache.Get(scientificName)
-	if err != nil {
-		// Check for "not found" errors using errors.Is
-		if errors.Is(err, ErrImageNotFound) {
-			// For images not found, still set cache headers to prevent repeated lookups
-			// Cache the 404 response to reduce load
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		// For other errors, return 500
-		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
-	}
-
-	// Set aggressive cache headers for species images since they rarely change
-	// These are external images from wikimedia/flickr that are stable
-	// Cache with immutable flag to prevent revalidation
-	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d, immutable", ImageCacheSeconds))
-
-	// Redirect to the image URL
-	return ctx.Redirect(http.StatusFound, birdImage.URL)
+	// Delegate to the proxy handler by setting the param
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues(scientificName)
+	return c.ServeSpeciesImageProxy(ctx)
 }
 
 // GetSpeciesImageInfo returns attribution metadata for a species image as JSON
@@ -2124,7 +2102,10 @@ func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType stri
 		return c.HandleError(ctx, err, "Failed to stat cached image", http.StatusInternalServerError)
 	}
 
-	// Set cache headers
+	// Set content type and cache headers
+	if contentType != "" {
+		ctx.Response().Header().Set("Content-Type", contentType)
+	}
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
 	ctx.Response().Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
 

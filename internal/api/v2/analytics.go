@@ -464,7 +464,7 @@ func (c *Controller) batchFetchCachedThumbnails(scientificNames []string) map[st
 	batchResults := c.BirdImageCache.GetBatchCachedOnly(scientificNames)
 	for name := range batchResults {
 		if batchResults[name].URL != "" {
-			thumbnailURLs[name] = batchResults[name].URL
+			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
 		}
 	}
 	return thumbnailURLs
@@ -673,8 +673,8 @@ func getThumbnailURLFromBirdImage(thumbnailURLs map[string]imageprovider.BirdIma
 	if thumbnailURLs == nil {
 		return ""
 	}
-	if birdImage, ok := thumbnailURLs[scientificName]; ok {
-		return birdImage.URL
+	if birdImage, ok := thumbnailURLs[scientificName]; ok && birdImage.URL != "" {
+		return imageprovider.ProxyImageURL(scientificName)
 	}
 	return ""
 }
@@ -1161,7 +1161,7 @@ func (c *Controller) batchFetchThumbnailURLs(scientificNames []string) map[strin
 	batchResults := c.BirdImageCache.GetBatch(scientificNames)
 	for name := range batchResults {
 		if batchResults[name].URL != "" {
-			thumbnailURLs[name] = batchResults[name].URL
+			thumbnailURLs[name] = imageprovider.ProxyImageURL(name)
 		}
 	}
 	return thumbnailURLs
@@ -1277,10 +1277,10 @@ func (c *Controller) buildThumbnailMap(speciesParams []string) map[string]string
 	// Get thumbnails in batch from cache
 	images := c.BirdImageCache.GetBatch(speciesParams)
 
-	// Convert to simple map of scientific name -> URL
+	// Convert to simple map of scientific name -> proxy URL
 	for name := range images {
 		if images[name].URL != "" {
-			result[name] = images[name].URL
+			result[name] = imageprovider.ProxyImageURL(name)
 		} else {
 			result[name] = placeholderImageURL
 		}

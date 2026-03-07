@@ -737,7 +737,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 			FirstHeard:          "08:15:00",
 			LatestHeard:         "14:45:00",
 			HighConfidence:      true, // Based on 0.95 > 0.8
-			ThumbnailURLContain: "Corvus brachyrhynchos",
+			ThumbnailURLContain: "/api/v2/media/image/Corvus%20brachyrhynchos",
 		})
 	}
 
@@ -752,7 +752,7 @@ func TestGetDailySpeciesSummary_MultipleDetections(t *testing.T) {
 			FirstHeard:          "10:20:00",
 			LatestHeard:         "16:05:00",
 			HighConfidence:      true, // Based on 0.8 >= 0.8
-			ThumbnailURLContain: "Melanerpes carolinus",
+			ThumbnailURLContain: "/api/v2/media/image/Melanerpes%20carolinus",
 		})
 	}
 

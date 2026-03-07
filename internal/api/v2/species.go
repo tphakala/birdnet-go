@@ -623,35 +623,8 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 			Build(), "Invalid species data", http.StatusInternalServerError)
 	}
 
-	// Now use the scientific name to get the bird image
-	birdImage, err := c.BirdImageCache.Get(scientificName)
-	if err != nil {
-		// Check for "not found" errors - the cache returns a specific error message
-		if strings.Contains(err.Error(), "not found") {
-			return c.HandleError(ctx, errors.New(err).
-				Context("species_code", speciesCode).
-				Context("scientific_name", scientificName).
-				Component("api-species").
-				Build(), "Image not found for species", http.StatusNotFound)
-		}
-		// For other errors
-		return c.HandleError(ctx, errors.New(err).
-			Category(errors.CategoryProcessing).
-			Context("species_code", speciesCode).
-			Context("scientific_name", scientificName).
-			Component("api-species").
-			Build(), "Failed to fetch species image", http.StatusInternalServerError)
-	}
-
-	// Log successful retrieval
-	c.logInfoIfEnabled("Successfully retrieved thumbnail",
-		logger.String("species_code", speciesCode),
-		logger.String("scientific_name", scientificName),
-		logger.String("image_url", birdImage.URL),
-		logger.String("ip", ctx.RealIP()),
-		logger.String("path", ctx.Request().URL.Path),
-	)
-
-	// Redirect to the image URL
-	return ctx.Redirect(http.StatusFound, birdImage.URL)
+	// Delegate to the image proxy handler
+	ctx.SetParamNames("scientific_name")
+	ctx.SetParamValues(scientificName)
+	return c.ServeSpeciesImageProxy(ctx)
 }

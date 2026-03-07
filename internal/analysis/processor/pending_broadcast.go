@@ -3,6 +3,7 @@ package processor
 import (
 	"slices"
 
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -96,11 +97,11 @@ func (p *Processor) getThumbnailURL(scientificName string) string {
 	if p.BirdImageCache == nil {
 		return ""
 	}
-	img, err := p.BirdImageCache.Get(scientificName)
+	_, err := p.BirdImageCache.Get(scientificName)
 	if err != nil {
 		return ""
 	}
-	return img.URL
+	return imageprovider.ProxyImageURL(scientificName)
 }
 
 // broadcastPendingSnapshot broadcasts a pending detection snapshot via the
