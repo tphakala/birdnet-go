@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Zatwierdzone",
+    "currentlyHearing": "Aktualnie słychać",
+    "rejected": "Odrzucone",
     "dailySummary": {
       "title": "Dzienna Aktywność",
       "subtitle": "Wykrycia według godziny",

@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Approuvé",
+    "currentlyHearing": "En écoute",
+    "rejected": "Rejeté",
     "dailySummary": {
       "title": "Activité Quotidienne",
       "subtitle": "Détections par heure",

@@ -40,10 +40,12 @@ Performance Optimizations:
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import ReconnectingEventSource from 'reconnecting-eventsource';
+  import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
   import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary, Detection } from '$lib/types/detection.types';
+  import type { PendingDetection } from '$lib/types/pending.types';
   import {
     getLocalDateString,
     isFutureDate,
@@ -120,6 +122,7 @@ Performance Optimizations:
   let showThumbnails = $state(true); // Default to true for backward compatibility
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
+  let pendingDetections = $state<PendingDetection[]>([]);
 
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -549,8 +552,22 @@ Performance Optimizations:
         }
       });
 
+      eventSource.addEventListener('pending', (event: Event) => {
+        try {
+          // eslint-disable-next-line no-undef
+          const messageEvent = event as MessageEvent;
+          const data = JSON.parse(messageEvent.data);
+          if (Array.isArray(data)) {
+            pendingDetections = data as PendingDetection[];
+          }
+        } catch (error) {
+          logger.error('Failed to parse pending event:', error);
+        }
+      });
+
       eventSource.onerror = (error: Event) => {
         logger.error('SSE connection error:', error);
+        pendingDetections = []; // Clear pending on disconnect
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
       };
@@ -1174,6 +1191,11 @@ Performance Optimizations:
     onGoToToday={goToToday}
     onDateChange={handleDateChange}
   />
+
+  <!-- Currently Hearing Section -->
+  {#if isViewingToday}
+    <CurrentlyHearingCard detections={pendingDetections} />
+  {/if}
 
   <!-- Recent Detections Section -->
   <DetectionCardGrid

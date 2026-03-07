@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Genehmigt",
+    "currentlyHearing": "Gerade gehört",
+    "rejected": "Abgelehnt",
     "dailySummary": {
       "title": "Tagesaktivität",
       "subtitle": "Artnachweise pro Stunde",

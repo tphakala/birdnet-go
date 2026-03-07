@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Hyväksytty",
+    "currentlyHearing": "Kuunnellaan nyt",
+    "rejected": "Hylätty",
     "dailySummary": {
       "title": "Päivän aktiivisuus",
       "subtitle": "Havaintoja tunneittain",
