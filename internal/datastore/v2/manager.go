@@ -96,7 +96,7 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	}
 
 	// Build DSN with recommended SQLite pragmas
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=5000&_foreign_keys=ON", dbPath)
+	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON", dbPath)
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger,

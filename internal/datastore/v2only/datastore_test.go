@@ -1051,3 +1051,34 @@ func TestV2OnlyDatastore_ConcatenatedLabelExtraction(t *testing.T) {
 			"Save should store only the extracted scientific name, not the concatenated form")
 	})
 }
+
+func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	note := &datastore.Note{
+		Date:           "2024-06-15",
+		Time:           "08:30:00",
+		ScientificName: "Periparus ater",
+		CommonName:     "Coal Tit",
+		Confidence:     0.99,
+	}
+
+	// Simulate duplicate species in prediction results (same species, different confidences).
+	// This happens when custom BirdNET classifiers have the same species at multiple
+	// positions in the label file.
+	results := []datastore.Results{
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.99},
+		{Species: "Parus major_Great Tit", Confidence: 0.50},
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.92}, // duplicate!
+	}
+
+	err := ds.Save(note, results)
+	require.NoError(t, err, "Save should succeed even with duplicate prediction labels")
+
+	// Verify the detection was saved
+	notes, err := ds.GetAllNotes()
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, "Periparus ater", notes[0].ScientificName)
+}

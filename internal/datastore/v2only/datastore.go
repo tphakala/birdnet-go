@@ -501,14 +501,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		}
 
 		if len(results) > 0 && len(predLabels) > 0 {
-			preds := make([]*entities.DetectionPrediction, 0, len(results))
-			for i, r := range results {
-				preds = append(preds, &entities.DetectionPrediction{
-					DetectionID: det.ID,
-					LabelID:     predLabels[i].ID,
-					Confidence:  float64(r.Confidence),
-				})
-			}
+			preds := buildDedupedPredictions(det.ID, results, predLabels)
 			if len(preds) > 0 {
 				if err := tx.Create(&preds).Error; err != nil {
 					return fmt.Errorf("failed to save predictions: %w", err)
@@ -518,6 +511,30 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 
 		return nil
 	})
+}
+
+// buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
+// for each label. This is defense-in-depth against UNIQUE constraint violations when custom
+// BirdNET classifiers have the same species at multiple positions in the label file.
+func buildDedupedPredictions(detectionID uint, results []datastore.Results, predLabels []*entities.Label) []*entities.DetectionPrediction {
+	seen := make(map[uint]int, len(results))
+	preds := make([]*entities.DetectionPrediction, 0, len(results))
+	for i, r := range results {
+		labelID := predLabels[i].ID
+		if idx, exists := seen[labelID]; exists {
+			if float64(r.Confidence) > preds[idx].Confidence {
+				preds[idx].Confidence = float64(r.Confidence)
+			}
+			continue
+		}
+		seen[labelID] = len(preds)
+		preds = append(preds, &entities.DetectionPrediction{
+			DetectionID: detectionID,
+			LabelID:     labelID,
+			Confidence:  float64(r.Confidence),
+		})
+	}
+	return preds
 }
 
 // Delete deletes a note by ID.
