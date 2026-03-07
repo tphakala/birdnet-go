@@ -109,10 +109,11 @@
   }
 
   /* Species thumbnail */
+  /* 4:3 aspect ratio to match avicommons 320×240 source images */
   .species-thumbnail {
     flex-shrink: 0;
-    width: 3rem;
-    height: 3rem;
+    width: 3.5rem;
+    height: 2.625rem;
     border-radius: 0.5rem;
     overflow: hidden;
     border: 2px solid rgb(51 65 85 / 0.8);

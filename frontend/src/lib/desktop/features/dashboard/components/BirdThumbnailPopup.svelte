@@ -26,6 +26,8 @@
 
 <script lang="ts">
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
+  import type { ImageAttribution } from '$lib/types/detection.types';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Portal from 'svelte-portal';
   import { Image } from '@lucide/svelte';
 
@@ -49,6 +51,28 @@
   let imageLoaded = $state(false);
   let imageError = $state(false);
 
+  // Image attribution state
+  let imageAttribution = $state<ImageAttribution | null>(null);
+  let lastFetchedScientificName = '';
+
+  // Fetch image attribution when popup opens
+  async function fetchImageAttribution() {
+    if (!scientificName || lastFetchedScientificName === scientificName) return;
+    lastFetchedScientificName = scientificName;
+
+    try {
+      const url = buildAppUrl(
+        `/api/v2/media/species-image/info?name=${encodeURIComponent(scientificName)}`
+      );
+      const response = await fetch(url);
+      if (response.ok) {
+        imageAttribution = (await response.json()) as ImageAttribution;
+      }
+    } catch {
+      // Attribution is non-critical — fail silently
+    }
+  }
+
   // Show popup and calculate position
   function handleMouseEnter(event: MouseEvent) {
     if (!triggerElement) return;
@@ -57,6 +81,7 @@
     calculatePosition(event);
     imageLoaded = false;
     imageError = false;
+    fetchImageAttribution();
   }
 
   // Hide popup
@@ -173,11 +198,11 @@
     aria-describedby={showPopup ? 'bird-popup' : undefined}
   >
     <!-- Thumbnail placeholder -->
-    <div class="thumbnail-placeholder w-8 h-7 rounded-sm bg-[var(--color-base-200)]"></div>
+    <div class="thumbnail-placeholder w-8 h-6 rounded-sm bg-[var(--color-base-200)]"></div>
     <img
       src={thumbnailUrl}
       alt={commonName}
-      class="thumbnail-image w-8 h-7 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
+      class="thumbnail-image w-8 h-6 rounded-sm object-cover cursor-pointer hover:opacity-80 transition-opacity"
       onerror={handleImageError}
       loading="lazy"
     />
@@ -212,7 +237,9 @@
           </div>
 
           <!-- Large image container -->
-          <div class="relative w-full h-48 bg-[var(--color-base-200)] rounded-lg overflow-hidden">
+          <div
+            class="relative w-full aspect-[4/3] bg-[var(--color-base-200)] rounded-lg overflow-hidden"
+          >
             {#if !imageLoaded && !imageError}
               <!-- Loading state -->
               <div class="absolute inset-0 flex items-center justify-center">
@@ -234,12 +261,35 @@
               <img
                 src={thumbnailUrl}
                 alt={`Large view of ${commonName}`}
-                class="w-full h-full object-cover transition-opacity duration-200"
+                class="w-full h-full object-contain transition-opacity duration-200"
                 class:opacity-0={!imageLoaded}
                 class:opacity-100={imageLoaded}
                 onload={handleImageLoad}
                 onerror={handleImageError}
               />
+            {/if}
+
+            <!-- Photo credit overlay -->
+            {#if imageAttribution?.authorName && imageLoaded}
+              <div
+                class="thumbnail-credit"
+                aria-label="Image credit: {imageAttribution.authorName}"
+              >
+                <span class="credit-text">{imageAttribution.authorName}</span>
+                {#if imageAttribution.licenseName}
+                  <span class="credit-separator">·</span>
+                  {#if imageAttribution.licenseURL}
+                    <a
+                      href={imageAttribution.licenseURL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="credit-license">{imageAttribution.licenseName}</a
+                    >
+                  {:else}
+                    <span class="credit-license">{imageAttribution.licenseName}</span>
+                  {/if}
+                {/if}
+              </div>
             {/if}
           </div>
 
@@ -339,6 +389,47 @@
       left: 10px !important;
       right: 10px !important;
     }
+  }
+
+  /* Photo credit — bottom-right corner of image */
+  .thumbnail-credit {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: 0.2rem;
+    padding: 0.2rem 0.4rem;
+    background: oklch(10% 0 0deg / 0.55);
+    border-top-left-radius: 0.375rem;
+  }
+
+  .credit-text {
+    font-size: 0.5625rem;
+    color: oklch(95% 0 0deg);
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .credit-separator {
+    font-size: 0.5625rem;
+    color: oklch(70% 0 0deg);
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .credit-license {
+    font-size: 0.5625rem;
+    color: oklch(80% 0 0deg);
+    text-decoration: none;
+    line-height: 1;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  a.credit-license:hover {
+    color: white;
+    text-decoration: underline;
   }
 
   /* Respect reduced motion preference */
