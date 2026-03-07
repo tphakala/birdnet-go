@@ -236,6 +236,14 @@ func allocateCaptureBufferInternal(durationSeconds, sampleRate, bytesPerSample i
 
 	captureBuffers[source] = cb
 
+	log.Info("capture buffer allocated",
+		logger.String("source", source),
+		logger.Int("duration_seconds", durationSeconds),
+		logger.Int("buffer_size_bytes", alignedBufferSize),
+		logger.Int("sample_rate", sampleRate),
+		logger.Int("bytes_per_sample", bytesPerSample),
+		logger.Float64("buffer_duration_seconds", cb.bufferDuration.Seconds()))
+
 	// Acquire reference to this source
 	registry := GetRegistry()
 	// Guard against nil registry during initialization to prevent panic
@@ -456,6 +464,16 @@ func (cb *CaptureBuffer) ReadSegment(requestedStartTime time.Time, duration int)
 	operationStart := time.Now()
 	log := GetLogger()
 	requestedEndTime := requestedStartTime.Add(time.Duration(duration) * time.Second)
+
+	if conf.Setting().Realtime.Audio.Export.Debug {
+		log.Debug("ReadSegment: reading audio segment",
+			logger.String("source", cb.source),
+			logger.Int("requested_duration_seconds", duration),
+			logger.Int("buffer_size_bytes", cb.bufferSize),
+			logger.Float64("buffer_duration_seconds", cb.bufferDuration.Seconds()),
+			logger.Time("requested_start", requestedStartTime),
+			logger.Time("requested_end", requestedEndTime))
+	}
 
 	for {
 		cb.lock.Lock()

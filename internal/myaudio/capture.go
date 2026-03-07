@@ -281,12 +281,18 @@ func initializeBuffersForSource(sourceID string) error {
 	// Initialize capture buffer if needed
 	// Pass the ORIGINAL sourceID since AllocateCaptureBufferIfNeeded does its own migration
 	if !cbExists {
-		// Determine capture buffer duration from settings
-		captureBufferDuration := conf.DefaultCaptureBufferSeconds
-		extended := conf.Setting().Realtime.ExtendedCapture
-		if extended.Enabled && extended.CaptureBufferSeconds > 0 {
-			captureBufferDuration = extended.CaptureBufferSeconds
-		}
+		// Determine capture buffer duration from settings.
+		// EffectiveCaptureBufferSeconds is a pure read-only method that returns the
+		// correct buffer size without mutating settings.
+		settings := conf.Setting()
+		preCapture := settings.Realtime.Audio.Export.PreCapture
+		captureBufferDuration := settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(preCapture)
+
+		initLog := GetLogger()
+		initLog.Info("initializeBuffersForSource: requesting capture buffer allocation",
+			logger.String("source_id", sourceID),
+			logger.Int("capture_buffer_duration", captureBufferDuration),
+			logger.Bool("extended_capture_enabled", settings.Realtime.ExtendedCapture.Enabled))
 
 		if err := AllocateCaptureBufferIfNeeded(captureBufferDuration, conf.SampleRate, conf.BitDepth/8, sourceID); err != nil {
 			// Clean up the analysis buffer if we just created it and capture buffer init fails

@@ -566,6 +566,37 @@ type ExtendedCaptureSettings struct {
 	Species              []string `json:"species" mapstructure:"species"`
 }
 
+// EffectiveCaptureBufferSeconds returns the capture buffer duration to use for
+// buffer allocation. Unlike Validate, this is a pure read-only method that does
+// not mutate settings. Returns DefaultCaptureBufferSeconds when extended capture
+// is disabled or settings are invalid.
+func (e *ExtendedCaptureSettings) EffectiveCaptureBufferSeconds(preCapture int) int {
+	if !e.Enabled {
+		return DefaultCaptureBufferSeconds
+	}
+
+	maxDuration := e.MaxDuration
+	if maxDuration == 0 {
+		maxDuration = DefaultExtendedCaptureMaxDuration
+	}
+
+	if maxDuration < 0 || maxDuration > MaxExtendedCaptureDuration {
+		return DefaultCaptureBufferSeconds
+	}
+
+	bufferSeconds := e.CaptureBufferSeconds
+	if bufferSeconds == 0 {
+		bufferSeconds = maxDuration + preCapture + ExtendedCaptureBufferMargin
+	}
+
+	minBuffer := maxDuration + preCapture + ExtendedCaptureMinBufferMargin
+	if bufferSeconds < minBuffer {
+		return DefaultCaptureBufferSeconds
+	}
+
+	return bufferSeconds
+}
+
 // Validate checks ExtendedCaptureSettings for consistency.
 func (e *ExtendedCaptureSettings) Validate(preCapture int) error {
 	if !e.Enabled {

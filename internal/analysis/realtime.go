@@ -1346,11 +1346,17 @@ func initializeBuffers(sources []string) error {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
 	}
 
-	// Initialize capture buffers using default or extended capture buffer size
-	captureBufferSize := conf.DefaultCaptureBufferSeconds
-	if conf.Setting().Realtime.ExtendedCapture.Enabled && conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-		captureBufferSize = conf.Setting().Realtime.ExtendedCapture.CaptureBufferSeconds
-	}
+	// Initialize capture buffers using default or extended capture buffer size.
+	// EffectiveCaptureBufferSeconds is a pure read-only method that returns the
+	// correct buffer size without mutating settings.
+	settings := conf.Setting()
+	preCapture := settings.Realtime.Audio.Export.PreCapture
+	captureBufferSize := settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(preCapture)
+	GetLogger().Info("initializeBuffers: requesting capture buffer allocation",
+		logger.Int("capture_buffer_size_seconds", captureBufferSize),
+		logger.Bool("extended_capture_enabled", settings.Realtime.ExtendedCapture.Enabled),
+		logger.Int("source_count", len(sources)),
+		logger.Any("sources", sources))
 	if err := myaudio.InitCaptureBuffers(captureBufferSize, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
 		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
 	}
