@@ -131,7 +131,8 @@ type PendingDetection struct {
 	Detection       Detections // The detection data
 	Confidence      float64    // Confidence level of the detection
 	Source          string     // Audio source of the detection, RTSP URL or audio card name
-	FirstDetected   time.Time  // Time the detection was first detected
+	FirstDetected   time.Time  // Back-dated time for audio clip extraction (startTime from analysis buffer)
+	CreatedAt       time.Time  // Real wall-clock time when detection was first created (for display)
 	LastUpdated     time.Time  // Last time this detection was updated
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
 	Count           int        // Number of times this detection has been updated
@@ -589,6 +590,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				Confidence:    confidence,
 				Source:        item.Source.ID,
 				FirstDetected: item.StartTime,
+				CreatedAt:     now,
 				LastUpdated:   item.StartTime,
 				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
@@ -1329,7 +1331,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 					ScientificName: item.Detection.Result.Species.ScientificName,
 					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 					Status:         PendingStatusActive,
-					FirstDetected:  item.FirstDetected.Unix(),
+					FirstDetected:  item.CreatedAt.Unix(),
 					Source:         p.getDisplayNameForSource(item.Source),
 				})
 			}

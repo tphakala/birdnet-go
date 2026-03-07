@@ -55,6 +55,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 				},
 				Source:        "src1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
+				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         5, // Above threshold of 3 (minDetections=12)
 			},
 			"src1:species_b": {
@@ -68,6 +69,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 				},
 				Source:        "src1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
+				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         1, // Below threshold of 3
 			},
 			"src1:species_c": {
@@ -81,6 +83,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 				},
 				Source:        "src1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
+				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         3, // Exactly at threshold
 			},
 		},
@@ -148,6 +151,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 				},
 				Source:        "src1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
+				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         2, // Below threshold of 3
 			},
 		},
@@ -175,13 +179,14 @@ func TestBuildFlushNotification(t *testing.T) {
 		},
 		Source:        "src1",
 		FirstDetected: time.Date(2026, 3, 7, 8, 50, 0, 0, time.UTC),
+		CreatedAt:     time.Date(2026, 3, 7, 8, 50, 13, 0, time.UTC),
 	}
 
 	approved := p.buildFlushNotification(item, PendingStatusApproved)
 	assert.Equal(t, "käpytikka", approved.Species)
 	assert.Equal(t, "Dendrocopos major", approved.ScientificName)
 	assert.Equal(t, PendingStatusApproved, approved.Status)
-	assert.Equal(t, item.FirstDetected.Unix(), approved.FirstDetected)
+	assert.Equal(t, item.CreatedAt.Unix(), approved.FirstDetected)
 
 	rejected := p.buildFlushNotification(item, PendingStatusRejected)
 	assert.Equal(t, PendingStatusRejected, rejected.Status)
