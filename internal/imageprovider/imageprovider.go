@@ -1284,7 +1284,7 @@ func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *Bi
 		provider = c.providerName
 	}
 
-	if _, err := c.fileCache.DownloadAndStore(provider, scientificName, img.URL); err != nil {
+	if _, _, err := c.fileCache.DownloadAndStore(provider, scientificName, img.URL); err != nil {
 		log.Warn("Failed to download image to file cache", logger.Error(err))
 		return
 	}

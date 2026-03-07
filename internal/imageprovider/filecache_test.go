@@ -18,9 +18,10 @@ func TestImageFileCache_StoreAndGet(t *testing.T) {
 	// Minimal valid JPEG: FFD8FF header triggers image/jpeg detection.
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46}
 
-	storedPath, err := cache.Store("wikimedia", "Parus major", jpegData, "https://example.com/img.jpg")
+	storedPath, storeCT, err := cache.Store("wikimedia", "Parus major", jpegData, "https://example.com/img.jpg", "image/jpeg")
 	require.NoError(t, err)
 	assert.Contains(t, storedPath, "parus_major.jpg")
+	assert.Equal(t, "image/jpeg", storeCT)
 
 	// Read back and verify contents.
 	got, err := os.ReadFile(storedPath)
@@ -53,7 +54,7 @@ func TestImageFileCache_IsFresh(t *testing.T) {
 	cache := NewImageFileCache(filepath.Join(t.TempDir(), "cache"))
 
 	jpegData := []byte{0xFF, 0xD8, 0xFF, 0xE0}
-	storedPath, err := cache.Store("test", "Turdus merula", jpegData, "")
+	storedPath, _, err := cache.Store("test", "Turdus merula", jpegData, "", "")
 	require.NoError(t, err)
 
 	// With a 30-day TTL the file should be fresh.
@@ -109,7 +110,7 @@ func TestImageFileCache_RejectsPathTraversal(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := cache.Store(tt.provider, tt.species, data, "")
+			_, _, err := cache.Store(tt.provider, tt.species, data, "", "")
 			require.Error(t, err, "Store should reject path traversal")
 
 			_, _, _, err = cache.Get(tt.provider, tt.species)
@@ -121,7 +122,7 @@ func TestImageFileCache_RejectsPathTraversal(t *testing.T) {
 func TestImageFileCache_DownloadAndStore_InvalidURL(t *testing.T) {
 	t.Parallel()
 	cache := NewImageFileCache(t.TempDir())
-	_, err := cache.DownloadAndStore("avicommons", "Test species", "http://invalid.test/img.jpg")
+	_, _, err := cache.DownloadAndStore("avicommons", "Test species", "http://invalid.test/img.jpg")
 	assert.Error(t, err)
 }
 
@@ -133,9 +134,10 @@ func TestImageFileCache_DetectsContentType(t *testing.T) {
 	// PNG file signature.
 	pngData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52}
 
-	storedPath, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngData, "https://example.com/img.png")
+	storedPath, storedCT, err := cache.Store("wikimedia", "Cyanistes caeruleus", pngData, "https://example.com/img.png", "")
 	require.NoError(t, err)
 	assert.Equal(t, ".png", filepath.Ext(storedPath), "expected .png extension")
+	assert.Equal(t, "image/png", storedCT)
 
 	path, contentType, _, err := cache.Get("wikimedia", "Cyanistes caeruleus")
 	require.NoError(t, err)

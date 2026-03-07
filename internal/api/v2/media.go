@@ -2070,26 +2070,39 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 	}
 
 	if cachedPath != "" && fresh {
+		c.logDebugIfEnabled("Serving fresh cached image",
+			logger.String("scientific_name", scientificName),
+			logger.String("path", cachedPath))
 		return c.serveImageFile(ctx, cachedPath, contentType)
 	}
 
 	// File not cached or stale — download it
-	cachedPath, err = fileCache.DownloadAndStore(provider, scientificName, birdImage.URL)
-	if err != nil {
-		// Graceful degradation: redirect to external URL
+	newPath, newCT, dlErr := fileCache.DownloadAndStore(provider, scientificName, birdImage.URL)
+	if dlErr != nil {
+		// Graceful degradation: serve stale file if available, otherwise redirect
+		if cachedPath != "" {
+			c.logDebugIfEnabled("Download failed, serving stale cached image",
+				logger.String("scientific_name", scientificName),
+				logger.String("path", cachedPath),
+				logger.Error(dlErr))
+			return c.serveImageFile(ctx, cachedPath, contentType)
+		}
 		c.logInfoIfEnabled("File cache download failed, redirecting to external URL",
 			logger.String("scientific_name", scientificName),
 			logger.String("url", birdImage.URL),
-			logger.Error(err))
+			logger.Error(dlErr))
 		return ctx.Redirect(http.StatusFound, birdImage.URL)
 	}
 
-	// Detect content type from the stored file
-	_, contentType, _, _ = fileCache.Get(provider, scientificName)
-	return c.serveImageFile(ctx, cachedPath, contentType)
+	c.logDebugIfEnabled("Serving freshly downloaded image",
+		logger.String("scientific_name", scientificName),
+		logger.String("path", newPath),
+		logger.String("content_type", newCT))
+	return c.serveImageFile(ctx, newPath, newCT)
 }
 
 // serveImageFile serves a cached image file with appropriate cache headers.
+// http.ServeContent handles Last-Modified, If-Modified-Since, and If-None-Match natively.
 func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -2102,29 +2115,16 @@ func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType stri
 		return c.HandleError(ctx, err, "Failed to stat cached image", http.StatusInternalServerError)
 	}
 
-	// Set content type and cache headers
 	if contentType != "" {
 		ctx.Response().Header().Set("Content-Type", contentType)
 	}
 	ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", ImageCacheSeconds))
-	ctx.Response().Header().Set("Last-Modified", info.ModTime().UTC().Format(http.TimeFormat))
 
 	// ETag based on modification time and size
 	etag := fmt.Sprintf(`"%x-%x"`, info.ModTime().UnixNano(), info.Size())
 	ctx.Response().Header().Set("ETag", etag)
 
-	// Check If-None-Match
-	if match := ctx.Request().Header.Get("If-None-Match"); match == etag {
-		return ctx.NoContent(http.StatusNotModified)
-	}
-
-	// Check If-Modified-Since
-	if ims := ctx.Request().Header.Get("If-Modified-Since"); ims != "" {
-		if t, parseErr := http.ParseTime(ims); parseErr == nil && !info.ModTime().After(t) {
-			return ctx.NoContent(http.StatusNotModified)
-		}
-	}
-
+	// http.ServeContent handles Last-Modified, If-Modified-Since, and range requests.
 	http.ServeContent(ctx.Response(), ctx.Request(), filepath.Base(filePath), info.ModTime(), file)
 	return nil
 }

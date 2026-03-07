@@ -2,8 +2,10 @@
 package imageprovider
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,8 +20,11 @@ const (
 	// imageCacheDir is the default subdirectory for cached images.
 	imageCacheDir = "cache/images"
 
-	// maxConcurrentDownloads limits parallel image fetches (for later use).
+	// maxConcurrentDownloads limits parallel image fetches.
 	maxConcurrentDownloads = 5
+
+	// maxImageSize is the maximum allowed image download size (10 MB).
+	maxImageSize = 10 << 20
 
 	// defaultFileCacheTTL is the default time-to-live for cached image files.
 	defaultFileCacheTTL = 30 * 24 * time.Hour
@@ -28,9 +33,57 @@ const (
 // knownExtensions lists the file extensions tried when looking up cached images.
 var knownExtensions = []string{".jpg", ".png", ".gif", ".webp", ".svg"}
 
-// imageHTTPClient is a shared HTTP client for downloading images with a 10-second timeout.
-// Shared to avoid goroutine leaks from per-request clients creating new HTTP/2 connections.
-var imageHTTPClient = &http.Client{Timeout: 10 * time.Second}
+// isSafeIP reports whether ip is safe to connect to (not loopback, private, link-local, or unspecified).
+func isSafeIP(ip net.IP) bool {
+	return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() && !ip.IsUnspecified()
+}
+
+// imageHTTPClient is a shared HTTP client for downloading images with SSRF protection.
+// The custom DialContext resolves hostnames and dials validated IPs directly (not hostnames),
+// preventing SSRF via DNS rebinding, localhost, or IP-literal redirects.
+var imageHTTPClient = &http.Client{
+	Timeout: 10 * time.Second,
+	Transport: &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			host, port, err := net.SplitHostPort(addr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid address %q: %w", addr, err)
+			}
+
+			// Resolve the hostname to IPs and validate them.
+			ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+			if err != nil {
+				return nil, fmt.Errorf("DNS lookup failed for %q: %w", host, err)
+			}
+
+			// Dial the first safe resolved IP directly to prevent TOCTOU/DNS rebinding.
+			dialer := &net.Dialer{Timeout: 5 * time.Second}
+			var lastErr error
+			for _, ipAddr := range ips {
+				if !isSafeIP(ipAddr.IP) {
+					continue
+				}
+				conn, dialErr := dialer.DialContext(ctx, network, net.JoinHostPort(ipAddr.IP.String(), port))
+				if dialErr != nil {
+					lastErr = dialErr
+					continue
+				}
+				return conn, nil
+			}
+			if lastErr != nil {
+				return nil, fmt.Errorf("failed to connect to %q: %w", host, lastErr)
+			}
+			return nil, fmt.Errorf("no safe IP addresses for host %q", host)
+		},
+	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 3 {
+			return fmt.Errorf("too many redirects")
+		}
+		return nil
+	},
+}
 
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
@@ -100,8 +153,10 @@ func (c *ImageFileCache) buildPath(provider, scientificName string) (dir, namePr
 }
 
 // Store saves image data to the file cache using atomic write (temp file + rename).
-// It detects the content type from the data and returns the final file path.
-func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sourceURL string) (string, error) {
+// It uses upstreamContentType (from the HTTP response) to determine the extension;
+// if empty or generic, it falls back to http.DetectContentType on the data bytes.
+// Returns the final file path and the resolved content type.
+func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sourceURL, upstreamContentType string) (filePath, resolvedContentType string, err error) {
 	log := GetLogger().With(
 		logger.String("provider", provider),
 		logger.String("species", scientificName),
@@ -109,46 +164,51 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 
 	dir, namePrefix, err := c.buildPath(provider, scientificName)
 	if err != nil {
-		return "", fmt.Errorf("build path: %w", err)
+		return "", "", fmt.Errorf("build path: %w", err)
 	}
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("create cache directory: %w", err)
+		return "", "", fmt.Errorf("create cache directory: %w", err)
 	}
 
-	contentType := http.DetectContentType(data)
+	// Prefer upstream Content-Type; fall back to sniffing if missing or generic.
+	contentType := upstreamContentType
+	if contentType == "" || strings.HasPrefix(contentType, "application/octet-stream") || strings.HasPrefix(contentType, "text/") {
+		contentType = http.DetectContentType(data)
+	}
 	ext := extensionFromContentType(contentType)
 	finalPath := filepath.Join(dir, namePrefix+ext)
 
 	// Atomic write: write to temp file then rename.
 	tmpFile, err := os.CreateTemp(dir, namePrefix+"-*.tmp")
 	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
+		return "", "", fmt.Errorf("create temp file: %w", err)
 	}
 	tmpPath := tmpFile.Name()
 
 	if _, writeErr := tmpFile.Write(data); writeErr != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
-		return "", fmt.Errorf("write temp file: %w", writeErr)
+		return "", "", fmt.Errorf("write temp file: %w", writeErr)
 	}
 	if closeErr := tmpFile.Close(); closeErr != nil {
 		_ = os.Remove(tmpPath)
-		return "", fmt.Errorf("close temp file: %w", closeErr)
+		return "", "", fmt.Errorf("close temp file: %w", closeErr)
 	}
 
 	if renameErr := os.Rename(tmpPath, finalPath); renameErr != nil {
 		_ = os.Remove(tmpPath)
-		return "", fmt.Errorf("rename temp file: %w", renameErr)
+		return "", "", fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
+	resolvedCT := contentTypeFromExtension(ext)
 	log.Debug("Stored image in file cache",
 		logger.String("path", finalPath),
-		logger.String("content_type", contentType),
+		logger.String("content_type", resolvedCT),
 		logger.String("source_url", sourceURL),
 	)
 
-	return finalPath, nil
+	return finalPath, resolvedCT, nil
 }
 
 // Get looks up a cached image file for the given provider and species.
@@ -211,9 +271,15 @@ func contentTypeFromExtension(ext string) string {
 	}
 }
 
+// downloadResult holds the path and content type returned by DownloadAndStore via singleflight.
+type downloadResult struct {
+	path        string
+	contentType string
+}
+
 // DownloadAndStore fetches image bytes from imageURL, stores to disk, deduplicating concurrent requests.
-// Returns the cached file path.
-func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL string) (string, error) {
+// Returns the cached file path and the resolved content type.
+func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL string) (filePath, contentType string, err error) {
 	key := provider + "/" + normalizeSpeciesName(scientificName)
 
 	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
@@ -221,7 +287,7 @@ func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL st
 		fc.downloadSem <- struct{}{}
 		defer func() { <-fc.downloadSem }()
 
-		resp, err := imageHTTPClient.Get(imageURL)
+		resp, err := imageHTTPClient.Get(imageURL) //nolint:gosec // URL comes from trusted DB entries, not user input
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}
@@ -231,16 +297,27 @@ func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL st
 			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
 		}
 
-		data, err := io.ReadAll(resp.Body)
+		// Limit read size to prevent OOM from malicious or malformed responses.
+		limited := io.LimitReader(resp.Body, maxImageSize+1)
+		data, err := io.ReadAll(limited)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read image body: %w", err)
 		}
+		if len(data) > maxImageSize {
+			return nil, fmt.Errorf("image exceeds maximum size of %d bytes", maxImageSize)
+		}
 
-		return fc.Store(provider, scientificName, data, imageURL)
+		upstreamCT := resp.Header.Get("Content-Type")
+		path, ct, storeErr := fc.Store(provider, scientificName, data, imageURL, upstreamCT)
+		if storeErr != nil {
+			return nil, storeErr
+		}
+		return &downloadResult{path: path, contentType: ct}, nil
 	})
 
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return result.(string), nil
+	dr := result.(*downloadResult)
+	return dr.path, dr.contentType, nil
 }
