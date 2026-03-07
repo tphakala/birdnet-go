@@ -279,24 +279,16 @@ realtime:
     monitoring:
         checkInterval: 60
         cpu:
-            critical: 95
             enabled: true
-            warning: 80
-        criticalResendInterval: 30
         disk:
-            critical: 90
             enabled: true
             paths:
                 - /
                 - /data
                 - /home/user/birdnet
-            warning: 80
         enabled: true
-        hysteresisPercent: 5
         memory:
-            critical: 95
             enabled: true
-            warning: 85
     mqtt:
         broker: mqtt://[host]:1883
         debug: false

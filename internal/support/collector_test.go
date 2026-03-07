@@ -1399,25 +1399,17 @@ func createComprehensiveMockConfig() map[string]any {
 
 			// System Monitoring
 			"monitoring": map[string]any{
-				"enabled":                true,
-				"checkInterval":          60,
-				"criticalResendInterval": 30,
-				"hysteresisPercent":      5.0,
+				"enabled":       true,
+				"checkInterval": 60,
 				"cpu": map[string]any{
-					"enabled":  true,
-					"warning":  80.0,
-					"critical": 95.0,
+					"enabled": true,
 				},
 				"memory": map[string]any{
-					"enabled":  true,
-					"warning":  85.0,
-					"critical": 95.0,
+					"enabled": true,
 				},
 				"disk": map[string]any{
-					"enabled":  true,
-					"warning":  80.0,
-					"critical": 90.0,
-					"paths":    []any{"/", "/data", "/home/user/birdnet"},
+					"enabled": true,
+					"paths":   []any{"/", "/data", "/home/user/birdnet"},
 				},
 			},
 
