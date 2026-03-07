@@ -363,7 +363,7 @@ func BenchmarkCacheRefreshCycle(b *testing.B) {
 	}
 
 	// Add stale entries to trigger refresh
-	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	staleTime := time.Now().Add(-31 * 24 * time.Hour)
 	for i := range 50 {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
 		if err := mockStore.SaveImageCache(&datastore.ImageCache{

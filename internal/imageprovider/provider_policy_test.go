@@ -276,7 +276,7 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	store := newMockStore()
 
 	// Pre-populate: stale avicommons entry (triggers refresh)
-	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	staleTime := time.Now().Add(-31 * 24 * time.Hour)
 	require.NoError(t, store.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
@@ -359,7 +359,7 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 		ScientificName: species,
 		ProviderName:   providerAvicommons,
 		URL:            "http://old.example.com/redpoll.jpg",
-		CachedAt:       time.Now().Add(-15 * 24 * time.Hour),
+		CachedAt:       time.Now().Add(-31 * 24 * time.Hour),
 	}))
 
 	// Valid wikimedia entry exists but should NOT be used

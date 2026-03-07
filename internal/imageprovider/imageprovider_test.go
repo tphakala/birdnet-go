@@ -647,7 +647,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
 		AuthorName:     "Old Author",
 		AuthorURL:      "http://example.com/old-author",
-		CachedAt:       time.Now().Add(-15 * 24 * time.Hour), // 15 days old
+		CachedAt:       time.Now().Add(-31 * 24 * time.Hour), // 31 days old
 		ProviderName:   "wikimedia",                          // Add provider name to match the default cache provider
 	}
 	t.Logf("Created old entry: CachedAt=%v", oldEntry.CachedAt)
@@ -901,7 +901,7 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 // populateStaleEntries adds stale cache entries to the store to trigger background refresh.
 func populateStaleEntries(t *testing.T, store *mockStore, count int) {
 	t.Helper()
-	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	staleTime := time.Now().Add(-31 * 24 * time.Hour)
 	for i := range count {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
 		err := store.SaveImageCache(&datastore.ImageCache{
@@ -1006,5 +1006,7 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		// Ignore the cache refresh goroutine pattern - it should be properly cleaned up by Close()
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/imageprovider.(*BirdImageCache).startCacheRefresh.func1"),
+		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient
+		goleak.IgnoreAnyFunction("net/http.(*http2clientConnReadLoop).run"),
 	)
 }

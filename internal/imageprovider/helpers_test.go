@@ -26,14 +26,14 @@ func TestIsCacheEntryStale(t *testing.T) {
 			wantStale:  false,
 		},
 		{
-			name:       "stale positive entry (older than 14 days)",
-			cachedAt:   time.Now().Add(-15 * 24 * time.Hour),
+			name:       "stale positive entry (older than 30 days)",
+			cachedAt:   time.Now().Add(-31 * 24 * time.Hour),
 			isNegative: false,
 			wantStale:  true,
 		},
 		{
 			name:       "positive entry just before TTL boundary",
-			cachedAt:   time.Now().Add(-14*24*time.Hour + 1*time.Second), // 1 second fresher than TTL
+			cachedAt:   time.Now().Add(-30*24*time.Hour + 1*time.Second), // 1 second fresher than TTL
 			isNegative: false,
 			wantStale:  false,
 		},

@@ -181,7 +181,7 @@ func TestBackgroundRefreshIsolation(t *testing.T) {
 	require.NoError(t, err, "Failed to create metrics")
 
 	// Pre-populate with stale entry
-	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	staleTime := time.Now().Add(-31 * 24 * time.Hour)
 	species := "Turdus merula"
 	err = mockStore.SaveImageCache(&datastore.ImageCache{
 		ScientificName: species,
