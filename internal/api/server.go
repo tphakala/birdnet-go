@@ -435,8 +435,6 @@ func (s *Server) StartWithGracefulShutdown() error {
 // ShutdownWithContext gracefully stops the server using the provided context
 // for timeout control. Use this when the caller manages the shutdown budget.
 func (s *Server) ShutdownWithContext(ctx context.Context) error {
-	shutdownStart := time.Now()
-
 	// Disable keep-alives immediately so idle connections close and no new
 	// keep-alive connections are accepted. This starts draining while the
 	// controller is still shutting down its background goroutines.
@@ -450,29 +448,21 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 			s.slogger.Warn("Error closing listener during shutdown", logger.Error(err))
 		}
 	}
-	s.slogger.Info("shutdown: listener closed",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Shutdown API controller (waits for its background goroutines)
 	if s.apiController != nil {
 		s.apiController.Shutdown()
 	}
-	s.slogger.Info("shutdown: API controller stopped",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Shutdown Echo server — since the listener is already closed and SSE
 	// clients are disconnected, this should complete quickly.
 	if err := s.echo.Shutdown(ctx); err != nil {
 		// Ignore "use of closed network connection" since we closed the listener above
 		if !errors.Is(err, net.ErrClosed) {
-			s.slogger.Error("Error during server shutdown",
-				logger.Error(err),
-				logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
+			s.slogger.Error("Error during server shutdown", logger.Error(err))
 			return fmt.Errorf("shutdown error: %w", err)
 		}
 	}
-	s.slogger.Info("shutdown: Echo server stopped",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Log completion and flush
 	s.slogger.Info("Server shutdown complete")

@@ -602,16 +602,12 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 // Shutdown performs cleanup of all resources used by the API controller
 // This should be called when the application is shutting down
 func (c *Controller) Shutdown() {
-	shutdownStart := time.Now()
-
 	// Close all SSE clients first so echo.Shutdown() has no active
 	// connections to wait for. SSE handlers block on request context
 	// which only closes when echo shuts down, creating a circular wait.
 	if c.sseManager != nil {
 		c.sseManager.CloseAllClients()
 	}
-	GetLogger().Info("controller shutdown: SSE clients closed",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Stop alerting engine background goroutines and event bus
 	if c.alertEngine != nil {
@@ -620,8 +616,6 @@ func (c *Controller) Shutdown() {
 	if bus := alerting.GetGlobalBus(); bus != nil {
 		bus.Stop()
 	}
-	GetLogger().Info("controller shutdown: alert engine stopped",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Cancel context to stop all goroutines
 	if c.cancel != nil {
@@ -630,8 +624,6 @@ func (c *Controller) Shutdown() {
 
 	// Wait for all goroutines to finish
 	c.wg.Wait()
-	GetLogger().Info("controller shutdown: goroutines finished",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
 
 	// Shutdown the backup job manager to stop its cleanup goroutine
 	if backupJobManager != nil {
@@ -649,8 +641,7 @@ func (c *Controller) Shutdown() {
 		c.detectionCache.Flush()
 	}
 
-	GetLogger().Info("controller shutdown: complete",
-		logger.Int64("elapsed_ms", time.Since(shutdownStart).Milliseconds()))
+	c.Debug("API Controller shutting down")
 }
 
 // Error response structure
