@@ -1245,9 +1245,9 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 	now := time.Now()
 
 	var terminalNotifs []SSEPendingDetection
+	var broadcastSnapshot []SSEPendingDetection
 
 	p.pendingMutex.Lock()
-	defer p.pendingMutex.Unlock()
 
 	pendingCount = len(p.pendingDetections)
 
@@ -1297,14 +1297,14 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		}
 	}
 
-	// Broadcast combined snapshot (active + terminal) for "currently hearing" UI.
+	// Build snapshot while still holding the lock, then release before broadcasting.
 	if len(terminalNotifs) > 0 || flushedCount > 0 {
 		threshold := CalculateVisibilityThreshold(minDetections)
-		activeSnapshot := make([]SSEPendingDetection, 0, len(p.pendingDetections))
+		broadcastSnapshot = make([]SSEPendingDetection, 0, len(p.pendingDetections)+len(terminalNotifs))
 		for key := range p.pendingDetections {
 			item := p.pendingDetections[key]
 			if item.Count >= threshold {
-				activeSnapshot = append(activeSnapshot, SSEPendingDetection{
+				broadcastSnapshot = append(broadcastSnapshot, SSEPendingDetection{
 					Species:        item.Detection.Result.Species.CommonName,
 					ScientificName: item.Detection.Result.Species.ScientificName,
 					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
@@ -1314,9 +1314,15 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 				})
 			}
 		}
-		logPendingBroadcast(len(activeSnapshot), len(terminalNotifs))
-		activeSnapshot = append(activeSnapshot, terminalNotifs...)
-		p.broadcastPendingSnapshot(activeSnapshot)
+		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))
+		broadcastSnapshot = append(broadcastSnapshot, terminalNotifs...)
+	}
+
+	p.pendingMutex.Unlock()
+
+	// Broadcast outside the lock to avoid blocking processDetections.
+	if broadcastSnapshot != nil {
+		p.broadcastPendingSnapshot(broadcastSnapshot)
 	}
 
 	return pendingCount, flushedCount
