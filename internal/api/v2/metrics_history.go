@@ -121,6 +121,12 @@ func (c *Controller) StreamMetrics(ctx echo.Context) error {
 
 	for {
 		select {
+		case <-c.ctx.Done():
+			c.logInfoIfEnabled("Metrics SSE client disconnected due to shutdown",
+				logger.String("client_id", clientID),
+			)
+			return nil
+
 		case <-reqCtx.Done():
 			c.logInfoIfEnabled("Metrics SSE client disconnected",
 				logger.String("client_id", clientID),
