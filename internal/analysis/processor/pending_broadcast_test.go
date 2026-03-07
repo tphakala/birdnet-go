@@ -91,15 +91,32 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	// Should include Species A (count=5) and Species C (count=3), but not Species B (count=1)
 	require.Len(t, result, 2)
 
-	names := make(map[string]bool)
+	bySpecies := make(map[string]SSEPendingDetection)
 	for _, pd := range result {
-		names[pd.Species] = true
-		assert.Equal(t, PendingStatusActive, pd.Status)
-		assert.NotZero(t, pd.FirstDetected)
+		bySpecies[pd.Species] = pd
 	}
-	assert.True(t, names["Species A"], "Species A should be visible (count=5 >= threshold=3)")
-	assert.True(t, names["Species C"], "Species C should be visible (count=3 >= threshold=3)")
-	assert.False(t, names["Species B"], "Species B should be hidden (count=1 < threshold=3)")
+
+	// Species A should be visible (count=5 >= threshold=3)
+	pdA, okA := bySpecies["Species A"]
+	assert.True(t, okA, "Species A should be visible")
+	if okA {
+		assert.Equal(t, PendingStatusActive, pdA.Status)
+		assert.Equal(t, "Genus speciesA", pdA.ScientificName)
+		assert.NotZero(t, pdA.FirstDetected)
+	}
+
+	// Species C should be visible (count=3 >= threshold=3)
+	pdC, okC := bySpecies["Species C"]
+	assert.True(t, okC, "Species C should be visible")
+	if okC {
+		assert.Equal(t, PendingStatusActive, pdC.Status)
+		assert.Equal(t, "Genus speciesC", pdC.ScientificName)
+		assert.NotZero(t, pdC.FirstDetected)
+	}
+
+	// Species B should be hidden (count=1 < threshold=3)
+	_, okB := bySpecies["Species B"]
+	assert.False(t, okB, "Species B should be hidden (count=1 < threshold=3)")
 }
 
 func TestSnapshotVisiblePending_EmptyMap(t *testing.T) {

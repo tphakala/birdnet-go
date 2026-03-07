@@ -45,15 +45,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 	threshold := CalculateVisibilityThreshold(minDetections)
 
 	p.pendingMutex.RLock()
-	// Pre-count visible items for capacity hint.
-	count := 0
-	for key := range p.pendingDetections {
-		if p.pendingDetections[key].Count >= threshold {
-			count++
-		}
-	}
-
-	result := make([]SSEPendingDetection, 0, count)
+	result := make([]SSEPendingDetection, 0, len(p.pendingDetections))
 	for key := range p.pendingDetections {
 		item := p.pendingDetections[key]
 		if item.Count < threshold {
