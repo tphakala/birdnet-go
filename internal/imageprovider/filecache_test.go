@@ -118,6 +118,13 @@ func TestImageFileCache_RejectsPathTraversal(t *testing.T) {
 	}
 }
 
+func TestImageFileCache_DownloadAndStore_InvalidURL(t *testing.T) {
+	t.Parallel()
+	cache := NewImageFileCache(t.TempDir())
+	_, err := cache.DownloadAndStore("avicommons", "Test species", "http://invalid.test/img.jpg")
+	assert.Error(t, err)
+}
+
 func TestImageFileCache_DetectsContentType(t *testing.T) {
 	t.Parallel()
 

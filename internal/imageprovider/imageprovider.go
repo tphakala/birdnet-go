@@ -4,9 +4,7 @@ package imageprovider
 import (
 	"context"
 	"fmt"
-	"io"
 	"maps"
-	"net/http"
 	"net/url"
 	"sync"
 	"sync/atomic"
@@ -1277,35 +1275,10 @@ func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *Bi
 		provider = c.providerName
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Get(img.URL)
-	if err != nil {
-		log.Warn("Failed to download image for file cache", logger.Error(err))
+	if _, err := c.fileCache.DownloadAndStore(provider, scientificName, img.URL); err != nil {
+		log.Warn("Failed to download image to file cache", logger.Error(err))
 		return
 	}
-	defer func() {
-		if cerr := resp.Body.Close(); cerr != nil {
-			log.Warn("Failed to close response body", logger.Error(cerr))
-		}
-	}()
-
-	if resp.StatusCode != http.StatusOK {
-		log.Warn("Non-200 response downloading image for file cache",
-			logger.Int("status", resp.StatusCode))
-		return
-	}
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		log.Warn("Failed to read image body for file cache", logger.Error(err))
-		return
-	}
-
-	if _, err := c.fileCache.Store(provider, scientificName, data, img.URL); err != nil {
-		log.Warn("Failed to store image in file cache", logger.Error(err))
-		return
-	}
-
 	log.Debug("Image downloaded to file cache")
 }
 

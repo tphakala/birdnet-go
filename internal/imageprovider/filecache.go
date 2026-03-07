@@ -3,6 +3,7 @@ package imageprovider
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"golang.org/x/sync/singleflight"
 )
 
 const (
@@ -28,12 +30,17 @@ var knownExtensions = []string{".jpg", ".png", ".gif", ".webp", ".svg"}
 
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
-	basePath string
+	basePath    string
+	downloadSem chan struct{}      // limits concurrent external downloads
+	sfGroup     singleflight.Group // deduplicates concurrent fetches for same species
 }
 
 // NewImageFileCache creates a new ImageFileCache rooted at basePath.
 func NewImageFileCache(basePath string) *ImageFileCache {
-	return &ImageFileCache{basePath: basePath}
+	return &ImageFileCache{
+		basePath:    basePath,
+		downloadSem: make(chan struct{}, maxConcurrentDownloads),
+	}
 }
 
 // normalizeSpeciesName converts a species name to a filesystem-safe form:
@@ -198,4 +205,39 @@ func contentTypeFromExtension(ext string) string {
 	default:
 		return "image/jpeg"
 	}
+}
+
+// DownloadAndStore fetches image bytes from imageURL, stores to disk, deduplicating concurrent requests.
+// Returns the cached file path.
+func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL string) (string, error) {
+	key := provider + "/" + normalizeSpeciesName(scientificName)
+
+	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
+		// Acquire semaphore to limit concurrent downloads.
+		fc.downloadSem <- struct{}{}
+		defer func() { <-fc.downloadSem }()
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(imageURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download image: %w", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("non-200 status downloading image: %d", resp.StatusCode)
+		}
+
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read image body: %w", err)
+		}
+
+		return fc.Store(provider, scientificName, data, imageURL)
+	})
+
+	if err != nil {
+		return "", err
+	}
+	return result.(string), nil
 }
