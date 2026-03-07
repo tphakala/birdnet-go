@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 func TestIsExtendedCaptureSpecies(t *testing.T) {
@@ -409,4 +410,115 @@ func TestCalculateExtendedFlushDeadline(t *testing.T) {
 				"wait time %v should be <= %v", waitTime, tt.expectedMaxWait)
 		})
 	}
+}
+
+func TestNormalizeDetectionTimes_NonExtendedCapture(t *testing.T) {
+	t.Parallel()
+
+	// Settings: captureLength=60, preCapture=6, normalWindow=54s
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Length: 60, PreCapture: 6},
+				},
+				ExtendedCapture: conf.ExtendedCaptureSettings{Enabled: false},
+			},
+		},
+	}
+
+	firstDetected := time.Date(2026, 3, 7, 8, 50, 0, 0, time.UTC)
+	captureWindow := 54 * time.Second // Length - PreCapture = 60 - 6
+
+	// Simulate: Detection struct was replaced by a higher-confidence detection
+	// that arrived 30s into the pending window. Its BeginTime/EndTime reflect
+	// the later analysis chunk, not the first detection.
+	laterStart := firstDetected.Add(30 * time.Second)
+	item := &PendingDetection{
+		Detection: Detections{
+			Result: detection.Result{
+				BeginTime: laterStart,
+				EndTime:   laterStart.Add(captureWindow),
+				Species: detection.Species{
+					CommonName:     "käpytikka",
+					ScientificName: "Dendrocopos major",
+				},
+			},
+		},
+		Confidence:      0.85,
+		Source:          "test_source",
+		FirstDetected:   firstDetected,
+		LastUpdated:     laterStart,
+		Count:           27,
+		ExtendedCapture: false,
+	}
+
+	p.normalizeDetectionTimes(item)
+
+	// BeginTime should be backdated to FirstDetected
+	assert.Equal(t, firstDetected, item.Detection.Result.BeginTime)
+
+	// EndTime should be recalculated: FirstDetected + (Length - PreCapture)
+	expectedEndTime := firstDetected.Add(captureWindow)
+	assert.Equal(t, expectedEndTime, item.Detection.Result.EndTime,
+		"EndTime should be recalculated from FirstDetected for non-extended species")
+
+	// The derived capture length should equal the configured length
+	preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+	derivedLength := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
+	assert.Equal(t, p.Settings.Realtime.Audio.Export.Length, derivedLength,
+		"derived capture length should match configured export length")
+}
+
+func TestNormalizeDetectionTimes_ExtendedCapture(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Audio: conf.AudioSettings{
+					Export: conf.ExportSettings{Length: 60, PreCapture: 6},
+				},
+				ExtendedCapture: conf.ExtendedCaptureSettings{Enabled: true, MaxDuration: 600},
+			},
+		},
+	}
+
+	firstDetected := time.Date(2026, 3, 7, 20, 0, 0, 0, time.UTC)
+	lastUpdated := firstDetected.Add(3 * time.Minute)
+
+	item := &PendingDetection{
+		Detection: Detections{
+			Result: detection.Result{
+				BeginTime: firstDetected.Add(30 * time.Second),
+				EndTime:   firstDetected.Add(84 * time.Second),
+				Species: detection.Species{
+					CommonName:     "lehtopöllö",
+					ScientificName: "Strix aluco",
+				},
+			},
+		},
+		Confidence:      0.92,
+		Source:          "test_source",
+		FirstDetected:   firstDetected,
+		LastUpdated:     lastUpdated,
+		Count:           45,
+		ExtendedCapture: true,
+	}
+
+	p.normalizeDetectionTimes(item)
+
+	// BeginTime should be backdated to FirstDetected
+	assert.Equal(t, firstDetected, item.Detection.Result.BeginTime)
+
+	// EndTime should be LastUpdated + normalDetectionWindow (54s)
+	expectedEndTime := lastUpdated.Add(54 * time.Second)
+	assert.Equal(t, expectedEndTime, item.Detection.Result.EndTime,
+		"EndTime should span from LastUpdated + normal window for extended capture")
+
+	// Duration should be > configured length (this is the whole point of extended capture)
+	preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+	derivedLength := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
+	assert.Greater(t, derivedLength, p.Settings.Realtime.Audio.Export.Length,
+		"extended capture should produce longer duration than configured length")
 }

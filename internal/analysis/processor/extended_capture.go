@@ -163,6 +163,44 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 	return false, resolved
 }
 
+// normalizeDetectionTimes sets BeginTime/EndTime on an approved detection.
+// BeginTime is always backdated to FirstDetected so the audio clip starts from
+// the beginning of the event. EndTime handling depends on capture mode:
+//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
+//   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
+//
+// For extended captures the clip name is regenerated to reflect the actual duration.
+func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
+	item.Detection.Result.BeginTime = item.FirstDetected
+
+	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+
+	if item.ExtendedCapture {
+		// For extended captures, EndTime reflects the last detection + normal detection window.
+		// LastUpdated is always initialized (set on creation and every re-detection).
+		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
+
+		// Regenerate clip name with actual duration (unknown at createDetection time)
+		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+		durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
+		item.Detection.Result.ClipName = p.generateClipNameWithDuration(
+			item.Detection.Result.Species.ScientificName,
+			float32(item.Confidence),
+			durationSeconds,
+			item.Detection.Result.Timestamp,
+		)
+	} else {
+		// For non-extended detections, recalculate EndTime to maintain the configured
+		// capture window. BeginTime was backdated to FirstDetected, but EndTime may
+		// come from a later higher-confidence detection that replaced the Detection
+		// struct during the pending window. Without this recalculation, the time span
+		// (EndTime - BeginTime) inflates beyond the configured capture length.
+		item.Detection.Result.EndTime = item.FirstDetected.Add(normalDetectionWindow)
+	}
+}
+
 // applyExtendedCapture applies extended capture logic to a pending detection.
 // It sets the ExtendedCapture flag, MaxDeadline, and calculates the scaled flush deadline.
 // This is called from processDetections after the pending detection is created/updated.

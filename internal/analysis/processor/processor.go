@@ -1095,29 +1095,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
 	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
-	// Set BeginTime to the first detection time for all approved detections.
-	// This ensures the audio clip starts from the beginning of the event.
-	item.Detection.Result.BeginTime = item.FirstDetected
-
-	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window.
-		// LastUpdated is always initialized (set on creation and every re-detection).
-		lastDetection := item.LastUpdated
-		captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-		preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
-		normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
-		item.Detection.Result.EndTime = lastDetection.Add(normalDetectionWindow)
-
-		// Regenerate clip name with actual duration (unknown at createDetection time)
-		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
-		durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
-		item.Detection.Result.ClipName = p.generateClipNameWithDuration(
-			item.Detection.Result.Species.ScientificName,
-			float32(item.Confidence),
-			durationSeconds,
-			item.Detection.Result.Timestamp,
-		)
-	}
+	p.normalizeDetectionTimes(item)
 
 	actionList := p.getActionsForItem(&item.Detection)
 	for _, action := range actionList {

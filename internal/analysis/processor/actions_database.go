@@ -152,10 +152,11 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 			derivedLength := int(a.Result.EndTime.Sub(a.Result.BeginTime).Seconds()) + preCapture
 			if derivedLength > captureLength {
 				captureLength = derivedLength
-				GetLogger().Info("Using extended capture duration for audio export",
+				GetLogger().Info("Using derived capture duration from detection time span",
 					logger.String("detection_id", a.CorrelationID),
 					logger.String("species", a.Result.Species.CommonName),
 					logger.Int("duration_seconds", captureLength),
+					logger.Int("configured_length", a.Settings.Realtime.Audio.Export.Length),
 					logger.String("operation", "extended_capture_audio_export"))
 			}
 		}
