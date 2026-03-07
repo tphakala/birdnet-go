@@ -126,9 +126,12 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		CityName: data.Location.City,
 	}
 
-	// Save daily events data
+	// Save daily events data. If this fails (e.g., SQLITE_BUSY), log the error
+	// but continue — the upsert will succeed on the next hourly poll, and we
+	// can still save hourly weather if a daily_events row already exists.
+	var dailyEventsFailed bool
 	if err := s.db.SaveDailyEvents(dailyEvents); err != nil {
-		// Log the error before returning
+		dailyEventsFailed = true
 		getLogger().Error("Failed to save daily events to database",
 			logger.Error(err),
 			logger.String("date", dailyEvents.Date),
@@ -136,15 +139,26 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		if s.metrics != nil {
 			s.metrics.RecordWeatherDbError("save_daily_events", "database_error")
 		}
-		return errors.New(err).
-			Component("weather").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_daily_events").
-			Context("date", dailyEvents.Date).
-			Build()
-	}
-	if s.metrics != nil {
+	} else if s.metrics != nil {
 		s.metrics.RecordWeatherDbOperation("save_daily_events", "success")
+	}
+
+	// If daily events save failed, try to look up the existing row for the FK
+	if dailyEventsFailed {
+		existing, lookupErr := s.db.GetDailyEvents(localDate)
+		if lookupErr != nil {
+			// No existing row either — can't save hourly weather without the FK
+			return errors.New(lookupErr).
+				Component("weather").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_daily_events_fallback").
+				Context("date", localDate).
+				Build()
+		}
+		dailyEvents.ID = existing.ID
+		getLogger().Info("Using existing daily events row after save failure",
+			logger.String("date", localDate),
+			logger.Any("id", dailyEvents.ID))
 	}
 
 	// Create hourly weather data
