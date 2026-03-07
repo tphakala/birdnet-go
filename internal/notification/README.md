@@ -42,8 +42,8 @@ Use the helper functions for common scenarios:
 // Error notification from an error
 notification.NotifyError(err)
 
-// System alert
-notification.NotifySystemAlert(notification.PriorityHigh, "High CPU Usage", "CPU usage is above 80%")
+// System alert (e.g., startup/shutdown events)
+notification.NotifySystemAlert(notification.PriorityMedium, "System Starting", "BirdNET-Go is initializing")
 
 // Bird detection
 notification.NotifyDetection("Northern Cardinal", 0.95, map[string]interface{}{

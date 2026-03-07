@@ -455,6 +455,54 @@ func TestEngine_DiskMetricPathIsolation(t *testing.T) {
 	assert.False(t, fired, "disk usage rule should not fire for /data at 15%%")
 }
 
+func TestEngine_DiskMetricPathIsolation_Sustained(t *testing.T) {
+	// Uses DurationSec > 0 to exercise the per-path MetricTracker buffer isolation
+	// in evaluateMetricConditions via metricBufferKey().
+	rule := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeSystem,
+		TriggerType: TriggerTypeMetric,
+		MetricName:  MetricDiskUsage,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 60},
+		},
+	}
+	repo := newMockRepo(rule)
+
+	var firedPath string
+	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+		firedPath = event.Properties[PropertyPath].(string)
+	}, testLogger())
+
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	now := time.Now()
+
+	// Send sustained events for "/" at 90% over 2 minutes.
+	for i := range 5 {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: 90.0, PropertyPath: "/"},
+			Timestamp:  now.Add(time.Duration(i) * 30 * time.Second),
+		})
+	}
+	assert.Equal(t, "/", firedPath, "sustained disk usage rule should fire for /")
+
+	// Interleave low "/data" events — should NOT fire because /data buffer is separate.
+	firedPath = ""
+	for i := range 5 {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: 15.0, PropertyPath: "/data"},
+			Timestamp:  now.Add(time.Duration(i) * 30 * time.Second),
+		})
+	}
+	assert.Empty(t, firedPath, "sustained disk usage rule should not fire for /data at 15%%")
+}
+
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
 	// Two rules targeting the same metric — metric sample should be recorded once per event.
 	rule1 := entities.AlertRule{
