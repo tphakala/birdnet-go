@@ -71,7 +71,7 @@ type Processor struct {
 	DynamicThresholds   map[string]*DynamicThreshold
 	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
 	pendingDetections   map[string]PendingDetection
-	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
+	pendingMutex        sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
 	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
@@ -87,6 +87,12 @@ type Processor struct {
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
+
+	// Pending detection broadcast fields
+	PendingBroadcaster   func(snapshot []SSEPendingDetection) // Function to broadcast pending detections via SSE
+	pendingBroadcasterMu sync.RWMutex                         // Mutex to protect PendingBroadcaster access
+	pendingFlushNotifs   []SSEPendingDetection                // Terminal-state notifications from last flush cycle
+	pendingFlushNotifsMu sync.Mutex                           // Mutex to protect pendingFlushNotifs
 
 	// Backup system fields (optional)
 	backupManager   any // Use interface{} to avoid import cycle
@@ -1655,6 +1661,13 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 	p.sseBroadcasterMutex.RLock()
 	defer p.sseBroadcasterMutex.RUnlock()
 	return p.SSEBroadcaster
+}
+
+// SetPendingBroadcaster safely sets the pending detection broadcaster function.
+func (p *Processor) SetPendingBroadcaster(broadcaster func(snapshot []SSEPendingDetection)) {
+	p.pendingBroadcasterMu.Lock()
+	defer p.pendingBroadcasterMu.Unlock()
+	p.PendingBroadcaster = broadcaster
 }
 
 // SetBackupManager safely sets the backup manager
