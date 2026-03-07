@@ -323,6 +323,12 @@ func (s *Server) setupRoutes() error {
 		// Connect SSE broadcaster for real-time detection streaming
 		s.processor.SetSSEBroadcaster(s.apiController.BroadcastDetection)
 		s.slogger.Debug("SSE broadcaster connected to processor")
+
+		// Connect pending detection broadcaster for "currently hearing" UI
+		s.processor.SetPendingBroadcaster(func(snapshot []processor.SSEPendingDetection) {
+			s.apiController.BroadcastPending(snapshot)
+		})
+		s.slogger.Debug("Pending broadcaster connected to processor")
 	}
 
 	// Set audio level channel if available

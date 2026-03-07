@@ -608,6 +608,12 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
 	}
+
+	// Broadcast updated pending detections snapshot for "currently hearing" UI.
+	// This runs after all new detections are incorporated into pendingDetections.
+	minDet := p.calculateMinDetections()
+	snapshot := p.SnapshotVisiblePending(minDet)
+	p.broadcastPendingSnapshot(snapshot)
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
@@ -1238,6 +1244,8 @@ func (p *Processor) calculateMinDetections() int {
 func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flushedCount int) {
 	now := time.Now()
 
+	var terminalNotifs []SSEPendingDetection
+
 	p.pendingMutex.Lock()
 	defer p.pendingMutex.Unlock()
 
@@ -1262,6 +1270,12 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 				logger.Int("count", item.Count),
 				logger.String("operation", "discard_detection"))
 			delete(p.pendingDetections, mapKey)
+
+			// Collect rejected notification if species was visible
+			if item.Count >= CalculateVisibilityThreshold(minDetections) {
+				terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusRejected))
+			}
+
 			continue
 		}
 
@@ -1276,6 +1290,33 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		p.processApprovedDetection(&item, speciesName)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
+
+		// Collect approved notification if species was visible
+		if item.Count >= CalculateVisibilityThreshold(minDetections) {
+			terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusApproved))
+		}
+	}
+
+	// Broadcast combined snapshot (active + terminal) for "currently hearing" UI.
+	if len(terminalNotifs) > 0 || flushedCount > 0 {
+		threshold := CalculateVisibilityThreshold(minDetections)
+		activeSnapshot := make([]SSEPendingDetection, 0, len(p.pendingDetections))
+		for key := range p.pendingDetections {
+			item := p.pendingDetections[key]
+			if item.Count >= threshold {
+				activeSnapshot = append(activeSnapshot, SSEPendingDetection{
+					Species:        item.Detection.Result.Species.CommonName,
+					ScientificName: item.Detection.Result.Species.ScientificName,
+					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
+					Status:         PendingStatusActive,
+					FirstDetected:  item.FirstDetected.Unix(),
+					Source:         p.getDisplayNameForSource(item.Source),
+				})
+			}
+		}
+		logPendingBroadcast(len(activeSnapshot), len(terminalNotifs))
+		activeSnapshot = append(activeSnapshot, terminalNotifs...)
+		p.broadcastPendingSnapshot(activeSnapshot)
 	}
 
 	return pendingCount, flushedCount
