@@ -111,6 +111,15 @@ Props:
 
   // Show source column only when multiple sources are present
   let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
+
+  // Clean up pending timers on component destroy
+  $effect(() => {
+    return () => {
+      for (const key in removalTimers) {
+        clearTimeout(removalTimers[key]);
+      }
+    };
+  });
 </script>
 
 {#if hasDisplayDetections}
