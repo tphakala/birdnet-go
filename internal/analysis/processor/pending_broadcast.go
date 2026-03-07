@@ -58,7 +58,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			ScientificName: item.Detection.Result.Species.ScientificName,
 			Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 			Status:         PendingStatusActive,
-			FirstDetected:  item.FirstDetected.Unix(),
+			FirstDetected:  item.CreatedAt.Unix(),
 			Source:         p.getDisplayNameForSource(item.Source),
 		})
 	}
@@ -120,7 +120,7 @@ func (p *Processor) buildFlushNotification(item *PendingDetection, status Pendin
 		ScientificName: item.Detection.Result.Species.ScientificName,
 		Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 		Status:         status,
-		FirstDetected:  item.FirstDetected.Unix(),
+		FirstDetected:  item.CreatedAt.Unix(),
 		Source:         p.getDisplayNameForSource(item.Source),
 	}
 }
