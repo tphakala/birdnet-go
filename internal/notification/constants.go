@@ -20,9 +20,6 @@ const (
 	// DefaultAlertExpiry is the default expiry time for alert notifications.
 	DefaultAlertExpiry = 30 * time.Minute
 
-	// DefaultResourceAlertExpiry is the expiry time for resource alert notifications.
-	DefaultResourceAlertExpiry = 30 * time.Minute
-
 	// DefaultQuickExpiry is the default short expiry for temporary notifications.
 	DefaultQuickExpiry = 5 * time.Minute
 
@@ -31,9 +28,6 @@ const (
 
 	// DefaultHealthCheckTimeout is the default timeout for health checks.
 	DefaultHealthCheckTimeout = 10 * time.Second
-
-	// DefaultAlertThrottle is the default throttle period between repeated alerts.
-	DefaultAlertThrottle = 5 * time.Minute
 
 	// DefaultCleanupInterval is the default interval for cleanup tasks.
 	DefaultCleanupInterval = 5 * time.Minute

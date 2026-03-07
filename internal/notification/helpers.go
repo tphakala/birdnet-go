@@ -101,50 +101,6 @@ func NotifyIntegrationFailure(integration string, err error) {
 	}
 }
 
-// NotifyResourceAlert creates notifications for resource threshold violations
-func NotifyResourceAlert(resource string, current, threshold float64, unit string) {
-	if !IsInitialized() {
-		return
-	}
-
-	service := GetService()
-	if service == nil {
-		return
-	}
-
-	var priority Priority
-	switch {
-	case current >= threshold*1.5:
-		priority = PriorityCritical
-	case current >= threshold*1.2:
-		priority = PriorityHigh
-	default:
-		priority = PriorityMedium
-	}
-
-	title := fmt.Sprintf("High %s Usage", resource)
-	message := fmt.Sprintf("Current: %.1f%s (Threshold: %.1f%s)", current, unit, threshold, unit)
-
-	// Build notification fully before broadcast to ensure SSE subscribers see translation keys
-	notif := NewNotification(TypeWarning, priority, title, message).
-		WithComponent("system").
-		WithTitleKey(MsgResourceHighUsage, map[string]any{"resource": resource}).
-		WithMessageKey(MsgResourceCurrentUsage, map[string]any{
-			"current":   fmt.Sprintf("%.1f", current),
-			"threshold": fmt.Sprintf("%.1f", threshold),
-			"unit":      unit,
-		}).
-		WithMetadata("resource", resource).
-		WithMetadata("current_value", current).
-		WithMetadata("threshold", threshold).
-		WithMetadata("unit", unit).
-		WithExpiry(DefaultResourceAlertExpiry) // Auto-expire resource alerts
-
-	if err := service.CreateWithMetadata(notif); err != nil {
-		GetLogger().Warn("failed to create resource alert notification", logger.Error(err))
-	}
-}
-
 // NotifyInfo creates an informational notification
 func NotifyInfo(title, message string) {
 	if !IsInitialized() {

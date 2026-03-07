@@ -23,12 +23,6 @@ const (
 	MsgIntegrationFailedTitle   = "notifications.content.integration.failedTitle"
 	MsgIntegrationFailedMessage = "notifications.content.integration.failedMessage"
 
-	// Resource alert notifications
-	MsgResourceHighUsage     = "notifications.content.resource.highUsage"
-	MsgResourceCriticalUsage = "notifications.content.resource.criticalUsage"
-	MsgResourceRecovered     = "notifications.content.resource.recovered"
-	MsgResourceCurrentUsage  = "notifications.content.resource.currentUsage"
-
 	// Error notifications (title keys only — messages are raw error strings)
 	MsgErrorCriticalSystem = "notifications.content.error.criticalSystem"
 	MsgErrorApplication    = "notifications.content.error.application"
