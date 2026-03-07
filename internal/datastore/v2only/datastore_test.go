@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -1081,4 +1082,10 @@ func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
 	assert.Equal(t, "Periparus ater", notes[0].ScientificName)
+
+	// Verify predictions were deduplicated: 3 input results → 2 unique labels
+	noteID := fmt.Sprint(notes[0].ID)
+	preds, err := ds.GetNoteResults(noteID)
+	require.NoError(t, err)
+	assert.Len(t, preds, 2, "duplicate label should be collapsed to single prediction")
 }

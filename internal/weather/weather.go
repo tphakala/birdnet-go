@@ -146,8 +146,13 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	// If daily events save failed, try to look up the existing row for the FK
 	if dailyEventsFailed {
 		existing, lookupErr := s.db.GetDailyEvents(localDate)
-		if lookupErr != nil {
-			// No existing row either — can't save hourly weather without the FK
+		if lookupErr != nil || existing.ID == 0 {
+			// No existing row either — can't save hourly weather without the FK.
+			// The v1 legacy store returns DailyEvents{} with nil error for "not found",
+			// so we also check for zero ID.
+			if lookupErr == nil {
+				lookupErr = fmt.Errorf("daily events not found for %s", localDate)
+			}
 			return errors.New(lookupErr).
 				Component("weather").
 				Category(errors.CategoryDatabase).

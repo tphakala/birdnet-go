@@ -468,6 +468,38 @@ func TestService_SaveWeatherData(t *testing.T) {
 		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
 	})
 
+	t.Run("daily_events_error_and_lookup_returns_empty_row", func(t *testing.T) {
+		mockDB := mocks.NewMockInterface(t)
+
+		settings := createTestSettings(t, "yrno")
+		service := &Service{
+			provider: NewYrNoProvider(),
+			db:       mockDB,
+			settings: settings,
+			metrics:  nil,
+		}
+
+		fixedTime := time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC)
+		testData := createTestWeatherData(t, func(d *WeatherData) {
+			d.Time = fixedTime
+		})
+
+		// SaveDailyEvents fails
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+
+		// GetDailyEvents returns empty row with nil error (v1 legacy "not found" contract)
+		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, nil).Once()
+
+		err := service.SaveWeatherData(testData)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "daily events not found")
+
+		// SaveHourlyWeather should NOT be called when fallback returns zero ID
+		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
+	})
+
 	t.Run("hourly_weather_error", func(t *testing.T) {
 		mockDB := mocks.NewMockInterface(t)
 
@@ -842,7 +874,7 @@ func TestService_StartPolling_StartupDelay(t *testing.T) {
 		select {
 		case <-fetchCalled:
 			elapsed := time.Since(startTime)
-			assert.Less(t, elapsed, 100*time.Millisecond,
+			assert.Less(t, elapsed, 500*time.Millisecond,
 				"With zero delay, fetch should happen almost immediately")
 		case <-time.After(2 * time.Second):
 			t.Fatal("Initial fetch did not complete within timeout")

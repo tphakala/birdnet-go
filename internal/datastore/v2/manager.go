@@ -20,6 +20,10 @@ import (
 // Set to 1 second to accommodate migration batch queries which can take 800-900ms.
 const defaultGormSlowThreshold = 1 * time.Second
 
+// sqliteBusyTimeoutMs is the SQLite busy_timeout pragma value in milliseconds.
+// Matches the 30s timeout used by the legacy datastore.
+const sqliteBusyTimeoutMs = 30_000
+
 // Manager defines the interface for v2 database operations.
 type Manager interface {
 	// Initialize creates the schema and seeds initial data.
@@ -96,7 +100,7 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	}
 
 	// Build DSN with recommended SQLite pragmas
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON", dbPath)
+	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=ON", dbPath, sqliteBusyTimeoutMs)
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger,
