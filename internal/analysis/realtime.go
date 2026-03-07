@@ -564,11 +564,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					}
 				}
 
-				// Now it's safe to close controlChan after HTTP server is down
+				// Close controlChan to signal goroutines selecting on it to stop
 				log.Info("closing control channel after producers shutdown",
 					logger.String("operation", "close_control_channel"))
 				close(controlChan)
 
+				// Check context after step 5 — if the timeout fired while the
+				// HTTP server was shutting down, return immediately and let the
+				// deferred cleanup handle database close.
 				if ctx.Err() != nil {
 					log.Warn("shutdown context cancelled after step 5",
 						logger.Int("step", 5),
@@ -665,6 +668,11 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				// Ensure migration worker is stopped on timeout
 				apiv2.StopMigrationWorker()
 				cancel()
+				// Wait for the shutdown goroutine to finish before returning.
+				// The goroutine checks ctx.Err() between steps and will exit
+				// quickly now that the context is cancelled. This prevents a
+				// race between the goroutine and deferred cleanup (database close).
+				<-shutdownComplete
 				return nil
 			}
 
