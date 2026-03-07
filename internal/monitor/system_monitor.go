@@ -247,51 +247,18 @@ func (m *SystemMonitor) checkDiskGroup(group MountGroup) {
 		logger.String("mount_point", group.MountPoint),
 		logger.Any("paths", group.Paths),
 	)
-
-	// Validate mount point exists
-	if _, err := os.Stat(group.MountPoint); err != nil {
-		m.log.Error("Mount point does not exist or is not accessible",
-			logger.String("mount_point", group.MountPoint),
-			logger.Error(err),
-		)
-		return
-	}
-
-	usage, err := disk.Usage(group.MountPoint)
-	if err != nil {
-		m.log.Error("Failed to get disk usage",
-			logger.Error(err),
-			logger.String("mount_point", group.MountPoint),
-		)
-		return
-	}
-
-	m.log.Debug("Disk usage check completed",
-		logger.String("mount_point", group.MountPoint),
-		logger.Any("affected_paths", group.Paths),
-		logger.String("total_gb", fmt.Sprintf("%.2f", float64(usage.Total)/bytesPerGB)),
-		logger.String("used_gb", fmt.Sprintf("%.2f", float64(usage.Used)/bytesPerGB)),
-		logger.String("free_gb", fmt.Sprintf("%.2f", float64(usage.Free)/bytesPerGB)),
-		logger.String("used_percent", fmt.Sprintf("%.2f%%", usage.UsedPercent)),
-		logger.String("filesystem", usage.Fstype),
-	)
-
-	alerting.TryPublish(&alerting.AlertEvent{
-		ObjectType: alerting.ObjectTypeSystem,
-		MetricName: alerting.MetricDiskUsage,
-		Properties: map[string]any{
-			alerting.PropertyValue: usage.UsedPercent,
-			alerting.PropertyPath:  group.MountPoint,
-		},
-	})
+	m.publishDiskMetric(group.MountPoint)
 }
 
 // checkDiskPath monitors disk usage for a single path (fallback when mount grouping fails)
 func (m *SystemMonitor) checkDiskPath(path string) {
-	m.log.Debug("Starting disk usage check", logger.String("path", path))
+	m.publishDiskMetric(path)
+}
 
+// publishDiskMetric collects and publishes disk usage for a single path or mount point
+func (m *SystemMonitor) publishDiskMetric(path string) {
 	if _, err := os.Stat(path); err != nil {
-		m.log.Error("Disk monitoring path does not exist or is not accessible",
+		m.log.Error("Disk path does not exist or is not accessible",
 			logger.String("path", path),
 			logger.Error(err),
 		)
