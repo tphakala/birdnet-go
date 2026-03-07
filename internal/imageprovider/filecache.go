@@ -28,6 +28,10 @@ const (
 // knownExtensions lists the file extensions tried when looking up cached images.
 var knownExtensions = []string{".jpg", ".png", ".gif", ".webp", ".svg"}
 
+// imageHTTPClient is a shared HTTP client for downloading images with a 10-second timeout.
+// Shared to avoid goroutine leaks from per-request clients creating new HTTP/2 connections.
+var imageHTTPClient = &http.Client{Timeout: 10 * time.Second}
+
 // ImageFileCache manages disk-based image caching organized by provider.
 type ImageFileCache struct {
 	basePath    string
@@ -217,8 +221,7 @@ func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL st
 		fc.downloadSem <- struct{}{}
 		defer func() { <-fc.downloadSem }()
 
-		client := &http.Client{Timeout: 10 * time.Second}
-		resp, err := client.Get(imageURL)
+		resp, err := imageHTTPClient.Get(imageURL)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}

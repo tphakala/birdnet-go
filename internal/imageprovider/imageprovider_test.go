@@ -1006,5 +1006,7 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		// Ignore the cache refresh goroutine pattern - it should be properly cleaned up by Close()
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/imageprovider.(*BirdImageCache).startCacheRefresh.func1"),
+		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient
+		goleak.IgnoreAnyFunction("net/http.(*http2clientConnReadLoop).run"),
 	)
 }
