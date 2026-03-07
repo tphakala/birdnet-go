@@ -407,7 +407,7 @@ func (s *Server) startBlocking() error {
 		err = s.echo.Start(addr)
 	}
 
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("server error: %w", err)
 	}
 
