@@ -467,6 +467,10 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 			if c.metrics != nil {
 				c.metrics.IncrementImageDownloads()
 			}
+			// Download fallback image to file cache
+			if c.fileCache != nil {
+				go c.downloadImageToFileCache(scientificName, &fallbackImg)
+			}
 		}
 		return
 	}
@@ -478,6 +482,11 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	// Update database cache
 	log.Debug("Updating database cache with refreshed image")
 	c.saveToDB(&birdImage)
+
+	// Download refreshed image to file cache
+	if c.fileCache != nil && birdImage.URL != "" && !birdImage.IsNegativeEntry() {
+		go c.downloadImageToFileCache(scientificName, &birdImage)
+	}
 
 	if c.metrics != nil {
 		c.metrics.IncrementImageDownloads()

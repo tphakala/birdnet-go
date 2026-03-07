@@ -123,14 +123,16 @@ routeInitializers := []struct {
 
 ### Media (`media.go`)
 
-| Method | Route                          | Handler                | Auth | Description                       |
-| ------ | ------------------------------ | ---------------------- | ---- | --------------------------------- |
-| GET    | `/media/audio/:filename`       | `ServeAudioClip`       | ❌   | Serve audio file                  |
-| GET    | `/media/spectrogram/:filename` | `ServeSpectrogram`     | ❌   | Serve spectrogram image           |
-| GET    | `/media/audio`                 | `ServeAudioByQueryID`  | ❌   | Serve audio by detection ID       |
-| GET    | `/media/species-image`         | `GetSpeciesImage`      | ❌   | Get species thumbnail image       |
-| GET    | `/media/species-image/info`    | `GetSpeciesImageInfo`  | ❌   | Get species image attribution     |
-| GET    | `/spectrogram/:id/status`      | `GetSpectrogramStatus` | ❌   | Get spectrogram generation status |
+| Method | Route                                | Handler                  | Auth | Description                       |
+| ------ | ------------------------------------ | ------------------------ | ---- | --------------------------------- |
+| GET    | `/media/audio/:filename`             | `ServeAudioClip`         | ❌   | Serve audio file                  |
+| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`       | ❌   | Serve spectrogram image           |
+| GET    | `/media/audio`                       | `ServeAudioByQueryID`    | ❌   | Serve audio by detection ID       |
+| GET    | `/media/species-image`               | `GetSpeciesImage`        | ❌   | Get species thumbnail image       |
+| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution     |
+| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)   |
+| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint    |
+| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status |
 
 ### Notifications (`notifications.go`)
 
