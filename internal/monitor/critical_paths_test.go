@@ -185,8 +185,6 @@ func TestSystemMonitorIntegration(t *testing.T) {
 	config.Realtime.Monitoring.Enabled = true
 	config.Realtime.Monitoring.CheckInterval = 1
 	config.Realtime.Monitoring.Disk.Enabled = true
-	config.Realtime.Monitoring.Disk.Warning = 80.0
-	config.Realtime.Monitoring.Disk.Critical = 90.0
 	config.Realtime.Monitoring.Disk.Paths = []string{"/custom"}
 
 	// Enable audio export

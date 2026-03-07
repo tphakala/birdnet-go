@@ -514,30 +514,25 @@ type TelemetrySettings struct {
 	Listen  string `json:"listen"`  // IP address and port to listen on
 }
 
-// MonitoringSettings contains settings for system resource monitoring
+// MonitoringSettings controls system resource metric collection.
+// Thresholds and notifications are managed by the alerting engine rules.
 type MonitoringSettings struct {
-	Enabled                bool                  `json:"enabled"`                // true to enable system resource monitoring
-	CheckInterval          int                   `json:"checkInterval"`          // interval in seconds between resource checks
-	CriticalResendInterval int                   `json:"criticalResendInterval"` // interval in minutes between critical alert resends (default: 30)
-	HysteresisPercent      float64               `json:"hysteresisPercent"`      // hysteresis percentage for state transitions (default: 5.0)
-	CPU                    ThresholdSettings     `json:"cpu"`                    // CPU usage thresholds
-	Memory                 ThresholdSettings     `json:"memory"`                 // Memory usage thresholds
-	Disk                   DiskThresholdSettings `json:"disk"`                   // Disk usage thresholds
+	Enabled       bool              `json:"enabled"`       // true to enable system resource monitoring
+	CheckInterval int               `json:"checkInterval"` // interval in seconds between resource checks
+	CPU           ResourceEnabled   `json:"cpu"`           // CPU metric collection
+	Memory        ResourceEnabled   `json:"memory"`        // Memory metric collection
+	Disk          DiskMonitorConfig `json:"disk"`          // Disk metric collection
 }
 
-// ThresholdSettings contains warning and critical thresholds
-type ThresholdSettings struct {
-	Enabled  bool    `json:"enabled"`  // true to enable monitoring for this resource
-	Warning  float64 `json:"warning"`  // warning threshold percentage
-	Critical float64 `json:"critical"` // critical threshold percentage
+// ResourceEnabled controls whether a resource type is monitored.
+type ResourceEnabled struct {
+	Enabled bool `json:"enabled"` // true to enable monitoring for this resource
 }
 
-// DiskThresholdSettings contains disk monitoring configuration for multiple paths
-type DiskThresholdSettings struct {
-	Enabled  bool     `json:"enabled"`  // true to enable disk monitoring
-	Warning  float64  `json:"warning"`  // warning threshold percentage
-	Critical float64  `json:"critical"` // critical threshold percentage
-	Paths    []string `json:"paths"`    // filesystem paths to monitor
+// DiskMonitorConfig controls disk monitoring and which paths to check.
+type DiskMonitorConfig struct {
+	Enabled bool     `json:"enabled"` // true to enable disk monitoring
+	Paths   []string `json:"paths"`   // filesystem paths to monitor
 }
 
 // SentrySettings contains settings for Sentry error tracking

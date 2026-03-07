@@ -66,6 +66,16 @@ func (e *Engine) RefreshRules(ctx context.Context) error {
 	return nil
 }
 
+// metricBufferKey derives the MetricTracker buffer key from the metric name
+// and event properties. For per-instance metrics (e.g., disk usage per mount
+// point), the key includes the "path" property to isolate ring buffers.
+func metricBufferKey(metricName string, properties map[string]any) string {
+	if path, ok := properties[PropertyPath].(string); ok && path != "" {
+		return metricName + "|" + path
+	}
+	return metricName
+}
+
 // HandleEvent evaluates an event against all enabled rules.
 func (e *Engine) HandleEvent(event *AlertEvent) {
 	// Record metric sample once before rule iteration to avoid duplicates
@@ -73,7 +83,8 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	if event.MetricName != "" {
 		if val, ok := event.Properties[PropertyValue]; ok {
 			if floatVal, err := toFloat64(val); err == nil {
-				e.metricTracker.Record(event.MetricName, floatVal, event.Timestamp)
+				trackerKey := metricBufferKey(event.MetricName, event.Properties)
+				e.metricTracker.Record(trackerKey, floatVal, event.Timestamp)
 			}
 		}
 	}
@@ -122,12 +133,13 @@ func (e *Engine) ruleMatches(rule *entities.AlertRule, event *AlertEvent) bool {
 
 func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *AlertEvent) bool {
 	// Evaluate each condition (metric sample already recorded in HandleEvent)
+	trackerKey := metricBufferKey(rule.MetricName, event.Properties)
 	for i := range rule.Conditions {
 		cond := &rule.Conditions[i]
 		if cond.DurationSec > 0 {
 			// Check sustained threshold
 			duration := time.Duration(cond.DurationSec) * time.Second
-			if !e.metricTracker.IsSustained(rule.MetricName, cond.Operator, cond.Value, duration, event.Timestamp) {
+			if !e.metricTracker.IsSustained(trackerKey, cond.Operator, cond.Value, duration, event.Timestamp) {
 				return false
 			}
 		} else if !evaluateCondition(cond, event.Properties) {

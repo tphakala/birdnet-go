@@ -42,8 +42,8 @@ Use the helper functions for common scenarios:
 // Error notification from an error
 notification.NotifyError(err)
 
-// System alert
-notification.NotifySystemAlert(notification.PriorityHigh, "High CPU Usage", "CPU usage is above 80%")
+// System alert (e.g., startup/shutdown events)
+notification.NotifySystemAlert(notification.PriorityMedium, "System Starting", "BirdNET-Go is initializing")
 
 // Bird detection
 notification.NotifyDetection("Northern Cardinal", 0.95, map[string]interface{}{
@@ -53,9 +53,6 @@ notification.NotifyDetection("Northern Cardinal", 0.95, map[string]interface{}{
 
 // Integration failure
 notification.NotifyIntegrationFailure("BirdWeather", err)
-
-// Resource alert
-notification.NotifyResourceAlert("Memory", 85.5, 80.0, "%")
 
 // Info message
 notification.NotifyInfo("Update Available", "A new version of BirdNET-Go is available")
@@ -220,6 +217,10 @@ The notification package implements an `EventConsumer` that:
 - Converts errors to appropriate notifications
 - Applies rate limiting to prevent spam
 - Maps error categories to notification priorities
+
+> **Note:** System resource alerts (CPU, memory, disk) are handled by the alerting engine's
+> user-configurable rules, not by the notification worker. The system monitor publishes
+> metrics to the alerting engine, which evaluates rules and creates notifications as needed.
 
 ### Automatic Error Notifications
 

@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 		goleak.IgnoreTopFunction("runtime.gopark"),
 		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*Service).cleanupLoop"),
-		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*ResourceEventWorker).cleanupLoop"),
 	)
 	os.Exit(m.Run())
 }
