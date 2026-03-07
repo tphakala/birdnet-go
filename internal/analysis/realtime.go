@@ -351,8 +351,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
-	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
-	defer closeV2Database()
+	// Ensure v2 database is closed on shutdown (handles nil case gracefully).
+	// In v2-only mode, the v2only.Datastore wraps the same manager, so closeDataStore
+	// handles everything via v2only.Datastore.Close(). Only register this defer in
+	// legacy/migration mode where the v2 database is a separate resource.
+	if !v2OnlyMode {
+		defer closeV2Database()
+	}
 
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
@@ -632,11 +637,15 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					logger.String("operation", "shutdown_migration_worker"))
 				apiv2.StopMigrationWorker()
 
-				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore)
-				log.Info("shutdown step 11: closing v2 database",
-					logger.Int("step", 11),
-					logger.String("operation", "shutdown_v2_database"))
-				closeV2Database()
+				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore).
+				// In v2-only mode, the v2only.Datastore wraps the same manager — closing is
+				// handled by the deferred closeDataStore call to avoid double-close errors.
+				if !v2OnlyMode {
+					log.Info("shutdown step 11: closing v2 database",
+						logger.Int("step", 11),
+						logger.String("operation", "shutdown_v2_database"))
+					closeV2Database()
+				}
 
 				log.Info("graceful shutdown completed",
 					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
