@@ -23,8 +23,8 @@ func TestCalculateVisibilityThreshold(t *testing.T) {
 		{name: "low_filtering_5detections", minDetections: 5, expected: 2},
 		{name: "very_low_4detections", minDetections: 4, expected: 2},
 		{name: "minimal_2detections", minDetections: 2, expected: 2},
-		{name: "filtering_disabled_1detection", minDetections: 1, expected: 2},
-		{name: "zero_detections", minDetections: 0, expected: 2},
+		{name: "filtering_disabled_1detection", minDetections: 1, expected: 1},
+		{name: "zero_detections", minDetections: 0, expected: 0},
 		{name: "medium_filtering_6detections", minDetections: 6, expected: 2},
 		{name: "level4_overlap0_2detections", minDetections: 2, expected: 2},
 	}
@@ -36,6 +36,17 @@ func TestCalculateVisibilityThreshold(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+
+	// Invariant: visibility threshold must never exceed minDetections.
+	// Otherwise detections can be approved without ever appearing in "currently hearing".
+	t.Run("threshold_never_exceeds_minDetections", func(t *testing.T) {
+		t.Parallel()
+		for minDet := range 100 {
+			threshold := CalculateVisibilityThreshold(minDet)
+			assert.LessOrEqual(t, threshold, minDet,
+				"threshold %d exceeds minDetections %d — detections would bypass currently hearing", threshold, minDet)
+		}
+	})
 }
 
 func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {

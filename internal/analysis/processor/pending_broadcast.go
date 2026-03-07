@@ -34,10 +34,15 @@ type SSEPendingDetection struct {
 
 // CalculateVisibilityThreshold computes the minimum hit count for a pending
 // detection to be visible in the "currently hearing" card.
-// It returns 25% of minDetections, floored at 2.
+// It returns 25% of minDetections, floored at 2, but never exceeds minDetections.
+// Without the cap, detections could be approved (flushed) before ever becoming
+// visible — e.g. when minDetections=1 (level 0, no filtering) the old floor of 2
+// meant single-hit detections bypassed "currently hearing" entirely.
 func CalculateVisibilityThreshold(minDetections int) int {
 	threshold := minDetections / 4
-	return max(2, threshold)
+	threshold = max(2, threshold)
+	// Never exceed minDetections: approved detections must always be visible first.
+	return min(threshold, minDetections)
 }
 
 // SnapshotVisiblePending returns all pending detections that have accumulated
