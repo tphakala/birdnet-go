@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"slices"
+
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -61,6 +63,24 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 		})
 	}
 	p.pendingMutex.RUnlock()
+
+	// Sort by FirstDetected (oldest first) for stable ordering across broadcasts.
+	slices.SortFunc(result, func(a, b SSEPendingDetection) int {
+		if a.FirstDetected != b.FirstDetected {
+			if a.FirstDetected < b.FirstDetected {
+				return -1
+			}
+			return 1
+		}
+		// Tie-break by species name for determinism.
+		if a.Species < b.Species {
+			return -1
+		}
+		if a.Species > b.Species {
+			return 1
+		}
+		return 0
+	})
 
 	return result
 }

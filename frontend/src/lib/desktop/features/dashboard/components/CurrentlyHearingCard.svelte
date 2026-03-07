@@ -59,17 +59,17 @@ Props:
 </script>
 
 {#if hasDetections}
-  <div
-    class="mt-4 rounded-xl border border-[var(--color-border)] bg-[var(--color-base-200)] p-4 {className}"
+  <section
+    class="card col-span-12 mt-4 rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm {className}"
   >
-    <div class="mb-3 flex items-center gap-2">
+    <!-- Card Header -->
+    <div class="flex items-center gap-2 border-b border-[var(--color-base-200)] px-6 py-4">
       <Radio class="h-4 w-4 animate-pulse text-[var(--color-success)]" />
-      <h3 class="text-sm font-semibold text-[var(--color-base-content)]">
-        {t('dashboard.currentlyHearing')}
-      </h3>
+      <h3 class="font-semibold">{t('dashboard.currentlyHearing')}</h3>
     </div>
 
-    <div class="flex flex-wrap gap-3">
+    <!-- Card Content -->
+    <div class="flex flex-wrap gap-3 p-4">
       {#each detections as detection (detection.source + detection.scientificName)}
         {@const key = detection.source + detection.scientificName}
         <div
@@ -78,7 +78,7 @@ Props:
             ? 'border border-[var(--color-success)]/30 bg-[var(--color-success)]/15'
             : detection.status === 'rejected'
               ? 'border border-[var(--color-error)]/30 bg-[var(--color-error)]/15 opacity-60'
-              : 'border border-transparent bg-[var(--color-base-300)]'}"
+              : 'border border-transparent bg-[var(--color-base-200)]'}"
         >
           <!-- Thumbnail -->
           {#if detection.thumbnail}
@@ -123,5 +123,5 @@ Props:
         </div>
       {/each}
     </div>
-  </div>
+  </section>
 {/if}
