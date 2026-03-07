@@ -542,7 +542,10 @@
   },
   "dashboard": {
     "approved": "Hyväksytty",
-    "currentlyHearing": "Kuunnellaan nyt",
+    "currentlyHearing": {
+      "title": "Kuunnellaan nyt",
+      "subtitle": "Lajeja tunnistetaan reaaliajassa"
+    },
     "rejected": "Hylätty",
     "dailySummary": {
       "title": "Päivän aktiivisuus",

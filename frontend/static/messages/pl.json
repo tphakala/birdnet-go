@@ -542,7 +542,10 @@
   },
   "dashboard": {
     "approved": "Zatwierdzone",
-    "currentlyHearing": "Aktualnie słychać",
+    "currentlyHearing": {
+      "title": "Aktualnie słychać",
+      "subtitle": "Gatunki identyfikowane w czasie rzeczywistym"
+    },
     "rejected": "Odrzucone",
     "dailySummary": {
       "title": "Dzienna Aktywność",

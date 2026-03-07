@@ -74,6 +74,8 @@ Props:
       }
     }
 
+    // Sort newest first so new detections appear on the left
+    result.sort((a, b) => b.firstDetected - a.firstDetected);
     return result;
   });
 
@@ -128,7 +130,12 @@ Props:
   >
     <!-- Card Header -->
     <div class="flex items-center gap-2 border-b border-[var(--color-base-200)] px-6 py-4">
-      <h3 class="font-semibold">{t('dashboard.currentlyHearing')}</h3>
+      <div class="flex flex-col">
+        <h3 class="font-semibold">{t('dashboard.currentlyHearing.title')}</h3>
+        <p class="text-sm text-[var(--color-base-content)]/60">
+          {t('dashboard.currentlyHearing.subtitle')}
+        </p>
+      </div>
     </div>
 
     <!-- Card Content -->

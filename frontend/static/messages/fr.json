@@ -542,7 +542,10 @@
   },
   "dashboard": {
     "approved": "Approuvé",
-    "currentlyHearing": "En écoute",
+    "currentlyHearing": {
+      "title": "En écoute",
+      "subtitle": "Espèces identifiées en temps réel"
+    },
     "rejected": "Rejeté",
     "dailySummary": {
       "title": "Activité Quotidienne",

@@ -542,7 +542,10 @@
   },
   "dashboard": {
     "approved": "Schválené",
-    "currentlyHearing": "Práve počuť",
+    "currentlyHearing": {
+      "title": "Práve počuť",
+      "subtitle": "Druhy identifikované v reálnom čase"
+    },
     "rejected": "Zamietnuté",
     "dailySummary": {
       "title": "Denná aktivita",

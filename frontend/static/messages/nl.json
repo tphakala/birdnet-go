@@ -542,7 +542,10 @@
   },
   "dashboard": {
     "approved": "Goedgekeurd",
-    "currentlyHearing": "Nu te horen",
+    "currentlyHearing": {
+      "title": "Nu te horen",
+      "subtitle": "Soorten worden in realtime geïdentificeerd"
+    },
     "rejected": "Afgewezen",
     "dailySummary": {
       "title": "Dagactiviteit",
