@@ -191,3 +191,70 @@ func TestBuildFlushNotification(t *testing.T) {
 	rejected := p.buildFlushNotification(item, PendingStatusRejected)
 	assert.Equal(t, PendingStatusRejected, rejected.Status)
 }
+
+func TestSnapshotVisiblePending_UsesCreatedAtNotFirstDetected(t *testing.T) {
+	t.Parallel()
+
+	// FirstDetected is back-dated (for audio export), CreatedAt is real wall-clock time.
+	// SSE output should use CreatedAt.
+	backdatedTime := time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC)
+	realCreationTime := time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC) // 13s later
+
+	p := &Processor{
+		Settings: &conf.Settings{},
+		pendingDetections: map[string]PendingDetection{
+			"src1:test_species": {
+				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     "Test Bird",
+							ScientificName: "Testus birdus",
+						},
+					},
+				},
+				Source:        "src1",
+				FirstDetected: backdatedTime,
+				CreatedAt:     realCreationTime,
+				Count:         5,
+			},
+		},
+	}
+
+	result := p.SnapshotVisiblePending(4) // threshold = max(2, 4/4) = 2, count=5 passes
+	require.Len(t, result, 1)
+
+	// The SSE firstDetected field should use CreatedAt (real time), NOT FirstDetected (back-dated)
+	assert.Equal(t, realCreationTime.Unix(), result[0].FirstDetected,
+		"SSE firstDetected should use CreatedAt (real wall-clock time), not the back-dated FirstDetected")
+	assert.NotEqual(t, backdatedTime.Unix(), result[0].FirstDetected,
+		"SSE firstDetected must NOT use the back-dated FirstDetected timestamp")
+}
+
+func TestBuildFlushNotification_UsesCreatedAt(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{},
+	}
+
+	backdatedTime := time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC)
+	realCreationTime := time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC)
+
+	item := &PendingDetection{
+		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Test Bird",
+					ScientificName: "Testus birdus",
+				},
+			},
+		},
+		Source:        "src1",
+		FirstDetected: backdatedTime,
+		CreatedAt:     realCreationTime,
+	}
+
+	notification := p.buildFlushNotification(item, PendingStatusApproved)
+	assert.Equal(t, realCreationTime.Unix(), notification.FirstDetected,
+		"Flush notification should use CreatedAt for display timestamp")
+}
