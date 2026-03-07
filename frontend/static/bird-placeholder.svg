@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240">
 <rect width="100%" height="100%" fill="#e5e7eb"/>
-<g transform="translate(160, 120) scale(1.15) translate(-147.5, -130)">
-<path d="M 240 95 L 230 83 C 215 70, 195 70, 180 80 C 155 95, 130 115, 115 135 Q 150 145, 185 140 C 205 135, 205 110, 190 102" fill="none" stroke="#9ca3af" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 240 95 L 228 100 C 228 115, 220 135, 200 148 C 175 165, 140 165, 110 158 L 55 175 L 105 148" fill="none" stroke="#9ca3af" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 155 163 L 165 190 M 175 161 L 185 190 M 150 190 L 200 190" fill="none" stroke="#9ca3af" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="210" cy="88" r="3.5" fill="#9ca3af"/>
+<g transform="translate(160, 120) scale(1.45) translate(-147.5, -130)">
+<path d="M 240 95 L 230 83 C 215 70, 195 70, 180 80 C 155 95, 130 115, 115 135 Q 150 145, 185 140 C 205 135, 205 110, 190 102" fill="none" stroke="#6b7280" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 240 95 L 228 100 C 228 115, 220 135, 200 148 C 175 165, 140 165, 110 158 L 55 175 L 105 148" fill="none" stroke="#6b7280" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M 155 163 L 165 190 M 175 161 L 185 190 M 150 190 L 200 190" fill="none" stroke="#6b7280" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="210" cy="88" r="3.5" fill="#6b7280"/>
 </g>
 </svg>
