@@ -476,6 +476,12 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 
 	for {
 		select {
+		case <-c.ctx.Done():
+			// Controller shutting down
+			c.logInfoIfEnabled("stream health SSE client disconnected due to shutdown",
+				logger.String("client_id", clientID),
+			)
+			return nil
 		case <-heartbeatTicker.C:
 			if err := c.handleStreamHealthHeartbeat(ctx, clientID); err != nil {
 				return err

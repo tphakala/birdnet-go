@@ -309,6 +309,12 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 	// Main event loop - reads from subscriber channel instead of source channel
 	for {
 		select {
+		case <-c.ctx.Done():
+			// Controller shutting down
+			c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
+				logger.String("reason", "shutdown"))
+			return nil
+
 		case <-timeoutCtx.Done():
 			c.logAPIRequest(ctx, logger.LogLevelInfo, "Audio level SSE connection closed",
 				logger.String("reason", "timeout_or_cancelled"))
