@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Schválené",
+    "currentlyHearing": "Práve počuť",
+    "rejected": "Zamietnuté",
     "dailySummary": {
       "title": "Denná aktivita",
       "subtitle": "Detekcie druhov podľa hodín",

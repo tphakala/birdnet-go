@@ -35,6 +35,7 @@ const (
 	// Buffer sizes
 	sseDetectionBufferSize  = 100 // Buffer size for detection channels (high volume)
 	sseSoundLevelBufferSize = 100 // Buffer size for sound level channels
+	ssePendingBufferSize    = 10  // Buffer size for pending detection channels
 	sseMinimalBufferSize    = 1   // Minimal buffer for unused channels
 	sseDoneChannelBuffer    = 1   // Buffer for Done channels to prevent blocking
 
@@ -86,6 +87,7 @@ type SSEClient struct {
 	ID             string
 	Channel        chan SSEDetectionData
 	SoundLevelChan chan SSESoundLevelData
+	PendingChan    chan any // Channel for pending detection snapshots ([]SSEPendingDetection from processor)
 	Request        *http.Request
 	Response       http.ResponseWriter
 	Done           chan struct{} // Signal-only buffered channel to prevent blocking
@@ -139,6 +141,9 @@ func (m *SSEManager) RemoveClient(clientID string) {
 		}
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
+		}
+		if client.PendingChan != nil {
+			close(client.PendingChan)
 		}
 		close(client.Done)
 		delete(m.clients, clientID)
@@ -244,6 +249,49 @@ func (m *SSEManager) BroadcastSoundLevel(soundLevel *SSESoundLevelData) {
 	}
 }
 
+// BroadcastPending sends pending detection data to all connected detection stream clients.
+// Uses non-blocking send to prevent slow clients from blocking the processor.
+// Clients are automatically disconnected after maxConsecutiveDrops failed sends.
+func (m *SSEManager) BroadcastPending(pending any) {
+	m.mutex.RLock()
+
+	if len(m.clients) == 0 {
+		m.mutex.RUnlock()
+		return
+	}
+
+	var blockedClients []string
+
+	for clientID, client := range m.clients {
+		// Only send to clients receiving detection data
+		if client.StreamType != streamTypeDetections && client.StreamType != streamTypeAll {
+			continue
+		}
+		if client.PendingChan == nil {
+			continue
+		}
+		select {
+		case client.PendingChan <- pending:
+			client.consecutiveDrops.Store(0)
+		default:
+			drops := client.consecutiveDrops.Add(1)
+			if drops >= maxConsecutiveDrops {
+				GetLogger().Info("SSE client disconnected after consecutive drops",
+					logger.String("client_id", clientID),
+					logger.Int("consecutive_drops", int(drops)),
+				)
+				blockedClients = append(blockedClients, clientID)
+			}
+		}
+	}
+
+	m.mutex.RUnlock()
+
+	for _, clientID := range blockedClients {
+		m.RemoveClient(clientID)
+	}
+}
+
 // CloseAllClients disconnects all SSE clients during shutdown.
 // This must be called before echo.Shutdown() so the HTTP server
 // has no active connections to wait for.
@@ -257,6 +305,9 @@ func (m *SSEManager) CloseAllClients() {
 		}
 		if client.SoundLevelChan != nil {
 			close(client.SoundLevelChan)
+		}
+		if client.PendingChan != nil {
+			close(client.PendingChan)
 		}
 		close(client.Done)
 		delete(m.clients, id)
@@ -455,24 +506,84 @@ func (c *Controller) StreamDetections(ctx echo.Context) error {
 	return c.handleSSEStream(ctx, streamTypeDetections, "Connected to detection stream", "detection",
 		func(client *SSEClient) {
 			client.Channel = make(chan SSEDetectionData, sseDetectionBufferSize) // Buffer for high detection periods
+			client.PendingChan = make(chan any, ssePendingBufferSize)            // Buffer for pending detection snapshots
 		},
 		func(ctx echo.Context, client *SSEClient, clientID string) error {
-			return c.runSSEEventLoop(ctx, client, clientID, detectionStreamEndpoint,
-				func() (any, bool) {
-					select {
-					case detection, ok := <-client.Channel:
-						if !ok {
-							return nil, false // Channel closed, no more data
-						}
-						return detection, true
-					default:
-						return nil, false
-					}
-				},
-				"detection",
-				"",
-			)
+			return c.runSSEEventLoopMulti(ctx, client, clientID, detectionStreamEndpoint)
 		})
+}
+
+// runSSEEventLoopMulti handles the SSE event loop for detection streams,
+// which receive both detection events and pending detection snapshots.
+func (c *Controller) runSSEEventLoopMulti(ctx echo.Context, client *SSEClient, clientID, endpoint string) error {
+	ticker := time.NewTicker(sseHeartbeatInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if err := c.sendSSEHeartbeat(ctx, clientID, ""); err != nil {
+				c.recordSSEError(endpoint, "heartbeat_failed")
+				return err
+			}
+			c.recordSSEMessage(endpoint, "heartbeat")
+
+		case <-ctx.Request().Context().Done():
+			return nil
+
+		case <-client.Done:
+			return nil
+
+		default:
+			sent := false
+
+			// Check for detection data
+			select {
+			case detection, ok := <-client.Channel:
+				if !ok {
+					return nil
+				}
+				if err := c.sendSSEMessage(ctx, "detection", detection); err != nil {
+					c.logErrorIfEnabled("Failed to send SSE detection",
+						logger.String("client_id", clientID),
+						logger.String("endpoint", endpoint),
+						logger.Error(err),
+					)
+					c.recordSSEError(endpoint, "send_failed")
+					return err
+				}
+				c.recordSSEMessage(endpoint, "detection")
+				sent = true
+			default:
+			}
+
+			// Check for pending data
+			if client.PendingChan != nil {
+				select {
+				case pending, ok := <-client.PendingChan:
+					if !ok {
+						return nil
+					}
+					if err := c.sendSSEMessage(ctx, "pending", pending); err != nil {
+						c.logErrorIfEnabled("Failed to send SSE pending",
+							logger.String("client_id", clientID),
+							logger.String("endpoint", endpoint),
+							logger.Error(err),
+						)
+						c.recordSSEError(endpoint, "send_failed")
+						return err
+					}
+					c.recordSSEMessage(endpoint, "pending")
+					sent = true
+				default:
+				}
+			}
+
+			if !sent {
+				time.Sleep(sseEventLoopSleep)
+			}
+		}
+	}
 }
 
 // StreamSoundLevels handles the SSE connection for real-time sound level streaming
@@ -579,6 +690,14 @@ func (c *Controller) sendSSEMessage(ctx echo.Context, event string, data any) er
 	}
 
 	return nil
+}
+
+// BroadcastPending broadcasts pending detection snapshot from the controller.
+func (c *Controller) BroadcastPending(snapshot any) {
+	if c.sseManager == nil {
+		return
+	}
+	c.sseManager.BroadcastPending(snapshot)
 }
 
 // safeMarshalJSON marshals data to JSON with panic recovery.

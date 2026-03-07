@@ -71,7 +71,7 @@ type Processor struct {
 	DynamicThresholds   map[string]*DynamicThreshold
 	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
 	pendingDetections   map[string]PendingDetection
-	pendingMutex        sync.Mutex // Mutex to protect access to pendingDetections
+	pendingMutex        sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
 	lastDogDetectionLog map[string]time.Time
 	dogDetectionMutex   sync.Mutex
 	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
@@ -87,6 +87,12 @@ type Processor struct {
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
+
+	// Pending detection broadcast fields
+	PendingBroadcaster   func(snapshot []SSEPendingDetection) // Function to broadcast pending detections via SSE
+	pendingBroadcasterMu sync.RWMutex                         // Mutex to protect PendingBroadcaster access
+	pendingFlushNotifs   []SSEPendingDetection                // Terminal-state notifications from last flush cycle
+	pendingFlushNotifsMu sync.Mutex                           // Mutex to protect pendingFlushNotifs
 
 	// Backup system fields (optional)
 	backupManager   any // Use interface{} to avoid import cycle
@@ -602,6 +608,12 @@ func (p *Processor) processDetections(item birdnet.Results) {
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
 	}
+
+	// Broadcast updated pending detections snapshot for "currently hearing" UI.
+	// This runs after all new detections are incorporated into pendingDetections.
+	minDet := p.calculateMinDetections()
+	snapshot := p.SnapshotVisiblePending(minDet)
+	p.broadcastPendingSnapshot(snapshot)
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
@@ -1232,8 +1244,10 @@ func (p *Processor) calculateMinDetections() int {
 func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flushedCount int) {
 	now := time.Now()
 
+	var terminalNotifs []SSEPendingDetection
+	var broadcastSnapshot []SSEPendingDetection
+
 	p.pendingMutex.Lock()
-	defer p.pendingMutex.Unlock()
 
 	pendingCount = len(p.pendingDetections)
 
@@ -1256,6 +1270,12 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 				logger.Int("count", item.Count),
 				logger.String("operation", "discard_detection"))
 			delete(p.pendingDetections, mapKey)
+
+			// Collect rejected notification if species was visible
+			if item.Count >= CalculateVisibilityThreshold(minDetections) {
+				terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusRejected))
+			}
+
 			continue
 		}
 
@@ -1270,6 +1290,39 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		p.processApprovedDetection(&item, speciesName)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
+
+		// Collect approved notification if species was visible
+		if item.Count >= CalculateVisibilityThreshold(minDetections) {
+			terminalNotifs = append(terminalNotifs, p.buildFlushNotification(&item, PendingStatusApproved))
+		}
+	}
+
+	// Build snapshot while still holding the lock, then release before broadcasting.
+	if len(terminalNotifs) > 0 || flushedCount > 0 {
+		threshold := CalculateVisibilityThreshold(minDetections)
+		broadcastSnapshot = make([]SSEPendingDetection, 0, len(p.pendingDetections)+len(terminalNotifs))
+		for key := range p.pendingDetections {
+			item := p.pendingDetections[key]
+			if item.Count >= threshold {
+				broadcastSnapshot = append(broadcastSnapshot, SSEPendingDetection{
+					Species:        item.Detection.Result.Species.CommonName,
+					ScientificName: item.Detection.Result.Species.ScientificName,
+					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
+					Status:         PendingStatusActive,
+					FirstDetected:  item.FirstDetected.Unix(),
+					Source:         p.getDisplayNameForSource(item.Source),
+				})
+			}
+		}
+		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))
+		broadcastSnapshot = append(broadcastSnapshot, terminalNotifs...)
+	}
+
+	p.pendingMutex.Unlock()
+
+	// Broadcast outside the lock to avoid blocking processDetections.
+	if broadcastSnapshot != nil {
+		p.broadcastPendingSnapshot(broadcastSnapshot)
 	}
 
 	return pendingCount, flushedCount
@@ -1655,6 +1708,13 @@ func (p *Processor) GetSSEBroadcaster() func(note *datastore.Note, birdImage *im
 	p.sseBroadcasterMutex.RLock()
 	defer p.sseBroadcasterMutex.RUnlock()
 	return p.SSEBroadcaster
+}
+
+// SetPendingBroadcaster safely sets the pending detection broadcaster function.
+func (p *Processor) SetPendingBroadcaster(broadcaster func(snapshot []SSEPendingDetection)) {
+	p.pendingBroadcasterMu.Lock()
+	defer p.pendingBroadcasterMu.Unlock()
+	p.PendingBroadcaster = broadcaster
 }
 
 // SetBackupManager safely sets the backup manager

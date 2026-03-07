@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Approved",
+    "currentlyHearing": "Currently Hearing",
+    "rejected": "Rejected",
     "dailySummary": {
       "title": "Daily Activity",
       "subtitle": "Species detections by hour",

@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Goedgekeurd",
+    "currentlyHearing": "Nu te horen",
+    "rejected": "Afgewezen",
     "dailySummary": {
       "title": "Dagactiviteit",
       "subtitle": "Detecties per uur",

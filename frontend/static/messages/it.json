@@ -541,6 +541,9 @@
     }
   },
   "dashboard": {
+    "approved": "Approvato",
+    "currentlyHearing": "In ascolto",
+    "rejected": "Rifiutato",
     "dailySummary": {
       "title": "Attività giornaliera",
       "subtitle": "Rilevamenti specie per ora",
