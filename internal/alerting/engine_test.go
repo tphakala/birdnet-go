@@ -53,13 +53,13 @@ func (m *mockAlertRuleRepo) GetRule(_ context.Context, _ uint) (*entities.AlertR
 }
 func (m *mockAlertRuleRepo) CreateRule(_ context.Context, _ *entities.AlertRule) error { return nil }
 func (m *mockAlertRuleRepo) UpdateRule(_ context.Context, _ *entities.AlertRule) error { return nil }
-func (m *mockAlertRuleRepo) DeleteRule(_ context.Context, _ uint) error               { return nil }
+func (m *mockAlertRuleRepo) DeleteRule(_ context.Context, _ uint) error                { return nil }
 func (m *mockAlertRuleRepo) ToggleRule(_ context.Context, _ uint, _ bool) error        { return nil }
 func (m *mockAlertRuleRepo) DeleteBuiltInRules(_ context.Context) (int64, error)       { return 0, nil }
 func (m *mockAlertRuleRepo) ListHistory(_ context.Context, _ repository.AlertHistoryFilter) ([]entities.AlertHistory, int64, error) {
 	return nil, 0, nil
 }
-func (m *mockAlertRuleRepo) DeleteHistory(_ context.Context) (int64, error)            { return 0, nil }
+func (m *mockAlertRuleRepo) DeleteHistory(_ context.Context) (int64, error) { return 0, nil }
 func (m *mockAlertRuleRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error) {
 	return 0, nil
 }
@@ -413,6 +413,46 @@ func TestEngine_NoCooldownMeansAlwaysFires(t *testing.T) {
 	engine.HandleEvent(event)
 
 	assert.Equal(t, 3, fireCount, "with 0 cooldown, rule should fire every time")
+}
+
+func TestEngine_DiskMetricPathIsolation(t *testing.T) {
+	rule := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeSystem,
+		TriggerType: TriggerTypeMetric,
+		MetricName:  MetricDiskUsage,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0},
+		},
+	}
+	repo := newMockRepo(rule)
+
+	var fired bool
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
+		fired = true
+	}, testLogger())
+
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	// Send event for "/" at 90% — should trigger the rule.
+	engine.HandleEvent(&AlertEvent{
+		ObjectType: ObjectTypeSystem,
+		MetricName: MetricDiskUsage,
+		Properties: map[string]any{PropertyValue: 90.0, PropertyPath: "/"},
+		Timestamp:  time.Now(),
+	})
+	assert.True(t, fired, "disk usage rule should fire for / at 90%%")
+
+	// Reset and send event for "/data" at 15% — should NOT trigger.
+	fired = false
+	engine.HandleEvent(&AlertEvent{
+		ObjectType: ObjectTypeSystem,
+		MetricName: MetricDiskUsage,
+		Properties: map[string]any{PropertyValue: 15.0, PropertyPath: "/data"},
+		Timestamp:  time.Now(),
+	})
+	assert.False(t, fired, "disk usage rule should not fire for /data at 15%%")
 }
 
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {

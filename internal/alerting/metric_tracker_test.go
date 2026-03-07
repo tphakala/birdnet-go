@@ -105,6 +105,24 @@ func TestMetricTracker_InvalidThreshold(t *testing.T) {
 	assert.False(t, tracker.IsSustained("cpu", OperatorGreaterThan, "not_a_number", 0, now))
 }
 
+func TestMetricTracker_MultiDiskIsolation(t *testing.T) {
+	t.Parallel()
+	tracker := NewMetricTracker()
+	base := time.Now().Add(-6 * time.Minute)
+
+	for i := range 7 {
+		ts := base.Add(time.Duration(i) * time.Minute)
+		tracker.Record("system.disk_usage|/", 90.0, ts)
+		tracker.Record("system.disk_usage|/data", 15.0, ts)
+	}
+
+	now := base.Add(6 * time.Minute)
+	assert.True(t, tracker.IsSustained("system.disk_usage|/", OperatorGreaterThan, "85", 5*time.Minute, now),
+		"root disk should sustain above 85%%")
+	assert.False(t, tracker.IsSustained("system.disk_usage|/data", OperatorGreaterThan, "85", 5*time.Minute, now),
+		"data disk should not be above 85%%")
+}
+
 func TestMetricTracker_LessThanOperator(t *testing.T) {
 	tracker := NewMetricTracker()
 	base := time.Now().Add(-6 * time.Minute)
