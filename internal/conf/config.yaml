@@ -182,6 +182,15 @@ realtime:
         - type: LowPass
           frequency: 15000
           passes: 0 
+    quiethours:
+      enabled: false      # true to enable quiet hours (stop capture during specified times)
+      mode: fixed         # "fixed" for clock times, "solar" for sunrise/sunset based
+      starttime: "22:00"  # start of quiet period (HH:MM, fixed mode)
+      endtime: "06:00"    # end of quiet period (HH:MM, fixed mode)
+      startevent: sunset  # solar event for start (solar mode): "sunrise" or "sunset"
+      startoffset: 0      # minutes offset from start event (solar mode, -180 to 180)
+      endevent: sunrise   # solar event for end (solar mode): "sunrise" or "sunset"
+      endoffset: 0        # minutes offset from end event (solar mode, -180 to 180)
     export:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages

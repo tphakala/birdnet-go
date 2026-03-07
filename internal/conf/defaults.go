@@ -106,6 +106,16 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0) // typical range for broadcast
 	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)     // headroom to prevent clipping
 
+	// Quiet hours configuration (sound card)
+	viper.SetDefault("realtime.audio.quiethours.enabled", false)
+	viper.SetDefault("realtime.audio.quiethours.mode", QuietHoursModeFixed)
+	viper.SetDefault("realtime.audio.quiethours.starttime", "22:00")
+	viper.SetDefault("realtime.audio.quiethours.endtime", "06:00")
+	viper.SetDefault("realtime.audio.quiethours.startevent", SolarEventSunset)
+	viper.SetDefault("realtime.audio.quiethours.startoffset", 0)
+	viper.SetDefault("realtime.audio.quiethours.endevent", SolarEventSunrise)
+	viper.SetDefault("realtime.audio.quiethours.endoffset", 0)
+
 	// Audio equalizer configuration
 	viper.SetDefault("realtime.audio.equalizer.enabled", false)
 	viper.SetDefault("realtime.audio.equalizer.filters", []map[string]any{
