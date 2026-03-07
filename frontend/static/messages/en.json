@@ -542,7 +542,7 @@
   },
   "dashboard": {
     "approved": "Approved",
-    "currentlyHearing": "Currently hearing",
+    "currentlyHearing": "Currently Hearing",
     "rejected": "Rejected",
     "dailySummary": {
       "title": "Daily Activity",

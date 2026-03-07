@@ -4,6 +4,7 @@ CurrentlyHearingCard.svelte - Real-time pending detection display
 Purpose:
 - Shows species currently being detected by BirdNET in real-time
 - Provides visual feedback when detections are approved or rejected
+- Retains terminal (approved/rejected) states for a few seconds before fading out
 - Hidden entirely when no pending detections exist
 
 Props:
@@ -11,7 +12,8 @@ Props:
 - className?: string - Additional CSS classes (default: '')
 -->
 <script lang="ts">
-  import { Radio, Check, X } from '@lucide/svelte';
+  import { Check, X } from '@lucide/svelte';
+  import { fade } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
 
@@ -21,6 +23,61 @@ Props:
   }
 
   let { detections = [], className = '' }: Props = $props();
+
+  // How long terminal (approved/rejected) detections remain visible (ms)
+  const TERMINAL_RETENTION_MS = 3000;
+
+  // Retained terminal detections kept visible after backend stops sending them
+  let retainedKeys = $state<string[]>([]);
+  let retainedData: Record<string, PendingDetection> = {};
+  let removalTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+
+  function detectionKey(d: PendingDetection): string {
+    return d.source + d.scientificName;
+  }
+
+  // Track terminal detections and schedule their removal
+  $effect(() => {
+    for (const d of detections) {
+      const key = detectionKey(d);
+      if ((d.status === 'approved' || d.status === 'rejected') && !(key in removalTimers)) {
+        retainedData[key] = d;
+        removalTimers[key] = setTimeout(() => {
+          delete retainedData[key];
+          delete removalTimers[key];
+          retainedKeys = retainedKeys.filter(k => k !== key);
+        }, TERMINAL_RETENTION_MS);
+        if (!retainedKeys.includes(key)) {
+          retainedKeys = [...retainedKeys, key];
+        }
+      }
+    }
+  });
+
+  // Merge incoming detections with retained terminal ones
+  let displayDetections = $derived.by(() => {
+    // Read retainedKeys to establish reactive dependency
+    const retained = retainedKeys;
+
+    const incomingByKey = new Set<string>();
+    for (const d of detections) {
+      incomingByKey.add(detectionKey(d));
+    }
+
+    const result: PendingDetection[] = [...detections];
+    for (const key of retained) {
+      if (!incomingByKey.has(key)) {
+        const data = retainedData[key];
+        if (data) {
+          result.push(data);
+        }
+      }
+    }
+
+    return result;
+  });
+
+  let hasDisplayDetections = $derived(displayDetections.length > 0);
 
   // Compute relative time string from Unix timestamp
   function getElapsedText(firstDetected: number): string {
@@ -34,9 +91,8 @@ Props:
 
   // Refresh elapsed times every second
   let tick = $state(0);
-  let hasDetections = $derived(detections.length > 0);
   $effect(() => {
-    if (!hasDetections) return;
+    if (!hasDisplayDetections) return;
     const interval = setInterval(() => {
       tick++;
     }, 1000);
@@ -45,53 +101,52 @@ Props:
 
   // Force re-evaluation of elapsed text when tick changes
   let elapsedTexts = $derived.by(() => {
-    // Reference tick to trigger reactivity
     void tick;
     const result: Record<string, string> = {};
-    for (const d of detections) {
-      result[d.source + d.scientificName] = getElapsedText(d.firstDetected);
+    for (const d of displayDetections) {
+      result[detectionKey(d)] = getElapsedText(d.firstDetected);
     }
     return result;
   });
 
   // Show source column only when multiple sources are present
-  let hasMultipleSources = $derived(new Set(detections.map(d => d.source)).size > 1);
+  let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
 </script>
 
-{#if hasDetections}
+{#if hasDisplayDetections}
   <section
     class="card col-span-12 mt-4 rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm {className}"
   >
     <!-- Card Header -->
     <div class="flex items-center gap-2 border-b border-[var(--color-base-200)] px-6 py-4">
-      <Radio class="h-4 w-4 animate-pulse text-[var(--color-success)]" />
       <h3 class="font-semibold">{t('dashboard.currentlyHearing')}</h3>
     </div>
 
     <!-- Card Content -->
     <div class="flex flex-wrap gap-3 p-4">
-      {#each detections as detection (detection.source + detection.scientificName)}
+      {#each displayDetections as detection (detection.source + detection.scientificName)}
         {@const key = detection.source + detection.scientificName}
         <div
-          class="flex items-center gap-2 rounded-lg px-3 py-2 transition-all duration-300
+          class="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-300
             {detection.status === 'approved'
             ? 'border border-[var(--color-success)]/30 bg-[var(--color-success)]/15'
             : detection.status === 'rejected'
               ? 'border border-[var(--color-error)]/30 bg-[var(--color-error)]/15 opacity-60'
               : 'border border-transparent bg-[var(--color-base-200)]'}"
+          transition:fade={{ duration: 200 }}
         >
           <!-- Thumbnail -->
           {#if detection.thumbnail}
             <img
               src={detection.thumbnail}
               alt={detection.species}
-              class="h-8 w-8 rounded-full object-cover"
+              class="h-8 w-8 rounded-md object-cover"
             />
           {:else}
             <div
-              class="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--color-base-content)]/10"
+              class="flex h-8 w-8 items-center justify-center rounded-md bg-[var(--color-base-content)]/10 text-xs font-bold text-[var(--color-base-content)]/50"
             >
-              <Radio class="h-4 w-4 text-[var(--color-base-content)]/50" />
+              {detection.species.slice(0, 2).toUpperCase()}
             </div>
           {/if}
 
