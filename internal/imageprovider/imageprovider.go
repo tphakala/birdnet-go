@@ -439,6 +439,22 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		if c.metrics != nil {
 			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "cache_refresh_fetch")
 		}
+
+		// Try fallback providers before giving up
+		if fallbackImg, found := c.tryRefreshFallback(scientificName); found {
+			// Store in primary cache's memory with original SourceProvider for correct attribution
+			c.dataMap.Store(scientificName, &fallbackImg)
+			// Save to DB under primary provider name so loadFromDBCache finds it on restart
+			// and refreshStaleEntries won't keep re-triggering for this species
+			dbCopy := fallbackImg
+			dbCopy.SourceProvider = c.providerName
+			c.saveToDB(&dbCopy)
+			log.Debug("Background refresh: using fallback provider image",
+				logger.String("source_provider", fallbackImg.SourceProvider))
+			if c.metrics != nil {
+				c.metrics.IncrementImageDownloads()
+			}
+		}
 		return
 	}
 
@@ -454,6 +470,54 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 		c.metrics.IncrementImageDownloads()
 	}
 	log.Debug("Successfully refreshed cache entry")
+}
+
+// tryRefreshFallback attempts to find an image from fallback providers during background refresh.
+// It uses a two-tier approach to minimize network requests:
+// Tier 1: Check fallback providers' DB cache (no network request needed)
+// Tier 2: Fetch from fallback providers via network (only if DB had nothing valid)
+func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, bool) {
+	log := GetLogger().With(
+		logger.String("provider", c.providerName),
+		logger.String("scientific_name", scientificName))
+
+	settings := conf.Setting()
+	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
+		return BirdImage{}, false
+	}
+
+	registry := c.GetRegistry()
+	if registry == nil {
+		return BirdImage{}, false
+	}
+
+	// Tier 1: Check fallback providers' DB cache (no network)
+	if c.store != nil {
+		for _, providerName := range fallbackProviders {
+			if providerName == c.providerName {
+				continue
+			}
+			query := datastore.ImageCacheQuery{
+				ScientificName: scientificName,
+				ProviderName:   providerName,
+			}
+			cachedImage, err := c.store.GetImageCache(query)
+			if err != nil || cachedImage == nil {
+				continue
+			}
+			img := dbEntryToBirdImage(cachedImage)
+			if img.URL != "" && !img.IsNegativeEntry() && !isCacheEntryStale(img.CachedAt, false) {
+				log.Debug("Background refresh: found valid fallback image in DB cache",
+					logger.String("fallback_provider", providerName))
+				return img, true
+			}
+		}
+	}
+
+	// Tier 2: Fetch from fallback providers via network (only if DB had nothing valid)
+	log.Debug("Background refresh: no valid fallback in DB, trying network fetch")
+	triedProviders := map[string]bool{c.providerName: true}
+	return c.tryFallbackProviders(scientificName, triedProviders)
 }
 
 // Close stops the cache refresh routine and performs cleanup
