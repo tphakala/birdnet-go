@@ -647,7 +647,7 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
 		AuthorName:     "Old Author",
 		AuthorURL:      "http://example.com/old-author",
-		CachedAt:       time.Now().Add(-15 * 24 * time.Hour), // 15 days old
+		CachedAt:       time.Now().Add(-31 * 24 * time.Hour), // 31 days old
 		ProviderName:   "wikimedia",                          // Add provider name to match the default cache provider
 	}
 	t.Logf("Created old entry: CachedAt=%v", oldEntry.CachedAt)
@@ -901,7 +901,7 @@ func TestUserRequestsNotRateLimited(t *testing.T) {
 // populateStaleEntries adds stale cache entries to the store to trigger background refresh.
 func populateStaleEntries(t *testing.T, store *mockStore, count int) {
 	t.Helper()
-	staleTime := time.Now().Add(-15 * 24 * time.Hour)
+	staleTime := time.Now().Add(-31 * 24 * time.Hour)
 	for i := range count {
 		species := fmt.Sprintf("StaleSpecies_%d", i)
 		err := store.SaveImageCache(&datastore.ImageCache{

@@ -4,7 +4,10 @@ package imageprovider
 import (
 	"context"
 	"fmt"
+	"io"
 	"maps"
+	"net/http"
+	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -112,9 +115,21 @@ type BirdImageCache struct {
 	metrics      *metrics.ImageProviderMetrics
 	debug        bool
 	store        datastore.Interface
+	fileCache    *ImageFileCache
 	quit         chan struct{}                         // Channel to signal shutdown
 	Initializing sync.Map                              // Track which species are being initialized
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
+}
+
+// GetFileCache returns the file cache instance, or nil if not configured.
+func (c *BirdImageCache) GetFileCache() *ImageFileCache {
+	return c.fileCache
+}
+
+// ProxyImageURL generates the proxy URL for serving a cached bird image.
+func ProxyImageURL(scientificName string) string {
+	encoded := url.PathEscape(scientificName)
+	return fmt.Sprintf("/api/v2/media/image/%s", encoded)
 }
 
 // GetLogger returns the package logger for the imageprovider module
@@ -149,7 +164,7 @@ func (c *BirdImageCache) SetImageProvider(provider ImageProvider) {
 }
 
 const (
-	defaultCacheTTL     = 14 * 24 * time.Hour // 14 days for positive entries
+	defaultCacheTTL     = 30 * 24 * time.Hour // 30 days for positive entries
 	negativeCacheTTL    = 15 * time.Minute    // 15 minutes for negative entries
 	refreshInterval     = 1 * time.Hour       // Check for stale entries every hour in production
 	refreshBatchSize    = 10                  // Number of entries to refresh in one batch
@@ -555,6 +570,7 @@ func InitCache(providerName string, e ImageProvider, t *observability.Metrics, s
 		metrics:      imageProviderMetrics,
 		debug:        settings.Realtime.Dashboard.Thumbnails.Debug, // Keep for potential checks
 		store:        store,
+		fileCache:    NewImageFileCache(imageCacheDir),
 		quit:         quit,
 	}
 
@@ -1237,12 +1253,60 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 	c.dataMap.Store(scientificName, fetchedImage)
 	c.saveToDB(fetchedImage)
 
+	// Download image to disk cache
+	if c.fileCache != nil && fetchedImage.URL != "" && !fetchedImage.IsNegativeEntry() {
+		go c.downloadImageToFileCache(scientificName, fetchedImage)
+	}
+
 	if c.metrics != nil {
 		c.metrics.IncrementCacheMisses()
 		c.metrics.IncrementImageDownloads()
 	}
 
 	return *fetchedImage
+}
+
+// downloadImageToFileCache fetches the image bytes from the URL and stores in the file cache.
+func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *BirdImage) {
+	log := GetLogger().With(
+		logger.String("provider", c.providerName),
+		logger.String("scientific_name", scientificName))
+
+	provider := img.SourceProvider
+	if provider == "" {
+		provider = c.providerName
+	}
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(img.URL)
+	if err != nil {
+		log.Warn("Failed to download image for file cache", logger.Error(err))
+		return
+	}
+	defer func() {
+		if cerr := resp.Body.Close(); cerr != nil {
+			log.Warn("Failed to close response body", logger.Error(cerr))
+		}
+	}()
+
+	if resp.StatusCode != http.StatusOK {
+		log.Warn("Non-200 response downloading image for file cache",
+			logger.Int("status", resp.StatusCode))
+		return
+	}
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Warn("Failed to read image body for file cache", logger.Error(err))
+		return
+	}
+
+	if _, err := c.fileCache.Store(provider, scientificName, data, img.URL); err != nil {
+		log.Warn("Failed to store image in file cache", logger.Error(err))
+		return
+	}
+
+	log.Debug("Image downloaded to file cache")
 }
 
 // logSlowOperation logs if an operation exceeds the threshold.
