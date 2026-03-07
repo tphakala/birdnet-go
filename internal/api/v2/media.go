@@ -2041,13 +2041,6 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.HandleError(ctx, ErrImageProviderNotAvailable, "Image service unavailable", http.StatusServiceUnavailable)
 	}
 
-	// Get the file cache from the BirdImageCache
-	fileCache := c.BirdImageCache.GetFileCache()
-	if fileCache == nil {
-		// No file cache, fall back to redirect
-		return c.serveImageViaRedirect(ctx, scientificName)
-	}
-
 	// Look up metadata to know which provider owns this image
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
@@ -2058,9 +2051,22 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
 	}
 
+	// Negative cache entries have no real image URL
+	if birdImage.IsNegativeEntry() || birdImage.URL == "" {
+		ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
+		return c.HandleError(ctx, ErrImageNotFound, "Image not found for species", http.StatusNotFound)
+	}
+
+	// Get the file cache from the BirdImageCache
+	fileCache := c.BirdImageCache.GetFileCache()
+	if fileCache == nil {
+		// No file cache configured, redirect to external URL
+		return ctx.Redirect(http.StatusFound, birdImage.URL)
+	}
+
 	provider := birdImage.SourceProvider
 	if provider == "" {
-		provider = "unknown"
+		provider = c.BirdImageCache.GetProviderName()
 	}
 
 	// Try to serve from file cache
@@ -2077,7 +2083,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 	}
 
 	// File not cached or stale — download it
-	newPath, newCT, dlErr := fileCache.DownloadAndStore(provider, scientificName, birdImage.URL)
+	newPath, newCT, dlErr := fileCache.DownloadAndStore(ctx.Request().Context(), provider, scientificName, birdImage.URL)
 	if dlErr != nil {
 		// Graceful degradation: serve stale file if available, otherwise redirect
 		if cachedPath != "" {
@@ -2127,19 +2133,6 @@ func (c *Controller) serveImageFile(ctx echo.Context, filePath, contentType stri
 	// http.ServeContent handles Last-Modified, If-Modified-Since, and range requests.
 	http.ServeContent(ctx.Response(), ctx.Request(), filepath.Base(filePath), info.ModTime(), file)
 	return nil
-}
-
-// serveImageViaRedirect falls back to redirecting to the external image URL.
-func (c *Controller) serveImageViaRedirect(ctx echo.Context, scientificName string) error {
-	birdImage, err := c.BirdImageCache.Get(scientificName)
-	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
-			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
-		}
-		return c.HandleError(ctx, err, "Failed to fetch species image", http.StatusInternalServerError)
-	}
-	return ctx.Redirect(http.StatusFound, birdImage.URL)
 }
 
 // HandleError method should exist on Controller, typically defined in controller.go or api.go

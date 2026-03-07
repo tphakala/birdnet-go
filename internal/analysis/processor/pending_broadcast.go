@@ -97,8 +97,8 @@ func (p *Processor) getThumbnailURL(scientificName string) string {
 	if p.BirdImageCache == nil {
 		return ""
 	}
-	_, err := p.BirdImageCache.Get(scientificName)
-	if err != nil {
+	img, err := p.BirdImageCache.Get(scientificName)
+	if err != nil || img.IsNegativeEntry() || img.URL == "" {
 		return ""
 	}
 	return imageprovider.ProxyImageURL(scientificName)

@@ -122,7 +122,7 @@ func TestImageFileCache_RejectsPathTraversal(t *testing.T) {
 func TestImageFileCache_DownloadAndStore_InvalidURL(t *testing.T) {
 	t.Parallel()
 	cache := NewImageFileCache(t.TempDir())
-	_, _, err := cache.DownloadAndStore("avicommons", "Test species", "http://invalid.test/img.jpg")
+	_, _, err := cache.DownloadAndStore(t.Context(), "avicommons", "Test species", "http://[::1]:0/img.jpg")
 	assert.Error(t, err)
 }
 

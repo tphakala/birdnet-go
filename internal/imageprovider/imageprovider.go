@@ -124,6 +124,11 @@ func (c *BirdImageCache) GetFileCache() *ImageFileCache {
 	return c.fileCache
 }
 
+// GetProviderName returns the name of the primary image provider (e.g. "wikimedia").
+func (c *BirdImageCache) GetProviderName() string {
+	return c.providerName
+}
+
 // ProxyImageURL generates the proxy URL for serving a cached bird image.
 func ProxyImageURL(scientificName string) string {
 	encoded := url.PathEscape(scientificName)
@@ -467,9 +472,9 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 			if c.metrics != nil {
 				c.metrics.IncrementImageDownloads()
 			}
-			// Download fallback image to file cache
+			// Download fallback image to file cache using dbCopy which has the corrected SourceProvider
 			if c.fileCache != nil {
-				go c.downloadImageToFileCache(scientificName, &fallbackImg)
+				go c.downloadImageToFileCache(scientificName, &dbCopy)
 			}
 		}
 		return
@@ -1284,7 +1289,7 @@ func (c *BirdImageCache) downloadImageToFileCache(scientificName string, img *Bi
 		provider = c.providerName
 	}
 
-	if _, _, err := c.fileCache.DownloadAndStore(provider, scientificName, img.URL); err != nil {
+	if _, _, err := c.fileCache.DownloadAndStore(context.Background(), provider, scientificName, img.URL); err != nil {
 		log.Warn("Failed to download image to file cache", logger.Error(err))
 		return
 	}

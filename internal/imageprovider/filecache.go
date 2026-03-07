@@ -201,6 +201,17 @@ func (c *ImageFileCache) Store(provider, scientificName string, data []byte, sou
 		return "", "", fmt.Errorf("rename temp file: %w", renameErr)
 	}
 
+	// Remove stale files with different extensions (e.g. old .png when new file is .jpg).
+	for _, oldExt := range knownExtensions {
+		if oldExt == ext {
+			continue
+		}
+		stale := filepath.Join(dir, namePrefix+oldExt)
+		if err := os.Remove(stale); err == nil {
+			log.Debug("Removed stale cached image variant", logger.String("path", stale))
+		}
+	}
+
 	resolvedCT := contentTypeFromExtension(ext)
 	log.Debug("Stored image in file cache",
 		logger.String("path", finalPath),
@@ -278,16 +289,25 @@ type downloadResult struct {
 }
 
 // DownloadAndStore fetches image bytes from imageURL, stores to disk, deduplicating concurrent requests.
+// The provided context is used for the HTTP request and semaphore acquisition, enabling cancellation.
 // Returns the cached file path and the resolved content type.
-func (fc *ImageFileCache) DownloadAndStore(provider, scientificName, imageURL string) (filePath, contentType string, err error) {
+func (fc *ImageFileCache) DownloadAndStore(ctx context.Context, provider, scientificName, imageURL string) (filePath, contentType string, err error) {
 	key := provider + "/" + normalizeSpeciesName(scientificName)
 
 	result, err, _ := fc.sfGroup.Do(key, func() (any, error) {
-		// Acquire semaphore to limit concurrent downloads.
-		fc.downloadSem <- struct{}{}
+		// Acquire semaphore to limit concurrent downloads, respecting context cancellation.
+		select {
+		case fc.downloadSem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 		defer func() { <-fc.downloadSem }()
 
-		resp, err := imageHTTPClient.Get(imageURL) //nolint:gosec // URL comes from trusted DB entries, not user input
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, imageURL, http.NoBody) //nolint:gosec // URL comes from trusted DB entries, not user input
+		if err != nil {
+			return nil, fmt.Errorf("failed to create image request: %w", err)
+		}
+		resp, err := imageHTTPClient.Do(req)
 		if err != nil {
 			return nil, fmt.Errorf("failed to download image: %w", err)
 		}
