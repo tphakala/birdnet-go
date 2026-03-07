@@ -24,9 +24,6 @@ const (
 	// EventTypeError represents error events such as failures, exceptions, or operational issues
 	EventTypeError EventType = "error"
 
-	// EventTypeResource represents resource-related events like file operations, disk usage, or memory events
-	EventTypeResource EventType = "resource"
-
 	// EventTypeDetection represents bird detection events from the BirdNET analysis engine
 	EventTypeDetection EventType = "detection"
 
@@ -50,8 +47,6 @@ func getEventType(event any) EventType {
 	// Interface checks (more general)
 	case ErrorEvent:
 		return EventTypeError
-	case ResourceEvent:
-		return EventTypeResource
 	case DetectionEvent:
 		return EventTypeDetection
 	default:
@@ -65,7 +60,6 @@ func getEventType(event any) EventType {
 type EventBus struct {
 	// Channels for different event types
 	errorEventChan     chan ErrorEvent
-	resourceEventChan  chan ResourceEvent
 	detectionEventChan chan DetectionEvent
 
 	// Configuration
@@ -83,7 +77,6 @@ type EventBus struct {
 
 	// Consumers
 	consumers          []EventConsumer
-	resourceConsumers  []ResourceEventConsumer  // Separate slice for resource event consumers
 	detectionConsumers []DetectionEventConsumer // Separate slice for detection event consumers
 
 	// Deduplication
@@ -136,12 +129,11 @@ func DefaultConfig() *Config {
 
 // Config holds event bus configuration
 type Config struct {
-	BufferSize         int // Buffer size for error events
-	ResourceBufferSize int // Buffer size for resource events (if 0, uses BufferSize)
-	Workers            int
-	Enabled            bool
-	Debug              bool // Enable debug logging
-	Deduplication      *DeduplicationConfig
+	BufferSize    int // Buffer size for events
+	Workers       int
+	Enabled       bool
+	Debug         bool // Enable debug logging
+	Deduplication *DeduplicationConfig
 }
 
 // Initialize creates or returns the global event bus instance
@@ -167,26 +159,18 @@ func Initialize(config *Config) (*EventBus, error) {
 	// Create new event bus
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Use ResourceBufferSize if specified, otherwise fall back to BufferSize
-	resourceBufSize := config.ResourceBufferSize
-	if resourceBufSize == 0 {
-		resourceBufSize = config.BufferSize
-	}
-
 	// Get logger for events module
 	eventsLogger := logger.Global().Module("events")
 
 	eb := &EventBus{
 		config:             config,
 		errorEventChan:     make(chan ErrorEvent, config.BufferSize),
-		resourceEventChan:  make(chan ResourceEvent, resourceBufSize),
 		detectionEventChan: make(chan DetectionEvent, config.BufferSize),
 		bufferSize:         config.BufferSize,
 		workers:            config.Workers,
 		ctx:                ctx,
 		cancel:             cancel,
 		consumers:          make([]EventConsumer, 0),
-		resourceConsumers:  make([]ResourceEventConsumer, 0),
 		detectionConsumers: make([]DetectionEventConsumer, 0),
 		logger:             eventsLogger,
 		startTime:          time.Now(),
@@ -246,11 +230,6 @@ func (eb *EventBus) RegisterConsumer(consumer EventConsumer) error {
 	}
 
 	eb.consumers = append(eb.consumers, consumer)
-
-	// Check if consumer also implements ResourceEventConsumer
-	if resourceConsumer, ok := consumer.(ResourceEventConsumer); ok {
-		eb.resourceConsumers = append(eb.resourceConsumers, resourceConsumer)
-	}
 
 	// Check if consumer also implements DetectionEventConsumer
 	if detectionConsumer, ok := consumer.(DetectionEventConsumer); ok {
@@ -341,69 +320,8 @@ func (eb *EventBus) TryPublish(event ErrorEvent) bool {
 	}
 }
 
-// TryPublishResource attempts to publish a resource event without blocking
-// Returns true if the event was accepted, false if dropped
-//
-//nolint:dupl // Similar to TryPublishDetection but handles different event type
-func (eb *EventBus) TryPublishResource(event ResourceEvent) bool {
-	// Ultra-fast path: check global flag first (lock-free)
-	if !hasActiveConsumers.Load() {
-		if eb != nil {
-			atomic.AddUint64(&eb.stats.FastPathHits, 1)
-		}
-		return false
-	}
-
-	if eb == nil || !eb.initialized.Load() || !eb.running.Load() {
-		return false
-	}
-
-	// Debug logging for event publishing
-	if eb.config != nil && eb.config.Debug {
-		eb.logger.Debug("publishing resource event",
-			logger.String("resource_type", event.GetResourceType()),
-			logger.Float64("current_value", event.GetCurrentValue()),
-			logger.String("severity", event.GetSeverity()),
-			logger.Int("buffer_used", len(eb.resourceEventChan)),
-			logger.Int("buffer_capacity", cap(eb.resourceEventChan)),
-			logger.Int("active_consumers", len(eb.consumers)),
-		)
-	}
-
-	// Fast path - check if we have consumers
-	eb.mu.Lock()
-	hasConsumers := len(eb.consumers) > 0
-	eb.mu.Unlock()
-
-	if !hasConsumers {
-		atomic.AddUint64(&eb.stats.FastPathHits, 1)
-		return false
-	}
-
-	// Non-blocking send
-	select {
-	case eb.resourceEventChan <- event:
-		atomic.AddUint64(&eb.stats.EventsReceived, 1)
-		return true
-	default:
-		// Channel full, drop the event
-		atomic.AddUint64(&eb.stats.EventsDropped, 1)
-
-		// Log at debug level to avoid spam
-		if eb.logger != nil {
-			eb.logger.Debug("resource event dropped due to full buffer",
-				logger.String("resource_type", event.GetResourceType()),
-				logger.String("severity", event.GetSeverity()),
-			)
-		}
-		return false
-	}
-}
-
 // TryPublishDetection attempts to publish a detection event without blocking
 // Returns true if the event was accepted, false if dropped
-//
-//nolint:dupl // Similar to TryPublishResource but handles different event type
 func (eb *EventBus) TryPublishDetection(event DetectionEvent) bool {
 	// Ultra-fast path: check global flag first (lock-free)
 	if !hasActiveConsumers.Load() {
@@ -511,27 +429,6 @@ func (eb *EventBus) worker(id int) {
 				eb.processErrorEvent(event, workerLogger)
 			}
 
-		case event, ok := <-eb.resourceEventChan:
-			if !ok {
-				workerLogger.Debug("worker stopping due to resource channel closure")
-				return
-			}
-
-			// Add timing for debug mode
-			if eb.config != nil && eb.config.Debug {
-				start := time.Now()
-				eb.processResourceEvent(event, workerLogger)
-				duration := time.Since(start)
-				workerLogger.Debug("resource event processed",
-					logger.String("event_type", string(getEventType(event))),
-					logger.String("resource_type", event.GetResourceType()),
-					logger.String("severity", event.GetSeverity()),
-					logger.Int64("duration_ms", duration.Milliseconds()),
-				)
-			} else {
-				eb.processResourceEvent(event, workerLogger)
-			}
-
 		case event, ok := <-eb.detectionEventChan:
 			if !ok {
 				workerLogger.Debug("worker stopping due to detection channel closure")
@@ -556,7 +453,7 @@ func (eb *EventBus) worker(id int) {
 	}
 }
 
-// processEvent is a generic event processor that handles both error and resource events
+// processEvent is a generic event processor that handles event dispatching to consumers
 func (eb *EventBus) processEvent(
 	consumerName string,
 	processFunc func() error,
@@ -620,28 +517,6 @@ func (eb *EventBus) processErrorEvent(event ErrorEvent, log logger.Logger) {
 	}
 }
 
-// processResourceEvent sends the resource event to all registered resource consumers
-func (eb *EventBus) processResourceEvent(event ResourceEvent, log logger.Logger) {
-	eb.mu.Lock()
-	resourceConsumers := make([]ResourceEventConsumer, len(eb.resourceConsumers))
-	copy(resourceConsumers, eb.resourceConsumers)
-	eb.mu.Unlock()
-
-	// No type assertions needed - iterate directly over resource consumers
-	for _, consumer := range resourceConsumers {
-		logFields := []logger.Field{
-			logger.String("resource_type", event.GetResourceType()),
-			logger.String("severity", event.GetSeverity()),
-		}
-		eb.processEvent(
-			consumer.Name(),
-			func() error { return consumer.ProcessResourceEvent(event) },
-			logFields,
-			log,
-		)
-	}
-}
-
 // processDetectionEvent sends the detection event to all registered detection consumers
 func (eb *EventBus) processDetectionEvent(event DetectionEvent, log logger.Logger) {
 	eb.mu.Lock()
@@ -696,7 +571,6 @@ func (eb *EventBus) Shutdown(timeout time.Duration) error {
 			logger.Any("total_events_processed", atomic.LoadUint64(&eb.stats.EventsProcessed)),
 			logger.Any("total_events_dropped", atomic.LoadUint64(&eb.stats.EventsDropped)),
 			logger.Int("final_error_buffer_size", len(eb.errorEventChan)),
-			logger.Int("final_resource_buffer_size", len(eb.resourceEventChan)),
 			logger.Int("final_detection_buffer_size", len(eb.detectionEventChan)),
 			logger.Float64("uptime_seconds", time.Since(eb.startTime).Seconds()),
 		)
@@ -772,13 +646,9 @@ func (eb *EventBus) logMetrics(reason string) {
 
 	// Calculate buffer utilization for all channels
 	errorBufferUtil := float64(len(eb.errorEventChan)) / float64(cap(eb.errorEventChan)) * 100
-	resourceBufferUtil := float64(len(eb.resourceEventChan)) / float64(cap(eb.resourceEventChan)) * 100
 	detectionBufferUtil := float64(len(eb.detectionEventChan)) / float64(cap(eb.detectionEventChan)) * 100
-	avgBufferUtilization := (errorBufferUtil + resourceBufferUtil + detectionBufferUtil) / 3
+	avgBufferUtilization := (errorBufferUtil + detectionBufferUtil) / 2
 	maxBufferUtilization := errorBufferUtil
-	if resourceBufferUtil > maxBufferUtilization {
-		maxBufferUtilization = resourceBufferUtil
-	}
 	if detectionBufferUtil > maxBufferUtilization {
 		maxBufferUtilization = detectionBufferUtil
 	}
@@ -797,7 +667,6 @@ func (eb *EventBus) logMetrics(reason string) {
 		logger.String("avg_buffer_utilization", fmt.Sprintf("%.1f%%", avgBufferUtilization)),
 		logger.String("max_buffer_utilization", fmt.Sprintf("%.1f%%", maxBufferUtilization)),
 		logger.String("error_buffer_utilization", fmt.Sprintf("%.1f%%", errorBufferUtil)),
-		logger.String("resource_buffer_utilization", fmt.Sprintf("%.1f%%", resourceBufferUtil)),
 		logger.String("detection_buffer_utilization", fmt.Sprintf("%.1f%%", detectionBufferUtil)),
 		logger.Any("dedup_total_seen", dedupStats.TotalSeen),
 		logger.Any("dedup_total_suppressed", dedupStats.TotalSuppressed),

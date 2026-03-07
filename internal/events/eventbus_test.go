@@ -114,17 +114,17 @@ func createTestEventBus(t *testing.T, bufferSize, workers int) *EventBus {
 	t.Cleanup(func() { cancel() })
 
 	eb := &EventBus{
-		errorEventChan:    make(chan ErrorEvent, bufferSize),
-		resourceEventChan: make(chan ResourceEvent, bufferSize),
-		bufferSize:        bufferSize,
-		workers:           workers,
-		consumers:         make([]EventConsumer, 0),
-		resourceConsumers: make([]ResourceEventConsumer, 0),
-		ctx:               ctx,
-		cancel:            cancel,
-		logger:            logger.NewConsoleLogger("test", logger.LogLevelDebug),
-		startTime:         time.Now(),
-		config:            &Config{Workers: workers, BufferSize: bufferSize},
+		errorEventChan:     make(chan ErrorEvent, bufferSize),
+		detectionEventChan: make(chan DetectionEvent, bufferSize),
+		bufferSize:         bufferSize,
+		workers:            workers,
+		consumers:          make([]EventConsumer, 0),
+		detectionConsumers: make([]DetectionEventConsumer, 0),
+		ctx:                ctx,
+		cancel:             cancel,
+		logger:             logger.NewConsoleLogger("test", logger.LogLevelDebug),
+		startTime:          time.Now(),
+		config:             &Config{Workers: workers, BufferSize: bufferSize},
 	}
 	eb.initialized.Store(true)
 
@@ -337,15 +337,15 @@ func TestEventBusShutdown(t *testing.T) {
 	t.Cleanup(cancel)
 
 	eb := &EventBus{
-		errorEventChan:    make(chan ErrorEvent, 100),
-		resourceEventChan: make(chan ResourceEvent, 100),
-		bufferSize:        100,
-		workers:           2,
-		consumers:         make([]EventConsumer, 0),
-		resourceConsumers: make([]ResourceEventConsumer, 0),
-		ctx:               ctx,
-		cancel:            cancel,
-		logger:            logger.NewConsoleLogger("test", logger.LogLevelDebug),
+		errorEventChan:     make(chan ErrorEvent, 100),
+		detectionEventChan: make(chan DetectionEvent, 100),
+		bufferSize:         100,
+		workers:            2,
+		consumers:          make([]EventConsumer, 0),
+		detectionConsumers: make([]DetectionEventConsumer, 0),
+		ctx:                ctx,
+		cancel:             cancel,
+		logger:             logger.NewConsoleLogger("test", logger.LogLevelDebug),
 	}
 	eb.initialized.Store(true)
 

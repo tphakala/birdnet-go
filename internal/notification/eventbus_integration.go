@@ -10,8 +10,6 @@ import (
 var (
 	// notificationWorker is the singleton notification worker
 	notificationWorker *NotificationWorker
-	// resourceWorker is the singleton resource event worker
-	resourceWorker *ResourceEventWorker
 	// detectionConsumer is the singleton detection notification consumer
 	detectionConsumer *DetectionNotificationConsumer
 )
@@ -80,30 +78,6 @@ func InitializeEventBusIntegration() error {
 		logger.Duration("recovery_timeout", config.RecoveryTimeout),
 		logger.Bool("debug", config.Debug))
 
-	// Create and register resource event worker
-	resourceConfig := DefaultResourceWorkerConfig()
-	if service.config != nil {
-		resourceConfig.Debug = service.config.Debug
-	}
-
-	resWorker, err := NewResourceEventWorker(service, resourceConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create resource worker: %w", err)
-	}
-
-	// Register resource worker
-	if err := eventBus.RegisterConsumer(resWorker); err != nil {
-		return fmt.Errorf("failed to register resource worker: %w", err)
-	}
-
-	// Store reference
-	resourceWorker = resWorker
-
-	getIntegrationLogger().Info("resource worker registered with event bus",
-		logger.String("consumer", resWorker.Name()),
-		logger.Duration("alert_throttle", resourceConfig.AlertThrottle),
-		logger.Bool("debug", resourceConfig.Debug))
-
 	// Create and register detection notification consumer
 	detectionConsumer = NewDetectionNotificationConsumer(service)
 	if err := eventBus.RegisterConsumer(detectionConsumer); err != nil {
@@ -112,7 +86,7 @@ func InitializeEventBusIntegration() error {
 
 	getIntegrationLogger().Info("detection notification consumer registered with event bus",
 		logger.String("consumer", detectionConsumer.Name()),
-		logger.Bool("debug", resourceConfig.Debug))
+		logger.Bool("debug", config.Debug))
 
 	return nil
 }
@@ -120,11 +94,6 @@ func InitializeEventBusIntegration() error {
 // GetNotificationWorker returns the notification worker instance
 func GetNotificationWorker() *NotificationWorker {
 	return notificationWorker
-}
-
-// GetResourceWorker returns the resource event worker instance
-func GetResourceWorker() *ResourceEventWorker {
-	return resourceWorker
 }
 
 // GetDetectionConsumer returns the detection notification consumer instance
