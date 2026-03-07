@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -406,7 +407,7 @@ func (s *Server) startBlocking() error {
 		err = s.echo.Start(addr)
 	}
 
-	if err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("server error: %w", err)
 	}
 
@@ -434,15 +435,33 @@ func (s *Server) StartWithGracefulShutdown() error {
 // ShutdownWithContext gracefully stops the server using the provided context
 // for timeout control. Use this when the caller manages the shutdown budget.
 func (s *Server) ShutdownWithContext(ctx context.Context) error {
-	// Shutdown API controller first (waits for its background goroutines)
+	// Disable keep-alives immediately so idle connections close and no new
+	// keep-alive connections are accepted. This starts draining while the
+	// controller is still shutting down its background goroutines.
+	s.echo.Server.SetKeepAlivesEnabled(false)
+
+	// Close the TCP listener so no new connections are accepted and existing
+	// idle connections receive RST. This allows connections to drain in
+	// parallel with the controller shutdown below.
+	if s.echo.Listener != nil {
+		if err := s.echo.Listener.Close(); err != nil {
+			s.slogger.Warn("Error closing listener during shutdown", logger.Error(err))
+		}
+	}
+
+	// Shutdown API controller (waits for its background goroutines)
 	if s.apiController != nil {
 		s.apiController.Shutdown()
 	}
 
-	// Shutdown Echo server (causes Start() goroutine to exit)
+	// Shutdown Echo server — since the listener is already closed and SSE
+	// clients are disconnected, this should complete quickly.
 	if err := s.echo.Shutdown(ctx); err != nil {
-		s.slogger.Error("Error during server shutdown", logger.Error(err))
-		return fmt.Errorf("shutdown error: %w", err)
+		// Ignore "use of closed network connection" since we closed the listener above
+		if !errors.Is(err, net.ErrClosed) {
+			s.slogger.Error("Error during server shutdown", logger.Error(err))
+			return fmt.Errorf("shutdown error: %w", err)
+		}
 	}
 
 	// Log completion and flush

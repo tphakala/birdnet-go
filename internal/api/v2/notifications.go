@@ -466,6 +466,13 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 	// Main event loop
 	for {
 		select {
+		case <-c.ctx.Done():
+			// Controller shutting down
+			c.logInfoIfEnabled("notification SSE client disconnected due to shutdown",
+				logger.String("client_id", client.ID),
+			)
+			return nil
+
 		case notif := <-client.SubscriberCh:
 			if notif == nil {
 				// Channel closed, service is shutting down

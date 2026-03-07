@@ -351,8 +351,13 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
-	// Ensure v2 database is closed on shutdown (handles nil case gracefully)
-	defer closeV2Database()
+	// Ensure v2 database is closed on shutdown (handles nil case gracefully).
+	// In v2-only mode, the v2only.Datastore wraps the same manager, so closeDataStore
+	// handles everything via v2only.Datastore.Close(). Only register this defer in
+	// legacy/migration mode where the v2 database is a separate resource.
+	if !v2OnlyMode {
+		defer closeV2Database()
+	}
 
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
@@ -559,11 +564,14 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					}
 				}
 
-				// Now it's safe to close controlChan after HTTP server is down
+				// Close controlChan to signal goroutines selecting on it to stop
 				log.Info("closing control channel after producers shutdown",
 					logger.String("operation", "close_control_channel"))
 				close(controlChan)
 
+				// Check context after step 5 — if the timeout fired while the
+				// HTTP server was shutting down, return immediately and let the
+				// deferred cleanup handle database close.
 				if ctx.Err() != nil {
 					log.Warn("shutdown context cancelled after step 5",
 						logger.Int("step", 5),
@@ -632,11 +640,15 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 					logger.String("operation", "shutdown_migration_worker"))
 				apiv2.StopMigrationWorker()
 
-				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore)
-				log.Info("shutdown step 11: closing v2 database",
-					logger.Int("step", 11),
-					logger.String("operation", "shutdown_v2_database"))
-				closeV2Database()
+				// Step 11: Close v2 database (before legacy database closes via deferred closeDataStore).
+				// In v2-only mode, the v2only.Datastore wraps the same manager — closing is
+				// handled by the deferred closeDataStore call to avoid double-close errors.
+				if !v2OnlyMode {
+					log.Info("shutdown step 11: closing v2 database",
+						logger.Int("step", 11),
+						logger.String("operation", "shutdown_v2_database"))
+					closeV2Database()
+				}
 
 				log.Info("graceful shutdown completed",
 					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
@@ -656,6 +668,11 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 				// Ensure migration worker is stopped on timeout
 				apiv2.StopMigrationWorker()
 				cancel()
+				// Wait for the shutdown goroutine to finish before returning.
+				// The goroutine checks ctx.Err() between steps and will exit
+				// quickly now that the context is cancelled. This prevents a
+				// race between the goroutine and deferred cleanup (database close).
+				<-shutdownComplete
 				return nil
 			}
 

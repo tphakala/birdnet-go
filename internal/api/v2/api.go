@@ -641,8 +641,7 @@ func (c *Controller) Shutdown() {
 		c.detectionCache.Flush()
 	}
 
-	// Log shutdown
-	c.Debug("API Controller shutting down")
+	c.Debug("API Controller shutdown complete")
 }
 
 // Error response structure
