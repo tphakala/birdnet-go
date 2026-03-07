@@ -641,10 +641,11 @@ func TestService_StartPolling(t *testing.T) {
 			s.Realtime.Weather.PollInterval = 60
 		})
 		service := &Service{
-			provider: NewYrNoProvider(),
-			db:       mockDB,
-			settings: settings,
-			metrics:  nil,
+			provider:     NewYrNoProvider(),
+			db:           mockDB,
+			settings:     settings,
+			metrics:      nil,
+			startupDelay: 0, // No delay for this test
 		}
 
 		// Channel to signal initial fetch completion (avoids flaky time.Sleep)
@@ -686,5 +687,159 @@ func TestService_StartPolling(t *testing.T) {
 		}
 
 		mockDB.AssertExpectations(t)
+	})
+}
+
+// =============================================================================
+// STARTUP DELAY TESTS
+// =============================================================================
+
+// TestService_StartPolling_StartupDelay tests the startup delay behavior.
+func TestService_StartPolling_StartupDelay(t *testing.T) {
+	t.Run("delay_postpones_initial_fetch", func(t *testing.T) {
+		setupHTTPMock(t)
+		mockDB := mocks.NewMockInterface(t)
+
+		registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
+
+		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
+			s.Realtime.Weather.PollInterval = 60
+		})
+
+		delay := 200 * time.Millisecond
+		service := &Service{
+			provider:     NewYrNoProvider(),
+			db:           mockDB,
+			settings:     settings,
+			metrics:      nil,
+			startupDelay: delay,
+		}
+
+		fetchCalled := make(chan struct{})
+		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+			de := args.Get(0).(*datastore.DailyEvents)
+			de.ID = 1
+			close(fetchCalled)
+		}).Return(nil).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
+
+		stopChan := make(chan struct{})
+		done := make(chan struct{})
+		startTime := time.Now()
+
+		go func() {
+			service.StartPolling(stopChan)
+			close(done)
+		}()
+
+		// Wait for initial fetch to complete
+		select {
+		case <-fetchCalled:
+			elapsed := time.Since(startTime)
+			assert.GreaterOrEqual(t, elapsed, delay,
+				"Initial fetch should be delayed by at least the startup delay")
+		case <-time.After(5 * time.Second):
+			t.Fatal("Initial fetch did not complete within timeout")
+		}
+
+		close(stopChan)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("StartPolling did not stop within timeout")
+		}
+
+		mockDB.AssertExpectations(t)
+	})
+
+	t.Run("zero_delay_fetches_immediately", func(t *testing.T) {
+		setupHTTPMock(t)
+		mockDB := mocks.NewMockInterface(t)
+
+		registerYrNoResponder(t, http.StatusOK, yrNoSuccessResponse(), nil)
+
+		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
+			s.Realtime.Weather.PollInterval = 60
+		})
+
+		service := &Service{
+			provider:     NewYrNoProvider(),
+			db:           mockDB,
+			settings:     settings,
+			metrics:      nil,
+			startupDelay: 0,
+		}
+
+		fetchCalled := make(chan struct{})
+		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+			de := args.Get(0).(*datastore.DailyEvents)
+			de.ID = 1
+			close(fetchCalled)
+		}).Return(nil).Once()
+		mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
+
+		stopChan := make(chan struct{})
+		done := make(chan struct{})
+		startTime := time.Now()
+
+		go func() {
+			service.StartPolling(stopChan)
+			close(done)
+		}()
+
+		// Fetch should happen almost immediately
+		select {
+		case <-fetchCalled:
+			elapsed := time.Since(startTime)
+			assert.Less(t, elapsed, 100*time.Millisecond,
+				"With zero delay, fetch should happen almost immediately")
+		case <-time.After(2 * time.Second):
+			t.Fatal("Initial fetch did not complete within timeout")
+		}
+
+		close(stopChan)
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			t.Fatal("StartPolling did not stop within timeout")
+		}
+
+		mockDB.AssertExpectations(t)
+	})
+
+	t.Run("delay_interruptible_via_stop_chan", func(t *testing.T) {
+		settings := createTestSettings(t, "yrno", func(s *conf.Settings) {
+			s.Realtime.Weather.PollInterval = 60
+		})
+
+		// Use a long delay that we will interrupt
+		service := &Service{
+			provider:     NewYrNoProvider(),
+			db:           nil,
+			settings:     settings,
+			metrics:      nil,
+			startupDelay: 10 * time.Second,
+		}
+
+		stopChan := make(chan struct{})
+		done := make(chan struct{})
+
+		go func() {
+			service.StartPolling(stopChan)
+			close(done)
+		}()
+
+		// Close stop channel after a short time to interrupt the delay
+		time.AfterFunc(50*time.Millisecond, func() {
+			close(stopChan)
+		})
+
+		// StartPolling should return quickly after stopChan is closed
+		select {
+		case <-done:
+			// Success - StartPolling was interrupted during delay
+		case <-time.After(2 * time.Second):
+			t.Fatal("StartPolling was not interrupted by stopChan during startup delay")
+		}
 	})
 }

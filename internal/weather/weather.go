@@ -24,10 +24,11 @@ type Provider interface {
 
 // Service handles weather data operations
 type Service struct {
-	provider Provider
-	db       datastore.Interface
-	settings *conf.Settings
-	metrics  *metrics.WeatherMetrics
+	provider     Provider
+	db           datastore.Interface
+	settings     *conf.Settings
+	metrics      *metrics.WeatherMetrics
+	startupDelay time.Duration
 }
 
 // WeatherData represents the common structure for weather data across providers
@@ -91,10 +92,11 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	}
 
 	return &Service{
-		provider: provider,
-		db:       db,
-		settings: settings,
-		metrics:  weatherMetrics,
+		provider:     provider,
+		db:           db,
+		settings:     settings,
+		metrics:      weatherMetrics,
+		startupDelay: DefaultStartupDelay,
 	}, nil
 }
 
@@ -199,6 +201,10 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	return nil
 }
 
+// DefaultStartupDelay is the delay before the initial weather fetch to reduce
+// startup DB contention with other services (image cache warm-up, threshold cleanup).
+const DefaultStartupDelay = 10 * time.Second
+
 // absoluteZeroCelsius is the lowest possible temperature in Celsius
 const absoluteZeroCelsius = -273.15
 
@@ -229,6 +235,18 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 	getLogger().Info("Starting weather polling service",
 		logger.String("provider", s.settings.Realtime.Weather.Provider),
 		logger.Int("interval_minutes", s.settings.Realtime.Weather.PollInterval))
+
+	// Delay initial fetch to reduce startup DB contention with other services
+	if s.startupDelay > 0 {
+		getLogger().Info("Delaying initial weather fetch to reduce startup DB contention",
+			logger.String("delay", s.startupDelay.String()))
+		select {
+		case <-time.After(s.startupDelay):
+			// Delay elapsed, proceed with fetch
+		case <-stopChan:
+			return
+		}
+	}
 
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
