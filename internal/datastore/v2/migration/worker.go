@@ -535,6 +535,22 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 	return runActionContinue
 }
 
+// reportCompletedTelemetry reports a successful migration to Sentry telemetry.
+// It fetches state to compute duration and overall rate.
+func (w *Worker) reportCompletedTelemetry() {
+	state, stateErr := w.stateManager.GetState()
+	if stateErr != nil || state.StartedAt == nil {
+		return
+	}
+	duration := time.Since(*state.StartedAt)
+	dirtyCount, _ := w.stateManager.GetDirtyIDCount()
+	var overallRate float64
+	if duration.Seconds() > 0 {
+		overallRate = float64(state.MigratedRecords) / duration.Seconds()
+	}
+	w.telemetry.ReportCompleted(state.MigratedRecords, duration, overallRate, dirtyCount)
+}
+
 // completeValidation handles the successful validation path.
 func (w *Worker) completeValidation(ctx context.Context) runAction {
 	w.logger.Info("validation passed, transitioning to cutover")
@@ -551,16 +567,7 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 
 	w.logger.Info("migration completed successfully")
 
-	// Report successful migration to telemetry
-	if state, stateErr := w.stateManager.GetState(); stateErr == nil && state.StartedAt != nil {
-		duration := time.Since(*state.StartedAt)
-		dirtyCount, _ := w.stateManager.GetDirtyIDCount()
-		var overallRate float64
-		if duration.Seconds() > 0 {
-			overallRate = float64(state.MigratedRecords) / duration.Seconds()
-		}
-		w.telemetry.ReportCompleted(state.MigratedRecords, duration, overallRate, dirtyCount)
-	}
+	w.reportCompletedTelemetry()
 
 	// Send completion notification
 	if notifService := notification.GetService(); notifService != nil {
@@ -809,16 +816,7 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 
 	w.logger.Info("migration completed successfully from cutover state")
 
-	// Report successful migration to telemetry
-	if state, stateErr := w.stateManager.GetState(); stateErr == nil && state.StartedAt != nil {
-		duration := time.Since(*state.StartedAt)
-		dirtyCount, _ := w.stateManager.GetDirtyIDCount()
-		var overallRate float64
-		if duration.Seconds() > 0 {
-			overallRate = float64(state.MigratedRecords) / duration.Seconds()
-		}
-		w.telemetry.ReportCompleted(state.MigratedRecords, duration, overallRate, dirtyCount)
-	}
+	w.reportCompletedTelemetry()
 
 	// Send notification that migration has completed
 	if notifService := notification.GetService(); notifService != nil {

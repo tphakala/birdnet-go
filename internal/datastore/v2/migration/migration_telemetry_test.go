@@ -43,6 +43,21 @@ func TestNewMigrationTelemetry(t *testing.T) {
 	}
 }
 
+func TestMigrationTelemetry_NonNilInstance(t *testing.T) {
+	t.Parallel()
+
+	mt := NewMigrationTelemetry("sqlite")
+
+	// All methods must be safe to call on a non-nil instance
+	// (Sentry SDK is not initialized in tests, so CaptureMessage is a no-op)
+	assert.NotPanics(t, func() { mt.ReportStarted(1000) })
+	assert.NotPanics(t, func() { mt.ReportCompleted(1000, 5*time.Minute, 3.5, 0) })
+	assert.NotPanics(t, func() { mt.ReportValidationFailed(1000, 990, 0, "count mismatch") })
+	assert.NotPanics(t, func() { mt.ReportAutoPaused(10, fmt.Errorf("disk full"), 500, 1000) })
+	assert.NotPanics(t, func() { mt.ReportCancelled(500, 1000) })
+	assert.NotPanics(t, func() { mt.ReportPanic("nil pointer dereference") })
+}
+
 func TestFormatDurationHuman(t *testing.T) {
 	t.Parallel()
 
