@@ -16,6 +16,48 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	// Set up state as migrating so runIteration() enters processBatch()
+	require.NoError(t, sm.StartMigration(10))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+
+	w := &Worker{
+		stateManager: sm,
+		logger:       testLogger(),
+		telemetry:    nil, // nil-safe, no Sentry calls
+		batchSize:    DefaultBatchSize,
+		sleepBetween: 0,
+		stopCh:       make(chan struct{}),
+		pauseCh:      make(chan struct{}),
+		resumeCh:     make(chan struct{}),
+		// legacy is nil — processBatch() will panic on nil pointer dereference
+	}
+
+	w.mu.Lock()
+	w.running = true
+	w.mu.Unlock()
+
+	// run() should recover from the panic without itself panicking
+	assert.NotPanics(t, func() {
+		w.run(t.Context())
+	})
+
+	// Verify the worker recorded the panic error
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Contains(t, state.ErrorMessage, "migration worker panic")
+
+	// Verify worker is no longer running
+	w.mu.Lock()
+	running := w.running
+	w.mu.Unlock()
+	assert.False(t, running)
+}
+
 // testLogger returns a silent logger for tests.
 func testLogger() logger.Logger {
 	return logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
