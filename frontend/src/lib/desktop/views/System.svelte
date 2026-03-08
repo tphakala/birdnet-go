@@ -6,7 +6,6 @@
   import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
-  import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -33,6 +32,9 @@
 
   // Polling fallback interval in milliseconds
   const POLLING_INTERVAL_MS = 5000;
+
+  // Auto-refresh interval for slow-changing data (system info, disks, processes)
+  const SLOW_REFRESH_INTERVAL_MS = 30000;
 
   // Process name displayed in place of the Go binary name
   const BIRDNET_PROCESS_NAME = 'BirdNET-Go';
@@ -104,8 +106,6 @@
   let memoryUsage = $state<MemoryInfo>({} as MemoryInfo);
   let systemTemperature = $state<TemperatureInfo>({ is_available: false });
   let processes = $state<ProcessInfo[]>([]);
-  let isLoading = $state(true);
-
   // Sparkline history arrays
   let cpuHistory = $state<number[]>([]);
   let memoryHistory = $state<number[]>([]);
@@ -120,6 +120,9 @@
 
   // Polling fallback timeout reference (used when SSE endpoints aren't available)
   let pollingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Auto-refresh timeout for slow-changing data not covered by SSE
+  let slowRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Map user's temperature preference to TemperatureUnit format
   // Settings store uses 'celsius'/'fahrenheit', formatters use 'metric'/'imperial'/'standard'
@@ -390,9 +393,29 @@
     }
   }
 
+  // Refresh slow-changing data not delivered by SSE (system info, disks, processes).
+  // Uses recursive setTimeout (like startPollingFallback) to avoid overlapping requests.
+  function startSlowRefresh(active: { current: boolean }): void {
+    async function tick(): Promise<void> {
+      if (!active.current) return;
+      await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
+      if (active.current) {
+        slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
+      }
+    }
+
+    slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
+  }
+
+  function stopSlowRefresh(): void {
+    if (slowRefreshTimeout) {
+      clearTimeout(slowRefreshTimeout);
+      slowRefreshTimeout = null;
+    }
+  }
+
   // Load all data
   async function loadAllData(): Promise<void> {
-    isLoading = true;
     await Promise.all([
       loadSystemInfo(),
       loadDiskUsage(),
@@ -401,24 +424,39 @@
       loadProcesses(),
       loadBirdnetOverlap(),
     ]);
-    isLoading = false;
   }
+
+  // Component-level active flag shared between effects
+  let componentActive = { current: false };
 
   // Initialize on mount, clean up on unmount
   $effect(() => {
-    const active = { current: true };
+    componentActive.current = true;
 
     // Load initial data, then load metrics history (which needs data for fallback seeding)
     loadAllData().then(() => {
-      if (active.current) {
-        loadMetricsHistory(active);
+      if (componentActive.current) {
+        loadMetricsHistory(componentActive);
       }
     });
 
     return () => {
-      active.current = false;
+      componentActive.current = false;
       disconnectMetricsStream();
       stopPollingFallback();
+    };
+  });
+
+  // Start/stop slow refresh based on active subpage.
+  // The active guard lives inside startSlowRefresh's tick(), so no need to
+  // check componentActive here — avoids an ordering dependency between effects.
+  $effect(() => {
+    if (currentSubpage === 'overview') {
+      startSlowRefresh(componentActive);
+    }
+
+    return () => {
+      stopSlowRefresh();
     };
   });
 </script>
@@ -497,18 +535,5 @@
         loadProcesses();
       }}
     />
-
-    <!-- Refresh button -->
-    <div class="flex justify-center mt-6">
-      <button
-        class="inline-flex items-center px-4 py-2 rounded-lg font-medium text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        onclick={loadAllData}
-        disabled={isLoading}
-        aria-label={t('system.aria.refreshData')}
-      >
-        <RefreshCw class="size-5 mr-2" />
-        {t('system.refreshData')}
-      </button>
-    </div>
   </div>
 {/if}
