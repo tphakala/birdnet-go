@@ -22,18 +22,14 @@ const osWindows = "windows"
 // =============================================================================
 
 // createTestScript creates a temporary executable shell script with the given content.
-// Returns the script path and a cleanup function. The cleanup function should be deferred.
-func createTestScript(t *testing.T, prefix, content string) (scriptPath string, cleanup func()) {
+// Uses t.TempDir() for automatic cleanup and os.WriteFile for atomic write,
+// which avoids ETXTBSY ("text file busy") races on CI where Close() and exec
+// can overlap at the kernel level.
+func createTestScript(t *testing.T, name, content string) string {
 	t.Helper()
-	tmpFile, err := os.CreateTemp("", prefix)
-	require.NoError(t, err)
-
-	_, err = tmpFile.WriteString(content)
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
-
-	return tmpFile.Name(), func() { _ = os.Remove(tmpFile.Name()) }
+	scriptPath := filepath.Join(t.TempDir(), name)
+	require.NoError(t, os.WriteFile(scriptPath, []byte(content), 0o755)) //nolint:gosec // executable permission needed for test
+	return scriptPath
 }
 
 // createTestDetections creates a Detections struct with both Result and Note populated.
@@ -761,8 +757,7 @@ func TestExecuteCommandAction_SuccessfulExecution(t *testing.T) {
 	}
 	t.Parallel()
 
-	scriptPath, cleanup := createTestScript(t, "test_script_*.sh", "#!/bin/sh\nexit 0\n")
-	defer cleanup()
+	scriptPath := createTestScript(t, "test_script.sh", "#!/bin/sh\nexit 0\n")
 
 	action := &ExecuteCommandAction{
 		Command: scriptPath,
@@ -779,18 +774,10 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a temporary executable script that fails
-	tmpFile, err := os.CreateTemp("", "fail_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	_, err = tmpFile.WriteString("#!/bin/sh\nexit 1\n")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "fail_script.sh", "#!/bin/sh\nexit 1\n")
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params:  nil,
 	}
 
@@ -800,7 +787,7 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(t.Context(), det)
+	err := action.Execute(t.Context(), det)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exit")
 }
@@ -822,19 +809,10 @@ func TestExecuteCommandAction_Timeout(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a temporary executable script that sleeps
-	tmpFile, err := os.CreateTemp("", "sleep_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	// Script sleeps for 30 seconds (much longer than our timeout)
-	_, err = tmpFile.WriteString("#!/bin/sh\nsleep 30\n")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "sleep_script.sh", "#!/bin/sh\nsleep 30\n")
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params:  nil,
 	}
 
@@ -850,7 +828,7 @@ func TestExecuteCommandAction_Timeout(t *testing.T) {
 	defer cancel()
 
 	startTime := time.Now()
-	err = action.ExecuteContext(ctx, det)
+	err := action.ExecuteContext(ctx, det)
 	duration := time.Since(startTime)
 
 	require.Error(t, err)
@@ -865,27 +843,15 @@ func TestExecuteCommandAction_WithParameters(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create a temporary executable script that outputs its arguments
-	tmpFile, err := os.CreateTemp("", "args_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	// Output file for verification
-	outputFile, err := os.CreateTemp("", "args_output_*.txt")
-	require.NoError(t, err)
-	outputPath := outputFile.Name()
-	_ = outputFile.Close()
-	defer func() { _ = os.Remove(outputPath) }()
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "args_output.txt")
 
 	// Script that writes args to output file
 	scriptContent := "#!/bin/sh\necho \"$@\" > " + outputPath + "\n"
-	_, err = tmpFile.WriteString(scriptContent)
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "args_script.sh", scriptContent)
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params: map[string]any{
 			"species": "Robin",
 			"conf":    "95",
@@ -898,7 +864,7 @@ func TestExecuteCommandAction_WithParameters(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(t.Context(), det)
+	err := action.Execute(t.Context(), det)
 	require.NoError(t, err)
 
 	// Verify output
@@ -925,15 +891,7 @@ func TestExecuteCommandAction_CommandInjectionPrevention(t *testing.T) {
 	indicatorPath := filepath.Join(os.TempDir(), "pwned_indicator_"+time.Now().Format("20060102150405"))
 	defer func() { _ = os.Remove(indicatorPath) }() // Clean up in case it was created
 
-	// Create a script that just echoes its arguments (doesn't execute them)
-	tmpFile, err := os.CreateTemp("", "echo_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
-
-	_, err = tmpFile.WriteString("#!/bin/sh\necho \"$@\"\n")
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "echo_script.sh", "#!/bin/sh\necho \"$@\"\n")
 
 	// Try various injection attempts
 	injectionAttempts := []string{
@@ -947,7 +905,7 @@ func TestExecuteCommandAction_CommandInjectionPrevention(t *testing.T) {
 	for _, injection := range injectionAttempts {
 		t.Run(injection, func(t *testing.T) {
 			action := &ExecuteCommandAction{
-				Command: tmpFile.Name(),
+				Command: scriptPath,
 				Params: map[string]any{
 					"input": injection,
 				},
@@ -995,26 +953,14 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Create output file for verification
-	outputFile, err := os.CreateTemp("", "unicode_output_*.txt")
-	require.NoError(t, err)
-	outputPath := outputFile.Name()
-	_ = outputFile.Close()
-	defer func() { _ = os.Remove(outputPath) }()
-
-	// Create a script that writes args to output file
-	tmpFile, err := os.CreateTemp("", "unicode_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "unicode_output.txt")
 
 	scriptContent := "#!/bin/sh\necho \"$@\" > " + outputPath + "\n"
-	_, err = tmpFile.WriteString(scriptContent)
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "unicode_script.sh", scriptContent)
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params: map[string]any{
 			"species": "Sparrow 🐦",
 		},
@@ -1026,7 +972,7 @@ func TestExecuteCommandAction_UnicodeInParameters(t *testing.T) {
 		},
 	}
 
-	err = action.Execute(t.Context(), det)
+	err := action.Execute(t.Context(), det)
 	require.NoError(t, err)
 
 	// Verify output contains unicode
@@ -1044,8 +990,7 @@ func TestExecuteCommandAction_LargeOutput(t *testing.T) {
 
 	// Script that generates 100KB of output
 	scriptContent := "#!/bin/sh\nfor i in $(seq 1 10000); do echo 'This is line number '$i' with some padding text to make it longer'; done\n"
-	scriptPath, cleanup := createTestScript(t, "large_output_*.sh", scriptContent)
-	defer cleanup()
+	scriptPath := createTestScript(t, "large_output.sh", scriptContent)
 
 	action := &ExecuteCommandAction{
 		Command: scriptPath,
@@ -1068,36 +1013,18 @@ func TestExecuteCommandAction_EnvironmentIsolation(t *testing.T) {
 	require.NoError(t, os.Setenv(testEnvKey, "secret_value"))
 	defer func() { _ = os.Unsetenv(testEnvKey) }()
 
-	// Create output file for verification
-	outputFile, err := os.CreateTemp("", "env_output_*.txt")
-	require.NoError(t, err)
-	outputPath := outputFile.Name()
-	_ = outputFile.Close()
-	defer func() { _ = os.Remove(outputPath) }()
-
-	// Create a script that outputs environment variables
-	tmpFile, err := os.CreateTemp("", "env_script_*.sh")
-	require.NoError(t, err)
-	defer func() { _ = os.Remove(tmpFile.Name()) }()
+	tmpDir := t.TempDir()
+	outputPath := filepath.Join(tmpDir, "env_output.txt")
 
 	scriptContent := "#!/bin/sh\nenv > " + outputPath + "\n"
-	_, err = tmpFile.WriteString(scriptContent)
-	require.NoError(t, err)
-	require.NoError(t, tmpFile.Close())
-	require.NoError(t, os.Chmod(tmpFile.Name(), 0o755)) //nolint:gosec // executable permission needed for test
+	scriptPath := createTestScript(t, "env_script.sh", scriptContent)
 
 	action := &ExecuteCommandAction{
-		Command: tmpFile.Name(),
+		Command: scriptPath,
 		Params:  nil,
 	}
 
-	det := Detections{
-		Result: detection.Result{
-			Species: detection.Species{CommonName: "Test Bird"},
-		},
-	}
-
-	err = action.Execute(t.Context(), det)
+	err := action.Execute(t.Context(), createTestDetections("Test Bird"))
 	require.NoError(t, err)
 
 	// Verify output does NOT contain our secret environment variable
