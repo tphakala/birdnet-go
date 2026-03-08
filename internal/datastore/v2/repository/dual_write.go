@@ -241,7 +241,7 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 // reportDualWriteReconciliation reports reconciliation status to Sentry
 // when dirty ID count is elevated, rate-limited to once per hour.
 func (dw *DualWriteRepository) reportDualWriteReconciliation(totalDirty int64, reconciled, remaining int) {
-	if totalDirty < dirtyIDWarningThreshold {
+	if int64(remaining) < dirtyIDWarningThreshold {
 		return
 	}
 

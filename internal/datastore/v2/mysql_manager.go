@@ -118,26 +118,26 @@ func (m *MySQLManager) Initialize() error {
 		&entities.AlertHistory{},
 	)
 	if err != nil {
-		reportInitFailure("mysql", "AutoMigrate", err, "")
+		reportInitFailure("mysql", "AutoMigrate", err, m.location)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
 	}
 
 	// Initialize migration state singleton using FirstOrCreate to handle race conditions
 	state := entities.MigrationState{ID: 1, State: entities.MigrationStatusIdle}
 	if err := m.db.FirstOrCreate(&state, entities.MigrationState{ID: 1}).Error; err != nil {
-		reportInitFailure("mysql", "initMigrationState", err, "")
+		reportInitFailure("mysql", "initMigrationState", err, m.location)
 		return fmt.Errorf("failed to initialize migration state: %w", err)
 	}
 
 	// Seed lookup tables
 	if err := m.seedLookupTables(); err != nil {
-		reportInitFailure("mysql", "seedLookupTables", err, "")
+		reportInitFailure("mysql", "seedLookupTables", err, m.location)
 		return fmt.Errorf("failed to seed lookup tables: %w", err)
 	}
 
 	// Seed default AI model (BirdNET)
 	if err := m.seedDefaultModel(); err != nil {
-		reportInitFailure("mysql", "seedDefaultModel", err, "")
+		reportInitFailure("mysql", "seedDefaultModel", err, m.location)
 		return err
 	}
 	return nil

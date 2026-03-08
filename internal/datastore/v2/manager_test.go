@@ -485,9 +485,9 @@ func TestScrubErrorWithPaths_EmptyPath(t *testing.T) {
 	assert.Equal(t, "some error", result)
 }
 
-func TestReportInitFailure_NilSafe(t *testing.T) {
+func TestReportInitFailure_SentryNotInitialized(t *testing.T) {
 	t.Parallel()
-	// Should not panic when called (Sentry not initialized in tests)
+	// Should not panic when Sentry hub is not initialized
 	assert.NotPanics(t, func() {
 		reportInitFailure("sqlite", "AutoMigrate", fmt.Errorf("disk full"), "/tmp/test.db")
 	})
