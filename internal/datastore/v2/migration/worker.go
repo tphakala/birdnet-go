@@ -341,10 +341,22 @@ const (
 func (w *Worker) run(ctx context.Context) {
 	defer func() {
 		w.mu.Lock()
+		wasPaused := w.paused
 		w.running = false
 		w.mu.Unlock()
 		// Clear phase on exit
 		_ = w.stateManager.SetCurrentPhase(entities.MigrationPhaseNone)
+
+		// Report cancellation to telemetry only for genuine cancellation/stop.
+		// Skip if: completed normally (ReportCompleted handles it),
+		// or auto-paused (ReportAutoPaused handles it).
+		if !wasPaused {
+			if state, err := w.stateManager.GetState(); err == nil &&
+				state.State != entities.MigrationStatusCompleted &&
+				state.State != entities.MigrationStatusPaused {
+				w.telemetry.ReportCancelled(state.MigratedRecords, state.TotalRecords)
+			}
+		}
 	}()
 
 	// Recover from panics in the migration goroutine to prevent silent death.
@@ -363,6 +375,11 @@ func (w *Worker) run(ctx context.Context) {
 	}()
 
 	w.logger.Info("migration worker started")
+
+	// Report migration started to telemetry
+	if state, err := w.stateManager.GetState(); err == nil {
+		w.telemetry.ReportStarted(state.TotalRecords)
+	}
 
 	// Set initial phase to detections
 	if err := w.stateManager.SetCurrentPhase(entities.MigrationPhaseDetections); err != nil {
