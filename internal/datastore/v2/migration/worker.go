@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // DefaultBatchSize is the default number of records processed per batch.
@@ -128,6 +129,9 @@ type Worker struct {
 	// Progress logging tracking
 	lastProgressLog     time.Time
 	recordsSinceLastLog int64
+
+	// Telemetry
+	telemetry *MigrationTelemetry
 }
 
 // WorkerConfig configures the migration worker.
@@ -151,6 +155,8 @@ type WorkerConfig struct {
 	SpeciesLabelTypeID uint  // "species" label type ID
 	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
 	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
+
+	Telemetry *MigrationTelemetry // Optional: Sentry lifecycle reporting
 }
 
 // NewWorker creates a new migration worker.
@@ -227,6 +233,7 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		stopCh:             make(chan struct{}),
 		maxConsecErrors:    maxConsecErrors,
 		rateSamples:        make([]rateSample, DefaultRateWindowSize),
+		telemetry:          cfg.Telemetry,
 	}, nil
 }
 
@@ -340,6 +347,21 @@ func (w *Worker) run(ctx context.Context) {
 		_ = w.stateManager.SetCurrentPhase(entities.MigrationPhaseNone)
 	}()
 
+	// Recover from panics in the migration goroutine to prevent silent death.
+	// Reports to Sentry and records the error message in state so the UI shows it.
+	defer func() {
+		if r := recover(); r != nil {
+			scrubbedPanic := privacy.ScrubMessage(fmt.Sprintf("%v", r))
+			w.logger.Error("migration worker panic recovered",
+				logger.String("panic", scrubbedPanic))
+
+			w.telemetry.ReportPanic(r)
+
+			errMsg := fmt.Sprintf("migration worker panic: %s", scrubbedPanic)
+			_ = w.stateManager.SetError(errMsg)
+		}
+	}()
+
 	w.logger.Info("migration worker started")
 
 	// Set initial phase to detections
@@ -448,6 +470,9 @@ func (w *Worker) handlePausedState(ctx context.Context) runAction {
 // If validation fails due to small count differences (from records added during migration),
 // it attempts to catch up by migrating the new records and retrying validation.
 func (w *Worker) handleValidatingState(ctx context.Context) runAction {
+	var legacyCount, v2Count int64
+	var err error
+
 	for attempt := 1; attempt <= validationMaxRetries; attempt++ {
 		w.logger.Info("running validation", logger.Int("attempt", attempt))
 
@@ -459,7 +484,7 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 		}
 
 		// Run validation and get counts for recovery logic
-		legacyCount, v2Count, err := w.validateWithCounts(ctx)
+		legacyCount, v2Count, err = w.validateWithCounts(ctx)
 		if err == nil {
 			// Validation passed - complete the migration
 			return w.completeValidation(ctx)
@@ -494,6 +519,8 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 		if setErr := w.stateManager.SetError(fmt.Sprintf("validation failed: %v", err)); setErr != nil {
 			w.logger.Warn("failed to set error in state", logger.Error(setErr))
 		}
+		dirtyCount, _ := w.stateManager.GetDirtyIDCount()
+		w.telemetry.ReportValidationFailed(legacyCount, v2Count, dirtyCount, err.Error())
 		w.failOnValidation()
 		return runActionContinue
 	}
@@ -504,8 +531,26 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 	if setErr := w.stateManager.SetError("validation failed after maximum retry attempts"); setErr != nil {
 		w.logger.Warn("failed to set error in state", logger.Error(setErr))
 	}
+	dirtyCount, _ := w.stateManager.GetDirtyIDCount()
+	w.telemetry.ReportValidationFailed(legacyCount, v2Count, dirtyCount, "validation failed after maximum retry attempts")
 	w.failOnValidation()
 	return runActionContinue
+}
+
+// reportCompletedTelemetry reports a successful migration to Sentry telemetry.
+// It fetches state to compute duration and overall rate.
+func (w *Worker) reportCompletedTelemetry() {
+	state, stateErr := w.stateManager.GetState()
+	if stateErr != nil || state.StartedAt == nil {
+		return
+	}
+	duration := time.Since(*state.StartedAt)
+	dirtyCount, _ := w.stateManager.GetDirtyIDCount()
+	var overallRate float64
+	if duration.Seconds() > 0 {
+		overallRate = float64(state.MigratedRecords) / duration.Seconds()
+	}
+	w.telemetry.ReportCompleted(state.MigratedRecords, duration, overallRate, dirtyCount)
 }
 
 // completeValidation handles the successful validation path.
@@ -523,6 +568,8 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 	}
 
 	w.logger.Info("migration completed successfully")
+
+	w.reportCompletedTelemetry()
 
 	// Send completion notification
 	if notifService := notification.GetService(); notifService != nil {
@@ -770,6 +817,8 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 	}
 
 	w.logger.Info("migration completed successfully from cutover state")
+
+	w.reportCompletedTelemetry()
 
 	// Send notification that migration has completed
 	if notifService := notification.GetService(); notifService != nil {
@@ -1062,6 +1111,11 @@ func (w *Worker) handleError(err error, msg string) bool {
 			if notifErr := notifService.CreateWithMetadata(notif); notifErr != nil {
 				w.logger.Warn("failed to send migration error notification", logger.Error(notifErr))
 			}
+		}
+
+		// Report auto-pause to telemetry
+		if state, stateErr := w.stateManager.GetState(); stateErr == nil {
+			w.telemetry.ReportAutoPaused(count, err, state.MigratedRecords, state.TotalRecords)
 		}
 
 		// Set local paused state

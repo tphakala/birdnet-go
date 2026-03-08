@@ -76,6 +76,7 @@ var (
 	migrationWorker       *migration.Worker
 	migrationWorkerCancel context.CancelFunc // Cancel function for worker context
 	isV2OnlyMode          bool
+	migrationTelemetry    *migration.MigrationTelemetry
 )
 
 // SetMigrationDependencies sets the migration-related dependencies.
@@ -137,6 +138,20 @@ func getMigrationWorker() *migration.Worker {
 	migrationMu.RLock()
 	defer migrationMu.RUnlock()
 	return migrationWorker
+}
+
+// SetMigrationTelemetry sets the telemetry reporter for migration events.
+func SetMigrationTelemetry(mt *migration.MigrationTelemetry) {
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
+	migrationTelemetry = mt
+}
+
+// getMigrationTelemetry returns the migration telemetry reporter with proper locking.
+func getMigrationTelemetry() *migration.MigrationTelemetry {
+	migrationMu.RLock()
+	defer migrationMu.RUnlock()
+	return migrationTelemetry
 }
 
 // getIsV2OnlyMode returns whether v2-only mode is active with proper locking.
@@ -431,6 +446,11 @@ func (c *Controller) StartMigration(ctx echo.Context) error {
 		logger.Int64("total_records", totalRecords),
 		logger.String("path", path), logger.String("ip", ip))
 
+	// Report migration start to telemetry
+	if mt := getMigrationTelemetry(); mt != nil {
+		mt.ReportStarted(totalRecords)
+	}
+
 	// Send notification that migration has started
 	if notifService := notification.GetService(); notifService != nil {
 		// Build notification fully before broadcast to ensure SSE subscribers see translation keys
@@ -589,6 +609,13 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
+	// Snapshot progress before cancel resets counters
+	var migratedSoFar, snapshotTotal int64
+	if state, stateErr := sm.GetState(); stateErr == nil {
+		migratedSoFar = state.MigratedRecords
+		snapshotTotal = state.TotalRecords
+	}
+
 	// Stop the worker first if running
 	if worker != nil && worker.IsRunning() {
 		worker.Stop()
@@ -609,6 +636,11 @@ func (c *Controller) CancelMigration(ctx echo.Context) error {
 
 	c.logInfoIfEnabled("Migration cancelled successfully",
 		logger.String("path", path), logger.String("ip", ip))
+
+	// Report cancellation to telemetry
+	if mt := getMigrationTelemetry(); mt != nil {
+		mt.ReportCancelled(migratedSoFar, snapshotTotal)
+	}
 
 	// Send notification that migration was cancelled
 	if notifService := notification.GetService(); notifService != nil {
