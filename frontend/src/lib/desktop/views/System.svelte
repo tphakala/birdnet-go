@@ -6,7 +6,6 @@
   import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
-  import { RefreshCw } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -33,6 +32,9 @@
 
   // Polling fallback interval in milliseconds
   const POLLING_INTERVAL_MS = 5000;
+
+  // Auto-refresh interval for slow-changing data (system info, disks, processes)
+  const SLOW_REFRESH_INTERVAL_MS = 30000;
 
   // Process name displayed in place of the Go binary name
   const BIRDNET_PROCESS_NAME = 'BirdNET-Go';
@@ -104,8 +106,6 @@
   let memoryUsage = $state<MemoryInfo>({} as MemoryInfo);
   let systemTemperature = $state<TemperatureInfo>({ is_available: false });
   let processes = $state<ProcessInfo[]>([]);
-  let isLoading = $state(true);
-
   // Sparkline history arrays
   let cpuHistory = $state<number[]>([]);
   let memoryHistory = $state<number[]>([]);
@@ -120,6 +120,9 @@
 
   // Polling fallback timeout reference (used when SSE endpoints aren't available)
   let pollingTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Auto-refresh interval for slow-changing data not covered by SSE
+  let slowRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
   // Map user's temperature preference to TemperatureUnit format
   // Settings store uses 'celsius'/'fahrenheit', formatters use 'metric'/'imperial'/'standard'
@@ -390,9 +393,26 @@
     }
   }
 
+  // Refresh slow-changing data not delivered by SSE (system info, disks, processes)
+  async function refreshSlowData(): Promise<void> {
+    await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
+  }
+
+  function startSlowRefresh(): void {
+    slowRefreshInterval = setInterval(() => {
+      refreshSlowData();
+    }, SLOW_REFRESH_INTERVAL_MS);
+  }
+
+  function stopSlowRefresh(): void {
+    if (slowRefreshInterval) {
+      clearInterval(slowRefreshInterval);
+      slowRefreshInterval = null;
+    }
+  }
+
   // Load all data
   async function loadAllData(): Promise<void> {
-    isLoading = true;
     await Promise.all([
       loadSystemInfo(),
       loadDiskUsage(),
@@ -401,7 +421,6 @@
       loadProcesses(),
       loadBirdnetOverlap(),
     ]);
-    isLoading = false;
   }
 
   // Initialize on mount, clean up on unmount
@@ -412,6 +431,7 @@
     loadAllData().then(() => {
       if (active.current) {
         loadMetricsHistory(active);
+        startSlowRefresh();
       }
     });
 
@@ -419,6 +439,7 @@
       active.current = false;
       disconnectMetricsStream();
       stopPollingFallback();
+      stopSlowRefresh();
     };
   });
 </script>
@@ -497,18 +518,5 @@
         loadProcesses();
       }}
     />
-
-    <!-- Refresh button -->
-    <div class="flex justify-center mt-6">
-      <button
-        class="inline-flex items-center px-4 py-2 rounded-lg font-medium text-sm text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        onclick={loadAllData}
-        disabled={isLoading}
-        aria-label={t('system.aria.refreshData')}
-      >
-        <RefreshCw class="size-5 mr-2" />
-        {t('system.refreshData')}
-      </button>
-    </div>
   </div>
 {/if}
