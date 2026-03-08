@@ -24,3 +24,12 @@ func TestNewAlertingTelemetry(t *testing.T) {
 	at := NewAlertingTelemetry()
 	assert.NotNil(t, at)
 }
+
+func TestAlertingTelemetry_ReportEventDropped_Counter(t *testing.T) {
+	t.Parallel()
+	at := NewAlertingTelemetry()
+	for i := int64(1); i <= 15; i++ {
+		at.ReportEventDropped()
+		assert.Equal(t, i, at.droppedEvents.Load())
+	}
+}

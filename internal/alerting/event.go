@@ -91,6 +91,10 @@ func (b *AlertEventBus) Subscribe(handler AlertEventHandler) {
 // is full the event is dropped to protect callers on hot paths.
 // Events are silently dropped after Stop() has been called.
 func (b *AlertEventBus) Publish(event *AlertEvent) {
+	if event == nil {
+		return
+	}
+
 	select {
 	case <-b.stopCh:
 		return // Bus is stopped, discard event

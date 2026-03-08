@@ -5,7 +5,6 @@ import (
 	"sync/atomic"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -67,11 +66,11 @@ func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 		scope.SetFingerprint([]string{telemetryComponent, "init-failed"})
 
 		scope.SetContext(telemetryComponent, map[string]any{
-			"error": privacy.ScrubMessage(errMsg),
+			"error": errMsg, // scrubbed by CaptureMessage
 		})
 
 		telemetry.CaptureMessage(
-			fmt.Sprintf("Alerting engine initialization failed: %s", privacy.ScrubMessage(errMsg)),
+			fmt.Sprintf("Alerting engine initialization failed: %s", errMsg),
 			sentry.LevelError,
 			telemetryComponent,
 		)
@@ -136,11 +135,23 @@ func (at *AlertingTelemetry) ReportDBWriteFailed(operation, errMsg string) {
 		return
 	}
 
-	telemetry.FastCaptureMessage(
-		fmt.Sprintf("Alerting DB operation failed: %s: %s", operation, privacy.ScrubMessage(errMsg)),
-		sentry.LevelError,
-		telemetryComponent,
-	)
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", telemetryComponent)
+		scope.SetTag("outcome", "db_write_failed")
+		scope.SetTag("operation", operation)
+		scope.SetFingerprint([]string{telemetryComponent, "db-write-failed", operation})
+
+		scope.SetContext(telemetryComponent, map[string]any{
+			"operation": operation,
+			"error":     errMsg, // scrubbed by CaptureMessage
+		})
+
+		telemetry.FastCaptureMessage(
+			fmt.Sprintf("Alerting DB operation failed: %s", operation),
+			sentry.LevelError,
+			telemetryComponent,
+		)
+	})
 }
 
 // ReportDispatchFailed reports that a notification dispatch failed.
@@ -150,11 +161,23 @@ func (at *AlertingTelemetry) ReportDispatchFailed(target, errMsg string) {
 		return
 	}
 
-	telemetry.FastCaptureMessage(
-		fmt.Sprintf("Alert dispatch to %s failed: %s", target, privacy.ScrubMessage(errMsg)),
-		sentry.LevelWarning,
-		telemetryComponent,
-	)
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", telemetryComponent)
+		scope.SetTag("outcome", "dispatch_failed")
+		scope.SetTag("target", target)
+		scope.SetFingerprint([]string{telemetryComponent, "dispatch-failed", target})
+
+		scope.SetContext(telemetryComponent, map[string]any{
+			"target": target,
+			"error":  errMsg, // scrubbed by CaptureMessage
+		})
+
+		telemetry.FastCaptureMessage(
+			fmt.Sprintf("Alert dispatch to %s failed", target),
+			sentry.LevelWarning,
+			telemetryComponent,
+		)
+	})
 }
 
 // ReportBridgeRegistrationFailed reports that an event bridge failed to register.
@@ -163,9 +186,19 @@ func (at *AlertingTelemetry) ReportBridgeRegistrationFailed(errMsg string) {
 		return
 	}
 
-	telemetry.FastCaptureMessage(
-		fmt.Sprintf("Alert bridge registration failed: %s", privacy.ScrubMessage(errMsg)),
-		sentry.LevelWarning,
-		telemetryComponent,
-	)
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", telemetryComponent)
+		scope.SetTag("outcome", "bridge_registration_failed")
+		scope.SetFingerprint([]string{telemetryComponent, "bridge-registration-failed"})
+
+		scope.SetContext(telemetryComponent, map[string]any{
+			"error": errMsg, // scrubbed by CaptureMessage
+		})
+
+		telemetry.FastCaptureMessage(
+			"Alert bridge registration failed",
+			sentry.LevelWarning,
+			telemetryComponent,
+		)
+	})
 }

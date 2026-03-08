@@ -132,9 +132,6 @@ func renderTemplate(tmpl string, rule *entities.AlertRule, event *AlertEvent) st
 // fallback string for the default (no-custom-template) notification message.
 // Returns empty key/message when required event properties are missing (e.g., test fires).
 func defaultMessageKeyAndParams(rule *entities.AlertRule, event *AlertEvent) (key string, params map[string]any, fallback string) {
-	if event == nil {
-		return "", nil, ""
-	}
 	switch {
 	case event.MetricName != "":
 		return metricMessage(rule, event)
