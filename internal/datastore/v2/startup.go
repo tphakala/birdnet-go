@@ -251,7 +251,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
 		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
 	if err != nil {
-		reportStartupError("mysql", "checkV2Tables", ErrV2DatabaseNotFound)
+		reportStartupError("mysql", "checkV2Tables", err)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
