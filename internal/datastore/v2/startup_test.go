@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -205,5 +206,13 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 		require.NoError(t, f.Close())
 
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
+	})
+}
+
+func TestReportStartupError_NilSafe(t *testing.T) {
+	t.Parallel()
+	assert.NotPanics(t, func() {
+		reportStartupError("sqlite", "openDatabase", fmt.Errorf("database is locked"))
+		reportStartupError("sqlite", "openV2Database", fmt.Errorf("open /home/user/birdnet_v2.db: denied"), "/home/user/birdnet_v2.db")
 	})
 }

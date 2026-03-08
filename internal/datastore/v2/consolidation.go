@@ -8,9 +8,11 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // StateFileName is the name of the consolidation state file.
@@ -97,6 +99,33 @@ func cleanupWALFiles(dbPath string) {
 	}
 }
 
+// reportConsolidationError reports a database consolidation failure to Sentry telemetry.
+// File paths in the error message are anonymized via scrubErrorWithPaths.
+func reportConsolidationError(operation string, err error, paths ...string) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-consolidation")
+		scope.SetTag("operation", operation)
+		scope.SetFingerprint([]string{"datastore-consolidation", operation})
+
+		scrubbedErr := scrubErrorWithPaths(err.Error(), paths...)
+		scope.SetContext("consolidation_error", map[string]any{
+			"operation": operation,
+			"error":     scrubbedErr,
+		})
+
+		level := sentry.LevelError
+		if operation == "rollbackFailed" {
+			level = sentry.LevelFatal
+		}
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Database consolidation failed: %s", operation),
+			level,
+			"datastore-consolidation",
+		)
+	})
+}
+
 // Consolidate performs the database consolidation after migration completes.
 // It renames the legacy database to .old and moves v2 to the configured path.
 //
@@ -149,12 +178,14 @@ func Consolidate(
 		StartedAt:      time.Now(),
 	}
 	if err := WriteConsolidationState(dataDir, state); err != nil {
+		reportConsolidationError("writeStateFile", err, configuredPath, v2Path)
 		return nil, fmt.Errorf("failed to write consolidation state: %w", err)
 	}
 
 	// Step 2: Checkpoint WAL on v2
 	log.Debug("checkpointing v2 database WAL")
 	if err := v2Manager.CheckpointWAL(); err != nil {
+		reportConsolidationError("v2WalCheckpoint", err, v2Path)
 		_ = DeleteConsolidationState(dataDir)
 		return nil, fmt.Errorf("failed to checkpoint v2 WAL: %w", err)
 	}
@@ -162,6 +193,7 @@ func Consolidate(
 	// Step 3: Close v2 connection
 	log.Debug("closing v2 database connection")
 	if err := v2Manager.Close(); err != nil {
+		reportConsolidationError("closeV2", err, v2Path)
 		_ = DeleteConsolidationState(dataDir)
 		return nil, fmt.Errorf("failed to close v2 database: %w", err)
 	}
@@ -170,6 +202,7 @@ func Consolidate(
 	log.Debug("checkpointing legacy database WAL")
 	if sqliteStore, ok := legacyStore.(*datastore.SQLiteStore); ok {
 		if err := sqliteStore.CheckpointWAL(); err != nil {
+			reportConsolidationError("legacyWalCheckpoint", err, configuredPath)
 			_ = DeleteConsolidationState(dataDir)
 			return nil, fmt.Errorf("failed to checkpoint legacy WAL: %w", err)
 		}
@@ -178,6 +211,7 @@ func Consolidate(
 	// Step 5: Close legacy connection
 	log.Debug("closing legacy database connection")
 	if err := legacyStore.Close(); err != nil {
+		reportConsolidationError("closeLegacy", err, configuredPath)
 		_ = DeleteConsolidationState(dataDir)
 		return nil, fmt.Errorf("failed to close legacy database: %w", err)
 	}
@@ -192,6 +226,7 @@ func Consolidate(
 		logger.String("from", configuredPath),
 		logger.String("to", backupPath))
 	if err := os.Rename(configuredPath, backupPath); err != nil {
+		reportConsolidationError("renameLegacyToBackup", err, configuredPath, backupPath)
 		_ = DeleteConsolidationState(dataDir)
 		return nil, fmt.Errorf("failed to rename legacy database to backup: %w", err)
 	}
@@ -201,10 +236,12 @@ func Consolidate(
 		logger.String("from", v2Path),
 		logger.String("to", configuredPath))
 	if err := os.Rename(v2Path, configuredPath); err != nil {
+		reportConsolidationError("renameV2ToConfigured", err, v2Path, configuredPath)
 		// Rollback: restore legacy from backup
 		log.Warn("v2 rename failed, rolling back legacy rename",
 			logger.Error(err))
 		if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
+			reportConsolidationError("rollbackFailed", rollbackErr, backupPath, configuredPath)
 			log.Error("rollback failed - manual intervention required",
 				logger.Error(rollbackErr),
 				logger.String("backup_path", backupPath),
@@ -231,6 +268,7 @@ func Consolidate(
 		logger.String("path", configuredPath))
 	newManager, err := NewSQLiteManager(Config{DirectPath: configuredPath})
 	if err != nil {
+		reportConsolidationError("reopenV2", err, configuredPath)
 		return nil, fmt.Errorf("failed to reopen v2 database at configured path: %w", err)
 	}
 

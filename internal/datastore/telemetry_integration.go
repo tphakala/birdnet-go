@@ -10,6 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -110,7 +111,7 @@ func (dt *DatastoreTelemetry) gatherErrorContext(err error, operation string, st
 	context := &ErrorContext{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Operation: operation,
-		Error:     err.Error(),
+		Error:     privacy.ScrubMessage(err.Error()),
 		ErrorType: fmt.Sprintf("%T", err),
 	}
 
@@ -142,7 +143,7 @@ func (dt *DatastoreTelemetry) buildEnhancedError(err error, operation string, co
 		Component("datastore").
 		Category(errors.CategoryDatabase).
 		Context("operation", operation).
-		Context("db_path", dt.dbPath)
+		Context("db_path", privacy.AnonymizePath(dt.dbPath))
 
 	// Add resource context if available
 	if context.ResourceSnapshot != nil {
