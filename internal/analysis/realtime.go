@@ -1828,6 +1828,13 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		AvesClassID:        &avesClass.ID,
 	})
 
+	// Determine database type for telemetry
+	dbType := "sqlite"
+	if isMySQL {
+		dbType = "mysql"
+	}
+	migrationTelemetry := migration.NewMigrationTelemetry(dbType)
+
 	// Create the migration worker
 	worker, err := migration.NewWorker(&migration.WorkerConfig{
 		Legacy:              legacyRepo,
@@ -1845,6 +1852,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		UseBatchMode:        isMySQL, // Use efficient batch inserts for MySQL
 		SpeciesLabelTypeID:  speciesLabelType.ID,
 		AvesClassID:         &avesClass.ID,
+		Telemetry:           migrationTelemetry,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create migration worker: %w", err)
@@ -1858,6 +1866,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 
 	// Inject dependencies into the API layer
 	apiv2.SetMigrationDependencies(stateManager, worker)
+	apiv2.SetMigrationTelemetry(migrationTelemetry)
 
 	// Check for state recovery - resume migration if it was in progress
 	state, err := stateManager.GetState()
