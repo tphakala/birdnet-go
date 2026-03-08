@@ -208,12 +208,13 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	// Collect MySQL endpoint info for redaction from error messages
 	mysqlHost := settings.Output.MySQL.Host
 	mysqlDB := settings.Output.MySQL.Database
+	mysqlUser := settings.Output.MySQL.Username
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		reportStartupError("mysql", "openDatabase", err, mysqlHost, mysqlDB)
+		reportStartupError("mysql", "openDatabase", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -224,7 +225,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		reportStartupError("mysql", "getUnderlyingDB", err, mysqlHost, mysqlDB)
+		reportStartupError("mysql", "getUnderlyingDB", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -239,7 +240,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
 		settings.Output.MySQL.Database).Scan(&legacyCount).Error
 	if err != nil {
-		reportStartupError("mysql", "checkLegacyTables", err, mysqlHost, mysqlDB)
+		reportStartupError("mysql", "checkLegacyTables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -255,7 +256,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
 		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
 	if err != nil {
-		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB)
+		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -310,7 +311,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	// Read migration state from v2 table
 	var state entities.MigrationState
 	if err := db.Table(tableName).First(&state).Error; err != nil {
-		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB)
+		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
