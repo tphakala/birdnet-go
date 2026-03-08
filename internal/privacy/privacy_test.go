@@ -2063,3 +2063,37 @@ func TestSanitizeStreamUrlBackwardCompatibility(t *testing.T) {
 		})
 	}
 }
+
+func TestScrubMessage_ScrubbsFilePaths(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "unix absolute path with username",
+			input: "failed to open /home/john/.config/birdnet-go/birdnet.db: permission denied",
+		},
+		{
+			name:  "windows path with username",
+			input: `error reading C:\Users\john\AppData\birdnet-go\data.db`,
+		},
+		{
+			name:  "unix path in middle of message",
+			input: "database error at /var/lib/birdnet-go/data.db: disk full",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			result := ScrubMessage(tt.input)
+			// The original username should not appear in the scrubbed output
+			assert.NotContains(t, result, "john")
+			// The scrubbed result should still contain non-path parts of the message
+			assert.NotEmpty(t, result)
+		})
+	}
+}

@@ -60,7 +60,7 @@ func (r *integrationRepo) CreateRule(_ context.Context, rule *entities.AlertRule
 }
 
 func (r *integrationRepo) UpdateRule(_ context.Context, _ *entities.AlertRule) error { return nil }
-func (r *integrationRepo) DeleteRule(_ context.Context, _ uint) error               { return nil }
+func (r *integrationRepo) DeleteRule(_ context.Context, _ uint) error                { return nil }
 func (r *integrationRepo) ToggleRule(_ context.Context, _ uint, _ bool) error        { return nil }
 func (r *integrationRepo) DeleteBuiltInRules(_ context.Context) (int64, error)       { return 0, nil }
 
@@ -93,9 +93,11 @@ func (r *integrationRepo) ListHistory(_ context.Context, _ repository.AlertHisto
 	return out, int64(len(r.history)), nil
 }
 
-func (r *integrationRepo) DeleteHistory(_ context.Context) (int64, error)                         { return 0, nil }
-func (r *integrationRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error)      { return 0, nil }
-func (r *integrationRepo) CountRulesByName(_ context.Context, _ string) (int64, error)            { return 0, nil }
+func (r *integrationRepo) DeleteHistory(_ context.Context) (int64, error) { return 0, nil }
+func (r *integrationRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (r *integrationRepo) CountRulesByName(_ context.Context, _ string) (int64, error) { return 0, nil }
 
 func (r *integrationRepo) historyCount() int {
 	r.mu.Lock()
@@ -105,8 +107,8 @@ func (r *integrationRepo) historyCount() int {
 
 // actionRecorder captures dispatched actions for verification.
 type actionRecorder struct {
-	mu       sync.Mutex
-	calls    []actionCall
+	mu    sync.Mutex
+	calls []actionCall
 }
 
 type actionCall struct {
@@ -150,7 +152,7 @@ func TestIntegration_DetectionNewSpeciesRuleFires(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create engine
-	engine := NewEngine(repo, recorder.dispatch, log)
+	engine := NewEngine(repo, recorder.dispatch, log, nil)
 	err = engine.RefreshRules(t.Context())
 	require.NoError(t, err)
 
@@ -184,7 +186,7 @@ func TestIntegration_CooldownPreventsDuplicateFiring(t *testing.T) {
 	err := seedDefaultRules(t.Context(), repo, log)
 	require.NoError(t, err)
 
-	engine := NewEngine(repo, recorder.dispatch, log)
+	engine := NewEngine(repo, recorder.dispatch, log, nil)
 	err = engine.RefreshRules(t.Context())
 	require.NoError(t, err)
 
@@ -229,7 +231,7 @@ func TestIntegration_CustomRuleWithConditions(t *testing.T) {
 	err := repo.CreateRule(t.Context(), customRule)
 	require.NoError(t, err)
 
-	engine := NewEngine(repo, recorder.dispatch, log)
+	engine := NewEngine(repo, recorder.dispatch, log, nil)
 	err = engine.RefreshRules(t.Context())
 	require.NoError(t, err)
 
@@ -278,7 +280,7 @@ func TestIntegration_MetricSustainedThresholdFires(t *testing.T) {
 	err := repo.CreateRule(t.Context(), metricRule)
 	require.NoError(t, err)
 
-	engine := NewEngine(repo, recorder.dispatch, log)
+	engine := NewEngine(repo, recorder.dispatch, log, nil)
 	err = engine.RefreshRules(t.Context())
 	require.NoError(t, err)
 
@@ -309,7 +311,7 @@ func TestIntegration_UnmatchedEventDoesNotFire(t *testing.T) {
 	err := seedDefaultRules(t.Context(), repo, log)
 	require.NoError(t, err)
 
-	engine := NewEngine(repo, recorder.dispatch, log)
+	engine := NewEngine(repo, recorder.dispatch, log, nil)
 	err = engine.RefreshRules(t.Context())
 	require.NoError(t, err)
 

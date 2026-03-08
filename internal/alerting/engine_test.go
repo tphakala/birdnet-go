@@ -84,7 +84,7 @@ func TestEngine_EventMatchesRuleNoConditions(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -114,7 +114,7 @@ func TestEngine_EventMatchesRuleWithPassingConditions(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -144,7 +144,7 @@ func TestEngine_EventMatchesRuleWithFailingConditions(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -171,7 +171,7 @@ func TestEngine_EventDoesNotMatchAnyRule(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -198,7 +198,7 @@ func TestEngine_DisabledRuleNotEvaluated(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -226,7 +226,7 @@ func TestEngine_CooldownPreventsRefiring(t *testing.T) {
 	var fireCount int
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fireCount++
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -257,7 +257,7 @@ func TestEngine_CooldownExpires(t *testing.T) {
 	var fireCount int
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fireCount++
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -300,7 +300,7 @@ func TestEngine_MultipleRulesMatchSameEvent(t *testing.T) {
 	var firedIDs []uint
 	engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
 		firedIDs = append(firedIDs, rule.ID)
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -329,7 +329,7 @@ func TestEngine_ActionDispatchRecordsHistory(t *testing.T) {
 
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		// no-op action
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -364,7 +364,7 @@ func TestEngine_MetricRuleWithSustainedDuration(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -397,7 +397,7 @@ func TestEngine_NoCooldownMeansAlwaysFires(t *testing.T) {
 	var fireCount int
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fireCount++
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -431,7 +431,7 @@ func TestEngine_DiskMetricPathIsolation(t *testing.T) {
 	var fired bool
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
 		fired = true
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -473,7 +473,7 @@ func TestEngine_DiskMetricPathIsolation_Sustained(t *testing.T) {
 	var firedPath string
 	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
 		firedPath = event.Properties[PropertyPath].(string)
-	}, testLogger())
+	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
@@ -527,7 +527,7 @@ func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
 	}
 	repo := newMockRepo(rule1, rule2)
 
-	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {}, testLogger())
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {}, testLogger(), nil)
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
 	now := time.Now()

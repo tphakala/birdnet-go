@@ -11,7 +11,7 @@ import (
 )
 
 func TestAlertEventBus_SubscribeAndPublish(t *testing.T) {
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 	defer bus.Stop()
 
 	var received atomic.Pointer[AlertEvent]
@@ -37,7 +37,7 @@ func TestAlertEventBus_SubscribeAndPublish(t *testing.T) {
 }
 
 func TestAlertEventBus_MultipleHandlers(t *testing.T) {
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 	defer bus.Stop()
 
 	var count atomic.Int32
@@ -54,14 +54,14 @@ func TestAlertEventBus_MultipleHandlers(t *testing.T) {
 }
 
 func TestAlertEventBus_PublishWithNoHandlers(t *testing.T) {
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 	defer bus.Stop()
 	// Should not panic
 	bus.Publish(&AlertEvent{ObjectType: ObjectTypeSystem, MetricName: MetricCPUUsage})
 }
 
 func TestAlertEventBus_PublishSetsTimestamp(t *testing.T) {
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 	defer bus.Stop()
 
 	var received atomic.Pointer[AlertEvent]
@@ -80,7 +80,7 @@ func TestAlertEventBus_PublishSetsTimestamp(t *testing.T) {
 }
 
 func TestAlertEventBus_ConcurrentPublish(t *testing.T) {
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 	defer bus.Stop()
 
 	var count atomic.Int32

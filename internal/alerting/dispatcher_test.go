@@ -45,7 +45,7 @@ func dispatchTestLogger() logger.Logger {
 
 func TestDispatcher_BellAction(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,
@@ -70,7 +70,7 @@ func TestDispatcher_BellAction(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -99,7 +99,7 @@ func TestDispatcher_DefaultTemplate_UsesKeys(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -127,7 +127,7 @@ func TestDispatcher_DefaultTemplate_EventKey(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_FallbackKey(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,
@@ -152,7 +152,7 @@ func TestDispatcher_DefaultTemplate_FallbackKey(t *testing.T) {
 
 func TestDispatcher_MultipleActions(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,
@@ -175,7 +175,7 @@ func TestDispatcher_MultipleActions(t *testing.T) {
 
 func TestDispatcher_UnknownTargetSkipped(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,
@@ -197,7 +197,7 @@ func TestDispatcher_UnknownTargetSkipped(t *testing.T) {
 }
 
 func TestDispatcher_NilNotifCreator(t *testing.T) {
-	dispatcher := NewActionDispatcher(nil, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(nil, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,
@@ -243,7 +243,7 @@ func TestRenderTemplate_WithProperties(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_MetricMessage(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -280,7 +280,7 @@ func TestDispatcher_DefaultTemplate_MetricMessage(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -314,7 +314,7 @@ func TestDispatcher_DefaultTemplate_DetectionMessage(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -349,7 +349,7 @@ func TestDispatcher_DefaultTemplate_ErrorMessage_Classified(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_ErrorMessage_Unclassified(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -380,7 +380,7 @@ func TestDispatcher_DefaultTemplate_ErrorMessage_Unclassified(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_DisconnectMessage(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:      1,
@@ -410,7 +410,7 @@ func TestDispatcher_DefaultTemplate_DisconnectMessage(t *testing.T) {
 
 func TestDispatcher_DefaultTemplate_NoProperties_GracefulFallback(t *testing.T) {
 	mock := &mockNotifCreator{}
-	dispatcher := NewActionDispatcher(mock, dispatchTestLogger())
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
 
 	rule := &entities.AlertRule{
 		ID:   1,

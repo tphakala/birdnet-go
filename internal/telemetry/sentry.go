@@ -183,7 +183,7 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 
 	// Remove extra fields except allowed ones
 	for k := range event.Extra {
-		if k != "error_type" && k != "component" {
+		if k != "error_type" && k != "component" && k != "stacktrace" {
 			delete(event.Extra, k)
 		}
 	}
@@ -283,6 +283,7 @@ func removePrivacyExtraFields(extra map[string]any) int {
 	allowedFields := map[string]bool{
 		"error_type": true,
 		"component":  true,
+		"stacktrace": true,
 	}
 
 	for k := range extra {
