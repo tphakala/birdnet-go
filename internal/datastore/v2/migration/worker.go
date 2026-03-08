@@ -339,6 +339,8 @@ const (
 
 // run is the main migration loop.
 func (w *Worker) run(ctx context.Context) {
+	var panicked bool
+
 	defer func() {
 		w.mu.Lock()
 		wasPaused := w.paused
@@ -349,8 +351,8 @@ func (w *Worker) run(ctx context.Context) {
 
 		// Report cancellation to telemetry only for genuine cancellation/stop.
 		// Skip if: completed normally (ReportCompleted handles it),
-		// or auto-paused (ReportAutoPaused handles it).
-		if !wasPaused {
+		// auto-paused (ReportAutoPaused handles it), or panicked (ReportPanic handles it).
+		if !wasPaused && !panicked {
 			if state, err := w.stateManager.GetState(); err == nil &&
 				state.State != entities.MigrationStatusCompleted &&
 				state.State != entities.MigrationStatusPaused {
@@ -363,6 +365,7 @@ func (w *Worker) run(ctx context.Context) {
 	// Reports to Sentry and records the error message in state so the UI shows it.
 	defer func() {
 		if r := recover(); r != nil {
+			panicked = true
 			scrubbedPanic := privacy.ScrubMessage(fmt.Sprintf("%v", r))
 			w.logger.Error("migration worker panic recovered",
 				logger.String("panic", scrubbedPanic))

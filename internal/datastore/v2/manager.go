@@ -241,16 +241,25 @@ func (m *SQLiteManager) fixSQLiteForeignKeys() error {
 
 // seedLookupTables seeds the label_types and taxonomic_classes tables with default values.
 func (m *SQLiteManager) seedLookupTables() error {
-	// Seed label types
+	return seedLookupTablesDB(m.db)
+}
+
+// seedDefaultModel ensures the default BirdNET model exists in the registry.
+func (m *SQLiteManager) seedDefaultModel() error {
+	return seedDefaultModelDB(m.db)
+}
+
+// seedLookupTablesDB seeds the label_types and taxonomic_classes tables with default values.
+// Shared implementation used by both SQLiteManager and MySQLManager.
+func seedLookupTablesDB(db *gorm.DB) error {
 	for _, lt := range entities.DefaultLabelTypes() {
-		if err := m.db.Where("name = ?", lt.Name).FirstOrCreate(&lt).Error; err != nil {
+		if err := db.Where("name = ?", lt.Name).FirstOrCreate(&lt).Error; err != nil {
 			return fmt.Errorf("failed to seed label type %q: %w", lt.Name, err)
 		}
 	}
 
-	// Seed taxonomic classes
 	for _, tc := range entities.DefaultTaxonomicClasses() {
-		if err := m.db.Where("name = ?", tc.Name).FirstOrCreate(&tc).Error; err != nil {
+		if err := db.Where("name = ?", tc.Name).FirstOrCreate(&tc).Error; err != nil {
 			return fmt.Errorf("failed to seed taxonomic class %q: %w", tc.Name, err)
 		}
 	}
@@ -258,18 +267,16 @@ func (m *SQLiteManager) seedLookupTables() error {
 	return nil
 }
 
-// seedDefaultModel ensures the default BirdNET model exists in the registry.
-// Uses detection.DefaultModelName, detection.DefaultModelVersion, and detection.DefaultModelVariant
-// to ensure consistency with the conversion layer's fallback logic.
-func (m *SQLiteManager) seedDefaultModel() error {
+// seedDefaultModelDB ensures the default BirdNET model exists in the registry.
+// Shared implementation used by both SQLiteManager and MySQLManager.
+func seedDefaultModelDB(db *gorm.DB) error {
 	model := entities.AIModel{
 		Name:      detection.DefaultModelName,
 		Version:   detection.DefaultModelVersion,
 		Variant:   detection.DefaultModelVariant,
 		ModelType: entities.ModelTypeBird,
 	}
-	// Use FirstOrCreate to avoid duplicates
-	result := m.db.Where("name = ? AND version = ? AND variant = ?", model.Name, model.Version, model.Variant).FirstOrCreate(&model)
+	result := db.Where("name = ? AND version = ? AND variant = ?", model.Name, model.Version, model.Variant).FirstOrCreate(&model)
 	if result.Error != nil {
 		return fmt.Errorf("failed to seed default model: %w", result.Error)
 	}

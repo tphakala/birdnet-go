@@ -2080,6 +2080,10 @@ func TestScrubMessage_ScrubbsFilePaths(t *testing.T) {
 			input: `error reading C:\Users\john\AppData\birdnet-go\data.db`,
 		},
 		{
+			name:  "windows path with lowercase drive letter",
+			input: `error reading c:\Users\john\AppData\birdnet-go\data.db`,
+		},
+		{
 			name:  "unix path in middle of message",
 			input: "database error at /var/lib/birdnet-go/data.db: disk full",
 		},
