@@ -67,7 +67,7 @@ func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 		scope.SetFingerprint([]string{telemetryComponent, "init-failed"})
 
 		scope.SetContext(telemetryComponent, map[string]any{
-			"error": errMsg, // scrubbed by CaptureMessage
+			"error": privacy.ScrubMessage(errMsg),
 		})
 
 		telemetry.CaptureMessage(
@@ -196,7 +196,7 @@ func (at *AlertingTelemetry) ReportBridgeRegistrationFailed(errMsg string) {
 		scope.SetFingerprint([]string{telemetryComponent, "bridge-registration-failed"})
 
 		scope.SetContext(telemetryComponent, map[string]any{
-			"error": errMsg, // scrubbed by CaptureMessage
+			"error": privacy.ScrubMessage(errMsg),
 		})
 
 		telemetry.FastCaptureMessage(

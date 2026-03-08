@@ -232,6 +232,7 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
+				e.log.Error("panic in alert history cleanup")
 				e.telemetry.ReportPanic(r, debug.Stack())
 			}
 		}()
