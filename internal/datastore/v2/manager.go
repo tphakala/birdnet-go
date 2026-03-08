@@ -84,15 +84,15 @@ func scrubErrorWithPaths(errMsg string, paths ...string) string {
 
 // reportInitFailure reports a schema initialization failure to Sentry telemetry.
 // This covers AutoMigrate, seeding, and trigger creation failures.
-// The dbPath parameter is used to scrub file paths from error messages.
-func reportInitFailure(dbType, operation string, err error, dbPath string) {
+// The paths parameter lists values (file paths, hostnames, database names) to scrub from error messages.
+func reportInitFailure(dbType, operation string, err error, paths ...string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", "datastore-init")
 		scope.SetTag("db_type", dbType)
 		scope.SetTag("operation", operation)
 		scope.SetFingerprint([]string{"datastore-init", dbType, operation})
 
-		scrubbedErr := scrubErrorWithPaths(err.Error(), dbPath)
+		scrubbedErr := scrubErrorWithPaths(err.Error(), paths...)
 		scope.SetContext("init_failure", map[string]any{
 			"db_type":   dbType,
 			"operation": operation,
