@@ -147,7 +147,7 @@ func (at *AlertingTelemetry) ReportDBWriteFailed(operation, errMsg string) {
 
 		scope.SetContext(telemetryComponent, map[string]any{
 			"operation": operation,
-			"error":     errMsg, // scrubbed by CaptureMessage
+			"error":     privacy.ScrubMessage(errMsg),
 		})
 
 		telemetry.FastCaptureMessage(
@@ -173,7 +173,7 @@ func (at *AlertingTelemetry) ReportDispatchFailed(target, errMsg string) {
 
 		scope.SetContext(telemetryComponent, map[string]any{
 			"target": target,
-			"error":  errMsg, // scrubbed by CaptureMessage
+			"error":  privacy.ScrubMessage(errMsg),
 		})
 
 		telemetry.FastCaptureMessage(
