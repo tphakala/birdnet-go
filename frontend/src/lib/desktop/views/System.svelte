@@ -447,9 +447,11 @@
     };
   });
 
-  // Start/stop slow refresh based on active subpage
+  // Start/stop slow refresh based on active subpage.
+  // The active guard lives inside startSlowRefresh's tick(), so no need to
+  // check componentActive here — avoids an ordering dependency between effects.
   $effect(() => {
-    if (currentSubpage === 'overview' && componentActive.current) {
+    if (currentSubpage === 'overview') {
       startSlowRefresh(componentActive);
     }
 
