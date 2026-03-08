@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
@@ -81,12 +82,11 @@ func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 // This is the most critical health signal -- it means there is a bug
 // in the engine or dispatcher code.
 //
-// PRIVACY: Only the panic type (%T) is sent to Sentry, NOT the panic value.
-// The value could contain alert content (species names, event properties)
-// if the handler panics while processing an AlertEvent. We deliberately
-// sacrifice debuggability for privacy -- the type alone (e.g., *runtime.Error,
-// string) plus Sentry's automatic stack trace is sufficient for diagnosis.
-func (at *AlertingTelemetry) ReportPanic(panicValue any) {
+// PRIVACY: Only the panic type (%T) and a scrubbed stack trace are sent.
+// The panic value itself is NOT sent because it could contain alert content
+// (species names, event properties). The stack trace is scrubbed to remove
+// file paths that could leak OS usernames.
+func (at *AlertingTelemetry) ReportPanic(panicValue any, stack []byte) {
 	if at == nil {
 		return
 	}
@@ -101,6 +101,10 @@ func (at *AlertingTelemetry) ReportPanic(panicValue any) {
 		scope.SetContext(telemetryComponent, map[string]any{
 			"panic_type": panicType,
 		})
+
+		if len(stack) > 0 {
+			scope.SetExtra("stacktrace", privacy.ScrubMessage(string(stack)))
+		}
 
 		telemetry.CaptureMessage(
 			fmt.Sprintf("Alerting handler panic (type: %s)", panicType),

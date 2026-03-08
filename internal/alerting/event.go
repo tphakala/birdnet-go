@@ -1,6 +1,7 @@
 package alerting
 
 import (
+	"runtime/debug"
 	"sync"
 	"time"
 )
@@ -156,7 +157,7 @@ func (b *AlertEventBus) dispatch(event *AlertEvent) {
 func (b *AlertEventBus) safeCall(handler AlertEventHandler, event *AlertEvent) {
 	defer func() {
 		if r := recover(); r != nil {
-			b.telemetry.ReportPanic(r)
+			b.telemetry.ReportPanic(r, debug.Stack())
 		}
 	}()
 	handler(event)

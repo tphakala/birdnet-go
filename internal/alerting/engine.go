@@ -3,6 +3,7 @@ package alerting
 import (
 	"context"
 	"encoding/json"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -231,7 +232,7 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				e.telemetry.ReportPanic(r)
+				e.telemetry.ReportPanic(r, debug.Stack())
 			}
 		}()
 		ticker := time.NewTicker(cleanupInterval)

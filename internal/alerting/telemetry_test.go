@@ -12,7 +12,7 @@ func TestAlertingTelemetry_NilSafe(t *testing.T) {
 	var at *AlertingTelemetry
 	assert.NotPanics(t, func() { at.ReportInitialized(10) })
 	assert.NotPanics(t, func() { at.ReportInitFailed("seed rules failed") })
-	assert.NotPanics(t, func() { at.ReportPanic("test panic") })
+	assert.NotPanics(t, func() { at.ReportPanic("test panic", nil) })
 	assert.NotPanics(t, func() { at.ReportEventDropped() })
 	assert.NotPanics(t, func() { at.ReportDBWriteFailed("save_history", "connection refused") })
 	assert.NotPanics(t, func() { at.ReportDispatchFailed("bell", "notification service unavailable") })
