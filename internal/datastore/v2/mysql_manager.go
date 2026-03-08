@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"github.com/tphakala/birdnet-go/internal/detection"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -145,39 +144,12 @@ func (m *MySQLManager) Initialize() error {
 
 // seedLookupTables seeds the label_types and taxonomic_classes tables with default values.
 func (m *MySQLManager) seedLookupTables() error {
-	// Seed label types
-	for _, lt := range entities.DefaultLabelTypes() {
-		if err := m.db.Where("name = ?", lt.Name).FirstOrCreate(&lt).Error; err != nil {
-			return fmt.Errorf("failed to seed label type %q: %w", lt.Name, err)
-		}
-	}
-
-	// Seed taxonomic classes
-	for _, tc := range entities.DefaultTaxonomicClasses() {
-		if err := m.db.Where("name = ?", tc.Name).FirstOrCreate(&tc).Error; err != nil {
-			return fmt.Errorf("failed to seed taxonomic class %q: %w", tc.Name, err)
-		}
-	}
-
-	return nil
+	return seedLookupTablesDB(m.db)
 }
 
 // seedDefaultModel ensures the default BirdNET model exists in the registry.
-// Uses detection.DefaultModelName, detection.DefaultModelVersion, and detection.DefaultModelVariant
-// to ensure consistency with the conversion layer's fallback logic.
 func (m *MySQLManager) seedDefaultModel() error {
-	model := entities.AIModel{
-		Name:      detection.DefaultModelName,
-		Version:   detection.DefaultModelVersion,
-		Variant:   detection.DefaultModelVariant,
-		ModelType: entities.ModelTypeBird,
-	}
-	// Use FirstOrCreate to avoid duplicates
-	result := m.db.Where("name = ? AND version = ? AND variant = ?", model.Name, model.Version, model.Variant).FirstOrCreate(&model)
-	if result.Error != nil {
-		return fmt.Errorf("failed to seed default model: %w", result.Error)
-	}
-	return nil
+	return seedDefaultModelDB(m.db)
 }
 
 // DB returns the underlying GORM database.
