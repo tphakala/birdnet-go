@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // DefaultBatchSize is the default number of records processed per batch.
@@ -350,12 +351,13 @@ func (w *Worker) run(ctx context.Context) {
 	// Reports to Sentry and records the error message in state so the UI shows it.
 	defer func() {
 		if r := recover(); r != nil {
+			scrubbedPanic := privacy.ScrubMessage(fmt.Sprintf("%v", r))
 			w.logger.Error("migration worker panic recovered",
-				logger.Any("panic", r))
+				logger.String("panic", scrubbedPanic))
 
 			w.telemetry.ReportPanic(r)
 
-			errMsg := fmt.Sprintf("migration worker panic: %v", r)
+			errMsg := fmt.Sprintf("migration worker panic: %s", scrubbedPanic)
 			_ = w.stateManager.SetError(errMsg)
 		}
 	}()

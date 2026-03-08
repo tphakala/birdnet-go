@@ -117,8 +117,14 @@ func (mt *MigrationTelemetry) ReportAutoPaused(consecutiveErrors int, lastErr er
 		scope.SetTag("component", "migration")
 		scope.SetTag("db_type", mt.dbType)
 		scope.SetTag("outcome", "auto_paused")
+		errorType := "<nil>"
+		lastError := ""
+		if lastErr != nil {
+			errorType = fmt.Sprintf("%T", lastErr)
+			lastError = privacy.ScrubMessage(lastErr.Error())
+		}
 		// Include error type in fingerprint so different root causes create separate Sentry issues
-		scope.SetFingerprint([]string{"migration", "auto-paused", fmt.Sprintf("%T", lastErr)})
+		scope.SetFingerprint([]string{"migration", "auto-paused", errorType})
 
 		var progressPercent float64
 		if totalRecords > 0 {
@@ -127,8 +133,8 @@ func (mt *MigrationTelemetry) ReportAutoPaused(consecutiveErrors int, lastErr er
 
 		scope.SetContext("migration", map[string]any{
 			"consecutive_errors": consecutiveErrors,
-			"last_error":         privacy.ScrubMessage(lastErr.Error()),
-			"error_type":         fmt.Sprintf("%T", lastErr),
+			"last_error":         lastError,
+			"error_type":         errorType,
 			"migrated_so_far":    migratedSoFar,
 			"total_records":      totalRecords,
 			"progress_percent":   progressPercent,
