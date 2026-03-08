@@ -187,16 +187,18 @@ func (mt *MigrationTelemetry) ReportPanic(panicValue any) {
 		scope.SetTag("component", "migration")
 		scope.SetTag("db_type", mt.dbType)
 		scope.SetTag("outcome", "panic")
-		scope.SetFingerprint([]string{"migration", "panic", fmt.Sprintf("%v", panicValue)})
+		// Group by panic type, not dynamic value, to prevent Sentry issue spam
+		scope.SetFingerprint([]string{"migration", "panic", fmt.Sprintf("%T", panicValue)})
 
+		scrubbedPanic := privacy.ScrubMessage(fmt.Sprintf("%v", panicValue))
 		scope.SetContext("migration", map[string]any{
-			"panic_value": fmt.Sprintf("%v", panicValue),
+			"panic_value": scrubbedPanic,
 			"panic_type":  fmt.Sprintf("%T", panicValue),
 			"db_type":     mt.dbType,
 		})
 
 		telemetry.CaptureMessage(
-			fmt.Sprintf("Migration worker panic: %v", panicValue),
+			fmt.Sprintf("Migration worker panic: %s", scrubbedPanic),
 			sentry.LevelFatal,
 			"migration",
 		)
