@@ -5,7 +5,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -76,6 +79,7 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 		Updates(updates)
 
 	if result.Error != nil {
+		reportStateTransitionError(string(entities.MigrationStatusIdle), string(entities.MigrationStatusInitializing), result.Error)
 		return fmt.Errorf("failed to start migration: %w", result.Error)
 	}
 
@@ -84,7 +88,9 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
 		}
-		return fmt.Errorf("cannot start migration: current state is %s, expected idle", current.State)
+		startErr := fmt.Errorf("cannot start migration: current state is %s, expected idle", current.State)
+		reportStateTransitionError(string(entities.MigrationStatusIdle), string(entities.MigrationStatusInitializing), startErr)
+		return startErr
 	}
 
 	return nil
@@ -191,6 +197,7 @@ func (m *StateManager) Complete() error {
 		Updates(updates)
 
 	if result.Error != nil {
+		reportStateTransitionError(string(entities.MigrationStatusCutover), string(entities.MigrationStatusCompleted), result.Error)
 		return fmt.Errorf("failed to complete migration: %w", result.Error)
 	}
 
@@ -199,7 +206,9 @@ func (m *StateManager) Complete() error {
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
 		}
-		return fmt.Errorf("cannot complete migration: current state is %s, expected cutover", current.State)
+		completeErr := fmt.Errorf("cannot complete migration: current state is %s, expected cutover", current.State)
+		reportStateTransitionError(string(entities.MigrationStatusCutover), string(entities.MigrationStatusCompleted), completeErr)
+		return completeErr
 	}
 
 	return nil
@@ -240,6 +249,7 @@ func (m *StateManager) Cancel() error {
 		Updates(updates)
 
 	if result.Error != nil {
+		reportStateTransitionError("cancellable", string(entities.MigrationStatusIdle), result.Error)
 		return fmt.Errorf("failed to cancel migration: %w", result.Error)
 	}
 
@@ -248,7 +258,9 @@ func (m *StateManager) Cancel() error {
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
 		}
-		return fmt.Errorf("cannot cancel migration: current state is %s", current.State)
+		cancelErr := fmt.Errorf("cannot cancel migration: current state is %s", current.State)
+		reportStateTransitionError("cancellable", string(entities.MigrationStatusIdle), cancelErr)
+		return cancelErr
 	}
 
 	return nil
@@ -276,6 +288,7 @@ func (m *StateManager) Rollback() error {
 		Updates(updates)
 
 	if result.Error != nil {
+		reportStateTransitionError(string(entities.MigrationStatusCompleted), string(entities.MigrationStatusIdle), result.Error)
 		return fmt.Errorf("failed to rollback migration: %w", result.Error)
 	}
 
@@ -284,7 +297,9 @@ func (m *StateManager) Rollback() error {
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
 		}
-		return fmt.Errorf("cannot rollback: current state is %s, expected completed", current.State)
+		rollbackErr := fmt.Errorf("cannot rollback: current state is %s, expected completed", current.State)
+		reportStateTransitionError(string(entities.MigrationStatusCompleted), string(entities.MigrationStatusIdle), rollbackErr)
+		return rollbackErr
 	}
 
 	return nil
@@ -374,6 +389,28 @@ func (m *StateManager) SetPhaseWithProgress(phase entities.MigrationPhase, phase
 	return nil
 }
 
+// reportStateTransitionError reports a migration state transition failure to Sentry.
+func reportStateTransitionError(from, to string, err error) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "migration-state")
+		scope.SetTag("transition", from+"->"+to)
+		scope.SetFingerprint([]string{"migration-state", "transition-failed", from, to})
+
+		scrubbedErr := privacy.ScrubMessage(err.Error())
+		scope.SetContext("state_transition", map[string]any{
+			"from":  from,
+			"to":    to,
+			"error": scrubbedErr,
+		})
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Migration state transition failed: %s -> %s", from, to),
+			sentry.LevelError,
+			"migration-state",
+		)
+	})
+}
+
 // transitionState is a helper that validates and performs a state transition.
 // Uses atomic SQL update with WHERE clause for multi-process safety.
 func (m *StateManager) transitionState(from, to entities.MigrationStatus) error {
@@ -385,6 +422,7 @@ func (m *StateManager) transitionState(from, to entities.MigrationStatus) error 
 		Update("state", to)
 
 	if result.Error != nil {
+		reportStateTransitionError(string(from), string(to), result.Error)
 		return fmt.Errorf("failed to transition state: %w", result.Error)
 	}
 
@@ -393,7 +431,9 @@ func (m *StateManager) transitionState(from, to entities.MigrationStatus) error 
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
 		}
-		return fmt.Errorf("cannot transition to %s: current state is %s, expected %s", to, current.State, from)
+		transitionErr := fmt.Errorf("cannot transition to %s: current state is %s, expected %s", to, current.State, from)
+		reportStateTransitionError(string(from), string(to), transitionErr)
+		return transitionErr
 	}
 
 	return nil
