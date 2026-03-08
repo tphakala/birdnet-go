@@ -121,8 +121,8 @@
   // Polling fallback timeout reference (used when SSE endpoints aren't available)
   let pollingTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  // Auto-refresh interval for slow-changing data not covered by SSE
-  let slowRefreshInterval: ReturnType<typeof setInterval> | null = null;
+  // Auto-refresh timeout for slow-changing data not covered by SSE
+  let slowRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Map user's temperature preference to TemperatureUnit format
   // Settings store uses 'celsius'/'fahrenheit', formatters use 'metric'/'imperial'/'standard'
@@ -393,21 +393,24 @@
     }
   }
 
-  // Refresh slow-changing data not delivered by SSE (system info, disks, processes)
-  async function refreshSlowData(): Promise<void> {
-    await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
-  }
+  // Refresh slow-changing data not delivered by SSE (system info, disks, processes).
+  // Uses recursive setTimeout (like startPollingFallback) to avoid overlapping requests.
+  function startSlowRefresh(active: { current: boolean }): void {
+    async function tick(): Promise<void> {
+      if (!active.current) return;
+      await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
+      if (active.current) {
+        slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
+      }
+    }
 
-  function startSlowRefresh(): void {
-    slowRefreshInterval = setInterval(() => {
-      refreshSlowData();
-    }, SLOW_REFRESH_INTERVAL_MS);
+    slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
   }
 
   function stopSlowRefresh(): void {
-    if (slowRefreshInterval) {
-      clearInterval(slowRefreshInterval);
-      slowRefreshInterval = null;
+    if (slowRefreshTimeout) {
+      clearTimeout(slowRefreshTimeout);
+      slowRefreshTimeout = null;
     }
   }
 
@@ -423,22 +426,35 @@
     ]);
   }
 
+  // Component-level active flag shared between effects
+  let componentActive = { current: false };
+
   // Initialize on mount, clean up on unmount
   $effect(() => {
-    const active = { current: true };
+    componentActive = { current: true };
 
     // Load initial data, then load metrics history (which needs data for fallback seeding)
     loadAllData().then(() => {
-      if (active.current) {
-        loadMetricsHistory(active);
-        startSlowRefresh();
+      if (componentActive.current) {
+        loadMetricsHistory(componentActive);
       }
     });
 
     return () => {
-      active.current = false;
+      componentActive.current = false;
       disconnectMetricsStream();
       stopPollingFallback();
+      stopSlowRefresh();
+    };
+  });
+
+  // Start/stop slow refresh based on active subpage
+  $effect(() => {
+    if (currentSubpage === 'overview' && componentActive.current) {
+      startSlowRefresh(componentActive);
+    }
+
+    return () => {
       stopSlowRefresh();
     };
   });
