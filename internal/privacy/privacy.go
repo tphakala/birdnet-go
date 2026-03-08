@@ -156,7 +156,7 @@ var (
 	// File path patterns - matches absolute Unix and Windows paths
 	// Unix: /home/user/..., /var/lib/...
 	// Windows: C:\Users\John Doe\AppData\... (supports spaces in path segments)
-	filePathPattern = regexp.MustCompile(`(?:(?:/[a-zA-Z0-9 ._-]+){2,}(?:\.[a-zA-Z0-9]+)?|[A-Z]:\\(?:[a-zA-Z0-9 ._-]+\\){1,}[a-zA-Z0-9 ._-]+)`)
+	filePathPattern = regexp.MustCompile(`(?:(?:/[a-zA-Z0-9 ._-]+){2,}(?:\.[a-zA-Z0-9]+)?|[a-zA-Z]:\\(?:[a-zA-Z0-9 ._-]+\\){1,}[a-zA-Z0-9 ._-]+)`)
 )
 
 // Common two-part TLDs that need special handling
