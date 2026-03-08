@@ -8,9 +8,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -63,6 +66,45 @@ type Config struct {
 	// Deprecated: Use ConfiguredPath instead. DataDir is kept for backwards compatibility
 	// during migration. When set, it's used to construct ConfiguredPath if not provided.
 	DataDir string
+}
+
+// scrubErrorWithPaths scrubs an error message, replacing known file paths with
+// anonymized versions before applying general scrubbing. This is necessary because
+// privacy.ScrubMessage() does not handle file paths, but OS-level errors from
+// os.Rename, gorm.Open, etc. embed absolute paths that may contain usernames.
+func scrubErrorWithPaths(errMsg string, paths ...string) string {
+	result := errMsg
+	for _, p := range paths {
+		if p != "" {
+			result = strings.ReplaceAll(result, p, privacy.AnonymizePath(p))
+		}
+	}
+	return privacy.ScrubMessage(result)
+}
+
+// reportInitFailure reports a schema initialization failure to Sentry telemetry.
+// This covers AutoMigrate, seeding, and trigger creation failures.
+// The paths parameter lists values (file paths, hostnames, database names) to scrub from error messages.
+func reportInitFailure(dbType, operation string, err error, paths ...string) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-init")
+		scope.SetTag("db_type", dbType)
+		scope.SetTag("operation", operation)
+		scope.SetFingerprint([]string{"datastore-init", dbType, operation})
+
+		scrubbedErr := scrubErrorWithPaths(err.Error(), paths...)
+		scope.SetContext("init_failure", map[string]any{
+			"db_type":   dbType,
+			"operation": operation,
+			"error":     scrubbedErr,
+		})
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Schema initialization failed: %s (%s)", operation, dbType),
+			sentry.LevelError,
+			"datastore-init",
+		)
+	})
 }
 
 // SQLiteManager handles the v2 normalized database for SQLite.
@@ -147,28 +189,36 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.AlertHistory{},
 	)
 	if err != nil {
+		reportInitFailure("sqlite", "AutoMigrate", err, m.dbPath)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
 	}
 
 	// Fix SQLite foreign key constraints that GORM's AutoMigrate may not handle correctly.
 	// SQLite requires ON DELETE clauses to be defined at table creation time.
 	if err := m.fixSQLiteForeignKeys(); err != nil {
+		reportInitFailure("sqlite", "fixForeignKeys", err, m.dbPath)
 		return fmt.Errorf("failed to fix foreign key constraints: %w", err)
 	}
 
 	// Initialize migration state singleton using FirstOrCreate to handle race conditions
 	state := entities.MigrationState{ID: 1, State: entities.MigrationStatusIdle}
 	if err := m.db.FirstOrCreate(&state, entities.MigrationState{ID: 1}).Error; err != nil {
+		reportInitFailure("sqlite", "initMigrationState", err, m.dbPath)
 		return fmt.Errorf("failed to initialize migration state: %w", err)
 	}
 
 	// Seed lookup tables
 	if err := m.seedLookupTables(); err != nil {
+		reportInitFailure("sqlite", "seedLookupTables", err, m.dbPath)
 		return fmt.Errorf("failed to seed lookup tables: %w", err)
 	}
 
 	// Seed default AI model (BirdNET)
-	return m.seedDefaultModel()
+	if err := m.seedDefaultModel(); err != nil {
+		reportInitFailure("sqlite", "seedDefaultModel", err, m.dbPath)
+		return err
+	}
+	return nil
 }
 
 // fixSQLiteForeignKeys ensures ON DELETE SET NULL behavior for SQLite.

@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -502,4 +503,11 @@ func TestMigrationState_FailedCannotResume(t *testing.T) {
 
 	state := &entities.MigrationState{State: entities.MigrationStatusFailed}
 	assert.False(t, state.CanResume())
+}
+
+func TestReportStateTransitionError_NilSafe(t *testing.T) {
+	t.Parallel()
+	assert.NotPanics(t, func() {
+		reportStateTransitionError("IDLE", "DUAL_WRITE", fmt.Errorf("no rows affected"))
+	})
 }

@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -284,3 +285,13 @@ func (l *testLogger) Flush() error { return nil }
 
 // Ensure testLogger implements logger.Logger
 var _ logger.Logger = (*testLogger)(nil)
+
+func TestReportConsolidationError_NilSafe(t *testing.T) {
+	t.Parallel()
+	assert.NotPanics(t, func() {
+		reportConsolidationError("walCheckpoint", fmt.Errorf("disk full"))
+		reportConsolidationError("renameFailed",
+			fmt.Errorf("rename /home/user/birdnet.db /home/user/birdnet_v2.db: denied"),
+			"/home/user/birdnet.db", "/home/user/birdnet_v2.db")
+	})
+}

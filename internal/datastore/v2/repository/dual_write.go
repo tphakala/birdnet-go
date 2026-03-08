@@ -7,12 +7,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // parseDetectionID converts a string ID to uint.
@@ -37,6 +39,14 @@ const (
 	reconcileBatchSize = 50
 )
 
+// dirtyIDWarningThreshold is the minimum dirty ID count to trigger a Sentry warning.
+// Below this threshold, dirty IDs are normal transient state.
+const dirtyIDWarningThreshold = 20
+
+// dirtyIDTelemetryInterval is the minimum time between Sentry events for elevated dirty IDs.
+// Prevents Sentry quota exhaustion when dirty IDs persist (reconciliation runs every 60s).
+const dirtyIDTelemetryInterval = 1 * time.Hour
+
 // DualWriteRepository wraps legacy and v2 repositories for migration.
 // It implements the datastore.DetectionRepository interface while writing
 // to both legacy (authoritative) and v2 databases during migration.
@@ -56,6 +66,8 @@ type DualWriteRepository struct {
 	reconcileTicker *time.Ticker  // Periodic dirty ID reconciliation
 	reconcileDone   chan struct{} // Signals reconciliation goroutine has exited
 	reconcileOnce   sync.Once     // Ensures StartReconciliation is called only once
+
+	lastDirtyIDTelemetry time.Time // Rate-limits dirty ID telemetry
 
 	// Cached lookup table IDs
 	speciesLabelTypeID uint
@@ -223,6 +235,39 @@ func (dw *DualWriteRepository) reconcileDirtyIDs() {
 
 	remaining := max(int(count)-reconciled, 0)
 	dw.logger.Info("reconciliation complete", logger.Int("reconciled", reconciled), logger.Int("remaining", remaining))
+	dw.reportDualWriteReconciliation(count, reconciled, remaining)
+}
+
+// reportDualWriteReconciliation reports reconciliation status to Sentry
+// when dirty ID count is elevated, rate-limited to once per hour.
+func (dw *DualWriteRepository) reportDualWriteReconciliation(totalDirty int64, reconciled, remaining int) {
+	if int64(remaining) < dirtyIDWarningThreshold {
+		return
+	}
+
+	now := time.Now()
+	if now.Sub(dw.lastDirtyIDTelemetry) < dirtyIDTelemetryInterval {
+		return
+	}
+	dw.lastDirtyIDTelemetry = now
+
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "dual-write")
+		scope.SetTag("outcome", "elevated_dirty_ids")
+		scope.SetFingerprint([]string{"dual-write", "elevated-dirty-ids"})
+
+		scope.SetContext("reconciliation", map[string]any{
+			"total_dirty": totalDirty,
+			"reconciled":  reconciled,
+			"remaining":   remaining,
+		})
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Dual-write: elevated dirty ID count (%d remaining after reconciliation)", remaining),
+			sentry.LevelWarning,
+			"dual-write",
+		)
+	})
 }
 
 // ============================================================================

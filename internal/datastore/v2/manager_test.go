@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -463,4 +464,31 @@ func TestSQLiteManager_NoReverseForeignKey(t *testing.T) {
 		"source_uri should be varchar(500), not integer")
 	assert.NotContains(t, tableSQL, "source_id",
 		"audio_sources should not have source_id column (renamed to source_uri)")
+}
+
+func TestScrubErrorWithPaths(t *testing.T) {
+	t.Parallel()
+
+	// Verify file paths are replaced with anonymized versions
+	errMsg := "open /home/john/data/birdnet.db: permission denied"
+	result := scrubErrorWithPaths(errMsg, "/home/john/data/birdnet.db")
+	assert.NotContains(t, result, "/home/john")
+	assert.NotContains(t, result, "birdnet.db")
+}
+
+func TestScrubErrorWithPaths_EmptyPath(t *testing.T) {
+	t.Parallel()
+
+	// Empty paths should be skipped safely
+	errMsg := "some error"
+	result := scrubErrorWithPaths(errMsg, "")
+	assert.Equal(t, "some error", result)
+}
+
+func TestReportInitFailure_SentryNotInitialized(t *testing.T) {
+	t.Parallel()
+	// Should not panic when Sentry hub is not initialized
+	assert.NotPanics(t, func() {
+		reportInitFailure("sqlite", "AutoMigrate", fmt.Errorf("disk full"), "/tmp/test.db")
+	})
 }

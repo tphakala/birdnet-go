@@ -5,16 +5,42 @@ import (
 	"os"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
+
+// reportStartupError reports a startup state check failure to Sentry telemetry.
+// The paths parameter lists file paths that should be anonymized in the error message.
+func reportStartupError(dbType, operation string, err error, paths ...string) {
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-startup")
+		scope.SetTag("db_type", dbType)
+		scope.SetTag("operation", operation)
+		scope.SetFingerprint([]string{"datastore-startup", dbType, operation})
+
+		scrubbedErr := scrubErrorWithPaths(err.Error(), paths...)
+		scope.SetContext("startup_error", map[string]any{
+			"db_type":   dbType,
+			"operation": operation,
+			"error":     scrubbedErr,
+		})
+
+		telemetry.CaptureMessage(
+			fmt.Sprintf("Startup state check failed: %s (%s)", operation, dbType),
+			sentry.LevelWarning,
+			"datastore-startup",
+		)
+	})
+}
 
 // dbStartupTimeout is the timeout for database startup operations.
 const dbStartupTimeout = "5s"
@@ -114,6 +140,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
+		reportStartupError("sqlite", "openV2Database", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -125,6 +152,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	// Close the connection when done
 	sqlDB, err := db.DB()
 	if err != nil {
+		reportStartupError("sqlite", "getUnderlyingDB", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -137,6 +165,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	// Read migration state
 	var state entities.MigrationState
 	if err := db.First(&state).Error; err != nil {
+		reportStartupError("sqlite", "readMigrationState", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
@@ -176,10 +205,16 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	dsn := cfg.FormatDSN()
 
+	// Collect MySQL endpoint info for redaction from error messages
+	mysqlHost := settings.Output.MySQL.Host
+	mysqlDB := settings.Output.MySQL.Database
+	mysqlUser := settings.Output.MySQL.Username
+
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
+		reportStartupError("mysql", "openDatabase", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -190,6 +225,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 
 	sqlDB, err := db.DB()
 	if err != nil {
+		reportStartupError("mysql", "getUnderlyingDB", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -204,6 +240,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
 		settings.Output.MySQL.Database).Scan(&legacyCount).Error
 	if err != nil {
+		reportStartupError("mysql", "checkLegacyTables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -219,6 +256,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
 		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
 	if err != nil {
+		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -273,6 +311,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	// Read migration state from v2 table
 	var state entities.MigrationState
 	if err := db.Table(tableName).First(&state).Error; err != nil {
+		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
@@ -433,6 +472,7 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	// Step 1: Check for interrupted consolidation
 	resumed, newPath, err := ResumeConsolidation(dataDir, log)
 	if err != nil {
+		reportConsolidationError("resumeConsolidation", err, configuredPath)
 		return false, fmt.Errorf("failed to check/resume consolidation: %w", err)
 	}
 	if resumed {
@@ -484,6 +524,7 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 		StartedAt:      time.Now(),
 	}
 	if err := WriteConsolidationState(dataDir, state); err != nil {
+		reportConsolidationError("writeStateFile", err, configuredPath, v2MigrationPath)
 		return false, fmt.Errorf("failed to write consolidation state: %w", err)
 	}
 
@@ -497,6 +538,7 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 			logger.String("from", configuredPath),
 			logger.String("to", backupPath))
 		if err := os.Rename(configuredPath, backupPath); err != nil {
+			reportConsolidationError("startupRenameLegacy", err, configuredPath, backupPath)
 			_ = DeleteConsolidationState(dataDir)
 			return false, fmt.Errorf("failed to rename legacy database: %w", err)
 		}
@@ -507,11 +549,13 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 		logger.String("from", v2MigrationPath),
 		logger.String("to", configuredPath))
 	if err := os.Rename(v2MigrationPath, configuredPath); err != nil {
+		reportConsolidationError("startupRenameV2", err, v2MigrationPath, configuredPath)
 		// Rollback: restore legacy from backup if it existed
 		if _, statErr := os.Stat(backupPath); statErr == nil {
 			log.Warn("v2 rename failed, rolling back",
 				logger.Error(err))
 			if rollbackErr := os.Rename(backupPath, configuredPath); rollbackErr != nil {
+				reportConsolidationError("rollbackFailed", rollbackErr, backupPath, configuredPath)
 				log.Error("rollback failed - manual intervention required",
 					logger.Error(rollbackErr))
 				// Return without deleting state file to allow recovery on next boot
