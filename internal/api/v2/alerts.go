@@ -27,8 +27,9 @@ func (c *Controller) initAlertRoutes() {
 	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB())
 
 	// Initialize the alerting engine — seeds default rules and starts event processing
-	eventBus := alerting.NewAlertEventBus()
-	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger())
+	alertTelemetry := alerting.NewAlertingTelemetry()
+	eventBus := alerting.NewAlertEventBus(alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger(), alertTelemetry)
 	if err != nil {
 		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
 		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global

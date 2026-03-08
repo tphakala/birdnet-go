@@ -47,20 +47,23 @@ func Initialize(
 	repo repository.AlertRuleRepository,
 	eventBus *AlertEventBus,
 	log logger.Logger,
+	at *AlertingTelemetry,
 ) (*Engine, error) {
 	ctx := context.Background()
 
 	// Seed default rules if the table is empty
 	if err := seedDefaultRules(ctx, repo, log); err != nil {
+		at.ReportInitFailed(err.Error())
 		return nil, err
 	}
 
 	// Create dispatcher and engine (adapter lazily resolves notification service)
-	dispatcher := NewActionDispatcher(&notificationAdapter{}, log)
-	engine := NewEngine(repo, dispatcher.Dispatch, log)
+	dispatcher := NewActionDispatcher(&notificationAdapter{}, log, at)
+	engine := NewEngine(repo, dispatcher.Dispatch, log, at)
 
 	// Load rules from database
 	if err := engine.RefreshRules(ctx); err != nil {
+		at.ReportInitFailed(err.Error())
 		return nil, err
 	}
 
@@ -74,6 +77,7 @@ func Initialize(
 		bridge := NewDetectionAlertBridge(log)
 		if err := eventBusInstance.RegisterConsumer(bridge); err != nil {
 			log.Warn("failed to register detection alert bridge", logger.Error(err))
+			at.ReportBridgeRegistrationFailed(err.Error())
 		}
 	}
 
@@ -88,6 +92,7 @@ func Initialize(
 
 	log.Info("alerting engine initialized",
 		logger.Int("rules_loaded", len(engine.rules)))
+	at.ReportInitialized(len(engine.rules))
 
 	return engine, nil
 }

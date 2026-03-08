@@ -29,6 +29,7 @@ type Engine struct {
 	metricTracker *MetricTracker
 	actionFunc    ActionFunc
 	log           logger.Logger
+	telemetry     *AlertingTelemetry // nil-safe engine health reporter
 
 	// Cooldown tracking (in-memory, resets on restart)
 	cooldowns   map[uint]time.Time // rule ID → last fired time
@@ -43,12 +44,13 @@ type Engine struct {
 }
 
 // NewEngine creates a new alerting rules engine.
-func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log logger.Logger) *Engine {
+func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log logger.Logger, at *AlertingTelemetry) *Engine {
 	return &Engine{
 		repo:          repo,
 		metricTracker: NewMetricTracker(),
 		actionFunc:    actionFunc,
 		log:           log,
+		telemetry:     at,
 		cooldowns:     make(map[uint]time.Time),
 	}
 }
@@ -192,6 +194,7 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 		e.log.Error("failed to save alert history",
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
+		e.telemetry.ReportDBWriteFailed("save_history", err.Error())
 	}
 
 	// Dispatch actions
@@ -226,6 +229,11 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 	stopCh := e.cleanupStop
 	e.rulesMu.Unlock()
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				e.telemetry.ReportPanic(r)
+			}
+		}()
 		ticker := time.NewTicker(cleanupInterval)
 		defer ticker.Stop()
 		for {
@@ -237,6 +245,7 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 				cleanupCancel()
 				if err != nil {
 					e.log.Error("alert history cleanup failed", logger.Error(err))
+					e.telemetry.ReportDBWriteFailed("history_cleanup", err.Error())
 				} else if deleted > 0 {
 					e.log.Info("alert history cleanup completed",
 						logger.Int64("deleted", deleted),

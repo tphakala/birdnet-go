@@ -39,7 +39,7 @@ func (m *initMockRepo) CreateRule(_ context.Context, rule *entities.AlertRule) e
 }
 
 func (m *initMockRepo) UpdateRule(_ context.Context, _ *entities.AlertRule) error { return nil }
-func (m *initMockRepo) DeleteRule(_ context.Context, _ uint) error               { return nil }
+func (m *initMockRepo) DeleteRule(_ context.Context, _ uint) error                { return nil }
 func (m *initMockRepo) ToggleRule(_ context.Context, _ uint, _ bool) error        { return nil }
 
 func (m *initMockRepo) GetEnabledRules(_ context.Context) ([]entities.AlertRule, error) {
@@ -52,14 +52,19 @@ func (m *initMockRepo) GetEnabledRules(_ context.Context) ([]entities.AlertRule,
 	return enabled, nil
 }
 
-func (m *initMockRepo) DeleteBuiltInRules(_ context.Context) (int64, error)          { return 0, nil }
-func (m *initMockRepo) SaveHistory(_ context.Context, h *entities.AlertHistory) error { m.history = append(m.history, *h); return nil }
+func (m *initMockRepo) DeleteBuiltInRules(_ context.Context) (int64, error) { return 0, nil }
+func (m *initMockRepo) SaveHistory(_ context.Context, h *entities.AlertHistory) error {
+	m.history = append(m.history, *h)
+	return nil
+}
 func (m *initMockRepo) ListHistory(_ context.Context, _ repository.AlertHistoryFilter) ([]entities.AlertHistory, int64, error) {
 	return m.history, int64(len(m.history)), nil
 }
-func (m *initMockRepo) DeleteHistory(_ context.Context) (int64, error)                         { return 0, nil }
-func (m *initMockRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error)      { return 0, nil }
-func (m *initMockRepo) CountRulesByName(_ context.Context, _ string) (int64, error)            { return 0, nil }
+func (m *initMockRepo) DeleteHistory(_ context.Context) (int64, error) { return 0, nil }
+func (m *initMockRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error) {
+	return 0, nil
+}
+func (m *initMockRepo) CountRulesByName(_ context.Context, _ string) (int64, error) { return 0, nil }
 
 func initTestLogger() logger.Logger {
 	return logger.NewSlogLogger(io.Discard, logger.LogLevelError, nil)
@@ -92,9 +97,9 @@ func TestSeedDefaultRules_AlreadySeeded(t *testing.T) {
 
 func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {
 	repo := &initMockRepo{}
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 
-	engine, err := Initialize(repo, bus, initTestLogger())
+	engine, err := Initialize(repo, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
@@ -109,9 +114,9 @@ func TestInitialize_SeedsOnlyMissingDefaults(t *testing.T) {
 			{ID: 1, Name: "Custom Rule", Enabled: true},
 		},
 	}
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 
-	engine, err := Initialize(repo, bus, initTestLogger())
+	engine, err := Initialize(repo, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, engine)
 
@@ -121,9 +126,9 @@ func TestInitialize_SeedsOnlyMissingDefaults(t *testing.T) {
 
 func TestInitialize_SubscribesToEventBus(t *testing.T) {
 	repo := &initMockRepo{}
-	bus := NewAlertEventBus()
+	bus := NewAlertEventBus(nil)
 
-	_, err := Initialize(repo, bus, initTestLogger())
+	_, err := Initialize(repo, bus, initTestLogger(), nil)
 	require.NoError(t, err)
 
 	// The bus should have at least one handler registered

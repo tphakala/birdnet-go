@@ -60,19 +60,21 @@ const (
 // so callers (stream managers, monitors) are never blocked by DB writes or
 // notification dispatch.
 type AlertEventBus struct {
-	handlers []AlertEventHandler
-	mu       sync.RWMutex
-	eventCh  chan *AlertEvent
-	stopCh   chan struct{}
-	stopOnce sync.Once
+	handlers  []AlertEventHandler
+	mu        sync.RWMutex
+	eventCh   chan *AlertEvent
+	stopCh    chan struct{}
+	stopOnce  sync.Once
+	telemetry *AlertingTelemetry // nil-safe, reports engine health
 }
 
 // NewAlertEventBus creates a new alert event bus and starts its worker.
-func NewAlertEventBus() *AlertEventBus {
+func NewAlertEventBus(at *AlertingTelemetry) *AlertEventBus {
 	b := &AlertEventBus{
-		handlers: make([]AlertEventHandler, 0),
-		eventCh:  make(chan *AlertEvent, eventBusBufferSize),
-		stopCh:   make(chan struct{}),
+		handlers:  make([]AlertEventHandler, 0),
+		eventCh:   make(chan *AlertEvent, eventBusBufferSize),
+		stopCh:    make(chan struct{}),
+		telemetry: at,
 	}
 	go b.processLoop()
 	return b
@@ -103,6 +105,7 @@ func (b *AlertEventBus) Publish(event *AlertEvent) {
 	case b.eventCh <- event:
 	default:
 		// Buffer full — drop event to avoid blocking callers
+		b.telemetry.ReportEventDropped()
 	}
 }
 
@@ -148,9 +151,9 @@ func (b *AlertEventBus) dispatch(event *AlertEvent) {
 // cannot kill the event bus goroutine.
 func (b *AlertEventBus) safeCall(handler AlertEventHandler, event *AlertEvent) {
 	defer func() {
-		// Swallow panics to keep the bus alive. There is no logger
-		// available at this level; the handler should do its own logging.
-		recover() //nolint:errcheck // intentionally swallowed to keep bus alive
+		if r := recover(); r != nil {
+			b.telemetry.ReportPanic(r)
+		}
 	}()
 	handler(event)
 }

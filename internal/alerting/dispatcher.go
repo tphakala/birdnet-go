@@ -20,13 +20,15 @@ type NotificationCreator interface {
 type ActionDispatcher struct {
 	notifCreator NotificationCreator
 	log          logger.Logger
+	telemetry    *AlertingTelemetry
 }
 
 // NewActionDispatcher creates a new ActionDispatcher.
-func NewActionDispatcher(notifCreator NotificationCreator, log logger.Logger) *ActionDispatcher {
+func NewActionDispatcher(notifCreator NotificationCreator, log logger.Logger, at *AlertingTelemetry) *ActionDispatcher {
 	return &ActionDispatcher{
 		notifCreator: notifCreator,
 		log:          log,
+		telemetry:    at,
 	}
 }
 
@@ -68,6 +70,7 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 			d.log.Error("failed to create bell notification",
 				logger.Uint64("rule_id", uint64(rule.ID)),
 				logger.Error(err))
+			d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
 		}
 		return
 	}
@@ -76,6 +79,7 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 		d.log.Error("failed to create bell notification",
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
+		d.telemetry.ReportDispatchFailed(TargetBell, err.Error())
 	}
 }
 
