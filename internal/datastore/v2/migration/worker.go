@@ -128,6 +128,9 @@ type Worker struct {
 	// Progress logging tracking
 	lastProgressLog     time.Time
 	recordsSinceLastLog int64
+
+	// Telemetry
+	telemetry *MigrationTelemetry
 }
 
 // WorkerConfig configures the migration worker.
@@ -151,6 +154,8 @@ type WorkerConfig struct {
 	SpeciesLabelTypeID uint  // "species" label type ID
 	AvesClassID        *uint // "Aves" taxonomic class ID (optional)
 	ChiropteraClassID  *uint // "Chiroptera" taxonomic class ID (optional)
+
+	Telemetry *MigrationTelemetry // Optional: Sentry lifecycle reporting
 }
 
 // NewWorker creates a new migration worker.
@@ -227,6 +232,7 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 		stopCh:             make(chan struct{}),
 		maxConsecErrors:    maxConsecErrors,
 		rateSamples:        make([]rateSample, DefaultRateWindowSize),
+		telemetry:          cfg.Telemetry,
 	}, nil
 }
 
@@ -338,6 +344,20 @@ func (w *Worker) run(ctx context.Context) {
 		w.mu.Unlock()
 		// Clear phase on exit
 		_ = w.stateManager.SetCurrentPhase(entities.MigrationPhaseNone)
+	}()
+
+	// Recover from panics in the migration goroutine to prevent silent death.
+	// Reports to Sentry and records the error message in state so the UI shows it.
+	defer func() {
+		if r := recover(); r != nil {
+			w.logger.Error("migration worker panic recovered",
+				logger.Any("panic", r))
+
+			w.telemetry.ReportPanic(r)
+
+			errMsg := fmt.Sprintf("migration worker panic: %v", r)
+			_ = w.stateManager.SetError(errMsg)
+		}
 	}()
 
 	w.logger.Info("migration worker started")
