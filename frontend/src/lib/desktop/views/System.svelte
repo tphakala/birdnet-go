@@ -431,7 +431,7 @@
 
   // Initialize on mount, clean up on unmount
   $effect(() => {
-    componentActive = { current: true };
+    componentActive.current = true;
 
     // Load initial data, then load metrics history (which needs data for fallback seeding)
     loadAllData().then(() => {
@@ -444,7 +444,6 @@
       componentActive.current = false;
       disconnectMetricsStream();
       stopPollingFallback();
-      stopSlowRefresh();
     };
   });
 
