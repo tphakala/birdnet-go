@@ -271,7 +271,13 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'detections'",
 		settings.Output.MySQL.Database).Scan(&freshV2Count).Error
 	if err != nil {
-		freshV2Count = 0 // Ignore error, just means no fresh v2 tables
+		reportStartupError("mysql", "checkFreshV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     false,
+			LegacyRequired:  true,
+			Error:           fmt.Errorf("failed to check fresh v2 tables: %w", err),
+		}
 	}
 	freshV2Exists := freshV2Count > 0
 
