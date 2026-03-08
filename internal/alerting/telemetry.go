@@ -71,7 +71,7 @@ func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 		})
 
 		telemetry.CaptureMessage(
-			fmt.Sprintf("Alerting engine initialization failed: %s", errMsg),
+			"Alerting engine initialization failed",
 			sentry.LevelError,
 			telemetryComponent,
 		)
