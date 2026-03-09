@@ -109,10 +109,40 @@ func GetV2DatabaseManager() datastoreV2.Manager {
 	return v2DatabaseManager
 }
 
-// RealtimeAnalysis initiates the BirdNET Analyzer in real-time mode and waits for a termination signal.
+// RealtimeAnalysis is the backward-compatible entry point.
+// New code should use RealtimeAnalysisWithQuit via the App lifecycle.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
 func RealtimeAnalysis(settings *conf.Settings) error {
+	quitChan := make(chan struct{})
+	monitorShutdownSignals(quitChan)
+	return realtimeAnalysisInternal(settings, quitChan)
+}
+
+// RealtimeAnalysisWithQuit runs the analysis loop with an externally controlled quit channel.
+// The caller is responsible for signal handling and closing the quit channel.
+func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{}) error {
+	// Convert read-only channel to bidirectional for internal use.
+	// The done channel prevents a goroutine leak if realtimeAnalysisInternal
+	// returns early (e.g., init failure) before quit is closed.
+	quitChan := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-quit:
+			close(quitChan)
+		case <-done:
+		}
+	}()
+	defer close(done)
+	return realtimeAnalysisInternal(settings, quitChan)
+}
+
+// realtimeAnalysisInternal is the main orchestration function that coordinates
+// multiple subsystems during startup and shutdown.
+//
+//nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
+func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) error {
 	// Initialize BirdNET interpreter
 	if err := initializeBirdNET(settings); err != nil {
 		// Model initialization failures are not retryable because they indicate:
@@ -244,8 +274,6 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
 	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
-	// quitChannel is used to signal the goroutines to stop.
-	quitChan := make(chan struct{})
 
 	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
@@ -455,9 +483,6 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 
 	// start control monitor for hot reloads
 	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)
-
-	// start shutdown signal monitor
-	monitorShutdownSignals(quitChan)
 
 	// Track the HTTP server, system monitor and control monitor for clean shutdown
 	httpServerRef := apiServer
