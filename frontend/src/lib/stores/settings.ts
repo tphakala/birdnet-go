@@ -829,6 +829,12 @@ function createEmptySettings(): SettingsFormData {
           deviceName: 'BirdNET-Go',
         },
       },
+      ebird: {
+        enabled: false,
+        apiKey: '',
+        cacheTTL: 24,
+        locale: 'en',
+      },
       species: {
         include: [],
         exclude: [],
