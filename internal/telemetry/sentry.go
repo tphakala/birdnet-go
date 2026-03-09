@@ -12,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	internalerrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -234,11 +235,16 @@ func anonymizeFilePath(path string) string {
 	if path == "" {
 		return path
 	}
-	parts := strings.Split(path, "/")
-	if len(parts) <= 2 {
+	// Normalize Windows paths
+	normalized := strings.ReplaceAll(path, "\\", "/")
+	parts := strings.Split(normalized, "/")
+	if len(parts) <= 1 {
 		return path
 	}
-	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
+	if len(parts) >= 2 {
+		return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
+	}
+	return "<redacted>/" + parts[len(parts)-1]
 }
 
 // applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
@@ -616,48 +622,12 @@ func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
 		if start := strings.LastIndex(scrubbedMsg[:idx], "["); start >= 0 {
 			category := scrubbedMsg[start+1 : idx]
 			rest := strings.TrimSpace(scrubbedMsg[idx+1:])
-			normalizedType := normalizeMessageToType(strings.ToLower(rest))
+			normalizedType := internalerrors.NormalizeErrorType(strings.ToLower(rest))
 			return category + ":" + normalizedType
 		}
 	}
 
-	return normalizeMessageToType(lower)
-}
-
-// normalizeMessageToType converts error messages to stable type strings.
-func normalizeMessageToType(lower string) string {
-	patterns := []struct {
-		contains string
-		result   string
-	}{
-		{"database is locked", "database_locked"},
-		{"database or disk is full", "disk_full"},
-		{"database disk image is malformed", "db_corrupted"},
-		{"nil pointer dereference", "nil_pointer"},
-		{"invalid memory address", "nil_pointer"},
-		{"context deadline exceeded", "context_deadline"},
-		{"connection refused", "connection_refused"},
-		{"connection reset", "connection_reset"},
-		{"signal: killed", "signal_killed"},
-		{"ringbuffer is full", "buffer_full"},
-		{"not initialized", "not_initialized"},
-		{"cannot be empty", "empty_value"},
-		{"not found", "not_found"},
-		{"timed out", "timeout"},
-		{"timeout", "timeout"},
-		{"disk is full", "disk_full"},
-		{"exit status", "process_exit"},
-		{"broken pipe", "broken_pipe"},
-		{"permission denied", "permission_denied"},
-	}
-
-	for _, p := range patterns {
-		if strings.Contains(lower, p.contains) {
-			return p.result
-		}
-	}
-
-	return "error"
+	return internalerrors.NormalizeErrorType(lower)
 }
 
 // CaptureError captures an error with privacy-compliant context
