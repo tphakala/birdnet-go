@@ -125,6 +125,9 @@ func (sr *SentryReporter) IsEnabled() bool {
 // shouldReportToSentry determines if an error should be sent to Sentry
 // It filters out operational/configuration errors that aren't code bugs
 func shouldReportToSentry(ee *EnhancedError) bool {
+	if ee.Err == nil {
+		return true
+	}
 	errorMsg := strings.ToLower(ee.Err.Error())
 
 	// Check for MQTT authentication/authorization errors (user config issues)

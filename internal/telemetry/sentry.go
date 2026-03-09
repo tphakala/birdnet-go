@@ -185,11 +185,7 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 	}
 
 	// Remove extra fields except allowed ones
-	for k := range event.Extra {
-		if k != "error_type" && k != "component" && k != "stacktrace" {
-			delete(event.Extra, k)
-		}
-	}
+	removePrivacyExtraFields(event.Extra)
 
 	// Remove sensitive tags
 	if event.Tags != nil {
@@ -243,10 +239,7 @@ func anonymizeFilePath(path string) string {
 	if len(parts) <= 1 {
 		return path
 	}
-	if len(parts) >= 2 {
-		return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
-	}
-	return "<redacted>/" + parts[len(parts)-1]
+	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
 }
 
 // applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
@@ -825,10 +818,8 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// Mark as initialized but with limited functionality
 	sentryInitialized = true
 
-	// Create an enabled attachment uploader (under lock to avoid data race with GetAttachmentUploader)
-	deferredMutex.Lock()
+	// Create an enabled attachment uploader (already under deferredMutex from line 788)
 	attachmentUploader = NewAttachmentUploader(true)
-	deferredMutex.Unlock()
 
 	GetLogger().Info("minimal Sentry initialized for support uploads only",
 		logger.String("system_id", systemID))
