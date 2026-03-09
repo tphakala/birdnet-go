@@ -123,27 +123,12 @@ jobs:
     needs: nightly
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-        with:
-          token: ${{ secrets.RELEASE_TOKEN }}
-
       - name: Get Build Version
         id: get_build_version
         run: |
           DATE=$(date +'%Y%m%d')
           BUILD_VERSION="nightly-${DATE}"
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
-
-      - name: Create git tag
-        run: |
-          TAG="${{ steps.get_build_version.outputs.build_version }}"
-          # Delete existing tag if present (from a previous failed run)
-          git tag -d "$TAG" 2>/dev/null || true
-          git push origin ":refs/tags/$TAG" 2>/dev/null || true
-          # Create and push the tag so the release doesn't need to create it
-          git tag "$TAG"
-          git push origin "$TAG"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v7
@@ -157,10 +142,20 @@ jobs:
       - name: Create GitHub Release
         run: |
           TAG="${{ steps.get_build_version.outputs.build_version }}"
-          gh release create "$TAG" \
+          # If the tag is poisoned from a previous failed run, append run number
+          if ! gh release create "$TAG" \
             artifacts/**/*.tar.gz \
             --title "Nightly Build $TAG" \
-            --prerelease
+            --prerelease \
+            --target main 2>/dev/null; then
+            TAG="${TAG}-${{ github.run_number }}"
+            gh release create "$TAG" \
+              artifacts/**/*.tar.gz \
+              --title "Nightly Build $TAG" \
+              --prerelease \
+              --target main
+          fi
+          echo "Created release: $TAG"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
