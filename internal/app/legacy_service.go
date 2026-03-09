@@ -78,6 +78,13 @@ func (l *LegacyService) Stop(ctx context.Context) error {
 	case <-l.done:
 		return l.result
 	case <-ctx.Done():
-		return ctx.Err()
+		// Re-check l.done: if both fired simultaneously, prefer the
+		// actual result over a misleading DeadlineExceeded.
+		select {
+		case <-l.done:
+			return l.result
+		default:
+			return ctx.Err()
+		}
 	}
 }
