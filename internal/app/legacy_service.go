@@ -46,8 +46,11 @@ func (l *LegacyService) ErrChan() <-chan error {
 }
 
 // Start launches the blocking function in a goroutine.
-// Returns an error if called more than once.
+// Returns an error if called more than once or if fn is nil.
 func (l *LegacyService) Start(_ context.Context) error {
+	if l.fn == nil {
+		return fmt.Errorf("service %q: nil legacy function", l.name)
+	}
 	if l.started.Swap(true) {
 		return fmt.Errorf("service %q: Start called twice", l.name)
 	}

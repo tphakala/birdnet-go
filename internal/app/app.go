@@ -129,22 +129,17 @@ func (a *App) Wait() error {
 		}
 	}
 
+	// Select on signal and legacy error channels. A nil legacyErrChan
+	// blocks forever in select, so the branch is effectively ignored.
 	var legacyErr error
-	if legacyErrChan != nil {
-		select {
-		case sig := <-sigChan:
-			log.Info("received shutdown signal",
-				logger.String("signal", sig.String()),
-				logger.String("operation", "graceful_shutdown"))
-		case legacyErr = <-legacyErrChan:
-			log.Info("legacy service exited",
-				logger.Error(legacyErr),
-				logger.String("operation", "graceful_shutdown"))
-		}
-	} else {
-		sig := <-sigChan
+	select {
+	case sig := <-sigChan:
 		log.Info("received shutdown signal",
 			logger.String("signal", sig.String()),
+			logger.String("operation", "graceful_shutdown"))
+	case legacyErr = <-legacyErrChan:
+		log.Info("legacy service exited",
+			logger.Error(legacyErr),
 			logger.String("operation", "graceful_shutdown"))
 	}
 
