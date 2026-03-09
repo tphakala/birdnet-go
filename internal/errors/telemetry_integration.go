@@ -36,6 +36,41 @@ var (
 	}
 )
 
+// categoryOriginMap classifies error categories by their origin for telemetry tagging.
+var categoryOriginMap = map[ErrorCategory]string{
+	CategoryValidation:     "code",
+	CategoryNotFound:       "code",
+	CategoryModelInit:      "code",
+	CategoryModelLoad:      "code",
+	CategoryLabelLoad:      "code",
+	CategorySoundLevel:     "code",
+	CategoryImageCache:     "code",
+	CategoryImageProvider:  "code",
+	CategoryImageFetch:     "code",
+	CategoryNetwork:        "environment",
+	CategoryDatabase:       "environment",
+	CategoryFileIO:         "environment",
+	CategoryConfiguration:  "environment",
+	CategoryRTSP:           "environment",
+	CategoryMQTTConnection: "environment",
+	CategoryMQTTPublish:    "environment",
+	CategoryMQTTAuth:       "environment",
+	CategoryHTTP:           "environment",
+	CategoryDiskUsage:      "environment",
+	CategoryDiskCleanup:    "environment",
+	CategoryAudioSource:    "environment",
+	CategoryIntegration:    "external",
+}
+
+// GetErrorOrigin returns the origin classification for an error category.
+// Returns "code", "environment", "external", or "unknown".
+func GetErrorOrigin(category ErrorCategory) string {
+	if origin, ok := categoryOriginMap[category]; ok {
+		return origin
+	}
+	return "unknown"
+}
+
 // Initialize package state
 func init() {
 	// Initialize hasActiveReporting to false (no telemetry or hooks by default)
@@ -125,6 +160,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("component", ee.GetComponent())
 		scope.SetTag("category", string(ee.Category))
+		scope.SetTag("error_origin", GetErrorOrigin(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
 		// Add context data with privacy scrubbing

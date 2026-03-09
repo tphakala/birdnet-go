@@ -26,6 +26,38 @@ func TestFastPathNoTelemetry(t *testing.T) {
 	assert.Equal(t, CategoryGeneric, ee.Category, "expected category 'generic' in fast path")
 }
 
+func TestErrorOriginTag(t *testing.T) {
+	tests := []struct {
+		name     string
+		category ErrorCategory
+		expected string
+	}{
+		{"validation is code", CategoryValidation, "code"},
+		{"not-found is code", CategoryNotFound, "code"},
+		{"model-init is code", CategoryModelInit, "code"},
+		{"image-cache is code", CategoryImageCache, "code"},
+		{"sound-level is code", CategorySoundLevel, "code"},
+		{"network is environment", CategoryNetwork, "environment"},
+		{"database is environment", CategoryDatabase, "environment"},
+		{"file-io is environment", CategoryFileIO, "environment"},
+		{"configuration is environment", CategoryConfiguration, "environment"},
+		{"rtsp is environment", CategoryRTSP, "environment"},
+		{"mqtt-connection is environment", CategoryMQTTConnection, "environment"},
+		{"mqtt-publish is environment", CategoryMQTTPublish, "environment"},
+		{"integration is external", CategoryIntegration, "external"},
+		{"timeout is unknown", CategoryTimeout, "unknown"},
+		{"generic is unknown", CategoryGeneric, "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetErrorOrigin(tt.category)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
 
