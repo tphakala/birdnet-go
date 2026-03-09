@@ -995,7 +995,12 @@ export const integrationSettings = derived(settingsStore, $store => ({
     },
   },
   weather: $store.formData.realtime?.weather,
-  ebird: $store.formData.realtime?.ebird,
+  ebird: $store.formData.realtime?.ebird ?? {
+    enabled: false,
+    apiKey: '',
+    cacheTTL: 24,
+    locale: 'en',
+  },
 }));
 
 export const supportSettings = derived(settingsStore, $store => ({
