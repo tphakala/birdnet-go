@@ -3457,7 +3457,7 @@
           "less_or_equal": "less or equal"
         }
       },
-      "v2Required": "The enhanced database schema is required for alert rules. Please update your database in the main settings to enable this feature.",
+      "v2Required": "The enhanced database schema is required for alert rules. You can migrate your database from the Database page under System.",
       "builtInRules": {
         "newSpecies": {
           "name": "New species detected",

@@ -47,7 +47,7 @@
   function stateBadgeClass(state: string): string {
     switch (state) {
       case 'idle':
-        return 'bg-slate-500/15 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/15 text-muted';
       case 'initializing':
       case 'dual_write':
       case 'migrating':
@@ -64,7 +64,7 @@
       case 'failed':
         return 'bg-red-500/15 text-red-600 dark:text-red-400';
       default:
-        return 'bg-slate-500/15 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/15 text-muted';
     }
   }
 
@@ -87,7 +87,7 @@
         <div class="p-1.5 rounded-lg bg-amber-500/10">
           <Database class="w-4 h-4 text-amber-500" />
         </div>
-        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
+        <span class="text-xs font-medium text-muted"
           >{t('system.database.migration.strip.legacy')}</span
         >
       </div>
@@ -107,19 +107,17 @@
     </div>
     <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.type')}</span>
+        <span class="text-muted">{t('system.database.stats.type')}</span>
         <span class="font-medium uppercase">{legacyStats?.type ?? '---'}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.size')}</span>
+        <span class="text-muted">{t('system.database.stats.size')}</span>
         <span class="font-mono tabular-nums font-medium"
           >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
         >
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400"
-          >{t('system.database.stats.detections')}</span
-        >
+        <span class="text-muted">{t('system.database.stats.detections')}</span>
         <span class="font-mono tabular-nums font-medium"
           >{formatNumber(legacyStats?.total_detections ?? 0)}</span
         >
@@ -136,7 +134,7 @@
         <div class="p-1.5 rounded-lg bg-emerald-500/10">
           <Database class="w-4 h-4 text-emerald-500" />
         </div>
-        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
+        <span class="text-xs font-medium text-muted"
           >{t('system.database.migration.strip.v2Target')}</span
         >
       </div>
@@ -156,19 +154,17 @@
     </div>
     <div class="space-y-2 text-sm flex-1">
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.type')}</span>
+        <span class="text-muted">{t('system.database.stats.type')}</span>
         <span class="font-medium uppercase">{v2Stats?.type ?? '---'}</span>
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400">{t('system.database.stats.size')}</span>
+        <span class="text-muted">{t('system.database.stats.size')}</span>
         <span class="font-mono tabular-nums font-medium"
           >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
         >
       </div>
       <div class="flex justify-between">
-        <span class="text-slate-600 dark:text-slate-400"
-          >{t('system.database.stats.detections')}</span
-        >
+        <span class="text-muted">{t('system.database.stats.detections')}</span>
         <span class="font-mono tabular-nums font-medium">{formatNumber(v2TotalRecords)}</span>
       </div>
     </div>
@@ -183,9 +179,7 @@
         <div class="p-1.5 rounded-lg bg-blue-500/10">
           <Activity class="w-4 h-4 text-blue-500" />
         </div>
-        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
-          >{t('system.database.stats.detections')}</span
-        >
+        <span class="text-xs font-medium text-muted">{t('system.database.stats.detections')}</span>
       </div>
       <span class="font-mono tabular-nums text-lg font-semibold"
         >{formatNumber(totalDetections)}</span
@@ -194,7 +188,7 @@
     <div class="flex-1 min-h-[28px]">
       <Sparkline data={detectionHistory} color={SPARKLINE_COLOR} />
     </div>
-    <div class="flex justify-between mt-2 text-[10px] text-slate-600 dark:text-slate-400">
+    <div class="flex justify-between mt-2 text-[10px] text-muted">
       <span>{t('system.database.migration.strip.dayAvg', { count: dailyAverage })}</span>
       <span>{t('system.database.migration.strip.dayHistory')}</span>
     </div>
@@ -215,7 +209,7 @@
             <RefreshCw class="w-4 h-4 text-orange-500" />
           {/if}
         </div>
-        <span class="text-xs font-medium text-slate-600 dark:text-slate-400"
+        <span class="text-xs font-medium text-muted"
           >{t('system.database.migration.strip.migration')}</span
         >
       </div>
@@ -231,16 +225,16 @@
         <CheckCircle class="w-4 h-4" />
         <span>{t('system.database.migration.strip.complete')}</span>
       </div>
-      <div class="mt-1 text-[10px] tabular-nums text-slate-600 dark:text-slate-400">
+      <div class="mt-1 text-[10px] tabular-nums text-muted">
         {t('system.database.migration.strip.recordsMigrated', {
           count: formatNumber(migrationStatus?.total_records ?? 0),
         })}
       </div>
     {:else if isIdle}
-      <div class="text-sm text-slate-600 dark:text-slate-400">
+      <div class="text-sm text-muted">
         {t('system.database.migration.strip.readyToMigrate')}
       </div>
-      <div class="mt-1 text-[10px] tabular-nums text-slate-600 dark:text-slate-400">
+      <div class="mt-1 text-[10px] tabular-nums text-muted">
         {t('system.database.migration.strip.recordsInLegacy', {
           count: formatNumber(legacyStats?.total_detections ?? 0),
         })}
@@ -251,7 +245,7 @@
           <div class="h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700">
             <div class="h-full rounded-full bg-violet-500 animate-pulse" style:width="100%"></div>
           </div>
-          <div class="mt-1 text-[10px] text-slate-600 dark:text-slate-400">
+          <div class="mt-1 text-[10px] text-muted">
             {t('system.database.migration.strip.comparingRecords')}
           </div>
         </div>
@@ -271,9 +265,7 @@
               style:width="{Math.min(migrationStatus?.progress_percent ?? 0, 100).toFixed(1)}%"
             ></div>
           </div>
-          <div
-            class="flex justify-between mt-1 text-[10px] tabular-nums text-slate-600 dark:text-slate-400"
-          >
+          <div class="flex justify-between mt-1 text-[10px] tabular-nums text-muted">
             <span>{(migrationStatus?.progress_percent ?? 0).toFixed(1)}%</span>
             {#if migrationStatus?.estimated_remaining}
               <span
@@ -285,9 +277,7 @@
           </div>
         </div>
         <div class="flex justify-between text-sm">
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.migration.strip.rate')}</span
-          >
+          <span class="text-muted">{t('system.database.migration.strip.rate')}</span>
           <span class="font-mono tabular-nums font-medium"
             >{t('system.database.migration.progress.rateValue', {
               rate: formatNumber(Math.round(migrationStatus?.records_per_second ?? 0)),

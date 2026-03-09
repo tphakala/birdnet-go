@@ -78,7 +78,7 @@
   function statusClasses(status: string): string {
     switch (status) {
       case 'pending':
-        return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/10 text-muted';
       case 'in_progress':
         return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
       case 'completed':
@@ -86,7 +86,7 @@
       case 'failed':
         return 'bg-red-500/10 text-red-600 dark:text-red-400';
       default:
-        return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/10 text-muted';
     }
   }
 
@@ -108,11 +108,11 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('system.database.backup.history.title')}
       </h3>
       <span
-        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-slate-600 dark:text-slate-400"
+        class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-500/10 text-muted"
       >
         {safeBackups.length}
       </span>
@@ -135,7 +135,7 @@
   </div>
 
   {#if safeBackups.length === 0}
-    <div class="py-8 text-center text-sm text-slate-600 dark:text-slate-400">
+    <div class="py-8 text-center text-sm text-muted">
       {t('system.database.backup.history.noBackups')}
     </div>
   {:else}
@@ -145,7 +145,7 @@
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-600 dark:text-slate-400"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
                 scope="col"
                 tabindex="0"
                 aria-sort={sortColumn === col.key
@@ -175,10 +175,7 @@
                 </div>
               </th>
             {/each}
-            <th
-              scope="col"
-              class="text-right py-2 px-3 text-xs font-medium text-slate-600 dark:text-slate-400"
-            >
+            <th scope="col" class="text-right py-2 px-3 text-xs font-medium text-muted">
               {t('system.database.backup.history.columns.actions')}
             </th>
           </tr>
@@ -190,7 +187,7 @@
             >
               <td class="py-2 px-3">
                 <div class="flex items-center gap-2">
-                  <Clock class="w-3.5 h-3.5 flex-shrink-0 text-slate-600 dark:text-slate-400" />
+                  <Clock class="w-3.5 h-3.5 flex-shrink-0 text-muted" />
                   <span class="text-sm tabular-nums">{formatDateTime(backup.started_at)}</span>
                 </div>
               </td>
@@ -236,7 +233,7 @@
                       {t('system.database.backup.history.failed')}
                     </span>
                   {:else}
-                    <span class="text-xs text-slate-600 dark:text-slate-400">&mdash;</span>
+                    <span class="text-xs text-muted">&mdash;</span>
                   {/if}
                 </div>
               </td>

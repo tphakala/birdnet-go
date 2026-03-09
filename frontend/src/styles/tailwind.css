@@ -3,6 +3,11 @@
 
 @import 'tailwindcss';
 
+/* Custom text utilities */
+@utility text-muted {
+  color: var(--text-muted);
+}
+
 /* Custom breakpoints and fonts */
 @theme {
   --breakpoint-*: initial;
@@ -87,6 +92,9 @@
   --border-200: #cbd5e1;
   --hover-overlay: rgba(0, 0, 0, 0.05);
 
+  /* Text colors */
+  --text-muted: #475569; /* slate-600 - secondary/muted text */
+
   /* Component tokens */
   --radius-box: 0.5rem;
   --radius-field: 0.375rem;
@@ -158,6 +166,9 @@
   --border-100: #1e293b; /* slate-800 - subtle borders */
   --border-200: #334155; /* slate-700 - prominent borders */
   --hover-overlay: rgba(255, 255, 255, 0.05);
+
+  /* Text colors */
+  --text-muted: #e2e8f0; /* slate-200 - secondary/muted text (high contrast) */
 
   /* Shadows (darker for dark mode) */
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);

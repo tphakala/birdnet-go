@@ -3427,7 +3427,7 @@
           "less_or_equal": "kleiner oder gleich"
         }
       },
-      "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Bitte aktualisieren Sie Ihre Datenbank in den Haupteinstellungen, um diese Funktion zu aktivieren.",
+      "v2Required": "Für Alarmregeln ist das erweiterte Datenbankschema erforderlich. Sie können Ihre Datenbank über die Datenbankseite unter System migrieren.",
       "builtInRules": {
         "newSpecies": {
           "name": "Neue Art erkannt",

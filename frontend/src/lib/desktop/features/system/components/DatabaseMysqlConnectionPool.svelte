@@ -16,9 +16,7 @@
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-  <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
-  >
+  <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
     {t('system.database.dashboard.connectionPool.title')}
   </h3>
   <div class="space-y-3">
@@ -30,7 +28,7 @@
         >
         <span class="font-mono tabular-nums text-sm">
           <span class="font-semibold">{details.active_connections}</span>
-          <span class="text-slate-600 dark:text-slate-400"> / {details.max_connections}</span>
+          <span class="text-muted"> / {details.max_connections}</span>
         </span>
       </div>
       <div
@@ -46,9 +44,7 @@
           style:width="{poolUsagePct}%"
         ></div>
       </div>
-      <div
-        class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
-      >
+      <div class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-muted">
         <span
           >{details.active_connections}
           {t('system.database.dashboard.connectionPool.active')}, {details.idle_connections}
@@ -63,8 +59,8 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Users class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
+          <Users class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted"
             >{t('system.database.dashboard.connectionPool.totalCreated')}</span
           >
         </div>
@@ -73,10 +69,8 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <AlertTriangle class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.connectionPool.connErrors')}</span
-          >
+          <AlertTriangle class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.connectionPool.connErrors')}</span>
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.connection_errors > 0
@@ -86,10 +80,8 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Network class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.connectionPool.threads')}</span
-          >
+          <Network class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.connectionPool.threads')}</span>
         </div>
         <span class="font-mono tabular-nums font-medium"
           >{details.threads_running}

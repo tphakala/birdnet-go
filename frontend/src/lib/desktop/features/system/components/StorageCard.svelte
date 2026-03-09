@@ -39,9 +39,7 @@
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-  <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
-  >
+  <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
     {t('system.storage.title')}
   </h3>
   <div class="space-y-4">
@@ -49,14 +47,12 @@
       <div>
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2">
-            <HardDrive class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+            <HardDrive class="w-3.5 h-3.5 text-muted" />
             <span class="text-sm font-medium font-mono">{disk.mountpoint}</span>
           </div>
           <div class="text-sm font-mono tabular-nums">
             <span class="font-semibold">{formatBytesCompact(disk.used)}</span>
-            <span class="text-slate-600 dark:text-slate-400">
-              / {formatBytesCompact(disk.total)}</span
-            >
+            <span class="text-muted"> / {formatBytesCompact(disk.total)}</span>
           </div>
         </div>
         <div class="h-2 rounded-full overflow-hidden bg-[var(--surface-300)]">
@@ -66,9 +62,7 @@
             style:background={getProgressColor(disk.usage_percent)}
           ></div>
         </div>
-        <div
-          class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
-        >
+        <div class="flex justify-between mt-1 text-[10px] font-mono tabular-nums text-muted">
           <span>{Math.round(disk.usage_percent)}% {t('system.storage.used')}</span>
           <span>{formatBytesCompact(disk.total - disk.used)} {t('system.storage.free')}</span>
         </div>
@@ -80,14 +74,12 @@
       <div class="pt-2 border-t border-[var(--border-100)]">
         <div class="flex items-center justify-between mb-1.5">
           <div class="flex items-center gap-2">
-            <MemoryStick class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
+            <MemoryStick class="w-3.5 h-3.5 text-muted" />
             <span class="text-sm font-medium">{t('system.storage.ram')}</span>
           </div>
           <div class="text-sm font-mono tabular-nums">
             <span class="font-semibold">{formatBytesCompact(memory.used)}</span>
-            <span class="text-slate-600 dark:text-slate-400">
-              / {formatBytesCompact(memory.total)}</span
-            >
+            <span class="text-muted"> / {formatBytesCompact(memory.total)}</span>
           </div>
         </div>
         <div class="h-2 rounded-full overflow-hidden relative bg-[var(--surface-300)]">
@@ -102,9 +94,7 @@
             style:background="#8b5cf6"
           ></div>
         </div>
-        <div
-          class="grid grid-cols-4 mt-2 text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
-        >
+        <div class="grid grid-cols-4 mt-2 text-[10px] font-mono tabular-nums text-muted">
           <span>{Math.round(memory.usedPercent)}% {t('system.storage.used')}</span>
           <span>{formatBytesCompact(memory.free)} {t('system.storage.free')}</span>
           <span>{formatBytesCompact(memory.available)} {t('system.metrics.available')}</span>

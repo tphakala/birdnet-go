@@ -77,7 +77,7 @@
       case 'zombie':
         return 'bg-red-500/15 text-red-600 dark:text-red-400';
       default:
-        return 'bg-slate-500/15 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/15 text-muted';
     }
   }
 
@@ -93,19 +93,17 @@
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
-      <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+      <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
         {t('system.processInfo.title')}
       </h3>
       <span
-        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-slate-600 dark:text-slate-400"
+        class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
       >
         {processes.length}
       </span>
     </div>
     <div class="flex items-center gap-2 cursor-pointer">
-      <span class="text-xs text-slate-600 dark:text-slate-400"
-        >{t('system.processInfo.showAll')}</span
-      >
+      <span class="text-xs text-muted">{t('system.processInfo.showAll')}</span>
       <button
         type="button"
         class="relative w-8 h-4 rounded-full transition-colors cursor-pointer {showAllProcesses
@@ -130,7 +128,7 @@
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
             <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-slate-600 dark:text-slate-400"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
               role="columnheader"
               tabindex="0"
               aria-sort={sortColumn === col.key
@@ -169,14 +167,12 @@
           >
             <td class="py-2 px-3">
               <div class="flex items-center gap-2">
-                <Terminal class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+                <Terminal class="w-3.5 h-3.5 shrink-0 text-muted" />
                 <div>
                   <div class="font-medium text-sm">
                     {proc.name === 'main' ? processName : proc.name}
                   </div>
-                  <div
-                    class="text-[10px] font-mono tabular-nums text-slate-600 dark:text-slate-400"
-                  >
+                  <div class="text-[10px] font-mono tabular-nums text-muted">
                     {t('system.processInfo.headers.pid')}
                     {proc.pid}
                   </div>

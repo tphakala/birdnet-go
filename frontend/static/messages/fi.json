@@ -3427,7 +3427,7 @@
           "less_or_equal": "pienempi tai yhtä suuri"
         }
       },
-      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Päivitä tietokanta pääasetuksissa ottaaksesi tämän ominaisuuden käyttöön.",
+      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Voit siirtää tietokantasi Järjestelmä-valikon Tietokanta-sivulta.",
       "builtInRules": {
         "newSpecies": {
           "name": "Uusi laji havaittu",

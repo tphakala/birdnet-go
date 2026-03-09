@@ -71,7 +71,7 @@
   function stateBadgeClass(state: string): string {
     switch (state) {
       case 'idle':
-        return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/10 text-muted';
       case 'initializing':
       case 'dual_write':
       case 'migrating':
@@ -85,7 +85,7 @@
       case 'failed':
         return 'bg-red-500/10 text-red-600 dark:text-red-400';
       default:
-        return 'bg-slate-500/10 text-slate-600 dark:text-slate-400';
+        return 'bg-slate-500/10 text-muted';
     }
   }
 
@@ -103,12 +103,12 @@
 >
   <!-- Header -->
   <div class="flex items-center justify-between mb-3">
-    <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+    <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
       {t('system.database.migration.progress.title')}
     </h3>
     <div class="flex items-center gap-2">
       {#if status?.current_phase && !isIdle && !isCompleted}
-        <span class="text-[10px] tabular-nums text-slate-600 dark:text-slate-400">
+        <span class="text-[10px] tabular-nums text-muted">
           {t('system.database.migration.phase.indicator', {
             current: status.phase_number,
             total: status.total_phases,
@@ -136,7 +136,7 @@
         <p class="text-sm font-semibold text-emerald-700 dark:text-emerald-300">
           {t('system.database.migration.progress.completedTitle')}
         </p>
-        <p class="text-xs mt-1 text-slate-600 dark:text-slate-400">
+        <p class="text-xs mt-1 text-muted">
           {t('system.database.migration.progress.completedBody', {
             count: formatNumber(status?.total_records ?? 0),
           })}
@@ -152,7 +152,7 @@
           <p class="text-sm font-medium text-blue-700 dark:text-blue-300">
             {t('system.database.migration.progress.restartTitle')}
           </p>
-          <p class="text-xs mt-0.5 text-slate-600 dark:text-slate-400">
+          <p class="text-xs mt-0.5 text-muted">
             {t('system.database.migration.progress.restartBody')}
           </p>
         </div>
@@ -167,7 +167,7 @@
         <p class="text-sm font-semibold text-red-700 dark:text-red-300">
           {t('system.database.migration.status.failed')}
         </p>
-        <p class="text-xs mt-1 text-slate-600 dark:text-slate-400">
+        <p class="text-xs mt-1 text-muted">
           {status?.error_message ?? t('system.database.migration.progress.fallbackError')}
         </p>
         {#if status && status.dirty_id_count > 0}
@@ -203,7 +203,7 @@
     <!-- STATE: Idle (pre-migration) -->
   {:else if isIdle}
     <div
-      class="flex items-start gap-2 p-3 rounded-lg mb-4 text-xs bg-black/[0.03] dark:bg-white/[0.03] text-slate-600 dark:text-slate-400"
+      class="flex items-start gap-2 p-3 rounded-lg mb-4 text-xs bg-black/[0.03] dark:bg-white/[0.03] text-muted"
     >
       <Info class="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
       <span>
@@ -224,17 +224,13 @@
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
-            <span class="text-slate-600 dark:text-slate-400"
-              >{t('system.database.migration.progress.recordsLabel')}</span
-            >
+            <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
             <span class="tabular-nums font-medium"
               >{formatNumber(legacyStats?.total_detections ?? 0)}</span
             >
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-slate-600 dark:text-slate-400"
-              >{t('system.database.migration.progress.sizeLabel')}</span
-            >
+            <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
             <span class="tabular-nums font-medium"
               >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
             >
@@ -249,17 +245,13 @@
         </div>
         <div class="space-y-1">
           <div class="flex justify-between text-xs">
-            <span class="text-slate-600 dark:text-slate-400"
-              >{t('system.database.migration.progress.recordsLabel')}</span
-            >
+            <span class="text-muted">{t('system.database.migration.progress.recordsLabel')}</span>
             <span class="tabular-nums font-medium"
               >{formatNumber(v2Stats?.total_detections ?? 0)}</span
             >
           </div>
           <div class="flex justify-between text-xs">
-            <span class="text-slate-600 dark:text-slate-400"
-              >{t('system.database.migration.progress.sizeLabel')}</span
-            >
+            <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
             <span class="tabular-nums font-medium"
               >{formatBytesCompact(v2Stats?.size_bytes ?? 0)}</span
             >
@@ -309,7 +301,7 @@
     <div class="p-4 rounded-lg text-center bg-black/[0.03] dark:bg-white/[0.03]">
       <Loader2 class="w-6 h-6 mx-auto mb-2 text-violet-500 animate-spin" />
       <p class="text-sm font-medium">{t('system.database.migration.progress.validatingTitle')}</p>
-      <p class="text-xs mt-1 text-slate-600 dark:text-slate-400">
+      <p class="text-xs mt-1 text-muted">
         {t('system.database.migration.progress.validatingBody', {
           count: formatNumber(legacyStats?.total_detections ?? 0),
         })}
@@ -357,7 +349,7 @@
     <div class="p-4 rounded-lg text-center bg-black/[0.03] dark:bg-white/[0.03]">
       <Loader2 class="w-6 h-6 mx-auto mb-2 text-amber-500 animate-spin" />
       <p class="text-sm font-medium">{t('system.database.migration.progress.cutoverTitle')}</p>
-      <p class="text-xs mt-1 text-slate-600 dark:text-slate-400">
+      <p class="text-xs mt-1 text-muted">
         {t('system.database.migration.progress.cutoverBody')}
       </p>
     </div>
@@ -393,7 +385,7 @@
           <span class="text-sm font-medium">
             {t('system.database.migration.progress.migratingPhase', { phase: phaseName })}
           </span>
-          <span class="text-[10px] tabular-nums text-slate-600 dark:text-slate-400">
+          <span class="text-[10px] tabular-nums text-muted">
             {t('system.database.migration.phase.indicator', {
               current: status.phase_number,
               total: status.total_phases,
@@ -410,7 +402,7 @@
           >
           <div class="text-sm tabular-nums">
             <span class="font-semibold">{formatNumber(status?.migrated_records ?? 0)}</span>
-            <span class="text-slate-600 dark:text-slate-400">
+            <span class="text-muted">
               {t('system.database.migration.progress.ofRecords', {
                 count: formatNumber(status?.total_records ?? 0),
               })}</span
@@ -432,9 +424,7 @@
             style:width="{Math.min(status?.progress_percent ?? 0, 100).toFixed(1)}%"
           ></div>
         </div>
-        <div
-          class="grid grid-cols-3 mt-1.5 text-[10px] tabular-nums text-slate-600 dark:text-slate-400"
-        >
+        <div class="grid grid-cols-3 mt-1.5 text-[10px] tabular-nums text-muted">
           <span
             >{t('system.database.migration.progress.percentComplete', {
               percent: (status?.progress_percent ?? 0).toFixed(1),
@@ -485,7 +475,7 @@
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-slate-600 dark:text-slate-400"
+                <span class="text-muted"
                   >{t('system.database.migration.progress.recordsLabel')}</span
                 >
                 <span class="tabular-nums font-medium"
@@ -493,9 +483,7 @@
                 >
               </div>
               <div class="flex justify-between text-xs">
-                <span class="text-slate-600 dark:text-slate-400"
-                  >{t('system.database.migration.progress.sizeLabel')}</span
-                >
+                <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
                 <span class="tabular-nums font-medium"
                   >{formatBytesCompact(legacyStats?.size_bytes ?? 0)}</span
                 >
@@ -512,7 +500,7 @@
             </div>
             <div class="space-y-1">
               <div class="flex justify-between text-xs">
-                <span class="text-slate-600 dark:text-slate-400"
+                <span class="text-muted"
                   >{t('system.database.migration.progress.recordsLabel')}</span
                 >
                 <span class="tabular-nums font-medium"
@@ -522,9 +510,7 @@
                 >
               </div>
               <div class="flex justify-between text-xs">
-                <span class="text-slate-600 dark:text-slate-400"
-                  >{t('system.database.migration.progress.sizeLabel')}</span
-                >
+                <span class="text-muted">{t('system.database.migration.progress.sizeLabel')}</span>
                 <span class="tabular-nums font-medium"
                   >{formatBytesCompact(
                     (v2Stats?.size_bytes ?? 0) +

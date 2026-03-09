@@ -3427,7 +3427,7 @@
           "less_or_equal": "kleiner of gelijk"
         }
       },
-      "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. Werk uw database bij in de hoofdinstellingen om deze functie in te schakelen.",
+      "v2Required": "Het uitgebreide databaseschema is vereist voor waarschuwingsregels. U kunt uw database migreren via de pagina Database onder Systeem.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nieuwe soort gedetecteerd",

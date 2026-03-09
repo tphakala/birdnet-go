@@ -12,9 +12,7 @@
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-  <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
-  >
+  <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
     {t('system.database.dashboard.innodb.title')}
   </h3>
   <div class="space-y-3">
@@ -22,10 +20,8 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Gauge class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.innodb.bufferPoolHitRate')}</span
-          >
+          <Gauge class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.innodb.bufferPoolHitRate')}</span>
         </div>
         <span class="font-mono tabular-nums font-medium text-emerald-600 dark:text-emerald-400"
           >{details.buffer_pool_hit_rate.toFixed(1)}%</span
@@ -33,10 +29,8 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <HardDrive class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.innodb.bufferPoolSize')}</span
-          >
+          <HardDrive class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.innodb.bufferPoolSize')}</span>
         </div>
         <span class="font-mono tabular-nums font-medium"
           >{formatBytesCompact(details.buffer_pool_size_bytes)}</span
@@ -50,19 +44,15 @@
     <div class="space-y-2">
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Lock class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.innodb.lockWaits')}</span
-          >
+          <Lock class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.innodb.lockWaits')}</span>
         </div>
         <span class="font-mono tabular-nums font-medium">{formatNumber(details.lock_waits)}</span>
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <AlertTriangle class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.innodb.deadlocks')}</span
-          >
+          <AlertTriangle class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.innodb.deadlocks')}</span>
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.deadlocks > 0
@@ -72,27 +62,21 @@
       </div>
       <div class="flex justify-between text-sm">
         <div class="flex items-center gap-2">
-          <Timer class="w-3.5 h-3.5 text-slate-600 dark:text-slate-400" />
-          <span class="text-slate-600 dark:text-slate-400"
-            >{t('system.database.dashboard.innodb.avgLockWait')}</span
-          >
+          <Timer class="w-3.5 h-3.5 text-muted" />
+          <span class="text-muted">{t('system.database.dashboard.innodb.avgLockWait')}</span>
         </div>
         <span class="font-mono tabular-nums font-medium"
           >{details.avg_lock_wait_ms.toFixed(1)}ms</span
         >
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-slate-600 dark:text-slate-400"
-          >{t('system.database.dashboard.innodb.tableLocksWaited')}</span
-        >
+        <span class="text-muted">{t('system.database.dashboard.innodb.tableLocksWaited')}</span>
         <span class="font-mono tabular-nums font-medium"
           >{formatNumber(details.table_locks_waited)}</span
         >
       </div>
       <div class="flex justify-between text-sm">
-        <span class="text-slate-600 dark:text-slate-400"
-          >{t('system.database.dashboard.innodb.tableLocksImmediate')}</span
-        >
+        <span class="text-muted">{t('system.database.dashboard.innodb.tableLocksImmediate')}</span>
         <span class="font-mono tabular-nums font-medium"
           >{formatNumber(details.table_locks_immediate)}</span
         >

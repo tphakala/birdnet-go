@@ -29,45 +29,43 @@
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
-  <h3
-    class="text-xs font-semibold uppercase tracking-wider mb-3 text-slate-600 dark:text-slate-400"
-  >
+  <h3 class="text-xs font-semibold uppercase tracking-wider mb-3 text-muted">
     {t('system.systemInfo.title')}
   </h3>
   <div class="space-y-2.5">
     <div class="flex items-center gap-3">
-      <Monitor class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+      <Monitor class="w-3.5 h-3.5 shrink-0 text-muted" />
       <span class="text-sm truncate">{osDisplay}</span>
     </div>
     {#if hostname}
       <div class="flex items-center gap-3">
-        <Network class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+        <Network class="w-3.5 h-3.5 shrink-0 text-muted" />
         <span class="text-sm truncate">{hostname}</span>
       </div>
     {/if}
     {#if systemModel}
       <div class="flex items-center gap-3">
-        <Server class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+        <Server class="w-3.5 h-3.5 shrink-0 text-muted" />
         <span class="text-sm">{systemModel}</span>
       </div>
     {/if}
     <div class="flex items-center gap-3">
-      <Clock class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+      <Clock class="w-3.5 h-3.5 shrink-0 text-muted" />
       <span class="text-sm">{formatUptimeCompact(uptimeSeconds)}</span>
     </div>
     {#if timeZone}
       <div class="flex items-center gap-3">
-        <Globe class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+        <Globe class="w-3.5 h-3.5 shrink-0 text-muted" />
         <span class="text-sm">{timeZone}</span>
       </div>
     {/if}
     <div class="flex items-center gap-3">
-      <Cpu class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+      <Cpu class="w-3.5 h-3.5 shrink-0 text-muted" />
       <span class="text-sm">{cpuCores} {t('system.systemInfo.cpuCores')}</span>
     </div>
     {#if temperatureAvailable}
       <div class="flex items-center gap-3">
-        <Thermometer class="w-3.5 h-3.5 shrink-0 text-slate-600 dark:text-slate-400" />
+        <Thermometer class="w-3.5 h-3.5 shrink-0 text-muted" />
         <span class="text-sm">{temperatureValue.toFixed(1)}{tempSymbol}</span>
       </div>
     {/if}
