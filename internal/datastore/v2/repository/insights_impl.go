@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -126,14 +127,15 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
 		Where("d.detected_at >= ?", since).
-		Where(fpWhere).
-		Group("d.label_id").
-		Having("COUNT(*) >= ? AND AVG(d.confidence) < ?", minDetections, maxAvgConfidence).
-		Order("avg_confidence ASC")
+		Where(fpWhere)
 
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
+
+	query = query.Group("d.label_id").
+		Having("COUNT(*) >= ? AND AVG(d.confidence) < ?", minDetections, maxAvgConfidence).
+		Order("avg_confidence ASC")
 
 	var results []PhantomSpecies
 	if err := query.Scan(&results).Error; err != nil {
@@ -157,12 +159,13 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, 
 		Joins(fpJoin).
 		Where("d.detected_at >= ?", since).
 		Where(fpWhere).
-		Where(fmt.Sprintf("%s >= ? AND %s < ?", hourExpr, hourExpr), startHour, endHour).
-		Group(fmt.Sprintf("d.label_id, %s", dateExpr))
+		Where(fmt.Sprintf("%s >= ? AND %s < ?", hourExpr, hourExpr), startHour, endHour)
 
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
+
+	query = query.Group(fmt.Sprintf("d.label_id, %s", dateExpr))
 
 	var results []DawnChorusRawEntry
 	if err := query.Scan(&results).Error; err != nil {
@@ -181,14 +184,15 @@ func (r *insightsRepository) GetNewArrivals(ctx context.Context, recentSince int
 		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MIN(d.detected_at) as first_detected, COUNT(*) as detection_count", lab)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
-		Where(fpWhere).
-		Group("d.label_id").
-		Having("MIN(d.detected_at) >= ?", recentSince).
-		Order("first_detected DESC")
+		Where(fpWhere)
 
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
+
+	query = query.Group("d.label_id").
+		Having("MIN(d.detected_at) >= ?", recentSince).
+		Order("first_detected DESC")
 
 	var results []NewArrival
 	if err := query.Scan(&results).Error; err != nil {
@@ -207,14 +211,15 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MAX(d.detected_at) as last_detected, COUNT(*) as total_detections", lab)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
-		Where(fpWhere).
-		Group("d.label_id").
-		Having("COUNT(*) >= ? AND MAX(d.detected_at) < ?", minTotalDetections, recentSince).
-		Order("last_detected DESC")
+		Where(fpWhere)
 
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
+
+	query = query.Group("d.label_id").
+		Having("COUNT(*) >= ? AND MAX(d.detected_at) < ?", minTotalDetections, recentSince).
+		Order("last_detected DESC")
 
 	var results []GoneQuietSpecies
 	if err := query.Scan(&results).Error; err != nil {
@@ -250,8 +255,8 @@ func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince in
 		return nil, fmt.Errorf("today detections: %w", err)
 	}
 
-	// 3. Best day (scoped to last 365 days for performance)
-	oneYearAgo := todaySince - 365*24*60*60
+	// 3. Best day (scoped to last year for performance)
+	oneYearAgo := time.Unix(todaySince, 0).AddDate(-1, 0, 0).Unix()
 	var bestDay struct {
 		Date  string
 		Count int64

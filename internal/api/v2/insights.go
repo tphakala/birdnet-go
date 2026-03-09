@@ -222,12 +222,14 @@ func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 				Start: rangeStart.Unix(),
 				End:   dec31.Unix(),
 			})
-			wrapEndDOY := endDOY - daysInYear
-			wrapEnd := time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, wrapEndDOY-1)
-			ranges = append(ranges, repository.TimeRange{
-				Start: time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).Unix(),
-				End:   time.Date(wrapEnd.Year(), wrapEnd.Month(), wrapEnd.Day(), 23, 59, 59, 0, loc).Unix(),
-			})
+			if year+1 < currentYear {
+				wrapEndDOY := endDOY - daysInYear
+				wrapEnd := time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, wrapEndDOY-1)
+				ranges = append(ranges, repository.TimeRange{
+					Start: time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).Unix(),
+					End:   time.Date(wrapEnd.Year(), wrapEnd.Month(), wrapEnd.Day(), 23, 59, 59, 0, loc).Unix(),
+				})
+			}
 		default:
 			rangeStart := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, startDOY-1)
 			rangeEnd := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, endDOY-1)
