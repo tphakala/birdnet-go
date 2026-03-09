@@ -3,6 +3,7 @@ package ebird
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -33,7 +34,7 @@ func (c *Client) GetRecentObservations(ctx context.Context, lat, lng float64, da
 			c.metrics.mu.Lock()
 			c.metrics.cacheHits++
 			c.metrics.mu.Unlock()
-			return obs, nil
+			return slices.Clone(obs), nil
 		}
 	}
 
@@ -48,7 +49,7 @@ func (c *Client) GetRecentObservations(ctx context.Context, lat, lng float64, da
 		return nil, fmt.Errorf("get recent observations: %w", err)
 	}
 
-	c.cache.Set(cacheKey, observations, c.config.CacheTTL)
+	c.cache.Set(cacheKey, slices.Clone(observations), c.config.CacheTTL)
 
 	c.metrics.mu.Lock()
 	c.metrics.cacheMisses++

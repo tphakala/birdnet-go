@@ -99,8 +99,9 @@ func TestGetPhantomSpecies_Handler(t *testing.T) {
 
 func TestGetDashboardKPIs_Handler(t *testing.T) {
 	t.Parallel()
-	today := time.Now().Format(time.DateOnly)
-	yesterday := time.Now().AddDate(0, 0, -1).Format(time.DateOnly)
+	now := time.Now()
+	today := now.Format(time.DateOnly)
+	yesterday := now.AddDate(0, 0, -1).Format(time.DateOnly)
 	mockRepo := &mockInsightsRepo{
 		dashboardKPIs: &repository.DashboardKPIs{
 			LifetimeSpecies: 87,
