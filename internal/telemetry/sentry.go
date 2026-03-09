@@ -111,8 +111,10 @@ func InitSentry(settings *conf.Settings) error {
 	// Configure global scope
 	configureSentryScope(settings)
 
-	// Initialize attachment uploader
+	// Initialize attachment uploader (under lock to avoid data race with GetAttachmentUploader)
+	deferredMutex.Lock()
 	attachmentUploader = NewAttachmentUploader(true)
+	deferredMutex.Unlock()
 
 	// Process deferred messages
 	deferredCount := processDeferredMessages()
@@ -823,8 +825,10 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// Mark as initialized but with limited functionality
 	sentryInitialized = true
 
-	// Create an enabled attachment uploader
+	// Create an enabled attachment uploader (under lock to avoid data race with GetAttachmentUploader)
+	deferredMutex.Lock()
 	attachmentUploader = NewAttachmentUploader(true)
+	deferredMutex.Unlock()
 
 	GetLogger().Info("minimal Sentry initialized for support uploads only",
 		logger.String("system_id", systemID))
