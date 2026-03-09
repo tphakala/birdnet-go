@@ -992,7 +992,7 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 }
 
 // setupImageProviderRegistry initializes or retrieves the global image provider registry
-// and registers the default providers (Wikimedia, AviCommons).
+// and registers the available providers (AviCommons, Wikimedia).
 // Uses atomic GetOrRegister to eliminate race conditions between concurrent calls.
 func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.Metrics) (*imageprovider.ImageProviderRegistry, error) {
 	// Use the global registry if available, otherwise create a new one
@@ -1118,12 +1118,14 @@ func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *
 	var defaultCache *imageprovider.BirdImageCache
 
 	if preferredProvider == "auto" {
-		// Use wikimedia as the default provider in auto mode, if available
-		defaultCache, _ = registry.GetCache("wikimedia")
-		log.Info("selected default image provider",
-			logger.String("provider", "wikimedia"),
-			logger.String("mode", "auto"),
-			logger.String("operation", "select_default_provider"))
+		// Use avicommons as the default provider in auto mode, if available
+		if cache, ok := registry.GetCache("avicommons"); ok {
+			defaultCache = cache
+			log.Info("selected default image provider",
+				logger.String("provider", "avicommons"),
+				logger.String("mode", "auto"),
+				logger.String("operation", "select_default_provider"))
+		}
 	} else {
 		// User has specified a specific provider
 		if cache, ok := registry.GetCache(preferredProvider); ok {
@@ -1131,17 +1133,17 @@ func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *
 			log.Info("selected preferred image provider",
 				logger.String("provider", preferredProvider),
 				logger.String("operation", "select_default_provider"))
-		} else {
-			// Fallback to wikimedia if preferred provider doesn't exist or isn't registered
-			defaultCache, _ = registry.GetCache("wikimedia")
+		} else if cache, ok := registry.GetCache("avicommons"); ok {
+			// Fallback to avicommons if preferred provider doesn't exist or isn't registered
+			defaultCache = cache
 			log.Warn("preferred provider not available, falling back",
 				logger.String("preferred_provider", preferredProvider),
-				logger.String("fallback_provider", "wikimedia"),
+				logger.String("fallback_provider", "avicommons"),
 				logger.String("operation", "select_default_provider"))
 		}
 	}
 
-	// If we still don't have a default cache (e.g., wikimedia failed registration), try any available provider.
+	// If we still don't have a default cache (e.g., avicommons failed registration), try any available provider.
 	if defaultCache == nil {
 		log.Warn("no default image provider found, searching for alternatives",
 			logger.String("operation", "select_default_provider"))

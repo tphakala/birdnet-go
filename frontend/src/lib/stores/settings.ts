@@ -830,8 +830,8 @@ function createEmptySettings(): SettingsFormData {
         thumbnails: {
           summary: true,
           recent: true,
-          imageProvider: 'wikimedia',
-          fallbackPolicy: 'all',
+          imageProvider: 'avicommons',
+          fallbackPolicy: 'none',
         },
         summaryLimit: 100,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
