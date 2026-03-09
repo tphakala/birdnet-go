@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Compile-time check that SQLiteStore implements DatabaseInspector.
@@ -101,7 +102,11 @@ func (s *SQLiteStore) getTableStatsViaDBStat() ([]TableStats, error) {
 	}
 
 	var rows []dbstatRow
-	err := s.DB.Raw(`
+	// Use a silent session to suppress GORM error logging for this probe query.
+	// The dbstat virtual table may not exist (requires SQLITE_ENABLE_DBSTAT_VTAB),
+	// and the caller handles the failure gracefully by falling back to estimation.
+	silentDB := s.DB.Session(&gorm.Session{Logger: s.DB.Logger.LogMode(gormlogger.Silent)})
+	err := silentDB.Raw(`
 		SELECT d.name, SUM(d.pgsize) AS size_bytes
 		FROM dbstat d
 		JOIN sqlite_master m ON m.name = d.name

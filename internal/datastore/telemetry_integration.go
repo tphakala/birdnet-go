@@ -196,7 +196,7 @@ func (dt *DatastoreTelemetry) calculateSeverity(err error, context *ErrorContext
 	// Critical errors that indicate data corruption or system failure
 	if strings.Contains(errStr, "malformed") ||
 		strings.Contains(errStr, "corrupt") ||
-		strings.Contains(errStr, "no such table") ||
+		(strings.Contains(errStr, "no such table") && !strings.Contains(errStr, "no such table: dbstat")) ||
 		strings.Contains(errStr, "disk full") ||
 		strings.Contains(errStr, "out of memory") {
 		return SeverityCritical

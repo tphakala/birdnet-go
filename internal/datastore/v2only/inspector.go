@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 // Compile-time check that Datastore implements DatabaseInspector.
@@ -170,7 +172,11 @@ func (ds *Datastore) getSQLiteTableStatsViaDBStat() ([]datastore.TableStats, err
 	}
 
 	var rows []dbstatRow
-	err := db.Raw(`
+	// Use a silent session to suppress GORM error logging for this probe query.
+	// The dbstat virtual table may not exist (requires SQLITE_ENABLE_DBSTAT_VTAB),
+	// and the caller handles the failure gracefully by falling back to estimation.
+	silentDB := db.Session(&gorm.Session{Logger: db.Logger.LogMode(gormlogger.Silent)})
+	err := silentDB.Raw(`
 		SELECT d.name, SUM(d.pgsize) AS size_bytes
 		FROM dbstat d
 		JOIN sqlite_master m ON m.name = d.name
