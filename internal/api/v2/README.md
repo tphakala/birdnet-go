@@ -411,6 +411,23 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 - `GET /alerts/rules`: `object_type`, `enabled` (true/false), `built_in` (true/false)
 - `GET /alerts/history`: `rule_id`, `limit` (default 50), `offset`
 
+### Insights (`insights.go`)
+
+Requires enhanced (v2) database. Returns 409 Conflict if not available.
+
+| Method | Route                           | Handler                 | Auth | Description                             |
+| ------ | ------------------------------- | ----------------------- | ---- | --------------------------------------- |
+| GET    | `/insights/expected-today`      | `getExpectedToday`      | ❌   | Species expected today based on history |
+| GET    | `/insights/phantom-species`     | `getPhantomSpecies`     | ❌   | Frequent but low-confidence detections  |
+| GET    | `/insights/dawn-chorus`         | `getDawnChorus`         | ❌   | Dawn chorus timing analysis             |
+| GET    | `/insights/migration`           | `getMigration`          | ❌   | New arrivals and gone-quiet species     |
+| GET    | `/insights/nearby-observations` | `getNearbyObservations` | ❌   | Recent eBird observations near station  |
+| GET    | `/dashboard/kpis`               | `getDashboardKPIs`      | ❌   | Dashboard headline metrics and streak   |
+
+**Query Parameters:**
+
+- All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
+
 ## Legend
 
 - ✅ = Authentication required
