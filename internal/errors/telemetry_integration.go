@@ -172,7 +172,11 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	}
 
 	// Create enhanced error message with category
-	enhancedMessage := fmt.Sprintf("[%s] %s", ee.Category, ee.Err.Error())
+	errMessage := "<nil error>"
+	if ee.Err != nil {
+		errMessage = ee.Err.Error()
+	}
+	enhancedMessage := fmt.Sprintf("[%s] %s", ee.Category, errMessage)
 
 	// Scrub the message for privacy (using local function)
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)

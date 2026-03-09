@@ -880,6 +880,16 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 			_ = cmd.Process.Kill()
 			select {
 			case err := <-done:
+				if err == nil {
+					return errors.Newf("process exceeded timeout of %s", timeout).
+						Component("spectrogram").
+						Category(errors.CategorySystem).
+						Context("operation", "generate_spectrogram").
+						Context("event", "process_exited_after_timeout").
+						Context("pid", pid).
+						Context("timeout", timeout.String()).
+						Build()
+				}
 				return errors.New(err).
 					Component("spectrogram").
 					Category(errors.CategorySystem).

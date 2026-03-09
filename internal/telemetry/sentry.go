@@ -193,12 +193,18 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 		delete(event.Tags, "hostname")
 	}
 
-	// Handle stack traces based on event level
+	// Apply stacktrace privacy filters
+	applyStacktracePrivacyFilters(event)
+
+	return event
+}
+
+// applyStacktracePrivacyFilters handles stack traces based on event severity.
+// Fatal events get scrubbed paths; non-fatal events get traces stripped entirely.
+func applyStacktracePrivacyFilters(event *sentry.Event) {
 	if event.Level == sentry.LevelFatal {
-		// Keep and scrub stack traces for fatal events
 		scrubStackTraceFrames(event)
 	} else {
-		// Strip all stack traces for non-fatal events
 		for i := range event.Exception {
 			event.Exception[i].Stacktrace = nil
 		}
@@ -206,8 +212,6 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 			event.Threads[i].Stacktrace = nil
 		}
 	}
-
-	return event
 }
 
 // scrubStackTraceFrames anonymizes file paths in stack trace frames for privacy.
@@ -244,8 +248,8 @@ func anonymizeFilePath(path string) string {
 	// Normalize Windows paths
 	normalized := strings.ReplaceAll(path, "\\", "/")
 	parts := strings.Split(normalized, "/")
-	if len(parts) <= 1 {
-		return path
+	if len(parts) <= 2 {
+		return normalized // Short paths like "telemetry/sentry.go" are safe
 	}
 	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
 }
@@ -285,6 +289,9 @@ func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
 		tagsRemoved := removePrivacyTags(event.Tags)
 		filtersApplied = append(filtersApplied, tagsRemoved...)
 	}
+
+	// Apply stacktrace privacy filters (same as non-debug path)
+	applyStacktracePrivacyFilters(event)
 
 	// Log after filtering
 	logEventAfterFiltering(event, filtersApplied)
@@ -618,19 +625,19 @@ func titleCaseComponent(component string) string {
 }
 
 // normalizeDirectCaptureErrorType extracts a stable error type from a scrubbed message.
+// Only treats a leading "[category] ..." prefix as metadata; brackets elsewhere are ignored.
 func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
-	lower := strings.ToLower(scrubbedMsg)
-
-	if idx := strings.Index(scrubbedMsg, "]"); idx > 0 {
-		if start := strings.LastIndex(scrubbedMsg[:idx], "["); start >= 0 {
-			category := scrubbedMsg[start+1 : idx]
-			rest := strings.TrimSpace(scrubbedMsg[idx+1:])
+	trimmed := strings.TrimSpace(scrubbedMsg)
+	if strings.HasPrefix(trimmed, "[") {
+		if idx := strings.Index(trimmed, "]"); idx > 1 {
+			category := trimmed[1:idx]
+			rest := strings.TrimSpace(trimmed[idx+1:])
 			normalizedType := internalerrors.NormalizeErrorType(strings.ToLower(rest))
 			return category + ":" + normalizedType
 		}
 	}
 
-	return internalerrors.NormalizeErrorType(lower)
+	return internalerrors.NormalizeErrorType(strings.ToLower(scrubbedMsg))
 }
 
 // CaptureError captures an error with privacy-compliant context
