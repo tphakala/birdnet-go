@@ -585,7 +585,7 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 		arrivalItems = append(arrivalItems, NewArrivalItem{
 			ScientificName: a.ScientificName,
 			CommonName:     resolveCommonName(nameMap, a.ScientificName),
-			FirstDetected:  time.Unix(a.FirstDetected, 0).Format(time.DateOnly),
+			FirstDetected:  time.Unix(a.FirstDetected, 0).In(now.Location()).Format(time.DateOnly),
 			DetectionCount: a.DetectionCount,
 			ThumbnailURL:   buildThumbnailURL(a.ScientificName),
 		})
@@ -593,14 +593,14 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 
 	quietItems := make([]GoneQuietItem, 0, len(quiet))
 	for _, q := range quiet {
-		lastDetectedTime := time.Unix(q.LastDetected, 0)
+		lastDetectedLocal := time.Unix(q.LastDetected, 0).In(now.Location())
 		todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		lastDate := time.Date(lastDetectedTime.Year(), lastDetectedTime.Month(), lastDetectedTime.Day(), 0, 0, 0, 0, now.Location())
+		lastDate := time.Date(lastDetectedLocal.Year(), lastDetectedLocal.Month(), lastDetectedLocal.Day(), 0, 0, 0, 0, now.Location())
 		daysSince := int(todayDate.Sub(lastDate).Hours() / 24)
 		quietItems = append(quietItems, GoneQuietItem{
 			ScientificName:  q.ScientificName,
 			CommonName:      resolveCommonName(nameMap, q.ScientificName),
-			LastDetected:    lastDetectedTime.Format(time.DateOnly),
+			LastDetected:    lastDetectedLocal.Format(time.DateOnly),
 			DaysSince:       daysSince,
 			TotalDetections: q.TotalDetections,
 			ThumbnailURL:    buildThumbnailURL(q.ScientificName),
