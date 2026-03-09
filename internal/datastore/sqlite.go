@@ -555,6 +555,11 @@ func (s *SQLiteStore) CheckpointWAL() error {
 	return nil
 }
 
+// SchemaVersion returns the datastore schema version.
+func (s *SQLiteStore) SchemaVersion() string {
+	return SchemaVersionLegacy
+}
+
 // GetDatabaseStats returns basic runtime statistics about the SQLite database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.

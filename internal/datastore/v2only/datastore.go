@@ -334,6 +334,11 @@ func (ds *Datastore) Transaction(fc func(tx *gorm.DB) error) error {
 	return ds.manager.DB().Transaction(fc)
 }
 
+// SchemaVersion returns the datastore schema version.
+func (ds *Datastore) SchemaVersion() string {
+	return datastore.SchemaVersionV2
+}
+
 // GetDatabaseStats returns database statistics.
 func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	ctx := context.Background()

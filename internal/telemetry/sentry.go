@@ -349,6 +349,17 @@ func configureSentryScope(settings *conf.Settings) {
 	})
 }
 
+// SetDatastoreSchemaTag sets a global Sentry tag indicating which datastore schema is active.
+// This should be called after the datastore is opened and its schema version is known.
+func SetDatastoreSchemaTag(schemaVersion string) {
+	if shouldSkipTelemetry() || schemaVersion == "" {
+		return
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag("datastore_schema", schemaVersion)
+	})
+}
+
 // processDeferredMessages processes any messages that were captured before Sentry was ready
 func processDeferredMessages() int {
 	deferredMutex.Lock()
