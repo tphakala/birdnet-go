@@ -2480,6 +2480,24 @@
       "errors": {
         "connectionError": "Verbindingsfout",
         "responseStreamFailed": "Antwoordstroom kon niet worden gelezen"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Verbind met de eBird-taxonomiedatabase voor verrijkte soortengegevens inclusief taxonomische classificatie en ondersoortinformatie.",
+        "enable": "eBird-integratie inschakelen",
+        "enabledRequired": "eBird-integratie is niet ingeschakeld",
+        "apiKey": {
+          "label": "eBird API-sleutel",
+          "helpText": "Uw eBird API-sleutel. Verkrijg er een via het eBird API-portaal."
+        },
+        "locale": {
+          "label": "Taal van soortnamen"
+        },
+        "cacheTTL": {
+          "label": "Cacheduur (uren)",
+          "helpText": "Hoe lang taxonomiegegevens van eBird in de cache worden bewaard. Taxonomie verandert zelden, dus langere cachetijden verminderen API-aanroepen."
+        },
+        "note": "eBird levert taxonomische gegevens voor soortclassificatie en inzichten. De API-sleutel is gratis verkrijgbaar bij het Cornell Lab of Ornithology."
       }
     },
     "audio": {

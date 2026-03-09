@@ -2486,6 +2486,24 @@
       "errors": {
         "connectionError": "Błąd połączenia",
         "responseStreamFailed": "Nie udało się odczytać strumienia odpowiedzi"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Połączenie z bazą taksonomiczną eBird w celu uzyskania wzbogaconych danych o gatunkach, w tym klasyfikacji taksonomicznej i informacji o podgatunkach.",
+        "enable": "Włącz integrację z eBird",
+        "enabledRequired": "Integracja z eBird nie jest włączona",
+        "apiKey": {
+          "label": "Klucz API eBird",
+          "helpText": "Twój klucz API eBird. Uzyskaj go w portalu API eBird."
+        },
+        "locale": {
+          "label": "Język nazw gatunków"
+        },
+        "cacheTTL": {
+          "label": "Czas trwania pamięci podręcznej (godziny)",
+          "helpText": "Jak długo przechowywać dane taksonomiczne z eBird w pamięci podręcznej. Taksonomia zmienia się rzadko, więc dłuższy czas cache zmniejsza liczbę wywołań API."
+        },
+        "note": "eBird dostarcza dane taksonomiczne wykorzystywane do klasyfikacji gatunków i analiz. Klucz API jest bezpłatny i dostępny w Cornell Lab of Ornithology."
       }
     },
     "audio": {

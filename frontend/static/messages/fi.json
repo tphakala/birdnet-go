@@ -2822,6 +2822,24 @@
       "errors": {
         "connectionError": "Yhteysvirhe",
         "responseStreamFailed": "Vastausvirran lukeminen epäonnistui"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Yhdistä eBird-taksonomiatietokantaan rikastettujen lajitietojen saamiseksi, mukaan lukien taksonominen luokittelu ja alalajitiedot.",
+        "enable": "Ota eBird-integraatio käyttöön",
+        "enabledRequired": "eBird-integraatio ei ole käytössä",
+        "apiKey": {
+          "label": "eBird API-avain",
+          "helpText": "eBird API-avaimesi. Hanki avain eBird API-portaalista."
+        },
+        "locale": {
+          "label": "Lajinimien kieli"
+        },
+        "cacheTTL": {
+          "label": "Välimuistin kesto (tuntia)",
+          "helpText": "Kuinka kauan eBirdin taksonomiatietoja säilytetään välimuistissa. Taksonomia muuttuu harvoin, joten pidempi välimuistiaika vähentää API-kutsuja."
+        },
+        "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta."
       }
     },
     "species": {

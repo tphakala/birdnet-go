@@ -273,11 +273,19 @@ export interface DaylightFilterSettings {
   species: string[];
 }
 
+export interface EBirdSettings {
+  enabled: boolean;
+  apiKey: string;
+  cacheTTL: number; // cache time-to-live in hours (default: 24)
+  locale: string; // locale for eBird data (e.g., "en", "es")
+}
+
 export interface IntegrationSettings {
   birdweather: BirdWeatherSettings;
   mqtt: MQTTSettings;
   observability: ObservabilitySettings;
   weather: WeatherSettings;
+  ebird: EBirdSettings;
 }
 
 export interface BirdWeatherSettings {
@@ -473,6 +481,7 @@ export interface RealtimeSettings {
   weather?: WeatherSettings;
   speciesTracking?: SpeciesTrackingSettings;
   extendedCapture?: ExtendedCaptureSettings;
+  ebird?: EBirdSettings;
 }
 
 // WebServer settings
@@ -980,6 +989,7 @@ export const integrationSettings = derived(settingsStore, $store => ({
     },
   },
   weather: $store.formData.realtime?.weather,
+  ebird: $store.formData.realtime?.ebird,
 }));
 
 export const supportSettings = derived(settingsStore, $store => ({

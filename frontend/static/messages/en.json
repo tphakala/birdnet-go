@@ -2516,6 +2516,24 @@
       "errors": {
         "connectionError": "Connection Error",
         "responseStreamFailed": "Failed to read response stream"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Connect to the eBird taxonomy database for enriched species data including taxonomic classification and subspecies information.",
+        "enable": "Enable eBird Integration",
+        "enabledRequired": "eBird integration is not enabled",
+        "apiKey": {
+          "label": "eBird API Key",
+          "helpText": "Your eBird API key. Obtain one from the eBird API portal."
+        },
+        "locale": {
+          "label": "Species Name Language"
+        },
+        "cacheTTL": {
+          "label": "Cache Duration (hours)",
+          "helpText": "How long to cache taxonomy data from eBird. Taxonomy rarely changes, so longer cache durations reduce API calls."
+        },
+        "note": "eBird provides taxonomic data used for species classification and insights. The API key is free to obtain from the Cornell Lab of Ornithology."
       }
     },
     "audio": {

@@ -2317,6 +2317,24 @@
       "errors": {
         "connectionError": "Chyba pripojenia",
         "responseStreamFailed": "Nepodarilo sa prečítať prúd odpovede"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Pripojenie k taxonomickej databáze eBird pre obohatené údaje o druhoch vrátane taxonomickej klasifikácie a informácií o poddruhoch.",
+        "enable": "Povoliť integráciu eBird",
+        "enabledRequired": "Integrácia eBird nie je povolená",
+        "apiKey": {
+          "label": "API kľúč eBird",
+          "helpText": "Váš API kľúč eBird. Získajte ho na portáli API eBird."
+        },
+        "locale": {
+          "label": "Jazyk názvov druhov"
+        },
+        "cacheTTL": {
+          "label": "Trvanie vyrovnávacej pamäte (hodiny)",
+          "helpText": "Ako dlho uchovávať taxonomické údaje z eBird vo vyrovnávacej pamäti. Taxonómia sa mení zriedkavo, preto dlhšie doby cache znižujú počet volaní API."
+        },
+        "note": "eBird poskytuje taxonomické údaje používané na klasifikáciu druhov a analýzy. API kľúč je bezplatný a dostupný z Cornell Lab of Ornithology."
       }
     },
     "audio": {

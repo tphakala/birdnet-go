@@ -38,7 +38,8 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
-  import { Bird, Radio, Activity } from '@lucide/svelte';
+  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
+  import { Bird, Radio, Activity, Binoculars } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
@@ -94,6 +95,12 @@
           path: '/metrics',
         },
       },
+      ebird: {
+        enabled: false,
+        apiKey: '',
+        cacheTTL: 24,
+        locale: 'en',
+      },
     }
   );
 
@@ -119,6 +126,13 @@
       // Observability is actually derived from telemetry in the store
       (store.originalData as SettingsFormData)?.realtime?.telemetry,
       (store.formData as SettingsFormData)?.realtime?.telemetry
+    )
+  );
+
+  let ebirdHasChanges = $derived(
+    hasSettingsChanged(
+      (store.originalData as SettingsFormData)?.realtime?.ebird,
+      (store.formData as SettingsFormData)?.realtime?.ebird
     )
   );
 
@@ -152,6 +166,13 @@
       icon: Radio,
       content: mqttTabContent,
       hasChanges: mqttHasChanges,
+    },
+    {
+      id: 'ebird',
+      label: t('settings.integration.ebird.title'),
+      icon: Binoculars,
+      content: ebirdTabContent,
+      hasChanges: ebirdHasChanges,
     },
     {
       id: 'prometheus',
@@ -322,6 +343,45 @@
       },
     });
   }
+
+  // eBird update handlers
+  function updateEBirdEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, enabled },
+    });
+  }
+
+  function updateEBirdApiKey(apiKey: string) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, apiKey },
+    });
+  }
+
+  function updateEBirdLocale(locale: string) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, locale },
+    });
+  }
+
+  function updateEBirdCacheTTL(cacheTTL: number) {
+    settingsActions.updateSection('realtime', {
+      ebird: { ...settings.ebird!, cacheTTL },
+    });
+  }
+
+  // eBird locale options
+  const ebirdLocaleOptions = [
+    { value: 'en', label: 'English' },
+    { value: 'de', label: 'Deutsch' },
+    { value: 'es', label: 'Español' },
+    { value: 'fi', label: 'Suomi' },
+    { value: 'fr', label: 'Français' },
+    { value: 'it', label: 'Italiano' },
+    { value: 'nl', label: 'Nederlands' },
+    { value: 'pl', label: 'Polski' },
+    { value: 'pt', label: 'Português' },
+    { value: 'sk', label: 'Slovenčina' },
+  ];
 
   // Test functions with multi-stage operations
   async function testBirdWeather() {
@@ -1141,6 +1201,79 @@
                 onchange={updateObservabilityListen}
               />
             </div>
+          </div>
+        </fieldset>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet ebirdTabContent()}
+  <div class="space-y-6">
+    <!-- eBird Settings Card -->
+    <SettingsSection
+      title={t('settings.integration.ebird.title')}
+      description={t('settings.integration.ebird.description')}
+      originalData={(store.originalData as SettingsFormData)?.realtime?.ebird}
+      currentData={(store.formData as SettingsFormData)?.realtime?.ebird}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.ebird!.enabled}
+          label={t('settings.integration.ebird.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateEBirdEnabled}
+        />
+
+        <!-- Fieldset for accessible disabled state -->
+        <fieldset
+          disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+          class="contents"
+          aria-describedby="ebird-status"
+        >
+          <span id="ebird-status" class="sr-only">
+            {settings.ebird?.enabled
+              ? t('settings.integration.ebird.enable')
+              : t('settings.integration.ebird.enabledRequired')}
+          </span>
+          <div class="transition-opacity duration-200" class:opacity-50={!settings.ebird?.enabled}>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <PasswordField
+                label={t('settings.integration.ebird.apiKey.label')}
+                value={settings.ebird!.apiKey}
+                onUpdate={updateEBirdApiKey}
+                placeholder=""
+                helpText={t('settings.integration.ebird.apiKey.helpText')}
+                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                allowReveal={true}
+              />
+
+              <SelectField
+                value={settings.ebird!.locale}
+                options={ebirdLocaleOptions}
+                label={t('settings.integration.ebird.locale.label')}
+                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+                onchange={updateEBirdLocale}
+              />
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
+              <NumberField
+                label={t('settings.integration.ebird.cacheTTL.label')}
+                value={settings.ebird!.cacheTTL}
+                onUpdate={updateEBirdCacheTTL}
+                min={1}
+                max={168}
+                step={1}
+                placeholder="24"
+                helpText={t('settings.integration.ebird.cacheTTL.helpText')}
+                disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
+              />
+            </div>
+
+            <SettingsNote>
+              <span>{t('settings.integration.ebird.note')}</span>
+            </SettingsNote>
           </div>
         </fieldset>
       </div>
