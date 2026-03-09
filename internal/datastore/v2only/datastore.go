@@ -336,7 +336,7 @@ func (ds *Datastore) Transaction(fc func(tx *gorm.DB) error) error {
 
 // SchemaVersion returns the datastore schema version.
 func (ds *Datastore) SchemaVersion() string {
-	return "v2"
+	return datastore.SchemaVersionV2
 }
 
 // GetDatabaseStats returns database statistics.

@@ -77,6 +77,14 @@ var (
 // conversion between domain and persistence layers.
 //
 // Optional methods:
+// Schema version constants for datastore implementations.
+const (
+	// SchemaVersionLegacy identifies the legacy (v1) datastore schema.
+	SchemaVersionLegacy = "legacy"
+	// SchemaVersionV2 identifies the v2 datastore schema.
+	SchemaVersionV2 = "v2"
+)
+
 //   - CheckpointWAL() error - Implemented by stores that support Write-Ahead Logging (e.g., SQLite)
 //     Call via type assertion: if sqliteStore, ok := store.(*SQLiteStore); ok { sqliteStore.CheckpointWAL() }
 type Interface interface {

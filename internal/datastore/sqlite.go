@@ -557,7 +557,7 @@ func (s *SQLiteStore) CheckpointWAL() error {
 
 // SchemaVersion returns the datastore schema version.
 func (s *SQLiteStore) SchemaVersion() string {
-	return "legacy"
+	return SchemaVersionLegacy
 }
 
 // GetDatabaseStats returns basic runtime statistics about the SQLite database.

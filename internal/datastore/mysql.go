@@ -233,7 +233,7 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 
 // SchemaVersion returns the datastore schema version.
 func (m *MySQLStore) SchemaVersion() string {
-	return "legacy"
+	return SchemaVersionLegacy
 }
 
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
