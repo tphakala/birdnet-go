@@ -281,9 +281,12 @@ func removePrivacyContexts(contexts map[string]sentry.Context) []string {
 func removePrivacyExtraFields(extra map[string]any) int {
 	removed := 0
 	allowedFields := map[string]bool{
-		"error_type": true,
-		"component":  true,
-		"stacktrace": true,
+		"error_type":   true,
+		"component":    true,
+		"stacktrace":   true,
+		"operation":    true,
+		"category":     true,
+		"error_origin": true,
 	}
 
 	for k := range extra {
@@ -585,6 +588,7 @@ func CaptureError(err error, component string) {
 
 		scope.SetTag("component", component)
 		scope.SetTag("error_title", errorTitle)
+		scope.SetTag("error_origin", "unknown")
 		// Add parsed error type to extras for easier filtering in Sentry
 		scope.SetExtra("error_type", errorType)
 		scope.SetContext("error", map[string]any{
@@ -637,6 +641,9 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
+		if level == sentry.LevelInfo {
+			scope.SetTag("error_origin", "operational")
+		}
 		sentry.CaptureMessage(scrubbedMessage)
 	})
 
