@@ -788,6 +788,7 @@ func (s *testLegacyInterface) GetNotificationHistory(_, _ string) (*datastore.No
 func (s *testLegacyInterface) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
 	return 0, nil
 }
+func (s *testLegacyInterface) SchemaVersion() string                               { return "legacy" }
 func (s *testLegacyInterface) GetDatabaseStats() (*datastore.DatabaseStats, error) { return nil, nil } //nolint:nilnil // stub
 
 // Migration bulk fetch methods - query actual database for integration tests

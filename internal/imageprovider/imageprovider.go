@@ -267,6 +267,11 @@ func (c *BirdImageCache) findStaleEntries(entries []datastore.ImageCache) []stri
 	var staleEntries []string
 
 	for i := range entries {
+		if entries[i].ScientificName == "" {
+			log.Warn("Skipping image cache entry with empty scientific name",
+				logger.Int("id", int(entries[i].ID)))
+			continue
+		}
 		isNegative := entries[i].URL == negativeEntryMarker
 		if isCacheEntryStale(entries[i].CachedAt, isNegative) {
 			if isNegative {
@@ -791,6 +796,12 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	// Check if store is nil
 	if c.store == nil {
 		log.Warn("Cannot save to DB cache: DB store is nil")
+		return
+	}
+
+	// Check if scientific name is empty - can't save without it
+	if image.ScientificName == "" {
+		log.Warn("Cannot save to DB cache: scientific name is empty")
 		return
 	}
 

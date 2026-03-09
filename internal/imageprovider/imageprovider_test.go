@@ -311,6 +311,7 @@ func (m *mockStore) DeleteExpiredNotificationHistory(before time.Time) (int64, e
 	return 0, nil
 }
 
+func (m *mockStore) SchemaVersion() string { return "legacy" }
 func (m *mockStore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{
 		Type:      "mock",

@@ -298,6 +298,9 @@ func RealtimeAnalysis(settings *conf.Settings) error {
 	// Ensure the database connection is closed when the function returns.
 	defer closeDataStore(dataStore)
 
+	// Set datastore schema version as a Sentry tag for telemetry
+	telemetry.SetDatastoreSchemaTag(dataStore.SchemaVersion())
+
 	// Note: datastore monitoring is automatically started when the database is opened
 
 	// Initialize bird image cache if needed

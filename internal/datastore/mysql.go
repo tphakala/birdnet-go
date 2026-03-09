@@ -231,6 +231,11 @@ func (m *MySQLStore) UpdateNote(id string, updates map[string]any) error {
 	return m.DB.Model(&Note{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// SchemaVersion returns the datastore schema version.
+func (m *MySQLStore) SchemaVersion() string {
+	return "legacy"
+}
+
 // GetDatabaseStats returns basic runtime statistics about the MySQL database.
 // Returns partial stats with ErrDBNotConnected if the database is unreachable.
 // The Connected field in the returned stats indicates if the DB is reachable.

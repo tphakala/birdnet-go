@@ -210,6 +210,8 @@ type Interface interface {
 	DeleteExpiredNotificationHistory(before time.Time) (int64, error) // Returns count deleted
 	// Database stats method for runtime statistics
 	GetDatabaseStats() (*DatabaseStats, error)
+	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
+	SchemaVersion() string
 }
 
 // DatabaseStats contains basic runtime statistics about the database
@@ -223,11 +225,11 @@ type DatabaseStats struct {
 
 // DataStore implements StoreInterface using a GORM database.
 type DataStore struct {
-	DB            *gorm.DB         // GORM database instance
-	SunCalc       *suncalc.SunCalc // Instance for calculating sun times (Assumed initialized)
-	sunTimesCache sync.Map         // Thread-safe map for caching sun times by date
-	metrics       *Metrics         // Metrics instance for tracking operations
-	metricsMu     sync.RWMutex     // Mutex to protect metrics field access
+	DB            *gorm.DB          // GORM database instance
+	SunCalc       *suncalc.SunCalc  // Instance for calculating sun times (Assumed initialized)
+	sunTimesCache sync.Map          // Thread-safe map for caching sun times by date
+	metrics       *Metrics          // Metrics instance for tracking operations
+	metricsMu     sync.RWMutex      // Mutex to protect metrics field access
 	dbCounters    *dbstats.Counters // Atomic counters for query latency tracking
 
 	// Monitoring lifecycle management
