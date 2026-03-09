@@ -1037,11 +1037,11 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 	if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
 		log.Debug("listing embedded filesystem contents",
 			logger.String("operation", "debug_filesystem"))
-		if walkErr := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
+		if walkErr := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
 				log.Debug("error walking filesystem path",
 					logger.String("path", path),
-					logger.Error(walkErr),
+					logger.Error(err),
 					logger.String("operation", "debug_filesystem"))
 				return nil
 			}
