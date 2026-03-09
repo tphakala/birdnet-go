@@ -399,7 +399,7 @@ func stripDurationSuffix(name string) string {
 	}
 	suffix := name[lastUnderscore+1:]
 	if len(suffix) >= 2 && suffix[len(suffix)-1] == 's' {
-		if _, err := strconv.Atoi(suffix[:len(suffix)-1]); err == nil {
+		if _, err := strconv.ParseUint(suffix[:len(suffix)-1], 10, 64); err == nil {
 			return name[:lastUnderscore]
 		}
 	}

@@ -60,6 +60,9 @@ func TestStripDurationSuffix(t *testing.T) {
 		{"bubo_bubo_80p_20210102T150405Z", "bubo_bubo_80p_20210102T150405Z"},
 		// Not a valid duration suffix
 		{"bubo_bubo_80p_20210102T150405Z_abc", "bubo_bubo_80p_20210102T150405Z_abc"},
+		// Signed numbers should not match
+		{"bubo_bubo_80p_20210102T150405Z_-5s", "bubo_bubo_80p_20210102T150405Z_-5s"},
+		{"bubo_bubo_80p_20210102T150405Z_+5s", "bubo_bubo_80p_20210102T150405Z_+5s"},
 		// Single character — not enough
 		{"bubo_bubo_80p_20210102T150405Z_s", "bubo_bubo_80p_20210102T150405Z_s"},
 		// No underscores at all
