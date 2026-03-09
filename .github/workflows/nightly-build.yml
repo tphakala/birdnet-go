@@ -141,16 +141,19 @@ jobs:
 
       - name: Create GitHub Release
         run: |
+          REPO="${{ github.repository }}"
           TAG="${{ steps.get_build_version.outputs.build_version }}"
           # If the tag is poisoned from a previous failed run, append run number
           if ! gh release create "$TAG" \
             artifacts/**/*.tar.gz \
+            --repo "$REPO" \
             --title "Nightly Build $TAG" \
             --prerelease \
             --target main 2>/dev/null; then
             TAG="${TAG}-${{ github.run_number }}"
             gh release create "$TAG" \
               artifacts/**/*.tar.gz \
+              --repo "$REPO" \
               --title "Nightly Build $TAG" \
               --prerelease \
               --target main
