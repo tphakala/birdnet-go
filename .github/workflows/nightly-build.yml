@@ -125,6 +125,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.RELEASE_TOKEN }}
 
       - name: Get Build Version
         id: get_build_version
@@ -160,7 +162,7 @@ jobs:
             --title "Nightly Build $TAG" \
             --prerelease
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   get-version:
     runs-on: ubuntu-latest
