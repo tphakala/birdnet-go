@@ -28,6 +28,17 @@ func InitializeErrorIntegration() {
 
 	// Set the privacy scrubbing function
 	errors.SetPrivacyScrubber(privacy.ScrubMessage)
+
+	// Register resource snapshot callback for error reporting
+	errors.ResourceSnapshotFunc = func() map[string]any {
+		snap := CollectResourceSnapshot()
+		return map[string]any{
+			"goroutine_count": snap.GoroutineCount,
+			"heap_alloc_mb":   snap.HeapAllocMB,
+			"heap_sys_mb":     snap.HeapSysMB,
+			"num_gc":          snap.NumGC,
+		}
+	}
 }
 
 // UpdateErrorIntegration updates the error integration when telemetry settings change

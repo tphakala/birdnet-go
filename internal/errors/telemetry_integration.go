@@ -36,6 +36,63 @@ var (
 	}
 )
 
+// ResourceSnapshotFunc is a callback for collecting resource metrics.
+// Set by the telemetry package to avoid circular imports.
+var ResourceSnapshotFunc func() map[string]any
+
+// categoryOriginMap classifies error categories by their origin for telemetry tagging.
+var categoryOriginMap = map[ErrorCategory]string{
+	CategoryValidation:       "code",
+	CategoryNotFound:         "code",
+	CategoryModelInit:        "code",
+	CategoryModelLoad:        "code",
+	CategoryLabelLoad:        "code",
+	CategorySoundLevel:       "code",
+	CategoryImageCache:       "code",
+	CategoryImageProvider:    "code",
+	CategoryAudio:            "code",
+	CategoryAudioAnalysis:    "code",
+	CategoryBuffer:           "code",
+	CategoryWorker:           "code",
+	CategoryJobQueue:         "code",
+	CategoryState:            "code",
+	CategoryProcessing:       "code",
+	CategoryLimit:            "code",
+	CategoryThreshold:        "code",
+	CategoryEventTracking:    "code",
+	CategorySpeciesTracking:  "code",
+	CategoryFileParsing:      "code",
+	CategoryPolicyConfig:     "code",
+	CategoryConflict:         "code",
+	CategoryBroadcast:        "code",
+	CategoryImageFetch:       "environment",
+	CategoryNetwork:          "environment",
+	CategoryDatabase:         "environment",
+	CategoryFileIO:           "environment",
+	CategoryConfiguration:    "environment",
+	CategoryRTSP:             "environment",
+	CategoryMQTTConnection:   "environment",
+	CategoryMQTTPublish:      "environment",
+	CategoryMQTTAuth:         "environment",
+	CategoryHTTP:             "environment",
+	CategoryDiskUsage:        "environment",
+	CategoryDiskCleanup:      "environment",
+	CategoryAudioSource:      "environment",
+	CategoryResource:         "environment",
+	CategorySystem:           "environment",
+	CategoryCommandExecution: "environment",
+	CategoryIntegration:      "external",
+}
+
+// GetErrorOrigin returns the origin classification for an error category.
+// Returns "code", "environment", "external", or "unknown".
+func GetErrorOrigin(category ErrorCategory) string {
+	if origin, ok := categoryOriginMap[category]; ok {
+		return origin
+	}
+	return "unknown"
+}
+
 // Initialize package state
 func init() {
 	// Initialize hasActiveReporting to false (no telemetry or hooks by default)
@@ -68,6 +125,9 @@ func (sr *SentryReporter) IsEnabled() bool {
 // shouldReportToSentry determines if an error should be sent to Sentry
 // It filters out operational/configuration errors that aren't code bugs
 func shouldReportToSentry(ee *EnhancedError) bool {
+	if ee.Err == nil {
+		return true
+	}
 	errorMsg := strings.ToLower(ee.Err.Error())
 
 	// Check for MQTT authentication/authorization errors (user config issues)
@@ -112,7 +172,11 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	}
 
 	// Create enhanced error message with category
-	enhancedMessage := fmt.Sprintf("[%s] %s", ee.Category, ee.Err.Error())
+	errMessage := "<nil error>"
+	if ee.Err != nil {
+		errMessage = ee.Err.Error()
+	}
+	enhancedMessage := fmt.Sprintf("[%s] %s", ee.Category, errMessage)
 
 	// Scrub the message for privacy (using local function)
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)
@@ -125,6 +189,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("component", ee.GetComponent())
 		scope.SetTag("category", string(ee.Category))
+		scope.SetTag("error_origin", GetErrorOrigin(ee.Category))
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
 		// Add context data with privacy scrubbing
@@ -137,12 +202,17 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 			scope.SetContext(key, map[string]any{"value": scrubbedValue})
 		}
 
+		// Attach resource snapshot for resource-related error categories
+		if shouldAttachResourceSnapshot(ee.Category) && ResourceSnapshotFunc != nil {
+			scope.SetContext("resource_state", ResourceSnapshotFunc())
+		}
+
 		// Set error level based on category
 		level := getErrorLevel(ee.Category)
 		scope.SetLevel(level)
 
-		// Set custom fingerprint for better grouping using the error title
-		scope.SetFingerprint([]string{errorTitle, ee.GetComponent(), string(ee.Category)})
+		// Set custom fingerprint for better grouping using structured fields
+		scope.SetFingerprint(buildFingerprint(ee))
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -162,6 +232,85 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 	// Mark as reported
 	ee.MarkReported()
+}
+
+// buildFingerprint creates a structured fingerprint for Sentry issue grouping.
+func buildFingerprint(ee *EnhancedError) []string {
+	component := ee.GetComponent()
+	category := string(ee.Category)
+	operation, _ := ee.Context["operation"].(string)
+	var errMsg string
+	if ee.Err != nil {
+		errMsg = ee.Err.Error()
+	}
+	normalizedType := NormalizeErrorType(errMsg)
+
+	fp := make([]string, 0, 5)
+	if component != "" && component != ComponentUnknown {
+		fp = append(fp, component)
+	}
+	if category != "" && category != string(CategoryGeneric) {
+		fp = append(fp, category)
+	}
+	if operation != "" {
+		fp = append(fp, operation)
+	}
+	fp = append(fp, normalizedType)
+
+	// For unclassified errors, add the error title to prevent over-grouping
+	if normalizedType == "error" {
+		errorTitle := generateErrorTitle(ee)
+		fp = append(fp, errorTitle)
+	}
+	return fp
+}
+
+// NormalizeErrorType extracts a stable, non-variable error type string.
+func NormalizeErrorType(errMsg string) string {
+	lower := strings.ToLower(errMsg)
+
+	patterns := []struct {
+		contains string
+		result   string
+	}{
+		{"database is locked", "database_locked"},
+		{"database or disk is full", "disk_full"},
+		{"database disk image is malformed", "db_corrupted"},
+		{"nil pointer dereference", "nil_pointer"},
+		{"invalid memory address", "nil_pointer"},
+		{"index out of range", "index_out_of_range"},
+		{"slice bounds out of range", "slice_bounds"},
+		{"concurrent map", "concurrent_map"},
+		{"context deadline exceeded", "context_deadline"},
+		{"context canceled", "context_canceled"},
+		{"connection refused", "connection_refused"},
+		{"connection reset", "connection_reset"},
+		{"connection timed out", "connection_timeout"},
+		{"no such file or directory", "file_not_found"},
+		{"permission denied", "permission_denied"},
+		{"dns resolution", "dns_error"},
+		{"no such host", "dns_error"},
+		{"signal: killed", "signal_killed"},
+		{"ringbuffer is full", "buffer_full"},
+		{"not initialized", "not_initialized"},
+		{"scientific name cannot be empty", "empty_scientific_name"},
+		{"not found", "not_found"},
+		{"is locked", "resource_locked"},
+		{"timed out", "timeout"},
+		{"timeout", "timeout"},
+		{"disk is full", "disk_full"},
+		{"i/o timeout", "io_timeout"},
+		{"broken pipe", "broken_pipe"},
+		{"exit status", "process_exit"},
+	}
+
+	for _, p := range patterns {
+		if strings.Contains(lower, p.contains) {
+			return p.result
+		}
+	}
+
+	return "error"
 }
 
 // generateErrorTitle creates a meaningful error title for Sentry based on enhanced error context
@@ -272,6 +421,18 @@ func getErrorLevel(category ErrorCategory) sentry.Level {
 		return sentry.LevelInfo // Expected condition for unknown species/taxonomy lookups
 	default:
 		return sentry.LevelError
+	}
+}
+
+// shouldAttachResourceSnapshot returns true for error categories where
+// system resource state is relevant for diagnosing the root cause.
+func shouldAttachResourceSnapshot(category ErrorCategory) bool {
+	switch category {
+	case CategorySystem, CategoryDatabase, CategoryTimeout,
+		CategoryBuffer, CategoryResource, CategoryDiskUsage:
+		return true
+	default:
+		return false
 	}
 }
 

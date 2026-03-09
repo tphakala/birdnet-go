@@ -12,6 +12,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	internalerrors "github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -110,8 +111,10 @@ func InitSentry(settings *conf.Settings) error {
 	// Configure global scope
 	configureSentryScope(settings)
 
-	// Initialize attachment uploader
+	// Initialize attachment uploader (under lock to avoid data race with GetAttachmentUploader)
+	deferredMutex.Lock()
 	attachmentUploader = NewAttachmentUploader(true)
+	deferredMutex.Unlock()
 
 	// Process deferred messages
 	deferredCount := processDeferredMessages()
@@ -140,7 +143,7 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		Debug:      false, // Keep debug off for production
 
 		// Privacy-compliant settings
-		AttachStacktrace: false, // Don't attach stack traces by default
+		AttachStacktrace: true, // Enabled; stripped for non-fatal in BeforeSend
 		Environment:      "production",
 		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
 
@@ -182,11 +185,7 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 	}
 
 	// Remove extra fields except allowed ones
-	for k := range event.Extra {
-		if k != "error_type" && k != "component" && k != "stacktrace" {
-			delete(event.Extra, k)
-		}
-	}
+	removePrivacyExtraFields(event.Extra)
 
 	// Remove sensitive tags
 	if event.Tags != nil {
@@ -194,7 +193,65 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 		delete(event.Tags, "hostname")
 	}
 
+	// Apply stacktrace privacy filters
+	applyStacktracePrivacyFilters(event)
+
 	return event
+}
+
+// applyStacktracePrivacyFilters handles stack traces based on event severity.
+// Fatal events get scrubbed paths; non-fatal events get traces stripped entirely.
+func applyStacktracePrivacyFilters(event *sentry.Event) {
+	if event.Level == sentry.LevelFatal {
+		scrubStackTraceFrames(event)
+	} else {
+		for i := range event.Exception {
+			event.Exception[i].Stacktrace = nil
+		}
+		for i := range event.Threads {
+			event.Threads[i].Stacktrace = nil
+		}
+	}
+}
+
+// scrubStackTraceFrames anonymizes file paths in stack trace frames for privacy.
+// Scrubs both Exception stacktraces and Thread stacktraces (all goroutines).
+func scrubStackTraceFrames(event *sentry.Event) {
+	for i := range event.Exception {
+		scrubStacktrace(event.Exception[i].Stacktrace)
+	}
+	for i := range event.Threads {
+		scrubStacktrace(event.Threads[i].Stacktrace)
+	}
+}
+
+// scrubStacktrace anonymizes file paths in a single stacktrace.
+func scrubStacktrace(st *sentry.Stacktrace) {
+	if st == nil {
+		return
+	}
+	for j := range st.Frames {
+		frame := &st.Frames[j]
+		frame.AbsPath = anonymizeFilePath(frame.AbsPath)
+		if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
+			frame.Filename = anonymizeFilePath(frame.Filename)
+		}
+	}
+}
+
+// anonymizeFilePath replaces directory paths with generic markers, preserving
+// the last two path segments for debugging context (e.g., "telemetry/sentry.go").
+func anonymizeFilePath(path string) string {
+	if path == "" {
+		return path
+	}
+	// Normalize Windows paths
+	normalized := strings.ReplaceAll(path, "\\", "/")
+	parts := strings.Split(normalized, "/")
+	if len(parts) <= 2 {
+		return normalized // Short paths like "telemetry/sentry.go" are safe
+	}
+	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
 }
 
 // applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
@@ -232,6 +289,9 @@ func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
 		tagsRemoved := removePrivacyTags(event.Tags)
 		filtersApplied = append(filtersApplied, tagsRemoved...)
 	}
+
+	// Apply stacktrace privacy filters (same as non-debug path)
+	applyStacktracePrivacyFilters(event)
 
 	// Log after filtering
 	logEventAfterFiltering(event, filtersApplied)
@@ -281,9 +341,12 @@ func removePrivacyContexts(contexts map[string]sentry.Context) []string {
 func removePrivacyExtraFields(extra map[string]any) int {
 	removed := 0
 	allowedFields := map[string]bool{
-		"error_type": true,
-		"component":  true,
-		"stacktrace": true,
+		"error_type":   true,
+		"component":    true,
+		"stacktrace":   true,
+		"operation":    true,
+		"category":     true,
+		"error_origin": true,
 	}
 
 	for k := range extra {
@@ -561,6 +624,22 @@ func titleCaseComponent(component string) string {
 	return strings.Join(result, " ")
 }
 
+// normalizeDirectCaptureErrorType extracts a stable error type from a scrubbed message.
+// Only treats a leading "[category] ..." prefix as metadata; brackets elsewhere are ignored.
+func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
+	trimmed := strings.TrimSpace(scrubbedMsg)
+	if strings.HasPrefix(trimmed, "[") {
+		if idx := strings.Index(trimmed, "]"); idx > 1 {
+			category := trimmed[1:idx]
+			rest := strings.TrimSpace(trimmed[idx+1:])
+			normalizedType := internalerrors.NormalizeErrorType(strings.ToLower(rest))
+			return category + ":" + normalizedType
+		}
+	}
+
+	return internalerrors.NormalizeErrorType(strings.ToLower(scrubbedMsg))
+}
+
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
 	if shouldSkipTelemetry() {
@@ -585,6 +664,7 @@ func CaptureError(err error, component string) {
 
 		scope.SetTag("component", component)
 		scope.SetTag("error_title", errorTitle)
+		scope.SetTag("error_origin", "unknown")
 		// Add parsed error type to extras for easier filtering in Sentry
 		scope.SetExtra("error_type", errorType)
 		scope.SetContext("error", map[string]any{
@@ -602,12 +682,14 @@ func CaptureError(err error, component string) {
 		}}
 
 		// Set custom fingerprint for better grouping
-		// Exclude empty/unknown components to avoid noisy fingerprints
+		// Use normalized error type instead of errorTitle to prevent issue sprawl
+		// (errorTitle contains scrubbed message text which varies per instance)
+		normalizedType := normalizeDirectCaptureErrorType(scrubbedErrorMsg)
 		comp := strings.TrimSpace(component)
 		if comp == "" || strings.EqualFold(comp, "unknown") {
-			scope.SetFingerprint([]string{errorTitle})
+			scope.SetFingerprint([]string{normalizedType})
 		} else {
-			scope.SetFingerprint([]string{errorTitle, comp})
+			scope.SetFingerprint([]string{comp, normalizedType})
 		}
 
 		sentry.CaptureEvent(event)
@@ -637,6 +719,9 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
+		if level == sentry.LevelInfo {
+			scope.SetTag("error_origin", "operational")
+		}
 		sentry.CaptureMessage(scrubbedMessage)
 	})
 
@@ -748,7 +833,7 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// Mark as initialized but with limited functionality
 	sentryInitialized = true
 
-	// Create an enabled attachment uploader
+	// Create an enabled attachment uploader (already under deferredMutex from line 788)
 	attachmentUploader = NewAttachmentUploader(true)
 
 	GetLogger().Info("minimal Sentry initialized for support uploads only",

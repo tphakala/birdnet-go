@@ -26,6 +26,77 @@ func TestFastPathNoTelemetry(t *testing.T) {
 	assert.Equal(t, CategoryGeneric, ee.Category, "expected category 'generic' in fast path")
 }
 
+func TestErrorOriginTag(t *testing.T) {
+	tests := []struct {
+		name     string
+		category ErrorCategory
+		expected string
+	}{
+		{"validation is code", CategoryValidation, "code"},
+		{"not-found is code", CategoryNotFound, "code"},
+		{"model-init is code", CategoryModelInit, "code"},
+		{"image-cache is code", CategoryImageCache, "code"},
+		{"sound-level is code", CategorySoundLevel, "code"},
+		{"audio is code", CategoryAudio, "code"},
+		{"audio-analysis is code", CategoryAudioAnalysis, "code"},
+		{"buffer is code", CategoryBuffer, "code"},
+		{"worker is code", CategoryWorker, "code"},
+		{"job-queue is code", CategoryJobQueue, "code"},
+		{"state is code", CategoryState, "code"},
+		{"processing is code", CategoryProcessing, "code"},
+		{"limit is code", CategoryLimit, "code"},
+		{"threshold is code", CategoryThreshold, "code"},
+		{"event-tracking is code", CategoryEventTracking, "code"},
+		{"species-tracking is code", CategorySpeciesTracking, "code"},
+		{"file-parsing is code", CategoryFileParsing, "code"},
+		{"policy-config is code", CategoryPolicyConfig, "code"},
+		{"conflict is code", CategoryConflict, "code"},
+		{"broadcast is code", CategoryBroadcast, "code"},
+		{"image-fetch is environment", CategoryImageFetch, "environment"},
+		{"network is environment", CategoryNetwork, "environment"},
+		{"database is environment", CategoryDatabase, "environment"},
+		{"file-io is environment", CategoryFileIO, "environment"},
+		{"configuration is environment", CategoryConfiguration, "environment"},
+		{"rtsp is environment", CategoryRTSP, "environment"},
+		{"mqtt-connection is environment", CategoryMQTTConnection, "environment"},
+		{"mqtt-publish is environment", CategoryMQTTPublish, "environment"},
+		{"resource is environment", CategoryResource, "environment"},
+		{"system is environment", CategorySystem, "environment"},
+		{"command-execution is environment", CategoryCommandExecution, "environment"},
+		{"integration is external", CategoryIntegration, "external"},
+		{"timeout is unknown", CategoryTimeout, "unknown"},
+		{"cancellation is unknown", CategoryCancellation, "unknown"},
+		{"retry is unknown", CategoryRetry, "unknown"},
+		{"generic is unknown", CategoryGeneric, "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := GetErrorOrigin(tt.category)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
+	ee1 := Newf("database is locked").
+		Component("datastore").
+		Category(CategoryDatabase).
+		Context("operation", "save_note").
+		Build()
+
+	ee2 := Newf("database or disk is full").
+		Component("datastore").
+		Category(CategoryDatabase).
+		Context("operation", "save_note").
+		Build()
+
+	fp1 := buildFingerprint(ee1)
+	fp2 := buildFingerprint(ee2)
+	assert.NotEqual(t, fp1, fp2, "different root causes should have different fingerprints")
+}
+
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
 

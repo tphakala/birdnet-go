@@ -260,3 +260,77 @@ func TestConcurrentAccess(t *testing.T) {
 	expectedCount := numGoroutines * eventsPerGoroutine
 	assert.Equal(t, expectedCount, transport.GetEventCount(), "Expected all events to be captured")
 }
+
+func TestScrubStackTraceFrames(t *testing.T) {
+	t.Parallel()
+	event := sentry.NewEvent()
+	event.Level = sentry.LevelFatal
+	event.Exception = []sentry.Exception{{
+		Type:  "nil pointer",
+		Value: "runtime error",
+		Stacktrace: &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					AbsPath:  "/home/user/go/src/birdnet-go/internal/telemetry/sentry.go",
+					Filename: "internal/telemetry/sentry.go",
+					Function: "CaptureError",
+					Lineno:   42,
+				},
+				{
+					AbsPath:  "/home/user/projects/birdnet-go/main.go",
+					Filename: "main.go",
+					Function: "main",
+					Lineno:   10,
+				},
+			},
+		},
+	}}
+
+	scrubStackTraceFrames(event)
+
+	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].AbsPath, "/home/user")
+	assert.Equal(t, "main.go", event.Exception[0].Stacktrace.Frames[1].Filename)
+	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].Filename, "internal")
+}
+
+func TestNonFatalEventsHaveNoStackTrace(t *testing.T) {
+	t.Parallel()
+	event := sentry.NewEvent()
+	event.Level = sentry.LevelError
+	event.Exception = []sentry.Exception{{
+		Stacktrace: &sentry.Stacktrace{
+			Frames: []sentry.Frame{{AbsPath: "/some/path", Function: "foo"}},
+		},
+	}}
+
+	applyPrivacyFilters(event)
+
+	assert.Nil(t, event.Exception[0].Stacktrace)
+}
+
+func TestCollectResourceSnapshot(t *testing.T) {
+	t.Parallel()
+	snap := CollectResourceSnapshot()
+	assert.Positive(t, snap.GoroutineCount)
+	assert.Positive(t, snap.HeapAllocMB)
+	assert.Positive(t, snap.HeapSysMB)
+}
+
+func TestPrivacyExtraFieldWhitelist(t *testing.T) {
+	extra := map[string]any{
+		"error_type":   "validation",
+		"component":    "datastore",
+		"stacktrace":   "...",
+		"operation":    "save_note",
+		"category":     "database",
+		"error_origin": "code",
+		"secret_field": "should_remove",
+		"user_data":    "pii",
+	}
+	removePrivacyExtraFields(extra)
+	assert.Contains(t, extra, "operation")
+	assert.Contains(t, extra, "category")
+	assert.Contains(t, extra, "error_origin")
+	assert.NotContains(t, extra, "secret_field")
+	assert.NotContains(t, extra, "user_data")
+}
