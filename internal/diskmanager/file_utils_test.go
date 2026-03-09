@@ -47,6 +47,62 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 	}
 }
 
+// TestStripDurationSuffix tests the stripDurationSuffix helper
+func TestStripDurationSuffix(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected string
+	}{
+		{"turdus_migratorius_94p_20260309T092833Z_86s", "turdus_migratorius_94p_20260309T092833Z"},
+		{"cyanocitta_cristata_89p_20210106T150405Z_38s", "cyanocitta_cristata_89p_20210106T150405Z"},
+		{"bubo_bubo_100p_20210102T150405Z_120s", "bubo_bubo_100p_20210102T150405Z"},
+		// No duration suffix — should be unchanged
+		{"bubo_bubo_80p_20210102T150405Z", "bubo_bubo_80p_20210102T150405Z"},
+		// Not a valid duration suffix
+		{"bubo_bubo_80p_20210102T150405Z_abc", "bubo_bubo_80p_20210102T150405Z_abc"},
+		// Single character — not enough
+		{"bubo_bubo_80p_20210102T150405Z_s", "bubo_bubo_80p_20210102T150405Z_s"},
+		// No underscores at all
+		{"nounderscores", "nounderscores"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stripDurationSuffix(tt.input))
+		})
+	}
+}
+
+// TestParseFileInfoWithDurationSuffix tests parsing filenames with duration suffix from extended capture mode
+func TestParseFileInfoWithDurationSuffix(t *testing.T) {
+	tests := []struct {
+		filename   string
+		species    string
+		confidence int
+	}{
+		{"turdus_migratorius_94p_20260309T092833Z_86s.m4a", "turdus_migratorius", 94},
+		{"cyanocitta_cristata_89p_20210106T150405Z_38s.wav", "cyanocitta_cristata", 89},
+		{"dryobates_pubescens_100p_20260309T093942Z_117s.m4a", "dryobates_pubescens", 100},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			mockInfo := &MockFileInfo{
+				FileName:    tt.filename,
+				FileSize:    1024,
+				FileMode:    0o644,
+				FileModTime: parseTime("20210102T150405Z"),
+				FileIsDir:   false,
+			}
+
+			info, err := parseFileInfo("/test/"+tt.filename, mockInfo, allowedFileTypes)
+			require.NoError(t, err)
+			assert.Equal(t, tt.species, info.Species)
+			assert.Equal(t, tt.confidence, info.Confidence)
+		})
+	}
+}
+
 // TestGetAudioFilesContinuesOnError tests that GetAudioFiles continues processing after encountering invalid files
 func TestGetAudioFilesContinuesOnError(t *testing.T) {
 	// Create a temporary directory
@@ -85,6 +141,8 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 		tempDir + "/bubo_bubo_80p_20210102T150405Z.wav",
 		tempDir + "/anas_platyrhynchos_70p_20210103T150405Z.mp3",
 		tempDir + "/erithacus_rubecula_60p_20210104T150405Z.flac",
+		tempDir + "/turdus_migratorius_94p_20210105T150405Z_86s.m4a",  // with duration suffix
+		tempDir + "/cyanocitta_cristata_89p_20210106T150405Z_38s.wav", // with duration suffix
 	}
 
 	invalidFiles := []string{
