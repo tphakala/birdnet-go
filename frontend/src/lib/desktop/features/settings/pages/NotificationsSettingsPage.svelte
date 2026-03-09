@@ -53,6 +53,7 @@
     Wifi,
   } from '@lucide/svelte';
   import StatusBanner from '$lib/desktop/components/ui/StatusBanner.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import StatsSummaryBar from '$lib/desktop/components/ui/StatsSummaryBar.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -1301,7 +1302,11 @@
 
 {#snippet v2RequiredBanner()}
   {#if !v2Available}
-    <StatusBanner message={t('settings.alerts.v2Required')} type="warning" class="mb-4" />
+    <ErrorAlert type="warning" className="mb-4">
+      {#snippet children()}
+        {t('settings.alerts.v2Required')}
+      {/snippet}
+    </ErrorAlert>
   {/if}
 {/snippet}
 
