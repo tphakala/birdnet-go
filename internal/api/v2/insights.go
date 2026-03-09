@@ -12,6 +12,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // Insights constants
@@ -253,21 +254,18 @@ func calculateStreak(recentDates []string, today string) (days int, startDate st
 	}
 
 	streakDays := 1
-	expectedDate := todayTime
+	lastMatched := todayTime
+	expected := todayTime
 	for i := 1; i < len(recentDates); i++ {
-		expectedDate = expectedDate.AddDate(0, 0, -1)
-		expected := expectedDate.Format(time.DateOnly)
-		if recentDates[i] != expected {
+		expected = expected.AddDate(0, 0, -1)
+		if recentDates[i] != expected.Format(time.DateOnly) {
 			break
 		}
+		lastMatched = expected
 		streakDays++
 	}
 
-	startDate = expectedDate.Format(time.DateOnly)
-	if streakDays == 1 {
-		startDate = today
-	}
-	return streakDays, startDate
+	return streakDays, lastMatched.Format(time.DateOnly)
 }
 
 // secondsToTimeString converts seconds since midnight to "HH:MM" format.
@@ -395,9 +393,13 @@ func (c *Controller) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to query eBird observations", http.StatusInternalServerError)
 	}
 
-	// Get local species to deduplicate against
+	// Get local species to deduplicate against (best-effort — if this fails, show all eBird results)
 	yearRanges := buildYearRanges(time.Now(), expectedTodayWindowDays)
-	localSpecies, _ := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
+	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, nil)
+	if localErr != nil {
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to query local species for deduplication",
+			logger.Error(localErr))
+	}
 
 	localSet := make(map[string]struct{}, len(localSpecies))
 	for _, sp := range localSpecies {

@@ -183,6 +183,13 @@ func TestCalculateStreak(t *testing.T) {
 			wantStart: "",
 		},
 		{
+			name:      "two-day streak with gap after",
+			dates:     []string{"2026-03-09", "2026-03-08", "2026-03-06"},
+			today:     "2026-03-09",
+			wantDays:  2,
+			wantStart: "2026-03-08",
+		},
+		{
 			name:      "empty dates",
 			dates:     []string{},
 			today:     "2026-03-09",

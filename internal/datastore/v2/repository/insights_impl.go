@@ -76,8 +76,6 @@ func (r *insightsRepository) falsePositiveExclusion(detAlias string) (joinClause
 	return joinClause, whereClause
 }
 
-// Stub implementations (filled in subsequent tasks)
-
 func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, modelID *uint) ([]ExpectedSpecies, error) {
 	if len(yearRanges) == 0 {
 		return nil, nil

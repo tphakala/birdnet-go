@@ -415,14 +415,14 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
-| Method | Route                           | Handler                 | Auth | Description                             |
-| ------ | ------------------------------- | ----------------------- | ---- | --------------------------------------- |
-| GET    | `/insights/expected-today`      | `getExpectedToday`      | ❌   | Species expected today based on history |
-| GET    | `/insights/phantom-species`     | `getPhantomSpecies`     | ❌   | Frequent but low-confidence detections  |
-| GET    | `/insights/dawn-chorus`         | `getDawnChorus`         | ❌   | Dawn chorus timing analysis             |
-| GET    | `/insights/migration`           | `getMigration`          | ❌   | New arrivals and gone-quiet species     |
-| GET    | `/insights/nearby-observations` | `getNearbyObservations` | ❌   | Recent eBird observations near station  |
-| GET    | `/dashboard/kpis`               | `getDashboardKPIs`      | ❌   | Dashboard headline metrics and streak   |
+| Method | Route                               | Handler                    | Auth | Description                              |
+| ------ | ----------------------------------- | -------------------------- | ---- | ---------------------------------------- |
+| GET    | `/insights/expected-today`          | `getExpectedToday`         | ❌   | Species expected today based on history  |
+| GET    | `/insights/expected-today/regional` | `getExpectedTodayRegional` | ❌   | Regional eBird observations near station |
+| GET    | `/insights/phantom-species`         | `getPhantomSpecies`        | ❌   | Frequent but low-confidence detections   |
+| GET    | `/insights/dawn-chorus`             | `getDawnChorus`            | ❌   | Dawn chorus timing analysis              |
+| GET    | `/insights/migration`               | `getMigration`             | ❌   | New arrivals and gone-quiet species      |
+| GET    | `/dashboard/kpis`                   | `getDashboardKPIs`         | ❌   | Dashboard headline metrics and streak    |
 
 **Query Parameters:**
 
