@@ -46,11 +46,14 @@ func (l *LegacyService) ErrChan() <-chan error {
 }
 
 // Start launches the blocking function in a goroutine.
+// Returns an error if called more than once.
 func (l *LegacyService) Start(_ context.Context) error {
+	if l.started.Swap(true) {
+		return fmt.Errorf("service %q: Start called twice", l.name)
+	}
 	l.quit = make(chan struct{})
 	l.errChan = make(chan error, 1)
 	l.done = make(chan struct{})
-	l.started.Store(true)
 	go func() {
 		l.result = l.fn(l.quit)
 		l.errChan <- l.result

@@ -119,6 +119,8 @@ func (a *App) Wait() error {
 	// If RealtimeAnalysis fails during init (e.g., database open error),
 	// it returns an error into ErrChan — we must detect that instead of
 	// hanging forever waiting for a signal that will never come.
+	// NOTE: Only monitors the first LegacyService. Multiple legacy services
+	// are not expected, but if needed this should be extended to select on all.
 	var legacyErrChan <-chan error
 	for _, svc := range a.services {
 		if ls, ok := svc.(*LegacyService); ok {
