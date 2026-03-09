@@ -118,12 +118,31 @@ jobs:
           name: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}
           path: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
 
-      # Optional: Create a GitHub release for tagged builds
+  release:
+    name: Create GitHub Release
+    needs: nightly
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Build Version
+        id: get_build_version
+        run: |
+          DATE=$(date +'%Y%m%d')
+          BUILD_VERSION="nightly-${DATE}"
+          echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          pattern: birdnet-go-*
+
+      - name: List artifacts
+        run: find artifacts -type f
+
       - name: Create GitHub Release
-        if: github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz
+          files: artifacts/**/*.tar.gz
           tag_name: ${{ steps.get_build_version.outputs.build_version }}
           name: "Nightly Build ${{ steps.get_build_version.outputs.build_version }}"
           prerelease: true
@@ -165,7 +184,7 @@ jobs:
 
   cleanup:
     name: Cleanup old nightly releases
-    needs: nightly
+    needs: release
     runs-on: ubuntu-latest
     # Run cleanup even if some builds failed, but not if cancelled
     if: ${{ !cancelled() }}
