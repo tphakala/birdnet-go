@@ -308,6 +308,14 @@ func TestNonFatalEventsHaveNoStackTrace(t *testing.T) {
 	assert.Nil(t, event.Exception[0].Stacktrace)
 }
 
+func TestCollectResourceSnapshot(t *testing.T) {
+	t.Parallel()
+	snap := CollectResourceSnapshot()
+	assert.Positive(t, snap.GoroutineCount)
+	assert.Positive(t, snap.HeapAllocMB)
+	assert.Positive(t, snap.HeapSysMB)
+}
+
 func TestPrivacyExtraFieldWhitelist(t *testing.T) {
 	extra := map[string]any{
 		"error_type":   "validation",

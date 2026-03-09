@@ -36,30 +36,52 @@ var (
 	}
 )
 
+// ResourceSnapshotFunc is a callback for collecting resource metrics.
+// Set by the telemetry package to avoid circular imports.
+var ResourceSnapshotFunc func() map[string]any
+
 // categoryOriginMap classifies error categories by their origin for telemetry tagging.
 var categoryOriginMap = map[ErrorCategory]string{
-	CategoryValidation:     "code",
-	CategoryNotFound:       "code",
-	CategoryModelInit:      "code",
-	CategoryModelLoad:      "code",
-	CategoryLabelLoad:      "code",
-	CategorySoundLevel:     "code",
-	CategoryImageCache:     "code",
-	CategoryImageProvider:  "code",
-	CategoryImageFetch:     "code",
-	CategoryNetwork:        "environment",
-	CategoryDatabase:       "environment",
-	CategoryFileIO:         "environment",
-	CategoryConfiguration:  "environment",
-	CategoryRTSP:           "environment",
-	CategoryMQTTConnection: "environment",
-	CategoryMQTTPublish:    "environment",
-	CategoryMQTTAuth:       "environment",
-	CategoryHTTP:           "environment",
-	CategoryDiskUsage:      "environment",
-	CategoryDiskCleanup:    "environment",
-	CategoryAudioSource:    "environment",
-	CategoryIntegration:    "external",
+	CategoryValidation:       "code",
+	CategoryNotFound:         "code",
+	CategoryModelInit:        "code",
+	CategoryModelLoad:        "code",
+	CategoryLabelLoad:        "code",
+	CategorySoundLevel:       "code",
+	CategoryImageCache:       "code",
+	CategoryImageProvider:    "code",
+	CategoryAudio:            "code",
+	CategoryAudioAnalysis:    "code",
+	CategoryBuffer:           "code",
+	CategoryWorker:           "code",
+	CategoryJobQueue:         "code",
+	CategoryState:            "code",
+	CategoryProcessing:       "code",
+	CategoryLimit:            "code",
+	CategoryThreshold:        "code",
+	CategoryEventTracking:    "code",
+	CategorySpeciesTracking:  "code",
+	CategoryFileParsing:      "code",
+	CategoryPolicyConfig:     "code",
+	CategoryConflict:         "code",
+	CategoryBroadcast:        "code",
+	CategoryImageFetch:       "environment",
+	CategoryNetwork:          "environment",
+	CategoryDatabase:         "environment",
+	CategoryFileIO:           "environment",
+	CategoryConfiguration:    "environment",
+	CategoryRTSP:             "environment",
+	CategoryMQTTConnection:   "environment",
+	CategoryMQTTPublish:      "environment",
+	CategoryMQTTAuth:         "environment",
+	CategoryHTTP:             "environment",
+	CategoryDiskUsage:        "environment",
+	CategoryDiskCleanup:      "environment",
+	CategoryAudioSource:      "environment",
+	CategoryResource:         "environment",
+	CategorySystem:           "environment",
+	CategoryCommandExecution: "environment",
+	CategoryIntegration:      "external",
 }
 
 // GetErrorOrigin returns the origin classification for an error category.
@@ -173,6 +195,11 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 			scope.SetContext(key, map[string]any{"value": scrubbedValue})
 		}
 
+		// Attach resource snapshot for resource-related error categories
+		if shouldAttachResourceSnapshot(ee.Category) && ResourceSnapshotFunc != nil {
+			scope.SetContext("resource_state", ResourceSnapshotFunc())
+		}
+
 		// Set error level based on category
 		level := getErrorLevel(ee.Category)
 		scope.SetLevel(level)
@@ -205,9 +232,13 @@ func buildFingerprint(ee *EnhancedError) []string {
 	component := ee.GetComponent()
 	category := string(ee.Category)
 	operation, _ := ee.Context["operation"].(string)
-	normalizedType := normalizeErrorType(ee.Err.Error())
+	var errMsg string
+	if ee.Err != nil {
+		errMsg = ee.Err.Error()
+	}
+	normalizedType := NormalizeErrorType(errMsg)
 
-	fp := make([]string, 0, 4)
+	fp := make([]string, 0, 5)
 	if component != "" && component != ComponentUnknown {
 		fp = append(fp, component)
 	}
@@ -218,11 +249,17 @@ func buildFingerprint(ee *EnhancedError) []string {
 		fp = append(fp, operation)
 	}
 	fp = append(fp, normalizedType)
+
+	// For unclassified errors, add the error title to prevent over-grouping
+	if normalizedType == "error" {
+		errorTitle := generateErrorTitle(ee)
+		fp = append(fp, errorTitle)
+	}
 	return fp
 }
 
-// normalizeErrorType extracts a stable, non-variable error type string.
-func normalizeErrorType(errMsg string) string {
+// NormalizeErrorType extracts a stable, non-variable error type string.
+func NormalizeErrorType(errMsg string) string {
 	lower := strings.ToLower(errMsg)
 
 	patterns := []struct {
@@ -377,6 +414,18 @@ func getErrorLevel(category ErrorCategory) sentry.Level {
 		return sentry.LevelInfo // Expected condition for unknown species/taxonomy lookups
 	default:
 		return sentry.LevelError
+	}
+}
+
+// shouldAttachResourceSnapshot returns true for error categories where
+// system resource state is relevant for diagnosing the root cause.
+func shouldAttachResourceSnapshot(category ErrorCategory) bool {
+	switch category {
+	case CategorySystem, CategoryDatabase, CategoryTimeout,
+		CategoryBuffer, CategoryResource, CategoryDiskUsage:
+		return true
+	default:
+		return false
 	}
 }
 
