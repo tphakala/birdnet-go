@@ -475,8 +475,9 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		Category(errors.CategorySystem).
 		Context("operation", "write_to_analysis_buffer").
 		Context("source_id", sourceID).
+		Context("display_name", displayName).
 		Context("data_size", len(data)).
-		Context("capacity", capacity).
+		Context("buffer_capacity", capacity).
 		Context("used_bytes", ab.Length()).
 		Context("free_bytes", ab.Free()).
 		Context("max_retries", maxRetries).

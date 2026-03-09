@@ -880,12 +880,33 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 			_ = cmd.Process.Kill()
 			select {
 			case err := <-done:
-				return fmt.Errorf("process wait timed out after %v (killed, exit error: %w)", timeout, err)
+				return errors.New(err).
+					Component("spectrogram").
+					Category(errors.CategorySystem).
+					Context("operation", "generate_spectrogram").
+					Context("event", "process_killed_after_timeout").
+					Context("pid", pid).
+					Context("timeout", timeout.String()).
+					Build()
 			case <-time.After(1 * time.Second):
-				return fmt.Errorf("process wait timed out after %v and failed to kill", timeout)
+				return errors.Newf("process wait timed out after %v and failed to kill", timeout).
+					Component("spectrogram").
+					Category(errors.CategorySystem).
+					Context("operation", "generate_spectrogram").
+					Context("event", "kill_failed_after_timeout").
+					Context("pid", pid).
+					Context("timeout", timeout.String()).
+					Build()
 			}
 		}
-		return fmt.Errorf("process wait timed out after %v", timeout)
+		return errors.Newf("process wait timed out after %v", timeout).
+			Component("spectrogram").
+			Category(errors.CategorySystem).
+			Context("operation", "generate_spectrogram").
+			Context("event", "timeout_no_process").
+			Context("pid", pid).
+			Context("timeout", timeout.String()).
+			Build()
 	}
 }
 
