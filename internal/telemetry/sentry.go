@@ -194,35 +194,43 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 	}
 
 	// Handle stack traces based on event level
-	for i := range event.Exception {
-		if event.Level == sentry.LevelFatal {
-			// Keep stack traces for fatal events (scrubbed below)
-		} else {
-			// Strip stack traces for non-fatal events
+	if event.Level == sentry.LevelFatal {
+		// Keep and scrub stack traces for fatal events
+		scrubStackTraceFrames(event)
+	} else {
+		// Strip all stack traces for non-fatal events
+		for i := range event.Exception {
 			event.Exception[i].Stacktrace = nil
 		}
-	}
-
-	// Scrub fatal stack trace paths
-	if event.Level == sentry.LevelFatal {
-		scrubStackTraceFrames(event)
+		for i := range event.Threads {
+			event.Threads[i].Stacktrace = nil
+		}
 	}
 
 	return event
 }
 
 // scrubStackTraceFrames anonymizes file paths in stack trace frames for privacy.
+// Scrubs both Exception stacktraces and Thread stacktraces (all goroutines).
 func scrubStackTraceFrames(event *sentry.Event) {
 	for i := range event.Exception {
-		if event.Exception[i].Stacktrace == nil {
-			continue
-		}
-		for j := range event.Exception[i].Stacktrace.Frames {
-			frame := &event.Exception[i].Stacktrace.Frames[j]
-			frame.AbsPath = anonymizeFilePath(frame.AbsPath)
-			if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
-				frame.Filename = anonymizeFilePath(frame.Filename)
-			}
+		scrubStacktrace(event.Exception[i].Stacktrace)
+	}
+	for i := range event.Threads {
+		scrubStacktrace(event.Threads[i].Stacktrace)
+	}
+}
+
+// scrubStacktrace anonymizes file paths in a single stacktrace.
+func scrubStacktrace(st *sentry.Stacktrace) {
+	if st == nil {
+		return
+	}
+	for j := range st.Frames {
+		frame := &st.Frames[j]
+		frame.AbsPath = anonymizeFilePath(frame.AbsPath)
+		if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
+			frame.Filename = anonymizeFilePath(frame.Filename)
 		}
 	}
 }
