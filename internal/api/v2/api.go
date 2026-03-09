@@ -96,6 +96,10 @@ type Controller struct {
 	alertRuleRepo repository.AlertRuleRepository
 	alertEngine   *alerting.Engine
 
+	// Insights fields (initialized lazily in initInsightsRoutes)
+	insightsRepo  repository.InsightsRepository
+	commonNameMap map[string]string // scientific name → common name, cached at init
+
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
 
@@ -505,6 +509,7 @@ func (c *Controller) initRoutes() {
 		{"species routes", c.initSpeciesRoutes},
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
 		{"alert routes", c.initAlertRoutes},
+		{"insights routes", c.initInsightsRoutes},
 	}
 
 	for _, initializer := range routeInitializers {
