@@ -123,12 +123,25 @@ jobs:
     needs: nightly
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
       - name: Get Build Version
         id: get_build_version
         run: |
           DATE=$(date +'%Y%m%d')
           BUILD_VERSION="nightly-${DATE}"
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create git tag
+        run: |
+          TAG="${{ steps.get_build_version.outputs.build_version }}"
+          # Delete existing tag if present (from a previous failed run)
+          git tag -d "$TAG" 2>/dev/null || true
+          git push origin ":refs/tags/$TAG" 2>/dev/null || true
+          # Create and push the tag so the release doesn't need to create it
+          git tag "$TAG"
+          git push origin "$TAG"
 
       - name: Download all build artifacts
         uses: actions/download-artifact@v7
@@ -140,12 +153,12 @@ jobs:
         run: find artifacts -type f
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/**/*.tar.gz
-          tag_name: ${{ steps.get_build_version.outputs.build_version }}
-          name: "Nightly Build ${{ steps.get_build_version.outputs.build_version }}"
-          prerelease: true
+        run: |
+          TAG="${{ steps.get_build_version.outputs.build_version }}"
+          gh release create "$TAG" \
+            artifacts/**/*.tar.gz \
+            --title "Nightly Build $TAG" \
+            --prerelease
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
