@@ -214,8 +214,8 @@
         thumbnails: {
           summary: true,
           recent: true,
-          imageProvider: 'wikimedia',
-          fallbackPolicy: 'all',
+          imageProvider: 'avicommons',
+          fallbackPolicy: 'none',
         },
         summaryLimit: 100,
       }),
