@@ -594,7 +594,9 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 	quietItems := make([]GoneQuietItem, 0, len(quiet))
 	for _, q := range quiet {
 		lastDetectedTime := time.Unix(q.LastDetected, 0)
-		daysSince := int(now.Sub(lastDetectedTime).Hours() / 24)
+		todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+		lastDate := time.Date(lastDetectedTime.Year(), lastDetectedTime.Month(), lastDetectedTime.Day(), 0, 0, 0, 0, now.Location())
+		daysSince := int(todayDate.Sub(lastDate).Hours() / 24)
 		quietItems = append(quietItems, GoneQuietItem{
 			ScientificName:  q.ScientificName,
 			CommonName:      resolveCommonName(nameMap, q.ScientificName),

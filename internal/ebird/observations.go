@@ -40,8 +40,11 @@ func (c *Client) GetRecentObservations(ctx context.Context, lat, lng float64, da
 	url := fmt.Sprintf("%s/v2/data/obs/geo/recent?lat=%.4f&lng=%.4f&back=%d&maxResults=200",
 		c.config.BaseURL, lat, lng, days)
 
+	reqCtx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+
 	var observations []Observation
-	if err := c.doRequestWithRetry(ctx, "GET", url, nil, &observations); err != nil {
+	if err := c.doRequestWithRetry(reqCtx, "GET", url, nil, &observations); err != nil {
 		return nil, fmt.Errorf("get recent observations: %w", err)
 	}
 

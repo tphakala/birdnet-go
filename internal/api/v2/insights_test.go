@@ -73,6 +73,7 @@ func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Ec
 }
 
 func TestGetPhantomSpecies_Handler(t *testing.T) {
+	t.Parallel()
 	mockRepo := &mockInsightsRepo{
 		phantomSpecies: []repository.PhantomSpecies{
 			{LabelID: 1, ScientificName: "Parus major", DetectionCount: 5, AvgConfidence: 0.42, MaxConfidence: 0.58},
@@ -97,6 +98,7 @@ func TestGetPhantomSpecies_Handler(t *testing.T) {
 }
 
 func TestGetDashboardKPIs_Handler(t *testing.T) {
+	t.Parallel()
 	today := time.Now().Format(time.DateOnly)
 	yesterday := time.Now().AddDate(0, 0, -1).Format(time.DateOnly)
 	mockRepo := &mockInsightsRepo{
@@ -126,6 +128,7 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 }
 
 func TestGetMigration_Handler(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	mockRepo := &mockInsightsRepo{
 		newArrivals: []repository.NewArrival{
@@ -154,6 +157,7 @@ func TestGetMigration_Handler(t *testing.T) {
 }
 
 func TestCalculateStreak(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		dates     []string
@@ -200,6 +204,7 @@ func TestCalculateStreak(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			days, start := calculateStreak(tt.dates, tt.today)
 			assert.Equal(t, tt.wantDays, days)
 			assert.Equal(t, tt.wantStart, start)
@@ -208,6 +213,7 @@ func TestCalculateStreak(t *testing.T) {
 }
 
 func TestBuildYearRanges(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		now       time.Time
@@ -268,6 +274,7 @@ func TestBuildYearRanges(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ranges := buildYearRanges(tt.now, tt.window)
 			tt.checkFunc(t, ranges)
 		})
@@ -275,6 +282,7 @@ func TestBuildYearRanges(t *testing.T) {
 }
 
 func TestBuildCommonNameMap(t *testing.T) {
+	t.Parallel()
 	labels := []string{
 		"Turdus merula_Eurasian Blackbird",
 		"Parus major_Great Tit",
@@ -293,6 +301,7 @@ func TestBuildCommonNameMap(t *testing.T) {
 }
 
 func TestSecondsToTimeString(t *testing.T) {
+	t.Parallel()
 	assert.Equal(t, "05:30", secondsToTimeString(5*3600+30*60))
 	assert.Equal(t, "00:00", secondsToTimeString(0))
 	assert.Equal(t, "23:59", secondsToTimeString(23*3600+59*60))
