@@ -148,6 +148,7 @@ jobs:
             artifacts/**/*.tar.gz \
             --repo "$REPO" \
             --title "Nightly Build $TAG" \
+            --notes "Nightly build $TAG" \
             --prerelease \
             --target main 2>/dev/null; then
             TAG="${TAG}-${{ github.run_number }}"
@@ -155,6 +156,7 @@ jobs:
               artifacts/**/*.tar.gz \
               --repo "$REPO" \
               --title "Nightly Build $TAG" \
+              --notes "Nightly build $TAG" \
               --prerelease \
               --target main
           fi
