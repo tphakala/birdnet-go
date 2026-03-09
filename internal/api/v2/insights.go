@@ -27,7 +27,8 @@ const (
 	dawnChorusMinDaysObserved   = 3
 	migrationRecentDays         = 14
 	migrationMinTotalDetections = 5
-	expectedTodayWindowDays     = 3 // +/- days around today's DOY
+	expectedTodayWindowDays     = 3  // +/- days around today's DOY
+	expectedTodayMaxYears       = 10 // how many previous years to scan
 )
 
 // --- Response types ---
@@ -185,7 +186,7 @@ func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 	currentYear := now.Year()
 	doy := now.YearDay()
 
-	firstYear := currentYear - 10
+	firstYear := currentYear - expectedTodayMaxYears
 
 	ranges := make([]repository.TimeRange, 0, currentYear-firstYear)
 	for year := firstYear; year < currentYear; year++ {
