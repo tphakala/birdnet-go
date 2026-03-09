@@ -140,7 +140,7 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		Debug:      false, // Keep debug off for production
 
 		// Privacy-compliant settings
-		AttachStacktrace: false, // Don't attach stack traces by default
+		AttachStacktrace: true, // Enabled; stripped for non-fatal in BeforeSend
 		Environment:      "production",
 		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
 
@@ -194,7 +194,51 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 		delete(event.Tags, "hostname")
 	}
 
+	// Handle stack traces based on event level
+	for i := range event.Exception {
+		if event.Level == sentry.LevelFatal {
+			// Keep stack traces for fatal events (scrubbed below)
+		} else {
+			// Strip stack traces for non-fatal events
+			event.Exception[i].Stacktrace = nil
+		}
+	}
+
+	// Scrub fatal stack trace paths
+	if event.Level == sentry.LevelFatal {
+		scrubStackTraceFrames(event)
+	}
+
 	return event
+}
+
+// scrubStackTraceFrames anonymizes file paths in stack trace frames for privacy.
+func scrubStackTraceFrames(event *sentry.Event) {
+	for i := range event.Exception {
+		if event.Exception[i].Stacktrace == nil {
+			continue
+		}
+		for j := range event.Exception[i].Stacktrace.Frames {
+			frame := &event.Exception[i].Stacktrace.Frames[j]
+			frame.AbsPath = anonymizeFilePath(frame.AbsPath)
+			if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
+				frame.Filename = anonymizeFilePath(frame.Filename)
+			}
+		}
+	}
+}
+
+// anonymizeFilePath replaces directory paths with generic markers, preserving
+// the last two path segments for debugging context (e.g., "telemetry/sentry.go").
+func anonymizeFilePath(path string) string {
+	if path == "" {
+		return path
+	}
+	parts := strings.Split(path, "/")
+	if len(parts) <= 2 {
+		return path
+	}
+	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
 }
 
 // applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
@@ -564,6 +608,58 @@ func titleCaseComponent(component string) string {
 	return strings.Join(result, " ")
 }
 
+// normalizeDirectCaptureErrorType extracts a stable error type from a scrubbed message.
+func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
+	lower := strings.ToLower(scrubbedMsg)
+
+	if idx := strings.Index(scrubbedMsg, "]"); idx > 0 {
+		if start := strings.LastIndex(scrubbedMsg[:idx], "["); start >= 0 {
+			category := scrubbedMsg[start+1 : idx]
+			rest := strings.TrimSpace(scrubbedMsg[idx+1:])
+			normalizedType := normalizeMessageToType(strings.ToLower(rest))
+			return category + ":" + normalizedType
+		}
+	}
+
+	return normalizeMessageToType(lower)
+}
+
+// normalizeMessageToType converts error messages to stable type strings.
+func normalizeMessageToType(lower string) string {
+	patterns := []struct {
+		contains string
+		result   string
+	}{
+		{"database is locked", "database_locked"},
+		{"database or disk is full", "disk_full"},
+		{"database disk image is malformed", "db_corrupted"},
+		{"nil pointer dereference", "nil_pointer"},
+		{"invalid memory address", "nil_pointer"},
+		{"context deadline exceeded", "context_deadline"},
+		{"connection refused", "connection_refused"},
+		{"connection reset", "connection_reset"},
+		{"signal: killed", "signal_killed"},
+		{"ringbuffer is full", "buffer_full"},
+		{"not initialized", "not_initialized"},
+		{"cannot be empty", "empty_value"},
+		{"not found", "not_found"},
+		{"timed out", "timeout"},
+		{"timeout", "timeout"},
+		{"disk is full", "disk_full"},
+		{"exit status", "process_exit"},
+		{"broken pipe", "broken_pipe"},
+		{"permission denied", "permission_denied"},
+	}
+
+	for _, p := range patterns {
+		if strings.Contains(lower, p.contains) {
+			return p.result
+		}
+	}
+
+	return "error"
+}
+
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
 	if shouldSkipTelemetry() {
@@ -606,12 +702,14 @@ func CaptureError(err error, component string) {
 		}}
 
 		// Set custom fingerprint for better grouping
-		// Exclude empty/unknown components to avoid noisy fingerprints
+		// Use normalized error type instead of errorTitle to prevent issue sprawl
+		// (errorTitle contains scrubbed message text which varies per instance)
+		normalizedType := normalizeDirectCaptureErrorType(scrubbedErrorMsg)
 		comp := strings.TrimSpace(component)
 		if comp == "" || strings.EqualFold(comp, "unknown") {
-			scope.SetFingerprint([]string{errorTitle})
+			scope.SetFingerprint([]string{normalizedType})
 		} else {
-			scope.SetFingerprint([]string{errorTitle, comp})
+			scope.SetFingerprint([]string{comp, normalizedType})
 		}
 
 		sentry.CaptureEvent(event)
