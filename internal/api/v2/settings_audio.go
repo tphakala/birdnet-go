@@ -52,12 +52,19 @@ func getAudioBlockedFields() map[string]any {
 }
 
 // extendedCaptureSettingsChanged checks if extended capture settings have changed
+// in a way that requires a restart. When extended capture is disabled on both old
+// and new settings, changes to MaxDuration or Species are irrelevant.
 func extendedCaptureSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	old := oldSettings.Realtime.ExtendedCapture
 	cur := currentSettings.Realtime.ExtendedCapture
 
 	if old.Enabled != cur.Enabled {
 		return true
+	}
+
+	// If disabled on both sides, other fields don't matter
+	if !old.Enabled && !cur.Enabled {
+		return false
 	}
 
 	if old.MaxDuration != cur.MaxDuration {
