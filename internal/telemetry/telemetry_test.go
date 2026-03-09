@@ -261,6 +261,53 @@ func TestConcurrentAccess(t *testing.T) {
 	assert.Equal(t, expectedCount, transport.GetEventCount(), "Expected all events to be captured")
 }
 
+func TestScrubStackTraceFrames(t *testing.T) {
+	t.Parallel()
+	event := sentry.NewEvent()
+	event.Level = sentry.LevelFatal
+	event.Exception = []sentry.Exception{{
+		Type:  "nil pointer",
+		Value: "runtime error",
+		Stacktrace: &sentry.Stacktrace{
+			Frames: []sentry.Frame{
+				{
+					AbsPath:  "/home/user/go/src/birdnet-go/internal/telemetry/sentry.go",
+					Filename: "internal/telemetry/sentry.go",
+					Function: "CaptureError",
+					Lineno:   42,
+				},
+				{
+					AbsPath:  "/home/user/projects/birdnet-go/main.go",
+					Filename: "main.go",
+					Function: "main",
+					Lineno:   10,
+				},
+			},
+		},
+	}}
+
+	scrubStackTraceFrames(event)
+
+	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].AbsPath, "/home/user")
+	assert.Equal(t, "main.go", event.Exception[0].Stacktrace.Frames[1].Filename)
+	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].Filename, "internal")
+}
+
+func TestNonFatalEventsHaveNoStackTrace(t *testing.T) {
+	t.Parallel()
+	event := sentry.NewEvent()
+	event.Level = sentry.LevelError
+	event.Exception = []sentry.Exception{{
+		Stacktrace: &sentry.Stacktrace{
+			Frames: []sentry.Frame{{AbsPath: "/some/path", Function: "foo"}},
+		},
+	}}
+
+	applyPrivacyFilters(event)
+
+	assert.Nil(t, event.Exception[0].Stacktrace)
+}
+
 func TestPrivacyExtraFieldWhitelist(t *testing.T) {
 	extra := map[string]any{
 		"error_type":   "validation",
