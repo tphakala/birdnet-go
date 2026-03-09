@@ -173,14 +173,108 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, 
 	return results, nil
 }
 
-func (r *insightsRepository) GetNewArrivals(_ context.Context, _ int64, _ *uint) ([]NewArrival, error) {
-	return nil, fmt.Errorf("not implemented")
+func (r *insightsRepository) GetNewArrivals(ctx context.Context, recentSince int64, modelID *uint) ([]NewArrival, error) {
+	det := r.detectionsTable()
+	lab := r.labelsTable()
+	fpJoin, fpWhere := r.falsePositiveExclusion("d")
+
+	query := r.db.WithContext(ctx).
+		Table(fmt.Sprintf("%s d", det)).
+		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MIN(d.detected_at) as first_detected, COUNT(*) as detection_count", lab)).
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
+		Joins(fpJoin).
+		Where(fpWhere).
+		Group("d.label_id").
+		Having("MIN(d.detected_at) >= ?", recentSince).
+		Order("first_detected DESC")
+
+	if modelID != nil {
+		query = query.Where("d.model_id = ?", *modelID)
+	}
+
+	var results []NewArrival
+	if err := query.Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("new arrivals query: %w", err)
+	}
+	return results, nil
 }
 
-func (r *insightsRepository) GetGoneQuiet(_ context.Context, _ int64, _ int, _ *uint) ([]GoneQuietSpecies, error) {
-	return nil, fmt.Errorf("not implemented")
+func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64, minTotalDetections int, modelID *uint) ([]GoneQuietSpecies, error) {
+	det := r.detectionsTable()
+	lab := r.labelsTable()
+	fpJoin, fpWhere := r.falsePositiveExclusion("d")
+
+	query := r.db.WithContext(ctx).
+		Table(fmt.Sprintf("%s d", det)).
+		Select(fmt.Sprintf("d.label_id, %s.scientific_name, MAX(d.detected_at) as last_detected, COUNT(*) as total_detections", lab)).
+		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
+		Joins(fpJoin).
+		Where(fpWhere).
+		Group("d.label_id").
+		Having("COUNT(*) >= ? AND MAX(d.detected_at) < ?", minTotalDetections, recentSince).
+		Order("last_detected DESC")
+
+	if modelID != nil {
+		query = query.Where("d.model_id = ?", *modelID)
+	}
+
+	var results []GoneQuietSpecies
+	if err := query.Scan(&results).Error; err != nil {
+		return nil, fmt.Errorf("gone quiet query: %w", err)
+	}
+	return results, nil
 }
 
-func (r *insightsRepository) GetDashboardKPIs(_ context.Context, _ int64, _ *uint) (*DashboardKPIs, error) {
-	return nil, fmt.Errorf("not implemented")
+func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince int64, modelID *uint) (*DashboardKPIs, error) {
+	det := r.detectionsTable()
+	fpJoin, fpWhere := r.falsePositiveExclusion("d")
+	dateExpr := r.dateFromUnixExpr("d.detected_at")
+
+	kpis := &DashboardKPIs{}
+
+	baseQuery := func() *gorm.DB {
+		q := r.db.WithContext(ctx).Table(fmt.Sprintf("%s d", det)).
+			Joins(fpJoin).Where(fpWhere)
+		if modelID != nil {
+			q = q.Where("d.model_id = ?", *modelID)
+		}
+		return q
+	}
+
+	// 1. Lifetime species
+	if err := baseQuery().Select("COUNT(DISTINCT d.label_id)").Scan(&kpis.LifetimeSpecies).Error; err != nil {
+		return nil, fmt.Errorf("lifetime species: %w", err)
+	}
+
+	// 2. Today's detections
+	if err := baseQuery().Where("d.detected_at >= ?", todaySince).
+		Select("COUNT(*)").Scan(&kpis.TodayDetections).Error; err != nil {
+		return nil, fmt.Errorf("today detections: %w", err)
+	}
+
+	// 3. Best day (scoped to last 365 days for performance)
+	oneYearAgo := todaySince - 365*24*60*60
+	var bestDay struct {
+		Date  string
+		Count int64
+	}
+	if err := baseQuery().
+		Where("d.detected_at >= ?", oneYearAgo).
+		Select(fmt.Sprintf("%s as date, COUNT(*) as count", dateExpr)).
+		Group("date").Order("count DESC").Limit(1).
+		Scan(&bestDay).Error; err != nil {
+		return nil, fmt.Errorf("best day: %w", err)
+	}
+	kpis.BestDayDate = bestDay.Date
+	kpis.BestDayCount = bestDay.Count
+
+	// 4. Recent distinct dates (for streak calculation in caller)
+	if err := baseQuery().
+		Select(fmt.Sprintf("DISTINCT %s as date", dateExpr)).
+		Order("date DESC").Limit(90).
+		Pluck("date", &kpis.RecentDates).Error; err != nil {
+		return nil, fmt.Errorf("recent dates: %w", err)
+	}
+
+	return kpis, nil
 }

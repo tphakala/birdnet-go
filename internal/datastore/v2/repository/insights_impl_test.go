@@ -207,6 +207,118 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	}
 }
 
+func TestGetNewArrivals(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	// Species A: first-ever detection 5 days ago (new arrival)
+	labelA := seedLabel(t, db, "Phylloscopus collybita")
+	seedDetection(t, db, labelA, now.AddDate(0, 0, -5).Unix(), 0.9)
+	seedDetection(t, db, labelA, now.AddDate(0, 0, -3).Unix(), 0.85)
+
+	// Species B: first detection 60 days ago (not new)
+	labelB := seedLabel(t, db, "Turdus merula")
+	seedDetection(t, db, labelB, now.AddDate(0, 0, -60).Unix(), 0.9)
+	seedDetection(t, db, labelB, now.AddDate(0, 0, -2).Unix(), 0.88)
+
+	// Species C: only false-positive detections recently (should be excluded)
+	labelC := seedLabel(t, db, "Corvus corax")
+	detID := seedDetection(t, db, labelC, now.AddDate(0, 0, -3).Unix(), 0.4)
+	seedFalsePositiveReview(t, db, detID)
+
+	results, err := repo.GetNewArrivals(ctx, fourteenDaysAgo, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Phylloscopus collybita", results[0].ScientificName)
+	assert.Equal(t, int64(2), results[0].DetectionCount)
+}
+
+func TestGetGoneQuiet(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	fourteenDaysAgo := now.AddDate(0, 0, -14).Unix()
+
+	// Species A: 10 detections, last one 20 days ago (gone quiet)
+	labelA := seedLabel(t, db, "Turdus pilaris")
+	for i := 20; i < 30; i++ {
+		seedDetection(t, db, labelA, now.AddDate(0, 0, -i).Unix(), 0.85)
+	}
+
+	// Species B: 10 detections, latest is 2 days ago (still active, not gone quiet)
+	labelB := seedLabel(t, db, "Turdus merula")
+	for i := range 10 {
+		seedDetection(t, db, labelB, now.AddDate(0, 0, -i).Unix(), 0.9)
+	}
+
+	// Species C: only 3 detections, all old (below minTotalDetections=5)
+	labelC := seedLabel(t, db, "Corvus corax")
+	for i := 20; i < 23; i++ {
+		seedDetection(t, db, labelC, now.AddDate(0, 0, -i).Unix(), 0.8)
+	}
+
+	results, err := repo.GetGoneQuiet(ctx, fourteenDaysAgo, 5, nil)
+	require.NoError(t, err)
+	require.Len(t, results, 1)
+	assert.Equal(t, "Turdus pilaris", results[0].ScientificName)
+	assert.Equal(t, int64(10), results[0].TotalDetections)
+}
+
+func TestGetDashboardKPIs(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	now := time.Now()
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
+
+	// Species A: detections today and yesterday
+	labelA := seedLabel(t, db, "Turdus merula")
+	seedDetection(t, db, labelA, today.Add(2*time.Hour).Unix(), 0.9)
+	seedDetection(t, db, labelA, today.Add(3*time.Hour).Unix(), 0.85)
+	seedDetection(t, db, labelA, today.AddDate(0, 0, -1).Add(8*time.Hour).Unix(), 0.88)
+
+	// Species B: detections yesterday and 2 days ago
+	labelB := seedLabel(t, db, "Parus major")
+	seedDetection(t, db, labelB, today.AddDate(0, 0, -1).Add(6*time.Hour).Unix(), 0.82)
+	seedDetection(t, db, labelB, today.AddDate(0, 0, -2).Add(7*time.Hour).Unix(), 0.80)
+
+	// Species C: 5 detections on a single day (should be best day candidate)
+	labelC := seedLabel(t, db, "Corvus corax")
+	bestDay := today.AddDate(0, 0, -5)
+	for i := range 5 {
+		seedDetection(t, db, labelC, bestDay.Add(time.Duration(i)*time.Hour).Unix(), 0.9)
+	}
+
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, kpis)
+
+	assert.Equal(t, int64(3), kpis.LifetimeSpecies)
+	assert.Equal(t, int64(2), kpis.TodayDetections)
+	assert.Equal(t, int64(5), kpis.BestDayCount)
+	assert.NotEmpty(t, kpis.RecentDates)
+	assert.GreaterOrEqual(t, len(kpis.RecentDates), 4) // today, yesterday, 2d ago, 5d ago
+}
+
+func TestGetDashboardKPIs_Empty(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, kpis)
+	assert.Equal(t, int64(0), kpis.LifetimeSpecies)
+	assert.Equal(t, int64(0), kpis.TodayDetections)
+}
+
 func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	db := setupInsightsTestDB(t)
 	repo := NewInsightsRepository(db, false, false)
