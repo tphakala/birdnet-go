@@ -1119,11 +1119,13 @@ func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *
 
 	if preferredProvider == "auto" {
 		// Use avicommons as the default provider in auto mode, if available
-		defaultCache, _ = registry.GetCache("avicommons")
-		log.Info("selected default image provider",
-			logger.String("provider", "avicommons"),
-			logger.String("mode", "auto"),
-			logger.String("operation", "select_default_provider"))
+		if cache, ok := registry.GetCache("avicommons"); ok {
+			defaultCache = cache
+			log.Info("selected default image provider",
+				logger.String("provider", "avicommons"),
+				logger.String("mode", "auto"),
+				logger.String("operation", "select_default_provider"))
+		}
 	} else {
 		// User has specified a specific provider
 		if cache, ok := registry.GetCache(preferredProvider); ok {
@@ -1131,9 +1133,9 @@ func selectDefaultImageProvider(registry *imageprovider.ImageProviderRegistry) *
 			log.Info("selected preferred image provider",
 				logger.String("provider", preferredProvider),
 				logger.String("operation", "select_default_provider"))
-		} else {
+		} else if cache, ok := registry.GetCache("avicommons"); ok {
 			// Fallback to avicommons if preferred provider doesn't exist or isn't registered
-			defaultCache, _ = registry.GetCache("avicommons")
+			defaultCache = cache
 			log.Warn("preferred provider not available, falling back",
 				logger.String("preferred_provider", preferredProvider),
 				logger.String("fallback_provider", "avicommons"),
