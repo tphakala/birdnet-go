@@ -177,8 +177,8 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		level := getErrorLevel(ee.Category)
 		scope.SetLevel(level)
 
-		// Set custom fingerprint for better grouping using the error title
-		scope.SetFingerprint([]string{errorTitle, ee.GetComponent(), string(ee.Category)})
+		// Set custom fingerprint for better grouping using structured fields
+		scope.SetFingerprint(buildFingerprint(ee))
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -198,6 +198,75 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 	// Mark as reported
 	ee.MarkReported()
+}
+
+// buildFingerprint creates a structured fingerprint for Sentry issue grouping.
+func buildFingerprint(ee *EnhancedError) []string {
+	component := ee.GetComponent()
+	category := string(ee.Category)
+	operation, _ := ee.Context["operation"].(string)
+	normalizedType := normalizeErrorType(ee.Err.Error())
+
+	fp := make([]string, 0, 4)
+	if component != "" && component != ComponentUnknown {
+		fp = append(fp, component)
+	}
+	if category != "" && category != string(CategoryGeneric) {
+		fp = append(fp, category)
+	}
+	if operation != "" {
+		fp = append(fp, operation)
+	}
+	fp = append(fp, normalizedType)
+	return fp
+}
+
+// normalizeErrorType extracts a stable, non-variable error type string.
+func normalizeErrorType(errMsg string) string {
+	lower := strings.ToLower(errMsg)
+
+	patterns := []struct {
+		contains string
+		result   string
+	}{
+		{"database is locked", "database_locked"},
+		{"database or disk is full", "disk_full"},
+		{"database disk image is malformed", "db_corrupted"},
+		{"nil pointer dereference", "nil_pointer"},
+		{"invalid memory address", "nil_pointer"},
+		{"index out of range", "index_out_of_range"},
+		{"slice bounds out of range", "slice_bounds"},
+		{"concurrent map", "concurrent_map"},
+		{"context deadline exceeded", "context_deadline"},
+		{"context canceled", "context_canceled"},
+		{"connection refused", "connection_refused"},
+		{"connection reset", "connection_reset"},
+		{"connection timed out", "connection_timeout"},
+		{"no such file or directory", "file_not_found"},
+		{"permission denied", "permission_denied"},
+		{"dns resolution", "dns_error"},
+		{"no such host", "dns_error"},
+		{"signal: killed", "signal_killed"},
+		{"ringbuffer is full", "buffer_full"},
+		{"not initialized", "not_initialized"},
+		{"scientific name cannot be empty", "empty_scientific_name"},
+		{"not found", "not_found"},
+		{"is locked", "resource_locked"},
+		{"timed out", "timeout"},
+		{"timeout", "timeout"},
+		{"disk is full", "disk_full"},
+		{"i/o timeout", "io_timeout"},
+		{"broken pipe", "broken_pipe"},
+		{"exit status", "process_exit"},
+	}
+
+	for _, p := range patterns {
+		if strings.Contains(lower, p.contains) {
+			return p.result
+		}
+	}
+
+	return "error"
 }
 
 // generateErrorTitle creates a meaningful error title for Sentry based on enhanced error context

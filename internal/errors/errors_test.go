@@ -58,6 +58,24 @@ func TestErrorOriginTag(t *testing.T) {
 	}
 }
 
+func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
+	ee1 := Newf("database is locked").
+		Component("datastore").
+		Category(CategoryDatabase).
+		Context("operation", "save_note").
+		Build()
+
+	ee2 := Newf("database or disk is full").
+		Component("datastore").
+		Category(CategoryDatabase).
+		Context("operation", "save_note").
+		Build()
+
+	fp1 := buildFingerprint(ee1)
+	fp2 := buildFingerprint(ee2)
+	assert.NotEqual(t, fp1, fp2, "different root causes should have different fingerprints")
+}
+
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
 
