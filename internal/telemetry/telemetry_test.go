@@ -260,3 +260,22 @@ func TestConcurrentAccess(t *testing.T) {
 	expectedCount := numGoroutines * eventsPerGoroutine
 	assert.Equal(t, expectedCount, transport.GetEventCount(), "Expected all events to be captured")
 }
+
+func TestPrivacyExtraFieldWhitelist(t *testing.T) {
+	extra := map[string]any{
+		"error_type":   "validation",
+		"component":    "datastore",
+		"stacktrace":   "...",
+		"operation":    "save_note",
+		"category":     "database",
+		"error_origin": "code",
+		"secret_field": "should_remove",
+		"user_data":    "pii",
+	}
+	removePrivacyExtraFields(extra)
+	assert.Contains(t, extra, "operation")
+	assert.Contains(t, extra, "category")
+	assert.Contains(t, extra, "error_origin")
+	assert.NotContains(t, extra, "secret_field")
+	assert.NotContains(t, extra, "user_data")
+}
