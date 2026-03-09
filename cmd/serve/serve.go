@@ -1,4 +1,4 @@
-package realtime
+package serve
 
 import (
 	"fmt"
@@ -7,21 +7,36 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
+	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// RealtimeCommand creates a new command for real-time audio analysis.
+// Command creates the serve command which starts the BirdNET-Go server.
+// The "realtime" command is registered as an alias for backward compatibility.
 func Command(settings *conf.Settings) *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "realtime",
-		Short: "Analyze audio in realtime mode",
-		Long:  "Start analyzing incoming audio data in real-time looking for bird calls.",
+		Use:     "serve",
+		Aliases: []string{"realtime"},
+		Short:   "Start the BirdNET-Go server",
+		Long: `Start the BirdNET-Go server for real-time bird sound identification.
+This command initializes all subsystems (audio capture, BirdNET model,
+web interface, database) and runs until interrupted.
+
+The "realtime" command is an alias for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return analysis.RealtimeAnalysis(settings)
+			application := app.New()
+			application.Register(app.NewLegacyService("birdnet-go", func(quit <-chan struct{}) error {
+				return analysis.RealtimeAnalysisWithQuit(settings, quit)
+			}))
+
+			if err := application.Start(cmd.Context()); err != nil {
+				return err
+			}
+			return application.Wait()
 		},
 	}
 
-	// Set up flags specific to the 'file' command
+	// Set up flags (migrated from cmd/realtime)
 	if err := setupFlags(cmd, settings); err != nil {
 		fmt.Printf("error setting up flags: %v\n", err)
 		os.Exit(1)
@@ -30,7 +45,8 @@ func Command(settings *conf.Settings) *cobra.Command {
 	return cmd
 }
 
-// setupRealtimeFlags configures flags specific to the realtime command.
+// setupFlags configures flags specific to the serve command.
+// These are the same flags previously on the realtime command.
 func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().StringVar(&settings.Realtime.Audio.Export.Path, "clippath", viper.GetString("realtime.audio.export.path"), "Path to save audio clips")
 	cmd.Flags().StringVar(&settings.Realtime.Audio.Source, "source", viper.GetString("realtime.audio.source"), "Audio capture source (\"sysdefault\", \"USB Audio\", \":0,0\", etc.)")
@@ -41,7 +57,6 @@ func setupFlags(cmd *cobra.Command, settings *conf.Settings) error {
 	cmd.Flags().BoolVar(&settings.Realtime.Telemetry.Enabled, "telemetry", viper.GetBool("realtime.telemetry.enabled"), "Enable Prometheus telemetry endpoint")
 	cmd.Flags().StringVar(&settings.Realtime.Telemetry.Listen, "listen", viper.GetString("realtime.telemetry.listen"), "Listen address and port of telemetry endpoint")
 
-	// Bind flags to the viper settings
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return fmt.Errorf("error binding flags: %w", err)
 	}
