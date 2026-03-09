@@ -1033,68 +1033,50 @@ func setupImageProviderRegistry(ds datastore.Interface, metrics *observability.M
 			logger.String("operation", "register_image_provider"))
 	}
 
-	// Attempt to register AviCommons
-	if _, ok := registry.GetCache("avicommons"); !ok {
-		log.Info("attempting to register AviCommons provider",
-			logger.String("provider", "avicommons"),
-			logger.String("operation", "register_image_provider"))
-
-		// Debug logging for embedded filesystem if enabled
-		if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
-			log.Debug("listing embedded filesystem contents",
-				logger.String("operation", "debug_filesystem"))
-			if err := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					log.Debug("error walking filesystem path",
-						logger.String("path", path),
-						logger.Error(err),
-						logger.String("operation", "debug_filesystem"))
-					return nil
-				}
-				log.Debug("filesystem entry found",
+	// Debug logging for embedded filesystem if enabled (outside GetOrRegister to avoid holding registry lock)
+	if conf.Setting().Realtime.Dashboard.Thumbnails.Debug {
+		log.Debug("listing embedded filesystem contents",
+			logger.String("operation", "debug_filesystem"))
+		if walkErr := fs.WalkDir(api.ImageDataFs, ".", func(path string, d fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				log.Debug("error walking filesystem path",
 					logger.String("path", path),
-					logger.Bool("is_dir", d.IsDir()),
+					logger.Error(walkErr),
 					logger.String("operation", "debug_filesystem"))
 				return nil
-			}); err != nil {
-				log.Error("error walking embedded filesystem",
-					logger.Error(err),
-					logger.String("operation", "debug_filesystem"))
 			}
+			log.Debug("filesystem entry found",
+				logger.String("path", path),
+				logger.Bool("is_dir", d.IsDir()),
+				logger.String("operation", "debug_filesystem"))
+			return nil
+		}); walkErr != nil {
+			log.Error("error walking embedded filesystem",
+				logger.Error(walkErr),
+				logger.String("operation", "debug_filesystem"))
 		}
+	}
 
-		if err := imageprovider.RegisterAviCommonsProvider(registry, api.ImageDataFs, metrics, ds); err != nil {
-			log.Error("failed to register AviCommons provider",
-				logger.Error(err),
-				logger.String("provider", "avicommons"),
-				logger.String("operation", "register_image_provider"))
-			errs = append(errs, errors.New(err).
-				Component("realtime-analysis").
-				Category(errors.CategoryImageProvider).
-				Context("operation", "register_avicommons_provider").
-				Context("provider", "avicommons").
-				Build())
-			// Check if we can read the data file for debugging
-			if _, errRead := fs.ReadFile(api.ImageDataFs, "internal/imageprovider/data/latest.json"); errRead != nil {
-				log.Error("error reading AviCommons data file",
-					logger.Error(errRead),
-					logger.String("provider", "avicommons"),
-					logger.String("file_path", "internal/imageprovider/data/latest.json"),
-					logger.String("operation", "read_data_file"))
-			} else {
-				log.Warn("AviCommons data file exists but registration failed",
-					logger.String("provider", "avicommons"),
-					logger.String("operation", "register_image_provider"))
-			}
-		} else {
-			log.Info("successfully registered image provider",
-				logger.String("provider", "avicommons"),
-				logger.String("operation", "register_image_provider"))
-		}
-	} else {
-		log.Info("using existing image provider",
+	// Use atomic GetOrRegister to eliminate race condition for AviCommons
+	_, err = registry.GetOrRegister("avicommons", func() (*imageprovider.BirdImageCache, error) {
+		return imageprovider.CreateAviCommonsCache(api.ImageDataFs, metrics, ds)
+	})
+	if err != nil {
+		log.Error("failed to register AviCommons image provider",
+			logger.Error(err),
 			logger.String("provider", "avicommons"),
-			logger.String("operation", "setup_image_provider"))
+			logger.String("operation", "register_image_provider"))
+		errs = append(errs, errors.New(err).
+			Component("realtime-analysis").
+			Category(errors.CategoryImageProvider).
+			Context("operation", "register_avicommons_provider").
+			Context("provider", "avicommons").
+			Build())
+		// Continue even if one provider fails
+	} else {
+		log.Info("successfully registered image provider",
+			logger.String("provider", "avicommons"),
+			logger.String("operation", "register_image_provider"))
 	}
 
 	// Set the registry in each provider for fallback support
