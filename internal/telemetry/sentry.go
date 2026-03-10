@@ -143,7 +143,7 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		Debug:      false, // Keep debug off for production
 
 		// Privacy-compliant settings
-		AttachStacktrace: true, // Enabled; stripped for non-fatal in BeforeSend
+		AttachStacktrace: true, // Enabled; stripped for warning/info/debug in BeforeSend, scrubbed for error/fatal
 		Environment:      "production",
 		ServerName:       "", // Explicitly clear server name to prevent hostname leakage
 
@@ -200,11 +200,13 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 }
 
 // applyStacktracePrivacyFilters handles stack traces based on event severity.
-// Fatal events get scrubbed paths; non-fatal events get traces stripped entirely.
+// Fatal and error events get scrubbed paths; other levels get traces stripped entirely.
 func applyStacktracePrivacyFilters(event *sentry.Event) {
-	if event.Level == sentry.LevelFatal {
+	if event.Level == sentry.LevelFatal || event.Level == sentry.LevelError {
+		// Fatal and error events: keep stacktraces with scrubbed paths
 		scrubStackTraceFrames(event)
 	} else {
+		// Warning/info/debug: strip stacktraces entirely (minimal data collection)
 		for i := range event.Exception {
 			event.Exception[i].Stacktrace = nil
 		}
@@ -347,6 +349,25 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"operation":    true,
 		"category":     true,
 		"error_origin": true,
+		// Diskmanager diagnostic fields (basenames and parsed fragments, no PII)
+		"expected_format":      true,
+		"filename":             true,
+		"confidence_string":    true,
+		"parsed_species":       true,
+		"parsed_timestamp_str": true,
+		"timestamp_string":     true,
+		"parsed_confidence":    true,
+		// FFmpeg exit diagnostics (numeric + Go ProcessState string)
+		"exit_code":     true,
+		"process_state": true,
+		// Config key identifier
+		"config_key": true,
+		// File size and timeout diagnostics (numeric/boolean only)
+		"file_exists":       true,
+		"file_size_bytes":   true,
+		"input_file_bytes":  true,
+		"total_duration_ms": true,
+		"max_attempts":      true,
 	}
 
 	for k := range extra {
@@ -705,6 +726,12 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 		return
 	}
 
+	// Filter out info/debug-level messages — these are operational signals,
+	// not errors. They create noise issues in Sentry's issue list.
+	if level == sentry.LevelInfo || level == sentry.LevelDebug {
+		return
+	}
+
 	// Scrub sensitive information from the message
 	scrubbedMessage := privacy.ScrubMessage(message)
 	log := GetLogger()
@@ -719,9 +746,6 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
-		if level == sentry.LevelInfo {
-			scope.SetTag("error_origin", "operational")
-		}
 		sentry.CaptureMessage(scrubbedMessage)
 	})
 

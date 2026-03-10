@@ -1117,6 +1117,20 @@ func (s *FFmpegStream) handleEarlyErrorDetection() error {
 // handleQuickExitError processes quick exit scenarios (process exits within processQuickExitTime)
 // and returns an appropriate error with error context extraction
 func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
+	// Collect process exit info for diagnostics (cross-platform, privacy-safe).
+	// Note: ProcessState is only populated after Wait() completes, which runs
+	// asynchronously. The -1/"unavailable" defaults are the honest values when
+	// Wait() hasn't finished yet.
+	exitCode := -1
+	processState := "unavailable"
+	s.cmdMu.Lock()
+	cmd := s.cmd
+	s.cmdMu.Unlock()
+	if cmd != nil && cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+		processState = cmd.ProcessState.String() // e.g. "signal: killed" or "exit status 1"
+	}
+
 	// Get stderr output safely
 	s.stderrMu.RLock()
 	stderrOutput := s.stderr.String()
@@ -1148,6 +1162,8 @@ func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
 			Context("transport", s.transport).
 			Context("exit_time_seconds", time.Since(startTime).Seconds()).
 			Context("error_type", errCtx.ErrorType).
+			Context("exit_code", exitCode).
+			Context("process_state", processState).
 			Build()
 	}
 
@@ -1163,6 +1179,8 @@ func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
 		Context("transport", s.transport).
 		Context("exit_time_seconds", time.Since(startTime).Seconds()).
 		Context("error_detail", sanitizedOutput).
+		Context("exit_code", exitCode).
+		Context("process_state", processState).
 		Build()
 }
 

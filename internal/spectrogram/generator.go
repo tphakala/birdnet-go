@@ -69,6 +69,16 @@ const (
 	soxResampleRate = "24k"
 )
 
+// getFileSizeBytes returns the file size in bytes, or -1 if the file can't be stat'd.
+// Used for telemetry context — the size value is privacy-safe (numeric only).
+func getFileSizeBytes(path string) int64 {
+	info, err := os.Stat(path)
+	if err != nil {
+		return -1
+	}
+	return info.Size()
+}
+
 // fftFriendlyHeight returns the nearest 2^n + 1 value >= width/2 for optimal sox FFT performance.
 // Sox computes DFT size as 2*(height-1). When this is a power of 2, sox uses the fast FFT path
 // (O(n log n)) instead of the brute-force DFT path (O(n²)). For a 60-second clip, this yields
@@ -403,6 +413,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 			Category(errors.CategorySystem).
 			Context("operation", "generate_with_sox_direct").
 			Context("audio_path", audioPath).
+			Context("input_file_bytes", getFileSizeBytes(audioPath)).
 			Context("output_path", outputPath).
 			Context("width", width).
 			Context("raw", raw).
@@ -534,6 +545,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "run_ffmpeg").
 			Context("audio_path", audioPath).
+			Context("input_file_bytes", getFileSizeBytes(audioPath)).
 			Context("width", width).
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
@@ -565,6 +577,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 			Category(errors.CategorySystem).
 			Context("operation", "wait_sox").
 			Context("audio_path", audioPath).
+			Context("input_file_bytes", getFileSizeBytes(audioPath)).
 			Context("width", width).
 			Context("raw", raw).
 			Context("ffmpeg_output", ffmpegOutput.String()).
@@ -718,6 +731,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 			Category(errors.CategorySystem).
 			Context("operation", "generate_with_ffmpeg").
 			Context("audio_path", audioPath).
+			Context("input_file_bytes", getFileSizeBytes(audioPath)).
 			Context("output_path", outputPath).
 			Context("width", width).
 			Context("raw", raw).

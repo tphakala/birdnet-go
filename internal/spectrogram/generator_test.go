@@ -850,6 +850,22 @@ func TestNonOperationalErrors_NoExplicitPriority(t *testing.T) {
 		"non-operational error should not have PriorityLow — it should generate notifications")
 }
 
+// TestGetFileSizeBytes_ReturnsSize tests that getFileSizeBytes returns the correct size for an existing file.
+func TestGetFileSizeBytes_ReturnsSize(t *testing.T) {
+	t.Parallel()
+	f := filepath.Join(t.TempDir(), "test.wav")
+	require.NoError(t, os.WriteFile(f, make([]byte, 4096), 0o644))
+	size := getFileSizeBytes(f)
+	assert.Equal(t, int64(4096), size)
+}
+
+// TestGetFileSizeBytes_MissingFile tests that getFileSizeBytes returns -1 for a nonexistent file.
+func TestGetFileSizeBytes_MissingFile(t *testing.T) {
+	t.Parallel()
+	size := getFileSizeBytes("/nonexistent/file.wav")
+	assert.Equal(t, int64(-1), size)
+}
+
 // TestNewGenerator_WithNilLogger tests generator creation with nil logger uses default.
 func TestNewGenerator_WithNilLogger(t *testing.T) {
 	env := setupTestEnv(t)

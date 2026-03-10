@@ -13,7 +13,7 @@ type MockFunctions struct {
 	GetAudioFiles        func(baseDir string, allowedExts []string, db any, debug bool) ([]any, error)
 	Setting              func() *conf.Settings
 	ParseRetentionPeriod func(period string) (int, error)
-	ParsePercentage      func(percentage string) (float64, error)
+	ParsePercentage      func(percentage, configKey string) (float64, error)
 	OsRemove             func(name string) error
 }
 
@@ -32,7 +32,7 @@ func NewMockFunctions() *MockFunctions {
 		ParseRetentionPeriod: func(period string) (int, error) {
 			return 0, nil
 		},
-		ParsePercentage: func(percentage string) (float64, error) {
+		ParsePercentage: func(percentage, configKey string) (float64, error) {
 			return 0.0, nil
 		},
 		OsRemove: func(name string) error {
@@ -57,7 +57,7 @@ var MockSetting func() *conf.Settings
 var MockParseRetentionPeriod func(period string) (int, error)
 
 // MockParsePercentage is a mock for the conf.ParsePercentage function
-var MockParsePercentage func(percentage string) (float64, error)
+var MockParsePercentage func(percentage, configKey string) (float64, error)
 
 // MockOsRemove is a mock for the os.Remove function
 var MockOsRemove func(name string) error
