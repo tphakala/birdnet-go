@@ -21,8 +21,3 @@ type AIModel struct {
 	ClassifierPath *string   `gorm:"type:varchar(500)"` // path to custom classifier file
 	CreatedAt      time.Time `gorm:"autoCreateTime"`
 }
-
-// TableName returns the table name for GORM.
-func (AIModel) TableName() string {
-	return "ai_models"
-}

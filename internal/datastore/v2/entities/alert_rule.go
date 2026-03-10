@@ -22,8 +22,3 @@ type AlertRule struct {
 	Conditions     []AlertCondition `gorm:"foreignKey:RuleID;constraint:OnDelete:CASCADE" json:"conditions"`
 	Actions        []AlertAction    `gorm:"foreignKey:RuleID;constraint:OnDelete:CASCADE" json:"actions"`
 }
-
-// TableName returns the table name for GORM.
-func (AlertRule) TableName() string {
-	return "alert_rules"
-}

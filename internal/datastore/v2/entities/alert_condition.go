@@ -11,8 +11,3 @@ type AlertCondition struct {
 	DurationSec int    `gorm:"default:0" json:"duration_sec"`
 	SortOrder   int    `gorm:"default:0" json:"sort_order"`
 }
-
-// TableName returns the table name for GORM.
-func (AlertCondition) TableName() string {
-	return "alert_conditions"
-}

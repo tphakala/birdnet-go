@@ -49,7 +49,7 @@ func TestV2TableName(t *testing.T) {
 	}{
 		{"labels", "v2_labels"},
 		{"detections", "v2_detections"},
-		{"migration_state", "v2_migration_state"},
+		{"migration_states", "v2_migration_states"},
 	}
 
 	for _, tt := range tests {
@@ -90,7 +90,7 @@ func TestMySQLManager_Initialize(t *testing.T) {
 	assert.True(t, mgr.db.Migrator().HasTable(V2TableName("labels")))
 	assert.True(t, mgr.db.Migrator().HasTable(V2TableName("ai_models")))
 	assert.True(t, mgr.db.Migrator().HasTable(V2TableName("detections")))
-	assert.True(t, mgr.db.Migrator().HasTable(V2TableName("migration_state")))
+	assert.True(t, mgr.db.Migrator().HasTable(V2TableName("migration_states")))
 }
 
 func TestMySQLManager_Initialize_SeedsBirdNETModel(t *testing.T) {
@@ -152,7 +152,7 @@ func TestMySQLManager_Delete(t *testing.T) {
 	// After deletion, v2 tables should not exist
 	assert.False(t, mgr.db.Migrator().HasTable(V2TableName("labels")))
 	assert.False(t, mgr.db.Migrator().HasTable(V2TableName("detections")))
-	assert.False(t, mgr.db.Migrator().HasTable(V2TableName("migration_state")))
+	assert.False(t, mgr.db.Migrator().HasTable(V2TableName("migration_states")))
 }
 
 func TestMySQLManager_Path(t *testing.T) {

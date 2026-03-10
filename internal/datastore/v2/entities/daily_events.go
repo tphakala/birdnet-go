@@ -10,8 +10,3 @@ type DailyEvents struct {
 	Country  string `gorm:"size:100"`
 	CityName string `gorm:"size:200"`
 }
-
-// TableName returns the table name for GORM.
-func (DailyEvents) TableName() string {
-	return "daily_events"
-}

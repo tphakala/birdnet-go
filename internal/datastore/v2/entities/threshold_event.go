@@ -18,8 +18,3 @@ type ThresholdEvent struct {
 	// Relationship
 	Label *Label `gorm:"foreignKey:LabelID"`
 }
-
-// TableName returns the table name for GORM.
-func (ThresholdEvent) TableName() string {
-	return "threshold_events"
-}

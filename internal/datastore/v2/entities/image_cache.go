@@ -21,8 +21,3 @@ type ImageCache struct {
 	// Relationship
 	Label *Label `gorm:"foreignKey:LabelID"`
 }
-
-// TableName returns the table name for GORM.
-func (ImageCache) TableName() string {
-	return "image_caches"
-}

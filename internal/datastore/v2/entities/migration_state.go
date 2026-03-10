@@ -48,11 +48,6 @@ type MigrationState struct {
 	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
 }
 
-// TableName returns the table name for GORM.
-func (MigrationState) TableName() string {
-	return "migration_state"
-}
-
 // Progress returns the migration progress as a percentage (0-100).
 func (m *MigrationState) Progress() float64 {
 	if m.TotalRecords == 0 {

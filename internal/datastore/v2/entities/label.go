@@ -21,8 +21,3 @@ type Label struct {
 	LabelType      *LabelType      `gorm:"foreignKey:LabelTypeID"`
 	TaxonomicClass *TaxonomicClass `gorm:"foreignKey:TaxonomicClassID"`
 }
-
-// TableName returns the table name for GORM.
-func (Label) TableName() string {
-	return "labels"
-}

@@ -189,8 +189,13 @@ func (m *MySQLManager) Delete() error {
 		prefix + "ai_models",
 		prefix + "taxonomic_classes",
 		prefix + "label_types",
-		prefix + "migration_state",
+		prefix + "migration_states",
 		prefix + "migration_dirty_ids",
+		// Alert tables (drop children first)
+		prefix + "alert_histories",
+		prefix + "alert_actions",
+		prefix + "alert_conditions",
+		prefix + "alert_rules",
 		// Auxiliary tables
 		prefix + "hourly_weathers",
 		prefix + "daily_events",
@@ -212,9 +217,9 @@ func (m *MySQLManager) Delete() error {
 
 // Exists checks if v2 tables exist in the MySQL database.
 func (m *MySQLManager) Exists() bool {
-	// Check if the migration_state table exists as an indicator.
+	// Check if the migration_states table exists as an indicator.
 	// Must account for the v2_ prefix when in migration mode.
-	tableName := m.tablePrefix + "migration_state"
+	tableName := m.tablePrefix + "migration_states"
 	return m.db.Migrator().HasTable(tableName)
 }
 
