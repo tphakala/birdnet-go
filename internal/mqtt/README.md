@@ -240,11 +240,17 @@ realtime:
 ### Running Tests
 
 ```bash
-# Run all tests
+# Run unit tests (no broker required)
 go test ./internal/mqtt/...
+
+# Run integration tests with testcontainer (requires Docker)
+go test -tags integration ./internal/mqtt/...
 
 # Run with local MQTT broker
 MQTT_TEST_BROKER=tcp://localhost:1883 go test ./internal/mqtt/...
+
+# Run TLS broker tests (opt-in, requires external broker connectivity)
+RUN_TLS_TESTS=true go test -v ./internal/mqtt/...
 
 # Run with verbose output
 go test -v ./internal/mqtt/...
@@ -252,11 +258,12 @@ go test -v ./internal/mqtt/...
 
 ### Test Environment
 
-Tests support multiple brokers:
+Tests use the following broker sources:
 
-1. Local broker (preferred): `localhost:1883`
-2. Public test broker: `test.mosquitto.org:1883`
-3. Custom broker via `MQTT_TEST_BROKER` environment variable
+1. **Testcontainer** (preferred): Integration tests use `testcontainers` to spin up a Mosquitto broker in Docker — no external dependencies needed
+2. **Local broker**: `localhost:1883` — used by unit tests when available
+3. **Custom broker**: Via `MQTT_TEST_BROKER` environment variable
+4. **External TLS brokers**: Opt-in only via `RUN_TLS_TESTS=true` — tests TLS connections against public brokers
 
 ## Security Considerations
 

@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	defaultTestBroker      = "tcp://test.mosquitto.org:1883"
 	localTestBroker        = "tcp://localhost:1883"
 	testQoS                = 1 // Use QoS 1 for more reliable delivery
 	testTimeout            = 45 * time.Second
@@ -37,46 +36,21 @@ const (
 	testClientID      = "test-client"
 )
 
-// getBrokerAddress returns the MQTT broker address to use for testing
+// getBrokerAddress returns the MQTT broker address to use for testing.
+// Use integration tests with testcontainer for comprehensive broker testing.
 func getBrokerAddress() string {
 	if broker := os.Getenv("MQTT_TEST_BROKER"); broker != "" {
 		return broker
 	}
-	// Skip using remote brokers in CI unless explicitly requested
-	if os.Getenv("CI") == "true" && os.Getenv("USE_REMOTE_MQTT_BROKER") != "true" {
-		// In CI, only use local broker to avoid flaky tests
-		if isLocalBrokerAvailable() {
-			return localTestBroker
-		}
-		return "" // No broker available in CI
-	}
-	// Prefer local broker first for faster tests
 	if isLocalBrokerAvailable() {
 		return localTestBroker
 	}
-	// Fall back to public test broker
-	if isTestBrokerAvailable() {
-		return defaultTestBroker
-	}
-	return "" // No broker available
+	return "" // No broker available — use integration tests with testcontainer instead
 }
 
 // isLocalBrokerAvailable checks if a local MQTT broker is available
 func isLocalBrokerAvailable() bool {
 	conn, err := net.DialTimeout("tcp", "localhost:1883", connectionCheckTimeout)
-	if err != nil {
-		return false
-	}
-	if err := conn.Close(); err != nil {
-		// Log but don't fail the check
-		log.Printf("Failed to close connection: %v", err)
-	}
-	return true
-}
-
-// isTestBrokerAvailable checks if the public test server is available
-func isTestBrokerAvailable() bool {
-	conn, err := net.DialTimeout("tcp", "test.mosquitto.org:1883", connectionCheckTimeout)
 	if err != nil {
 		return false
 	}

@@ -69,11 +69,6 @@ func runTLSFileExistenceTest(t *testing.T, tc *tlsFileTestCase, tempDir string, 
 func TestTLSFileExistenceChecks(t *testing.T) {
 	t.Parallel()
 
-	broker := getBrokerAddress()
-	if broker == "" {
-		t.Skip("No MQTT broker configured for testing")
-	}
-
 	tempDir := t.TempDir()
 
 	metrics, err := observability.NewMetrics()

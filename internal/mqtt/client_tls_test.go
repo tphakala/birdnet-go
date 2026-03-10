@@ -36,14 +36,12 @@ const (
 	envTrue = "true"
 )
 
-// skipIfNoTLSBroker skips the test if TLS brokers are not available
+// skipIfNoTLSBroker skips the test unless RUN_TLS_TESTS=true is set.
+// External TLS broker tests are opt-in only since testcontainer covers core MQTT functionality.
 func skipIfNoTLSBroker(t *testing.T) {
 	t.Helper()
-	if os.Getenv("SKIP_TLS_TESTS") == envTrue {
-		t.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
-	}
-	if os.Getenv("CI") == envTrue && os.Getenv("RUN_TLS_TESTS") != envTrue {
-		t.Skip("Skipping TLS tests in CI (set RUN_TLS_TESTS=true to enable)")
+	if os.Getenv("RUN_TLS_TESTS") != envTrue {
+		t.Skip("Skipping TLS broker tests (set RUN_TLS_TESTS=true to enable)")
 	}
 }
 
@@ -400,14 +398,11 @@ func TestTLSConfigValidation(t *testing.T) {
 	})
 }
 
-// skipIfNoTLSBrokerBench skips benchmarks if TLS brokers are not available
+// skipIfNoTLSBrokerBench skips benchmarks unless RUN_TLS_TESTS=true is set.
 func skipIfNoTLSBrokerBench(b *testing.B) {
 	b.Helper()
-	if os.Getenv("SKIP_TLS_TESTS") == envTrue {
-		b.Skip("Skipping TLS tests (SKIP_TLS_TESTS=true)")
-	}
-	if os.Getenv("CI") == envTrue && os.Getenv("RUN_TLS_TESTS") != envTrue {
-		b.Skip("Skipping TLS tests in CI (set RUN_TLS_TESTS=true to enable)")
+	if os.Getenv("RUN_TLS_TESTS") != envTrue {
+		b.Skip("Skipping TLS broker benchmarks (set RUN_TLS_TESTS=true to enable)")
 	}
 }
 
