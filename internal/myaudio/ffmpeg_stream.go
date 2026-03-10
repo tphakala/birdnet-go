@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -370,6 +371,7 @@ type FFmpegStream struct {
 	// Sound level processor registration tracking
 	soundLevelNotRegisteredLogMu   sync.Mutex
 	lastSoundLevelNotRegisteredLog time.Time
+	soundLevelDisabled             atomic.Bool // set when registration fails, prevents per-chunk error flooding
 
 	// Stream creation time for grace period calculation
 	streamCreatedAt time.Time
@@ -1386,23 +1388,17 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		Timestamp:  time.Now(),
 	}
 
-	// Process sound level if enabled
-	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+	// Process sound level if enabled and not disabled due to failed registration
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled && !s.soundLevelDisabled.Load() {
 		if soundLevel, err := ProcessSoundLevelData(s.source.ID, data); err != nil {
-			// Log as warning if it's a registration issue, debug otherwise
-			// Skip logging for normal conditions (interval incomplete, no data)
 			if errors.Is(err, ErrSoundLevelProcessorNotRegistered) {
-				// Rate limit this specific log message to prevent flooding
-				s.soundLevelNotRegisteredLogMu.Lock()
-				now := time.Now()
-				if now.Sub(s.lastSoundLevelNotRegisteredLog) >= dropLogInterval {
-					s.lastSoundLevelNotRegisteredLog = now
-					getStreamLogger().Warn("sound level processor not registered (further messages suppressed)",
-						logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
-						logger.Error(err),
-						logger.String("operation", "process_sound_level"))
-				}
-				s.soundLevelNotRegisteredLogMu.Unlock()
+				// Registration failed at some point — disable further attempts
+				// to prevent per-chunk error flooding (issue #2152)
+				s.soundLevelDisabled.Store(true)
+				getStreamLogger().Warn("sound level processor not registered, disabling for this stream",
+					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+					logger.Error(err),
+					logger.String("operation", "process_sound_level"))
 			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) && conf.Setting().Debug {
 				getStreamLogger().Debug("failed to process sound level data",
 					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),

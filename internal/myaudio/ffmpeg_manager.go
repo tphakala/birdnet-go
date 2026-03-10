@@ -124,7 +124,9 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "start_stream_sound_level_registration"))
-		// Continue with stream start - provides graceful degradation
+		// Mark stream so processAudioChunk skips ProcessSoundLevelData calls,
+		// preventing per-chunk error flooding (issue #2152)
+		stream.soundLevelDisabled.Store(true)
 	}
 
 	// Stream already created above
@@ -229,8 +231,10 @@ func (m *FFmpegManager) RestartStream(url string) error {
 			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "restart_stream_sound_level_registration"))
-		// Continue with stream restart even if sound level registration fails
-		// This provides graceful degradation - stream functionality is preserved
+		stream.soundLevelDisabled.Store(true)
+	} else if stream.soundLevelDisabled.Load() {
+		// Registration succeeded — re-enable sound level processing
+		stream.soundLevelDisabled.Store(false)
 	}
 
 	stream.Restart(false) // false = automatic restart (health-triggered)

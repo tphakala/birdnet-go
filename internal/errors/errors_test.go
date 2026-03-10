@@ -97,6 +97,87 @@ func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
 	assert.NotEqual(t, fp1, fp2, "different root causes should have different fingerprints")
 }
 
+func TestMatchesPathSegment(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		s       string
+		pattern string
+		want    bool
+	}{
+		{
+			name:    "birdnet should not match birdnet-go module path",
+			s:       "github.com/tphakala/birdnet-go/internal/datastore.Save",
+			pattern: "birdnet",
+			want:    false,
+		},
+		{
+			name:    "birdnet should match birdnet package segment",
+			s:       "github.com/tphakala/birdnet-go/internal/birdnet.Predict",
+			pattern: "birdnet",
+			want:    true,
+		},
+		{
+			name:    "myaudio should match myaudio package",
+			s:       "github.com/tphakala/birdnet-go/internal/myaudio.ProcessSoundLevelData",
+			pattern: "myaudio",
+			want:    true,
+		},
+		{
+			name:    "soundlevel does not match camelCase SoundLevel",
+			s:       "github.com/tphakala/birdnet-go/internal/analysis.registerSoundLevelProcessors",
+			pattern: "soundlevel",
+			want:    false, // case-sensitive: "soundlevel" != "SoundLevel"
+		},
+		{
+			name:    "analysis matches as path segment",
+			s:       "github.com/tphakala/birdnet-go/internal/analysis.registerSoundLevelProcessors",
+			pattern: "analysis",
+			want:    true,
+		},
+		{
+			name:    "analysis/processor matches subpackage path",
+			s:       "github.com/tphakala/birdnet-go/internal/analysis/processor.Process",
+			pattern: "analysis/processor",
+			want:    true,
+		},
+		{
+			name:    "pattern at end of string",
+			s:       "github.com/tphakala/birdnet-go/internal/datastore",
+			pattern: "datastore",
+			want:    true,
+		},
+		{
+			name:    "ffmpeg-manager matches hyphenated component name",
+			s:       "ffmpeg-manager",
+			pattern: "ffmpeg-manager",
+			want:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := matchesPathSegment(tt.s, tt.pattern)
+			assert.Equal(t, tt.want, got, "matchesPathSegment(%q, %q)", tt.s, tt.pattern)
+		})
+	}
+}
+
+func TestLookupComponentAvoidsMisdetection(t *testing.T) {
+	t.Parallel()
+
+	// A function in the datastore package should not be detected as "birdnet"
+	// just because "birdnet" appears in the module path "birdnet-go"
+	result := lookupComponent("github.com/tphakala/birdnet-go/internal/datastore.Save")
+	assert.Equal(t, "datastore", result, "should match datastore, not birdnet")
+
+	// A function in the actual birdnet package should match birdnet
+	result = lookupComponent("github.com/tphakala/birdnet-go/internal/birdnet.Predict")
+	assert.Equal(t, "birdnet", result, "should match birdnet package")
+}
+
 func TestRegexPrecompilation(t *testing.T) {
 	t.Parallel()
 

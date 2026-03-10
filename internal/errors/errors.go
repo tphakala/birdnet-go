@@ -490,14 +490,17 @@ func detectComponentFull() string {
 	return ComponentUnknown
 }
 
-// lookupComponent searches the registry for a matching component
+// lookupComponent searches the registry for a matching component.
+// Patterns are matched as path segments to avoid false positives where a short
+// pattern (e.g. "birdnet") matches the module path "birdnet-go" (issue #2152).
 func lookupComponent(funcName string) string {
 	registryMutex.RLock()
 	defer registryMutex.RUnlock()
 
-	// Check registered patterns
+	// Check registered patterns, rejecting matches inside hyphenated words
+	// (e.g. "birdnet" must not match the module name "birdnet-go").
 	for pattern, component := range componentRegistry {
-		if strings.Contains(funcName, pattern) {
+		if matchesPathSegment(funcName, pattern) {
 			return component
 		}
 	}
@@ -512,6 +515,29 @@ func lookupComponent(funcName string) string {
 	}
 
 	return ComponentUnknown
+}
+
+// matchesPathSegment checks if pattern appears in s without being part of a
+// hyphenated compound word. This prevents "birdnet" from matching the module
+// path "birdnet-go" while still allowing substring matches for function-name
+// based patterns like "soundlevel" in "registerSoundLevelProcessors".
+func matchesPathSegment(s, pattern string) bool {
+	for {
+		idx := strings.Index(s, pattern)
+		if idx < 0 {
+			return false
+		}
+		end := idx + len(pattern)
+		// Reject if the match is immediately preceded or followed by a hyphen,
+		// which indicates it's part of a hyphenated identifier (e.g. "birdnet-go").
+		hyphenBefore := idx > 0 && s[idx-1] == '-'
+		hyphenAfter := end < len(s) && s[end] == '-'
+		if !hyphenBefore && !hyphenAfter {
+			return true
+		}
+		// Advance past this match and try again
+		s = s[idx+1:]
+	}
 }
 
 // detectCategory automatically detects error category based on error message and component
