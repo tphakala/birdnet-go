@@ -69,6 +69,24 @@ func TestParseSpeciesString(t *testing.T) {
 			},
 		},
 		{
+			name:  "input with tab returns as-is",
+			input: "Species\twith\ttab",
+			expected: Species{
+				ScientificName: "Species\twith\ttab",
+				CommonName:     "Species\twith\ttab",
+				Code:           "",
+			},
+		},
+		{
+			name:  "input with newline returns as-is",
+			input: "Species\nwith\nnewline",
+			expected: Species{
+				ScientificName: "Species\nwith\nnewline",
+				CommonName:     "Species\nwith\nnewline",
+				Code:           "",
+			},
+		},
+		{
 			name:  "leading and trailing whitespace trimmed",
 			input: "  Turdus merula_Common Blackbird  ",
 			expected: Species{
