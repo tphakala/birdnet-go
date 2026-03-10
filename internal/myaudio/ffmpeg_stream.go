@@ -386,6 +386,13 @@ type FFmpegStream struct {
 	errorContexts   []*ErrorContext // Ring buffer of last N errors
 	errorContextsMu sync.RWMutex
 	maxErrorHistory int // Maximum number of error contexts to store
+
+	// Process exit info captured from cmd.Wait() for diagnostics.
+	// Populated by handleQuickExitError before cleanupProcess runs.
+	exitExitCode     int    // Exit code from ProcessState (-1 if unavailable)
+	exitProcessState string // ProcessState string (e.g. "exit status 1", "signal: killed")
+	exitWaitCalled   bool   // True if Wait() was already called on the current cmd
+	exitInfoMu       sync.Mutex
 }
 
 // threadSafeWriter wraps a bytes.Buffer with mutex protection for concurrent access
@@ -1117,18 +1124,44 @@ func (s *FFmpegStream) handleEarlyErrorDetection() error {
 // handleQuickExitError processes quick exit scenarios (process exits within processQuickExitTime)
 // and returns an appropriate error with error context extraction
 func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
-	// Collect process exit info for diagnostics (cross-platform, privacy-safe).
-	// Note: ProcessState is only populated after Wait() completes, which runs
-	// asynchronously. The -1/"unavailable" defaults are the honest values when
-	// Wait() hasn't finished yet.
+	// Collect process exit info by calling Wait() synchronously.
+	// The process already exited (we got an error reading stdout), so Wait()
+	// should return almost immediately. We call it here because ProcessState
+	// is only populated after Wait() completes, and cleanupProcess() hasn't
+	// run yet at this point.
 	exitCode := -1
 	processState := "unavailable"
 	s.cmdMu.Lock()
 	cmd := s.cmd
 	s.cmdMu.Unlock()
-	if cmd != nil && cmd.ProcessState != nil {
-		exitCode = cmd.ProcessState.ExitCode()
-		processState = cmd.ProcessState.String() // e.g. "signal: killed" or "exit status 1"
+	if cmd != nil {
+		// Claim ownership of Wait() immediately so cleanupProcess doesn't
+		// spawn a concurrent Wait() on the same cmd.
+		s.exitInfoMu.Lock()
+		s.exitWaitCalled = true
+		s.exitInfoMu.Unlock()
+
+		waitDone := make(chan struct{})
+		go func() {
+			_ = cmd.Wait()
+			close(waitDone)
+		}()
+		// Wait briefly — the process already exited so this should be near-instant.
+		select {
+		case <-waitDone:
+			// Only read ProcessState after Wait() has completed to avoid a data race.
+			if cmd.ProcessState != nil {
+				exitCode = cmd.ProcessState.ExitCode()
+				processState = cmd.ProcessState.String()
+			}
+			s.exitInfoMu.Lock()
+			s.exitExitCode = exitCode
+			s.exitProcessState = processState
+			s.exitInfoMu.Unlock()
+		case <-time.After(processQuickExitTime):
+			// Timeout — the background goroutine will eventually reap the process.
+			// Default -1/"unavailable" will be used for telemetry.
+		}
 	}
 
 	// Get stderr output safely
@@ -1566,100 +1599,121 @@ func (s *FFmpegStream) cleanupProcess() {
 			logger.String("operation", "cleanup_process_kill_success"))
 	}
 
-	// Create a channel to signal when Wait() completes
-	waitDone := make(chan error, 1)
+	// Check if Wait() was already called (e.g. by handleQuickExitError)
+	s.exitInfoMu.Lock()
+	alreadyWaited := s.exitWaitCalled
+	s.exitInfoMu.Unlock()
 
-	// Always call Wait() to reap the zombie - this is critical!
-	// We do this in a goroutine that we may abandon if it takes too long,
-	// but the goroutine will continue and eventually reap the process
-	// cmd is already captured at the beginning of this function
-	url := s.source.SafeString
-	waitStartTime := time.Now()
-
-	if conf.Setting().Debug {
-		getStreamLogger().Debug("spawning wait goroutine for process reaping",
-			logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
-			logger.Int("pid", pid),
-			logger.String("operation", "cleanup_process_wait_start"))
-	}
-
-	go func() {
-		waitErr := cmd.Wait()
-		waitDuration := time.Since(waitStartTime)
-
-		// Log completion even if we've already moved on
-		if conf.Setting().Debug {
-			if waitErr != nil && !strings.Contains(waitErr.Error(), "signal: killed") && !strings.Contains(waitErr.Error(), "signal: terminated") {
-				getStreamLogger().Debug("process wait completed with error",
-					logger.String("url", privacy.SanitizeStreamUrl(url)),
-					logger.Error(waitErr),
-					logger.Int("pid", pid),
-					logger.Int64("wait_duration_ms", waitDuration.Milliseconds()),
-					logger.String("operation", "cleanup_process_wait_error"))
-			} else {
-				getStreamLogger().Debug("process wait completed successfully",
-					logger.String("url", privacy.SanitizeStreamUrl(url)),
-					logger.Int("pid", pid),
-					logger.Int64("wait_duration_ms", waitDuration.Milliseconds()),
-					logger.String("operation", "cleanup_process_wait_success"))
-			}
-		}
-
-		// Non-blocking send of the wait result.
-		// If the buffer slot has already been consumed (or we timed out and moved on),
-		// skip sending to avoid blocking; the goroutine will exit regardless.
-		select {
-		case waitDone <- waitErr:
-		default:
-			// Channel buffer full or already consumed - we timed out
-			if conf.Setting().Debug {
-				getStreamLogger().Debug("wait result not sent - cleanup already timed out",
-					logger.String("url", privacy.SanitizeStreamUrl(url)),
-					logger.Int("pid", pid),
-					logger.String("operation", "cleanup_process_wait_abandoned"))
-			}
-		}
-	}()
-
-	// Wait for process cleanup with timeout
-	select {
-	case err := <-waitDone:
-		// Process was successfully reaped
-		if err != nil && !strings.Contains(err.Error(), "signal: killed") && !strings.Contains(err.Error(), "signal: terminated") {
-			getStreamLogger().Warn("FFmpeg process wait error",
-				logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
-				logger.Error(err),
-				logger.Int("pid", pid),
-				logger.String("component", "ffmpeg-stream"),
-				logger.String("operation", "process_wait"))
-		}
+	if alreadyWaited {
+		// Process was already reaped by handleQuickExitError — no need to Wait again
 		getStreamLogger().Info("FFmpeg process stopped",
 			logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
 			logger.Int("pid", pid),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "cleanup_process"))
+	} else {
+		// Create a channel to signal when Wait() completes
+		waitDone := make(chan error, 1)
 
-	case <-time.After(processCleanupTimeout):
-		// Timeout occurred, but the goroutine will continue and eventually reap the process
-		getStreamLogger().Warn("FFmpeg process cleanup timeout - process will be reaped asynchronously",
-			logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
-			logger.Int("pid", pid),
-			logger.Float64("timeout_seconds", processCleanupTimeout.Seconds()),
-			logger.String("component", "ffmpeg-stream"),
-			logger.String("operation", "cleanup_process_timeout"))
-
-		// Important: We do NOT return here - we continue to clean up our state
-		// The goroutine will eventually call Wait() and reap the zombie
-		// This is a simple and correct approach - we ensure Wait() is always called
-		// even if it takes longer than expected
+		// Always call Wait() to reap the zombie - this is critical!
+		// We do this in a goroutine that we may abandon if it takes too long,
+		// but the goroutine will continue and eventually reap the process
+		// cmd is already captured at the beginning of this function
+		url := s.source.SafeString
+		waitStartTime := time.Now()
 
 		if conf.Setting().Debug {
-			getStreamLogger().Debug("cleanup timeout - wait goroutine still running",
+			getStreamLogger().Debug("spawning wait goroutine for process reaping",
 				logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
 				logger.Int("pid", pid),
-				logger.String("operation", "cleanup_process_timeout_detail"))
+				logger.String("operation", "cleanup_process_wait_start"))
+		}
+
+		go func() {
+			waitErr := cmd.Wait()
+			waitDuration := time.Since(waitStartTime)
+
+			// Log completion even if we've already moved on
+			if conf.Setting().Debug {
+				if waitErr != nil && !strings.Contains(waitErr.Error(), "signal: killed") && !strings.Contains(waitErr.Error(), "signal: terminated") {
+					getStreamLogger().Debug("process wait completed with error",
+						logger.String("url", privacy.SanitizeStreamUrl(url)),
+						logger.Error(waitErr),
+						logger.Int("pid", pid),
+						logger.Int64("wait_duration_ms", waitDuration.Milliseconds()),
+						logger.String("operation", "cleanup_process_wait_error"))
+				} else {
+					getStreamLogger().Debug("process wait completed successfully",
+						logger.String("url", privacy.SanitizeStreamUrl(url)),
+						logger.Int("pid", pid),
+						logger.Int64("wait_duration_ms", waitDuration.Milliseconds()),
+						logger.String("operation", "cleanup_process_wait_success"))
+				}
+			}
+
+			// Non-blocking send of the wait result.
+			// If the buffer slot has already been consumed (or we timed out and moved on),
+			// skip sending to avoid blocking; the goroutine will exit regardless.
+			select {
+			case waitDone <- waitErr:
+			default:
+				// Channel buffer full or already consumed - we timed out
+				if conf.Setting().Debug {
+					getStreamLogger().Debug("wait result not sent - cleanup already timed out",
+						logger.String("url", privacy.SanitizeStreamUrl(url)),
+						logger.Int("pid", pid),
+						logger.String("operation", "cleanup_process_wait_abandoned"))
+				}
+			}
+		}()
+
+		// Wait for process cleanup with timeout
+		select {
+		case err := <-waitDone:
+			// Process was successfully reaped
+			if err != nil && !strings.Contains(err.Error(), "signal: killed") && !strings.Contains(err.Error(), "signal: terminated") {
+				getStreamLogger().Warn("FFmpeg process wait error",
+					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+					logger.Error(err),
+					logger.Int("pid", pid),
+					logger.String("component", "ffmpeg-stream"),
+					logger.String("operation", "process_wait"))
+			}
+			getStreamLogger().Info("FFmpeg process stopped",
+				logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+				logger.Int("pid", pid),
+				logger.String("component", "ffmpeg-stream"),
+				logger.String("operation", "cleanup_process"))
+
+		case <-time.After(processCleanupTimeout):
+			// Timeout occurred, but the goroutine will continue and eventually reap the process
+			getStreamLogger().Warn("FFmpeg process cleanup timeout - process will be reaped asynchronously",
+				logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+				logger.Int("pid", pid),
+				logger.Float64("timeout_seconds", processCleanupTimeout.Seconds()),
+				logger.String("component", "ffmpeg-stream"),
+				logger.String("operation", "cleanup_process_timeout"))
+
+			// Important: We do NOT return here - we continue to clean up our state
+			// The goroutine will eventually call Wait() and reap the zombie
+			// This is a simple and correct approach - we ensure Wait() is always called
+			// even if it takes longer than expected
+
+			if conf.Setting().Debug {
+				getStreamLogger().Debug("cleanup timeout - wait goroutine still running",
+					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
+					logger.Int("pid", pid),
+					logger.String("operation", "cleanup_process_timeout_detail"))
+			}
 		}
 	}
+
+	// Reset exit info for the next process lifecycle
+	s.exitInfoMu.Lock()
+	s.exitWaitCalled = false
+	s.exitExitCode = -1
+	s.exitProcessState = ""
+	s.exitInfoMu.Unlock()
 
 	// Command reference already cleared at the beginning of cleanup
 
