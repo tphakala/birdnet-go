@@ -22,13 +22,22 @@ const osWindows = "windows"
 // =============================================================================
 
 // createTestScript creates a temporary executable shell script with the given content.
-// Uses t.TempDir() for automatic cleanup and os.WriteFile for atomic write,
-// which avoids ETXTBSY ("text file busy") races on CI where Close() and exec
-// can overlap at the kernel level.
+// Uses t.TempDir() for automatic cleanup. Explicitly syncs the file to disk before
+// closing to prevent ETXTBSY ("text file busy") races where the kernel still holds
+// a write reference when exec is called immediately after.
 func createTestScript(t *testing.T, name, content string) string {
 	t.Helper()
 	scriptPath := filepath.Join(t.TempDir(), name)
-	require.NoError(t, os.WriteFile(scriptPath, []byte(content), 0o755)) //nolint:gosec // executable permission needed for test
+
+	f, err := os.OpenFile(scriptPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec // executable permission needed for test
+	require.NoError(t, err)
+
+	_, err = f.WriteString(content)
+	require.NoError(t, err)
+
+	require.NoError(t, f.Sync())
+	require.NoError(t, f.Close())
+
 	return scriptPath
 }
 
