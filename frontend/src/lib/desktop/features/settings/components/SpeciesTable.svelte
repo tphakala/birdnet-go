@@ -237,7 +237,7 @@
                 </div>
               </th>
             {/each}
-            <th class="text-right py-2 px-3 text-xs font-medium text-muted w-36">
+            <th class="text-right py-2 px-3 text-xs font-medium text-muted w-48">
               {t('settings.species.activeSpecies.columns.status')}
             </th>
           </tr>
@@ -265,17 +265,17 @@
                 </div>
               </td>
               <td class="py-2 px-3">
-                <div class="flex items-center gap-1.5 justify-end">
+                <div class="flex items-center gap-1.5 justify-end flex-nowrap">
                   {#if item.isManuallyIncluded}
                     <span
-                      class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
                     >
                       + {t('settings.species.activeSpecies.badges.included')}
                     </span>
                   {/if}
                   {#if item.hasCustomConfig}
                     <span
-                      class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-500/15 text-teal-600 dark:text-teal-400"
+                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium bg-teal-500/15 text-teal-600 dark:text-teal-400"
                     >
                       &#9733; {t('settings.species.activeSpecies.badges.configured')}
                     </span>

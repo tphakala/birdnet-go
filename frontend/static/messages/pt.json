@@ -198,7 +198,12 @@
     },
     "errors": {
       "unknownError": "Erro desconhecido"
-    }
+    },
+    "toggle": "Alternar",
+    "image": "Imagem",
+    "actionsColumn": "Ações",
+    "closeModal": "Fechar diálogo",
+    "hoursShort": "h"
   },
   "navigation": {
     "dashboard": "Painel",
@@ -2843,6 +2848,7 @@
       }
     },
     "species": {
+      "pageLabel": "Configurações de espécies",
       "saveError": "Falha ao guardar a configuração de \"{species}\". Tente novamente.",
       "configUpdated": "Configuração de \"{species}\" atualizada",
       "configAdded": "Configuração de \"{species}\" adicionada",
@@ -2987,13 +2993,17 @@
             "time": "Hora",
             "source": "Fonte",
             "clearParameters": "Limpar parâmetros"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Também executar ações padrão (armazenamento em banco de dados, notificações, etc.)",
           "helpText": "Quando ativado, tanto sua ação personalizada quanto as ações padrão do sistema serão executadas. Quando desativado, apenas sua ação personalizada será executada."
         }
       },
+      "add": "Adicionar",
+      "remove": "Remover",
       "addSpeciesToInclude": "Adicionar espécies para incluir",
       "addSpeciesToIncludeLabel": "Adicionar novas espécies para incluir",
       "addSpeciesToExclude": "Adicionar espécies para excluir",
@@ -3136,7 +3146,8 @@
         "resetAllError": "Falha ao redefinir limiares",
         "expand": "Mostrar histórico de eventos",
         "collapse": "Ocultar histórico de eventos"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "security": {
       "pageLabel": "Configurações de segurança",

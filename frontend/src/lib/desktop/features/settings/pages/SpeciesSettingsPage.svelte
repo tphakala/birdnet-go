@@ -208,9 +208,11 @@
 
   // Search/filter/expand state is now handled inside SpeciesTable component
 
-  // PERFORMANCE OPTIMIZATION: Derived species lists
+  // Lookup map: commonName (lowercase) → scientificName, built from species API
+  let speciesScientificNameMap = $state(new Map<string, string>());
+
+  // PERFORMANCE OPTIMIZATION: Derived species list
   let allSpecies = $derived(speciesListState.data);
-  let filteredSpecies = $derived([...allSpecies]);
 
   // Species predictions state
   let includePredictions = $state<string[]>([]);
@@ -455,38 +457,31 @@
 
     try {
       interface SpeciesListResponse {
-        species?: Array<{ commonName?: string; label: string }>;
+        species?: Array<{ commonName?: string; scientificName?: string; label: string }>;
       }
       const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
-      speciesListState.data =
-        data.species?.map((s: { commonName?: string; label: string }) => s.commonName || s.label) ||
-        [];
+      const speciesList = data.species ?? [];
+      speciesListState.data = speciesList.map(s => s.commonName || s.label);
+
+      // Build lookup map: commonName (lowercase) → scientificName
+      const map = new Map<string, string>();
+      for (const s of speciesList) {
+        const name = s.commonName || s.label;
+        if (s.scientificName) {
+          map.set(name.toLowerCase(), s.scientificName);
+        }
+      }
+      speciesScientificNameMap = map;
     } catch (error) {
       logger.error('Failed to load species data:', error);
       // Provide specific error messages based on status code
       if (error instanceof ApiError) {
-        switch (error.status) {
-          case 404:
-            speciesListState.error = 'Species data not found';
-            break;
-          case 500:
-          case 502:
-          case 503:
-            speciesListState.error = 'Server error occurred while loading species data';
-            break;
-          case 401:
-            speciesListState.error = 'Unauthorized access to species data';
-            break;
-          case 403:
-            speciesListState.error = 'Access to species data is forbidden';
-            break;
-          default:
-            speciesListState.error = t('settings.species.errors.speciesLoadFailed');
-        }
+        speciesListState.error = t('settings.species.errors.speciesLoadFailed');
       } else {
         speciesListState.error = t('settings.species.errors.speciesLoadFailed');
       }
       speciesListState.data = [];
+      speciesScientificNameMap = new Map();
     } finally {
       speciesListState.loading = false;
     }
@@ -715,7 +710,7 @@
 
       const inputLower = input.toLowerCase();
       const excludeSet = new Set(settings.exclude.map(s => s.toLowerCase())); // Use Set with lowercase for case-insensitive comparison
-      excludePredictions = filteredSpecies
+      excludePredictions = allSpecies
         .filter(
           species =>
             species.toLowerCase().includes(inputLower) && !excludeSet.has(species.toLowerCase())
@@ -1126,6 +1121,7 @@
     species={settings.include}
     icon={CirclePlus}
     iconColorClass="emerald"
+    scientificNameMap={speciesScientificNameMap}
     predictions={includePredictions}
     bind:inputValue={includeInputValue}
     inputLabel={t('settings.species.addSpeciesToIncludeLabel')}
@@ -1145,6 +1141,7 @@
     species={settings.exclude}
     icon={CircleMinus}
     iconColorClass="red"
+    scientificNameMap={speciesScientificNameMap}
     predictions={excludePredictions}
     bind:inputValue={excludeInputValue}
     inputLabel={t('settings.species.addSpeciesToExcludeLabel')}
@@ -1269,6 +1266,7 @@
             <!-- Buttons -->
             <div class="col-span-2 flex gap-1">
               <button
+                type="button"
                 class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 data-testid="save-config-button"
                 onclick={saveConfig}
@@ -1290,6 +1288,7 @@
                 {/if}
               </button>
               <button
+                type="button"
                 class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={cancelEdit}
                 disabled={store.isSaving}
@@ -1348,16 +1347,23 @@
                 <label class="flex flex-col gap-1 py-1" for="action-parameters">
                   <span class="text-xs font-medium text-muted flex items-center gap-1">
                     {t('settings.species.actionsModal.parameters.label')}
-                    <span class="text-muted" title="Use buttons below or type directly"> ⓘ </span>
+                    <span
+                      class="text-muted"
+                      role="img"
+                      aria-label={t('settings.species.actionsModal.parameters.tooltip')}
+                      title={t('settings.species.actionsModal.parameters.tooltip')}
+                    >
+                      ⓘ
+                    </span>
                   </span>
                 </label>
                 <input
                   id="action-parameters"
                   type="text"
                   bind:value={actionParameters}
-                  placeholder="Click buttons below to add parameters or type manually"
+                  placeholder={t('settings.species.actionsModal.parameters.placeholder')}
                   class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-200)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                  title="Add parameters using the buttons below or type directly (comma-separated)"
+                  title={t('settings.species.actionsModal.parameters.tooltip')}
                 />
                 <span class="text-xs text-muted mt-1 block"
                   >{t('settings.species.actionsModal.parameters.helpText')}</span
@@ -1440,21 +1446,19 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-[var(--border-100)]">
-                <th
-                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted"
+                <th class="text-left py-2 px-3 text-xs font-medium text-muted"
                   >{t('settings.species.customConfiguration.columnHeaders.species')}</th
                 >
-                <th
-                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted w-48"
+                <th class="text-left py-2 px-3 text-xs font-medium text-muted">
+                  {t('settings.species.activeSpecies.columns.scientificName')}
+                </th>
+                <th class="text-left py-2 px-3 text-xs font-medium text-muted w-48"
                   >{t('settings.species.customConfiguration.list.threshold')}</th
                 >
-                <th
-                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted"
+                <th class="text-left py-2 px-3 text-xs font-medium text-muted"
                   >{t('settings.species.customConfiguration.list.interval')}</th
                 >
-                <th
-                  class="text-right py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted w-24"
-                ></th>
+                <th class="w-24"></th>
               </tr>
             </thead>
             <tbody>
@@ -1471,6 +1475,11 @@
                         {t('settings.species.customConfiguration.list.actionBadge')}
                       </span>
                     {/if}
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <span class="text-xs text-muted italic"
+                      >{speciesScientificNameMap.get(species.toLowerCase()) ?? ''}</span
+                    >
                   </td>
                   <td class="py-2.5 px-3">
                     <div class="flex items-center gap-2">
@@ -1497,6 +1506,7 @@
                   <td class="py-2.5 px-3 text-right">
                     <div class="flex items-center justify-end gap-1">
                       <button
+                        type="button"
                         class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         onclick={() => startEdit(species)}
                         title={t('settings.species.customConfiguration.list.editTitle')}
@@ -1506,13 +1516,14 @@
                         <SquarePen class="size-4" />
                       </button>
                       <button
-                        class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-300)] text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        type="button"
+                        class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-red-500/10 text-muted hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
                         onclick={() => removeConfig(species)}
                         title={t('settings.species.customConfiguration.list.removeTitle')}
                         aria-label={t('settings.species.customConfiguration.list.removeTitle')}
                         disabled={store.isLoading || store.isSaving}
                       >
-                        <Trash2 class="size-4" />
+                        <Trash2 class="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </td>
@@ -1582,11 +1593,11 @@
                     TRACKING_DEFAULTS.newSpeciesWindowDays,
                     v => updateTrackingSettings({ newSpeciesWindowDays: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                  class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
@@ -1615,11 +1626,11 @@
                     TRACKING_DEFAULTS.syncIntervalMinutes,
                     v => updateTrackingSettings({ syncIntervalMinutes: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                  class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.min')}</span
                 >
               </div>
@@ -1648,11 +1659,11 @@
                     TRACKING_DEFAULTS.notificationSuppressionHours,
                     v => updateTrackingSettings({ notificationSuppressionHours: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                  class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.hours')}</span
                 >
               </div>
@@ -1726,7 +1737,7 @@
                     TRACKING_DEFAULTS.yearlyTracking.resetDay,
                     v => updateTrackingSettings({ yearlyTracking: { resetDay: v } })
                   )}
-                  class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <p class="text-xs text-muted mt-1">
@@ -1754,11 +1765,11 @@
                       TRACKING_DEFAULTS.yearlyTracking.windowDays,
                       v => updateTrackingSettings({ yearlyTracking: { windowDays: v } })
                     )}
-                    class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving}
                   />
                   <span
-                    class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                    class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                     >{t('settings.species.tracking.units.days')}</span
                   >
                 </div>
@@ -1808,11 +1819,11 @@
                     TRACKING_DEFAULTS.seasonalTracking.windowDays,
                     v => updateTrackingSettings({ seasonalTracking: { windowDays: v } })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-9 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
+                  class="inline-flex items-center justify-center h-9 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
@@ -1874,7 +1885,7 @@
                             seasonDefaults.startDay,
                             v => updateSeasonDate(seasonKey, 'startDay', v)
                           )}
-                          class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                          class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={store.isLoading || store.isSaving}
                         />
                       </div>
@@ -1899,6 +1910,6 @@
   <DynamicThresholdTab />
 {/snippet}
 
-<main class="settings-page-content" aria-label="Species settings configuration">
+<main class="settings-page-content" aria-label={t('settings.species.pageLabel')}>
   <SettingsTabs {tabs} bind:activeTab />
 </main>

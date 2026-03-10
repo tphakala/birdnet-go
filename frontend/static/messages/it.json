@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Errore sconosciuto"
-    }
+    },
+    "toggle": "Attiva/Disattiva",
+    "image": "Immagine",
+    "actionsColumn": "Azioni",
+    "closeModal": "Chiudi finestra",
+    "hoursShort": "h"
   },
   "pageTitle": {
     "settings": "Impostazioni - BirdNET-Go",
@@ -2785,6 +2790,7 @@
       }
     },
     "species": {
+      "pageLabel": "Impostazioni specie",
       "saveError": "Salvataggio della configurazione per \"{species}\" non riuscito. Riprova.",
       "configUpdated": "Configurazione di \"{species}\" aggiornata",
       "configAdded": "Configurazione di \"{species}\" aggiunta",
@@ -2929,13 +2935,17 @@
             "time": "Ora",
             "source": "Sorgente",
             "clearParameters": "Pulisci Parametri"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Esegui anche azioni predefinite (archiviazione database, notifiche, ecc.)",
           "helpText": "Quando abilitato, sia la tua azione personalizzata che le azioni predefinite del sistema verranno eseguite. Quando disabilitato, solo la tua azione personalizzata verrà eseguita."
         }
       },
+      "add": "Aggiungi",
+      "remove": "Rimuovi",
       "addSpeciesToInclude": "Aggiungi specie da includere",
       "addSpeciesToIncludeLabel": "Aggiungi Nuova Specie da Includere",
       "addSpeciesToExclude": "Aggiungi specie da escludere",
@@ -3078,7 +3088,8 @@
         "resetAllError": "Impossibile resettare soglie",
         "expand": "Mostra cronologia eventi",
         "collapse": "Nascondi cronologia eventi"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "database": {
       "sqlitePlaceholder": "Inserisci percorso database SQLite",

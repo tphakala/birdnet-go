@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Vyskytla sa neznáma chyba"
-    }
+    },
+    "toggle": "Prepnúť",
+    "image": "Obrázok",
+    "actionsColumn": "Akcie",
+    "closeModal": "Zatvoriť dialóg",
+    "hoursShort": "h"
   },
   "pageTitle": {
     "settings": "Nastavenia - BirdNET-Go",
@@ -2819,6 +2824,7 @@
       }
     },
     "species": {
+      "pageLabel": "Nastavenia druhov",
       "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
       "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
       "configAdded": "Konfigurácia pre \"{species}\" pridaná",
@@ -2963,13 +2969,17 @@
             "time": "Time",
             "source": "Source",
             "clearParameters": "Vymazať parametre"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Spustiť aj predvolené akcie (uloženie do databázy, upozornenia atď.)",
           "helpText": "Keď je povolené, spustí sa vaša vlastná akcia aj predvolené systémové akcie. Keď je zakázané, vykoná sa iba vaša vlastná akcia."
         }
       },
+      "add": "Pridať",
+      "remove": "Odstrániť",
       "addSpeciesToInclude": "Pridať druh na zahrnutie",
       "addSpeciesToIncludeLabel": "Pridať nový druh na zahrnutie",
       "addSpeciesToExclude": "Pridať druh na vylúčenie",
@@ -3112,7 +3122,8 @@
         "resetAllError": "Nepodarilo sa resetovať prahy",
         "expand": "Zobraziť históriu udalostí",
         "collapse": "Skryť históriu udalostí"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "database": {
       "sqlitePlaceholder": "Zadajte cestu k databáze SQLite",

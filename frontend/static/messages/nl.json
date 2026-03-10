@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Onbekende fout opgetreden"
-    }
+    },
+    "toggle": "Schakelen",
+    "image": "Afbeelding",
+    "actionsColumn": "Acties",
+    "closeModal": "Dialoogvenster sluiten",
+    "hoursShort": "u"
   },
   "pageTitle": {
     "settings": "Instellingen - BirdNET-Go",
@@ -2982,6 +2987,7 @@
       }
     },
     "species": {
+      "pageLabel": "Soortinstellingen",
       "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
       "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
       "configAdded": "Configuratie voor \"{species}\" toegevoegd",
@@ -3126,13 +3132,17 @@
             "time": "Time",
             "source": "Source",
             "clearParameters": "Wis Parameters"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Voer ook standaard acties uit (database opslag, meldingen, etc.)",
           "helpText": "Wanneer ingeschakeld, worden zowel uw aangepaste actie als de standaard acties van het systeem uitgevoerd. Wanneer uitgeschakeld, wordt alleen uw aangepaste actie uitgevoerd."
         }
       },
+      "add": "Toevoegen",
+      "remove": "Verwijderen",
       "addSpeciesToInclude": "Voeg soorten toe om op te nemen",
       "addSpeciesToIncludeLabel": "Voeg Nieuwe Soorten toe om Op te Nemen",
       "addSpeciesToExclude": "Voeg soorten toe om uit te sluiten",
@@ -3275,7 +3285,8 @@
         "resetAllError": "Resetten van drempels mislukt",
         "expand": "Gebeurtenisgeschiedenis tonen",
         "collapse": "Gebeurtenisgeschiedenis verbergen"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "database": {
       "sqlitePlaceholder": "Voer SQLite database pad in",

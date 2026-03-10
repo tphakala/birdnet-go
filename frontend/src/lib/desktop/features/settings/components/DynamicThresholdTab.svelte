@@ -27,6 +27,7 @@
     TrendingDown,
     Gauge,
   } from '@lucide/svelte';
+  import { SvelteMap, SvelteSet } from 'svelte/reactivity';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import { loggers } from '$lib/utils/logger';
@@ -49,17 +50,17 @@
   import type { ThresholdChangeReason } from '$lib/types/dynamic-threshold';
 
   // Sort types
-  type SortColumn = 'species' | 'threshold' | 'expires';
+  type SortColumn = 'species' | 'scientificName' | 'threshold' | 'expires';
   type SortDirection = 'asc' | 'desc';
 
   // State
   let thresholds = $state<DynamicThreshold[]>([]);
   let stats = $state<ThresholdStats | null>(null);
-  let loading = $state(true);
+  let loading = $state(false);
   let searchQuery = $state('');
-  let expandedSpecies = $state<Set<string>>(new Set());
-  let speciesEvents = $state<Map<string, ThresholdEvent[]>>(new Map());
-  let loadingEvents = $state<Set<string>>(new Set());
+  let expandedSpecies = new SvelteSet<string>();
+  let speciesEvents = new SvelteMap<string, ThresholdEvent[]>();
+  let loadingEvents = new SvelteSet<string>();
   let resetConfirmSpecies = $state<string | null>(null);
   let resetAllConfirm = $state(false);
   let resetting = $state(false);
@@ -81,7 +82,13 @@
   // Derived state - filter and sort by selected column
   let filteredThresholds = $derived.by(() => {
     const filtered = searchQuery
-      ? thresholds.filter(t => t.speciesName.toLowerCase().includes(searchQuery.toLowerCase()))
+      ? thresholds.filter(th => {
+          const q = searchQuery.toLowerCase();
+          return (
+            th.speciesName.toLowerCase().includes(q) ||
+            (th.scientificName && th.scientificName.toLowerCase().includes(q))
+          );
+        })
       : thresholds;
 
     return [...filtered].sort((a, b) => {
@@ -90,6 +97,9 @@
       switch (sortColumn) {
         case 'species':
           comparison = a.speciesName.localeCompare(b.speciesName);
+          break;
+        case 'scientificName':
+          comparison = (a.scientificName ?? '').localeCompare(b.scientificName ?? '');
           break;
         case 'threshold':
           comparison = a.currentValue - b.currentValue;
@@ -117,6 +127,7 @@
   });
 
   async function loadData() {
+    if (loading) return;
     loading = true;
     try {
       const [thresholdResponse, statsResponse] = await Promise.all([
@@ -137,26 +148,26 @@
   }
 
   async function loadEvents(species: string) {
-    if (speciesEvents.has(species)) return;
+    if (speciesEvents.has(species) || loadingEvents.has(species)) return;
 
-    loadingEvents = new Set([...loadingEvents, species]);
+    loadingEvents.add(species);
     try {
       const response = await api.get<{ data: ThresholdEvent[] }>(
         `/api/v2/dynamic-thresholds/${encodeURIComponent(species)}/events?limit=10`
       );
-      speciesEvents = new Map([...speciesEvents, [species, response.data || []]]);
+      speciesEvents.set(species, response.data || []);
     } catch (error) {
       logger.error('Failed to load events:', error);
     } finally {
-      loadingEvents = new Set([...loadingEvents].filter(s => s !== species));
+      loadingEvents.delete(species);
     }
   }
 
   function toggleExpanded(species: string) {
     if (expandedSpecies.has(species)) {
-      expandedSpecies = new Set([...expandedSpecies].filter(s => s !== species));
+      expandedSpecies.delete(species);
     } else {
-      expandedSpecies = new Set([...expandedSpecies, species]);
+      expandedSpecies.add(species);
       loadEvents(species);
     }
   }
@@ -167,6 +178,8 @@
       await api.delete(`/api/v2/dynamic-thresholds/${encodeURIComponent(species)}`);
       toastActions.success(t('settings.species.dynamicThreshold.resetSuccess', { species }));
       resetConfirmSpecies = null;
+      expandedSpecies.delete(species);
+      speciesEvents.delete(species);
       await loadData();
     } catch (error) {
       logger.error('Failed to reset threshold:', error);
@@ -186,6 +199,8 @@
         t('settings.species.dynamicThreshold.resetAllSuccess', { count: response.count })
       );
       resetAllConfirm = false;
+      expandedSpecies.clear();
+      speciesEvents.clear();
       await loadData();
     } catch (error) {
       logger.error('Failed to reset all thresholds:', error);
@@ -277,53 +292,75 @@
             >{t('settings.species.dynamicThreshold.stats.validityPeriod')}</span
           >
         </div>
-        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">{stats.validHours}h</span>
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+          >{stats.validHours}{t('common.hoursShort')}</span
+        >
       </div>
     </div>
   {/if}
 
-  <!-- Action Bar -->
-  <div class="flex flex-wrap items-center gap-3">
-    <div class="relative flex-1 min-w-48">
-      <Search
-        class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted"
-        aria-hidden="true"
-      />
-      <input
-        type="text"
-        placeholder={t('settings.species.dynamicThreshold.searchPlaceholder')}
-        class="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
-        bind:value={searchQuery}
-        autocomplete="off"
-        data-1p-ignore
-        data-lpignore="true"
-        data-form-type="other"
-      />
-    </div>
-
-    <button
-      class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05] text-muted disabled:opacity-50 disabled:cursor-not-allowed"
-      onclick={() => loadData()}
-      disabled={loading}
-    >
-      <RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
-      {t('common.refresh')}
-    </button>
-
-    {#if activeThresholds.length > 0}
-      <button
-        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={() => (resetAllConfirm = true)}
-        disabled={resetting}
-      >
-        <Trash2 class="size-3.5" />
-        {t('settings.species.dynamicThreshold.resetAll')}
-      </button>
-    {/if}
-  </div>
-
   <!-- Threshold List -->
   <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-100)]">
+      <div class="flex items-center gap-2">
+        <div class="p-1.5 rounded-lg bg-violet-500/10">
+          <Activity class="w-4 h-4 text-violet-500" />
+        </div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+          {t('settings.species.dynamicThreshold.header.species')}
+        </h3>
+        <span
+          class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
+        >
+          {thresholds.length}
+        </span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        {#if thresholds.length > 8}
+          <div class="relative">
+            <Search
+              class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted"
+              aria-hidden="true"
+            />
+            <input
+              type="text"
+              placeholder={t('settings.species.dynamicThreshold.searchPlaceholder')}
+              aria-label={t('settings.species.dynamicThreshold.searchPlaceholder')}
+              class="w-48 pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              bind:value={searchQuery}
+              autocomplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
+            />
+          </div>
+        {/if}
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05] text-muted disabled:opacity-50 disabled:cursor-not-allowed"
+          onclick={() => loadData()}
+          disabled={loading}
+        >
+          <RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
+          {t('common.refresh')}
+        </button>
+
+        {#if activeThresholds.length > 0}
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            onclick={() => (resetAllConfirm = true)}
+            disabled={resetting}
+          >
+            <Trash2 class="size-3.5" />
+            {t('settings.species.dynamicThreshold.resetAll')}
+          </button>
+        {/if}
+      </div>
+    </div>
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <div
@@ -337,12 +374,12 @@
         <p class="text-xs mt-1">{t('settings.species.dynamicThreshold.empty.description')}</p>
       </div>
     {:else}
-      <div class="overflow-x-auto overflow-y-auto max-h-[32rem]">
+      <div class="overflow-y-auto max-h-[28rem]">
         <table class="w-full text-sm">
           <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
             <tr class="border-b border-[var(--border-100)]">
-              <th class="w-8 py-2 px-2"></th>
-              <th class="w-10 py-2 px-1"></th>
+              <th class="w-8 py-2 px-2"><span class="sr-only">{t('common.toggle')}</span></th>
+              <th class="w-10 py-2 px-1"><span class="sr-only">{t('common.image')}</span></th>
               <th
                 class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
                 role="columnheader"
@@ -361,8 +398,38 @@
                 }}
               >
                 <div class="flex items-center gap-1">
-                  {t('settings.species.dynamicThreshold.header.species')}
+                  {t('settings.species.activeSpecies.columns.commonName')}
                   {#if sortColumn === 'species'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="w-3 h-3" />
+                    {:else}
+                      <ChevronDown class="w-3 h-3" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
+                  {/if}
+                </div>
+              </th>
+              <th
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                role="columnheader"
+                tabindex="0"
+                aria-sort={sortColumn === 'scientificName'
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'}
+                onclick={() => handleSort('scientificName')}
+                onkeydown={(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('scientificName');
+                  }
+                }}
+              >
+                <div class="flex items-center gap-1">
+                  {t('settings.species.activeSpecies.columns.scientificName')}
+                  {#if sortColumn === 'scientificName'}
                     {#if sortDirection === 'asc'}
                       <ChevronUp class="w-3 h-3" />
                     {:else}
@@ -433,7 +500,7 @@
                   {/if}
                 </div>
               </th>
-              <th class="w-8 py-2 px-2"></th>
+              <th class="w-12"><span class="sr-only">{t('common.actionsColumn')}</span></th>
             </tr>
           </thead>
           <tbody>
@@ -448,6 +515,7 @@
               >
                 <td class="py-2 px-2">
                   <button
+                    type="button"
                     class="inline-flex items-center justify-center p-1 rounded-md hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => toggleExpanded(threshold.speciesName)}
                     aria-label={isExpanded
@@ -471,7 +539,7 @@
                         src="/api/v2/media/species-image?name={encodeURIComponent(
                           threshold.scientificName
                         )}"
-                        alt={threshold.speciesName}
+                        alt=""
                         class="w-full h-full object-cover"
                         onerror={handleBirdImageError}
                         loading="lazy"
@@ -480,10 +548,15 @@
                   </div>
                 </td>
                 <td class="py-2 px-3">
-                  <span class="font-medium text-sm truncate block">{threshold.speciesName}</span>
+                  <span class="font-medium text-sm">{threshold.speciesName}</span>
+                </td>
+                <td class="py-2 px-3">
+                  <span class="text-xs text-muted italic">{threshold.scientificName ?? ''}</span>
                 </td>
                 <td class="py-2 px-3 text-center">
-                  <span class="badge {levelDisplay.badgeClass}">
+                  <span
+                    class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {levelDisplay.badgeClass}"
+                  >
                     {(threshold.currentValue * 100).toFixed(0)}%
                   </span>
                 </td>
@@ -496,10 +569,11 @@
                     >
                   {/if}
                 </td>
-                <td class="py-2 px-2">
+                <td class="py-2 px-3 w-12 text-right">
                   {#if resetConfirmSpecies === threshold.speciesName}
                     <div class="flex items-center gap-1">
                       <button
+                        type="button"
                         class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
                         onclick={() => resetThreshold(threshold.speciesName)}
                         disabled={resetting}
@@ -507,6 +581,7 @@
                         {t('common.confirm')}
                       </button>
                       <button
+                        type="button"
                         class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md hover:bg-[var(--surface-200)] transition-colors"
                         onclick={() => (resetConfirmSpecies = null)}
                       >
@@ -515,12 +590,13 @@
                     </div>
                   {:else}
                     <button
-                      class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors"
+                      type="button"
+                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-red-500/10 text-muted hover:text-red-500"
                       onclick={() => (resetConfirmSpecies = threshold.speciesName)}
                       title={t('settings.species.dynamicThreshold.resetSpecies')}
                       aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
                     >
-                      <Trash2 class="size-4 text-muted" />
+                      <Trash2 class="w-3.5 h-3.5" />
                     </button>
                   {/if}
                 </td>
@@ -529,7 +605,7 @@
               <!-- Expanded Events Row -->
               {#if isExpanded}
                 <tr>
-                  <td colspan="6" class="px-4 pb-3">
+                  <td colspan="7" class="px-4 pb-3">
                     <div class="ml-8 pl-4 border-l-2 border-[var(--border-100)] mt-1">
                       {#if isLoadingEvents}
                         <div class="flex items-center gap-2 py-2 text-muted">
@@ -547,10 +623,14 @@
                           {#each events as event (event.id)}
                             <div class="flex items-start gap-2 text-xs">
                               <div
-                                class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
-                                class:bg-blue-500={event.changeReason === 'high_confidence'}
-                                class:bg-gray-400={event.changeReason === 'expiry'}
-                                class:bg-orange-500={event.changeReason === 'manual_reset'}
+                                class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 {event.changeReason ===
+                                'high_confidence'
+                                  ? 'bg-blue-500'
+                                  : event.changeReason === 'expiry'
+                                    ? 'bg-gray-400'
+                                    : event.changeReason === 'manual_reset'
+                                      ? 'bg-orange-500'
+                                      : 'bg-slate-400'}"
                               ></div>
                               <div class="flex-1 min-w-0">
                                 <div class="flex items-center gap-2 flex-wrap">
@@ -623,6 +703,7 @@
       </p>
       <div class="flex justify-end gap-2 mt-6">
         <button
+          type="button"
           class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50"
           onclick={() => (resetAllConfirm = false)}
           disabled={resetting}
@@ -630,6 +711,7 @@
           {t('common.cancel')}
         </button>
         <button
+          type="button"
           class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
           onclick={resetAllThresholds}
           disabled={resetting}
@@ -644,9 +726,10 @@
       </div>
     </div>
     <button
+      type="button"
       class="fixed inset-0 -z-10"
       onclick={() => (resetAllConfirm = false)}
-      aria-label="Close modal"
+      aria-label={t('common.closeModal')}
       tabindex="-1"
     ></button>
   </div>
