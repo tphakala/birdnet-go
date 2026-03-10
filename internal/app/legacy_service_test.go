@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -82,19 +83,24 @@ func TestLegacyService_ConcurrentStartStop(t *testing.T) {
 	// a race window between started.Swap(true) and channel initialization
 	// where Stop() could attempt to close a nil quit channel.
 	ctx := t.Context()
+	var wg sync.WaitGroup
 	for range 100 {
 		svc := NewLegacyService("race-test", func(quit <-chan struct{}) error {
 			<-quit
 			return nil
 		})
 
+		wg.Add(2)
 		go func() {
+			defer wg.Done()
 			_ = svc.Start(ctx)
 		}()
 		go func() {
+			defer wg.Done()
 			_ = svc.Stop(ctx)
 		}()
 	}
+	wg.Wait()
 }
 
 func TestLegacyService_StopTimeout(t *testing.T) {
