@@ -49,19 +49,18 @@ func TestTelemetryIntegration(t *testing.T) {
 		defer cleanup()
 
 		// Report messages at different levels
+		// Info-level messages are filtered client-side and should not create events
 		ReportMessage("System initialized", sentry.LevelInfo, "system")
 		ReportMessage("High memory usage", sentry.LevelWarning, "monitor")
 		ReportMessage("Critical error occurred", sentry.LevelError, "core")
 
-		// Wait for all events
-		AssertEventCount(t, config.MockTransport, 3, 500*time.Millisecond)
+		// Only warning and error should be captured (info is filtered)
+		AssertEventCount(t, config.MockTransport, 2, 500*time.Millisecond)
 
-		// Verify levels
 		events := config.MockTransport.GetEvents()
-		require.Len(t, events, 3, "Expected 3 events")
+		require.Len(t, events, 2, "Expected 2 events (info filtered)")
 
 		expectedLevels := []sentry.Level{
-			sentry.LevelInfo,
 			sentry.LevelWarning,
 			sentry.LevelError,
 		}
@@ -152,9 +151,9 @@ func TestTelemetryIntegration(t *testing.T) {
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 
-		// Report multiple events
+		// Report multiple warning-level events (info is filtered)
 		for i := range 5 {
-			ReportMessage(fmt.Sprintf("Event %d", i), sentry.LevelInfo, "test")
+			ReportMessage(fmt.Sprintf("Event %d", i), sentry.LevelWarning, "test")
 		}
 
 		// Flush with timeout

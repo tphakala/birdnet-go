@@ -83,13 +83,14 @@ func TestE2EMessageFlow(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		message   string
-		level     sentry.Level
-		component string
+		message       string
+		level         sentry.Level
+		component     string
+		expectCapture bool // info/debug levels are filtered client-side
 	}{
-		{"System started", sentry.LevelInfo, "system"},
-		{"High memory usage", sentry.LevelWarning, "monitor"},
-		{"Critical failure", sentry.LevelError, "core"},
+		{"System started", sentry.LevelInfo, "system", false},
+		{"High memory usage", sentry.LevelWarning, "monitor", true},
+		{"Critical failure", sentry.LevelError, "core", true},
 	}
 
 	for _, tt := range tests {
@@ -97,6 +98,14 @@ func TestE2EMessageFlow(t *testing.T) {
 			config.MockTransport.Clear()
 
 			CaptureMessage(tt.message, tt.level, tt.component)
+
+			if !tt.expectCapture {
+				// Info/debug messages should be filtered out
+				time.Sleep(50 * time.Millisecond)
+				events := config.MockTransport.GetEvents()
+				assert.Empty(t, events, "info/debug messages should not create Sentry events")
+				return
+			}
 
 			AssertEventCount(t, config.MockTransport, 1, 100*time.Millisecond)
 			AssertEventLevel(t, config.MockTransport, tt.message, tt.level)
