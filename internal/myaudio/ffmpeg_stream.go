@@ -1391,15 +1391,11 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 	// Process sound level if enabled and not disabled due to failed registration
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled && !s.soundLevelDisabled.Load() {
 		if soundLevel, err := ProcessSoundLevelData(s.source.ID, data); err != nil {
-			if errors.Is(err, ErrSoundLevelProcessorNotRegistered) {
-				// Registration failed at some point — disable further attempts
-				// to prevent per-chunk error flooding (issue #2152)
-				s.soundLevelDisabled.Store(true)
-				getStreamLogger().Warn("sound level processor not registered, disabling for this stream",
-					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
-					logger.Error(err),
-					logger.String("operation", "process_sound_level"))
-			} else if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) && conf.Setting().Debug {
+			// Skip ErrSoundLevelProcessorNotRegistered silently — the soundLevelDisabled
+			// flag from StartStream/RestartStream is the primary guard against flooding.
+			// We don't latch here to avoid permanently suppressing sound levels during
+			// transient unregister/re-register windows (e.g. hot-reload).
+			if !errors.Is(err, ErrSoundLevelProcessorNotRegistered) && !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) && conf.Setting().Debug {
 				getStreamLogger().Debug("failed to process sound level data",
 					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
 					logger.Error(err),

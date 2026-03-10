@@ -246,6 +246,18 @@ func (m *FFmpegManager) RestartStream(url string) error {
 	return nil
 }
 
+// ClearSoundLevelDisabled re-enables sound level processing on all active streams.
+// Called after successful processor re-registration (e.g. hot-reload) to ensure
+// streams aren't permanently suppressed after a transient registration failure.
+func (m *FFmpegManager) ClearSoundLevelDisabled() {
+	m.streamsMu.RLock()
+	defer m.streamsMu.RUnlock()
+
+	for _, stream := range m.streams {
+		stream.soundLevelDisabled.Store(false)
+	}
+}
+
 // GetActiveStreams returns a list of active stream URLs
 func (m *FFmpegManager) GetActiveStreams() []string {
 	m.streamsMu.RLock()
