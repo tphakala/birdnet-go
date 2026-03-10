@@ -26,7 +26,7 @@ logging:
     path: logs/birdnet.log # default log file path
     max_size: 100         # maximum size in MB before rotation
     max_age: 30           # maximum age in days to keep old logs
-    max_backups: 10       # maximum number of old log files to keep
+    max_rotated_files: 10 # maximum number of old log files to keep
     compress: true        # compress rotated logs
     level: info           # log level for file output
 
