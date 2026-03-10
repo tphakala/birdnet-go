@@ -485,6 +485,27 @@ func TestBirdImageCache(t *testing.T) {
 	}
 }
 
+// TestBirdImageCacheGetEmptyName verifies that Get rejects empty scientific names.
+func TestBirdImageCacheGetEmptyName(t *testing.T) {
+	t.Parallel()
+	mockProvider := &mockImageProvider{}
+	store := newMockStore()
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	cache, err := imageprovider.CreateDefaultCache(metrics, store)
+	require.NoError(t, err)
+	cache.SetImageProvider(mockProvider)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close())
+	})
+
+	img, err := cache.Get("")
+	require.ErrorIs(t, err, imageprovider.ErrImageNotFound)
+	assert.Empty(t, img.URL)
+	assert.Equal(t, 0, mockProvider.fetchCounter, "should not attempt fetch for empty name")
+}
+
 // TestBirdImageCacheError tests the BirdImageCache error handling
 func TestBirdImageCacheError(t *testing.T) {
 	t.Parallel()
