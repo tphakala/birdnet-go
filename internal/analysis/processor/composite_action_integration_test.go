@@ -232,66 +232,6 @@ func TestCompositeAction_FullPipeline_DatabaseMQTTSSE(t *testing.T) {
 	assert.Equal(t, expectedID, sseNote.ID, "SSE note ID")
 }
 
-// TestCompositeAction_Integration_AudioExportFailedFlag verifies that AudioExportFailed
-// flag is properly propagated from DatabaseAction to SSEAction in a full pipeline.
-func TestCompositeAction_Integration_AudioExportFailedFlag(t *testing.T) {
-	t.Parallel()
-
-	// Setup
-	settings := &conf.Settings{Debug: true}
-	eventTracker := NewEventTracker(testEventTrackerInterval)
-
-	detectionCtx := &DetectionContext{}
-
-	// Track if SSE skipped audio wait
-	var sseSkippedWait bool
-	sseBroadcaster := func(_ *datastore.Note, _ *imageprovider.BirdImage) error {
-		// If we get here quickly, audio wait was skipped
-		sseSkippedWait = true
-		return nil
-	}
-
-	det := testDetection()
-	// Set a clip name that would trigger audio wait
-	det.Result.ClipName = "/nonexistent/clip.wav"
-
-	// Simulate database action that sets AudioExportFailed
-	dbAction := &SimpleAction{
-		name: "Mock Database Action",
-		onExecute: func() {
-			// Simulate database save assigning ID
-			detectionCtx.NoteID.Store(42)
-			// Simulate audio export failure
-			detectionCtx.AudioExportFailed.Store(true)
-		},
-	}
-
-	sseAction := &SSEAction{
-		Settings:       settings,
-		Result:         det.Result,
-		EventTracker:   eventTracker,
-		DetectionCtx:   detectionCtx,
-		SSEBroadcaster: sseBroadcaster,
-	}
-
-	composite := &CompositeAction{
-		Actions:     []Action{dbAction, sseAction},
-		Description: "Test AudioExportFailed propagation",
-	}
-
-	startTime := time.Now()
-	err := composite.Execute(t.Context(), det)
-	duration := time.Since(startTime)
-
-	require.NoError(t, err)
-
-	// Verify audio wait was skipped (should be fast, not 5+ seconds)
-	assert.Less(t, duration, 500*time.Millisecond,
-		"SSE should skip audio wait when AudioExportFailed is set")
-
-	assert.True(t, sseSkippedWait, "SSE broadcaster should have been called")
-}
-
 // TestCompositeAction_SequentialExecution verifies that actions execute
 // in order, not concurrently.
 func TestCompositeAction_SequentialExecution(t *testing.T) {

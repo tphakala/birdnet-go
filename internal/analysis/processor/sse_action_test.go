@@ -3,7 +3,6 @@
 // These tests verify that SSEAction correctly:
 // - Reads detection ID from DetectionContext
 // - Broadcasts detection data via SSEBroadcaster
-// - Handles AudioExportFailed flag to skip waiting
 // - Silently skips when broadcaster is nil
 package processor
 
@@ -161,46 +160,6 @@ func TestSSEAction_Execute_WithoutDetectionContext(t *testing.T) {
 	assert.Equal(t, uint(0), note.ID, "Note.ID should be 0 without DetectionContext")
 }
 
-// TestSSEAction_Execute_SkipsAudioWaitOnExportFailure verifies that SSEAction
-// skips waiting for audio file when AudioExportFailed is set.
-func TestSSEAction_Execute_SkipsAudioWaitOnExportFailure(t *testing.T) {
-	t.Parallel()
-
-	mockBroadcaster := NewMockSSEBroadcaster()
-	settings := &conf.Settings{Debug: true}
-	eventTracker := NewEventTracker(testEventTrackerInterval)
-
-	det := testDetection()
-	// Set a clip name that would normally trigger audio wait
-	det.Result.ClipName = "/path/to/nonexistent/clip.wav"
-
-	detectionCtx := &DetectionContext{}
-	detectionCtx.NoteID.Store(1)
-	// Mark audio export as failed - SSEAction should skip waiting
-	detectionCtx.AudioExportFailed.Store(true)
-
-	action := &SSEAction{
-		Settings:       settings,
-		Result:         det.Result,
-		EventTracker:   eventTracker,
-		DetectionCtx:   detectionCtx,
-		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
-	}
-
-	startTime := time.Now()
-	err := action.Execute(t.Context(), nil)
-	duration := time.Since(startTime)
-
-	require.NoError(t, err, "Should succeed even with nonexistent clip")
-
-	// Verify it didn't wait (should be fast, not 5+ seconds)
-	assert.Less(t, duration, 500*time.Millisecond,
-		"Should skip audio wait when AudioExportFailed is set")
-
-	// Verify broadcast was still called
-	assert.Equal(t, 1, mockBroadcaster.GetBroadcastCount(), "Should still broadcast")
-}
-
 // TestSSEAction_Execute_BroadcastsCorrectData verifies that SSEAction
 // broadcasts the correct detection data.
 func TestSSEAction_Execute_BroadcastsCorrectData(t *testing.T) {
@@ -283,9 +242,9 @@ func TestSSEAction_Execute_ReturnsErrorOnBroadcastFailure(t *testing.T) {
 	require.Error(t, err, "Should return error on broadcast failure")
 }
 
-// TestSSEAction_Execute_NoClipNameSkipsAudioWait verifies that SSEAction
-// doesn't wait for audio when ClipName is empty.
-func TestSSEAction_Execute_NoClipNameSkipsAudioWait(t *testing.T) {
+// TestSSEAction_Execute_NoClipNameBroadcastsQuickly verifies that SSEAction
+// broadcasts without delay when ClipName is empty.
+func TestSSEAction_Execute_NoClipNameBroadcastsQuickly(t *testing.T) {
 	t.Parallel()
 
 	mockBroadcaster := NewMockSSEBroadcaster()
@@ -312,7 +271,7 @@ func TestSSEAction_Execute_NoClipNameSkipsAudioWait(t *testing.T) {
 
 	require.NoError(t, err)
 
-	// Should be fast since no audio wait is needed
+	// SSE broadcast should always be fast
 	assert.Less(t, duration, 500*time.Millisecond,
-		"Should not wait for audio when ClipName is empty")
+		"SSE broadcast should complete quickly")
 }

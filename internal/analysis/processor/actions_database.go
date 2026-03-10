@@ -185,7 +185,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 			logger.Int("capture_length", captureLength),
 			logger.String("operation", "note_begin_end_capture_length"))
 
-		// handleAudioExportError logs the error and signals downstream actions.
+		// handleAudioExportError logs the error.
 		// This helper reduces duplication between buffer read and save failures.
 		handleAudioExportError := func(err error, extraFields ...logger.Field) {
 			fields := make([]logger.Field, 0, 5+len(extraFields))
@@ -198,12 +198,6 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 			)
 			fields = append(fields, extraFields...)
 			GetLogger().Error("Audio export failed (continuing with detection broadcast)", fields...)
-
-			// Signal to downstream actions that audio export failed
-			// This prevents SSEAction from waiting 5 seconds for a file that won't appear
-			if a.DetectionCtx != nil {
-				a.DetectionCtx.AudioExportFailed.Store(true)
-			}
 		}
 
 		// export audio clip from capture buffer

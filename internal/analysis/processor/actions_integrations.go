@@ -6,8 +6,6 @@ package processor
 import (
 	"context"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -364,31 +362,6 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 		}
 	}
 
-	// Wait for audio file to be available if this detection has an audio clip assigned
-	// AND audio export didn't fail in DatabaseAction.
-	// This properly handles per-species audio settings and avoids false positives.
-	if a.Result.ClipName != "" {
-		// Skip waiting if audio export failed - the file will never appear
-		// This prevents a 5-second timeout delay when DatabaseAction couldn't export audio
-		if a.DetectionCtx != nil && a.DetectionCtx.AudioExportFailed.Load() {
-			GetLogger().Debug("Skipping audio file wait - export failed in DatabaseAction",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("clip_name", a.Result.ClipName),
-				logger.String("operation", "sse_skip_audio_wait"))
-		} else if err := a.waitForAudioFile(); err != nil {
-			// Log warning but don't fail the SSE broadcast
-			GetLogger().Warn("Audio file not ready for SSE broadcast",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("clip_name", a.Result.ClipName),
-				logger.String("operation", "sse_wait_audio_file"))
-		}
-	}
-
 	// Get bird image of detected bird using the shared helper
 	birdImage := getBirdImageFromCache(a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 
@@ -433,48 +406,4 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 	}
 
 	return nil
-}
-
-// waitForAudioFile waits for the audio file to be written to disk with a timeout
-func (a *SSEAction) waitForAudioFile() error {
-	if a.Result.ClipName == "" {
-		return nil // No audio file expected
-	}
-
-	// Build the full path to the audio file using the configured export path
-	audioPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.Result.ClipName)
-
-	// Wait for file to be written
-	deadline := time.Now().Add(SSEAudioFileTimeout)
-
-	for time.Now().Before(deadline) {
-		// Check if file exists and has content
-		if info, err := os.Stat(audioPath); err == nil {
-			// File exists, check if it has reasonable size
-			if info.Size() > MinAudioFileSize {
-				if a.Settings.Debug {
-					GetLogger().Debug("Audio file ready for SSE broadcast",
-						logger.String("component", "analysis.processor.actions"),
-						logger.String("detection_id", a.CorrelationID),
-						logger.String("clip_name", a.Result.ClipName),
-						logger.Int64("file_size_bytes", info.Size()),
-						logger.String("species", a.Result.Species.CommonName),
-						logger.String("operation", "wait_audio_file_success"))
-				}
-				return nil
-			}
-			// File exists but might still be writing, wait a bit more
-		}
-
-		time.Sleep(SSEAudioCheckInterval)
-	}
-
-	// Timeout reached
-	return errors.Newf("audio file %s not ready after %v timeout", a.Result.ClipName, SSEAudioFileTimeout).
-		Component("analysis.processor").
-		Category(errors.CategoryTimeout).
-		Context("operation", "wait_for_audio_file").
-		Context("clip_name", a.Result.ClipName).
-		Context("timeout_seconds", SSEAudioFileTimeout.Seconds()).
-		Build()
 }
