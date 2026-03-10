@@ -545,14 +545,6 @@ func ExportAudioWithCustomFFmpegArgs(pcmData []byte, ffmpegPath string, customAr
 	return ExportAudioWithCustomFFmpegArgsContext(context.Background(), pcmData, ffmpegPath, customArgs)
 }
 
-// runCustomFFmpegCommandToBuffer executes FFmpeg, piping PCM input and capturing codec output to a buffer.
-//
-// Deprecated: Prefer runCustomFFmpegCommandToBufferWithContext for cancellation/timeout control.
-func runCustomFFmpegCommandToBuffer(ffmpegPath string, pcmData []byte, customArgs []string) (*bytes.Buffer, error) {
-	// Call the context-aware version with a background context
-	return runCustomFFmpegCommandToBufferWithContext(context.Background(), ffmpegPath, pcmData, customArgs)
-}
-
 // ExportAudioWithCustomFFmpegArgsContext exports PCM data using FFmpeg with custom arguments directly to a memory buffer.
 // This is the context-aware version of ExportAudioWithCustomFFmpegArgs that allows timeout/cancellation.
 // ffmpegPath is the path to the FFmpeg executable.

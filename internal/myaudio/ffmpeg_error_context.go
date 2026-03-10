@@ -41,7 +41,6 @@ var (
 	// Capture full TCP URL including credentials, IPv6, query params
 	// Pattern: "Connection to tcp://..." - captures everything after "Connection to "
 	reConnectionToTCP = regexp.MustCompile(`Connection to (tcp://\S+)`)
-	reRTSPStatus      = regexp.MustCompile(`Server returned (\d+)`)
 	reSSLError        = regexp.MustCompile(`SSL.*error|TLS.*error|certificate.*error`)
 )
 
@@ -433,7 +432,7 @@ func (ctx *ErrorContext) buildAuthFailureMessage() {
 }
 
 // extractAuthForbidden parses forbidden access details
-func (ctx *ErrorContext) extractAuthForbidden(output string) {
+func (ctx *ErrorContext) extractAuthForbidden(_ string) {
 	ctx.HTTPStatus = 403
 	ctx.PrimaryMessage = "Access forbidden"
 }
@@ -662,7 +661,7 @@ func (ctx *ErrorContext) buildDNSErrorMessage() {
 }
 
 // extractInvalidData parses invalid data details
-func (ctx *ErrorContext) extractInvalidData(output string) {
+func (ctx *ErrorContext) extractInvalidData(_ string) {
 	ctx.PrimaryMessage = "Invalid or corrupted stream data"
 }
 

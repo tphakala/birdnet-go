@@ -742,7 +742,7 @@ func processAudioFrame(
 
 // handleDeviceStop contains the logic for attempting to restart the audio device
 // when it stops unexpectedly.
-func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, settings *conf.Settings, restarting *atomic.Int32) {
+func handleDeviceStop(captureDevice *malgo.Device, quitChan, restartChan chan struct{}, _ *conf.Settings, restarting *atomic.Int32) {
 	log := GetLogger()
 	// Ensure the flag is reset when this attempt concludes.
 	defer restarting.Store(0)

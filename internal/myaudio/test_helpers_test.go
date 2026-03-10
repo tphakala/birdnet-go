@@ -3,12 +3,10 @@
 package myaudio
 
 import (
-	"context"
 	"io"
 	"os"
 	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -96,81 +94,4 @@ func newTestRegistry() *AudioSourceRegistry {
 		refCounts:     make(map[string]*int32),
 		logger:        getTestLogger(),
 	}
-}
-
-// --- Stream Helpers ---
-
-// TestStreamResult holds a test stream and its audio channel for cleanup.
-type TestStreamResult struct {
-	Stream    *FFmpegStream
-	AudioChan chan UnifiedAudioData
-	closed    bool
-}
-
-// Close cleans up the test stream and channel.
-// Safe to call multiple times.
-func (r *TestStreamResult) Close() {
-	if r.closed {
-		return
-	}
-	r.closed = true
-	if r.Stream != nil {
-		r.Stream.Stop()
-	}
-	if r.AudioChan != nil {
-		close(r.AudioChan)
-	}
-}
-
-// newTestStream creates a new FFmpegStream for testing with a default buffer size.
-// Returns a TestStreamResult that should be cleaned up with Close() or via t.Cleanup().
-func newTestStream(t *testing.T, url string) *TestStreamResult {
-	t.Helper()
-	return newTestStreamWithBuffer(t, url, 10)
-}
-
-// newTestStreamWithBuffer creates a new FFmpegStream for testing with a custom buffer size.
-func newTestStreamWithBuffer(t *testing.T, url string, bufferSize int) *TestStreamResult {
-	t.Helper()
-	audioChan := make(chan UnifiedAudioData, bufferSize)
-	stream := NewFFmpegStream(url, "tcp", audioChan)
-	result := &TestStreamResult{
-		Stream:    stream,
-		AudioChan: audioChan,
-	}
-	t.Cleanup(result.Close)
-	return result
-}
-
-// --- Context Helpers ---
-
-// testContextWithTimeout creates a context with the given timeout and registers cleanup.
-// Uses t.Cleanup() to ensure the cancel function is called.
-func testContextWithTimeout(t *testing.T, timeout time.Duration) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(t.Context(), timeout)
-	t.Cleanup(cancel)
-	return ctx
-}
-
-// testContext creates a context with a default 5-second timeout for tests.
-func testContext(t *testing.T) context.Context {
-	t.Helper()
-	return testContextWithTimeout(t, 5*time.Second)
-}
-
-// --- Source Config Helpers ---
-
-// newTestSourceConfig creates a SourceConfig for testing with common defaults.
-func newTestSourceConfig(id, displayName string, sourceType SourceType) SourceConfig {
-	return SourceConfig{
-		ID:          id,
-		DisplayName: displayName,
-		Type:        sourceType,
-	}
-}
-
-// newTestRTSPConfig creates a SourceConfig for RTSP sources with common defaults.
-func newTestRTSPConfig(id, displayName string) SourceConfig {
-	return newTestSourceConfig(id, displayName, SourceTypeRTSP)
 }

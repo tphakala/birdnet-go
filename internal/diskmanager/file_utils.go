@@ -142,7 +142,7 @@ func createWalkFunc(state *walkState) filepath.WalkFunc {
 }
 
 // handleWalkError handles errors during filepath.Walk, specifically temp file race conditions
-func handleWalkError(err error, path string, debug bool) error {
+func handleWalkError(err error, path string, _ bool) error {
 	// Handle race condition where temp files are renamed between directory
 	// listing and lstat call. If the error is "no such file or directory"
 	// and the path appears to be a temp file, continue walking.
