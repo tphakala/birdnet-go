@@ -362,10 +362,12 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"process_state": true,
 		// Config key identifier
 		"config_key": true,
-		// File size diagnostics (numeric/boolean only)
-		"file_exists":      true,
-		"file_size_bytes":  true,
-		"input_file_bytes": true,
+		// File size and timeout diagnostics (numeric/boolean only)
+		"file_exists":       true,
+		"file_size_bytes":   true,
+		"input_file_bytes":  true,
+		"total_duration_ms": true,
+		"max_attempts":      true,
 	}
 
 	for k := range extra {

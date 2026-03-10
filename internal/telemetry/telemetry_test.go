@@ -354,6 +354,8 @@ func TestRemovePrivacyExtraFields_AllowsDiagnosticFields(t *testing.T) {
 		"file_exists":          true,
 		"file_size_bytes":      int64(4096),
 		"input_file_bytes":     int64(0),
+		"total_duration_ms":    int64(5000),
+		"max_attempts":         10,
 		"secret_data":          "should_drop",
 	}
 
@@ -373,6 +375,8 @@ func TestRemovePrivacyExtraFields_AllowsDiagnosticFields(t *testing.T) {
 	assert.Contains(t, extra, "file_exists")
 	assert.Contains(t, extra, "file_size_bytes")
 	assert.Contains(t, extra, "input_file_bytes")
+	assert.Contains(t, extra, "total_duration_ms")
+	assert.Contains(t, extra, "max_attempts")
 	assert.NotContains(t, extra, "secret_data")
 }
 
