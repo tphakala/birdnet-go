@@ -741,7 +741,45 @@ func (c *Controller) handleErrorInternal(ctx echo.Context, err error, message st
 
 	c.logErrorIfEnabled("API Error", fields...)
 
+	// Report server-side errors (5xx) to Sentry telemetry.
+	// 4xx errors are client mistakes (bad input, not found) — not bugs — and are excluded.
+	if code >= http.StatusInternalServerError {
+		c.reportErrorToTelemetry(ctx, err, message, code)
+	}
+
 	return ctx.JSON(code, errorResp)
+}
+
+// reportErrorToTelemetry reports server-side errors (5xx) to Sentry telemetry.
+// Errors already reported by lower layers (e.g., datastore) are skipped to avoid
+// duplicate Sentry events. Privacy scrubbing and opt-in checks are handled by the
+// internal/errors and internal/telemetry packages.
+func (c *Controller) reportErrorToTelemetry(ctx echo.Context, err error, message string, code int) {
+	// Skip if the underlying error was already reported by a lower layer.
+	if err != nil {
+		var ee *errors.EnhancedError
+		if errors.As(err, &ee) && ee.IsReported() {
+			return
+		}
+	}
+
+	path := ctx.Request().URL.Path
+	method := ctx.Request().Method
+
+	var builder *errors.ErrorBuilder
+	if err != nil {
+		builder = errors.New(err)
+	} else {
+		builder = errors.Newf("%s", message)
+	}
+
+	_ = builder.
+		Component("api").
+		Category(errors.CategoryHTTP).
+		Context("http_status", code).
+		Context("endpoint", path).
+		Context("method", method).
+		Build()
 }
 
 // HandleError constructs and returns an appropriate error response
