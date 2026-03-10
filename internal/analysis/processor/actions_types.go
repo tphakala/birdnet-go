@@ -22,16 +22,6 @@ import (
 
 // Timeout and interval constants
 const (
-	// SSEAudioFileTimeout is the maximum time to wait for audio file to be written
-	SSEAudioFileTimeout = 5 * time.Second
-
-	// SSEAudioCheckInterval is how often to check for audio file
-	SSEAudioCheckInterval = 100 * time.Millisecond
-
-	// MinAudioFileSize is the minimum size in bytes for a valid audio file
-	// Typed as int64 to match os.FileInfo.Size() return type
-	MinAudioFileSize int64 = 1024
-
 	// MQTTPublishTimeout is the timeout for MQTT publish operations
 	MQTTPublishTimeout = 10 * time.Second
 
@@ -53,11 +43,6 @@ type DetectionContext struct {
 	// NoteID holds the database primary key after successful save.
 	// Use atomic operations: Store() in DatabaseAction, Load() in MqttAction/SSEAction.
 	NoteID atomic.Uint64
-
-	// AudioExportFailed indicates that audio export failed in DatabaseAction.
-	// When true, downstream actions should skip waiting for the audio file.
-	// This prevents the 5-second timeout delay when audio export fails.
-	AudioExportFailed atomic.Bool
 }
 
 // Action is the base interface for all actions that can be executed.
