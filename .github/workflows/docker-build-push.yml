@@ -75,7 +75,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Generate repository names
         id: repo-names
@@ -91,7 +91,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: inputs.push-to-ghcr
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -99,7 +99,7 @@ jobs:
 
       - name: Login to Docker Hub
         if: inputs.push-to-dockerhub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         continue-on-error: true
         id: dockerhub-login
         with:
@@ -168,7 +168,7 @@ jobs:
           echo "Generated tags: $TAGS"
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         continue-on-error: true
         id: build-push
         with:
@@ -223,7 +223,7 @@ jobs:
 
       - name: Login to GitHub Container Registry
         if: inputs.push-to-ghcr
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -231,7 +231,7 @@ jobs:
 
       - name: Login to Docker Hub
         if: inputs.push-to-dockerhub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         continue-on-error: true
         id: dockerhub-login
         with:
