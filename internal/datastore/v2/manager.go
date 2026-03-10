@@ -159,6 +159,16 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 
 // Initialize creates the schema and seeds initial data.
 func (m *SQLiteManager) Initialize() error {
+	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
+	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
+	if err := m.renamePrePR2165Tables(); err != nil {
+		return err
+	}
+
+	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
+	// fell back to legacy mode due to the PR #2165 table name mismatch.
+	m.cleanupLegacySchemaContamination()
+
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(
 		// Lookup tables (must be created first due to FK constraints)
@@ -219,6 +229,65 @@ func (m *SQLiteManager) Initialize() error {
 		return err
 	}
 	return nil
+}
+
+// renamePrePR2165Tables renames tables whose names changed when TableName() overrides
+// were removed in PR #2165. Only two tables actually changed:
+//   - migration_state → migration_states
+//   - alert_history → alert_histories
+//
+// This is safe to call on fresh databases (no-op if old tables don't exist).
+func (m *SQLiteManager) renamePrePR2165Tables() error {
+	renames := [][2]string{
+		{"migration_state", "migration_states"},
+		{"alert_history", "alert_histories"},
+	}
+	for _, r := range renames {
+		oldName, newName := r[0], r[1]
+		var count int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", oldName).Scan(&count).Error; err != nil || count == 0 {
+			continue
+		}
+		// Only rename if the new table doesn't already exist
+		var newCount int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", newName).Scan(&newCount).Error; err == nil && newCount > 0 {
+			continue
+		}
+		if err := m.db.Exec("ALTER TABLE `" + oldName + "` RENAME TO `" + newName + "`").Error; err != nil {
+			reportInitFailure("sqlite", "renameTable_"+oldName, err, m.dbPath)
+			return fmt.Errorf("failed to rename table %s to %s: %w", oldName, newName, err)
+		}
+	}
+	return nil
+}
+
+// cleanupLegacySchemaContamination removes columns that were erroneously added to v2
+// tables when the app fell back to legacy mode due to the PR #2165 table name mismatch.
+// Legacy AutoMigrate added NOT NULL columns (e.g. scientific_name) that don't exist in
+// the v2 entity definitions, causing INSERT failures.
+//
+// Only image_caches was affected: it comes before dynamic_thresholds in the legacy
+// migration order, and dynamic_thresholds is where the crash occurred (stopping further
+// contamination).
+//
+// Requires SQLite 3.35.0+ (ALTER TABLE DROP COLUMN). Safe no-op on older versions.
+func (m *SQLiteManager) cleanupLegacySchemaContamination() {
+	contaminations := []struct {
+		table  string
+		column string
+	}{
+		{"image_caches", "scientific_name"},
+	}
+
+	for _, c := range contaminations {
+		var colCount int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", c.table, c.column).Scan(&colCount).Error; err != nil || colCount == 0 {
+			continue
+		}
+		if err := m.db.Exec("ALTER TABLE `" + c.table + "` DROP COLUMN `" + c.column + "`").Error; err != nil {
+			reportInitFailure("sqlite", "dropOrphanedColumn_"+c.table+"_"+c.column, err, m.dbPath)
+		}
+	}
 }
 
 // fixSQLiteForeignKeys ensures ON DELETE SET NULL behavior for SQLite.
