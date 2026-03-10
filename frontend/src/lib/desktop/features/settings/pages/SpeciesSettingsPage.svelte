@@ -1564,8 +1564,8 @@
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <!-- New Species Window Days -->
             <div>
-              <label for="new-species-window" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold">
+              <label class="flex items-center py-2" for="new-species-window">
+                <span class="text-sm font-medium">
                   {t('settings.species.tracking.newSpeciesWindowDays.label')}
                 </span>
               </label>
@@ -1597,8 +1597,8 @@
 
             <!-- Sync Interval Minutes -->
             <div>
-              <label for="sync-interval" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold">
+              <label class="flex items-center py-2" for="sync-interval">
+                <span class="text-sm font-medium">
                   {t('settings.species.tracking.syncIntervalMinutes.label')}
                 </span>
               </label>
@@ -1630,8 +1630,8 @@
 
             <!-- Notification Suppression Hours -->
             <div>
-              <label for="notification-suppression" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold">
+              <label class="flex items-center py-2" for="notification-suppression">
+                <span class="text-sm font-medium">
                   {t('settings.species.tracking.notificationSuppressionHours.label')}
                 </span>
               </label>
@@ -1685,24 +1685,32 @@
           {#if trackingSettings?.yearlyTracking?.enabled}
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
               <!-- Reset Month -->
-              <SelectDropdown
-                label={t('settings.species.tracking.yearly.resetMonth.label')}
-                helpText={t('settings.species.tracking.yearly.resetMonth.helpText')}
-                value={String(
-                  trackingSettings?.yearlyTracking?.resetMonth ??
-                    TRACKING_DEFAULTS.yearlyTracking.resetMonth
-                )}
-                options={monthOptions}
-                disabled={store.isLoading || store.isSaving}
-                menuSize="sm"
-                onChange={value =>
-                  updateTrackingSettings({ yearlyTracking: { resetMonth: Number(value) } })}
-              />
+              <div>
+                <label class="flex items-center py-2" for="yearly-reset-month">
+                  <span class="text-sm font-medium">
+                    {t('settings.species.tracking.yearly.resetMonth.label')}
+                  </span>
+                </label>
+                <SelectDropdown
+                  value={String(
+                    trackingSettings?.yearlyTracking?.resetMonth ??
+                      TRACKING_DEFAULTS.yearlyTracking.resetMonth
+                  )}
+                  options={monthOptions}
+                  disabled={store.isLoading || store.isSaving}
+                  menuSize="sm"
+                  onChange={value =>
+                    updateTrackingSettings({ yearlyTracking: { resetMonth: Number(value) } })}
+                />
+                <p class="text-xs text-muted mt-1">
+                  {t('settings.species.tracking.yearly.resetMonth.helpText')}
+                </p>
+              </div>
 
               <!-- Reset Day -->
               <div>
-                <label for="yearly-reset-day" class="flex flex-col gap-1 mb-1">
-                  <span class="text-sm font-semibold">
+                <label class="flex items-center py-2" for="yearly-reset-day">
+                  <span class="text-sm font-medium">
                     {t('settings.species.tracking.yearly.resetDay.label')}
                   </span>
                 </label>
@@ -1728,8 +1736,8 @@
 
               <!-- Window Days -->
               <div>
-                <label for="yearly-window-days" class="flex flex-col gap-1 mb-1">
-                  <span class="text-sm font-semibold">
+                <label class="flex items-center py-2" for="yearly-window-days">
+                  <span class="text-sm font-medium">
                     {t('settings.species.tracking.yearly.windowDays.label')}
                   </span>
                 </label>
@@ -1782,8 +1790,8 @@
           {#if trackingSettings?.seasonalTracking?.enabled}
             <!-- Window Days -->
             <div class="max-w-xs">
-              <label for="seasonal-window-days" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold">
+              <label class="flex items-center py-2" for="seasonal-window-days">
+                <span class="text-sm font-medium">
                   {t('settings.species.tracking.seasonal.windowDays.label')}
                 </span>
               </label>
