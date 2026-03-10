@@ -239,10 +239,30 @@ func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioVa
 			fmt.Sprintf("exhausted_after_%dms", totalDuration.Milliseconds()))
 	}
 
-	if lastResult != nil && lastResult.Error != nil {
-		return lastResult, lastResult.Error
+	// Collect file state for diagnostics (privacy-safe: only boolean + numeric)
+	fileExists := false
+	var fileSizeBytes int64 = -1
+	if info, statErr := os.Stat(audioPath); statErr == nil {
+		fileExists = true
+		fileSizeBytes = info.Size()
 	}
-	return lastResult, ErrValidationFailed
+
+	// Build a structured error with file state context for Sentry diagnostics
+	baseErr := ErrValidationFailed
+	if lastResult != nil && lastResult.Error != nil {
+		baseErr = lastResult.Error
+	}
+	exhaustionErr := errors.New(baseErr).
+		Component("myaudio").
+		Category(errors.CategoryTimeout).
+		Context("operation", "wait_for_audio_file").
+		Context("file_exists", fileExists).
+		Context("file_size_bytes", fileSizeBytes).
+		Context("total_duration_ms", totalDuration.Milliseconds()).
+		Context("max_attempts", MaxValidationAttempts).
+		Build()
+
+	return lastResult, exhaustionErr
 }
 
 // isFileSizeStable checks if a file's size is stable (not being written)
