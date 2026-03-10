@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Tuntematon virhe"
-    }
+    },
+    "toggle": "Vaihda",
+    "image": "Kuva",
+    "actionsColumn": "Toiminnot",
+    "closeModal": "Sulje valintaikkuna",
+    "hoursShort": "t"
   },
   "navigation": {
     "dashboard": "Yleiskatsaus",
@@ -2843,6 +2848,7 @@
       }
     },
     "species": {
+      "pageLabel": "Lajiasetukset",
       "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
       "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
       "configAdded": "Lajin \"{species}\" asetukset lisätty",
@@ -2884,6 +2890,12 @@
           "title": "Sijaintia ei ole määritetty",
           "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
           "action": "Määritä sijainti"
+        },
+        "columns": {
+          "commonName": "Nimi",
+          "scientificName": "Tieteellinen nimi",
+          "score": "Pisteet",
+          "status": "Tila"
         }
       },
       "alwaysInclude": {
@@ -2981,13 +2993,17 @@
             "time": "Aika",
             "source": "Lähde",
             "clearParameters": "Tyhjennä parametrit"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Suorita myös oletustoiminnot (tietokantatallennus, ilmoitukset jne.)",
           "helpText": "Kun käytössä, sekä mukautettu toimintosi että järjestelmän oletustoiminnot suoritetaan. Kun pois käytöstä, vain mukautettu toimintosi suoritetaan."
         }
       },
+      "add": "Lisää",
+      "remove": "Poista",
       "addSpeciesToInclude": "Lisää sisällytettäviä lajeja",
       "addSpeciesToIncludeLabel": "Lisää uusia sisällytettäviä lajeja",
       "addSpeciesToExclude": "Lisää pois jätettäviä lajeja",
@@ -3130,7 +3146,8 @@
         "resetAllError": "Kynnysarvojen nollaus epäonnistui",
         "expand": "Näytä tapahtumahistoria",
         "collapse": "Piilota tapahtumahistoria"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "security": {
       "pageLabel": "Turva-asetukset",

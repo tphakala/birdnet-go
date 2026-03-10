@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Unknown error occurred"
-    }
+    },
+    "toggle": "Toggle",
+    "image": "Image",
+    "actionsColumn": "Actions",
+    "closeModal": "Close dialog",
+    "hoursShort": "h"
   },
   "pageTitle": {
     "settings": "Settings - BirdNET-Go",
@@ -3018,6 +3023,7 @@
       }
     },
     "species": {
+      "pageLabel": "Species settings",
       "saveError": "Failed to save configuration for \"{species}\". Please try again.",
       "configUpdated": "Updated configuration for \"{species}\"",
       "configAdded": "Added configuration for \"{species}\"",
@@ -3059,6 +3065,12 @@
           "title": "Location Not Configured",
           "description": "Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.",
           "action": "Configure Location"
+        },
+        "columns": {
+          "commonName": "Common Name",
+          "scientificName": "Scientific Name",
+          "score": "Score",
+          "status": "Status"
         }
       },
       "alwaysInclude": {
@@ -3148,6 +3160,8 @@
         "parameters": {
           "label": "Parameters",
           "helpText": "These values will be passed to your command in the order listed",
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)",
           "availableTitle": "Available Parameters",
           "buttons": {
             "commonName": "CommonName",
@@ -3163,6 +3177,9 @@
           "helpText": "When enabled, both your custom action and the system's default actions will run. When disabled, only your custom action will execute."
         }
       },
+      "add": "Add",
+      "remove": "Remove",
+      "suggestions": "Species suggestions",
       "addSpeciesToInclude": "Add species to include",
       "addSpeciesToIncludeLabel": "Add New Species to Include",
       "addSpeciesToExclude": "Add species to exclude",

@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Wystąpił nieznany błąd"
-    }
+    },
+    "toggle": "Przełącz",
+    "image": "Obraz",
+    "actionsColumn": "Akcje",
+    "closeModal": "Zamknij okno dialogowe",
+    "hoursShort": "godz."
   },
   "pageTitle": {
     "settings": "Ustawienia - BirdNET-Go",
@@ -2988,6 +2993,7 @@
       }
     },
     "species": {
+      "pageLabel": "Ustawienia gatunków",
       "saveError": "Nie udało się zapisać konfiguracji dla \"{species}\". Spróbuj ponownie.",
       "configUpdated": "Zaktualizowano konfigurację dla \"{species}\"",
       "configAdded": "Dodano konfigurację dla \"{species}\"",
@@ -3029,6 +3035,12 @@
           "title": "Lokalizacja nie skonfigurowana",
           "description": "Ustaw swoją lokalizację w Ustawieniach Głównych, aby zobaczyć gatunki dostępne w Twojej okolicy. Filtr zasięgu wykorzystuje Twoją lokalizację do określenia, które gatunki prawdopodobnie występują w pobliżu.",
           "action": "Skonfiguruj lokalizację"
+        },
+        "columns": {
+          "commonName": "Nazwa",
+          "scientificName": "Nazwa naukowa",
+          "score": "Wynik",
+          "status": "Status"
         }
       },
       "alwaysInclude": {
@@ -3126,13 +3138,17 @@
             "time": "Czas",
             "source": "Źródło",
             "clearParameters": "Wyczyść Parametry"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Uruchom również domyślne akcje (przechowywanie w bazie danych, powiadomienia itp.)",
           "helpText": "Po włączeniu będą działać zarówno twoja niestandardowa akcja, jak i domyślne akcje systemu. Po wyłączeniu zostanie wykonana tylko twoja niestandardowa akcja."
         }
       },
+      "add": "Dodaj",
+      "remove": "Usuń",
       "addSpeciesToInclude": "Dodaj gatunki do uwzględnienia",
       "addSpeciesToIncludeLabel": "Dodaj Nowy Gatunek do Uwzględnienia",
       "addSpeciesToExclude": "Dodaj gatunki do wykluczenia",
@@ -3275,7 +3291,8 @@
         "resetAllError": "Nie udało się zresetować progów",
         "expand": "Pokaż historię zdarzeń",
         "collapse": "Ukryj historię zdarzeń"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "database": {
       "sqlitePlaceholder": "Wprowadź ścieżkę bazy danych SQLite",

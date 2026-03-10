@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Unbekannter Fehler aufgetreten"
-    }
+    },
+    "toggle": "Umschalten",
+    "image": "Bild",
+    "actionsColumn": "Aktionen",
+    "closeModal": "Dialog schließen",
+    "hoursShort": "h"
   },
   "pageTitle": {
     "settings": "Einstellungen - BirdNET-Go",
@@ -2843,6 +2848,7 @@
       }
     },
     "species": {
+      "pageLabel": "Arteneinstellungen",
       "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
       "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
       "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
@@ -2884,6 +2890,12 @@
           "title": "Standort nicht konfiguriert",
           "description": "Legen Sie Ihren Standort in den Haupteinstellungen fest, um Arten in Ihrer Umgebung zu sehen. Der Bereichsfilter verwendet Ihren Standort, um zu bestimmen, welche Arten in der Nähe wahrscheinlich vorkommen.",
           "action": "Standort konfigurieren"
+        },
+        "columns": {
+          "commonName": "Name",
+          "scientificName": "Wissenschaftlicher Name",
+          "score": "Bewertung",
+          "status": "Status"
         }
       },
       "alwaysInclude": {
@@ -2981,13 +2993,17 @@
             "time": "Zeit",
             "source": "Quelle",
             "clearParameters": "Parameter löschen"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Auch Standardaktionen ausführen (Datenbankspeicherung, Benachrichtigungen usw.)",
           "helpText": "Wenn aktiviert, werden sowohl Ihre benutzerdefinierte Aktion als auch die Standardaktionen des Systems ausgeführt. Wenn deaktiviert, wird nur Ihre benutzerdefinierte Aktion ausgeführt."
         }
       },
+      "add": "Hinzufügen",
+      "remove": "Entfernen",
       "addSpeciesToInclude": "Arten zum Einschließen hinzufügen",
       "addSpeciesToIncludeLabel": "Neue Arten zum Einschließen hinzufügen",
       "addSpeciesToExclude": "Arten zum Ausschließen hinzufügen",
@@ -3130,7 +3146,8 @@
         "resetAllError": "Fehler beim Zurücksetzen der Schwellenwerte",
         "expand": "Ereignisverlauf anzeigen",
         "collapse": "Ereignisverlauf ausblenden"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "security": {
       "pageLabel": "Sicherheitseinstellungen",

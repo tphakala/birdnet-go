@@ -188,7 +188,12 @@
     },
     "errors": {
       "unknownError": "Erreur inconnue"
-    }
+    },
+    "toggle": "Basculer",
+    "image": "Image",
+    "actionsColumn": "Actions",
+    "closeModal": "Fermer la boîte de dialogue",
+    "hoursShort": "h"
   },
   "pageTitle": {
     "settings": "Paramètres - BirdNET-Go",
@@ -2982,6 +2987,7 @@
       }
     },
     "species": {
+      "pageLabel": "Paramètres des espèces",
       "saveError": "Échec de l'enregistrement de la configuration pour \"{species}\". Veuillez réessayer.",
       "configUpdated": "Configuration de \"{species}\" mise à jour",
       "configAdded": "Configuration de \"{species}\" ajoutée",
@@ -3023,6 +3029,12 @@
           "title": "Emplacement non configuré",
           "description": "Définissez votre emplacement dans les Paramètres Principaux pour voir les espèces disponibles dans votre région. Le filtre de portée utilise votre emplacement pour déterminer quelles espèces sont susceptibles d'être présentes à proximité.",
           "action": "Configurer l'emplacement"
+        },
+        "columns": {
+          "commonName": "Nom commun",
+          "scientificName": "Nom scientifique",
+          "score": "Score",
+          "status": "Statut"
         }
       },
       "alwaysInclude": {
@@ -3120,13 +3132,17 @@
             "time": "Temps",
             "source": "Source",
             "clearParameters": "Effacer les paramètres"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "Exécuter également les actions par défaut (stockage en base de données, notifications, etc.)",
           "helpText": "Lorsqu'activé, votre action personnalisée et les actions par défaut du système s'exécuteront. Lorsque désactivé, seule votre action personnalisée s'exécutera."
         }
       },
+      "add": "Ajouter",
+      "remove": "Supprimer",
       "addSpeciesToInclude": "Ajouter des espèces à inclure",
       "addSpeciesToIncludeLabel": "Ajouter de nouvelles espèces à inclure",
       "addSpeciesToExclude": "Ajouter des espèces à exclure",
@@ -3269,7 +3285,8 @@
         "resetAllError": "Échec de la réinitialisation des seuils",
         "expand": "Afficher l'historique des événements",
         "collapse": "Masquer l'historique des événements"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "database": {
       "sqlitePlaceholder": "Entrez le chemin de la base de données SQLite",

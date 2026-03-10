@@ -198,7 +198,12 @@
     },
     "errors": {
       "unknownError": "Error desconocido"
-    }
+    },
+    "toggle": "Alternar",
+    "image": "Imagen",
+    "actionsColumn": "Acciones",
+    "closeModal": "Cerrar diálogo",
+    "hoursShort": "h"
   },
   "navigation": {
     "dashboard": "Panel de control",
@@ -2843,6 +2848,7 @@
       }
     },
     "species": {
+      "pageLabel": "Configuración de especies",
       "saveError": "Error al guardar la configuración de \"{species}\". Por favor, inténtelo de nuevo.",
       "configUpdated": "Configuración de \"{species}\" actualizada",
       "configAdded": "Configuración de \"{species}\" añadida",
@@ -2884,6 +2890,12 @@
           "title": "Ubicación no configurada",
           "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles en tu área. El filtro de rango utiliza tu ubicación para determinar qué especies es probable encontrar cerca.",
           "action": "Configurar ubicación"
+        },
+        "columns": {
+          "commonName": "Nombre común",
+          "scientificName": "Nombre científico",
+          "score": "Puntuación",
+          "status": "Estado"
         }
       },
       "alwaysInclude": {
@@ -2981,13 +2993,17 @@
             "time": "Tiempo",
             "source": "Fuente",
             "clearParameters": "Limpiar parámetros"
-          }
+          },
+          "placeholder": "Click buttons below to add parameters or type manually",
+          "tooltip": "Use buttons below or type directly (comma-separated)"
         },
         "executeDefaults": {
           "label": "También ejecutar acciones predeterminadas (almacenamiento en base de datos, notificaciones, etc.)",
           "helpText": "Cuando está habilitado, tanto su acción personalizada como las acciones predeterminadas del sistema se ejecutarán. Cuando está deshabilitado, solo se ejecutará su acción personalizada."
         }
       },
+      "add": "Añadir",
+      "remove": "Eliminar",
       "addSpeciesToInclude": "Añadir especies a incluir",
       "addSpeciesToIncludeLabel": "Añadir nuevas especies a incluir",
       "addSpeciesToExclude": "Añadir especies a excluir",
@@ -3130,7 +3146,8 @@
         "resetAllError": "Error al restablecer los umbrales",
         "expand": "Mostrar historial de eventos",
         "collapse": "Ocultar historial de eventos"
-      }
+      },
+      "suggestions": "Species suggestions"
     },
     "security": {
       "pageLabel": "Configuración de seguridad",
