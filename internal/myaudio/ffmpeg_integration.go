@@ -235,6 +235,17 @@ func SyncStreamsWithConfig(audioChan chan UnifiedAudioData) error {
 	return manager.SyncWithConfig(audioChan)
 }
 
+// ClearSoundLevelDisabledOnStreams re-enables sound level processing on all
+// active FFmpeg streams. Should be called after successful processor
+// re-registration during hot-reload to clear any disabled flags.
+func ClearSoundLevelDisabledOnStreams() {
+	manager := getGlobalManager()
+	if manager == nil {
+		return
+	}
+	manager.ClearSoundLevelDisabled()
+}
+
 // GetStreamHealth returns health information for all streams
 func GetStreamHealth() map[string]StreamHealth {
 	manager := getGlobalManager()

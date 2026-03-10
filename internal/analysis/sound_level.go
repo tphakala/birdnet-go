@@ -715,6 +715,14 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	// Use structured logging for registration summary
 	LogSoundLevelRegistrationSummary(successCount, totalSources, len(activeStreams), successCount > 0 && successCount < totalSources, errs)
 
+	// Clear the soundLevelDisabled flag on active FFmpeg streams so they
+	// resume calling ProcessSoundLevelData after a successful re-registration
+	// (e.g. during hot-reload). Without this, streams whose registration
+	// failed at startup would stay suppressed forever (issue #2152).
+	if successCount > 0 {
+		myaudio.ClearSoundLevelDisabledOnStreams()
+	}
+
 	// Return error only if we have complete failure
 	// For partial success, we continue operating with available processors
 	if successCount == 0 && len(errs) > 0 {
