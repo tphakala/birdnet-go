@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"testing"
 
+	"time"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -126,13 +128,17 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 	)
 	require.NoError(t, err, "failed to migrate legacy schema")
 
-	// Insert sample data into each table
+	// Insert sample data into each table.
+	// BeginTime and EndTime must be non-zero — MySQL strict mode rejects '0000-00-00'.
+	sampleTime := time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC)
 	require.NoError(t, db.Create(&datastore.Note{
 		CommonName:     "Common Blackbird",
 		ScientificName: "Turdus merula",
 		Confidence:     0.95,
 		Date:           "2026-01-15",
 		Time:           "08:30:00",
+		BeginTime:      sampleTime,
+		EndTime:        sampleTime.Add(3 * time.Second),
 	}).Error, "failed to insert legacy note")
 
 	require.NoError(t, db.Create(&datastore.DailyEvents{
@@ -146,6 +152,10 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 		CurrentValue:  0.15,
 		BaseThreshold: 0.10,
 		ValidHours:    24,
+		ExpiresAt:     sampleTime.Add(24 * time.Hour),
+		LastTriggered: sampleTime,
+		FirstCreated:  sampleTime,
+		UpdatedAt:     sampleTime,
 	}).Error, "failed to insert legacy dynamic threshold")
 
 	require.NoError(t, db.Create(&datastore.ImageCache{
@@ -153,6 +163,7 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 		ProviderName:   "wikimedia",
 		SourceProvider: "wikimedia",
 		URL:            "https://example.com/blackbird.jpg",
+		CachedAt:       sampleTime,
 	}).Error, "failed to insert legacy image cache")
 }
 
