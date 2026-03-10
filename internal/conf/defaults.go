@@ -22,7 +22,7 @@ func setDefaultConfig() {
 	viper.SetDefault("logging.file_output.max_size", 100)
 	viper.SetDefault("logging.file_output.max_age", 30)
 	viper.SetDefault("logging.file_output.max_rotated_files", 10)
-	viper.SetDefault("logging.file_output.compress", true)
+	viper.SetDefault("logging.file_output.compress", false)
 
 	// Per-module log files
 	// Core processing modules

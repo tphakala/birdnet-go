@@ -1305,7 +1305,7 @@ type Settings struct {
 	ValidationWarnings []string `yaml:"-" json:"validationWarnings,omitempty"` // Configuration validation warnings for telemetry
 
 	// Logging configuration
-	Logging logger.LoggingConfig `json:"logging" mapstructure:"logging"` // centralized logging configuration
+	Logging logger.LoggingConfig `yaml:"logging" json:"logging" mapstructure:"logging"` // centralized logging configuration
 
 	Main struct {
 		Name      string `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
