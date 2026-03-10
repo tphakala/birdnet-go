@@ -183,6 +183,7 @@ jobs:
           # Run integration tests that use testcontainers and the integration build tag
           # Testcontainers automatically manage MySQL, Mosquitto, and MediaMTX containers
           go test -tags=integration -race -timeout 300s -v \
+            ./internal/datastore/v2 \
             ./internal/datastore/v2/repository/... \
             ./internal/mqtt/... \
             ./internal/myaudio/streamingtest/... \
