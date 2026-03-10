@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestParseFfmpegVersion(t *testing.T) {
@@ -93,6 +95,76 @@ libavformat    62.  3.100 / 62.  3.100`,
 			assert.Equal(t, tt.wantVersion, gotVersion, "version mismatch")
 			assert.Equal(t, tt.wantMajor, gotMajor, "major version mismatch")
 			assert.Equal(t, tt.wantMinor, gotMinor, "minor version mismatch")
+		})
+	}
+}
+
+func TestParsePercentage(t *testing.T) {
+	t.Parallel()
+
+	const testConfigKey = "disk_manager.retention_policy.min_disk_free"
+
+	tests := []struct {
+		name      string
+		input     string
+		wantValue float64
+		wantErr   bool
+		// wantParseErr true means the error comes from ParseFloat (path 2),
+		// false (with wantErr=true) means it comes from the missing-% path (path 3).
+		wantParseErr bool
+	}{
+		// --- valid percentages (path 1) ---
+		{name: "whole number", input: "85%", wantValue: 85.0},
+		{name: "zero percent", input: "0%", wantValue: 0.0},
+		{name: "one hundred percent", input: "100%", wantValue: 100.0},
+		{name: "fractional percent", input: "99.5%", wantValue: 99.5},
+		{name: "negative percent", input: "-10%", wantValue: -10.0},
+		// --- invalid float (path 2: suffix present, but before-% is not a valid float) ---
+		{name: "letters before suffix", input: "abc%", wantErr: true, wantParseErr: true},
+		{name: "empty before suffix", input: "%", wantErr: true, wantParseErr: true},
+		{name: "multiple dots", input: "12.34.56%", wantErr: true, wantParseErr: true},
+		{name: "whitespace before suffix", input: " 85%", wantErr: true, wantParseErr: true},
+		// --- missing % suffix (path 3) ---
+		{name: "integer without suffix", input: "85", wantErr: true},
+		{name: "hundred without suffix", input: "100", wantErr: true},
+		{name: "empty string", input: "", wantErr: true},
+		{name: "whitespace only", input: " ", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := ParsePercentage(tt.input, testConfigKey)
+
+			if !tt.wantErr {
+				require.NoError(t, err)
+				assert.InDelta(t, tt.wantValue, got, 1e-9)
+				return
+			}
+
+			require.Error(t, err)
+			assert.InDelta(t, 0.0, got, 1e-9, "on error, returned value must be zero")
+
+			// All error paths must return a structured EnhancedError
+			var enhanced *errors.EnhancedError
+			require.ErrorAs(t, err, &enhanced, "expected *errors.EnhancedError, got %T", err)
+
+			assert.Equal(t, errors.CategoryValidation, enhanced.Category)
+			assert.Equal(t, "conf", enhanced.GetComponent())
+
+			ctx := enhanced.GetContext()
+			assert.Equal(t, tt.input, ctx["input"], "context must carry the original input")
+			assert.Equal(t, testConfigKey, ctx["config_key"], "context must carry the config key")
+
+			if tt.wantParseErr {
+				// Path 2: wrapped strconv.ParseFloat error – should unwrap to a *strconv.NumError
+				assert.ErrorContains(t, err, "invalid syntax",
+					"path-2 errors must wrap the underlying ParseFloat error")
+			} else {
+				assert.ErrorContains(t, err, "invalid percentage format",
+					"path-3 errors must carry the format-validation message")
+			}
 		})
 	}
 }
