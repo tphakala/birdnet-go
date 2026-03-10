@@ -277,7 +277,7 @@ func GetBoardModel() string {
 }
 
 // ParsePercentage converts a percentage string (e.g., "80%") to a float64
-func ParsePercentage(percentage string) (float64, error) {
+func ParsePercentage(percentage, configKey string) (float64, error) {
 	if before, ok := strings.CutSuffix(percentage, "%"); ok {
 		value, err := strconv.ParseFloat(before, 64)
 		if err != nil {
@@ -289,6 +289,7 @@ func ParsePercentage(percentage string) (float64, error) {
 		Component("conf").
 		Category(errors.CategoryValidation).
 		Context("input", percentage).
+		Context("config_key", configKey).
 		Build()
 }
 

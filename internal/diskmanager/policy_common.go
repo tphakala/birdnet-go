@@ -397,7 +397,7 @@ func categorizeFilePath(path string) string {
 //   - err: error if check failed (nil on success)
 func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error) {
 	// Parse the threshold percentage
-	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage)
+	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage, "retention.max_usage")
 	if parseErr != nil {
 		return false, 0, parseErr
 	}

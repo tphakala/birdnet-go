@@ -370,7 +370,7 @@ func (c UsageBasedCleanupForTests) Cleanup(quitChan chan struct{}, _ Interface) 
 	h := c.helper
 
 	// Parse "80%" to 80.0
-	maxUsage, _ := conf.ParsePercentage(h.maxUsagePercent)
+	maxUsage, _ := conf.ParsePercentage(h.maxUsagePercent, "test.max_usage")
 
 	// Check if disk usage exceeds threshold
 	if h.diskUsage > maxUsage {

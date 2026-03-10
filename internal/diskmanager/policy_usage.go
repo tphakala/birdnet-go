@@ -51,7 +51,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 
 	// Convert usage threshold string (e.g., "80%") to float64
 	// This determines at what disk usage percentage the cleanup should activate
-	usageThresholdFloat, err := conf.ParsePercentage(usageThresholdSetting)
+	usageThresholdFloat, err := conf.ParsePercentage(usageThresholdSetting, "retention.max_usage")
 	if err != nil {
 		// Use the utilization from the initial result if available
 		GetLogger().Error("Usage-based cleanup failed",
