@@ -74,6 +74,29 @@ func TestLegacyService_ErrChan_ReportsEarlyExit(t *testing.T) {
 	}
 }
 
+func TestLegacyService_ConcurrentStartStop(t *testing.T) {
+	t.Parallel()
+
+	// This test verifies that calling Stop() concurrently with Start()
+	// does not panic due to nil channel access. Before the fix, there was
+	// a race window between started.Swap(true) and channel initialization
+	// where Stop() could attempt to close a nil quit channel.
+	ctx := t.Context()
+	for range 100 {
+		svc := NewLegacyService("race-test", func(quit <-chan struct{}) error {
+			<-quit
+			return nil
+		})
+
+		go func() {
+			_ = svc.Start(ctx)
+		}()
+		go func() {
+			_ = svc.Stop(ctx)
+		}()
+	}
+}
+
 func TestLegacyService_StopTimeout(t *testing.T) {
 	t.Parallel()
 
