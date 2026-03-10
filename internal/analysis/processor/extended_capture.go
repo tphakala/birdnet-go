@@ -115,7 +115,23 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 	for _, entry := range configSpecies {
 		entryLower := strings.ToLower(strings.TrimSpace(entry))
 
-		// Try taxonomy lookups if database is available
+		// Try as scientific name first (cheap map lookup, no side effects)
+		if scientificNames[entryLower] {
+			resolved[entryLower] = true
+			continue
+		}
+
+		// Try as common name (cheap map lookup, no side effects)
+		if sci, ok := commonToScientific[entryLower]; ok {
+			resolved[sci] = true
+			continue
+		}
+
+		// Try taxonomy lookups if database is available.
+		// These are tried after common/scientific name lookups because
+		// failed taxonomy lookups generate telemetry errors via the
+		// error builder, causing noise for localized common names that
+		// don't match any genus/family/order.
 		if taxonomyDB != nil {
 			// Try as genus name
 			if genusSpecies, err := taxonomyDB.GetAllSpeciesInGenus(entry); err == nil {
@@ -140,18 +156,6 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.Ta
 				}
 				continue
 			}
-		}
-
-		// Try as scientific name
-		if scientificNames[entryLower] {
-			resolved[entryLower] = true
-			continue
-		}
-
-		// Try as common name
-		if sci, ok := commonToScientific[entryLower]; ok {
-			resolved[sci] = true
-			continue
 		}
 
 		// Unknown entry — log warning so users can spot config typos
