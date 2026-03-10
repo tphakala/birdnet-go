@@ -2283,6 +2283,24 @@
       "errors": {
         "connectionError": "Errore di connessione",
         "responseStreamFailed": "Lettura del flusso di risposta non riuscita"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Connessione al database tassonomico di eBird per dati arricchiti sulle specie, inclusa la classificazione tassonomica e le informazioni sulle sottospecie.",
+        "enable": "Abilita integrazione eBird",
+        "enabledRequired": "L'integrazione eBird non è abilitata",
+        "apiKey": {
+          "label": "Chiave API eBird",
+          "helpText": "La tua chiave API eBird. Ottienila dal portale API di eBird."
+        },
+        "locale": {
+          "label": "Lingua dei nomi delle specie"
+        },
+        "cacheTTL": {
+          "label": "Durata della cache (ore)",
+          "helpText": "Per quanto tempo memorizzare nella cache i dati tassonomici di eBird. La tassonomia cambia raramente, quindi durate più lunghe riducono le chiamate API."
+        },
+        "note": "eBird fornisce dati tassonomici utilizzati per la classificazione delle specie e le analisi. La chiave API è gratuita e disponibile presso il Cornell Lab of Ornithology."
       }
     },
     "audio": {

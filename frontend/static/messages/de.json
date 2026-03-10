@@ -2480,6 +2480,24 @@
       "errors": {
         "connectionError": "Verbindungsfehler",
         "responseStreamFailed": "Antwort-Stream konnte nicht gelesen werden"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Verbindung zur eBird-Taxonomie-Datenbank für erweiterte Artdaten einschließlich taxonomischer Klassifizierung und Unterart-Informationen.",
+        "enable": "eBird-Integration aktivieren",
+        "enabledRequired": "eBird-Integration ist nicht aktiviert",
+        "apiKey": {
+          "label": "eBird-API-Schlüssel",
+          "helpText": "Ihr eBird-API-Schlüssel. Erhalten Sie einen im eBird-API-Portal."
+        },
+        "locale": {
+          "label": "Sprache der Artnamen"
+        },
+        "cacheTTL": {
+          "label": "Cache-Dauer (Stunden)",
+          "helpText": "Wie lange Taxonomie-Daten von eBird zwischengespeichert werden. Da sich die Taxonomie selten ändert, reduzieren längere Cache-Zeiten die API-Aufrufe."
+        },
+        "note": "eBird stellt taxonomische Daten zur Artklassifizierung und für Einblicke bereit. Der API-Schlüssel ist kostenlos beim Cornell Lab of Ornithology erhältlich."
       }
     },
     "audio": {
