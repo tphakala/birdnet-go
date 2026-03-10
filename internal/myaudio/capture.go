@@ -321,6 +321,13 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		return
 	}
 
+	// Initialize the audio equalizer filter chain before any audio source starts.
+	// This must happen before RTSP goroutines and sound card capture to avoid
+	// a race where ApplyFilters() is called before the chain is ready.
+	if err := InitializeFilterChain(settings); err != nil {
+		GetLogger().Warn("error initializing filter chain", logger.Error(err))
+	}
+
 	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
 	if len(settings.Realtime.RTSP.Streams) > 0 {
 		for i := range settings.Realtime.RTSP.Streams {
@@ -816,11 +823,6 @@ func captureAudioMalgo(settings *conf.Settings, source captureSource, sourceID s
 	deviceConfig.SampleRate = conf.SampleRate
 	deviceConfig.Alsa.NoMMap = 1
 	deviceConfig.Capture.DeviceID = source.Pointer
-
-	// Initialize the filter chain
-	if err := InitializeFilterChain(settings); err != nil {
-		log.Warn("error initializing filter chain", logger.Error(err))
-	}
 
 	// Initialize sound level processor for this source if enabled
 	if settings.Realtime.Audio.SoundLevel.Enabled {

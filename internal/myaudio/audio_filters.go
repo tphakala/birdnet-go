@@ -316,23 +316,9 @@ func ApplyFilters(samples []byte) error {
 	filterMutex.RLock()
 	defer filterMutex.RUnlock()
 
-	// If no filters, return early
-	if filterChain == nil {
-		enhancedErr := errors.Newf("filter chain is not initialized").
-			Component("myaudio").
-			Category(errors.CategorySystem).
-			Context("operation", "apply_filters").
-			Build()
-
-		if m := getFilterMetrics(); m != nil {
-			m.RecordAudioProcessing("apply_filters", "filter", "error")
-			m.RecordAudioProcessingError("apply_filters", "filter", "uninitialized_chain")
-		}
-		return enhancedErr
-	}
-
-	if filterChain.Length() == 0 {
-		// No filters to apply - record success but no processing
+	// If no filter chain or no filters configured, return early (no-op).
+	// A nil chain is functionally equivalent to an empty chain.
+	if filterChain == nil || filterChain.Length() == 0 {
 		if m := getFilterMetrics(); m != nil {
 			duration := time.Since(start).Seconds()
 			m.RecordAudioProcessing("apply_filters", "filter", "success")
