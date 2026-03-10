@@ -334,9 +334,11 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
 		// Lightweight error with format guidance
-		descriptiveErr := errors.Newf("diskmanager: invalid filename format: %s", name).
+		descriptiveErr := errors.Newf("diskmanager: invalid filename format").
 			Component("diskmanager").
+			Category(errors.CategoryValidation).
 			Context("expected_format", "species_confidence_timestamp").
+			Context("filename", name).
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
@@ -349,9 +351,13 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 	confidence, err := strconv.Atoi(strings.TrimSuffix(confidenceStr, "p"))
 	if err != nil {
 		// Lightweight error for confidence parsing
-		descriptiveErr := errors.Newf("diskmanager: invalid confidence value in %s", name).
+		descriptiveErr := errors.Newf("diskmanager: invalid confidence value").
 			Component("diskmanager").
+			Category(errors.CategoryValidation).
 			Context("confidence_string", confidenceStr).
+			Context("filename", name).
+			Context("parsed_species", species).
+			Context("parsed_timestamp_str", timestampStr).
 			Build()
 		return FileInfo{}, descriptiveErr
 	}
@@ -370,9 +376,13 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 		timestamp, err = time.Parse("20060102T150405Z", timestampStr)
 		if err != nil {
 			// Lightweight error for timestamp parsing
-			descriptiveErr := errors.Newf("diskmanager: invalid timestamp in %s", name).
+			descriptiveErr := errors.Newf("diskmanager: invalid timestamp format").
 				Component("diskmanager").
+				Category(errors.CategoryValidation).
 				Context("timestamp_string", timestampStr).
+				Context("filename", name).
+				Context("parsed_species", species).
+				Context("parsed_confidence", confidenceStr).
 				Build()
 			return FileInfo{}, descriptiveErr
 		}
