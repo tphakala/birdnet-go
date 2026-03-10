@@ -38,13 +38,6 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	})
 }
 
-// getProcessMetrics returns the current metrics instance in a thread-safe manner
-func getProcessMetrics() *metrics.MyAudioMetrics {
-	processMetricsMutex.RLock()
-	defer processMetricsMutex.RUnlock()
-	return processMetrics
-}
-
 // InitFloat32Pool initializes the global float32 pool for audio conversion.
 // This should be called during application startup.
 func InitFloat32Pool() error {

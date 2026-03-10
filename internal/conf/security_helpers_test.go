@@ -10,14 +10,11 @@ import (
 // Test constants for Security helper methods.
 const (
 	// Test hostnames and domains
-	testHostExample     = "birdnet.example.com"
-	testHostIgnored     = "ignored.example.com"
-	testHostDifferent   = "different.example.com"
-	testHostSubdomain   = "my.birdnet.home.arpa"
-	testHostLocalhost   = "localhost"
-	testHostIP          = "192.168.1.100"
-	testHostIPv6        = "2001:db8::1"
-	testHostIPv6Bracket = "[2001:db8::1]"
+	testHostExample   = "birdnet.example.com"
+	testHostIgnored   = "ignored.example.com"
+	testHostSubdomain = "my.birdnet.home.arpa"
+	testHostIP        = "192.168.1.100"
+	testHostIPv6      = "2001:db8::1"
 
 	// Test ports
 	testPortCustom = "8080"

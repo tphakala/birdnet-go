@@ -56,7 +56,7 @@ func runPoolConcurrencyGeneric(t *testing.T, numWorkers, opsPerWorker int,
 }
 
 // runPoolConcurrencyWithStats runs pool concurrency tests and verifies stats
-func runPoolConcurrencyWithStats(t *testing.T, bufferSize, numWorkers, opsPerWorker int,
+func runPoolConcurrencyWithStats(t *testing.T, _, numWorkers, opsPerWorker int,
 	getOp func() any, putOp func(any), validateBuffer func(any),
 	getStats func() PoolStatsProvider) {
 	t.Helper()
