@@ -2101,3 +2101,51 @@ func TestScrubMessage_ScrubbsFilePaths(t *testing.T) {
 		})
 	}
 }
+
+func TestAnonymizeStacktracePath(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "empty path",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "short path with one segment",
+			input:    "sentry.go",
+			expected: "sentry.go",
+		},
+		{
+			name:     "short path with two segments",
+			input:    "telemetry/sentry.go",
+			expected: "telemetry/sentry.go",
+		},
+		{
+			name:     "absolute Unix path",
+			input:    "/home/user/go/src/birdnet-go/internal/telemetry/sentry.go",
+			expected: "<redacted>/telemetry/sentry.go",
+		},
+		{
+			name:     "three segments",
+			input:    "internal/telemetry/sentry.go",
+			expected: "<redacted>/telemetry/sentry.go",
+		},
+		{
+			name:     "Windows path",
+			input:    `C:\Users\John\go\src\birdnet-go\internal\telemetry\sentry.go`,
+			expected: "<redacted>/telemetry/sentry.go",
+		},
+		{
+			name:     "mixed separators",
+			input:    `C:\Users\John/internal\telemetry/sentry.go`,
+			expected: "<redacted>/telemetry/sentry.go",
+		},
+	}
+
+	runScrubTests(t, AnonymizeStacktracePath, tests)
+}
