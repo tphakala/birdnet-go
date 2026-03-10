@@ -370,6 +370,7 @@ type FFmpegStream struct {
 	// Sound level processor registration tracking
 	soundLevelNotRegisteredLogMu   sync.Mutex
 	lastSoundLevelNotRegisteredLog time.Time
+	soundLevelDisabled             bool // Set when registration fails; skips ProcessSoundLevelData calls
 
 	// Stream creation time for grace period calculation
 	streamCreatedAt time.Time
@@ -1386,8 +1387,8 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 		Timestamp:  time.Now(),
 	}
 
-	// Process sound level if enabled
-	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+	// Process sound level if enabled and not disabled for this stream
+	if conf.Setting().Realtime.Audio.SoundLevel.Enabled && !s.soundLevelDisabled {
 		if soundLevel, err := ProcessSoundLevelData(s.source.ID, data); err != nil {
 			// Log as warning if it's a registration issue, debug otherwise
 			// Skip logging for normal conditions (interval incomplete, no data)

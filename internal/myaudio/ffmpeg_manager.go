@@ -120,11 +120,12 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 
 	// Initialize sound level processor if enabled
 	if err := registerSoundLevelProcessorIfEnabled(url, getManagerLogger()); err != nil {
-		getManagerLogger().Warn("sound level processor registration failed during stream start",
+		getManagerLogger().Warn("sound level processor registration failed during stream start, disabling for this stream",
 			logger.String("url", privacy.SanitizeStreamUrl(url)),
 			logger.Error(err),
 			logger.String("operation", "start_stream_sound_level_registration"))
-		// Continue with stream start - provides graceful degradation
+		// Mark stream to skip ProcessSoundLevelData calls, preventing error flooding
+		stream.soundLevelDisabled = true
 	}
 
 	// Stream already created above

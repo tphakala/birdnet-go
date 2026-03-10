@@ -79,6 +79,70 @@ func TestErrorOriginTag(t *testing.T) {
 	}
 }
 
+func TestLookupComponentSegmentMatching(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		funcName string
+		want     string
+	}{
+		{
+			name:     "birdnet package matches birdnet component",
+			funcName: "github.com/tphakala/birdnet-go/internal/birdnet.Predict",
+			want:     "birdnet",
+		},
+		{
+			name:     "module path birdnet-go does not match birdnet",
+			funcName: "github.com/tphakala/birdnet-go/cmd.Execute",
+			want:     "cmd", // Falls through to package name extraction fallback
+		},
+		{
+			name:     "myaudio package matches",
+			funcName: "github.com/tphakala/birdnet-go/internal/myaudio.ProcessSoundLevelData",
+			want:     "myaudio",
+		},
+		{
+			name:     "analysis/processor subpackage matches",
+			funcName: "github.com/tphakala/birdnet-go/internal/analysis/processor.NewProcessor",
+			want:     "analysis.processor",
+		},
+		{
+			name:     "api package matches",
+			funcName: "github.com/tphakala/birdnet-go/internal/api.New",
+			want:     "api",
+		},
+		{
+			name:     "api/v2 subpackage still matches api",
+			funcName: "github.com/tphakala/birdnet-go/internal/api/v2.HandleRequest",
+			want:     "api",
+		},
+		{
+			name:     "datastore matches",
+			funcName: "github.com/tphakala/birdnet-go/internal/datastore.Save",
+			want:     "datastore",
+		},
+		{
+			name:     "conf matches configuration",
+			funcName: "github.com/tphakala/birdnet-go/internal/conf.Setting",
+			want:     "configuration",
+		},
+		{
+			name:     "completely unknown function uses package name fallback",
+			funcName: "github.com/other/pkg.Foo",
+			want:     "pkg", // Package name extracted from path
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := lookupComponent(tt.funcName)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
 	ee1 := Newf("database is locked").
 		Component("datastore").

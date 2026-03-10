@@ -439,6 +439,16 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 			logger.String("operation", "startup_audio_check"))
 	}
 
+	// Pre-register sound level processors before starting audio capture to avoid
+	// a race where audio chunks arrive before processors are registered (#2152)
+	if settings.Realtime.Audio.SoundLevel.Enabled {
+		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
+			GetLogger().Warn("pre-registration of sound level processors had errors",
+				logger.Error(err),
+				logger.String("operation", "pre_register_sound_level"))
+		}
+	}
+
 	// start audio capture
 	unifiedAudioChan := startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
 	myaudio.SetCurrentAudioChan(unifiedAudioChan)

@@ -490,16 +490,35 @@ func detectComponentFull() string {
 	return ComponentUnknown
 }
 
-// lookupComponent searches the registry for a matching component
+// lookupComponent searches the registry for a matching component.
+// It matches against path segments and function name prefixes to avoid false positives
+// (e.g. "birdnet" matching "birdnet-go" in the module path).
 func lookupComponent(funcName string) string {
 	registryMutex.RLock()
 	defer registryMutex.RUnlock()
 
-	// Check registered patterns
+	// Check registered patterns using path-segment-aware matching.
+	// A pattern matches if it appears as:
+	//   - a full path segment bounded by "/" (e.g. "/myaudio/")
+	//   - a path segment at the end before "." (e.g. "/myaudio.FuncName")
+	//   - a function/type prefix after "." (e.g. ".soundlevel.SomeFunc")
+	// We track the longest matching pattern to prefer more specific matches
+	// (e.g. "analysis/processor" over "analysis").
+	bestPattern := ""
+	bestComponent := ""
 	for pattern, component := range componentRegistry {
-		if strings.Contains(funcName, pattern) {
-			return component
+		segSlash := "/" + pattern + "/"
+		segDot := "/" + pattern + "."
+		dotPattern := "." + pattern + "."
+		if strings.Contains(funcName, segSlash) || strings.Contains(funcName, segDot) || strings.Contains(funcName, dotPattern) {
+			if len(pattern) > len(bestPattern) {
+				bestPattern = pattern
+				bestComponent = component
+			}
 		}
+	}
+	if bestComponent != "" {
+		return bestComponent
 	}
 
 	// Fallback: extract from package path
