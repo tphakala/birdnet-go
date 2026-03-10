@@ -18,6 +18,18 @@ func skipOnWindows(t *testing.T) {
 	}
 }
 
+// createTestStreamForExitCode creates a minimal FFmpegStream for exit code tests.
+func createTestStreamForExitCode(t *testing.T) *FFmpegStream {
+	t.Helper()
+	audioChan := make(chan UnifiedAudioData, 10)
+	stream := NewFFmpegStream("rtsp://test.example.com/stream", "tcp", audioChan)
+	t.Cleanup(func() {
+		stream.Stop()
+		close(audioChan)
+	})
+	return stream
+}
+
 // TestHandleQuickExitError_CapturesExitCode verifies that handleQuickExitError
 // correctly captures the real exit code from the process via cmd.Wait(),
 // rather than always returning -1/"unavailable" due to the async lifecycle.
@@ -59,22 +71,13 @@ func TestHandleQuickExitError_CapturesExitCode(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := newTestStream(t, "rtsp://test.example.com/stream")
-			stream := result.Stream
+			stream := createTestStreamForExitCode(t)
 
-			// Set up a real command that exits with a known code
+			// Start a command that exits with a known code.
+			// handleQuickExitError calls cmd.Wait() itself, so we just need
+			// a started (not yet waited) cmd that has already exited.
 			cmd := exec.Command(tt.command, tt.args...)
 			require.NoError(t, cmd.Start(), "command should start")
-
-			// Wait for the process to actually exit before calling handleQuickExitError
-			// (simulates the real scenario where stdout returns EOF because process exited)
-			_ = cmd.Wait()
-
-			// Now re-start the command so we can test handleQuickExitError's Wait path
-			// (handleQuickExitError calls cmd.Wait() itself, so the cmd must have been
-			// started but not yet waited on)
-			cmd = exec.Command(tt.command, tt.args...)
-			require.NoError(t, cmd.Start(), "command should start for wait test")
 
 			// Assign the command to the stream (simulating what startProcess does)
 			stream.cmdMu.Lock()
@@ -86,7 +89,7 @@ func TestHandleQuickExitError_CapturesExitCode(t *testing.T) {
 
 			// Call handleQuickExitError — this should call cmd.Wait() and capture
 			// the real exit code instead of returning -1/"unavailable"
-			startTime := time.Now().Add(-1 * time.Second) // pretend we started 1s ago
+			startTime := time.Now().Add(-1 * time.Second)
 			err := stream.handleQuickExitError(startTime)
 
 			require.Error(t, err, "should return an error for quick exit")
@@ -113,8 +116,7 @@ func TestHandleQuickExitError_NilCmd(t *testing.T) {
 	skipOnWindows(t)
 	t.Parallel()
 
-	result := newTestStream(t, "rtsp://test.example.com/stream")
-	stream := result.Stream
+	stream := createTestStreamForExitCode(t)
 
 	// Ensure cmd is nil
 	stream.cmdMu.Lock()
@@ -139,8 +141,7 @@ func TestCleanupProcess_SkipsWaitWhenAlreadyCalled(t *testing.T) {
 	skipOnWindows(t)
 	t.Parallel()
 
-	result := newTestStream(t, "rtsp://test.example.com/stream")
-	stream := result.Stream
+	stream := createTestStreamForExitCode(t)
 
 	// Start a real process
 	cmd := exec.Command("sh", "-c", "exit 1")
@@ -165,7 +166,7 @@ func TestCleanupProcess_SkipsWaitWhenAlreadyCalled(t *testing.T) {
 	stream.exitInfoMu.Unlock()
 
 	// Now call cleanupProcess — it should skip Wait and not panic
-	// We need to re-assign cmd since handleQuickExitError doesn't clear it
+	// Re-assign cmd since handleQuickExitError doesn't clear it
 	stream.cmdMu.Lock()
 	stream.cmd = cmd
 	stream.cmdMu.Unlock()
