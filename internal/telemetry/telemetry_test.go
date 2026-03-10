@@ -293,10 +293,10 @@ func TestScrubStackTraceFrames(t *testing.T) {
 	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].Filename, "internal")
 }
 
-func TestNonFatalEventsHaveNoStackTrace(t *testing.T) {
+func TestNonFatalNonErrorEventsHaveNoStackTrace(t *testing.T) {
 	t.Parallel()
 	event := sentry.NewEvent()
-	event.Level = sentry.LevelError
+	event.Level = sentry.LevelWarning
 	event.Exception = []sentry.Exception{{
 		Stacktrace: &sentry.Stacktrace{
 			Frames: []sentry.Frame{{AbsPath: "/some/path", Function: "foo"}},
@@ -374,4 +374,78 @@ func TestRemovePrivacyExtraFields_AllowsDiagnosticFields(t *testing.T) {
 	assert.Contains(t, extra, "file_size_bytes")
 	assert.Contains(t, extra, "input_file_bytes")
 	assert.NotContains(t, extra, "secret_data")
+}
+
+func TestApplyStacktracePrivacyFilters_ErrorLevel(t *testing.T) {
+	t.Parallel()
+
+	event := &sentry.Event{
+		Level: sentry.LevelError,
+		Exception: []sentry.Exception{{
+			Type:  "TestError",
+			Value: "test error",
+			Stacktrace: &sentry.Stacktrace{
+				Frames: []sentry.Frame{
+					{
+						Function: "myFunc",
+						Module:   "github.com/tphakala/birdnet-go/internal/myaudio",
+						Filename: "internal/myaudio/ffmpeg_stream.go",
+						AbsPath:  "/home/user/birdnet-go/internal/myaudio/ffmpeg_stream.go",
+						Lineno:   42,
+					},
+				},
+			},
+		}},
+	}
+
+	applyStacktracePrivacyFilters(event)
+
+	assert.NotNil(t, event.Exception[0].Stacktrace, "error-level events should retain scrubbed stacktraces")
+	assert.Len(t, event.Exception[0].Stacktrace.Frames, 1)
+	assert.NotContains(t, event.Exception[0].Stacktrace.Frames[0].AbsPath, "/home/user/")
+}
+
+func TestApplyStacktracePrivacyFilters_WarningLevel(t *testing.T) {
+	t.Parallel()
+
+	event := &sentry.Event{
+		Level: sentry.LevelWarning,
+		Exception: []sentry.Exception{{
+			Stacktrace: &sentry.Stacktrace{
+				Frames: []sentry.Frame{{Function: "f", AbsPath: "/home/user/code.go"}},
+			},
+		}},
+	}
+
+	applyStacktracePrivacyFilters(event)
+
+	assert.Nil(t, event.Exception[0].Stacktrace, "warning-level events should still have stacktraces stripped")
+}
+
+func TestApplyStacktracePrivacyFilters_FatalLevel(t *testing.T) {
+	t.Parallel()
+
+	event := &sentry.Event{
+		Level: sentry.LevelFatal,
+		Exception: []sentry.Exception{{
+			Stacktrace: &sentry.Stacktrace{
+				Frames: []sentry.Frame{{Function: "f", AbsPath: "/home/user/code.go"}},
+			},
+		}},
+	}
+
+	applyStacktracePrivacyFilters(event)
+
+	assert.NotNil(t, event.Exception[0].Stacktrace, "fatal-level events should retain stacktraces")
+}
+
+func TestCaptureMessage_InfoLevelFiltered(t *testing.T) {
+	t.Parallel()
+	// Info and debug-level messages should be silently dropped.
+	// These calls should not panic even without Sentry initialized.
+	CaptureMessage("System initialized", sentry.LevelInfo, "system")
+	CaptureMessage("Verbose trace", sentry.LevelDebug, "system")
+	FastCaptureMessage("System initialized", sentry.LevelInfo, "system")
+	FastCaptureMessage("Verbose trace", sentry.LevelDebug, "system")
+	// If we get here without panic, the early return works.
 }
