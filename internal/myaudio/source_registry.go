@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/myaudio/equalizer"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -294,18 +295,31 @@ func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 
 // UpdateAllFilterChains rebuilds filter chains for all registered sources.
 // Called when equalizer settings change via the API.
-// Uses atomic.Pointer.Store so sources actively processing audio see
-// either the old chain or the new chain, never nil.
+// Builds all chains first, then swaps atomically to avoid partial updates
+// if chain creation fails for any source.
 func (r *AudioSourceRegistry) UpdateAllFilterChains(settings *conf.Settings) error {
+	// Snapshot sources under lock
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	sources := slices.Collect(maps.Values(r.sources))
+	r.mu.RUnlock()
 
-	for _, source := range r.sources {
+	// Build all chains outside the lock (no I/O under mutex)
+	type sourceChain struct {
+		source *AudioSource
+		chain  *equalizer.FilterChain
+	}
+	chains := make([]sourceChain, 0, len(sources))
+	for _, source := range sources {
 		chain, err := NewFilterChainFromSettings(settings)
 		if err != nil {
 			return fmt.Errorf("failed to create filter chain for source %s: %w", source.ID, err)
 		}
-		source.SetFilterChain(chain) // atomic store — safe while source is processing
+		chains = append(chains, sourceChain{source: source, chain: chain})
+	}
+
+	// All chains built successfully — swap them in atomically
+	for _, sc := range chains {
+		sc.source.SetFilterChain(sc.chain) // atomic store — safe while source is processing
 	}
 	return nil
 }

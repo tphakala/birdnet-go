@@ -94,7 +94,7 @@ func BytesToFloat64PCM16(samples []byte) []float64 {
 }
 
 // BytesToFloat64PCM16Into converts 16-bit PCM byte data into a pre-allocated float64 slice.
-// dst must have capacity for at least len(samples)/2 elements.
+// dst must have length >= len(samples)/2 (the function indexes dst[i] directly).
 // This avoids allocation when used with pooled buffers.
 func BytesToFloat64PCM16Into(dst []float64, samples []byte) {
 	sampleCount := len(samples) / 2
