@@ -131,7 +131,7 @@ jobs:
           echo "build_version=${BUILD_VERSION}" >> $GITHUB_OUTPUT
 
       - name: Download all build artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
           pattern: birdnet-go-*
