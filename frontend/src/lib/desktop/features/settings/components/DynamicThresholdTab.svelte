@@ -396,9 +396,8 @@
               </button>
 
               <!-- Thumbnail -->
-              <!-- 4:3 aspect ratio to match avicommons source images -->
               <div
-                class="w-10 h-[1.875rem] rounded overflow-hidden bg-[var(--color-base-200)] shrink-0"
+                class="w-10 aspect-[4/3] rounded overflow-hidden bg-[var(--color-base-200)] shrink-0"
               >
                 {#if threshold.scientificName}
                   <img

@@ -156,11 +156,11 @@ Props:
             <img
               src={detection.thumbnail}
               alt={detection.species}
-              class="h-8 w-[2.667rem] rounded-md object-cover"
+              class="h-8 aspect-[4/3] rounded-md object-cover"
             />
           {:else}
             <div
-              class="flex h-8 w-[2.667rem] items-center justify-center rounded-md bg-[var(--color-base-content)]/10 text-xs font-bold text-[var(--color-base-content)]/50"
+              class="flex h-8 aspect-[4/3] items-center justify-center rounded-md bg-[var(--color-base-content)]/10 text-xs font-bold text-[var(--color-base-content)]/50"
             >
               {detection.species.slice(0, 2).toUpperCase()}
             </div>
