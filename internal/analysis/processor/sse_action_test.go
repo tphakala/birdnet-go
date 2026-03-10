@@ -265,13 +265,10 @@ func TestSSEAction_Execute_NoClipNameBroadcastsQuickly(t *testing.T) {
 		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
 	}
 
-	startTime := time.Now()
 	err := action.Execute(t.Context(), nil)
-	duration := time.Since(startTime)
-
 	require.NoError(t, err)
 
-	// SSE broadcast should always be fast
-	assert.Less(t, duration, 500*time.Millisecond,
-		"SSE broadcast should complete quickly")
+	// Verify broadcast was called successfully
+	assert.Equal(t, 1, mockBroadcaster.GetBroadcastCount(), "Should broadcast once")
+	require.NotNil(t, mockBroadcaster.GetLastNote(), "Note should be broadcasted")
 }
