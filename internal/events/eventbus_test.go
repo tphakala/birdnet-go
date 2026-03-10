@@ -268,33 +268,30 @@ func TestEventBusPublish(t *testing.T) {
 func TestEventBusOverflow(t *testing.T) {
 	// Don't run in parallel - modifies global state
 
-	// Logger created in helper function
-
 	// Reset global state after test
 	t.Cleanup(resetGlobalStateForTesting)
 
-	// Create event bus with very small buffer for predictable overflow
-	eb := createTestEventBus(t, 2, 1)
+	// Create event bus with very small buffer for predictable overflow.
+	// Use 0 workers so no goroutine drains the buffer during the test —
+	// this eliminates the race where a worker reads an event (freeing a
+	// buffer slot) before the publishing loop fills the channel.
+	eb := createTestEventBus(t, 2, 0)
 
-	// Create blocking consumer
-	blockChan := make(chan struct{}, 1) // Buffered to prevent blocking
-	releaseChan := make(chan struct{})
-	consumer := &blockingConsumer{
-		name:        "blocking-consumer",
-		blockChan:   blockChan,
-		releaseChan: releaseChan,
-	}
+	// Register a consumer so TryPublish's consumer check passes
+	consumer := &mockConsumer{name: "overflow-consumer"}
 	err := eb.RegisterConsumer(consumer)
 	require.NoError(t, err, "failed to register consumer")
 
-	// Ensure workers are started
-	ensureEventBusStarted(t, eb)
+	// Mark the bus as running so TryPublish accepts events,
+	// but don't call start() which would launch worker goroutines.
+	eb.running.Store(true)
 
 	// Fill the buffer and test overflow
 	var published, dropped uint64
 
 	// Send buffer size + extra events (2 + 3 = 5 total)
-	// First 2 should succeed, rest should fail
+	// Buffer capacity is 2 and no worker is draining, so exactly 2
+	// succeed and 3 are dropped.
 	for i := range 5 {
 		event := &mockErrorEvent{
 			component: "test",
@@ -310,9 +307,7 @@ func TestEventBusOverflow(t *testing.T) {
 		}
 	}
 
-	// Verify results
-	// Buffer capacity is 2, we sent 5 events
-	// Without workers processing, we expect 2 to succeed and 3 to be dropped
+	// Verify results — deterministic because no worker is running
 	assert.Equal(t, uint64(2), published, "expected 2 published events")
 	assert.Equal(t, uint64(3), dropped, "expected 3 dropped events")
 
@@ -321,8 +316,7 @@ func TestEventBusOverflow(t *testing.T) {
 	assert.Equal(t, dropped, stats.EventsDropped)
 	assert.Equal(t, published, stats.EventsReceived)
 
-	// Clean up
-	close(releaseChan) // Release any blocked consumers
+	// Clean up — no workers to drain, just cancel context
 	_ = eb.Shutdown(1 * time.Second)
 }
 
