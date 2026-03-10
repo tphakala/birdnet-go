@@ -17,7 +17,7 @@ type Species struct {
 // Supported formats:
 //   - "ScientificName_CommonName_SpeciesCode" (3 parts)
 //   - "ScientificName_CommonName" (2 parts, most common)
-//   - "Common Name" (space-separated, likely just common name)
+//   - Fallback: returns original string as both ScientificName and CommonName
 //
 // For custom models with species not in the eBird taxonomy, the species code
 // might be empty or a placeholder.
@@ -52,17 +52,6 @@ func ParseSpeciesString(species string) Species {
 		return Species{
 			ScientificName: parts[0],
 			CommonName:     parts[1],
-			Code:           "",
-		}
-	}
-
-	// If we got here, the format doesn't match expected patterns
-	// Check if it has spaces instead, like "Common Blackbird" with no scientific name
-	if len(parts) == 1 && strings.Contains(species, " ") {
-		// This is likely just a common name without scientific name
-		return Species{
-			ScientificName: "",
-			CommonName:     species,
 			Code:           "",
 		}
 	}

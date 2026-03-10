@@ -1036,6 +1036,10 @@ func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string,
 
 // Get retrieves a bird image from the cache, fetching if necessary.
 func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
+	if scientificName == "" {
+		return BirdImage{}, ErrImageNotFound
+	}
+
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
