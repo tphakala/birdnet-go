@@ -334,3 +334,44 @@ func TestPrivacyExtraFieldWhitelist(t *testing.T) {
 	assert.NotContains(t, extra, "secret_field")
 	assert.NotContains(t, extra, "user_data")
 }
+
+func TestRemovePrivacyExtraFields_AllowsDiagnosticFields(t *testing.T) {
+	t.Parallel()
+
+	extra := map[string]any{
+		"error_type":           "test",
+		"component":            "test",
+		"expected_format":      "species_confidence_timestamp",
+		"filename":             "bubo_bubo_80p.wav",
+		"confidence_string":    "80p",
+		"parsed_species":       "bubo_bubo",
+		"parsed_timestamp_str": "20210102T150405Z",
+		"timestamp_string":     "20210102T150405Z",
+		"parsed_confidence":    "80p",
+		"exit_code":            137,
+		"process_state":        "signal: killed",
+		"config_key":           "retention.max_usage",
+		"file_exists":          true,
+		"file_size_bytes":      int64(4096),
+		"input_file_bytes":     int64(0),
+		"secret_data":          "should_drop",
+	}
+
+	removed := removePrivacyExtraFields(extra)
+
+	assert.Equal(t, 1, removed, "only secret_data should be removed")
+	assert.Contains(t, extra, "expected_format")
+	assert.Contains(t, extra, "filename")
+	assert.Contains(t, extra, "confidence_string")
+	assert.Contains(t, extra, "parsed_species")
+	assert.Contains(t, extra, "parsed_timestamp_str")
+	assert.Contains(t, extra, "timestamp_string")
+	assert.Contains(t, extra, "parsed_confidence")
+	assert.Contains(t, extra, "exit_code")
+	assert.Contains(t, extra, "process_state")
+	assert.Contains(t, extra, "config_key")
+	assert.Contains(t, extra, "file_exists")
+	assert.Contains(t, extra, "file_size_bytes")
+	assert.Contains(t, extra, "input_file_bytes")
+	assert.NotContains(t, extra, "secret_data")
+}

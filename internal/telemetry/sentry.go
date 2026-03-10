@@ -347,6 +347,23 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"operation":    true,
 		"category":     true,
 		"error_origin": true,
+		// Diskmanager diagnostic fields (basenames and parsed fragments, no PII)
+		"expected_format":      true,
+		"filename":             true,
+		"confidence_string":    true,
+		"parsed_species":       true,
+		"parsed_timestamp_str": true,
+		"timestamp_string":     true,
+		"parsed_confidence":    true,
+		// FFmpeg exit diagnostics (numeric + Go ProcessState string)
+		"exit_code":     true,
+		"process_state": true,
+		// Config key identifier
+		"config_key": true,
+		// File size diagnostics (numeric/boolean only)
+		"file_exists":      true,
+		"file_size_bytes":  true,
+		"input_file_bytes": true,
 	}
 
 	for k := range extra {
