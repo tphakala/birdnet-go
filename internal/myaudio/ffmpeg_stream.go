@@ -1131,36 +1131,42 @@ func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
 	// run yet at this point.
 	exitCode := -1
 	processState := "unavailable"
+	// Claim ownership of Wait() atomically with reading s.cmd to prevent
+	// a concurrent cleanupProcess (e.g. from Stop()) from spawning its own Wait().
 	s.cmdMu.Lock()
 	cmd := s.cmd
-	s.cmdMu.Unlock()
 	if cmd != nil {
-		// Claim ownership of Wait() immediately so cleanupProcess doesn't
-		// spawn a concurrent Wait() on the same cmd.
 		s.exitInfoMu.Lock()
 		s.exitWaitCalled = true
 		s.exitInfoMu.Unlock()
-
+	}
+	s.cmdMu.Unlock()
+	if cmd != nil {
 		waitDone := make(chan struct{})
 		go func() {
 			_ = cmd.Wait()
+			// Always store exit info when Wait completes, even if the select
+			// below already timed out — a later cleanupProcess may benefit.
+			if cmd.ProcessState != nil {
+				s.exitInfoMu.Lock()
+				s.exitExitCode = cmd.ProcessState.ExitCode()
+				s.exitProcessState = cmd.ProcessState.String()
+				s.exitInfoMu.Unlock()
+			}
 			close(waitDone)
 		}()
 		// Wait briefly — the process already exited so this should be near-instant.
 		select {
 		case <-waitDone:
-			// Only read ProcessState after Wait() has completed to avoid a data race.
-			if cmd.ProcessState != nil {
-				exitCode = cmd.ProcessState.ExitCode()
-				processState = cmd.ProcessState.String()
-			}
+			// Read the stored exit info (written by the goroutine above).
 			s.exitInfoMu.Lock()
-			s.exitExitCode = exitCode
-			s.exitProcessState = processState
+			exitCode = s.exitExitCode
+			processState = s.exitProcessState
 			s.exitInfoMu.Unlock()
 		case <-time.After(processQuickExitTime):
-			// Timeout — the background goroutine will eventually reap the process.
-			// Default -1/"unavailable" will be used for telemetry.
+			// Timeout — the background goroutine will eventually reap the process
+			// and store exit info. Default -1/"unavailable" will be used for
+			// this error report.
 		}
 	}
 
