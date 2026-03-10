@@ -2826,6 +2826,12 @@
           "title": "Posizione Non Configurata",
           "description": "Imposta la tua posizione in Impostazioni Principali per vedere specie disponibili nella tua area. Il filtro intervallo usa la tua posizione per determinare quali specie sono probabilmente presenti nelle vicinanze.",
           "action": "Configura Posizione"
+        },
+        "columns": {
+          "commonName": "Nome comune",
+          "scientificName": "Nome scientifico",
+          "score": "Punteggio",
+          "status": "Stato"
         }
       },
       "alwaysInclude": {

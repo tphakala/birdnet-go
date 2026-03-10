@@ -2884,6 +2884,12 @@
           "title": "Standort nicht konfiguriert",
           "description": "Legen Sie Ihren Standort in den Haupteinstellungen fest, um Arten in Ihrer Umgebung zu sehen. Der Bereichsfilter verwendet Ihren Standort, um zu bestimmen, welche Arten in der Nähe wahrscheinlich vorkommen.",
           "action": "Standort konfigurieren"
+        },
+        "columns": {
+          "commonName": "Name",
+          "scientificName": "Wissenschaftlicher Name",
+          "score": "Bewertung",
+          "status": "Status"
         }
       },
       "alwaysInclude": {

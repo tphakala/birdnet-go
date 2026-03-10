@@ -2860,6 +2860,12 @@
           "title": "Poloha nie je nakonfigurovaná",
           "description": "Nastavte svoju polohu v Hlavných nastaveniach, aby ste videli druhy dostupné vo vašej oblasti. Filter rozsahu používa vašu polohu na určenie toho, ktoré druhy sa pravdepodobne nachádzajú v blízkosti.",
           "action": "Konfigurovať polohu"
+        },
+        "columns": {
+          "commonName": "Názov",
+          "scientificName": "Vedecký názov",
+          "score": "Skóre",
+          "status": "Stav"
         }
       },
       "alwaysInclude": {

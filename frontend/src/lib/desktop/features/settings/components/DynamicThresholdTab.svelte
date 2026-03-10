@@ -32,9 +32,7 @@
   import { loggers } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
-  import SettingsCard from './SettingsCard.svelte';
   import SettingsNote from './SettingsNote.svelte';
-  import StatsCard from './StatsCard.svelte';
 
   const logger = loggers.settings;
 
@@ -73,10 +71,8 @@
   // Handle column header click to toggle sort
   function handleSort(column: SortColumn) {
     if (sortColumn === column) {
-      // Toggle direction if clicking same column
       sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
     } else {
-      // New column: set to ascending by default
       sortColumn = column;
       sortDirection = 'asc';
     }
@@ -84,12 +80,10 @@
 
   // Derived state - filter and sort by selected column
   let filteredThresholds = $derived.by(() => {
-    // First filter by search query
     const filtered = searchQuery
       ? thresholds.filter(t => t.speciesName.toLowerCase().includes(searchQuery.toLowerCase()))
       : thresholds;
 
-    // Then sort by selected column
     return [...filtered].sort((a, b) => {
       let comparison = 0;
 
@@ -101,15 +95,11 @@
           comparison = a.currentValue - b.currentValue;
           break;
         case 'expires': {
-          // Sort by active status first, then by expiration date
-          // Active items come before expired ones in ascending order
           if (a.isActive !== b.isActive) {
             comparison = a.isActive ? -1 : 1;
           } else if (a.isActive && b.isActive) {
-            // Both active: compare expiration dates
             comparison = new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
           } else {
-            // Both expired: compare by expiration date (most recently expired first)
             comparison = new Date(b.expiresAt).getTime() - new Date(a.expiresAt).getTime();
           }
           break;
@@ -122,7 +112,6 @@
 
   let activeThresholds = $derived(thresholds.filter(t => t.isActive));
 
-  // Load data on mount
   onMount(() => {
     loadData();
   });
@@ -210,7 +199,6 @@
     return new Date(isoDate).toLocaleString();
   }
 
-  // Map change reason to i18n key
   function getChangeReasonKey(reason: ThresholdChangeReason): string {
     switch (reason) {
       case 'high_confidence':
@@ -220,7 +208,6 @@
       case 'manual_reset':
         return 'settings.species.dynamicThreshold.changeReason.manualReset';
       default:
-        // Fallback for any future change reasons
         return 'settings.species.dynamicThreshold.changeReason.highConfidence';
     }
   }
@@ -228,290 +215,380 @@
 
 <div class="space-y-4">
   <!-- Description -->
-  <div class="text-sm text-[var(--color-base-content)]/70">
-    <p>{t('settings.species.dynamicThreshold.description')}</p>
-  </div>
+  <p class="text-sm text-muted">{t('settings.species.dynamicThreshold.description')}</p>
 
   <!-- Stats Cards -->
   {#if stats}
     <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-      <StatsCard
-        icon={Activity}
-        label={t('settings.species.dynamicThreshold.stats.active')}
-        value={stats.activeCount}
-      />
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+      >
+        <div class="flex items-center gap-2 mb-1.5">
+          <div class="p-1 rounded-md bg-violet-500/10">
+            <Activity class="w-3.5 h-3.5 text-violet-500" />
+          </div>
+          <span class="text-xs font-medium text-muted"
+            >{t('settings.species.dynamicThreshold.stats.active')}</span
+          >
+        </div>
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">{stats.activeCount}</span>
+      </div>
 
-      <StatsCard
-        icon={TrendingDown}
-        label={t('settings.species.dynamicThreshold.stats.atMinimum')}
-        value={stats.atMinimumCount}
-      />
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+      >
+        <div class="flex items-center gap-2 mb-1.5">
+          <div class="p-1 rounded-md bg-orange-500/10">
+            <TrendingDown class="w-3.5 h-3.5 text-orange-500" />
+          </div>
+          <span class="text-xs font-medium text-muted"
+            >{t('settings.species.dynamicThreshold.stats.atMinimum')}</span
+          >
+        </div>
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+          >{stats.atMinimumCount}</span
+        >
+      </div>
 
-      <StatsCard
-        icon={Gauge}
-        label={t('settings.species.dynamicThreshold.stats.minThreshold')}
-        value="{(stats.minThreshold * 100).toFixed(0)}%"
-      />
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+      >
+        <div class="flex items-center gap-2 mb-1.5">
+          <div class="p-1 rounded-md bg-emerald-500/10">
+            <Gauge class="w-3.5 h-3.5 text-emerald-500" />
+          </div>
+          <span class="text-xs font-medium text-muted"
+            >{t('settings.species.dynamicThreshold.stats.minThreshold')}</span
+          >
+        </div>
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+          >{(stats.minThreshold * 100).toFixed(0)}%</span
+        >
+      </div>
 
-      <StatsCard
-        icon={Clock}
-        label={t('settings.species.dynamicThreshold.stats.validityPeriod')}
-        value="{stats.validHours}h"
-      />
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+      >
+        <div class="flex items-center gap-2 mb-1.5">
+          <div class="p-1 rounded-md bg-blue-500/10">
+            <Clock class="w-3.5 h-3.5 text-blue-500" />
+          </div>
+          <span class="text-xs font-medium text-muted"
+            >{t('settings.species.dynamicThreshold.stats.validityPeriod')}</span
+          >
+        </div>
+        <span class="font-mono tabular-nums text-xl font-semibold pl-0.5">{stats.validHours}h</span>
+      </div>
     </div>
   {/if}
 
   <!-- Action Bar -->
   <div class="flex flex-wrap items-center gap-3">
     <div class="relative flex-1 min-w-48">
-      <Search class="absolute left-3 top-1/2 -translate-y-1/2 size-4 opacity-50" />
+      <Search
+        class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted"
+        aria-hidden="true"
+      />
       <input
         type="text"
         placeholder={t('settings.species.dynamicThreshold.searchPlaceholder')}
-        class="input input-bordered w-full pl-10"
+        class="w-full pl-8 pr-3 py-1.5 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-blue-500/40"
         bind:value={searchQuery}
+        autocomplete="off"
+        data-1p-ignore
+        data-lpignore="true"
+        data-form-type="other"
       />
     </div>
 
-    <button class="btn btn-ghost btn-sm gap-2" onclick={() => loadData()} disabled={loading}>
-      <RefreshCw class="size-4 {loading ? 'animate-spin' : ''}" />
+    <button
+      class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05] text-muted disabled:opacity-50 disabled:cursor-not-allowed"
+      onclick={() => loadData()}
+      disabled={loading}
+    >
+      <RefreshCw class="size-3.5 {loading ? 'animate-spin' : ''}" />
       {t('common.refresh')}
     </button>
 
     {#if activeThresholds.length > 0}
       <button
-        class="btn btn-error btn-sm gap-2"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         onclick={() => (resetAllConfirm = true)}
         disabled={resetting}
       >
-        <Trash2 class="size-4" />
+        <Trash2 class="size-3.5" />
         {t('settings.species.dynamicThreshold.resetAll')}
       </button>
     {/if}
   </div>
 
   <!-- Threshold List -->
-  <SettingsCard>
+  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
     {#if loading}
-      <div class="flex justify-center py-8">
-        <span class="loading loading-spinner loading-lg"></span>
+      <div class="flex items-center justify-center py-12">
+        <div
+          class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+        ></div>
       </div>
     {:else if filteredThresholds.length === 0}
-      <div class="text-center py-8 text-[var(--color-base-content)]/60">
-        <Activity class="size-12 mx-auto mb-3 opacity-40" />
-        <p class="font-medium">{t('settings.species.dynamicThreshold.empty.title')}</p>
-        <p class="text-sm">{t('settings.species.dynamicThreshold.empty.description')}</p>
+      <div class="text-center py-8 text-muted">
+        <Activity class="size-12 mx-auto mb-3 opacity-30" />
+        <p class="text-sm font-medium">{t('settings.species.dynamicThreshold.empty.title')}</p>
+        <p class="text-xs mt-1">{t('settings.species.dynamicThreshold.empty.description')}</p>
       </div>
     {:else}
-      <!-- Table Header -->
-      <div
-        class="grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 items-center px-2 py-2 text-xs font-medium text-[var(--color-base-content)]/60 border-b border-[var(--color-base-300)]"
-      >
-        <div class="w-6"></div>
-        <div class="w-10"></div>
-        <button
-          type="button"
-          class="flex items-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer text-left"
-          onclick={() => handleSort('species')}
-          aria-label={t('dataDisplay.table.sortBy', {
-            column: t('settings.species.dynamicThreshold.header.species'),
-          })}
-        >
-          {t('settings.species.dynamicThreshold.header.species')}
-          {#if sortColumn === 'species'}
-            {#if sortDirection === 'asc'}
-              <ChevronUp class="size-3.5" />
-            {:else}
-              <ChevronDown class="size-3.5" />
-            {/if}
-          {:else}
-            <ChevronsUpDown class="size-3.5 opacity-30" />
-          {/if}
-        </button>
-        <button
-          type="button"
-          class="flex items-center justify-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-20"
-          onclick={() => handleSort('threshold')}
-          aria-label={t('dataDisplay.table.sortBy', {
-            column: t('settings.species.dynamicThreshold.header.threshold'),
-          })}
-        >
-          {t('settings.species.dynamicThreshold.header.threshold')}
-          {#if sortColumn === 'threshold'}
-            {#if sortDirection === 'asc'}
-              <ChevronUp class="size-3.5" />
-            {:else}
-              <ChevronDown class="size-3.5" />
-            {/if}
-          {:else}
-            <ChevronsUpDown class="size-3.5 opacity-30" />
-          {/if}
-        </button>
-        <button
-          type="button"
-          class="flex items-center justify-center gap-1 hover:text-[var(--color-primary)] transition-colors cursor-pointer w-20"
-          onclick={() => handleSort('expires')}
-          aria-label={t('dataDisplay.table.sortBy', {
-            column: t('settings.species.dynamicThreshold.header.expires'),
-          })}
-        >
-          {t('settings.species.dynamicThreshold.header.expires')}
-          {#if sortColumn === 'expires'}
-            {#if sortDirection === 'asc'}
-              <ChevronUp class="size-3.5" />
-            {:else}
-              <ChevronDown class="size-3.5" />
-            {/if}
-          {:else}
-            <ChevronsUpDown class="size-3.5 opacity-30" />
-          {/if}
-        </button>
-        <div class="w-8"></div>
-      </div>
-
-      <!-- Table Body -->
-      <div class="divide-y divide-[var(--color-base-300)]">
-        {#each filteredThresholds as threshold (threshold.speciesName)}
-          {@const levelDisplay = getLevelDisplay(threshold.level as ThresholdLevel)}
-          {@const isExpanded = expandedSpecies.has(threshold.speciesName)}
-          {@const events = speciesEvents.get(threshold.speciesName) || []}
-          {@const isLoadingEvents = loadingEvents.has(threshold.speciesName)}
-
-          <div class="py-2">
-            <!-- Main Row -->
-            <div class="grid grid-cols-[auto_auto_1fr_auto_auto_auto] gap-3 items-center px-2">
-              <button
-                class="btn btn-ghost btn-xs btn-square"
-                onclick={() => toggleExpanded(threshold.speciesName)}
-                aria-label={isExpanded
-                  ? t('settings.species.dynamicThreshold.collapse')
-                  : t('settings.species.dynamicThreshold.expand')}
-                aria-expanded={isExpanded}
+      <div class="overflow-x-auto overflow-y-auto max-h-[32rem]">
+        <table class="w-full text-sm">
+          <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
+            <tr class="border-b border-[var(--border-100)]">
+              <th class="w-8 py-2 px-2"></th>
+              <th class="w-10 py-2 px-1"></th>
+              <th
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                role="columnheader"
+                tabindex="0"
+                aria-sort={sortColumn === 'species'
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'}
+                onclick={() => handleSort('species')}
+                onkeydown={(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('species');
+                  }
+                }}
               >
-                {#if isExpanded}
-                  <ChevronUp class="size-4" />
-                {:else}
-                  <ChevronDown class="size-4" />
-                {/if}
-              </button>
-
-              <!-- Thumbnail -->
-              <div
-                class="w-10 aspect-[4/3] rounded overflow-hidden bg-[var(--color-base-200)] shrink-0"
-              >
-                {#if threshold.scientificName}
-                  <img
-                    src="/api/v2/media/species-image?name={encodeURIComponent(
-                      threshold.scientificName
-                    )}"
-                    alt={threshold.speciesName}
-                    class="w-full h-full object-cover"
-                    onerror={handleBirdImageError}
-                    loading="lazy"
-                  />
-                {/if}
-              </div>
-
-              <div class="font-medium truncate">{threshold.speciesName}</div>
-
-              <div class="text-center w-20">
-                <span class="badge {levelDisplay.badgeClass}">
-                  {(threshold.currentValue * 100).toFixed(0)}%
-                </span>
-              </div>
-
-              <div class="text-center w-20 text-sm">
-                {#if threshold.isActive}
-                  {getTimeRemaining(threshold.expiresAt)}
-                {:else}
-                  <span class="text-[var(--color-warning)]"
-                    >{t('settings.species.dynamicThreshold.expired')}</span
-                  >
-                {/if}
-              </div>
-
-              <!-- Reset Button -->
-              {#if resetConfirmSpecies === threshold.speciesName}
                 <div class="flex items-center gap-1">
-                  <button
-                    class="btn btn-error btn-xs"
-                    onclick={() => resetThreshold(threshold.speciesName)}
-                    disabled={resetting}
-                  >
-                    {t('common.confirm')}
-                  </button>
-                  <button class="btn btn-ghost btn-xs" onclick={() => (resetConfirmSpecies = null)}>
-                    {t('common.cancel')}
-                  </button>
+                  {t('settings.species.dynamicThreshold.header.species')}
+                  {#if sortColumn === 'species'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="w-3 h-3" />
+                    {:else}
+                      <ChevronDown class="w-3 h-3" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
+                  {/if}
                 </div>
-              {:else}
-                <button
-                  class="btn btn-ghost btn-xs btn-square"
-                  onclick={() => (resetConfirmSpecies = threshold.speciesName)}
-                  title={t('settings.species.dynamicThreshold.resetSpecies')}
-                  aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
-                >
-                  <Trash2 class="size-4" />
-                </button>
-              {/if}
-            </div>
+              </th>
+              <th
+                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted w-24"
+                role="columnheader"
+                tabindex="0"
+                aria-sort={sortColumn === 'threshold'
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'}
+                onclick={() => handleSort('threshold')}
+                onkeydown={(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('threshold');
+                  }
+                }}
+              >
+                <div class="flex items-center justify-center gap-1">
+                  {t('settings.species.dynamicThreshold.header.threshold')}
+                  {#if sortColumn === 'threshold'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="w-3 h-3" />
+                    {:else}
+                      <ChevronDown class="w-3 h-3" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
+                  {/if}
+                </div>
+              </th>
+              <th
+                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted w-24"
+                role="columnheader"
+                tabindex="0"
+                aria-sort={sortColumn === 'expires'
+                  ? sortDirection === 'asc'
+                    ? 'ascending'
+                    : 'descending'
+                  : 'none'}
+                onclick={() => handleSort('expires')}
+                onkeydown={(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleSort('expires');
+                  }
+                }}
+              >
+                <div class="flex items-center justify-center gap-1">
+                  {t('settings.species.dynamicThreshold.header.expires')}
+                  {#if sortColumn === 'expires'}
+                    {#if sortDirection === 'asc'}
+                      <ChevronUp class="w-3 h-3" />
+                    {:else}
+                      <ChevronDown class="w-3 h-3" />
+                    {/if}
+                  {:else}
+                    <ChevronsUpDown class="w-3 h-3 opacity-30" />
+                  {/if}
+                </div>
+              </th>
+              <th class="w-8 py-2 px-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filteredThresholds as threshold (threshold.speciesName)}
+              {@const levelDisplay = getLevelDisplay(threshold.level as ThresholdLevel)}
+              {@const isExpanded = expandedSpecies.has(threshold.speciesName)}
+              {@const events = speciesEvents.get(threshold.speciesName) || []}
+              {@const isLoadingEvents = loadingEvents.has(threshold.speciesName)}
 
-            <!-- Expanded Events -->
-            {#if isExpanded}
-              <div class="mt-3 ml-8 pl-4 border-l-2 border-[var(--color-base-300)]">
-                {#if isLoadingEvents}
-                  <div class="flex items-center gap-2 py-2 text-[var(--color-base-content)]/60">
-                    <span class="loading loading-spinner loading-xs"></span>
-                    <span class="text-sm">{t('common.loading')}</span>
+              <tr
+                class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+              >
+                <td class="py-2 px-2">
+                  <button
+                    class="inline-flex items-center justify-center p-1 rounded-md hover:bg-[var(--surface-200)] transition-colors"
+                    onclick={() => toggleExpanded(threshold.speciesName)}
+                    aria-label={isExpanded
+                      ? t('settings.species.dynamicThreshold.collapse')
+                      : t('settings.species.dynamicThreshold.expand')}
+                    aria-expanded={isExpanded}
+                  >
+                    {#if isExpanded}
+                      <ChevronUp class="size-4" />
+                    {:else}
+                      <ChevronDown class="size-4" />
+                    {/if}
+                  </button>
+                </td>
+                <td class="py-2 px-1">
+                  <div
+                    class="w-10 aspect-[4/3] rounded overflow-hidden bg-[var(--surface-200)] shrink-0"
+                  >
+                    {#if threshold.scientificName}
+                      <img
+                        src="/api/v2/media/species-image?name={encodeURIComponent(
+                          threshold.scientificName
+                        )}"
+                        alt={threshold.speciesName}
+                        class="w-full h-full object-cover"
+                        onerror={handleBirdImageError}
+                        loading="lazy"
+                      />
+                    {/if}
                   </div>
-                {:else if events.length === 0}
-                  <p class="text-sm text-[var(--color-base-content)]/60 py-2">
-                    {t('settings.species.dynamicThreshold.noEvents')}
-                  </p>
-                {:else}
-                  <div class="space-y-2">
-                    {#each events as event (event.id)}
-                      <div class="flex items-start gap-2 text-sm">
-                        <div
-                          class="w-2 h-2 rounded-full mt-1.5 shrink-0"
-                          class:bg-blue-500={event.changeReason === 'high_confidence'}
-                          class:bg-gray-400={event.changeReason === 'expiry'}
-                          class:bg-orange-500={event.changeReason === 'manual_reset'}
-                        ></div>
-                        <div class="flex-1 min-w-0">
-                          <div class="flex items-center gap-2 flex-wrap">
-                            <span class="font-medium">
-                              {t('settings.species.dynamicThreshold.requiredConfidence')}:
-                              {(event.previousValue * 100).toFixed(0)}% → {(
-                                event.newValue * 100
-                              ).toFixed(0)}%
-                            </span>
-                            <span class="text-xs text-[var(--color-base-content)]/60">
-                              ({t(getChangeReasonKey(event.changeReason))})
-                            </span>
-                          </div>
-                          <div class="text-xs text-[var(--color-base-content)]/60">
-                            {formatDate(event.createdAt)}
-                            {#if event.confidence && event.confidence > 0}
-                              <span class="ml-2">
-                                {t('settings.species.dynamicThreshold.confidence')}: {(
-                                  event.confidence * 100
-                                ).toFixed(0)}%
-                              </span>
-                            {/if}
-                          </div>
+                </td>
+                <td class="py-2 px-3">
+                  <span class="font-medium text-sm truncate block">{threshold.speciesName}</span>
+                </td>
+                <td class="py-2 px-3 text-center">
+                  <span class="badge {levelDisplay.badgeClass}">
+                    {(threshold.currentValue * 100).toFixed(0)}%
+                  </span>
+                </td>
+                <td class="py-2 px-3 text-center">
+                  {#if threshold.isActive}
+                    <span class="text-xs font-medium">{getTimeRemaining(threshold.expiresAt)}</span>
+                  {:else}
+                    <span class="text-xs font-medium text-amber-500"
+                      >{t('settings.species.dynamicThreshold.expired')}</span
+                    >
+                  {/if}
+                </td>
+                <td class="py-2 px-2">
+                  {#if resetConfirmSpecies === threshold.speciesName}
+                    <div class="flex items-center gap-1">
+                      <button
+                        class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                        onclick={() => resetThreshold(threshold.speciesName)}
+                        disabled={resetting}
+                      >
+                        {t('common.confirm')}
+                      </button>
+                      <button
+                        class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md hover:bg-[var(--surface-200)] transition-colors"
+                        onclick={() => (resetConfirmSpecies = null)}
+                      >
+                        {t('common.cancel')}
+                      </button>
+                    </div>
+                  {:else}
+                    <button
+                      class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors"
+                      onclick={() => (resetConfirmSpecies = threshold.speciesName)}
+                      title={t('settings.species.dynamicThreshold.resetSpecies')}
+                      aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
+                    >
+                      <Trash2 class="size-4 text-muted" />
+                    </button>
+                  {/if}
+                </td>
+              </tr>
+
+              <!-- Expanded Events Row -->
+              {#if isExpanded}
+                <tr>
+                  <td colspan="6" class="px-4 pb-3">
+                    <div class="ml-8 pl-4 border-l-2 border-[var(--border-100)] mt-1">
+                      {#if isLoadingEvents}
+                        <div class="flex items-center gap-2 py-2 text-muted">
+                          <div
+                            class="inline-block w-3 h-3 border-2 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+                          ></div>
+                          <span class="text-xs">{t('common.loading')}</span>
                         </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/if}
-          </div>
-        {/each}
+                      {:else if events.length === 0}
+                        <p class="text-xs text-muted py-2">
+                          {t('settings.species.dynamicThreshold.noEvents')}
+                        </p>
+                      {:else}
+                        <div class="space-y-2 py-1">
+                          {#each events as event (event.id)}
+                            <div class="flex items-start gap-2 text-xs">
+                              <div
+                                class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                                class:bg-blue-500={event.changeReason === 'high_confidence'}
+                                class:bg-gray-400={event.changeReason === 'expiry'}
+                                class:bg-orange-500={event.changeReason === 'manual_reset'}
+                              ></div>
+                              <div class="flex-1 min-w-0">
+                                <div class="flex items-center gap-2 flex-wrap">
+                                  <span class="font-medium">
+                                    {t('settings.species.dynamicThreshold.requiredConfidence')}:
+                                    {(event.previousValue * 100).toFixed(0)}% → {(
+                                      event.newValue * 100
+                                    ).toFixed(0)}%
+                                  </span>
+                                  <span class="text-muted">
+                                    ({t(getChangeReasonKey(event.changeReason))})
+                                  </span>
+                                </div>
+                                <div class="text-muted mt-0.5">
+                                  {formatDate(event.createdAt)}
+                                  {#if event.confidence && event.confidence > 0}
+                                    <span class="ml-2">
+                                      {t('settings.species.dynamicThreshold.confidence')}: {(
+                                        event.confidence * 100
+                                      ).toFixed(0)}%
+                                    </span>
+                                  {/if}
+                                </div>
+                              </div>
+                            </div>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  </td>
+                </tr>
+              {/if}
+            {/each}
+          </tbody>
+        </table>
       </div>
     {/if}
-  </SettingsCard>
+  </div>
 
   <!-- Info Note -->
   <SettingsNote>
@@ -526,40 +603,51 @@
 
 <!-- Reset All Confirmation Modal -->
 {#if resetAllConfirm}
-  <div class="modal modal-open">
-    <div class="modal-box">
-      <h3 class="font-bold text-lg flex items-center gap-2">
-        <AlertTriangle class="size-5 text-[var(--color-warning)]" />
+  <div
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="reset-modal-title"
+  >
+    <div
+      class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-lg p-6 max-w-md mx-4"
+    >
+      <h3 id="reset-modal-title" class="font-bold text-lg flex items-center gap-2">
+        <AlertTriangle class="size-5 text-amber-500" />
         {t('settings.species.dynamicThreshold.resetAllConfirm.title')}
       </h3>
-      <p class="py-4">
+      <p class="text-sm text-muted mt-3">
         {t('settings.species.dynamicThreshold.resetAllConfirm.message', {
           count: activeThresholds.length,
         })}
       </p>
-      <div class="modal-action">
+      <div class="flex justify-end gap-2 mt-6">
         <button
-          class="btn btn-ghost"
+          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50"
           onclick={() => (resetAllConfirm = false)}
           disabled={resetting}
         >
           {t('common.cancel')}
         </button>
-        <button class="btn btn-error" onclick={resetAllThresholds} disabled={resetting}>
+        <button
+          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+          onclick={resetAllThresholds}
+          disabled={resetting}
+        >
           {#if resetting}
-            <span class="loading loading-spinner loading-sm"></span>
+            <div
+              class="inline-block w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin mr-1.5"
+            ></div>
           {/if}
           {t('settings.species.dynamicThreshold.resetAll')}
         </button>
       </div>
     </div>
-    <div
-      class="modal-backdrop"
+    <button
+      class="fixed inset-0 -z-10"
       onclick={() => (resetAllConfirm = false)}
-      onkeydown={e => e.key === 'Escape' && (resetAllConfirm = false)}
-      role="button"
-      tabindex="-1"
       aria-label="Close modal"
-    ></div>
+      tabindex="-1"
+    ></button>
   </div>
 {/if}

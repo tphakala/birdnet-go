@@ -3023,6 +3023,12 @@
           "title": "Emplacement non configuré",
           "description": "Définissez votre emplacement dans les Paramètres Principaux pour voir les espèces disponibles dans votre région. Le filtre de portée utilise votre emplacement pour déterminer quelles espèces sont susceptibles d'être présentes à proximité.",
           "action": "Configurer l'emplacement"
+        },
+        "columns": {
+          "commonName": "Nom commun",
+          "scientificName": "Nom scientifique",
+          "score": "Score",
+          "status": "Statut"
         }
       },
       "alwaysInclude": {

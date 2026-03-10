@@ -2884,6 +2884,12 @@
           "title": "Localização não configurada",
           "description": "Defina sua localização nas Configurações Principais para ver as espécies disponíveis na sua área. O filtro de alcance usa sua localização para determinar quais espécies provavelmente serão encontradas nas proximidades.",
           "action": "Configurar localização"
+        },
+        "columns": {
+          "commonName": "Nome comum",
+          "scientificName": "Nome científico",
+          "score": "Pontuação",
+          "status": "Estado"
         }
       },
       "alwaysInclude": {

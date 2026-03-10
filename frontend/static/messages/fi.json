@@ -2884,6 +2884,12 @@
           "title": "Sijaintia ei ole määritetty",
           "description": "Määritä sijaintisi pääasetuksissa nähdäksesi alueellasi esiintyvät lajit. Aluesuodatin käyttää sijaintiasi määrittääkseen, mitkä lajit todennäköisesti esiintyvät lähistölläsi.",
           "action": "Määritä sijainti"
+        },
+        "columns": {
+          "commonName": "Nimi",
+          "scientificName": "Tieteellinen nimi",
+          "score": "Pisteet",
+          "status": "Tila"
         }
       },
       "alwaysInclude": {

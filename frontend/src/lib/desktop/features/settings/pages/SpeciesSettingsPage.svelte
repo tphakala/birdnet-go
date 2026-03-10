@@ -44,7 +44,8 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import DynamicThresholdTab from '$lib/desktop/features/settings/components/DynamicThresholdTab.svelte';
-  import StatsCard from '$lib/desktop/features/settings/components/StatsCard.svelte';
+  import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
+  import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -59,14 +60,10 @@
     CircleMinus,
     Settings2,
     ListCheck,
-    Download,
     MapPin,
     SlidersHorizontal,
     Clock,
     Bird,
-    Search,
-    Maximize2,
-    Minimize2,
     CalendarClock,
     Activity,
   } from '@lucide/svelte';
@@ -209,57 +206,7 @@
     initialized: false,
   });
 
-  // Search query for active species filtering
-  // Use separate input value and debounced query to prevent rapid reactive updates
-  // that can corrupt Svelte's internal state
-  let searchInputValue = $state('');
-  let activeSearchQuery = $state('');
-  let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Debounced search update to prevent Svelte reactive corruption during rapid typing
-  function handleSearchInput(event: Event) {
-    const value = (event.target as HTMLInputElement).value;
-    searchInputValue = value;
-
-    // Clear existing timer
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-    }
-
-    // Debounce the actual search query update
-    searchDebounceTimer = setTimeout(() => {
-      searchDebounceTimer = null;
-      activeSearchQuery = value;
-    }, 150);
-  }
-
-  // List view state: expanded or compact with scroll
-  let isListExpanded = $state(false);
-
-  // Filtered active species list - use pure $derived.by() to avoid any state modifications
-  // during Svelte's reactive update cycle which can corrupt internal linked list state
-  // This is a read-only computation, not a state change, so it's safe
-  let filteredActiveSpecies = $derived.by(() => {
-    const data = activeSpeciesState.data;
-    const searchQuery = activeSearchQuery;
-
-    if (!data?.species) {
-      return [] as ActiveSpecies[];
-    }
-
-    const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      // Return the original array reference when no search query
-      // This is safe because we're not mutating it
-      return data.species;
-    }
-
-    // Filter creates a new array, which is what we want for search results
-    return data.species.filter(
-      s =>
-        s.commonName.toLowerCase().includes(query) || s.scientificName.toLowerCase().includes(query)
-    );
-  });
+  // Search/filter/expand state is now handled inside SpeciesTable component
 
   // PERFORMANCE OPTIMIZATION: Derived species lists
   let allSpecies = $derived(speciesListState.data);
@@ -737,9 +684,6 @@
     clearTimeout(debounceTimeouts.include);
     clearTimeout(debounceTimeouts.exclude);
     clearTimeout(debounceTimeouts.config);
-    if (searchDebounceTimer) {
-      clearTimeout(searchDebounceTimer);
-    }
   });
 
   function updateIncludePredictions(input: string) {
@@ -1025,405 +969,246 @@
 <!-- Active Species Tab Content -->
 {#snippet activeTabContent()}
   <div class="space-y-4">
-    <!-- Stats Bar - Outside the card -->
+    <!-- Stats Bar -->
     {#if activeSpeciesState.data}
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatsCard
-          icon={Bird}
-          label={t('settings.species.activeSpecies.stats.species')}
-          value={activeSpeciesState.data.count}
-        />
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="p-1 rounded-md bg-emerald-500/10">
+              <Bird class="w-3.5 h-3.5 text-emerald-500" />
+            </div>
+            <span class="text-xs font-medium text-muted"
+              >{t('settings.species.activeSpecies.stats.species')}</span
+            >
+          </div>
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+            >{activeSpeciesState.data.count}</span
+          >
+        </div>
 
-        <StatsCard
-          icon={MapPin}
-          label={t('settings.species.activeSpecies.stats.location')}
-          value="{activeSpeciesState.data.location.latitude.toFixed(
-            2
-          )}°, {activeSpeciesState.data.location.longitude.toFixed(2)}°"
-        />
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="p-1 rounded-md bg-blue-500/10">
+              <MapPin class="w-3.5 h-3.5 text-blue-500" />
+            </div>
+            <span class="text-xs font-medium text-muted"
+              >{t('settings.species.activeSpecies.stats.location')}</span
+            >
+          </div>
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+            >{activeSpeciesState.data.location.latitude.toFixed(2)}°, {activeSpeciesState.data.location.longitude.toFixed(
+              2
+            )}°</span
+          >
+        </div>
 
-        <StatsCard
-          icon={SlidersHorizontal}
-          label={t('settings.species.activeSpecies.stats.threshold')}
-          value={activeSpeciesState.data.threshold}
-        />
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="p-1 rounded-md bg-violet-500/10">
+              <SlidersHorizontal class="w-3.5 h-3.5 text-violet-500" />
+            </div>
+            <span class="text-xs font-medium text-muted"
+              >{t('settings.species.activeSpecies.stats.threshold')}</span
+            >
+          </div>
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+            >{activeSpeciesState.data.threshold}</span
+          >
+        </div>
 
-        <StatsCard
-          icon={Clock}
-          label={t('settings.species.activeSpecies.stats.updated')}
-          value={formatRelativeTime(activeSpeciesState.data.lastUpdated)}
-        />
+        <div
+          class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
+        >
+          <div class="flex items-center gap-2 mb-1.5">
+            <div class="p-1 rounded-md bg-orange-500/10">
+              <Clock class="w-3.5 h-3.5 text-orange-500" />
+            </div>
+            <span class="text-xs font-medium text-muted"
+              >{t('settings.species.activeSpecies.stats.updated')}</span
+            >
+          </div>
+          <span class="font-mono tabular-nums text-xl font-semibold pl-0.5"
+            >{formatRelativeTime(activeSpeciesState.data.lastUpdated)}</span
+          >
+        </div>
       </div>
     {/if}
 
-    <!-- Main Content Card -->
-    <SettingsSection
-      title={t('settings.species.activeSpecies.title')}
-      description={t('settings.species.activeSpecies.description')}
-      defaultOpen={true}
-    >
-      <div class="space-y-4">
-        <!-- Loading State: Show spinner until both main settings AND active species data are ready -->
-        <!-- Guard against flash: Don't show location warning until main settings have truly loaded from API -->
-        {#if activeSpeciesState.loading || store.isLoading || !store.originalData?.birdnet}
-          <div class="flex items-center justify-center py-12">
-            <div
-              class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-            ></div>
-          </div>
-        {:else if activeSpeciesState.error}
-          <!-- Error State -->
+    <!-- Main Content -->
+    {#if activeSpeciesState.loading || store.isLoading || !store.originalData?.birdnet}
+      <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
+        <div class="flex items-center justify-center py-12">
           <div
-            class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]"
-          >
-            <p class="text-sm">{activeSpeciesState.error}</p>
-            <button
-              type="button"
-              class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_25%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_35%,transparent)] transition-colors"
-              onclick={() => {
-                const birdnetData = store.formData?.birdnet;
-                if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
-                  loadActiveSpecies(birdnetData);
-                }
-              }}
-            >
-              {t('settings.species.activeSpecies.retry') || 'Retry'}
-            </button>
-          </div>
-        {:else if activeSpeciesState.locationNotConfigured}
-          <!-- Location Not Configured Warning -->
-          <div
-            class="p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)]"
-          >
-            <div class="flex items-start gap-3">
-              <MapPin class="size-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
-              <div>
-                <p class="font-medium text-[var(--color-warning)]">
-                  {t('settings.species.activeSpecies.locationNotConfigured.title') ||
-                    'Location Not Configured'}
-                </p>
-                <p class="text-sm text-[var(--color-base-content)] opacity-70 mt-1">
-                  {t('settings.species.activeSpecies.locationNotConfigured.description') ||
-                    'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
-                </p>
-                <a
-                  href="/ui/settings/main"
-                  class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:opacity-90 transition-colors mt-3"
-                >
-                  {t('settings.species.activeSpecies.locationNotConfigured.action') ||
-                    'Configure Location'}
-                </a>
-              </div>
-            </div>
-          </div>
-        {:else if activeSpeciesState.data}
-          <!-- Search & Actions Bar -->
-          <div class="flex items-center gap-3">
-            <!-- Search Input -->
-            <div class="relative flex-1">
-              <Search
-                class="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[color:var(--color-base-content)] opacity-40"
-                aria-hidden="true"
-              />
-              <input
-                id="active-species-search"
-                type="text"
-                value={searchInputValue}
-                oninput={handleSearchInput}
-                placeholder={t('settings.species.activeSpecies.search.placeholder')}
-                aria-label={t('settings.species.activeSpecies.search.placeholder')}
-                autocomplete="off"
-                data-1p-ignore
-                data-lpignore="true"
-                data-form-type="other"
-                class="w-full pl-10 pr-4 py-2 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-              />
-            </div>
-
-            <!-- Expand/Collapse Button -->
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
-              onclick={() => (isListExpanded = !isListExpanded)}
-              title={isListExpanded
-                ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
-                : t('settings.species.activeSpecies.expand') || 'Expand list'}
-              aria-label={isListExpanded
-                ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
-                : t('settings.species.activeSpecies.expand') || 'Expand list'}
-              aria-expanded={isListExpanded}
-            >
-              {#if isListExpanded}
-                <Minimize2 class="size-4" aria-hidden="true" />
-              {:else}
-                <Maximize2 class="size-4" aria-hidden="true" />
-              {/if}
-            </button>
-
-            <!-- CSV Download Button -->
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={downloadActiveSpeciesCSV}
-              disabled={!activeSpeciesState.data.species.length}
-              title={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
-              aria-label={t('settings.species.activeSpecies.downloadCsv') || 'Download CSV'}
-            >
-              <Download class="size-4" aria-hidden="true" />
-              <span class="hidden sm:inline">CSV</span>
-            </button>
-          </div>
-
-          <!-- Species List - Use {#key} to force full recreation instead of diffing -->
-          <!-- This prevents Svelte internal state corruption during list transitions -->
-          {#key activeSearchQuery}
-            {#if filteredActiveSpecies.length > 0}
-              <div
-                class="divide-y divide-[var(--border-200)] rounded-lg border border-[var(--border-200)] overflow-hidden overflow-y-auto"
-                class:max-h-[32rem]={!isListExpanded}
-                class:max-h-[80vh]={isListExpanded}
-              >
-                {#each filteredActiveSpecies as species, index (`${species.scientificName}_${species.commonName}_${index}`)}
-                  <div
-                    class="flex items-center justify-between p-3 hover:bg-[var(--color-base-200)]/50 transition-colors"
-                  >
-                    <!-- Left: Names -->
-                    <div class="min-w-0 flex-1">
-                      <div class="font-medium text-sm truncate">{species.commonName}</div>
-                      <div
-                        class="text-xs text-[color:var(--color-base-content)] opacity-50 italic truncate"
-                      >
-                        {species.scientificName}
-                      </div>
-                    </div>
-
-                    <!-- Right: Badges + Score bar (badges first for consistent score alignment) -->
-                    <div class="flex items-center gap-3 ml-3 shrink-0">
-                      <!-- Badges - fixed width container for alignment -->
-                      <div class="flex items-center gap-1.5 w-36 justify-end">
-                        {#if species.isManuallyIncluded}
-                          <span
-                            class="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--color-success)] text-[var(--color-success-content)]"
-                          >
-                            + {t('settings.species.activeSpecies.badges.included')}
-                          </span>
-                        {/if}
-                        {#if species.hasCustomConfig}
-                          <span
-                            class="inline-flex items-center justify-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full bg-[var(--color-secondary)] text-[var(--color-secondary-content)]"
-                          >
-                            ★ {t('settings.species.activeSpecies.badges.configured')}
-                          </span>
-                        {/if}
-                      </div>
-
-                      <!-- Score Bar - always in same position -->
-                      <div class="flex items-center gap-2">
-                        <div
-                          class="w-20 h-2 bg-[var(--color-base-300)] rounded-full overflow-hidden"
-                        >
-                          <div
-                            class="h-full bg-[var(--color-primary)] rounded-full transition-all"
-                            style:width="{species.score * 100}%"
-                          ></div>
-                        </div>
-                        <span
-                          class="text-xs font-mono tabular-nums w-10 text-[color:var(--color-base-content)] opacity-60"
-                        >
-                          {species.score.toFixed(2)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {:else if searchInputValue}
-              <!-- No Search Results -->
-              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
-                <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
-              </div>
-            {:else}
-              <!-- Empty State -->
-              <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
-                <Bird class="size-12 mx-auto mb-3 opacity-30" />
-                <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
-                <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
-              </div>
-            {/if}
-          {/key}
-
-          <!-- Info Note -->
-          <SettingsNote>
-            {t('settings.species.activeSpecies.infoNote')}
-          </SettingsNote>
-        {:else}
-          <!-- Initial Empty State (before load) -->
-          <div class="text-center py-8 text-[color:var(--color-base-content)] opacity-50">
-            <Bird class="size-12 mx-auto mb-3 opacity-30" />
-            <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
-            <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
-          </div>
-        {/if}
+            class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+          ></div>
+        </div>
       </div>
-    </SettingsSection>
+    {:else if activeSpeciesState.error}
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
+      >
+        <div class="flex items-start gap-3 p-4 rounded-lg bg-red-500/10">
+          <p class="text-sm text-red-600 dark:text-red-400">{activeSpeciesState.error}</p>
+          <button
+            type="button"
+            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-600 dark:text-red-400 transition-colors"
+            onclick={() => {
+              const birdnetData = store.formData?.birdnet;
+              if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
+                loadActiveSpecies(birdnetData);
+              }
+            }}
+          >
+            {t('settings.species.activeSpecies.retry') || 'Retry'}
+          </button>
+        </div>
+      </div>
+    {:else if activeSpeciesState.locationNotConfigured}
+      <div
+        class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
+      >
+        <div class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+          <div class="flex items-start gap-3">
+            <MapPin class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <div>
+              <p class="font-medium text-amber-600 dark:text-amber-400">
+                {t('settings.species.activeSpecies.locationNotConfigured.title') ||
+                  'Location Not Configured'}
+              </p>
+              <p class="text-sm text-muted mt-1">
+                {t('settings.species.activeSpecies.locationNotConfigured.description') ||
+                  'Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.'}
+              </p>
+              <a
+                href="/ui/settings/main"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mt-3"
+              >
+                {t('settings.species.activeSpecies.locationNotConfigured.action') ||
+                  'Configure Location'}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    {:else if activeSpeciesState.data}
+      <SpeciesTable
+        species={activeSpeciesState.data.species}
+        title={t('settings.species.activeSpecies.title')}
+        description={t('settings.species.activeSpecies.description')}
+        onDownloadCsv={downloadActiveSpeciesCSV}
+      />
+
+      <SettingsNote>
+        {t('settings.species.activeSpecies.infoNote')}
+      </SettingsNote>
+    {:else}
+      <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
+        <div class="text-center py-8 text-muted">
+          <Bird class="size-12 mx-auto mb-3 opacity-30" />
+          <p class="text-sm font-medium">{t('settings.species.activeSpecies.empty.title')}</p>
+          <p class="text-xs mt-1">{t('settings.species.activeSpecies.empty.description')}</p>
+        </div>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
 <!-- Include Species Tab Content -->
 {#snippet includeTabContent()}
-  <SettingsSection
+  <SpeciesListCard
     title={t('settings.species.alwaysInclude.title')}
-    description={t('settings.species.alwaysInclude.description')}
-    defaultOpen={true}
-    originalData={store.originalData.realtime?.species?.include}
-    currentData={store.formData.realtime?.species?.include}
-  >
-    <div class="space-y-4">
-      <!-- Species list -->
-      <div class="space-y-2">
-        {#each settings.include as species (species)}
-          <div class="flex items-center justify-between p-2 rounded-md bg-[var(--color-base-200)]">
-            <span class="text-sm">{species}</span>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={() => removeIncludeSpecies(species)}
-              disabled={store.isLoading || store.isSaving}
-              aria-label="Remove {species}"
-              title="Remove species"
-            >
-              <Trash2 class="size-4" />
-            </button>
-          </div>
-        {/each}
-
-        {#if settings.include.length === 0}
-          <div
-            class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center"
-          >
-            {t('settings.species.alwaysInclude.noSpeciesMessage')}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Add species input -->
-      <SpeciesInput
-        bind:value={includeInputValue}
-        label={t('settings.species.addSpeciesToIncludeLabel')}
-        placeholder={t('settings.species.addSpeciesToInclude')}
-        predictions={includePredictions}
-        size="sm"
-        onInput={updateIncludePredictions}
-        onAdd={addIncludeSpecies}
-        disabled={store.isLoading || store.isSaving}
-      />
-    </div>
-  </SettingsSection>
+    species={settings.include}
+    icon={CirclePlus}
+    iconColorClass="emerald"
+    predictions={includePredictions}
+    bind:inputValue={includeInputValue}
+    inputLabel={t('settings.species.addSpeciesToIncludeLabel')}
+    inputPlaceholder={t('settings.species.addSpeciesToInclude')}
+    emptyMessage={t('settings.species.alwaysInclude.noSpeciesMessage')}
+    disabled={store.isLoading || store.isSaving}
+    onAdd={addIncludeSpecies}
+    onRemove={removeIncludeSpecies}
+    onInput={updateIncludePredictions}
+  />
 {/snippet}
 
 <!-- Exclude Species Tab Content -->
 {#snippet excludeTabContent()}
-  <SettingsSection
+  <SpeciesListCard
     title={t('settings.species.alwaysExclude.title')}
-    description={t('settings.species.alwaysExclude.description')}
-    defaultOpen={true}
-    originalData={store.originalData.realtime?.species?.exclude}
-    currentData={store.formData.realtime?.species?.exclude}
-  >
-    <div class="space-y-4">
-      <!-- Species list -->
-      <div class="space-y-2">
-        {#each settings.exclude as species (species)}
-          <div class="flex items-center justify-between p-2 rounded-md bg-[var(--color-base-200)]">
-            <span class="text-sm">{species}</span>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={() => removeExcludeSpecies(species)}
-              disabled={store.isLoading || store.isSaving}
-              aria-label="Remove {species}"
-              title="Remove species"
-            >
-              <Trash2 class="size-4" />
-            </button>
-          </div>
-        {/each}
-
-        {#if settings.exclude.length === 0}
-          <div
-            class="text-sm text-[color:var(--color-base-content)] opacity-60 italic p-2 text-center"
-          >
-            {t('settings.species.alwaysExclude.noSpeciesMessage')}
-          </div>
-        {/if}
-      </div>
-
-      <!-- Add species input -->
-      <SpeciesInput
-        bind:value={excludeInputValue}
-        label={t('settings.species.addSpeciesToExcludeLabel')}
-        placeholder={t('settings.species.addSpeciesToExclude')}
-        predictions={excludePredictions}
-        size="sm"
-        onInput={updateExcludePredictions}
-        onAdd={addExcludeSpecies}
-        disabled={store.isLoading || store.isSaving}
-      />
-    </div>
-  </SettingsSection>
+    species={settings.exclude}
+    icon={CircleMinus}
+    iconColorClass="red"
+    predictions={excludePredictions}
+    bind:inputValue={excludeInputValue}
+    inputLabel={t('settings.species.addSpeciesToExcludeLabel')}
+    inputPlaceholder={t('settings.species.addSpeciesToExclude')}
+    emptyMessage={t('settings.species.alwaysExclude.noSpeciesMessage')}
+    disabled={store.isLoading || store.isSaving}
+    onAdd={addExcludeSpecies}
+    onRemove={removeExcludeSpecies}
+    onInput={updateExcludePredictions}
+  />
 {/snippet}
 
 <!-- Custom Configuration Tab Content -->
 {#snippet configTabContent()}
-  <SettingsSection
-    title={t('settings.species.customConfiguration.title')}
-    description={t('settings.species.customConfiguration.description')}
-    defaultOpen={true}
-    originalData={store.originalData.realtime?.species?.config}
-    currentData={store.formData.realtime?.species?.config}
-  >
-    <div class="space-y-4">
-      <!-- Header with Add Button -->
-      <div class="flex justify-between items-center">
-        {#if !showAddForm}
-          <button
-            type="button"
-            class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            data-testid="add-configuration-button"
-            onclick={() => (showAddForm = true)}
-            disabled={store.isLoading || store.isSaving}
-          >
-            <Plus class="size-4" />
-            {t('settings.species.customConfiguration.addConfiguration')}
-          </button>
-        {:else}
-          <span class="text-sm font-medium">
-            {editingSpecies
-              ? t('settings.species.customConfiguration.editing', { species: editingSpecies })
-              : t('settings.species.customConfiguration.newConfiguration')}
-          </span>
-        {/if}
-
+  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-100)]">
+      <div class="flex items-center gap-2">
+        <div class="p-1.5 rounded-lg bg-teal-500/10">
+          <Settings2 class="w-4 h-4 text-teal-500" />
+        </div>
+        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+          {t('settings.species.customConfiguration.title')}
+        </h3>
         {#if Object.keys(settings.config).length > 0}
-          <span class="text-xs text-[color:var(--color-base-content)] opacity-60">
-            {t('settings.species.customConfiguration.configuredCount', {
-              count: Object.keys(settings.config).length,
-            })}
+          <span
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
+          >
+            {Object.keys(settings.config).length}
           </span>
         {/if}
       </div>
+      {#if !showAddForm}
+        <button
+          type="button"
+          class="inline-flex items-center justify-center gap-2 h-8 px-3 text-xs font-medium rounded-lg bg-teal-500 text-white hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          data-testid="add-configuration-button"
+          onclick={() => (showAddForm = true)}
+          disabled={store.isLoading || store.isSaving}
+        >
+          <Plus class="size-3.5" />
+          {t('settings.species.customConfiguration.addConfiguration')}
+        </button>
+      {:else}
+        <span class="text-xs font-medium text-muted">
+          {editingSpecies
+            ? t('settings.species.customConfiguration.editing', { species: editingSpecies })
+            : t('settings.species.customConfiguration.newConfiguration')}
+        </span>
+      {/if}
+    </div>
 
+    <div class="p-4 space-y-4">
       <!-- Compact Add/Edit Form -->
       {#if showAddForm}
         <div
-          class="border border-[var(--border-200)] rounded-lg p-3 bg-[var(--color-base-100)] space-y-3"
+          class="border border-[var(--border-100)] rounded-xl p-3 bg-[var(--surface-100)] space-y-3"
         >
           <!-- Main configuration row -->
           <div class="grid grid-cols-12 gap-3 items-end">
             <!-- Species Input -->
             <div class="col-span-4">
               <label class="flex flex-col gap-1 py-1" for="config-species">
-                <span class="text-xs font-medium text-[var(--color-base-content)]"
+                <span class="text-xs font-medium text-muted"
                   >{t('settings.species.customConfiguration.columnHeaders.species')}</span
                 >
               </label>
@@ -1445,12 +1230,10 @@
             <!-- Threshold -->
             <div class="col-span-3">
               <label class="flex items-center justify-between py-1" for="config-threshold">
-                <span class="text-xs font-medium text-[var(--color-base-content)]"
+                <span class="text-xs font-medium text-muted"
                   >{t('settings.species.customConfiguration.labels.threshold')}</span
                 >
-                <span class="text-xs text-[var(--color-base-content)] opacity-60"
-                  >{newThreshold.toFixed(2)}</span
-                >
+                <span class="text-xs text-muted">{newThreshold.toFixed(2)}</span>
               </label>
               <input
                 id="config-threshold"
@@ -1460,14 +1243,14 @@
                 step="0.01"
                 value={newThreshold}
                 oninput={e => (newThreshold = Number(e.currentTarget.value))}
-                class="w-full h-2 bg-[var(--color-base-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
+                class="w-full h-2 bg-[var(--surface-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
               />
             </div>
 
             <!-- Interval -->
             <div class="col-span-3">
               <label class="flex flex-col gap-1 py-1" for="config-interval">
-                <span class="text-xs font-medium text-[var(--color-base-content)]"
+                <span class="text-xs font-medium text-muted"
                   >{t('settings.species.customConfiguration.labels.intervalSeconds')}</span
                 >
               </label>
@@ -1478,7 +1261,7 @@
                 onchange={e => (newInterval = Number(e.currentTarget.value))}
                 min="0"
                 max="3600"
-                class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                 placeholder="0"
               />
             </div>
@@ -1507,7 +1290,7 @@
                 {/if}
               </button>
               <button
-                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={cancelEdit}
                 disabled={store.isSaving}
               >
@@ -1517,7 +1300,7 @@
           </div>
 
           <!-- Actions Toggle -->
-          <div class="border-t border-[var(--border-200)] pt-2">
+          <div class="border-t border-[var(--border-100)] pt-2">
             <button
               type="button"
               class="flex items-center gap-2 text-xs font-medium hover:text-[var(--color-primary)] transition-colors"
@@ -1531,7 +1314,7 @@
               <span>{t('settings.species.customConfiguration.configureActions')}</span>
               {#if actionCommand}
                 <span
-                  class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--color-accent)] text-[var(--color-accent-content)]"
+                  class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400"
                   >{t('settings.species.customConfiguration.actionsConfigured')}</span
                 >
               {/if}
@@ -1544,7 +1327,7 @@
               <!-- Command Input -->
               <div>
                 <label class="flex flex-col gap-1 py-1" for="action-command">
-                  <span class="text-xs font-medium text-[var(--color-base-content)]"
+                  <span class="text-xs font-medium text-muted"
                     >{t('settings.species.actionsModal.command.label')}</span
                   >
                 </label>
@@ -1553,9 +1336,9 @@
                   type="text"
                   bind:value={actionCommand}
                   placeholder={t('settings.species.commandPathPlaceholder')}
-                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                 />
-                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
+                <span class="text-xs text-muted mt-1 block"
                   >{t('settings.species.actionsModal.command.helpText')}</span
                 >
               </div>
@@ -1563,16 +1346,9 @@
               <!-- Parameters -->
               <div>
                 <label class="flex flex-col gap-1 py-1" for="action-parameters">
-                  <span
-                    class="text-xs font-medium text-[var(--color-base-content)] flex items-center gap-1"
-                  >
+                  <span class="text-xs font-medium text-muted flex items-center gap-1">
                     {t('settings.species.actionsModal.parameters.label')}
-                    <span
-                      class="text-[var(--color-base-content)] opacity-60"
-                      title="Use buttons below or type directly"
-                    >
-                      ⓘ
-                    </span>
+                    <span class="text-muted" title="Use buttons below or type directly"> ⓘ </span>
                   </span>
                 </label>
                 <input
@@ -1580,10 +1356,10 @@
                   type="text"
                   bind:value={actionParameters}
                   placeholder="Click buttons below to add parameters or type manually"
-                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-200)] bg-[var(--color-base-200)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
+                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-200)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                   title="Add parameters using the buttons below or type directly (comma-separated)"
                 />
-                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
+                <span class="text-xs text-muted mt-1 block"
                   >{t('settings.species.actionsModal.parameters.helpText')}</span
                 >
               </div>
@@ -1596,31 +1372,31 @@
                 <div class="flex flex-wrap gap-1">
                   <button
                     type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => addParameter('CommonName')}
                     >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
                   >
                   <button
                     type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => addParameter('ScientificName')}
                     >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
                   >
                   <button
                     type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => addParameter('Confidence')}
                     >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
                   >
                   <button
                     type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => addParameter('Time')}
                     >{t('settings.species.actionsModal.parameters.buttons.time')}</button
                   >
                   <button
                     type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-200)] transition-colors"
+                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
                     onclick={() => addParameter('Source')}
                     >{t('settings.species.actionsModal.parameters.buttons.source')}</button
                   >
@@ -1643,13 +1419,13 @@
                     id="action-execute-defaults"
                     type="checkbox"
                     bind:checked={actionExecuteDefaults}
-                    class="appearance-none w-3.5 h-3.5 border-2 border-[var(--border-200)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
+                    class="appearance-none w-3.5 h-3.5 border-2 border-[var(--border-100)] rounded bg-[var(--surface-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
                   />
-                  <span class="text-xs text-[var(--color-base-content)]"
+                  <span class="text-xs text-muted"
                     >{t('settings.species.actionsModal.executeDefaults.label')}</span
                   >
                 </label>
-                <span class="text-xs text-[var(--color-base-content)] opacity-60 mt-1 block"
+                <span class="text-xs text-muted mt-1 block"
                   >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
                 >
               </div>
@@ -1658,83 +1434,109 @@
         </div>
       {/if}
 
-      <!-- Compact Configuration List -->
-      <div class="space-y-2">
-        {#each Object.entries(settings.config) as [species, config] (species)}
-          <div
-            class="flex items-center gap-3 p-2 rounded-lg bg-[var(--color-base-100)] border border-[var(--border-200)] hover:border-[var(--color-base-content)]/20 transition-colors"
-          >
-            <!-- Species Name -->
-            <div class="flex-1 min-w-0">
-              <span class="font-medium text-sm truncate block">{species}</span>
-            </div>
-
-            <!-- Threshold -->
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-[var(--color-base-content)] opacity-60"
-                >{t('settings.species.customConfiguration.list.threshold')}</span
-              >
-              <span class="font-mono text-xs font-medium">{(config.threshold ?? 0).toFixed(2)}</span
-              >
-            </div>
-
-            <!-- Interval -->
-            <div class="flex items-center gap-2">
-              <span class="text-xs text-[var(--color-base-content)] opacity-60"
-                >{t('settings.species.customConfiguration.list.interval')}</span
-              >
-              <span class="font-mono text-xs font-medium">
-                {config.interval > 0
-                  ? `${config.interval}s`
-                  : t('settings.species.customConfiguration.list.intervalNone')}
-              </span>
-            </div>
-
-            <!-- Action Badge -->
-            {#if config.actions?.length > 0}
-              <span
-                class="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-[var(--color-accent)] text-[var(--color-accent-content)]"
-                >{t('settings.species.customConfiguration.list.actionBadge')}</span
-              >
-            {/if}
-
-            <!-- Actions -->
-            <div class="flex items-center gap-1">
-              <button
-                class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={() => startEdit(species)}
-                title={t('settings.species.customConfiguration.list.editTitle')}
-                aria-label={t('settings.species.customConfiguration.list.editTitle')}
-                disabled={store.isLoading || store.isSaving}
-              >
-                <SquarePen class="size-4" />
-              </button>
-
-              <button
-                class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--color-base-300)] text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={() => removeConfig(species)}
-                title={t('settings.species.customConfiguration.list.removeTitle')}
-                aria-label={t('settings.species.customConfiguration.list.removeTitle')}
-                disabled={store.isLoading || store.isSaving}
-              >
-                <Trash2 class="size-4" />
-              </button>
-            </div>
-          </div>
-        {/each}
-      </div>
+      <!-- Configuration List -->
+      {#if Object.keys(settings.config).length > 0}
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-[var(--border-100)]">
+                <th
+                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted"
+                  >{t('settings.species.customConfiguration.columnHeaders.species')}</th
+                >
+                <th
+                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted w-48"
+                  >{t('settings.species.customConfiguration.list.threshold')}</th
+                >
+                <th
+                  class="text-left py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted"
+                  >{t('settings.species.customConfiguration.list.interval')}</th
+                >
+                <th
+                  class="text-right py-2 px-3 text-xs font-semibold uppercase tracking-wider text-muted w-24"
+                ></th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each Object.entries(settings.config) as [species, config] (species)}
+                <tr
+                  class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
+                >
+                  <td class="py-2.5 px-3">
+                    <span class="font-medium text-sm">{species}</span>
+                    {#if config.actions?.length > 0}
+                      <span
+                        class="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400"
+                      >
+                        {t('settings.species.customConfiguration.list.actionBadge')}
+                      </span>
+                    {/if}
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <div class="flex items-center gap-2">
+                      <div
+                        class="flex-1 h-1.5 rounded-full bg-[var(--surface-300)] overflow-hidden"
+                      >
+                        <div
+                          class="h-full rounded-full bg-teal-500 transition-all"
+                          style:width="{((config.threshold ?? 0) * 100).toFixed(0)}%"
+                        ></div>
+                      </div>
+                      <span class="font-mono tabular-nums text-xs font-medium w-8 text-right"
+                        >{(config.threshold ?? 0).toFixed(2)}</span
+                      >
+                    </div>
+                  </td>
+                  <td class="py-2.5 px-3">
+                    <span class="font-mono tabular-nums text-xs font-medium">
+                      {config.interval > 0
+                        ? `${config.interval}s`
+                        : t('settings.species.customConfiguration.list.intervalNone')}
+                    </span>
+                  </td>
+                  <td class="py-2.5 px-3 text-right">
+                    <div class="flex items-center justify-end gap-1">
+                      <button
+                        class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onclick={() => startEdit(species)}
+                        title={t('settings.species.customConfiguration.list.editTitle')}
+                        aria-label={t('settings.species.customConfiguration.list.editTitle')}
+                        disabled={store.isLoading || store.isSaving}
+                      >
+                        <SquarePen class="size-4" />
+                      </button>
+                      <button
+                        class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-300)] text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        onclick={() => removeConfig(species)}
+                        title={t('settings.species.customConfiguration.list.removeTitle')}
+                        aria-label={t('settings.species.customConfiguration.list.removeTitle')}
+                        disabled={store.isLoading || store.isSaving}
+                      >
+                        <Trash2 class="size-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
 
       <!-- Empty State -->
       {#if Object.keys(settings.config).length === 0 && !showAddForm}
-        <div class="text-center py-8 text-[var(--color-base-content)] opacity-60">
-          <p class="text-sm">{t('settings.species.customConfiguration.emptyState.title')}</p>
+        <div class="text-center py-8 text-muted">
+          <Settings2 class="size-12 mx-auto mb-3 opacity-30" />
+          <p class="text-sm font-medium">
+            {t('settings.species.customConfiguration.emptyState.title')}
+          </p>
           <p class="text-xs mt-1">
             {t('settings.species.customConfiguration.emptyState.description')}
           </p>
         </div>
       {/if}
     </div>
-  </SettingsSection>
+  </div>
 {/snippet}
 
 <!-- Tracking Tab Content -->
@@ -1763,7 +1565,7 @@
             <!-- New Species Window Days -->
             <div>
               <label for="new-species-window" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                <span class="text-sm font-semibold">
                   {t('settings.species.tracking.newSpeciesWindowDays.label')}
                 </span>
               </label>
@@ -1780,15 +1582,15 @@
                     TRACKING_DEFAULTS.newSpeciesWindowDays,
                     v => updateTrackingSettings({ newSpeciesWindowDays: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
-              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.newSpeciesWindowDays.helpText')}
               </p>
             </div>
@@ -1796,7 +1598,7 @@
             <!-- Sync Interval Minutes -->
             <div>
               <label for="sync-interval" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                <span class="text-sm font-semibold">
                   {t('settings.species.tracking.syncIntervalMinutes.label')}
                 </span>
               </label>
@@ -1813,15 +1615,15 @@
                     TRACKING_DEFAULTS.syncIntervalMinutes,
                     v => updateTrackingSettings({ syncIntervalMinutes: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.min')}</span
                 >
               </div>
-              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.syncIntervalMinutes.helpText')}
               </p>
             </div>
@@ -1829,7 +1631,7 @@
             <!-- Notification Suppression Hours -->
             <div>
               <label for="notification-suppression" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                <span class="text-sm font-semibold">
                   {t('settings.species.tracking.notificationSuppressionHours.label')}
                 </span>
               </label>
@@ -1846,15 +1648,15 @@
                     TRACKING_DEFAULTS.notificationSuppressionHours,
                     v => updateTrackingSettings({ notificationSuppressionHours: v })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.hours')}</span
                 >
               </div>
-              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.notificationSuppressionHours.helpText')}
               </p>
             </div>
@@ -1900,7 +1702,7 @@
               <!-- Reset Day -->
               <div>
                 <label for="yearly-reset-day" class="flex flex-col gap-1 mb-1">
-                  <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                  <span class="text-sm font-semibold">
                     {t('settings.species.tracking.yearly.resetDay.label')}
                   </span>
                 </label>
@@ -1916,10 +1718,10 @@
                     TRACKING_DEFAULTS.yearlyTracking.resetDay,
                     v => updateTrackingSettings({ yearlyTracking: { resetDay: v } })
                   )}
-                  class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
-                <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+                <p class="text-xs text-muted mt-1">
                   {t('settings.species.tracking.yearly.resetDay.helpText')}
                 </p>
               </div>
@@ -1927,7 +1729,7 @@
               <!-- Window Days -->
               <div>
                 <label for="yearly-window-days" class="flex flex-col gap-1 mb-1">
-                  <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                  <span class="text-sm font-semibold">
                     {t('settings.species.tracking.yearly.windowDays.label')}
                   </span>
                 </label>
@@ -1944,15 +1746,15 @@
                       TRACKING_DEFAULTS.yearlyTracking.windowDays,
                       v => updateTrackingSettings({ yearlyTracking: { windowDays: v } })
                     )}
-                    class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                    class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving}
                   />
                   <span
-                    class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
+                    class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                     >{t('settings.species.tracking.units.days')}</span
                   >
                 </div>
-                <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+                <p class="text-xs text-muted mt-1">
                   {t('settings.species.tracking.yearly.windowDays.helpText')}
                 </p>
               </div>
@@ -1981,7 +1783,7 @@
             <!-- Window Days -->
             <div class="max-w-xs">
               <label for="seasonal-window-days" class="flex flex-col gap-1 mb-1">
-                <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                <span class="text-sm font-semibold">
                   {t('settings.species.tracking.seasonal.windowDays.label')}
                 </span>
               </label>
@@ -1998,15 +1800,15 @@
                     TRACKING_DEFAULTS.seasonalTracking.windowDays,
                     v => updateTrackingSettings({ seasonalTracking: { windowDays: v } })
                   )}
-                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="flex-1 h-10 px-3 text-sm rounded-l-lg border border-r-0 border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                   disabled={store.isLoading || store.isSaving}
                 />
                 <span
-                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] opacity-70"
+                  class="inline-flex items-center justify-center h-10 px-3 text-sm font-medium rounded-r-lg border border-[var(--border-100)] bg-[var(--surface-200)] text-muted"
                   >{t('settings.species.tracking.units.days')}</span
                 >
               </div>
-              <p class="text-xs text-[var(--color-base-content)] opacity-60 mt-1">
+              <p class="text-xs text-muted mt-1">
                 {t('settings.species.tracking.seasonal.windowDays.helpText')}
               </p>
             </div>
@@ -2016,7 +1818,7 @@
               <h4 class="font-medium text-sm mb-2">
                 {t('settings.species.tracking.seasonal.seasons.title')}
               </h4>
-              <p class="text-xs text-[var(--color-base-content)] opacity-60 mb-4">
+              <p class="text-xs text-muted mb-4">
                 {t('settings.species.tracking.seasonal.seasons.description')}
               </p>
 
@@ -2026,23 +1828,30 @@
                   {@const seasonDefaults = getSeasonDefaults(seasonKey)}
                   {@const currentSeasonData = getCurrentSeasonData(seasonKey)}
                   <div
-                    class="rounded-lg bg-[var(--color-base-100)] border border-[var(--border-200)] p-4"
+                    class="rounded-lg bg-[var(--surface-100)] border border-[var(--border-100)] p-4"
                   >
                     <h5 class="font-medium text-sm mb-3">
                       {t(`settings.species.tracking.seasonal.seasons.${season}`)}
                     </h5>
-                    <div class="grid grid-cols-2 gap-3">
-                      <SelectDropdown
-                        label={t('settings.species.tracking.seasonal.seasons.startMonth')}
-                        value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
-                        options={monthOptions}
-                        disabled={store.isLoading || store.isSaving}
-                        menuSize="sm"
-                        onChange={value => updateSeasonDate(seasonKey, 'startMonth', Number(value))}
-                      />
+                    <div class="grid grid-cols-2 gap-3 items-end">
                       <div>
-                        <label for={`${season}-start-day`} class="flex flex-col gap-1 mb-1">
-                          <span class="text-sm font-semibold text-[var(--color-base-content)]">
+                        <label class="flex items-center py-2" for={`${season}-start-month`}>
+                          <span class="text-sm font-medium">
+                            {t('settings.species.tracking.seasonal.seasons.startMonth')}
+                          </span>
+                        </label>
+                        <SelectDropdown
+                          value={String(currentSeasonData?.startMonth ?? seasonDefaults.startMonth)}
+                          options={monthOptions}
+                          disabled={store.isLoading || store.isSaving}
+                          menuSize="sm"
+                          onChange={value =>
+                            updateSeasonDate(seasonKey, 'startMonth', Number(value))}
+                        />
+                      </div>
+                      <div>
+                        <label class="flex items-center py-2" for={`${season}-start-day`}>
+                          <span class="text-sm font-medium">
                             {t('settings.species.tracking.seasonal.seasons.startDay')}
                           </span>
                         </label>
@@ -2057,7 +1866,7 @@
                             seasonDefaults.startDay,
                             v => updateSeasonDate(seasonKey, 'startDay', v)
                           )}
-                          class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                          class="w-full h-10 px-3 text-sm rounded-lg border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
                           disabled={store.isLoading || store.isSaving}
                         />
                       </div>

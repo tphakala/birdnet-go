@@ -3059,6 +3059,12 @@
           "title": "Location Not Configured",
           "description": "Set your location in Main Settings to see species available in your area. The range filter uses your location to determine which species are likely to be found nearby.",
           "action": "Configure Location"
+        },
+        "columns": {
+          "commonName": "Common Name",
+          "scientificName": "Scientific Name",
+          "score": "Score",
+          "status": "Status"
         }
       },
       "alwaysInclude": {

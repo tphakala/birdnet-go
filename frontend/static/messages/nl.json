@@ -3023,6 +3023,12 @@
           "title": "Locatie niet geconfigureerd",
           "description": "Stel uw locatie in bij Hoofdinstellingen om soorten in uw omgeving te zien. Het bereikfilter gebruikt uw locatie om te bepalen welke soorten waarschijnlijk in de buurt voorkomen.",
           "action": "Locatie configureren"
+        },
+        "columns": {
+          "commonName": "Naam",
+          "scientificName": "Wetenschappelijke naam",
+          "score": "Score",
+          "status": "Status"
         }
       },
       "alwaysInclude": {

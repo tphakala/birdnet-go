@@ -3029,6 +3029,12 @@
           "title": "Lokalizacja nie skonfigurowana",
           "description": "Ustaw swoją lokalizację w Ustawieniach Głównych, aby zobaczyć gatunki dostępne w Twojej okolicy. Filtr zasięgu wykorzystuje Twoją lokalizację do określenia, które gatunki prawdopodobnie występują w pobliżu.",
           "action": "Skonfiguruj lokalizację"
+        },
+        "columns": {
+          "commonName": "Nazwa",
+          "scientificName": "Nazwa naukowa",
+          "score": "Wynik",
+          "status": "Status"
         }
       },
       "alwaysInclude": {

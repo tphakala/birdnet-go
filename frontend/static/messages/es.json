@@ -2884,6 +2884,12 @@
           "title": "Ubicación no configurada",
           "description": "Configura tu ubicación en Ajustes Principales para ver las especies disponibles en tu área. El filtro de rango utiliza tu ubicación para determinar qué especies es probable encontrar cerca.",
           "action": "Configurar ubicación"
+        },
+        "columns": {
+          "commonName": "Nombre común",
+          "scientificName": "Nombre científico",
+          "score": "Puntuación",
+          "status": "Estado"
         }
       },
       "alwaysInclude": {
