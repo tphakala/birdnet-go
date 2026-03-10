@@ -1,9 +1,8 @@
-//go:build !windows
-
 package myaudio
 
 import (
 	"os/exec"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,10 +10,19 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// skipOnWindows skips the test on Windows (tests use sh and Unix exit format).
+func skipOnWindows(t *testing.T) {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("test requires Unix shell (sh)")
+	}
+}
+
 // TestHandleQuickExitError_CapturesExitCode verifies that handleQuickExitError
 // correctly captures the real exit code from the process via cmd.Wait(),
 // rather than always returning -1/"unavailable" due to the async lifecycle.
 func TestHandleQuickExitError_CapturesExitCode(t *testing.T) {
+	skipOnWindows(t)
 	t.Parallel()
 
 	tests := []struct {
@@ -102,6 +110,7 @@ func TestHandleQuickExitError_CapturesExitCode(t *testing.T) {
 
 // TestHandleQuickExitError_NilCmd verifies handleQuickExitError handles nil cmd gracefully.
 func TestHandleQuickExitError_NilCmd(t *testing.T) {
+	skipOnWindows(t)
 	t.Parallel()
 
 	result := newTestStream(t, "rtsp://test.example.com/stream")
@@ -127,6 +136,7 @@ func TestHandleQuickExitError_NilCmd(t *testing.T) {
 // TestCleanupProcess_SkipsWaitWhenAlreadyCalled verifies that cleanupProcess
 // does not call Wait() again when handleQuickExitError already did.
 func TestCleanupProcess_SkipsWaitWhenAlreadyCalled(t *testing.T) {
+	skipOnWindows(t)
 	t.Parallel()
 
 	result := newTestStream(t, "rtsp://test.example.com/stream")
