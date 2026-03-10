@@ -167,7 +167,10 @@ func TestApplyFilters_OddByteCount(t *testing.T) {
 }
 
 func TestApplyFilters_NoFilterChain(t *testing.T) {
-	// Reset filter chain
+	// Reset filter chain to nil to simulate uninitialized state.
+	// A nil chain should be a no-op (equivalent to no filters configured),
+	// not an error. This is important for RTSP-only deployments where the
+	// malgo capture path (which previously initialized the chain) is never entered.
 	filterMutex.Lock()
 	oldChain := filterChain
 	filterChain = nil
@@ -179,9 +182,13 @@ func TestApplyFilters_NoFilterChain(t *testing.T) {
 		filterMutex.Unlock()
 	})
 
-	samples := make([]byte, 100)
+	samples := []byte{0x00, 0x40, 0x00, 0xC0} // Two 16-bit samples
+	original := make([]byte, len(samples))
+	copy(original, samples)
+
 	err := ApplyFilters(samples)
-	assert.Error(t, err)
+	require.NoError(t, err)
+	assert.Equal(t, original, samples, "samples should be unchanged when filter chain is nil")
 }
 
 func TestApplyFilters_EmptyFilterChain(t *testing.T) {
