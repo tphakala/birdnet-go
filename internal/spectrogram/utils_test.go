@@ -37,10 +37,10 @@ func TestSizeToPixels(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "removed sm size is invalid",
+			name:      "valid small size",
 			size:      "sm",
-			wantWidth: 0,
-			wantErr:   true,
+			wantWidth: 258,
+			wantErr:   false,
 		},
 		{
 			name:      "invalid size",
@@ -82,6 +82,12 @@ func TestPixelsToSize(t *testing.T) {
 		wantSize string
 		wantErr  bool
 	}{
+		{
+			name:     "258 pixels to sm",
+			width:    258,
+			wantSize: "sm",
+			wantErr:  false,
+		},
 		{
 			name:     "514 pixels to md",
 			width:    514,
@@ -136,11 +142,11 @@ func TestPixelsToSize(t *testing.T) {
 func TestGetValidSizes(t *testing.T) {
 	sizes := GetValidSizes()
 
-	// Check that we have exactly 3 sizes (sm removed)
-	assert.Len(t, sizes, 3)
+	// Check that we have exactly 4 sizes
+	assert.Len(t, sizes, 4)
 
 	// Check that sizes are sorted
-	expected := []string{"lg", "md", "xl"}
+	expected := []string{"lg", "md", "sm", "xl"}
 	assert.Equal(t, expected, sizes)
 
 	// Check that all sizes are valid
@@ -217,6 +223,14 @@ func TestBuildSpectrogramPathWithParams(t *testing.T) {
 		want      string
 		wantErr   bool
 	}{
+		{
+			name:      "sm size, not raw",
+			audioPath: "clips/audio.wav",
+			width:     258,
+			raw:       false,
+			want:      "clips/audio.sm.png",
+			wantErr:   false,
+		},
 		{
 			name:      "md size, not raw",
 			audioPath: "clips/audio.wav",

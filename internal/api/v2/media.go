@@ -36,6 +36,7 @@ const (
 // enabling fast FFT instead of brute-force DFT (~20x speedup).
 // Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
+	SpectrogramSizeSm = 258  // height=129, DFT=256
 	SpectrogramSizeMd = 514  // height=257, DFT=512
 	SpectrogramSizeLg = 1026 // height=513, DFT=1024 (default render size)
 	SpectrogramSizeXl = 2050 // height=1025, DFT=2048
@@ -993,6 +994,8 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		sizeParam := params.sizeStr
 		if sizeParam == "" {
 			switch params.width {
+			case SpectrogramSizeSm:
+				sizeParam = "sm"
 			case SpectrogramSizeMd:
 				sizeParam = "md"
 			case SpectrogramSizeLg:

@@ -19,6 +19,9 @@ import (
 // brute-force DFT (O(n²)). Sox DFT size = 2*(height-1), so height must be 2^n + 1
 // for the DFT size to be a power of 2. Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
+	// sizeSmallPx is the width for compact display in lists and dashboards (height=129, DFT=256)
+	sizeSmallPx = 258
+
 	// sizeMediumPx is the width for standard detail view (height=257, DFT=512)
 	sizeMediumPx = 514
 
@@ -40,10 +43,12 @@ const (
 
 // validSizes maps size strings to pixel widths (single source of truth).
 // All sizes use FFT-friendly dimensions (width = 2 × height, height = 2^n + 1):
+// - sm (258px): Compact display in lists and dashboards (DFT=256)
 // - md (514px): Standard detail view (DFT=512)
 // - lg (1026px): Default render size for all contexts (DFT=1024)
 // - xl (2050px): Maximum quality for expert review (DFT=2048)
 var validSizes = map[string]int{
+	"sm": sizeSmallPx,      // Small - 258px (height=129, DFT=256)
 	"md": sizeMediumPx,     // Medium - 514px (height=257, DFT=512)
 	"lg": sizeLargePx,      // Large - 1026px (height=513, DFT=1024)
 	"xl": sizeExtraLargePx, // Extra Large - 2050px (height=1025, DFT=2048)
@@ -52,11 +57,11 @@ var validSizes = map[string]int{
 // SizeToPixels converts a size string to pixel width.
 // Returns an error if the size string is not valid.
 //
-// Valid sizes: md (514px), lg (1026px), xl (2050px)
+// Valid sizes: sm (258px), md (514px), lg (1026px), xl (2050px)
 func SizeToPixels(size string) (int, error) {
 	width, ok := validSizes[size]
 	if !ok {
-		return 0, errors.Newf("invalid size (valid sizes: md, lg, xl)").
+		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
 			Component("spectrogram").
 			Category(errors.CategoryValidation).
 			Context("operation", "size_to_pixels").
