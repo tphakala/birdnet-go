@@ -35,12 +35,10 @@
     return date.toLocaleDateString();
   }
 
-  function handleImageError(event: Event) {
-    const target = event.target as globalThis.HTMLImageElement;
-    target.style.display = 'none';
-    if (target.parentElement) {
-      target.parentElement.classList.add('bg-[var(--color-base-300)]');
-    }
+  let imageLoadFailed = $state(false);
+
+  function handleImageError() {
+    imageLoadFailed = true;
   }
 
   function handleClick() {
@@ -60,16 +58,16 @@
     )}
   >
     <figure class="px-4 pt-4">
-      {#if species.thumbnail_url}
-        <img
-          src={species.thumbnail_url}
-          alt={species.common_name}
-          class="rounded-xl h-40 w-full object-cover"
-          onerror={handleImageError}
-        />
-      {:else}
-        <div class="rounded-xl h-40 w-full bg-[var(--color-base-300)]"></div>
-      {/if}
+      <div class="rounded-xl w-full aspect-[4/3] overflow-hidden bg-[var(--color-base-300)]">
+        {#if species.thumbnail_url && !imageLoadFailed}
+          <img
+            src={species.thumbnail_url}
+            alt={species.common_name}
+            class="h-full w-full object-cover"
+            onerror={handleImageError}
+          />
+        {/if}
+      </div>
     </figure>
     <div class="card-body p-4">
       <h3 class="card-title text-base">{species.common_name}</h3>

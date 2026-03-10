@@ -396,7 +396,9 @@
               </button>
 
               <!-- Thumbnail -->
-              <div class="w-10 h-8 rounded overflow-hidden bg-[var(--color-base-200)] shrink-0">
+              <div
+                class="w-10 aspect-[4/3] rounded overflow-hidden bg-[var(--color-base-200)] shrink-0"
+              >
                 {#if threshold.scientificName}
                   <img
                     src="/api/v2/media/species-image?name={encodeURIComponent(
