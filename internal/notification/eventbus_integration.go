@@ -1,8 +1,7 @@
 package notification
 
 import (
-	"fmt"
-
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -40,7 +39,7 @@ func InitializeEventBusIntegration() error {
 	// Get the notification service
 	service := GetService()
 	if service == nil {
-		return fmt.Errorf("notification service is nil")
+		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	// Create notification worker
@@ -51,18 +50,18 @@ func InitializeEventBusIntegration() error {
 	}
 	worker, err := NewNotificationWorker(service, config)
 	if err != nil {
-		return fmt.Errorf("failed to create notification worker: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryIntegration).Context("operation", "create_notification_worker").Build()
 	}
 
 	// Get event bus
 	eventBus := events.GetEventBus()
 	if eventBus == nil {
-		return fmt.Errorf("event bus is nil")
+		return errors.Newf("event bus is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	// Register the worker as a consumer
 	if err := eventBus.RegisterConsumer(worker); err != nil {
-		return fmt.Errorf("failed to register notification worker: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryIntegration).Context("operation", "register_notification_worker").Build()
 	}
 
 	// Store reference for stats/monitoring
@@ -81,7 +80,7 @@ func InitializeEventBusIntegration() error {
 	// Create and register detection notification consumer
 	detectionConsumer = NewDetectionNotificationConsumer(service)
 	if err := eventBus.RegisterConsumer(detectionConsumer); err != nil {
-		return fmt.Errorf("failed to register detection notification consumer: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryIntegration).Context("operation", "register_detection_consumer").Build()
 	}
 
 	getIntegrationLogger().Info("detection notification consumer registered with event bus",

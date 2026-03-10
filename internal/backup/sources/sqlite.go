@@ -4,7 +4,6 @@ package sources
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -64,7 +63,11 @@ func (dc *DatabaseConnection) Close() error {
 	}
 	if dc.db != nil {
 		if err := dc.db.Close(); err != nil {
-			return fmt.Errorf("failed to close database connection: %w", err)
+			return errors.New(err).
+				Component("backup").
+				Category(errors.CategoryDatabase).
+				Context("operation", "close_database_connection").
+				Build()
 		}
 		dc.closed = true
 	}
@@ -463,7 +466,11 @@ func (s *SQLiteSource) streamBackupToWriter(ctx context.Context, db *sql.DB, w i
 	// Get database info needed later
 	_, pageCount, _, err := s.getDatabaseInfo(db)
 	if err != nil {
-		return fmt.Errorf("failed to get database info before backup: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_database_info_before_backup").
+			Build()
 	}
 	s.log.Debug("Retrieved database info for backup", logger.Int("page_count", pageCount))
 
@@ -639,14 +646,22 @@ func (s *SQLiteSource) Backup(ctx context.Context) (io.ReadCloser, error) {
 	// Validate configuration and get database path
 	dbPath, err := s.validateConfig()
 	if err != nil {
-		return nil, fmt.Errorf("configuration validation failed: %w", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_config").
+			Build()
 	}
 	s.log.Info("Validated configuration", logger.String("db_path", dbPath))
 
 	// Verify source database exists and is accessible before proceeding
 	s.log.Info("Verifying source database", logger.String("db_path", dbPath))
 	if err := s.verifyDatabase(dbPath, false); err != nil {
-		return nil, fmt.Errorf("database verification failed: %w", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryDatabase).
+			Context("operation", "verify_database").
+			Build()
 	}
 	s.log.Info("Source database verified successfully", logger.String("db_path", dbPath))
 

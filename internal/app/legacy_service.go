@@ -2,9 +2,10 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // LegacyFunc is a blocking function that runs until the quit channel is closed.
@@ -52,10 +53,10 @@ func (l *LegacyService) ErrChan() <-chan error {
 // Returns an error if called more than once or if fn is nil.
 func (l *LegacyService) Start(_ context.Context) error {
 	if l.fn == nil {
-		return fmt.Errorf("service %q: nil legacy function", l.name)
+		return errors.Newf("service %q: nil legacy function", l.name).Component(componentApp).Category(errors.CategorySystem).Build()
 	}
 	if l.started.Swap(true) {
-		return fmt.Errorf("service %q: Start called twice", l.name)
+		return errors.Newf("service %q: Start called twice", l.name).Component(componentApp).Category(errors.CategorySystem).Build()
 	}
 	go func() {
 		l.result = l.fn(l.quit)
@@ -69,7 +70,7 @@ func (l *LegacyService) Start(_ context.Context) error {
 // Returns an error if called before Start().
 func (l *LegacyService) Stop(ctx context.Context) error {
 	if !l.started.Load() {
-		return fmt.Errorf("service %q: Stop called before Start", l.name)
+		return errors.Newf("service %q: Stop called before Start", l.name).Component(componentApp).Category(errors.CategorySystem).Build()
 	}
 	l.closeQuit.Do(func() { close(l.quit) })
 	// Wait for the legacy function to finish. We use l.done instead of l.errChan

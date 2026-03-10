@@ -1,9 +1,10 @@
 package notification
 
 import (
-	"fmt"
 	"sync"
 	"sync/atomic"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 var (
@@ -40,7 +41,7 @@ func SetServiceForTesting(service *Service) error {
 	defer mu.Unlock()
 
 	if instance != nil {
-		return fmt.Errorf("notification service already initialized")
+		return errors.Newf("notification service already initialized").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	instance = service

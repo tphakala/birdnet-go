@@ -38,7 +38,10 @@ type Scheduler struct {
 func NewScheduler(manager *Manager, _ logger.Logger, stateManager *StateManager) (*Scheduler, error) {
 	if stateManager == nil {
 		GetLogger().Error("StateManager provided to NewScheduler cannot be nil")
-		return nil, fmt.Errorf("state manager cannot be nil")
+		return nil, errors.Newf("state manager cannot be nil").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 
 	return &Scheduler{
@@ -55,10 +58,16 @@ func (s *Scheduler) AddSchedule(hour, minute int, weekday time.Weekday, isWeekly
 
 	// Validate time parameters
 	if hour < 0 || hour > 23 {
-		return fmt.Errorf("invalid hour: %d", hour)
+		return errors.Newf("invalid hour: %d", hour).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 	if minute < 0 || minute > 59 {
-		return fmt.Errorf("invalid minute: %d", minute)
+		return errors.Newf("invalid minute: %d", minute).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 
 	// For daily backups, set weekday to -1
@@ -360,7 +369,10 @@ func parseWeekday(weekday string) (time.Weekday, error) {
 	case "saturday":
 		return time.Saturday, nil
 	default:
-		return -1, fmt.Errorf("invalid weekday: %s", weekday)
+		return -1, errors.Newf("invalid weekday: %s", weekday).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 }
 
@@ -496,7 +508,10 @@ func (s *Scheduler) TriggerBackup(ctx context.Context) error {
 	// Try to acquire the lock to prevent concurrent backups
 	if !s.runningBackup.TryLock() {
 		s.logger.Warn("Cannot trigger manual backup - another backup is already running")
-		return fmt.Errorf("another backup is already in progress")
+		return errors.Newf("another backup is already in progress").
+			Component("backup").
+			Category(errors.CategorySystem).
+			Build()
 	}
 	defer s.runningBackup.Unlock()
 

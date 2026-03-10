@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"log"
 	"slices"
@@ -12,6 +11,7 @@ import (
 	shoutrrr "github.com/nicholas-fedor/shoutrrr"
 	router "github.com/nicholas-fedor/shoutrrr/pkg/router"
 	stypes "github.com/nicholas-fedor/shoutrrr/pkg/types"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -64,7 +64,7 @@ func (s *ShoutrrrProvider) ValidateConfig() error {
 		return nil
 	}
 	if len(s.urls) == 0 {
-		return fmt.Errorf("at least one URL is required")
+		return errors.Newf("at least one URL is required").Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	// Build sender to validate URLs
 	sender, err := shoutrrr.CreateSender(s.urls...)
@@ -85,7 +85,7 @@ func (s *ShoutrrrProvider) ValidateConfig() error {
 
 func (s *ShoutrrrProvider) Send(ctx context.Context, n *Notification) error {
 	if s.sender == nil {
-		return fmt.Errorf("shoutrrr sender not initialized")
+		return errors.Newf("shoutrrr sender not initialized").Component("notification").Category(errors.CategoryIntegration).Build()
 	}
 	_ = ctx // router handles its own timeouts
 

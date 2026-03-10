@@ -96,13 +96,13 @@ func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 // Validate checks if the circuit breaker configuration is valid.
 func (c CircuitBreakerConfig) Validate() error {
 	if c.MaxFailures < 1 {
-		return fmt.Errorf("max_failures must be at least 1, got %d", c.MaxFailures)
+		return errors.Newf("max_failures must be at least 1, got %d", c.MaxFailures).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.Timeout < time.Second {
-		return fmt.Errorf("timeout must be at least 1 second, got %v", c.Timeout)
+		return errors.Newf("timeout must be at least 1 second, got %v", c.Timeout).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.HalfOpenMaxRequests < 1 {
-		return fmt.Errorf("half_open_max_requests must be at least 1, got %d", c.HalfOpenMaxRequests)
+		return errors.Newf("half_open_max_requests must be at least 1, got %d", c.HalfOpenMaxRequests).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }
@@ -160,8 +160,7 @@ func (cb *PushCircuitBreaker) Call(ctx context.Context, fn func(context.Context)
 		// Capture state and failures under lock for thread-safe error message
 		state, failures := cb.State(), cb.Failures()
 		// Add context about circuit breaker state to help debugging
-		return fmt.Errorf("circuit breaker rejected request (%v, %d consecutive failures): %w",
-			state, failures, err)
+		return errors.New(err).Component("notification").Category(errors.CategoryLimit).Context("state", state.String()).Context("consecutive_failures", failures).Build()
 	}
 
 	// Execute the function

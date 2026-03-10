@@ -179,7 +179,10 @@ type Manager struct {
 // NewManager creates a new backup manager
 func NewManager(fullConfig *conf.Settings, _ logger.Logger, stateManager *StateManager, appVersion string) (*Manager, error) {
 	if stateManager == nil {
-		return nil, fmt.Errorf("StateManager cannot be nil")
+		return nil, errors.Newf("StateManager cannot be nil").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 
 	return &Manager{
@@ -310,8 +313,13 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 		allTempDirs = append(allTempDirs, tempDirs...)
 		if err != nil {
 			m.logger.Error("Failed to process backup source", logger.String("source_name", sourceName), logger.Error(err))
-			errs = append(errs, fmt.Errorf("source %s: %w", sourceName, err)) // Wrap error with source name
-			continue                                                          // Continue with the next source
+			errs = append(errs, errors.New(err).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "process_backup_source").
+				Context("source_name", sourceName).
+				Build()) // Wrap error with source name
+			continue // Continue with the next source
 		}
 		m.logger.Info("Successfully processed backup source",
 			logger.String("source_name", sourceName),
@@ -347,7 +355,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 	m.logger.Debug("Starting source backup", logger.String("source_name", sourceName))
 	backupReader, err := source.Backup(ctx)
 	if err != nil {
-		return tempDirs, fmt.Errorf("failed to initiate backup from source: %w", err)
+		return tempDirs, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "initiate_backup").
+			Build()
 	}
 	defer func() {
 		if err := backupReader.Close(); err != nil {
@@ -403,7 +415,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 
 	// 5. Create and populate the archive
 	if err := m.createArchive(ctx, archivePath, backupReader, metadata); err != nil {
-		return tempDirs, fmt.Errorf("failed to create backup archive: %w", err)
+		return tempDirs, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_backup_archive").
+			Build()
 	}
 	m.logger.Debug("Archive created successfully", logger.String("source_name", sourceName), logger.String("archive_path", archivePath))
 
@@ -414,7 +430,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 		encryptedArchivePath := archivePath + ".enc" // Convention for encrypted file
 		err := m.encryptArchive(ctx, archivePath, encryptedArchivePath)
 		if err != nil {
-			return tempDirs, fmt.Errorf("failed to encrypt archive: %w", err)
+			return tempDirs, errors.New(err).
+				Component("backup").
+				Category(errors.CategorySystem).
+				Context("operation", "encrypt_archive").
+				Build()
 		}
 		// Clean up the unencrypted archive
 		if err := os.Remove(archivePath); err != nil {
@@ -450,7 +470,11 @@ func (m *Manager) processBackupSource(ctx context.Context, sourceName string, so
 
 	// 8. Store the final archive in all registered targets
 	if err := m.storeBackupInTargets(ctx, finalArchivePath, metadata); err != nil {
-		return tempDirs, fmt.Errorf("failed to store backup in targets: %w", err)
+		return tempDirs, errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "store_backup_in_targets").
+			Build()
 	}
 
 	m.logger.Debug("Finished processing source", logger.String("source_name", sourceName))
@@ -546,7 +570,12 @@ func (m *Manager) storeBackupInTargets(ctx context.Context, archivePath string, 
 			m.logger.Info("Storing backup in target", logger.String("backup_id", metadata.ID), logger.String("target_name", targetName))
 
 			if err := target.Store(storeCtx, archivePath, metadata); err != nil {
-				wrappedErr := fmt.Errorf("target %s: %w", targetName, err)
+				wrappedErr := errors.New(err).
+					Component("backup").
+					Category(errors.CategorySystem).
+					Context("operation", "store_backup").
+					Context("target_name", targetName).
+					Build()
 				m.logger.Error("Failed to store backup in target", logger.String("backup_id", metadata.ID), logger.String("target_name", targetName), logger.Error(err))
 				errChan <- wrappedErr
 				// Update state for this specific target failure
@@ -667,7 +696,11 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 	// 1. Add metadata.json
 	m.logger.Debug("Adding metadata to archive", logger.String("backup_id", metadata.ID))
 	if err := m.addMetadataToArchive(ctx, tarWriter, metadata); err != nil {
-		return fmt.Errorf("failed to add metadata to archive: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "add_metadata_to_archive").
+			Build()
 	}
 
 	// 2. Add sanitized config.yml
@@ -676,13 +709,21 @@ func (m *Manager) createArchive(ctx context.Context, archivePath string, reader 
 		// Log warning but don't fail the backup if config fails to add? Or return error?
 		// For now, let's return the error.
 		m.logger.Warn("Failed to add config.yml to archive", logger.String("backup_id", metadata.ID), logger.Error(err))
-		return fmt.Errorf("failed to add config.yml to archive: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "add_config_to_archive").
+			Build()
 	}
 
 	// 3. Add the actual backup data stream
 	m.logger.Debug("Adding backup data stream to archive", logger.String("backup_id", metadata.ID))
 	if err := m.addBackupDataToArchive(ctx, tarWriter, reader, metadata); err != nil {
-		return fmt.Errorf("failed to add backup data to archive: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "add_backup_data_to_archive").
+			Build()
 	}
 
 	// Ensure everything is written (Close writers)
@@ -846,13 +887,21 @@ func (m *Manager) encryptArchive(ctx context.Context, sourcePath, destPath strin
 	// Get encryption key
 	key, err := m.GetEncryptionKey() // Assumes GetEncryptionKey is implemented in encryption.go
 	if err != nil {
-		return fmt.Errorf("failed to get encryption key: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "get_encryption_key").
+			Build()
 	}
 
 	// Encrypt data
 	ciphertext, err := encryptData(plaintext, key) // Assumes encryptData is implemented in encryption.go
 	if err != nil {
-		return fmt.Errorf("failed during data encryption: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "encrypt_data").
+			Build()
 	}
 
 	// Write encrypted data to destination file
@@ -1146,7 +1195,11 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 	// Get all backups first
 	allBackups, err := m.ListBackups(ctx) // Use existing method, includes timeout
 	if err != nil {
-		return fmt.Errorf("failed to list backups for cleanup: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "list_backups_for_cleanup").
+			Build()
 	}
 
 	// Group backups by target and source type
@@ -1171,7 +1224,13 @@ func (m *Manager) cleanupOldBackups(ctx context.Context) error {
 			wg.Go(func() {
 				if err := m.enforceRetentionPolicy(ctx, target, backups, retentionPolicy); err != nil {
 					m.logger.Error("Failed to enforce retention policy", logger.String("target_name", targetName), logger.String("source_type", sourceType), logger.Error(err))
-					errChan <- fmt.Errorf("target %s, source %s: %w", targetName, sourceType, err)
+					errChan <- errors.New(err).
+						Component("backup").
+						Category(errors.CategorySystem).
+						Context("operation", "enforce_retention_policy").
+						Context("target_name", targetName).
+						Context("source_type", sourceType).
+						Build()
 				}
 			})
 		}
@@ -1223,7 +1282,12 @@ func (m *Manager) ListBackups(ctx context.Context) ([]BackupInfo, error) {
 
 			backups, err := target.List(listCtx)
 			if err != nil {
-				wrappedErr := fmt.Errorf("target %s: %w", targetName, err)
+				wrappedErr := errors.New(err).
+					Component("backup").
+					Category(errors.CategorySystem).
+					Context("operation", "list_backups").
+					Context("target_name", targetName).
+					Build()
 				m.logger.Error("Failed to list backups from target", logger.String("target_name", targetName), logger.Error(err))
 				errChan <- wrappedErr
 				return // Don't attempt to add backups if listing failed
@@ -1284,7 +1348,11 @@ func (m *Manager) DeleteBackup(ctx context.Context, id string) error {
 	if err != nil {
 		// Don't wrap ListBackups error here, it's already descriptive
 		m.logger.Error("Cannot delete backup: failed to list existing backups", logger.String("backup_id", id), logger.Error(err))
-		return fmt.Errorf("failed to list backups to find target for deletion: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "list_backups_for_deletion").
+			Build()
 	}
 
 	var target Target
@@ -1439,7 +1507,11 @@ func (m *Manager) ValidateBackupCounts(ctx context.Context) error {
 	allBackups, err := m.ListBackups(ctx)
 	if err != nil {
 		m.logger.Error("Validation failed: Cannot list backups", logger.Error(err))
-		return fmt.Errorf("cannot list backups for validation: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategorySystem).
+			Context("operation", "list_backups_for_validation").
+			Build()
 	}
 
 	groupedBackups := m.groupBackupsByTargetAndType(allBackups)

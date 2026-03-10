@@ -72,7 +72,7 @@ type CircuitBreaker struct {
 // NewNotificationWorker creates a new notification worker
 func NewNotificationWorker(service *Service, config *WorkerConfig) (*NotificationWorker, error) {
 	if service == nil {
-		return nil, fmt.Errorf("notification service is required")
+		return nil, errors.Newf("notification service is required").Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	if config == nil {
@@ -126,7 +126,7 @@ func (w *NotificationWorker) initTemplates() error {
 	for name, tmplStr := range templates {
 		tmpl, err := template.New(name).Parse(tmplStr)
 		if err != nil {
-			return fmt.Errorf("failed to parse template %s: %w", name, err)
+			return errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("template", name).Build()
 		}
 		w.templates[name] = tmpl
 	}

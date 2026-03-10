@@ -81,7 +81,10 @@ func (rl *rateLimiter) acquire(ctx context.Context) error {
 		if ctx.Err() == context.Canceled {
 			return ctx.Err()
 		}
-		return fmt.Errorf("timeout waiting for rate limit token")
+		return errors.Newf("timeout waiting for rate limit token").
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Build()
 	case <-rl.tokens:
 		return nil
 	}

@@ -1,7 +1,6 @@
 package monitor
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -9,8 +8,11 @@ import (
 	"strings"
 
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+const componentMonitor = "monitor"
 
 // MountGroup represents a group of paths sharing the same mount point
 type MountGroup struct {
@@ -28,7 +30,7 @@ func getMountInfoFromPartitions(path string, partitions []disk.PartitionStat) (m
 	if err != nil {
 		// If symlink resolution fails, try with original path
 		if _, statErr := os.Stat(path); statErr != nil {
-			return "", "", "", fmt.Errorf("path does not exist: %s: %w", path, err)
+			return "", "", "", errors.New(err).Component(componentMonitor).Category(errors.CategorySystem).Context("operation", "resolve_mount_path").Build()
 		}
 		resolvedPath = path
 	}
@@ -49,7 +51,7 @@ func getMountInfoFromPartitions(path string, partitions []disk.PartitionStat) (m
 	}
 
 	if bestLen == 0 {
-		return "", "", "", fmt.Errorf("no mount point found for path: %s", path)
+		return "", "", "", errors.Newf("no mount point found for path: %s", path).Component(componentMonitor).Category(errors.CategorySystem).Build()
 	}
 
 	return bestMatch.Mountpoint, bestMatch.Device, bestMatch.Fstype, nil
@@ -61,7 +63,7 @@ func groupPathsByMountPoint(paths []string) ([]MountGroup, error) {
 	// Get partitions once for all paths (performance optimization)
 	partitions, err := disk.Partitions(false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get partitions: %w", err)
+		return nil, errors.New(err).Component(componentMonitor).Category(errors.CategorySystem).Context("operation", "get_partitions").Build()
 	}
 
 	return groupPathsWithPartitions(paths, partitions), nil

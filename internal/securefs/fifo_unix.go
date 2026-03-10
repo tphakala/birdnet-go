@@ -3,12 +3,11 @@
 package securefs
 
 import (
-	"errors"
-	"fmt"
 	"os"
 	"syscall"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -49,7 +48,7 @@ func createFIFOPlatform(path string) (string, error) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return "", fmt.Errorf("failed to create FIFO after retries: %w", fifoErr)
+	return "", errors.New(fifoErr).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "create_fifo").Build()
 }
 
 // CleanupNamedPipes is a no-op on non-Windows platforms
@@ -66,20 +65,20 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 
 	// Validate that the provided path is the same as what was created
 	if pipePath != sfs.pipeName {
-		return nil, fmt.Errorf("pipe path mismatch: expected %s but got %s",
-			sfs.pipeName, pipePath)
+		return nil, errors.Newf("pipe path mismatch: expected %s but got %s",
+			sfs.pipeName, pipePath).Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 	}
 
 	// Make the path relative to the base directory
 	relPath, err := sfs.RelativePath(pipePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get relative path: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "get_relative_path").Build()
 	}
 
 	// Open the FIFO through os.Root for security
 	fifo, err := sfs.root.OpenFile(relPath, os.O_WRONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open Unix FIFO: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_unix_fifo").Build()
 	}
 
 	return fifo, nil

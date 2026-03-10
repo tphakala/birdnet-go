@@ -16,6 +16,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+const componentSecurefs = "securefs"
+
 // GetLogger returns the securefs package logger scoped to the securefs module.
 // The logger is fetched from the global logger each time to ensure it uses
 // the current centralized logger (which may be set after package init).
@@ -52,20 +54,20 @@ func New(baseDir string) (*SecureFS, error) {
 	// Ensure baseDir is an absolute path
 	absPath, err := filepath.Abs(baseDir)
 	if err != nil {
-		return nil, fmt.Errorf("failed to resolve base path: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategorySystem).Context("operation", "resolve_base_path").Build()
 	}
 
 	// Create the directory if it doesn't exist with secure permissions
 	// Only owner can write, others can read/execute for serving files
 	if err := os.MkdirAll(absPath, 0o750); err != nil {
-		return nil, fmt.Errorf("failed to create base directory: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategorySystem).Context("operation", "create_base_directory").Build()
 	}
 
 	// Create a sandboxed filesystem with os.Root
 	// This is a Go 1.24 feature that provides OS-level filesystem isolation
 	root, err := os.OpenRoot(absPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create filesystem sandbox: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategorySystem).Context("operation", "create_sandbox").Build()
 	}
 
 	return &SecureFS{
@@ -131,12 +133,12 @@ func isPathPrefix(absBase, absTarget string) bool {
 func IsPathWithinBaseWithCache(cache *PathCache, basePath, targetPath string) (bool, error) {
 	absBase, err := resolveAbsPath(cache, basePath)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve base path: %w", err)
+		return false, errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "resolve_base_path").Build()
 	}
 
 	absTarget, err := resolveAbsPath(cache, targetPath)
 	if err != nil {
-		return false, fmt.Errorf("failed to resolve target path: %w", err)
+		return false, errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "resolve_target_path").Build()
 	}
 
 	// Clean paths to remove any . or .. components
@@ -181,12 +183,11 @@ func IsPathValidWithinBase(baseDir, path string) error {
 		if os.IsNotExist(err) {
 			return nil
 		}
-		return fmt.Errorf("path validation error: %w", err)
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "path_validation").Build()
 	}
 
 	if !isWithin {
-		return fmt.Errorf("%w: path %s is outside allowed directory %s",
-			ErrPathTraversal, path, baseDir)
+		return errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "path_outside_base").Build()
 	}
 
 	return nil
@@ -202,7 +203,7 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	// Get absolute paths for consistent comparison
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "get_absolute_path").Build()
 	}
 
 	// Since the path will be used with os.Root, which already provides
@@ -212,7 +213,7 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 	// Verify the path is within the base directory for safety
 	// Additional check using filepath.IsLocal for defense in depth
 	if !filepath.IsLocal(filepath.Base(absPath)) {
-		return "", fmt.Errorf("%w: path contains invalid components", ErrInvalidPath)
+		return "", errors.New(ErrInvalidPath).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "invalid_path_components").Build()
 	}
 
 	// Using the cached version of IsPathWithinBase for better performance
@@ -221,17 +222,17 @@ func (sfs *SecureFS) RelativePath(path string) (string, error) {
 		return IsPathWithinBaseWithCache(sfs.cache, sfs.baseDir, absPath)
 	})
 	if err != nil {
-		return "", fmt.Errorf("path validation error: %w", err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "path_validation").Build()
 	}
 
 	if !isWithin {
-		return "", fmt.Errorf("%w: path %s is outside allowed directory %s", ErrPathTraversal, path, sfs.baseDir)
+		return "", errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "path_outside_base").Build()
 	}
 
 	// Make the path relative to the base directory for os.Root operations
 	relPath, err := filepath.Rel(sfs.baseDir, absPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to make path relative: %w", err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "make_path_relative").Build()
 	}
 
 	// Ensure no leading slash which would make a relative path be treated as absolute
@@ -250,15 +251,13 @@ func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
 
 		// Check for absolute paths after cleaning (should not happen if input is truly relative)
 		if filepath.IsAbs(cleanedPath) {
-			return "", fmt.Errorf("%w: path must be relative, but got '%s' after cleaning '%s'",
-				ErrInvalidPath, cleanedPath, path)
+			return "", errors.New(ErrInvalidPath).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "absolute_path_rejected").Build()
 		}
 
 		// Check for attempts to traverse upwards from the root.
 		// After cleaning, paths starting with ".." indicate an attempt to go above the root.
 		if strings.HasPrefix(cleanedPath, ".."+string(filepath.Separator)) || cleanedPath == ".." {
-			return "", fmt.Errorf("%w: '%s' (cleaned from '%s')",
-				ErrPathTraversal, cleanedPath, path)
+			return "", errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "upward_traversal_rejected").Build()
 		}
 
 		// Ensure no leading separator after cleaning (should be handled by Clean, but double-check)
@@ -273,7 +272,7 @@ func (sfs *SecureFS) ValidateRelativePath(relPath string) (string, error) {
 func (sfs *SecureFS) createDirComponent(path string, perm os.FileMode) error {
 	err := sfs.root.Mkdir(path, perm)
 	if err != nil && !os.IsExist(err) {
-		return fmt.Errorf("failed to create directory component %s: %w", path, err)
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "create_directory").Build()
 	}
 	return nil
 }
@@ -535,11 +534,10 @@ func (sfs *SecureFS) ReadFile(path string) ([]byte, error) {
 	if sfs.maxReadFileSize > 0 {
 		stat, err := file.Stat()
 		if err != nil {
-			return nil, fmt.Errorf("failed to stat file: %w", err)
+			return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "stat_file").Build()
 		}
 		if stat.Size() > sfs.maxReadFileSize {
-			return nil, fmt.Errorf("%w: file is %d bytes, limit is %d bytes",
-				ErrFileTooLarge, stat.Size(), sfs.maxReadFileSize)
+			return nil, errors.New(ErrFileTooLarge).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "read_file_size_check").Build()
 		}
 	}
 
@@ -648,7 +646,7 @@ func (sfs *SecureFS) ServeFile(c echo.Context, path string) error {
 		file, err := sfs.root.Open(relPath)
 		if err != nil {
 			// Wrap operational errors for context
-			return nil, relPath, fmt.Errorf("ServeFile open failed for relPath '%s': %w", relPath, err)
+			return nil, relPath, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "serve_file_open").Build()
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, relPath, nil
@@ -671,7 +669,7 @@ func (sfs *SecureFS) ServeRelativeFile(c echo.Context, relPath string) error {
 		file, err := sfs.root.Open(validatedRelPath)
 		if err != nil {
 			// Wrap operational errors for context
-			return nil, validatedRelPath, fmt.Errorf("ServeRelativeFile open failed for validatedRelPath '%s': %w", validatedRelPath, err)
+			return nil, validatedRelPath, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "serve_relative_file_open").Build()
 		}
 		// Return the file handle, the validated relative path, and nil error
 		return file, validatedRelPath, nil
@@ -750,7 +748,7 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	// Open the directory using os.Root
 	dirFile, err := sfs.root.Open(relPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open directory: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_directory").Build()
 	}
 	defer func() {
 		if err := dirFile.Close(); err != nil {
@@ -761,7 +759,7 @@ func (sfs *SecureFS) ReadDir(path string) ([]os.DirEntry, error) {
 	// Read directory entries
 	entries, err := dirFile.ReadDir(0) // 0 means read all entries
 	if err != nil {
-		return nil, fmt.Errorf("failed to read directory entries: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "read_directory_entries").Build()
 	}
 
 	return entries, nil
@@ -814,31 +812,31 @@ func (sfs *SecureFS) Readlink(path string) (string, error) {
 	path = filepath.Clean(path)
 	absPath, err := filepath.Abs(path)
 	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "get_absolute_path").Build()
 	}
 
 	// Use Lstat to check if the symlink file itself exists (don't follow the link)
 	info, err := os.Lstat(absPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to stat symlink: %w", err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "stat_symlink").Build()
 	}
 
 	// Verify it's actually a symlink
 	if info.Mode()&os.ModeSymlink == 0 {
-		return "", fmt.Errorf("not a symbolic link: %s", path)
+		return "", errors.Newf("not a symbolic link: %s", path).Component(componentSecurefs).Category(errors.CategoryValidation).Build()
 	}
 
 	// Make the path relative to the base directory
 	relPath, err := filepath.Rel(sfs.baseDir, absPath)
 	if err != nil {
 		// This error implies the path is outside the base directory.
-		return "", fmt.Errorf("%w: failed to make path relative: %w", ErrPathTraversal, err)
+		return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "make_path_relative").Build()
 	}
 
 	// Validate the symlink file path itself is within bounds
 	// Check for path traversal attempts
 	if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
-		return "", fmt.Errorf("%w: symlink path escapes sandbox", ErrPathTraversal)
+		return "", errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "symlink_escapes_sandbox").Build()
 	}
 
 	// Ensure no leading separator

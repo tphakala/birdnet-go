@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/backup"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -217,7 +218,10 @@ func (t *RsyncTarget) executeCommand(ctx context.Context, cmd *exec.Cmd) error {
 		return &RsyncError{
 			Op:      "execute",
 			Command: cmd.Path,
-			Err:     fmt.Errorf("command path must be absolute for security"),
+			Err: errors.Newf("command path must be absolute for security").
+				Component("backup").
+				Category(errors.CategorySystem).
+				Build(),
 		}
 	}
 
@@ -479,7 +483,11 @@ func (t *RsyncTarget) cleanupTempFiles(ctx context.Context) error {
 					logger.String("path", path),
 					logger.Error(err))
 			}
-			errs = append(errs, fmt.Errorf("failed to delete %s: %w", path, err))
+			errs = append(errs, errors.New(err).
+				Component("backup").
+				Category(errors.CategoryNetwork).
+				Context("operation", "cleanup_temp_file").
+				Build())
 		} else {
 			delete(t.tempFiles, path) // Remove from map under the same lock
 		}
@@ -555,7 +563,11 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, backup.NewError(backup.ErrIO, "rsync: failed to list backups", fmt.Errorf("%w: %s", err, output))
+		return nil, backup.NewError(backup.ErrIO, "rsync: failed to list backups", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "list_backups").
+			Build())
 	}
 
 	lines := strings.Split(string(output), "\n")
@@ -632,7 +644,11 @@ func (t *RsyncTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath string, sshArgs []string, backupName string) (*RsyncMetadataV1, error) {
 	tempFile, err := os.CreateTemp("", "rsync-metadata-*")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary file for metadata: %w", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_metadata_file").
+			Build()
 	}
 	defer func() {
 		if err := os.Remove(tempFile.Name()); err != nil {
@@ -649,12 +665,20 @@ func (t *RsyncTarget) downloadAndParseMetadata(ctx context.Context, metadataPath
 	downloadCmd := exec.CommandContext(ctx, t.sshPath, append(sshArgs[:len(sshArgs)-1], fmt.Sprintf("cat %s", metadataPath))...) // #nosec G204 -- sshPath validated during initialization, metadataPath constructed from sanitized paths
 	metadataBytes, err := downloadCmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("failed to read metadata for %s: %w", backupName, err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "read_metadata").
+			Build()
 	}
 
 	var metadata RsyncMetadataV1
 	if err := json.Unmarshal(metadataBytes, &metadata); err != nil {
-		return nil, fmt.Errorf("invalid metadata in backup %s: %w", backupName, err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "parse_metadata").
+			Build()
 	}
 
 	return &metadata, nil
@@ -726,8 +750,12 @@ func (t *RsyncTarget) Validate() error {
 	sshArgs = append(sshArgs, fmt.Sprintf("%s@%s", t.config.Username, t.config.Host), "echo test")
 
 	cmd := exec.CommandContext(ctx, t.sshPath, sshArgs...) // #nosec G204 -- sshPath validated during initialization, args constructed with sanitized paths
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return backup.NewError(backup.ErrValidation, "rsync: SSH connection test failed", fmt.Errorf("%w: %s", err, output))
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return backup.NewError(backup.ErrValidation, "rsync: SSH connection test failed", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "ssh_connection_test").
+			Build())
 	}
 
 	// Test rsync access
@@ -739,8 +767,12 @@ func (t *RsyncTarget) Validate() error {
 	}
 
 	cmd = exec.CommandContext(ctx, t.rsyncPath, args...) // #nosec G204 -- rsyncPath validated during initialization, args constructed safely
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return backup.NewError(backup.ErrValidation, "rsync: access test failed", fmt.Errorf("%w: %s", err, output))
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return backup.NewError(backup.ErrValidation, "rsync: access test failed", errors.New(err).
+			Component("backup").
+			Category(errors.CategoryNetwork).
+			Context("operation", "rsync_access_test").
+			Build())
 	}
 
 	return nil

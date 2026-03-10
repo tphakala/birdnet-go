@@ -3,7 +3,6 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"slices"
@@ -13,6 +12,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+const componentApp = "app"
 
 const (
 	// defaultShutdownTimeout is the total shutdown budget (9s for Docker's 10s default).
@@ -64,7 +65,7 @@ func (a *App) Start(ctx context.Context) error {
 			rollbackCtx, cancel := context.WithTimeout(context.Background(), networkTierBudget+coreTierBudget)
 			a.shutdownRange(rollbackCtx, a.services[:i])
 			cancel()
-			return fmt.Errorf("service %q failed to start: %w", svc.Name(), err)
+			return errors.New(err).Component(componentApp).Category(errors.CategorySystem).Context("operation", "service_start").Context("service", svc.Name()).Build()
 		}
 	}
 	return nil
@@ -82,7 +83,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 	defer networkCancel()
 	for _, svc := range network {
 		if err := svc.Stop(networkCtx); err != nil {
-			allErrs = append(allErrs, fmt.Errorf("service %q: %w", svc.Name(), err))
+			allErrs = append(allErrs, errors.New(err).Component(componentApp).Category(errors.CategorySystem).Context("operation", "service_stop").Context("service", svc.Name()).Build())
 		}
 	}
 
@@ -91,7 +92,7 @@ func (a *App) Shutdown(ctx context.Context) error {
 	defer coreCancel()
 	for _, svc := range core {
 		if err := svc.Stop(coreCtx); err != nil {
-			allErrs = append(allErrs, fmt.Errorf("service %q: %w", svc.Name(), err))
+			allErrs = append(allErrs, errors.New(err).Component(componentApp).Category(errors.CategorySystem).Context("operation", "service_stop").Context("service", svc.Name()).Build())
 		}
 	}
 

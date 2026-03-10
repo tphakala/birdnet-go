@@ -13,7 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+const componentSecrets = "secrets"
 
 const (
 	// maxSecretFileSize limits secret file reads to prevent memory issues
@@ -70,7 +74,7 @@ func ExpandString(s string) (string, error) {
 	})
 
 	if len(missingVars) > 0 {
-		return "", fmt.Errorf("missing required environment variable(s): %s", strings.Join(missingVars, ", "))
+		return "", errors.Newf("missing required environment variable(s): %s", strings.Join(missingVars, ", ")).Component(componentSecrets).Category(errors.CategoryConfiguration).Build()
 	}
 
 	return expanded, nil
@@ -87,7 +91,7 @@ func ExpandString(s string) (string, error) {
 // Returns the file contents (trimmed) or an error.
 func ReadFile(path string) (string, error) {
 	if path == "" {
-		return "", fmt.Errorf("secret file path is empty")
+		return "", errors.Newf("secret file path is empty").Component(componentSecrets).Category(errors.CategoryValidation).Build()
 	}
 
 	// Clean the path to prevent directory traversal
@@ -97,19 +101,19 @@ func ReadFile(path string) (string, error) {
 	info, err := os.Stat(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return "", fmt.Errorf("secret file not found: %s", cleanPath)
+			return "", errors.Newf("secret file not found: %s", cleanPath).Component(componentSecrets).Category(errors.CategoryFileIO).Build()
 		}
-		return "", fmt.Errorf("failed to stat secret file %s: %w", cleanPath, err)
+		return "", errors.New(err).Component(componentSecrets).Category(errors.CategoryFileIO).Context("operation", "stat_secret_file").Build()
 	}
 
 	// Ensure it's a regular file (not a directory or device)
 	if !info.Mode().IsRegular() {
-		return "", fmt.Errorf("secret path is not a regular file: %s", cleanPath)
+		return "", errors.Newf("secret path is not a regular file: %s", cleanPath).Component(componentSecrets).Category(errors.CategoryValidation).Build()
 	}
 
 	// Check file size to prevent reading huge files
 	if info.Size() > maxSecretFileSize {
-		return "", fmt.Errorf("secret file too large (max %d bytes): %s", maxSecretFileSize, cleanPath)
+		return "", errors.Newf("secret file too large (max %d bytes): %s", maxSecretFileSize, cleanPath).Component(componentSecrets).Category(errors.CategoryValidation).Build()
 	}
 
 	// Check file permissions (warn if group/other have any permissions)
@@ -124,7 +128,7 @@ func ReadFile(path string) (string, error) {
 	// Read the file contents
 	data, err := os.ReadFile(cleanPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read secret file %s: %w", cleanPath, err)
+		return "", errors.New(err).Component(componentSecrets).Category(errors.CategoryFileIO).Context("operation", "read_secret_file").Build()
 	}
 
 	// Trim only trailing newlines (preserve intentional leading/trailing spaces)
@@ -132,7 +136,7 @@ func ReadFile(path string) (string, error) {
 	secret = strings.TrimRight(secret, "\r\n")
 
 	if secret == "" {
-		return "", fmt.Errorf("secret file is empty: %s", cleanPath)
+		return "", errors.Newf("secret file is empty: %s", cleanPath).Component(componentSecrets).Category(errors.CategoryValidation).Build()
 	}
 
 	return secret, nil
@@ -156,7 +160,7 @@ func Resolve(filePath, value string) (string, error) {
 	if filePath != "" {
 		secret, err := ReadFile(filePath)
 		if err != nil {
-			return "", fmt.Errorf("failed to read secret from file: %w", err)
+			return "", errors.New(err).Component(componentSecrets).Category(errors.CategoryFileIO).Context("operation", "resolve_secret_file").Build()
 		}
 		return secret, nil
 	}
@@ -183,7 +187,7 @@ func MustResolve(fieldName, filePath, value string) (string, error) {
 	}
 
 	if secret == "" {
-		return "", fmt.Errorf("%s is required but not provided", fieldName)
+		return "", errors.Newf("%s is required but not provided", fieldName).Component(componentSecrets).Category(errors.CategoryValidation).Build()
 	}
 
 	return secret, nil

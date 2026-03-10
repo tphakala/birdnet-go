@@ -11,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -21,13 +22,13 @@ const osWindows = "windows"
 func (sfs *SecureFS) CreateFIFO(path string) error {
 	// Validate the path is within the base directory
 	if err := IsPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return fmt.Errorf("security error creating FIFO: %w", err)
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "create_fifo").Build()
 	}
 
 	// First try to create the FIFO using platform-specific functions
 	pipeName, err := createFIFOPlatform(path)
 	if err != nil {
-		return fmt.Errorf("error creating FIFO: %w", err)
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "create_fifo_platform").Build()
 	}
 
 	// Store the pipe name for later reference
@@ -56,7 +57,7 @@ func GetFIFOPath(path string) string {
 func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error) {
 	// Validate the path is within the base directory
 	if err := IsPathValidWithinBase(sfs.baseDir, path); err != nil {
-		return nil, fmt.Errorf("security error opening FIFO: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_fifo").Build()
 	}
 
 	// For non-Windows platforms, this is just a regular file open
@@ -72,13 +73,13 @@ func (sfs *SecureFS) OpenFIFO(ctx context.Context, path string) (*os.File, error
 		// For Unix platforms, we can just open the file
 		relPath, err := sfs.RelativePath(path)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get relative path: %w", err)
+			return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "get_relative_path").Build()
 		}
 
 		// On Unix, open the FIFO through os.Root for sandbox security
 		fifo, err = sfs.root.OpenFile(relPath, getPlatformOpenFlags(), 0)
 		if err != nil {
-			return nil, fmt.Errorf("failed to open FIFO: %w", err)
+			return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_fifo").Build()
 		}
 	}
 
@@ -118,7 +119,7 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 
 	for i := range maxRetries {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context canceled while opening FIFO")
+			return nil, errors.Newf("context canceled while opening FIFO").Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 		}
 
 		fifo, openErr := openPlatformSpecificFIFO(pipePath, fifoPath, openFlags, sfs)
@@ -134,11 +135,11 @@ func openFIFOWithRetries(ctx context.Context, fifoPath, pipePath string, openFla
 		}
 
 		if err := waitWithContext(ctx, retryInterval); err != nil {
-			return nil, fmt.Errorf("context canceled during retry delay")
+			return nil, errors.Newf("context canceled during retry delay").Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 		}
 	}
 
-	return nil, fmt.Errorf("failed to open FIFO after %d attempts", maxRetries)
+	return nil, errors.Newf("failed to open FIFO after %d attempts", maxRetries).Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 }
 
 // openPlatformSpecificFIFO opens the FIFO using OS-specific approach
@@ -146,7 +147,7 @@ func openPlatformSpecificFIFO(pipePath, fifoPath string, openFlags int, sfs *Sec
 	if runtime.GOOS == osWindows {
 		// Validate Windows pipe path to ensure it's a valid named pipe path
 		if !strings.HasPrefix(pipePath, `\\.\pipe\`) {
-			return nil, fmt.Errorf("security error: Windows pipe path must start with \\\\.\\pipe\\")
+			return nil, errors.Newf("security error: Windows pipe path must start with \\\\.\\pipe\\").Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 		}
 		// For Windows, open the named pipe directly
 		// Named pipes on Windows have their own security model independent of file permissions

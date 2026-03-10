@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sys/windows"
 )
@@ -123,7 +124,7 @@ func createFIFOPlatform(path string) (string, error) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	return "", fmt.Errorf("failed to create Windows named pipe after retries: %v", createErr)
+	return "", errors.New(createErr).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "create_windows_named_pipe").Build()
 }
 
 // CleanupNamedPipes closes all open named pipe handles
@@ -152,7 +153,7 @@ func CleanupNamedPipes() {
 func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 	// Validate the path is a named pipe path
 	if len(pipePath) < 10 || !strings.HasPrefix(pipePath, "\\\\.\\pipe\\") {
-		return nil, fmt.Errorf("invalid Windows named pipe path: %s", pipePath)
+		return nil, errors.Newf("invalid Windows named pipe path: %s", pipePath).Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 	}
 
 	// Open the named pipe with proper flags
@@ -167,7 +168,7 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 	)
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to open Windows named pipe: %w", err)
+		return nil, errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "open_windows_named_pipe").Build()
 	}
 
 	// Convert Windows handle to os.File for compatibility with existing code
@@ -176,7 +177,7 @@ func openNamedPipePlatform(sfs *SecureFS, pipePath string) (*os.File, error) {
 	file := os.NewFile(fd, pipePath)
 	if file == nil {
 		windows.CloseHandle(h)
-		return nil, fmt.Errorf("failed to create file from pipe handle")
+		return nil, errors.Newf("failed to create file from pipe handle").Component(componentSecurefs).Category(errors.CategoryFileIO).Build()
 	}
 
 	// Use runtime.SetFinalizer to cleanup the handle when the file is garbage collected
