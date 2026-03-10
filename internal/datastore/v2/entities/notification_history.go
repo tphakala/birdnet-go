@@ -16,8 +16,3 @@ type NotificationHistory struct {
 	// Relationship
 	Label *Label `gorm:"foreignKey:LabelID"`
 }
-
-// TableName returns the table name for GORM.
-func (NotificationHistory) TableName() string {
-	return "notification_histories"
-}

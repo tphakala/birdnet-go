@@ -19,6 +19,11 @@ const (
 	tableDynamicThresholds   = "dynamic_thresholds"
 	tableThresholdEvents     = "threshold_events"
 	tableNotificationHistory = "notification_histories"
+	// Alert tables
+	tableAlertRules      = "alert_rules"
+	tableAlertConditions = "alert_conditions"
+	tableAlertActions    = "alert_actions"
+	tableAlertHistories  = "alert_histories"
 )
 
 // Table name constants for v2 prefixed schema (MySQL).
@@ -40,4 +45,9 @@ const (
 	tableV2DynamicThresholds   = "v2_dynamic_thresholds"
 	tableV2ThresholdEvents     = "v2_threshold_events"
 	tableV2NotificationHistory = "v2_notification_histories"
+	// Alert tables
+	tableV2AlertRules      = "v2_alert_rules"
+	tableV2AlertConditions = "v2_alert_conditions"
+	tableV2AlertActions    = "v2_alert_actions"
+	tableV2AlertHistories  = "v2_alert_histories"
 )

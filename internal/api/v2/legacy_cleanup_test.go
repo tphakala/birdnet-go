@@ -258,12 +258,12 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 	// For this test, we'll verify the safety check is called by checking error message
 	legacyPath := filepath.Join(tmpDir, "birdnet.db")
 
-	// Create a minimal SQLite database with migration_state table to simulate V2
+	// Create a minimal SQLite database with migration_states table to simulate V2
 	// The table structure must match what GORM expects for entities.MigrationState
 	db, err := sql.Open("sqlite3", legacyPath)
 	require.NoError(t, err)
 	_, err = db.Exec(`
-		CREATE TABLE migration_state (
+		CREATE TABLE migration_states (
 			id INTEGER PRIMARY KEY,
 			state TEXT NOT NULL DEFAULT 'completed',
 			current_phase TEXT NOT NULL DEFAULT '',
@@ -278,7 +278,7 @@ func TestStartLegacyCleanup_SQLite_V2DatabaseSafetyCheck(t *testing.T) {
 			related_data_error TEXT,
 			updated_at DATETIME
 		);
-		INSERT INTO migration_state (id, state) VALUES (1, 'completed');
+		INSERT INTO migration_states (id, state) VALUES (1, 'completed');
 	`)
 	require.NoError(t, err)
 	require.NoError(t, db.Close())

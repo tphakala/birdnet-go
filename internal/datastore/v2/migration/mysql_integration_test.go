@@ -68,7 +68,7 @@ func TestMySQL_MigrationInfrastructure_Initializes(t *testing.T) {
 	require.NoError(t, err, "failed to initialize MySQL v2 schema")
 
 	// Verify tables exist
-	require.True(t, manager.Exists(), "v2 migration_state table should exist")
+	require.True(t, manager.Exists(), "v2 migration_states table should exist")
 	require.True(t, manager.IsMySQL(), "should identify as MySQL")
 
 	t.Log("MySQL migration infrastructure initialized successfully")

@@ -27,8 +27,3 @@ type AudioSource struct {
 	ConfigJSON  *string    `gorm:"type:text"`
 	CreatedAt   time.Time  `gorm:"autoCreateTime"`
 }
-
-// TableName returns the table name for GORM.
-func (AudioSource) TableName() string {
-	return "audio_sources"
-}

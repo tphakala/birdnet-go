@@ -12,8 +12,3 @@ type DetectionLock struct {
 	// Relationship
 	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 }
-
-// TableName returns the table name for GORM.
-func (DetectionLock) TableName() string {
-	return "detection_locks"
-}

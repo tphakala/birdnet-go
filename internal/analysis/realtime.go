@@ -1984,24 +1984,26 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 
 // initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
 // Unlike SQLite which uses a separate file, MySQL shares the same database.
-// V2 tables have different names from legacy (detections vs notes), so no prefix needed.
+// V2 tables use the v2_ prefix to avoid collisions with legacy auxiliary tables
+// (e.g., dynamic_thresholds, image_caches) that share the same base names.
 func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) error {
-	// Create v2 MySQL manager - no prefix needed since v2 table names differ from legacy
-	// (Entity TableName() methods override GORM NamingStrategy anyway)
+	// Create v2 MySQL manager with v2_ prefix to avoid collisions with legacy
+	// auxiliary tables that share the same base names. TableName() methods have
+	// been removed so NamingStrategy.TablePrefix now takes effect.
 	v2Manager, err := datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
 		Host:        settings.Output.MySQL.Host,
 		Port:        settings.Output.MySQL.Port,
 		Username:    settings.Output.MySQL.Username,
 		Password:    settings.Output.MySQL.Password,
 		Database:    settings.Output.MySQL.Database,
-		UseV2Prefix: false, // No prefix - v2 tables have different names from legacy
+		UseV2Prefix: true, // v2_ prefix avoids collisions with legacy auxiliary tables
 		Debug:       settings.Debug,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create MySQL v2 manager: %w", err)
 	}
 
-	// Initialize the v2 schema (creates tables without prefix)
+	// Initialize the v2 schema (creates tables with v2_ prefix)
 	if err := v2Manager.Initialize(); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {
 			log.Warn("failed to close MySQL v2 manager after initialization failure",
@@ -2011,15 +2013,14 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		return fmt.Errorf("failed to initialize MySQL v2 schema: %w", err)
 	}
 
-	// Setup the migration worker using the common helper
-	// Note: useV2Prefix is false because entity TableName() methods override
-	// GORM's NamingStrategy, creating tables without prefix. Since v2 tables
-	// have different names from legacy (detections vs notes), prefix isn't needed.
+	// Setup the migration worker using the common helper.
+	// useV2Prefix is true so the migration worker creates v2_ prefixed tables,
+	// avoiding collisions with legacy auxiliary tables that share the same base names.
 	if err := setupMigrationWorker(&migrationSetupConfig{
 		manager:     v2Manager,
 		ds:          ds,
 		log:         log,
-		useV2Prefix: false, // Tables created without prefix due to TableName() methods
+		useV2Prefix: true, // v2_ prefix avoids collisions with legacy auxiliary tables
 		opName:      "initialize_mysql_migration",
 	}); err != nil {
 		if closeErr := v2Manager.Close(); closeErr != nil {

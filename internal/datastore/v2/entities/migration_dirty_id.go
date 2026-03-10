@@ -8,8 +8,3 @@ type MigrationDirtyID struct {
 	DetectionID uint      `gorm:"primaryKey"`
 	CreatedAt   time.Time `gorm:"autoCreateTime"`
 }
-
-// TableName returns the table name for GORM.
-func (MigrationDirtyID) TableName() string {
-	return "migration_dirty_ids"
-}

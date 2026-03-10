@@ -250,9 +250,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	legacyExists := legacyCount > 0
 
-	// Check if v2_migration_state table exists (migration-era v2 tables)
+	// Check if v2_migration_states table exists (migration-era v2 tables)
 	var v2MigrationCount int64
-	tableName := v2TablePrefix + "migration_state"
+	tableName := v2TablePrefix + "migration_states"
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
 		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
 	if err != nil {
@@ -292,12 +292,26 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		}
 	}
 
-	// Fresh v2 exists (restart after fresh install) - no migration tables needed
-	if freshV2Exists && !v2MigrationExists {
+	// Fresh v2 exists WITHOUT legacy = genuine fresh install restart
+	if freshV2Exists && !v2MigrationExists && !legacyExists {
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusCompleted,
 			V2Available:     true,
 			LegacyRequired:  false,
+			FreshInstall:    false,
+			Error:           nil,
+		}
+	}
+
+	// Fresh v2 exists WITH legacy = orphaned bare v2 tables from failed setup
+	// Clean up orphaned tables so migration infrastructure can start fresh
+	if freshV2Exists && !v2MigrationExists && legacyExists {
+		cleanupOrphanedBareV2Tables(db, settings.Output.MySQL.Database)
+		// After cleanup, treat as legacy-only mode
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     false,
+			LegacyRequired:  true,
 			FreshInstall:    false,
 			Error:           nil,
 		}
@@ -353,7 +367,7 @@ func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 // CheckSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
 // This is used to distinguish between a legacy database and a fresh v2 database.
 // Returns true only if the database has:
-//  1. The migration_state table (v2 schema indicator)
+//  1. The migration_states table (v2 schema indicator)
 //  2. A migration state record with COMPLETED status
 //
 // This prevents false positives from partially initialized databases.
@@ -381,9 +395,9 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if migration_state table exists (v2 schema indicator)
+	// Check if migration_states table exists (v2 schema indicator)
 	var tableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_state'").Scan(&tableCount).Error
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_states'").Scan(&tableCount).Error
 	if err != nil || tableCount == 0 {
 		return false
 	}
@@ -401,7 +415,7 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 
 // CheckMySQLHasFreshV2Schema checks if a MySQL database has fresh v2 tables (without v2_ prefix).
 // This is used to determine whether to use v2_ prefix for migration mode or no prefix for fresh installs.
-// Returns true if the fresh v2 schema exists (migration_state table without prefix).
+// Returns true if the fresh v2 schema exists (migration_states table without prefix).
 func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	// Build MySQL DSN
 	cfg := mysql.Config{
@@ -434,9 +448,9 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if fresh v2 migration_state table exists (no prefix)
+	// Check if fresh v2 migration_states table exists (no prefix)
 	var tableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'migration_state'",
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'migration_states'",
 		settings.Output.MySQL.Database).Scan(&tableCount).Error
 	if err != nil || tableCount == 0 {
 		return false
@@ -444,11 +458,79 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 
 	// Check if migration state is COMPLETED
 	var state entities.MigrationState
-	if err := db.Table("migration_state").First(&state).Error; err != nil {
+	if err := db.Table("migration_states").First(&state).Error; err != nil {
 		return false
 	}
 
 	return state.State == entities.MigrationStatusCompleted
+}
+
+// cleanupOrphanedBareV2Tables removes bare v2 tables that were created by a broken nightly
+// alongside existing legacy tables. These orphaned tables prevent the migration infrastructure
+// from starting fresh. Only v2-specific tables are dropped; legacy tables with real user data
+// (dynamic_thresholds, threshold_events, notification_histories, image_caches, daily_events,
+// hourly_weathers) are preserved.
+func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
+	// Report discovery of orphaned tables to Sentry
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-startup")
+		scope.SetTag("db_type", "mysql")
+		scope.SetTag("operation", "cleanupOrphanedBareV2Tables")
+		scope.SetFingerprint([]string{"datastore-startup", "mysql", "cleanupOrphanedBareV2Tables"})
+
+		telemetry.CaptureMessage(
+			"Orphaned bare v2 tables found alongside legacy data, cleaning up",
+			sentry.LevelWarning,
+			"datastore-startup",
+		)
+	})
+
+	// Bare v2-only tables that do NOT collide with legacy tables.
+	// Drop in reverse dependency order (children before parents) to avoid FK violations.
+	// Table names use the OLD singular forms (migration_state, alert_history) because
+	// the orphaned tables were created by code with TableName() overrides.
+	orphanedTables := []string{
+		// Alert children first, then parent
+		"alert_actions",
+		"alert_conditions",
+		"alert_history",
+		"alert_rules",
+		// Detection children first, then parent
+		"detection_locks",
+		"detection_comments",
+		"detection_reviews",
+		"detection_predictions",
+		"detections",
+		// Reference tables (labels referenced by detections, so drop after)
+		"audio_sources",
+		"ai_models",
+		"taxonomic_classes",
+		"label_types",
+		"labels",
+		// Migration tracking
+		"migration_dirty_ids",
+		"migration_state",
+	}
+
+	for _, table := range orphanedTables {
+		if err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
+			reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
+		}
+	}
+
+	// Report successful cleanup
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", "datastore-startup")
+		scope.SetTag("db_type", "mysql")
+		scope.SetTag("operation", "cleanupOrphanedBareV2TablesComplete")
+		scope.SetFingerprint([]string{"datastore-startup", "mysql", "cleanupOrphanedBareV2TablesComplete"})
+
+		telemetry.CaptureMessage(
+			"Orphaned bare v2 tables cleanup completed successfully",
+			sentry.LevelInfo,
+			"datastore-startup",
+		)
+	})
 }
 
 // CheckAndConsolidateAtStartup checks for and performs database consolidation at startup.

@@ -9,25 +9,17 @@
 //
 // The useV2Prefix constructor parameter controls this behavior.
 //
-// # IMPORTANT: Preload/Association Hazard
+// # Table Prefix Behavior
 //
-// When useV2Prefix is true (MySQL mode), DO NOT use GORM's automatic
-// Preload(), Joins(), or Association features without explicit table
-// configuration. The entity structs have hardcoded TableName() methods
-// returning standard names ("labels"), which will cause GORM to query
-// the wrong tables.
+// V2 entity structs no longer define TableName() methods. GORM's
+// NamingStrategy.TablePrefix (set via UseV2Prefix in MySQLConfig)
+// controls whether tables use the "v2_" prefix. This means standard
+// GORM operations (Preload, Joins, Find, etc.) automatically use
+// the correct prefixed table names when the db instance has the
+// prefix configured.
 //
-// WRONG (will query "labels" instead of "v2_labels"):
-//
-//	db.Preload("Label").Find(&detections)
-//
-// CORRECT (use explicit table names):
-//
-//	db.Table("v2_detections").
-//	    Joins("JOIN v2_labels ON v2_labels.id = v2_detections.label_id").
-//	    Find(&detections)
-//
-// Or use the repository methods which handle this correctly.
+// Repository implementations use explicit db.Table() calls with
+// constants from tables.go for clarity and consistency.
 //
 // # Error Handling
 //

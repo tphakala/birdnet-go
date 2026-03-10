@@ -44,11 +44,6 @@ type Detection struct {
 	// We avoid GORM relationship tags here because they interfere with
 	// the CASCADE constraints defined in DetectionReview/DetectionLock.
 	Review   *DetectionReview    `gorm:"-"`
-	Lock     *DetectionLock     `gorm:"-"`
+	Lock     *DetectionLock      `gorm:"-"`
 	Comments []*DetectionComment `gorm:"-"`
-}
-
-// TableName returns the table name for GORM.
-func (Detection) TableName() string {
-	return "detections"
 }
