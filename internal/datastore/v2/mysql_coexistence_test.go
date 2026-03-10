@@ -35,7 +35,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
-	ctx := context.Background()
+	os.Exit(testMain(m))
+}
+
+func testMain(m *testing.M) int {
+	ctx := context.Background() //nolint:gocritic // testMain uses *testing.M, not *testing.T — no t.Context() available
 
 	cfg := &containers.MySQLConfig{
 		Database:     "coexistence_test",
@@ -50,16 +54,19 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic("failed to create MySQL container: " + err.Error())
 	}
+	defer func() {
+		if err := coexTestContainer.Terminate(context.Background()); err != nil { //nolint:gocritic // cleanup context must outlive test
+			fmt.Fprintf(os.Stderr, "error terminating test container: %v\n", err)
+		}
+	}()
 
 	// Extract host and port from the container
 	host, err := coexTestContainer.GetHost(ctx)
 	if err != nil {
-		_ = coexTestContainer.Terminate(context.Background())
 		panic("failed to get container host: " + err.Error())
 	}
 	port, err := coexTestContainer.GetPort(ctx)
 	if err != nil {
-		_ = coexTestContainer.Terminate(context.Background())
 		panic("failed to get container port: " + err.Error())
 	}
 
@@ -76,13 +83,10 @@ func TestMain(m *testing.M) {
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
-		_ = coexTestContainer.Terminate(context.Background())
 		panic("failed to open GORM connection: " + err.Error())
 	}
 
-	code := m.Run()
-	_ = coexTestContainer.Terminate(context.Background())
-	os.Exit(code)
+	return m.Run()
 }
 
 // dropAllTables dynamically drops every user table in the database.
@@ -104,11 +108,14 @@ func dropAllTables(t *testing.T, db *gorm.DB, database string) {
 
 	// Disable FK checks, drop everything, re-enable
 	require.NoError(t, db.Exec("SET FOREIGN_KEY_CHECKS = 0").Error)
+	defer func() {
+		assert.NoError(t, db.Exec("SET FOREIGN_KEY_CHECKS = 1").Error,
+			"failed to re-enable foreign key checks")
+	}()
 	for _, name := range tableNames {
 		require.NoError(t, db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", name)).Error,
 			"failed to drop table %s", name)
 	}
-	require.NoError(t, db.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
 }
 
 // seedLegacyTables creates legacy schema tables with sample data.
@@ -216,7 +223,7 @@ func tableExists(t *testing.T, db *gorm.DB, database, tableName string) bool {
 func getRowCount(t *testing.T, db *gorm.DB, tableName string) int64 {
 	t.Helper()
 	var count int64
-	err := db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM `%s`", tableName)).Scan(&count).Error
+	err := db.Table(tableName).Count(&count).Error
 	require.NoError(t, err, "failed to count rows in %s", tableName)
 	return count
 }
@@ -264,7 +271,7 @@ func TestMySQL_V2Initialize_WithLegacyTables_CreatesV2Prefixed(t *testing.T) {
 	legacyNotesCount := getRowCount(t, coexTestDB, "notes")
 	legacyThresholdCount := getRowCount(t, coexTestDB, "dynamic_thresholds")
 	legacyImageCount := getRowCount(t, coexTestDB, "image_caches")
-	require.Greater(t, legacyNotesCount, int64(0), "legacy notes should have data")
+	require.Positive(t, legacyNotesCount, "legacy notes should have data")
 
 	// Initialize v2 with prefix
 	mgr := newTestMySQLManager(t, true)
@@ -281,7 +288,8 @@ func TestMySQL_V2Initialize_WithLegacyTables_CreatesV2Prefixed(t *testing.T) {
 		"v2_labels", "v2_detections", "v2_ai_models", "v2_audio_sources",
 		"v2_dynamic_thresholds", "v2_image_caches", "v2_notification_histories",
 		"v2_threshold_events", "v2_daily_events", "v2_hourly_weathers",
-		"v2_migration_states",
+		"v2_migration_states", "v2_alert_histories", "v2_alert_rules",
+		"v2_alert_conditions", "v2_alert_actions",
 	}
 	for _, table := range v2Tables {
 		assert.True(t, tableExists(t, coexTestDB, coexTestDBName, table),
@@ -401,7 +409,7 @@ func TestMySQL_StartupDetection_OrphanedV2WithLegacy_ReturnsLegacyMode(t *testin
 	assert.True(t, state.LegacyRequired, "legacy should be required")
 	assert.False(t, state.V2Available, "v2 should not be available")
 	assert.False(t, state.FreshInstall, "should not be a fresh install")
-	assert.NoError(t, state.Error)
+	require.NoError(t, state.Error)
 
 	// Orphaned bare v2 tables should be cleaned up
 	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "detections"),
@@ -439,7 +447,7 @@ func TestMySQL_StartupDetection_FreshV2Only_ReturnsCompleted(t *testing.T) {
 	assert.False(t, state.LegacyRequired, "legacy should not be required")
 	assert.True(t, state.V2Available, "v2 should be available")
 	assert.False(t, state.FreshInstall, "should not be fresh install")
-	assert.NoError(t, state.Error)
+	require.NoError(t, state.Error)
 }
 
 // TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall verifies that
@@ -454,7 +462,7 @@ func TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall(t *testing.T) {
 	assert.True(t, state.FreshInstall, "empty DB should be fresh install")
 	assert.False(t, state.LegacyRequired)
 	assert.False(t, state.V2Available)
-	assert.NoError(t, state.Error)
+	require.NoError(t, state.Error)
 }
 
 // TestMySQL_StartupDetection_LegacyOnly_ReturnsLegacyMode verifies that
@@ -470,5 +478,5 @@ func TestMySQL_StartupDetection_LegacyOnly_ReturnsLegacyMode(t *testing.T) {
 	assert.True(t, state.LegacyRequired, "legacy-only DB should require legacy")
 	assert.False(t, state.V2Available)
 	assert.False(t, state.FreshInstall)
-	assert.NoError(t, state.Error)
+	require.NoError(t, state.Error)
 }
