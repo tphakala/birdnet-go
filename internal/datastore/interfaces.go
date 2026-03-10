@@ -2160,7 +2160,10 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		}
 	}
 
-	startDate, err := time.Parse(time.DateOnly, startDateStr)
+	// Parse dates in local timezone to match how notes store their times.
+	// Using time.Parse would return UTC, causing a ~1 second discrepancy in
+	// sunrise/sunset calculations vs the actual note timestamps.
+	startDate, err := time.ParseInLocation(time.DateOnly, startDateStr, time.Local)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2169,7 +2172,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Context("start_date", startDateStr).
 			Build()
 	}
-	endDate, err := time.Parse(time.DateOnly, endDateStr)
+	endDate, err := time.ParseInLocation(time.DateOnly, endDateStr, time.Local)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").

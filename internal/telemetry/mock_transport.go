@@ -53,9 +53,13 @@ func (t *MockTransport) SendEvent(event *sentry.Event) {
 
 // Flush implements sentry.Transport
 func (t *MockTransport) Flush(timeout time.Duration) bool {
+	t.mu.RLock()
+	delay := t.delay
+	t.mu.RUnlock()
+
 	// Simulate flush delay
-	if t.delay > 0 && t.delay < timeout {
-		time.Sleep(t.delay)
+	if delay > 0 && delay < timeout {
+		time.Sleep(delay)
 	}
 	return true
 }
@@ -69,10 +73,14 @@ func (t *MockTransport) FlushWithContext(ctx context.Context) bool {
 	default:
 	}
 
+	t.mu.RLock()
+	delay := t.delay
+	t.mu.RUnlock()
+
 	// If delay is set, wait for it or context cancellation
-	if t.delay > 0 {
+	if delay > 0 {
 		select {
-		case <-time.After(t.delay):
+		case <-time.After(delay):
 			return true
 		case <-ctx.Done():
 			return false

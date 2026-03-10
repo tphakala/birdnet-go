@@ -83,9 +83,8 @@ func TestEventBusAsyncBehavior(t *testing.T) {
 
 // TestCurrentTelemetryIntegration tests the current telemetry integration
 func TestCurrentTelemetryIntegration(t *testing.T) {
-	t.Parallel()
+	// Cannot run in parallel due to global state from InitForTesting
 	t.Run("telemetry uses legacy synchronous path", func(t *testing.T) {
-		t.Parallel()
 		config, cleanup := InitForTesting(t)
 		defer cleanup()
 

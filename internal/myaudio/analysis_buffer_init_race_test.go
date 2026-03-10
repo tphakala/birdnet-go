@@ -126,8 +126,6 @@ func isAlreadyExistsError(err error) bool {
 
 // resetAnalysisBufferGlobals resets the global variables to simulate fresh start
 // This is necessary to test the initialization race condition
-// NOTE: sync.Once cannot be reset, so this function only clears the buffer maps.
-// The buffer pool initialization will only happen once per process.
 func resetAnalysisBufferGlobals() {
 	abMutex.Lock()
 	defer abMutex.Unlock()
@@ -142,9 +140,15 @@ func resetAnalysisBufferGlobals() {
 		delete(warningCounter, sourceID)
 	}
 
-	// Note: We intentionally do NOT reset readBufferPool, overlapSize, readSize,
-	// or bufferPoolInitOnce because sync.Once cannot be reset.
-	// The fix ensures these are initialized exactly once, thread-safely.
+	// Reset buffer pool to force re-initialization
+	bufferPoolInitMu.Lock()
+	if readBufferPool != nil {
+		readBufferPool.Clear()
+	}
+	readBufferPool = nil
+	overlapSize = 0
+	readSize = 0
+	bufferPoolInitMu.Unlock()
 }
 
 // getPoolAddress returns a simple identifier for the pool

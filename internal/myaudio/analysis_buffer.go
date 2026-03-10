@@ -34,8 +34,7 @@ var (
 	analysisMetricsMutex sync.RWMutex            // Mutex for thread-safe access to analysisMetrics
 	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
 	readBufferPool       *BufferPool             // Global buffer pool for read operations
-	bufferPoolInitOnce   sync.Once               // Ensures buffer pool is initialized exactly once
-	errBufferPoolInit    error                   // Stores any error from buffer pool initialization
+	bufferPoolInitMu     sync.Mutex              // Protects buffer pool initialization
 )
 
 // init initializes the warningCounter map
@@ -104,24 +103,26 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 
 	settings := conf.Setting()
 
-	// Initialize buffer pool sizes exactly once, thread-safely
-	bufferPoolInitOnce.Do(func() {
+	// Initialize buffer pool if not yet created (or after full cleanup).
+	// Uses a separate mutex to avoid holding abMutex during initialization.
+	bufferPoolInitMu.Lock()
+	if readBufferPool == nil {
 		overlapSize = SecondsToBytes(settings.BirdNET.Overlap)
 		readSize = conf.BufferSize - overlapSize
-		readBufferPool, errBufferPoolInit = NewBufferPool(readSize)
-	})
-
-	// Check if initialization failed
-	if errBufferPoolInit != nil {
-		enhancedErr := errors.New(errBufferPoolInit).
-			Component("myaudio").
-			Category(errors.CategorySystem).
-			Context("operation", "allocate_analysis_buffer").
-			Context("source", sourceID).
-			Context("buffer_pool_size", readSize).
-			Build()
-		return enhancedErr
+		var initErr error
+		readBufferPool, initErr = NewBufferPool(readSize)
+		if initErr != nil {
+			bufferPoolInitMu.Unlock()
+			return errors.New(initErr).
+				Component("myaudio").
+				Category(errors.CategorySystem).
+				Context("operation", "allocate_analysis_buffer").
+				Context("source", sourceID).
+				Context("buffer_pool_size", readSize).
+				Build()
+		}
 	}
+	bufferPoolInitMu.Unlock()
 
 	// Initialize the analysis ring buffer
 	ab := ringbuffer.New(capacity)
@@ -224,12 +225,16 @@ func RemoveAnalysisBuffer(sourceID string) error {
 	delete(warningCounter, sourceID)
 
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
-	if len(analysisBuffers) == 0 && readBufferPool != nil {
-		// Clear the buffer pool to release all cached buffers
-		readBufferPool.Clear()
-		readBufferPool = nil
-		overlapSize = 0
-		readSize = 0
+	if len(analysisBuffers) == 0 {
+		bufferPoolInitMu.Lock()
+		if readBufferPool != nil {
+			// Clear the buffer pool to release all cached buffers
+			readBufferPool.Clear()
+			readBufferPool = nil
+			overlapSize = 0
+			readSize = 0
+		}
+		bufferPoolInitMu.Unlock()
 	}
 	abMutex.Unlock() // Release lock before calling registry
 
