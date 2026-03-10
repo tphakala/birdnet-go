@@ -13,8 +13,3 @@ type DetectionPrediction struct {
 	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 	Label     *Label     `gorm:"foreignKey:LabelID"`
 }
-
-// TableName returns the table name for GORM.
-func (DetectionPrediction) TableName() string {
-	return "detection_predictions"
-}

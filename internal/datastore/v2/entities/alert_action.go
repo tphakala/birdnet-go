@@ -10,8 +10,3 @@ type AlertAction struct {
 	TemplateMessage string `gorm:"size:2000;default:''" json:"template_message"`
 	SortOrder       int    `gorm:"default:0" json:"sort_order"`
 }
-
-// TableName returns the table name for GORM.
-func (AlertAction) TableName() string {
-	return "alert_actions"
-}

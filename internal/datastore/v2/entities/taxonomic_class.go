@@ -7,11 +7,6 @@ type TaxonomicClass struct {
 	Name string `gorm:"size:50;uniqueIndex;not null"`
 }
 
-// TableName returns the table name for GORM.
-func (TaxonomicClass) TableName() string {
-	return "taxonomic_classes"
-}
-
 // DefaultTaxonomicClasses returns the default taxonomic class values to seed on initialization.
 func DefaultTaxonomicClasses() []TaxonomicClass {
 	return []TaxonomicClass{

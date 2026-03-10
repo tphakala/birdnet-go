@@ -24,8 +24,3 @@ type HourlyWeather struct {
 	WeatherIcon   string    `gorm:"size:20"`
 	CreatedAt     time.Time `gorm:"autoCreateTime"`
 }
-
-// TableName returns the table name for GORM.
-func (HourlyWeather) TableName() string {
-	return "hourly_weathers"
-}

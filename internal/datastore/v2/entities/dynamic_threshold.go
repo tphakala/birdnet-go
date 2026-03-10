@@ -22,8 +22,3 @@ type DynamicThreshold struct {
 	// Relationship
 	Label *Label `gorm:"foreignKey:LabelID"`
 }
-
-// TableName returns the table name for GORM.
-func (DynamicThreshold) TableName() string {
-	return "dynamic_thresholds"
-}
