@@ -281,7 +281,12 @@ func ParsePercentage(percentage, configKey string) (float64, error) {
 	if before, ok := strings.CutSuffix(percentage, "%"); ok {
 		value, err := strconv.ParseFloat(before, 64)
 		if err != nil {
-			return 0, err
+			return 0, errors.New(err).
+				Component("conf").
+				Category(errors.CategoryValidation).
+				Context("input", percentage).
+				Context("config_key", configKey).
+				Build()
 		}
 		return value, nil
 	}
