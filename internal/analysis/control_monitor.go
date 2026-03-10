@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -253,7 +254,11 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 
 	if cm.proc == nil {
 		GetLogger().Error("Processor not available for MQTT reconfiguration")
-		cm.notifyError("Failed to reconfigure MQTT", fmt.Errorf("processor not available"))
+		cm.notifyError("Failed to reconfigure MQTT", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_mqtt").
+			Build())
 		return
 	}
 
@@ -421,7 +426,11 @@ func (cm *ControlMonitor) handleReconfigureBirdWeather() {
 
 	if cm.proc == nil {
 		GetLogger().Error("Processor not available for BirdWeather reconfiguration")
-		cm.notifyError("Failed to reconfigure BirdWeather", fmt.Errorf("processor not available"))
+		cm.notifyError("Failed to reconfigure BirdWeather", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_birdweather").
+			Build())
 		return
 	}
 
@@ -455,7 +464,11 @@ func (cm *ControlMonitor) handleUpdateDetectionIntervals() {
 
 	if cm.proc == nil {
 		GetLogger().Error("Processor not available for detection interval update")
-		cm.notifyError("Failed to update detection intervals", fmt.Errorf("processor not available"))
+		cm.notifyError("Failed to update detection intervals", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "update_detection_intervals").
+			Build())
 		return
 	}
 
@@ -532,7 +545,11 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 	// Check if metrics is available
 	if cm.metrics == nil {
 		GetLogger().Error("Metrics not initialized for telemetry reconfiguration")
-		cm.notifyError("Failed to reconfigure telemetry", fmt.Errorf("metrics not initialized"))
+		cm.notifyError("Failed to reconfigure telemetry", errors.Newf("metrics not initialized").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_telemetry").
+			Build())
 		return
 	}
 
@@ -589,24 +606,43 @@ func (cm *ControlMonitor) handleReconfigureTelemetry() {
 // validateListenAddress checks if the listen address is in a valid format
 func (cm *ControlMonitor) validateListenAddress(address string) error {
 	if address == "" {
-		return fmt.Errorf("listen address cannot be empty")
+		return errors.Newf("listen address cannot be empty").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_listen_address").
+			Build()
 	}
 
 	// Check if it contains a colon (for port)
 	if !strings.Contains(address, ":") {
-		return fmt.Errorf("listen address must include port (e.g., '0.0.0.0:8090')")
+		return errors.Newf("listen address must include port (e.g., '0.0.0.0:8090')").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_listen_address").
+			Context("address", address).
+			Build()
 	}
 
 	// Split and validate components
 	parts := strings.Split(address, ":")
 	if len(parts) != 2 {
-		return fmt.Errorf("invalid address format, expected 'host:port'")
+		return errors.Newf("invalid address format, expected 'host:port'").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_listen_address").
+			Context("address", address).
+			Build()
 	}
 
 	// Validate port is numeric
 	port := parts[1]
 	if _, err := strconv.Atoi(port); err != nil {
-		return fmt.Errorf("invalid port number: %s", port)
+		return errors.Newf("invalid port number: %s", port).
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "validate_listen_address").
+			Context("address", address).
+			Build()
 	}
 
 	return nil
@@ -619,7 +655,11 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 
 	if cm.proc == nil {
 		GetLogger().Error("Processor not available for species tracking reconfiguration")
-		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("processor not available"))
+		cm.notifyError("Failed to reconfigure species tracking", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_species_tracking").
+			Build())
 		return
 	}
 
@@ -627,7 +667,11 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 	ds := cm.proc.Ds
 	if ds == nil {
 		GetLogger().Error("Datastore not available for species tracking reconfiguration")
-		cm.notifyError("Failed to reconfigure species tracking", fmt.Errorf("datastore not available"))
+		cm.notifyError("Failed to reconfigure species tracking", errors.Newf("datastore not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_species_tracking").
+			Build())
 		return
 	}
 

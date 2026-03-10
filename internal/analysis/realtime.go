@@ -408,7 +408,11 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 		api.WithV2Manager(GetV2DatabaseManager()),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create HTTP server: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategorySystem).
+			Context("operation", "create_http_server").
+			Build()
 	}
 	apiServer.Start()
 
@@ -1647,7 +1651,11 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			// Register RTSP sources in the registry and get their source IDs
 			registry := myaudio.GetRegistry()
 			if registry == nil {
-				return nil, fmt.Errorf("audio source registry not available")
+				return nil, errors.Newf("audio source registry not available").
+					Component("analysis").
+					Category(errors.CategorySystem).
+					Context("operation", "initialize_audio_sources").
+					Build()
 			}
 
 			var failedSources []string
@@ -1775,12 +1783,20 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 	// Look up required lookup table IDs (seeded during Manager.Initialize())
 	var speciesLabelType entities.LabelType
 	if err := v2DB.Where("name = ?", "species").FirstOrCreate(&speciesLabelType, entities.LabelType{Name: "species"}).Error; err != nil {
-		return fmt.Errorf("failed to get species label type: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_label_type").
+			Build()
 	}
 
 	var avesClass entities.TaxonomicClass
 	if err := v2DB.Where("name = ?", "Aves").FirstOrCreate(&avesClass, entities.TaxonomicClass{Name: "Aves"}).Error; err != nil {
-		return fmt.Errorf("failed to get Aves taxonomic class: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_aves_taxonomic_class").
+			Build()
 	}
 
 	// Get default model for related data migration (uses detection package constants)
@@ -1793,7 +1809,11 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			Variant:   detection.DefaultModelVariant,
 			ModelType: entities.ModelTypeBird,
 		}).Error; err != nil {
-		return fmt.Errorf("failed to get default model: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_default_model").
+			Build()
 	}
 
 	labelRepo := repository.NewLabelRepository(v2DB, cfg.useV2Prefix, isMySQL)
@@ -1878,7 +1898,11 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 		Telemetry:           migrationTelemetry,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create migration worker: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_migration_worker").
+			Build()
 	}
 
 	// Store manager for shutdown cleanup - only after successful worker creation
@@ -1961,7 +1985,11 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		Logger:         log,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create v2 database manager: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_v2_database_manager").
+			Build()
 	}
 
 	// Initialize the v2 database schema
@@ -1971,7 +1999,11 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return fmt.Errorf("failed to initialize v2 database: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "initialize_v2_database").
+			Build()
 	}
 
 	// Setup the migration worker using the common helper
@@ -2011,7 +2043,11 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		Debug:       settings.Debug,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create MySQL v2 manager: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_mysql_v2_manager").
+			Build()
 	}
 
 	// Initialize the v2 schema (creates tables with v2_ prefix)
@@ -2021,7 +2057,11 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return fmt.Errorf("failed to initialize MySQL v2 schema: %w", err)
+		return errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "initialize_mysql_v2_schema").
+			Build()
 	}
 
 	// Setup the migration worker using the common helper.
@@ -2108,17 +2148,29 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		})
 
 	default:
-		return nil, fmt.Errorf("no database configured")
+		return nil, errors.Newf("no database configured").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "initialize_v2_only_mode").
+			Build()
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create v2 database manager: %w", err)
+		return nil, errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_v2_database_manager").
+			Build()
 	}
 
 	// Initialize the v2 database schema (ensures auxiliary tables exist)
 	if err := v2Manager.Initialize(); err != nil {
 		_ = v2Manager.Close()
-		return nil, fmt.Errorf("failed to initialize v2 database: %w", err)
+		return nil, errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "initialize_v2_database").
+			Build()
 	}
 
 	// Create repositories
@@ -2150,7 +2202,11 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	})
 	if err != nil {
 		_ = v2Manager.Close()
-		return nil, fmt.Errorf("failed to create v2-only datastore: %w", err)
+		return nil, errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryDatabase).
+			Context("operation", "create_v2_only_datastore").
+			Build()
 	}
 
 	// Store manager for shutdown cleanup

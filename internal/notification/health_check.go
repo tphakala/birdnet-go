@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"slices"
 	"sync"
@@ -66,13 +65,13 @@ func DefaultHealthCheckConfig() HealthCheckConfig {
 // Validate checks if the health check configuration is valid.
 func (c HealthCheckConfig) Validate() error {
 	if c.Interval < time.Second {
-		return fmt.Errorf("interval must be at least 1 second, got %v", c.Interval)
+		return errors.Newf("interval must be at least 1 second, got %v", c.Interval).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.Timeout < time.Second {
-		return fmt.Errorf("timeout must be at least 1 second, got %v", c.Timeout)
+		return errors.Newf("timeout must be at least 1 second, got %v", c.Timeout).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.Timeout >= c.Interval {
-		return fmt.Errorf("timeout (%v) must be less than interval (%v)", c.Timeout, c.Interval)
+		return errors.Newf("timeout (%v) must be less than interval (%v)", c.Timeout, c.Interval).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }
@@ -113,7 +112,7 @@ func (hc *HealthChecker) RegisterProvider(provider Provider, circuitBreaker *Pus
 // Start begins periodic health checks.
 func (hc *HealthChecker) Start(ctx context.Context) error {
 	if hc.cancel != nil {
-		return fmt.Errorf("health checker already started")
+		return errors.Newf("health checker already started").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	ctx, cancel := context.WithCancel(ctx)

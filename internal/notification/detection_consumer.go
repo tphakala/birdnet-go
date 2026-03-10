@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -88,7 +89,7 @@ func (c *DetectionNotificationConsumer) ProcessDetectionEvent(event events.Detec
 		c.logger.Error("failed to save new species notification",
 			logger.String("species", event.GetSpeciesName()),
 			logger.Error(err))
-		return fmt.Errorf("failed to save notification: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "save_notification").Build()
 	}
 
 	c.service.broadcast(notification)
@@ -240,12 +241,12 @@ func RenderTemplate(name, tmplStr string, data any) (string, error) {
 func renderTemplate(name, tmplStr string, data any) (string, error) {
 	tmpl, err := template.New(name).Parse(tmplStr)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse template: %w", err)
+		return "", errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "parse_template").Build()
 	}
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("failed to execute template: %w", err)
+		return "", errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "execute_template").Build()
 	}
 
 	return buf.String(), nil

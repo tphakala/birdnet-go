@@ -632,7 +632,12 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("operation", "get_or_create_audio_source").
 				Context("source", settings.Realtime.Audio.Source).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", fmt.Errorf("failed to get/create audio source"))
+			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", errors.Newf("failed to get/create audio source").
+				Component("analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "get_or_create_audio_source").
+				Context("source", settings.Realtime.Audio.Source).
+				Build())
 		} else if err := myaudio.RegisterSoundLevelProcessor(audioSource.ID, audioSource.DisplayName); err != nil {
 			errs = append(errs, errors.New(err).
 				Component("realtime-analysis").
@@ -670,7 +675,12 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 				Context("stream_name", stream.Name).
 				Context("url", privacy.SanitizeStreamUrl(stream.URL)).
 				Build())
-			LogSoundLevelProcessorRegistrationFailed(stream.Name, stream.Type, "analysis.soundlevel", fmt.Errorf("failed to get/create stream source"))
+			LogSoundLevelProcessorRegistrationFailed(stream.Name, stream.Type, "analysis.soundlevel", errors.Newf("failed to get/create stream source").
+				Component("analysis").
+				Category(errors.CategorySystem).
+				Context("operation", "get_or_create_stream_source").
+				Context("stream_name", stream.Name).
+				Build())
 			continue
 		}
 

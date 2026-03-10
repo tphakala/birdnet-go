@@ -58,7 +58,11 @@ func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, w
 	// Create temp file using securefs (sandboxed to backup directory)
 	tempFile, err := t.sfs.OpenFile(tempName, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
-		return fmt.Errorf("failed to create temporary file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_temp_file").
+			Build()
 	}
 
 	// Track success for cleanup
@@ -76,7 +80,11 @@ func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, w
 
 	// Set file permissions
 	if err := tempFile.Chmod(perm); err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "set_file_permissions").
+			Build()
 	}
 
 	// Write data
@@ -86,17 +94,29 @@ func (t *LocalTarget) atomicWriteSecure(relativePath string, perm os.FileMode, w
 
 	// Ensure all data is written to disk
 	if err := tempFile.Sync(); err != nil {
-		return fmt.Errorf("failed to sync file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "sync_file").
+			Build()
 	}
 
 	// Close the file before renaming
 	if err := tempFile.Close(); err != nil {
-		return fmt.Errorf("failed to close temporary file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "close_temp_file").
+			Build()
 	}
 
 	// Perform atomic rename within the securefs sandbox (Go 1.25+)
 	if err := t.sfs.Rename(tempName, relativePath); err != nil {
-		return fmt.Errorf("failed to rename temporary file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "rename_temp_file").
+			Build()
 	}
 
 	success = true

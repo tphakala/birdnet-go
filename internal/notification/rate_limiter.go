@@ -2,9 +2,10 @@ package notification
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // RateLimiter implements a token bucket rate limiter to prevent overwhelming external services.
@@ -38,13 +39,13 @@ func DefaultPushRateLimiterConfig() PushRateLimiterConfig {
 // Validate checks if the rate limiter configuration is valid.
 func (c PushRateLimiterConfig) Validate() error {
 	if c.RequestsPerMinute < 1 {
-		return fmt.Errorf("requests_per_minute must be at least 1, got %d", c.RequestsPerMinute)
+		return errors.Newf("requests_per_minute must be at least 1, got %d", c.RequestsPerMinute).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.BurstSize < 1 {
-		return fmt.Errorf("burst_size must be at least 1, got %d", c.BurstSize)
+		return errors.Newf("burst_size must be at least 1, got %d", c.BurstSize).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if c.BurstSize > c.RequestsPerMinute {
-		return fmt.Errorf("burst_size (%d) should not exceed requests_per_minute (%d)", c.BurstSize, c.RequestsPerMinute)
+		return errors.Newf("burst_size (%d) should not exceed requests_per_minute (%d)", c.BurstSize, c.RequestsPerMinute).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }

@@ -63,7 +63,7 @@ func (s *ScriptProvider) ValidateConfig() error {
 		return nil
 	}
 	if strings.TrimSpace(s.command) == "" {
-		return fmt.Errorf("script command is required")
+		return errors.Newf("script command is required").Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }
@@ -117,7 +117,7 @@ func (s *ScriptProvider) Send(ctx context.Context, n *Notification) error {
 		if errors.As(err, &exitErr) {
 			_ = exitErr // caller decides retry policy; we just return the error
 		}
-		return fmt.Errorf("script '%s' failed: %w, output: %s", s.name, err, truncate(string(out), DefaultScriptOutputTruncateLength))
+		return errors.New(err).Component("notification").Category(errors.CategoryIntegration).Context("operation", "execute_script").Context("script", s.name).Context("output", truncate(string(out), DefaultScriptOutputTruncateLength)).Build()
 	}
 	return nil
 }

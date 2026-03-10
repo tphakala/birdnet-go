@@ -1,10 +1,10 @@
 package processor
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -96,7 +96,11 @@ func (p *Processor) isDaylightFilterSpecies(scientificName string) bool {
 // A positive offset shrinks the window (more lenient), a negative offset expands it (stricter).
 func (p *Processor) isDaylight(t time.Time) (bool, error) {
 	if p.sunCalc == nil {
-		return false, fmt.Errorf("sun calculator not initialized")
+		return false, errors.Newf("sun calculator not initialized").
+			Component("analysis.processor").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "check_daylight").
+			Build()
 	}
 
 	sunTimes, err := p.sunCalc.GetSunEventTimes(t)

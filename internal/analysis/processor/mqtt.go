@@ -3,11 +3,11 @@ package processor
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -55,7 +55,11 @@ func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) erro
 	if client != nil && client.IsConnected() {
 		return client.Publish(ctx, topic, payload)
 	}
-	return fmt.Errorf("MQTT client not available or not connected")
+	return errors.Newf("MQTT client not available or not connected").
+		Component("analysis.processor").
+		Category(errors.CategoryMQTTPublish).
+		Context("operation", "publish_mqtt").
+		Build()
 }
 
 // initializeMQTT initializes the MQTT client if enabled in settings
@@ -156,21 +160,37 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 
 	// Guard against nil settings during startup/teardown
 	if p.Settings == nil {
-		return fmt.Errorf("settings not initialized")
+		return errors.Newf("settings not initialized").
+			Component("analysis.processor").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "trigger_ha_discovery").
+			Build()
 	}
 
 	// Check if MQTT is enabled and Home Assistant discovery is enabled
 	if !p.Settings.Realtime.MQTT.Enabled {
-		return fmt.Errorf("MQTT is not enabled")
+		return errors.Newf("MQTT is not enabled").
+			Component("analysis.processor").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "trigger_ha_discovery").
+			Build()
 	}
 	if !p.Settings.Realtime.MQTT.HomeAssistant.Enabled {
-		return fmt.Errorf("home assistant discovery is not enabled")
+		return errors.Newf("home assistant discovery is not enabled").
+			Component("analysis.processor").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "trigger_ha_discovery").
+			Build()
 	}
 
 	// Get the MQTT client
 	client := p.GetMQTTClient()
 	if client == nil || !client.IsConnected() {
-		return fmt.Errorf("MQTT client not connected")
+		return errors.Newf("MQTT client not connected").
+			Component("analysis.processor").
+			Category(errors.CategoryMQTTConnection).
+			Context("operation", "trigger_ha_discovery").
+			Build()
 	}
 
 	log.Info("Manually triggering Home Assistant discovery")
@@ -181,7 +201,11 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 
 	if err := p.publishHomeAssistantDiscovery(publishCtx, client, p.Settings); err != nil {
 		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
-		return fmt.Errorf("failed to publish discovery: %w", err)
+		return errors.New(err).
+			Component("analysis.processor").
+			Category(errors.CategoryMQTTPublish).
+			Context("operation", "publish_ha_discovery").
+			Build()
 	}
 
 	return nil

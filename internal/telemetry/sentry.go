@@ -353,6 +353,8 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"input_file_bytes":  true,
 		"total_duration_ms": true,
 		"max_attempts":      true,
+		// HTTP response diagnostics (numeric, no PII)
+		"status_code": true,
 	}
 
 	for k := range extra {

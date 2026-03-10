@@ -1,10 +1,10 @@
 package notification
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // ToastType represents the visual style/severity of a toast message
@@ -152,12 +152,12 @@ func (t *Toast) ToNotification() *Notification {
 // SendToast is a convenience function to send a toast through the notification service
 func SendToast(message string, toastType ToastType, component string) error {
 	if !IsInitialized() {
-		return fmt.Errorf("notification service not initialized")
+		return errors.Newf("notification service not initialized").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	service := GetService()
 	if service == nil {
-		return fmt.Errorf("notification service is nil")
+		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	toast := NewToast(message, toastType).WithComponent(component)
@@ -170,12 +170,12 @@ func SendToast(message string, toastType ToastType, component string) error {
 // SendToastWithDuration sends a toast with a specific display duration
 func SendToastWithDuration(message string, toastType ToastType, component string, duration int) error {
 	if !IsInitialized() {
-		return fmt.Errorf("notification service not initialized")
+		return errors.Newf("notification service not initialized").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	service := GetService()
 	if service == nil {
-		return fmt.Errorf("notification service is nil")
+		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	toast := NewToast(message, toastType).
@@ -190,12 +190,12 @@ func SendToastWithDuration(message string, toastType ToastType, component string
 // SendToastWithDurationAndKey sends a toast with a specific display duration and translation key
 func SendToastWithDurationAndKey(message string, toastType ToastType, component string, duration int, messageKey string, messageParams map[string]any) error {
 	if !IsInitialized() {
-		return fmt.Errorf("notification service not initialized")
+		return errors.Newf("notification service not initialized").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	service := GetService()
 	if service == nil {
-		return fmt.Errorf("notification service is nil")
+		return errors.Newf("notification service is nil").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	toast := NewToast(message, toastType).

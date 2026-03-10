@@ -187,7 +187,7 @@ func GetPushDispatcher() *pushDispatcher { return globalPushDispatcher }
 func (d *pushDispatcher) start() error {
 	service := GetService()
 	if service == nil {
-		return fmt.Errorf("notification service not initialized")
+		return errors.Newf("notification service not initialized").Component("notification").Category(errors.CategoryState).Build()
 	}
 
 	ch, ctx := service.Subscribe()
@@ -1176,7 +1176,7 @@ func convertWebhookEndpoints(cfgEndpoints []conf.WebhookEndpointConfig, log logg
 		// Resolve authentication secrets
 		auth, err := resolveWebhookAuth(&cfg.Auth)
 		if err != nil {
-			return nil, fmt.Errorf("endpoint %d: %w", i, err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("endpoint_index", i).Build()
 		}
 
 		endpoints = append(endpoints, WebhookEndpoint{

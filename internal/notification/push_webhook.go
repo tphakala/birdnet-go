@@ -31,7 +31,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -113,28 +112,28 @@ func resolveWebhookAuth(cfg *conf.WebhookAuthConfig) (*WebhookAuth, error) {
 	case authTypeBearer:
 		auth.Token, err = secrets.MustResolve("bearer token", cfg.TokenFile, cfg.Token)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve bearer token: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("auth_type", "bearer").Build()
 		}
 
 	case authTypeBasic:
 		auth.User, err = secrets.MustResolve("basic auth user", cfg.UserFile, cfg.User)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve basic auth user: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("auth_type", "basic").Context("field", "user").Build()
 		}
 		auth.Pass, err = secrets.MustResolve("basic auth pass", cfg.PassFile, cfg.Pass)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve basic auth pass: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("auth_type", "basic").Context("field", "pass").Build()
 		}
 
 	case authTypeCustom:
 		auth.Header = cfg.Header // Header name is not a secret
 		auth.Value, err = secrets.MustResolve("custom header value", cfg.ValueFile, cfg.Value)
 		if err != nil {
-			return nil, fmt.Errorf("failed to resolve custom header value: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("auth_type", "custom").Build()
 		}
 
 	default:
-		return nil, fmt.Errorf("unsupported auth type: %s", auth.Type)
+		return nil, errors.Newf("unsupported auth type: %s", auth.Type).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	return auth, nil
@@ -194,7 +193,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 	if templateStr != "" {
 		tmpl, err := template.New("webhook").Parse(templateStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse webhook template: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("operation", "parse_webhook_template").Build()
 		}
 
 		// Validate template with dummy notification to catch errors early
@@ -214,7 +213,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 			},
 		}
 		if err := tmpl.Execute(io.Discard, testNotification); err != nil {
-			return nil, fmt.Errorf("template validation failed: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("operation", "validate_webhook_template").Build()
 		}
 
 		wp.template = tmpl
@@ -266,7 +265,7 @@ func (w *WebhookProvider) ValidateConfig() error {
 	}
 
 	if len(w.endpoints) == 0 {
-		return fmt.Errorf("at least one webhook endpoint is required")
+		return errors.Newf("at least one webhook endpoint is required").Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	for i := range w.endpoints {
@@ -281,7 +280,7 @@ func (w *WebhookProvider) ValidateConfig() error {
 // validateEndpoint validates a single webhook endpoint configuration.
 func (w *WebhookProvider) validateEndpoint(index int, endpoint *WebhookEndpoint) error {
 	if endpoint.URL == "" {
-		return fmt.Errorf("endpoint %d: URL is required", index)
+		return errors.Newf("endpoint %d: URL is required", index).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	if err := w.validateAndNormalizeMethod(index, endpoint); err != nil {
@@ -293,11 +292,11 @@ func (w *WebhookProvider) validateEndpoint(index int, endpoint *WebhookEndpoint)
 	}
 
 	if endpoint.Timeout < 0 {
-		return fmt.Errorf("endpoint %d: timeout must be >= 0", index)
+		return errors.Newf("endpoint %d: timeout must be >= 0", index).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	if err := validateResolvedWebhookAuth(&endpoint.Auth); err != nil {
-		return fmt.Errorf("endpoint %d: %w", index, err)
+		return errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("endpoint_index", index).Build()
 	}
 
 	return nil
@@ -312,7 +311,7 @@ func (w *WebhookProvider) validateAndNormalizeMethod(index int, endpoint *Webhoo
 	endpoint.Method = method
 
 	if method != http.MethodPost && method != http.MethodPut && method != http.MethodPatch {
-		return fmt.Errorf("endpoint %d: method must be POST, PUT, or PATCH, got %s", index, method)
+		return errors.Newf("endpoint %d: method must be POST, PUT, or PATCH, got %s", index, method).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }
@@ -321,13 +320,13 @@ func (w *WebhookProvider) validateAndNormalizeMethod(index int, endpoint *Webhoo
 func validateEndpointURL(index int, urlStr string) error {
 	u, err := url.Parse(urlStr)
 	if err != nil {
-		return fmt.Errorf("endpoint %d: invalid URL: %w", index, err)
+		return errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("endpoint_index", index).Context("operation", "parse_url").Build()
 	}
 	if u.Scheme != "http" && u.Scheme != "https" {
-		return fmt.Errorf("endpoint %d: URL scheme must be http or https, got %s", index, u.Scheme)
+		return errors.Newf("endpoint %d: URL scheme must be http or https, got %s", index, u.Scheme).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	if u.Host == "" {
-		return fmt.Errorf("endpoint %d: URL host is required", index)
+		return errors.Newf("endpoint %d: URL host is required", index).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 	return nil
 }
@@ -346,27 +345,27 @@ func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 		return nil
 	case authTypeBearer:
 		if auth.Token == "" {
-			return fmt.Errorf("bearer auth requires token (secret resolution may have failed)")
+			return errors.Newf("bearer auth requires token (secret resolution may have failed)").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 	case authTypeBasic:
 		if auth.User == "" || auth.Pass == "" {
-			return fmt.Errorf("basic auth requires user and pass (secret resolution may have failed)")
+			return errors.Newf("basic auth requires user and pass (secret resolution may have failed)").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 	case authTypeCustom:
 		if auth.Header == "" {
-			return fmt.Errorf("custom auth requires header name")
+			return errors.Newf("custom auth requires header name").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 		if strings.ContainsAny(auth.Header, "\r\n:") {
-			return fmt.Errorf("custom auth header contains invalid characters")
+			return errors.Newf("custom auth header contains invalid characters").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 		if auth.Value == "" {
-			return fmt.Errorf("custom auth requires value (secret resolution may have failed)")
+			return errors.Newf("custom auth requires value (secret resolution may have failed)").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 		if strings.ContainsAny(auth.Value, "\r\n") {
-			return fmt.Errorf("custom auth value contains invalid characters")
+			return errors.Newf("custom auth value contains invalid characters").Component("notification").Category(errors.CategoryConfiguration).Build()
 		}
 	default:
-		return fmt.Errorf("unsupported auth type: %s", authType)
+		return errors.Newf("unsupported auth type: %s", authType).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	return nil
@@ -381,13 +380,13 @@ func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 //   - Propagates context through entire HTTP request lifecycle
 func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 	if len(w.endpoints) == 0 {
-		return fmt.Errorf("no webhook endpoints configured")
+		return errors.Newf("no webhook endpoints configured").Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	// Build payload once (reused for all endpoints)
 	payload, err := w.buildPayload(n)
 	if err != nil {
-		return fmt.Errorf("failed to build webhook payload: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "build_webhook_payload").Build()
 	}
 
 	// Try each endpoint until one succeeds (use index to avoid copying)
@@ -413,15 +412,15 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 			return nil // Success!
 		}
 
-		errs = append(errs, fmt.Errorf("endpoint %d (%s): %w", i, endpoint.URL, err))
+		errs = append(errs, errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("endpoint_index", i).Build())
 
 		// Check if context was cancelled - if so, stop trying other endpoints
 		if ctx.Err() != nil {
-			return fmt.Errorf("context cancelled while sending webhook: %w", ctx.Err())
+			return errors.New(ctx.Err()).Component("notification").Category(errors.CategoryNetwork).Context("operation", "send_webhook").Build()
 		}
 	}
 
-	return fmt.Errorf("all webhook endpoints failed: %w", errors.Join(errs...))
+	return errors.New(errors.Join(errs...)).Component("notification").Category(errors.CategoryNetwork).Context("operation", "send_webhook_all_endpoints").Build()
 }
 
 // buildPayload constructs the JSON payload to send to the webhook.
@@ -432,11 +431,11 @@ func (w *WebhookProvider) buildPayload(n *Notification) ([]byte, error) {
 		var buf bytes.Buffer
 		err := w.template.Execute(&buf, n)
 		if err != nil {
-			return nil, fmt.Errorf("template execution failed: %w", err)
+			return nil, errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "execute_webhook_template").Build()
 		}
 		b := buf.Bytes()
 		if !json.Valid(b) {
-			return nil, fmt.Errorf("template output is not valid JSON")
+			return nil, errors.Newf("template output is not valid JSON").Component("notification").Category(errors.CategoryProcessing).Build()
 		}
 		return b, nil
 	}
@@ -456,7 +455,7 @@ func (w *WebhookProvider) buildPayload(n *Notification) ([]byte, error) {
 	// Marshal to JSON
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("json marshal failed: %w", err)
+		return nil, errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "json_marshal_webhook_payload").Build()
 	}
 
 	return data, nil
@@ -474,7 +473,7 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	// LLM Note: Use bytes.NewReader for request body to support retries
 	req, err := http.NewRequestWithContext(ctx, endpoint.Method, endpoint.URL, bytes.NewReader(payload))
 	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("operation", "create_http_request").Build()
 	}
 
 	// Set headers
@@ -485,7 +484,7 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 
 	// Apply authentication
 	if err := applyWebhookAuth(req, &endpoint.Auth); err != nil {
-		return fmt.Errorf("failed to apply auth: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("operation", "apply_webhook_auth").Build()
 	}
 
 	// Execute request
@@ -511,12 +510,12 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 		}
 
 		if isCancelled {
-			return fmt.Errorf("request cancelled: %w", err)
+			return errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("operation", "webhook_request_cancelled").Build()
 		}
 		if isTimeout {
-			return fmt.Errorf("request timed out: %w", err)
+			return errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("operation", "webhook_request_timeout").Build()
 		}
-		return fmt.Errorf("request failed: %w", err)
+		return errors.New(err).Component("notification").Category(errors.CategoryNetwork).Context("operation", "webhook_request").Build()
 	}
 	defer func() {
 		// Always close response body to prevent connection leaks
@@ -528,7 +527,7 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Read error response body for better diagnostics
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, maxErrorBodySize))
-		httpErr := fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(body))
+		httpErr := errors.Newf("webhook returned status %d: %s", resp.StatusCode, string(body)).Component("notification").Category(errors.CategoryNetwork).Context("status_code", resp.StatusCode).Build()
 
 		// Report telemetry for HTTP errors
 		if w.telemetry != nil {
@@ -564,7 +563,7 @@ func applyWebhookAuth(req *http.Request, auth *WebhookAuth) error {
 	case authTypeCustom:
 		req.Header.Set(auth.Header, auth.Value)
 	default:
-		return fmt.Errorf("unsupported auth type: %s", authType)
+		return errors.Newf("unsupported auth type: %s", authType).Component("notification").Category(errors.CategoryConfiguration).Build()
 	}
 
 	return nil

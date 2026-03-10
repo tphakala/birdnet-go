@@ -146,7 +146,7 @@ func TestApp_RollbackOnStartupFailure(t *testing.T) {
 
 	err := a.Start(t.Context())
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failing")
+	assert.Contains(t, err.Error(), "startup failed")
 
 	// db and api started, then failing failed, so db and api must be stopped (reverse)
 	// failing itself should NOT be stopped (it never successfully started)

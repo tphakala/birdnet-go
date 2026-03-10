@@ -1,10 +1,9 @@
 package analysis
 
 import (
-	"fmt"
-
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -21,17 +20,29 @@ func initializeBirdNET(settings *conf.Settings) error {
 		var err error
 		bn, err = birdnet.NewBirdNET(settings)
 		if err != nil {
-			return fmt.Errorf("failed to initialize BirdNET: %w", err)
+			return errors.New(err).
+				Component("analysis").
+				Category(errors.CategoryModelInit).
+				Context("operation", "initialize_birdnet").
+				Build()
 		}
 
 		// Initialize included species list
 		if err := birdnet.BuildRangeFilter(bn); err != nil {
-			return fmt.Errorf("failed to initialize BirdNET: %w", err)
+			return errors.New(err).
+				Component("analysis").
+				Category(errors.CategoryModelInit).
+				Context("operation", "build_range_filter").
+				Build()
 		}
 
 		// Initialize float32 pool for audio conversion
 		if err := myaudio.InitFloat32Pool(); err != nil {
-			return fmt.Errorf("failed to initialize float32 pool: %w", err)
+			return errors.New(err).
+				Component("analysis").
+				Category(errors.CategoryAudio).
+				Context("operation", "initialize_float32_pool").
+				Build()
 		}
 	}
 	return nil

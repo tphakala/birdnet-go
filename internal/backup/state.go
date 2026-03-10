@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -62,10 +63,17 @@ func NewStateManager(_ logger.Logger) (*StateManager, error) {
 	// Get config directory
 	configPaths, err := conf.GetDefaultConfigPaths()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get config paths: %w", err)
+		return nil, errors.New(err).
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_config_paths").
+			Build()
 	}
 	if len(configPaths) == 0 {
-		return nil, fmt.Errorf("no config paths available")
+		return nil, errors.Newf("no config paths available").
+			Component("backup").
+			Category(errors.CategoryConfiguration).
+			Build()
 	}
 
 	// Create state file path
@@ -126,21 +134,33 @@ func (sm *StateManager) saveState() error {
 	dirPath := filepath.Dir(sm.statePath)
 	if err := os.MkdirAll(dirPath, DefaultDirectoryPermissions()); err != nil {
 		sm.logger.Error("Failed to create state directory", logger.String("path", dirPath), logger.Error(err))
-		return fmt.Errorf("failed to create state directory: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "create_state_directory").
+			Build()
 	}
 
 	// Marshal state to JSON with pretty printing
 	data, err := json.MarshalIndent(stateSnapshot, "", "  ")
 	if err != nil {
 		sm.logger.Error("Failed to marshal backup state to JSON", logger.Error(err))
-		return fmt.Errorf("failed to marshal state: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "marshal_state").
+			Build()
 	}
 
 	// Write to temporary file first
 	tempFile := sm.statePath + ".tmp"
 	if err := os.WriteFile(tempFile, data, PermSecureFile); err != nil {
 		sm.logger.Error("Failed to write temporary state file", logger.String("path", tempFile), logger.Error(err))
-		return fmt.Errorf("failed to write temporary state file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "write_temp_state_file").
+			Build()
 	}
 
 	// Rename temporary file to actual state file (atomic operation)
@@ -149,7 +169,11 @@ func (sm *StateManager) saveState() error {
 			sm.logger.Warn("Failed to clean up temp file after rename failure", logger.String("temp_path", tempFile), logger.Error(removeErr))
 		}
 		sm.logger.Error("Failed to save state file (rename failed)", logger.String("temp_path", tempFile), logger.String("final_path", sm.statePath), logger.Error(err))
-		return fmt.Errorf("failed to save state file: %w", err)
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "save_state_file").
+			Build()
 	}
 
 	sm.logger.Debug("Backup state saved successfully", logger.String("path", sm.statePath), logger.Int64("duration_ms", time.Since(start).Milliseconds()))
