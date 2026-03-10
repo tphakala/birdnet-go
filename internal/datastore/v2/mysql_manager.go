@@ -185,24 +185,26 @@ func (m *MySQLManager) Delete() error {
 		prefix + "detection_predictions",
 		prefix + "detections",
 		prefix + "audio_sources",
-		prefix + "labels",
-		prefix + "ai_models",
-		prefix + "taxonomic_classes",
-		prefix + "label_types",
-		prefix + "migration_states",
-		prefix + "migration_dirty_ids",
 		// Alert tables (drop children first)
 		prefix + "alert_histories",
 		prefix + "alert_actions",
 		prefix + "alert_conditions",
 		prefix + "alert_rules",
-		// Auxiliary tables
-		prefix + "hourly_weathers",
-		prefix + "daily_events",
+		// Auxiliary tables that reference labels (must drop before labels)
 		prefix + "image_caches",
 		prefix + "threshold_events",
 		prefix + "dynamic_thresholds",
 		prefix + "notification_histories",
+		prefix + "hourly_weathers",
+		prefix + "daily_events",
+		// Labels and its dependencies (drop after all referencing tables)
+		prefix + "labels",
+		prefix + "ai_models",
+		prefix + "taxonomic_classes",
+		prefix + "label_types",
+		// Migration tracking
+		prefix + "migration_states",
+		prefix + "migration_dirty_ids",
 	}
 
 	for _, table := range tables {
