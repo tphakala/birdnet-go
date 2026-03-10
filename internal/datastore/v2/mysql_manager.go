@@ -86,6 +86,10 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 
 // Initialize creates the v2 schema tables with the v2_ prefix.
 func (m *MySQLManager) Initialize() error {
+	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
+	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
+	m.renamePrePR2165Tables()
+
 	// Run GORM auto-migrations for all entities
 	// Tables will be created with v2_ prefix due to NamingStrategy
 	err := m.db.AutoMigrate(
@@ -140,6 +144,34 @@ func (m *MySQLManager) Initialize() error {
 		return err
 	}
 	return nil
+}
+
+// renamePrePR2165Tables renames tables whose names changed when TableName() overrides
+// were removed in PR #2165. Only two tables actually changed:
+//   - migration_state → migration_states
+//   - alert_history → alert_histories
+//
+// The table prefix (empty or "v2_") is applied automatically.
+func (m *MySQLManager) renamePrePR2165Tables() {
+	renames := [][2]string{
+		{"migration_state", "migration_states"},
+		{"alert_history", "alert_histories"},
+	}
+	for _, r := range renames {
+		oldName := m.tablePrefix + r[0]
+		newName := m.tablePrefix + r[1]
+		var count int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", oldName).Scan(&count).Error; err != nil || count == 0 {
+			continue
+		}
+		var newCount int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name = ?", newName).Scan(&newCount).Error; err == nil && newCount > 0 {
+			continue
+		}
+		if err := m.db.Exec("ALTER TABLE `" + oldName + "` RENAME TO `" + newName + "`").Error; err != nil {
+			reportInitFailure("mysql", "renameTable_"+oldName, err, m.config.Host, m.config.Database, m.config.Username)
+		}
+	}
 }
 
 // seedLookupTables seeds the label_types and taxonomic_classes tables with default values.

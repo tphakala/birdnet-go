@@ -162,9 +162,19 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Read migration state
+	// Read migration state — try both table names (plural is current, singular is pre-PR #2165)
+	migrationTable := resolveTableName(db, "migration_states", "migration_state")
+	if migrationTable == "" {
+		reportStartupError("sqlite", "readMigrationState", fmt.Errorf("migration state table not found"), v2MigrationPath)
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     true,
+			LegacyRequired:  true,
+			Error:           fmt.Errorf("%w: migration state table not found", ErrV2DatabaseCorrupted),
+		}
+	}
 	var state entities.MigrationState
-	if err := db.First(&state).Error; err != nil {
+	if err := db.Table(migrationTable).First(&state).Error; err != nil {
 		reportStartupError("sqlite", "readMigrationState", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -250,11 +260,13 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	legacyExists := legacyCount > 0
 
-	// Check if v2_migration_states table exists (migration-era v2 tables)
+	// Check if v2_migration_states table exists (migration-era v2 tables).
+	// Also check for the old singular name v2_migration_state (pre-PR #2165).
 	var v2MigrationCount int64
-	tableName := v2TablePrefix + "migration_states"
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-		settings.Output.MySQL.Database, tableName).Scan(&v2MigrationCount).Error
+	tableNameNew := v2TablePrefix + "migration_states"
+	tableNameOld := v2TablePrefix + "migration_state"
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?)",
+		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationCount).Error
 	if err != nil {
 		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
@@ -328,9 +340,21 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		}
 	}
 
-	// Read migration state from v2 table
+	// Read migration state from v2 table — resolve actual table name (old singular or new plural)
+	var v2MigrationTableName string
+	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
+		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error
+	if err != nil || v2MigrationTableName == "" {
+		reportStartupError("mysql", "resolveV2TableName", fmt.Errorf("could not resolve migration state table"), mysqlHost, mysqlDB, mysqlUser)
+		return StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			V2Available:     true,
+			LegacyRequired:  true,
+			Error:           fmt.Errorf("%w: migration state table not found", ErrV2DatabaseCorrupted),
+		}
+	}
 	var state entities.MigrationState
-	if err := db.Table(tableName).First(&state).Error; err != nil {
+	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
 		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -395,16 +419,25 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if migration_states table exists (v2 schema indicator)
+	// Check if migration_states table exists (v2 schema indicator).
+	// Also check for the old singular name "migration_state" which existed before PR #2165
+	// removed TableName() overrides (GORM now auto-pluralizes to "migration_states").
 	var tableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_states'").Scan(&tableCount).Error
+	err = db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('migration_states', 'migration_state')").Scan(&tableCount).Error
 	if err != nil || tableCount == 0 {
+		return false
+	}
+
+	// Determine which table name exists and query it directly
+	var tableName string
+	err = db.Raw("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('migration_states', 'migration_state') LIMIT 1").Scan(&tableName).Error
+	if err != nil || tableName == "" {
 		return false
 	}
 
 	// Check if migration state is COMPLETED (fully initialized)
 	var state entities.MigrationState
-	err = db.First(&state).Error
+	err = db.Table(tableName).First(&state).Error
 	if err != nil {
 		return false
 	}
@@ -448,17 +481,26 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	// Check if fresh v2 migration_states table exists (no prefix)
+	// Check if fresh v2 migration_states table exists (no prefix).
+	// Also check for the old singular name "migration_state" (pre-PR #2165).
 	var tableCount int64
-	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'migration_states'",
+	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('migration_states', 'migration_state')",
 		settings.Output.MySQL.Database).Scan(&tableCount).Error
 	if err != nil || tableCount == 0 {
 		return false
 	}
 
+	// Determine which table name exists
+	var tableName string
+	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('migration_states', 'migration_state') LIMIT 1",
+		settings.Output.MySQL.Database).Scan(&tableName).Error
+	if err != nil || tableName == "" {
+		return false
+	}
+
 	// Check if migration state is COMPLETED
 	var state entities.MigrationState
-	if err := db.Table("migration_states").First(&state).Error; err != nil {
+	if err := db.Table(tableName).First(&state).Error; err != nil {
 		return false
 	}
 
@@ -664,4 +706,18 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 		logger.String("backup_path", backupPath))
 
 	return true, nil
+}
+
+// resolveTableName checks which of two possible SQLite table names exists.
+// Returns the first match or empty string if neither exists.
+// This handles the migration_state→migration_states and alert_history→alert_histories
+// rename from PR #2165 where TableName() overrides were removed.
+func resolveTableName(db *gorm.DB, names ...string) string {
+	for _, name := range names {
+		var count int64
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&count).Error; err == nil && count > 0 {
+			return name
+		}
+	}
+	return ""
 }
