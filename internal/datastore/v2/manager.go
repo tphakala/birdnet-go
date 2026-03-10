@@ -161,7 +161,9 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 func (m *SQLiteManager) Initialize() error {
 	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
 	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
-	m.renamePrePR2165Tables()
+	if err := m.renamePrePR2165Tables(); err != nil {
+		return err
+	}
 
 	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
 	// fell back to legacy mode due to the PR #2165 table name mismatch.
@@ -235,7 +237,7 @@ func (m *SQLiteManager) Initialize() error {
 //   - alert_history → alert_histories
 //
 // This is safe to call on fresh databases (no-op if old tables don't exist).
-func (m *SQLiteManager) renamePrePR2165Tables() {
+func (m *SQLiteManager) renamePrePR2165Tables() error {
 	renames := [][2]string{
 		{"migration_state", "migration_states"},
 		{"alert_history", "alert_histories"},
@@ -253,8 +255,10 @@ func (m *SQLiteManager) renamePrePR2165Tables() {
 		}
 		if err := m.db.Exec("ALTER TABLE `" + oldName + "` RENAME TO `" + newName + "`").Error; err != nil {
 			reportInitFailure("sqlite", "renameTable_"+oldName, err, m.dbPath)
+			return fmt.Errorf("failed to rename table %s to %s: %w", oldName, newName, err)
 		}
 	}
+	return nil
 }
 
 // cleanupLegacySchemaContamination removes columns that were erroneously added to v2

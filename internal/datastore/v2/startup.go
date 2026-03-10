@@ -163,7 +163,7 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	defer func() { _ = sqlDB.Close() }()
 
 	// Read migration state — try both table names (plural is current, singular is pre-PR #2165)
-	migrationTable := resolveTableName(db, "migration_states", "migration_state")
+	migrationTable := resolveSQLiteTableName(db, "migration_states", "migration_state")
 	if migrationTable == "" {
 		reportStartupError("sqlite", "readMigrationState", fmt.Errorf("migration state table not found"), v2MigrationPath)
 		return StartupState{
@@ -708,11 +708,11 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	return true, nil
 }
 
-// resolveTableName checks which of two possible SQLite table names exists.
-// Returns the first match or empty string if neither exists.
+// resolveSQLiteTableName checks which of the given SQLite table names exists.
+// Returns the first match or empty string if none exist.
 // This handles the migration_state→migration_states and alert_history→alert_histories
 // rename from PR #2165 where TableName() overrides were removed.
-func resolveTableName(db *gorm.DB, names ...string) string {
+func resolveSQLiteTableName(db *gorm.DB, names ...string) string {
 	for _, name := range names {
 		var count int64
 		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&count).Error; err == nil && count > 0 {
