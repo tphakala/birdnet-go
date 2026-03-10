@@ -396,7 +396,10 @@
               </button>
 
               <!-- Thumbnail -->
-              <div class="w-10 h-8 rounded overflow-hidden bg-[var(--color-base-200)] shrink-0">
+              <!-- 4:3 aspect ratio to match avicommons source images -->
+              <div
+                class="w-10 h-[1.875rem] rounded overflow-hidden bg-[var(--color-base-200)] shrink-0"
+              >
                 {#if threshold.scientificName}
                   <img
                     src="/api/v2/media/species-image?name={encodeURIComponent(

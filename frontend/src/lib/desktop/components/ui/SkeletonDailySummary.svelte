@@ -124,7 +124,7 @@ Features:
               <td class="py-0 px-2 sm:px-4" role="cell">
                 <div class="flex items-center gap-2">
                   {#if showThumbnails}
-                    <div class="w-8 h-8 bg-[var(--color-base-300)] rounded-sm animate-pulse"></div>
+                    <div class="w-8 h-6 bg-[var(--color-base-300)] rounded-sm animate-pulse"></div>
                   {/if}
                   <div
                     class="h-4 bg-[var(--color-base-300)] rounded-sm animate-pulse"

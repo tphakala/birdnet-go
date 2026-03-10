@@ -106,7 +106,7 @@
       <!-- Content -->
       <div class="p-4 space-y-3 overflow-y-auto">
         {#if species.thumbnail_url}
-          <div class="w-full h-40 rounded-xl overflow-hidden bg-[var(--color-base-300)]">
+          <div class="w-full aspect-[4/3] rounded-xl overflow-hidden bg-[var(--color-base-300)]">
             <img
               src={species.thumbnail_url}
               alt={species.common_name}

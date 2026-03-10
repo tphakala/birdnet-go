@@ -37,7 +37,7 @@
     target.style.display = 'none';
     if (target.parentElement) {
       target.parentElement.innerHTML =
-        '<div class="rounded-xl h-40 w-full bg-[var(--color-base-300)]"></div>';
+        '<div class="rounded-xl w-full aspect-[4/3] bg-[var(--color-base-300)]"></div>';
     }
   }
 </script>
@@ -48,11 +48,11 @@
       <img
         src={species.thumbnail_url}
         alt={species.common_name}
-        class="rounded-xl h-40 w-full object-cover"
+        class="rounded-xl w-full aspect-[4/3] object-cover"
         onerror={handleImageError}
       />
     {:else}
-      <div class="rounded-xl h-40 w-full bg-[var(--color-base-300)]"></div>
+      <div class="rounded-xl w-full aspect-[4/3] bg-[var(--color-base-300)]"></div>
     {/if}
   </figure>
   <div class="card-body p-4">

@@ -1560,7 +1560,7 @@ Responsive Breakpoints:
     align-items: center;
     justify-content: center;
     width: 2rem; /* w-8 - match thumbnail width */
-    height: 1.75rem; /* h-7 - match thumbnail height */
+    height: 1.5rem; /* 4:3 aspect ratio to match avicommons images */
     border-radius: 0.375rem;
     font-size: 0.625rem;
     font-weight: 700;

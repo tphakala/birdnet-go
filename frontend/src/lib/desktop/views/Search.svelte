@@ -685,7 +685,7 @@
                     <div class="flex items-center gap-2">
                       <!-- Add bird image thumbnail -->
                       <div
-                        class="w-12 h-12 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
+                        class="w-12 h-9 rounded-md overflow-hidden bg-gray-100 shrink-0 cursor-pointer hover:ring-2 hover:ring-primary transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
                         onclick={() => toggleExpand(result.id)}
                         onkeydown={e => {
                           if (e.key === 'Enter' || e.key === ' ') {
@@ -855,7 +855,7 @@
                             class="bg-[var(--color-base-200)] rounded-box p-4 flex flex-col justify-center items-center"
                           >
                             <div
-                              class="w-full aspect-square rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
+                              class="w-full aspect-[4/3] rounded-md overflow-hidden bg-gray-100 cursor-pointer hover:brightness-90 transition-all focus:outline-hidden focus:ring-2 focus:ring-[var(--color-primary)]"
                               onclick={() => toggleExpand(result.id)}
                               onkeydown={e => {
                                 if (e.key === 'Enter' || e.key === ' ') {
@@ -935,7 +935,7 @@
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2">
                     <div
-                      class="w-12 h-12 rounded-md overflow-hidden bg-[var(--color-base-200)] shrink-0"
+                      class="w-12 h-9 rounded-md overflow-hidden bg-[var(--color-base-200)] shrink-0"
                     >
                       <img
                         src="/api/v2/media/species-image?name={encodeURIComponent(
