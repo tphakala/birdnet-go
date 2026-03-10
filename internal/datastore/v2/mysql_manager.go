@@ -90,6 +90,10 @@ func (m *MySQLManager) Initialize() error {
 	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
 	m.renamePrePR2165Tables()
 
+	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
+	// fell back to legacy mode due to the PR #2165 table name mismatch.
+	m.cleanupLegacySchemaContamination()
+
 	// Run GORM auto-migrations for all entities
 	// Tables will be created with v2_ prefix due to NamingStrategy
 	err := m.db.AutoMigrate(
@@ -170,6 +174,29 @@ func (m *MySQLManager) renamePrePR2165Tables() {
 		}
 		if err := m.db.Exec("ALTER TABLE `" + oldName + "` RENAME TO `" + newName + "`").Error; err != nil {
 			reportInitFailure("mysql", "renameTable_"+oldName, err, m.config.Host, m.config.Database, m.config.Username)
+		}
+	}
+}
+
+// cleanupLegacySchemaContamination removes columns erroneously added by legacy AutoMigrate
+// when the app fell back to legacy mode due to the PR #2165 table name mismatch.
+func (m *MySQLManager) cleanupLegacySchemaContamination() {
+	contaminations := []struct {
+		table  string
+		column string
+	}{
+		{"image_caches", "scientific_name"},
+	}
+
+	for _, c := range contaminations {
+		tableName := m.tablePrefix + c.table
+		var colCount int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?",
+			tableName, c.column).Scan(&colCount).Error; err != nil || colCount == 0 {
+			continue
+		}
+		if err := m.db.Exec("ALTER TABLE `" + tableName + "` DROP COLUMN `" + c.column + "`").Error; err != nil {
+			reportInitFailure("mysql", "dropOrphanedColumn_"+tableName+"_"+c.column, err, m.config.Host, m.config.Database, m.config.Username)
 		}
 	}
 }

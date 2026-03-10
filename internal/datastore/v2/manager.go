@@ -163,6 +163,10 @@ func (m *SQLiteManager) Initialize() error {
 	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
 	m.renamePrePR2165Tables()
 
+	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
+	// fell back to legacy mode due to the PR #2165 table name mismatch.
+	m.cleanupLegacySchemaContamination()
+
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(
 		// Lookup tables (must be created first due to FK constraints)
@@ -249,6 +253,35 @@ func (m *SQLiteManager) renamePrePR2165Tables() {
 		}
 		if err := m.db.Exec("ALTER TABLE `" + oldName + "` RENAME TO `" + newName + "`").Error; err != nil {
 			reportInitFailure("sqlite", "renameTable_"+oldName, err, m.dbPath)
+		}
+	}
+}
+
+// cleanupLegacySchemaContamination removes columns that were erroneously added to v2
+// tables when the app fell back to legacy mode due to the PR #2165 table name mismatch.
+// Legacy AutoMigrate added NOT NULL columns (e.g. scientific_name) that don't exist in
+// the v2 entity definitions, causing INSERT failures.
+//
+// Only image_caches was affected: it comes before dynamic_thresholds in the legacy
+// migration order, and dynamic_thresholds is where the crash occurred (stopping further
+// contamination).
+//
+// Requires SQLite 3.35.0+ (ALTER TABLE DROP COLUMN). Safe no-op on older versions.
+func (m *SQLiteManager) cleanupLegacySchemaContamination() {
+	contaminations := []struct {
+		table  string
+		column string
+	}{
+		{"image_caches", "scientific_name"},
+	}
+
+	for _, c := range contaminations {
+		var colCount int64
+		if err := m.db.Raw("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", c.table, c.column).Scan(&colCount).Error; err != nil || colCount == 0 {
+			continue
+		}
+		if err := m.db.Exec("ALTER TABLE `" + c.table + "` DROP COLUMN `" + c.column + "`").Error; err != nil {
+			reportInitFailure("sqlite", "dropOrphanedColumn_"+c.table+"_"+c.column, err, m.dbPath)
 		}
 	}
 }
