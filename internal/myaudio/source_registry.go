@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -105,6 +106,10 @@ func (r *AudioSourceRegistry) RegisterSource(connectionString string, config Sou
 		}
 	}
 
+	// Build filter chain outside the lock to avoid blocking I/O under the mutex.
+	// conf.Setting() may trigger lazy initialization with file I/O.
+	filterChain, filterErr := NewFilterChainFromSettings(conf.Setting())
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -142,6 +147,15 @@ func (r *AudioSourceRegistry) RegisterSource(connectionString string, config Sou
 	// Auto-generate display name if not provided
 	if source.DisplayName == "" {
 		source.DisplayName = r.generateDisplayName(source)
+	}
+
+	// Set pre-built filter chain
+	if filterErr == nil {
+		source.SetFilterChain(filterChain)
+	} else {
+		r.logger.Warn("Failed to initialize filter chain for source",
+			logger.String("id", source.ID),
+			logger.Error(filterErr))
 	}
 
 	// Store in registry
@@ -272,12 +286,28 @@ func (r *AudioSourceRegistry) ListSources() []*AudioSource {
 	// Build result in sorted order
 	for _, id := range sourceIDs {
 		source := r.sources[id]
-		// Create a copy without the connection string for safety
-		sourceCopy := *source
-		sourceCopy.connectionString = "" // Never expose connection string
-		sources = append(sources, &sourceCopy)
+		// Create a safe copy that omits the atomic filterChain and connectionString
+		sources = append(sources, source.copyForAPI())
 	}
 	return sources
+}
+
+// UpdateAllFilterChains rebuilds filter chains for all registered sources.
+// Called when equalizer settings change via the API.
+// Uses atomic.Pointer.Store so sources actively processing audio see
+// either the old chain or the new chain, never nil.
+func (r *AudioSourceRegistry) UpdateAllFilterChains(settings *conf.Settings) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, source := range r.sources {
+		chain, err := NewFilterChainFromSettings(settings)
+		if err != nil {
+			return fmt.Errorf("failed to create filter chain for source %s: %w", source.ID, err)
+		}
+		source.SetFilterChain(chain) // atomic store — safe while source is processing
+	}
+	return nil
 }
 
 // UpdateSourceMetrics updates metrics for a source

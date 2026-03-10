@@ -2,9 +2,12 @@ package myaudio
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 	"math/rand/v2"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -153,72 +156,224 @@ func TestBytesToFloat64_RoundTrip(t *testing.T) {
 }
 
 // =============================================================================
-// Unit Tests for ApplyFilters
+// Unit Tests for BytesToFloat64PCM16Into (in-place conversion)
 // =============================================================================
 
-func TestApplyFilters_EmptyInput(t *testing.T) {
-	err := ApplyFilters([]byte{})
-	assert.Error(t, err)
-}
+func TestBytesToFloat64PCM16Into(t *testing.T) {
+	t.Run("matches_allocating_version", func(t *testing.T) {
+		input := []byte{0x00, 0x40, 0x00, 0xC0, 0xFF, 0x7F, 0x00, 0x80}
+		expected := BytesToFloat64PCM16(input)
 
-func TestApplyFilters_OddByteCount(t *testing.T) {
-	err := ApplyFilters([]byte{0x00, 0x00, 0x00}) // 3 bytes
-	assert.Error(t, err)
-}
+		dst := make([]float64, len(input)/2)
+		BytesToFloat64PCM16Into(dst, input)
 
-func TestApplyFilters_NoFilterChain(t *testing.T) {
-	// Reset filter chain to nil to simulate uninitialized state.
-	// A nil chain should be a no-op (equivalent to no filters configured),
-	// not an error. This is important for RTSP-only deployments where the
-	// malgo capture path (which previously initialized the chain) is never entered.
-	filterMutex.Lock()
-	oldChain := filterChain
-	filterChain = nil
-	filterMutex.Unlock()
-
-	t.Cleanup(func() {
-		filterMutex.Lock()
-		filterChain = oldChain
-		filterMutex.Unlock()
+		assert.InDeltaSlice(t, expected, dst, 1e-10)
 	})
 
-	samples := []byte{0x00, 0x40, 0x00, 0xC0} // Two 16-bit samples
+	t.Run("single_sample", func(t *testing.T) {
+		input := []byte{0x00, 0x00} // zero
+		dst := make([]float64, 1)
+		BytesToFloat64PCM16Into(dst, input)
+		assert.InDelta(t, 0.0, dst[0], 1e-10)
+	})
+}
+
+// =============================================================================
+// Unit Tests for ApplySourceFilters (per-source filter chains)
+// =============================================================================
+
+// registerTestSource is a helper that registers a test RTSP source and returns its ID.
+// It handles cleanup via t.Cleanup.
+func registerTestSource(t *testing.T) string {
+	t.Helper()
+	testURL := fmt.Sprintf("rtsp://test-source-%d.example.com/stream", time.Now().UnixNano())
+	registry := GetRegistry()
+	source, err := registry.RegisterSource(testURL, SourceConfig{Type: SourceTypeRTSP})
+	require.NoError(t, err)
+	require.NotNil(t, source)
+	t.Cleanup(func() {
+		_ = registry.RemoveSource(source.ID)
+	})
+	return source.ID
+}
+
+func TestApplySourceFilters_EmptyInput(t *testing.T) {
+	sourceID := registerTestSource(t)
+	err := ApplySourceFilters(sourceID, []byte{})
+	assert.Error(t, err)
+}
+
+func TestApplySourceFilters_OddByteCount(t *testing.T) {
+	sourceID := registerTestSource(t)
+	err := ApplySourceFilters(sourceID, []byte{0x00, 0x00, 0x00}) // 3 bytes
+	assert.Error(t, err)
+}
+
+func TestApplySourceFilters_UnknownSource(t *testing.T) {
+	// Unknown source should be a no-op (not an error)
+	samples := []byte{0x00, 0x40, 0x00, 0xC0}
 	original := make([]byte, len(samples))
 	copy(original, samples)
 
-	err := ApplyFilters(samples)
+	err := ApplySourceFilters("nonexistent-source-id", samples)
+	require.NoError(t, err)
+	assert.Equal(t, original, samples, "samples should be unchanged for unknown source")
+}
+
+func TestApplySourceFilters_NoFilterChain(t *testing.T) {
+	// Register a source but set its filter chain to nil
+	sourceID := registerTestSource(t)
+	registry := GetRegistry()
+	source, ok := registry.GetSourceByID(sourceID)
+	require.True(t, ok)
+	source.SetFilterChain(nil) // explicitly nil
+
+	samples := []byte{0x00, 0x40, 0x00, 0xC0}
+	original := make([]byte, len(samples))
+	copy(original, samples)
+
+	err := ApplySourceFilters(sourceID, samples)
 	require.NoError(t, err)
 	assert.Equal(t, original, samples, "samples should be unchanged when filter chain is nil")
 }
 
-func TestApplyFilters_EmptyFilterChain(t *testing.T) {
-	// Initialize empty filter chain
-	settings := conf.Setting()
-	if settings == nil {
-		t.Skip("Settings not available")
-	}
+func TestApplySourceFilters_EmptyFilterChain(t *testing.T) {
+	// Register a source with equalizer disabled (empty chain)
+	sourceID := registerTestSource(t)
+	registry := GetRegistry()
+	source, ok := registry.GetSourceByID(sourceID)
+	require.True(t, ok)
 
-	// Save original state
-	oldEnabled := settings.Realtime.Audio.Equalizer.Enabled
+	settings := &conf.Settings{}
 	settings.Realtime.Audio.Equalizer.Enabled = false
-
-	t.Cleanup(func() {
-		settings.Realtime.Audio.Equalizer.Enabled = oldEnabled
-	})
-
-	err := InitializeFilterChain(settings)
+	chain, err := NewFilterChainFromSettings(settings)
 	require.NoError(t, err)
+	source.SetFilterChain(chain)
 
-	// Apply filters with empty chain (should pass through unchanged)
-	samples := []byte{0x00, 0x40, 0x00, 0xC0} // Two samples
+	samples := []byte{0x00, 0x40, 0x00, 0xC0}
 	original := make([]byte, len(samples))
 	copy(original, samples)
 
-	err = ApplyFilters(samples)
+	err = ApplySourceFilters(sourceID, samples)
 	require.NoError(t, err)
+	assert.Equal(t, original, samples, "samples should be unchanged with empty filter chain")
+}
 
-	// With empty filter chain, samples should be unchanged
-	assert.Equal(t, original, samples)
+func TestApplySourceFilters_WithFilter(t *testing.T) {
+	// Register a source with an active high-pass filter
+	sourceID := registerTestSource(t)
+	registry := GetRegistry()
+	source, ok := registry.GetSourceByID(sourceID)
+	require.True(t, ok)
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Equalizer.Enabled = true
+	settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
+		{Type: "HighPass", Frequency: 1000, Q: 0.707, Passes: 4},
+	}
+	chain, err := NewFilterChainFromSettings(settings)
+	require.NoError(t, err)
+	source.SetFilterChain(chain)
+
+	// Generate a 100Hz sine wave (below the 1000Hz cutoff)
+	sampleRate := float64(conf.SampleRate)
+	numSamples := int(sampleRate / 10) // 0.1 seconds
+	samples := make([]byte, numSamples*2)
+	for i := range numSamples {
+		val := int16(math.Sin(2*math.Pi*100.0*float64(i)/sampleRate) * 16384) //nolint:gosec // G115: sin*16384 is always in int16 range
+		binary.LittleEndian.PutUint16(samples[i*2:], uint16(val))             //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+	}
+
+	originalRMS := calculateTestRMS(samples)
+	err = ApplySourceFilters(sourceID, samples)
+	require.NoError(t, err)
+	filteredRMS := calculateTestRMS(samples)
+
+	// The high-pass filter should significantly attenuate the 100Hz signal
+	attenuation := filteredRMS / originalRMS
+	assert.Less(t, attenuation, 0.5,
+		"100Hz signal should be attenuated by high-pass filter at 1000Hz (got %.2f%% of original)",
+		attenuation*100)
+}
+
+func TestApplySourceFilters_ConcurrentSources(t *testing.T) {
+	// Verify that concurrent filter application on different sources
+	// with independent filter chains doesn't corrupt audio data.
+	const numSources = 4
+	const numIterations = 50
+
+	sampleRate := float64(conf.SampleRate)
+	numSamples := int(sampleRate / 10)
+
+	// Create sources with different filter configurations
+	sourceIDs := make([]string, numSources)
+	for i := range numSources {
+		sourceIDs[i] = registerTestSource(t)
+		registry := GetRegistry()
+		source, ok := registry.GetSourceByID(sourceIDs[i])
+		require.True(t, ok)
+
+		settings := &conf.Settings{}
+		settings.Realtime.Audio.Equalizer.Enabled = true
+		// Each source gets a different cutoff frequency
+		freq := 500.0 + float64(i)*500.0
+		settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: freq, Q: 0.707, Passes: 2},
+		}
+		chain, err := NewFilterChainFromSettings(settings)
+		require.NoError(t, err)
+		source.SetFilterChain(chain)
+	}
+
+	// Run concurrent filter applications
+	var wg sync.WaitGroup
+	errs := make([]error, numSources)
+
+	for i := range numSources {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			for range numIterations {
+				samples := make([]byte, numSamples*2)
+				for j := range numSamples {
+					val := int16(math.Sin(2*math.Pi*100.0*float64(j)/sampleRate) * 16384) //nolint:gosec // G115: sin*16384 is always in int16 range
+					binary.LittleEndian.PutUint16(samples[j*2:], uint16(val))             //nolint:gosec // G115: intentional int16→uint16 for PCM test data
+				}
+				if err := ApplySourceFilters(sourceIDs[idx], samples); err != nil {
+					errs[idx] = err
+					return
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+	for i, err := range errs {
+		assert.NoError(t, err, "source %d should not error during concurrent processing", i)
+	}
+}
+
+// =============================================================================
+// Shared test helper
+// =============================================================================
+
+// calculateTestRMS computes the root mean square of PCM16 audio samples from byte slice.
+// Shared between audio_filters_test.go and ffmpeg_audio_filters_test.go.
+func calculateTestRMS(samples []byte) float64 {
+	if len(samples) < 2 {
+		return 0
+	}
+
+	var sumSquares float64
+	numSamples := len(samples) / 2
+
+	for i := range numSamples {
+		val := int16(binary.LittleEndian.Uint16(samples[i*2:])) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
+		normalized := float64(val) / 32768.0
+		sumSquares += normalized * normalized
+	}
+
+	return math.Sqrt(sumSquares / float64(numSamples))
 }
 
 // =============================================================================
@@ -359,33 +514,30 @@ func BenchmarkFloat64ToBytes_Sizes(b *testing.B) {
 	}
 }
 
-// BenchmarkApplyFilters_FullPipeline benchmarks the complete filter pipeline
-func BenchmarkApplyFilters_FullPipeline(b *testing.B) {
-	settings := conf.Setting()
-	if settings == nil {
-		b.Skip("Settings not available")
+// BenchmarkApplySourceFilters_FullPipeline benchmarks the complete per-source filter pipeline
+func BenchmarkApplySourceFilters_FullPipeline(b *testing.B) {
+	// Register a test source
+	testURL := fmt.Sprintf("rtsp://bench-source-%d.example.com/stream", time.Now().UnixNano())
+	registry := GetRegistry()
+	source, err := registry.RegisterSource(testURL, SourceConfig{Type: SourceTypeRTSP})
+	if err != nil {
+		b.Fatalf("Failed to register source: %v", err)
 	}
+	defer func() { _ = registry.RemoveSource(source.ID) }()
 
-	// Save original state
-	oldEnabled := settings.Realtime.Audio.Equalizer.Enabled
-	oldFilters := settings.Realtime.Audio.Equalizer.Filters
-
-	// Setup a simple filter chain
+	// Configure a filter chain
+	settings := &conf.Settings{}
 	settings.Realtime.Audio.Equalizer.Enabled = true
 	settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
 		{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 2},
 		{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 2},
 	}
 
-	defer func() {
-		settings.Realtime.Audio.Equalizer.Enabled = oldEnabled
-		settings.Realtime.Audio.Equalizer.Filters = oldFilters
-	}()
-
-	err := InitializeFilterChain(settings)
+	chain, err := NewFilterChainFromSettings(settings)
 	if err != nil {
-		b.Fatalf("Failed to initialize filter chain: %v", err)
+		b.Fatalf("Failed to create filter chain: %v", err)
 	}
+	source.SetFilterChain(chain)
 
 	sizes := []struct {
 		name string
@@ -408,8 +560,7 @@ func BenchmarkApplyFilters_FullPipeline(b *testing.B) {
 			b.SetBytes(int64(sz.size * 2))
 
 			for b.Loop() {
-				// Need to reset filter state for fair comparison
-				err := ApplyFilters(samples)
+				err := ApplySourceFilters(source.ID, samples)
 				if err != nil {
 					b.Fatal(err)
 				}

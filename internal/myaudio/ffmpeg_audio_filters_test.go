@@ -14,30 +14,15 @@ import (
 
 // TestFFmpegStream_handleAudioData_AppliesFilters verifies that audio filters
 // are applied to FFmpeg stream data when equalizer is enabled.
-// NOTE: Do NOT use t.Parallel() - this test modifies global state (filterChain, settings, buffers)
+// NOTE: Do NOT use t.Parallel() - this test modifies shared state (registry, buffers)
 func TestFFmpegStream_handleAudioData_AppliesFilters(t *testing.T) {
-	// Setup: Initialize settings with a HighPass filter that will modify the audio
-	settings := conf.Setting()
-	require.NotNil(t, settings, "Settings must be available")
-
-	// Save original state
-	oldEnabled := settings.Realtime.Audio.Equalizer.Enabled
-	oldFilters := settings.Realtime.Audio.Equalizer.Filters
-
-	// Configure a strong high-pass filter at 1000Hz that will noticeably affect low-frequency content
-	settings.Realtime.Audio.Equalizer.Enabled = true
-	settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
-		{Type: "HighPass", Frequency: 1000, Q: 0.707, Passes: 4},
-	}
-
-	t.Cleanup(func() {
-		settings.Realtime.Audio.Equalizer.Enabled = oldEnabled
-		settings.Realtime.Audio.Equalizer.Filters = oldFilters
-	})
-
-	// Initialize filter chain
-	err := InitializeFilterChain(settings)
-	require.NoError(t, err, "Filter chain must initialize")
+	// handleAudioData gates on conf.Setting().Realtime.Audio.Equalizer.Enabled
+	// so we must enable it on the global settings for the filter path to execute.
+	globalSettings := conf.Setting()
+	require.NotNil(t, globalSettings, "Settings must be available")
+	oldEnabled := globalSettings.Realtime.Audio.Equalizer.Enabled
+	globalSettings.Realtime.Audio.Equalizer.Enabled = true
+	t.Cleanup(func() { globalSettings.Realtime.Audio.Equalizer.Enabled = oldEnabled })
 
 	// Create a unique test URL to avoid conflicts with other tests
 	testURL := fmt.Sprintf("rtsp://filter-test-%d.example.com/stream", time.Now().UnixNano())
@@ -51,6 +36,16 @@ func TestFFmpegStream_handleAudioData_AppliesFilters(t *testing.T) {
 
 	// Get the actual source ID and allocate buffers
 	actualSourceID := stream.source.ID
+
+	// Configure a per-source filter chain with a strong high-pass filter
+	filterSettings := &conf.Settings{}
+	filterSettings.Realtime.Audio.Equalizer.Enabled = true
+	filterSettings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
+		{Type: "HighPass", Frequency: 1000, Q: 0.707, Passes: 4},
+	}
+	chain, err := NewFilterChainFromSettings(filterSettings)
+	require.NoError(t, err, "Filter chain must initialize")
+	stream.source.SetFilterChain(chain)
 
 	err = AllocateAnalysisBuffer(conf.BufferSize*3, actualSourceID)
 	if err != nil {
@@ -90,14 +85,14 @@ func TestFFmpegStream_handleAudioData_AppliesFilters(t *testing.T) {
 	copy(filteredSamples, originalSamples)
 
 	// Calculate RMS of original signal before processing
-	originalRMS := calculateRMSFromBytes(originalSamples)
+	originalRMS := calculateTestRMS(originalSamples)
 
 	// Call handleAudioData - this should apply filters to filteredSamples
 	err = stream.handleAudioData(filteredSamples)
 	require.NoError(t, err)
 
 	// Calculate RMS of filtered signal
-	filteredRMS := calculateRMSFromBytes(filteredSamples)
+	filteredRMS := calculateTestRMS(filteredSamples)
 
 	// The high-pass filter should significantly attenuate the 100Hz signal
 	// We expect at least 50% reduction (6dB) for a 4-pass high-pass at 1000Hz
@@ -109,30 +104,8 @@ func TestFFmpegStream_handleAudioData_AppliesFilters(t *testing.T) {
 
 // TestFFmpegStream_handleAudioData_NoFiltersWhenDisabled verifies that audio
 // is passed through unchanged when equalizer is disabled.
-// NOTE: Do NOT use t.Parallel() - this test modifies global state (filterChain, settings, buffers)
+// NOTE: Do NOT use t.Parallel() - this test modifies shared state (registry, buffers)
 func TestFFmpegStream_handleAudioData_NoFiltersWhenDisabled(t *testing.T) {
-	settings := conf.Setting()
-	require.NotNil(t, settings, "Settings must be available")
-
-	// Save original state
-	oldEnabled := settings.Realtime.Audio.Equalizer.Enabled
-	oldFilters := settings.Realtime.Audio.Equalizer.Filters
-
-	// Disable equalizer but configure filters (they should not be applied)
-	settings.Realtime.Audio.Equalizer.Enabled = false
-	settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
-		{Type: "HighPass", Frequency: 1000, Q: 0.707, Passes: 4},
-	}
-
-	t.Cleanup(func() {
-		settings.Realtime.Audio.Equalizer.Enabled = oldEnabled
-		settings.Realtime.Audio.Equalizer.Filters = oldFilters
-	})
-
-	// Initialize filter chain (should be empty since disabled)
-	err := InitializeFilterChain(settings)
-	require.NoError(t, err)
-
 	// Create a unique test URL to avoid conflicts with other tests
 	testURL := fmt.Sprintf("rtsp://filter-disabled-test-%d.example.com/stream", time.Now().UnixNano())
 
@@ -143,8 +116,18 @@ func TestFFmpegStream_handleAudioData_NoFiltersWhenDisabled(t *testing.T) {
 	stream := NewFFmpegStream(testURL, "tcp", audioChan)
 	require.NotNil(t, stream)
 
-	// Get the actual source ID and allocate buffers
+	// Get the actual source ID
 	actualSourceID := stream.source.ID
+
+	// Configure a per-source filter chain with equalizer disabled
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Equalizer.Enabled = false
+	settings.Realtime.Audio.Equalizer.Filters = []conf.EqualizerFilter{
+		{Type: "HighPass", Frequency: 1000, Q: 0.707, Passes: 4},
+	}
+	chain, err := NewFilterChainFromSettings(settings)
+	require.NoError(t, err)
+	stream.source.SetFilterChain(chain)
 
 	err = AllocateAnalysisBuffer(conf.BufferSize*3, actualSourceID)
 	if err != nil {
@@ -186,22 +169,4 @@ func TestFFmpegStream_handleAudioData_NoFiltersWhenDisabled(t *testing.T) {
 
 	// Audio should be unchanged when equalizer is disabled
 	assert.Equal(t, originalSamples, testSamples, "Audio should be unchanged when equalizer is disabled")
-}
-
-// calculateRMSFromBytes computes the root mean square of PCM16 audio samples from byte slice
-func calculateRMSFromBytes(samples []byte) float64 {
-	if len(samples) < 2 {
-		return 0
-	}
-
-	var sumSquares float64
-	numSamples := len(samples) / 2
-
-	for i := range numSamples {
-		val := int16(binary.LittleEndian.Uint16(samples[i*2:])) //nolint:gosec // G115: intentional uint16→int16 for PCM test verification
-		normalized := float64(val) / 32768.0
-		sumSquares += normalized * normalized
-	}
-
-	return math.Sqrt(sumSquares / float64(numSamples))
 }

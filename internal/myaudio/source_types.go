@@ -2,9 +2,11 @@
 package myaudio
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/myaudio/equalizer"
 )
 
 // SourceType represents the type of audio source
@@ -42,6 +44,36 @@ type AudioSource struct {
 	// Simple metrics
 	TotalBytes int64 `json:"totalBytes"`
 	ErrorCount int   `json:"errorCount"`
+
+	// Per-source filter chain (atomic for lock-free access during audio processing)
+	filterChain atomic.Pointer[equalizer.FilterChain] //nolint:govet // nocopy is acceptable; ListSources uses copyForAPI()
+}
+
+// GetFilterChain returns the source's filter chain atomically (lock-free).
+func (s *AudioSource) GetFilterChain() *equalizer.FilterChain {
+	return s.filterChain.Load()
+}
+
+// SetFilterChain atomically replaces the source's filter chain.
+func (s *AudioSource) SetFilterChain(chain *equalizer.FilterChain) {
+	s.filterChain.Store(chain)
+}
+
+// copyForAPI creates a copy of the source safe for API responses.
+// It omits the atomic filterChain field (which cannot be safely copied)
+// and the private connectionString.
+func (s *AudioSource) copyForAPI() *AudioSource {
+	return &AudioSource{
+		ID:           s.ID,
+		DisplayName:  s.DisplayName,
+		Type:         s.Type,
+		SafeString:   s.SafeString,
+		RegisteredAt: s.RegisteredAt,
+		IsActive:     s.IsActive,
+		LastSeen:     s.LastSeen,
+		TotalBytes:   s.TotalBytes,
+		ErrorCount:   s.ErrorCount,
+	}
 }
 
 // GetConnectionString returns the raw connection string for external use (e.g., FFmpeg input)

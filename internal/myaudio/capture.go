@@ -321,12 +321,8 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 		return
 	}
 
-	// Initialize the audio equalizer filter chain before any audio source starts.
-	// This must happen before RTSP goroutines and sound card capture to avoid
-	// a race where ApplyFilters() is called before the chain is ready.
-	if err := InitializeFilterChain(settings); err != nil {
-		GetLogger().Warn("error initializing filter chain", logger.Error(err))
-	}
+	// Filter chains are now initialized per-source during registration.
+	// No global InitializeFilterChain call needed.
 
 	// Initialize RTSP sources - the FFmpegManager will handle buffer initialization
 	if len(settings.Realtime.RTSP.Streams) > 0 {
@@ -679,9 +675,9 @@ func processAudioFrame(
 	}
 	// --- End Buffer Safety Handling ---
 
-	// Apply audio EQ filters if enabled (use the safe bufferToUse)
+	// Apply per-source audio EQ filters if enabled (use the safe bufferToUse)
 	if settings.Realtime.Audio.Equalizer.Enabled {
-		if eqErr := ApplyFilters(bufferToUse); eqErr != nil {
+		if eqErr := ApplySourceFilters(sourceID, bufferToUse); eqErr != nil {
 			log.Warn("error applying audio EQ filters", logger.Error(eqErr))
 			// Non-fatal, just log
 		}

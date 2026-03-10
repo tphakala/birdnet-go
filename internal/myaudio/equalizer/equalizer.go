@@ -15,7 +15,6 @@ package equalizer
 import (
 	"fmt"
 	"math"
-	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -418,49 +417,49 @@ func NewPeaking(sampleRate, frequency, widthHz, gain float64, passes int) (*Filt
 }
 
 // FilterChain represents a chain of filters to be applied in sequence.
+// Each chain is owned by a single audio source and accessed via atomic.Pointer,
+// so no internal locking is needed. Chains are built during construction
+// (AddFilter) and then used exclusively by a single processing goroutine
+// (ApplyBatch). Settings updates replace the entire chain atomically.
 type FilterChain struct {
 	filters []*Filter
-	mu      sync.RWMutex
+	log     logger.Logger
 }
 
 // NewFilterChain creates and returns a new FilterChain.
 func NewFilterChain() *FilterChain {
 	return &FilterChain{
-		filters: make([]*Filter, 0), // Initialize with empty slice of pointers
+		filters: make([]*Filter, 0),
+		log:     logger.Global().Module("audio").Module("equalizer"),
 	}
 }
 
 // AddFilter adds a new filter to the chain.
+// Must only be called during chain construction, before the chain is
+// stored in an AudioSource via SetFilterChain.
 func (fc *FilterChain) AddFilter(f *Filter) error {
 	if f == nil || f.IsZero() {
 		return fmt.Errorf("cannot add nil or uninitialized audio EQ filter")
 	}
-	fc.mu.Lock()
-	defer fc.mu.Unlock()
-
-	fc.filters = append(fc.filters, f) // Append pointer to filter
-
+	fc.filters = append(fc.filters, f)
 	return nil
 }
 
 // Length returns the number of filters in the chain.
 func (fc *FilterChain) Length() int {
-	fc.mu.RLock()
-	defer fc.mu.RUnlock()
 	return len(fc.filters)
 }
 
 // ApplyBatch applies all filters in the chain to a batch of input signals.
+// With per-source filter chains, each chain is dedicated to a single stream's
+// goroutine, so no locking is needed. Dynamic settings updates replace the
+// entire chain pointer atomically rather than mutating the filter slice.
 func (fc *FilterChain) ApplyBatch(input []float64) {
-	fc.mu.RLock()
-	defer fc.mu.RUnlock()
-
-	log := logger.Global().Module("audio").Module("equalizer")
 	for _, filter := range fc.filters {
 		if filter != nil {
 			filter.ApplyBatch(input)
 		} else {
-			log.Warn("encountered nil filter in audio EQ filter chain")
+			fc.log.Warn("encountered nil filter in audio EQ filter chain")
 		}
 	}
 }

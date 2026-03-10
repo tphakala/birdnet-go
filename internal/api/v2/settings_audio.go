@@ -38,8 +38,9 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 
 // handleEqualizerChange updates the audio filter chain when equalizer settings change
 func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
-	if err := myaudio.UpdateFilterChain(settings); err != nil {
-		return fmt.Errorf("failed to update audio filter chain: %w", err)
+	registry := myaudio.GetRegistry()
+	if err := registry.UpdateAllFilterChains(settings); err != nil {
+		return fmt.Errorf("failed to update audio filter chains: %w", err)
 	}
 	return nil
 }
