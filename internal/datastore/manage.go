@@ -268,6 +268,40 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 	return foundCorrectIndex && !foundIncorrectIndex, nil
 }
 
+// hasV2ImageCacheContaminationMySQL checks if the legacy image_caches table contains
+// a label_id column from the v2 schema. This happens when a fresh v2 install (which
+// creates image_caches with label_id NOT NULL) falls back to legacy mode. Legacy
+// AutoMigrate adds the correct index and scientific_name column but cannot remove
+// label_id, causing inserts to fail with MySQL error 1364.
+func hasV2ImageCacheContaminationMySQL(db *gorm.DB, dbName string) bool {
+	var count int64
+	if err := db.Raw(
+		"SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = ? AND table_name = 'image_caches' AND column_name = 'label_id'",
+		dbName,
+	).Scan(&count).Error; err != nil {
+		return false
+	}
+	return count > 0
+}
+
+// hasV2ImageCacheContaminationSQLite checks if the legacy image_caches table contains
+// a label_id column from the v2 schema. See hasV2ImageCacheContaminationMySQL for context.
+func hasV2ImageCacheContaminationSQLite(db *gorm.DB) bool {
+	type columnInfo struct {
+		Name string `gorm:"column:name"`
+	}
+	var columns []columnInfo
+	if err := db.Raw("PRAGMA table_info('image_caches')").Scan(&columns).Error; err != nil {
+		return false
+	}
+	for _, col := range columns {
+		if col.Name == "label_id" {
+			return true
+		}
+	}
+	return false
+}
+
 // performAutoMigration automates database migrations with error handling.
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
 func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
@@ -420,6 +454,10 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 			GetLogger().Error("Schema validation failed", logger.Error(enhancedErr))
 			return enhancedErr
 		}
+		if schemaCorrect && hasV2ImageCacheContaminationSQLite(db) {
+			schemaCorrect = false
+			GetLogger().Warn("Detected v2 column contamination (label_id) in legacy image_caches table, will recreate")
+		}
 	case "mysql":
 		// Need to extract dbName from connectionInfo for MySQL check
 		dbName := extractDBNameFromMySQLInfo(connectionInfo)
@@ -437,6 +475,10 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 
 				GetLogger().Error("Schema validation failed", logger.Error(enhancedErr))
 				return enhancedErr
+			}
+			if schemaCorrect && hasV2ImageCacheContaminationMySQL(db, dbName) {
+				schemaCorrect = false
+				GetLogger().Warn("Detected v2 column contamination (label_id) in legacy image_caches table, will recreate")
 			}
 		}
 	default:
