@@ -101,7 +101,7 @@ func TestE2EMessageFlow(t *testing.T) {
 
 			if !tt.expectCapture {
 				// Info/debug messages should be filtered out
-				time.Sleep(50 * time.Millisecond)
+				time.Sleep(100 * time.Millisecond)
 				events := config.MockTransport.GetEvents()
 				assert.Empty(t, events, "info/debug messages should not create Sentry events")
 				return

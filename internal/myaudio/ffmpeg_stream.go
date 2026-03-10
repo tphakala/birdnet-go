@@ -1117,12 +1117,18 @@ func (s *FFmpegStream) handleEarlyErrorDetection() error {
 // handleQuickExitError processes quick exit scenarios (process exits within processQuickExitTime)
 // and returns an appropriate error with error context extraction
 func (s *FFmpegStream) handleQuickExitError(startTime time.Time) error {
-	// Collect process exit info for diagnostics (cross-platform, privacy-safe)
+	// Collect process exit info for diagnostics (cross-platform, privacy-safe).
+	// Note: ProcessState is only populated after Wait() completes, which runs
+	// asynchronously. The -1/"unavailable" defaults are the honest values when
+	// Wait() hasn't finished yet.
 	exitCode := -1
 	processState := "unavailable"
-	if s.cmd != nil && s.cmd.ProcessState != nil {
-		exitCode = s.cmd.ProcessState.ExitCode()
-		processState = s.cmd.ProcessState.String() // e.g. "signal: killed" or "exit status 1"
+	s.cmdMu.Lock()
+	cmd := s.cmd
+	s.cmdMu.Unlock()
+	if cmd != nil && cmd.ProcessState != nil {
+		exitCode = cmd.ProcessState.ExitCode()
+		processState = cmd.ProcessState.String() // e.g. "signal: killed" or "exit status 1"
 	}
 
 	// Get stderr output safely

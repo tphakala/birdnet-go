@@ -247,10 +247,21 @@ func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioVa
 		fileSizeBytes = info.Size()
 	}
 
-	// Build a structured error with file state context for Sentry diagnostics
+	// Build a structured error with file state context for Sentry diagnostics.
+	// Map lastResult.Error to a sanitized sentinel to avoid leaking raw ffprobe
+	// stderr (which can contain file paths) into telemetry.
 	baseErr := ErrValidationFailed
 	if lastResult != nil && lastResult.Error != nil {
-		baseErr = lastResult.Error
+		switch {
+		case errors.Is(lastResult.Error, ErrAudioFileEmpty):
+			baseErr = ErrAudioFileEmpty
+		case errors.Is(lastResult.Error, ErrAudioFileTooSmall):
+			baseErr = ErrAudioFileTooSmall
+		case errors.Is(lastResult.Error, ErrAudioFileIncomplete):
+			baseErr = ErrAudioFileIncomplete
+		case errors.Is(lastResult.Error, ErrAudioFileInvalid):
+			baseErr = ErrAudioFileInvalid
+		}
 	}
 	exhaustionErr := errors.New(baseErr).
 		Component("myaudio").
