@@ -89,6 +89,14 @@ const (
 const (
 	// minWindowsPathLen is the minimum length for a Windows drive path (e.g., "C:")
 	minWindowsPathLen = 2
+
+	// stacktracePathSegments is the number of trailing path segments preserved by
+	// AnonymizeStacktracePath for debugging context (e.g., "telemetry/sentry.go").
+	stacktracePathSegments = 2
+
+	// redactedPathPrefix is the prefix used to replace leading path segments in
+	// AnonymizeStacktracePath.
+	redactedPathPrefix = "<redacted>"
 )
 
 // Constants for user agent parsing
@@ -770,6 +778,25 @@ func AnonymizePath(path string) string {
 	}
 
 	return result
+}
+
+// AnonymizeStacktracePath strips absolute path prefixes from file paths used in
+// stacktraces, preserving only the last two segments for debugging context
+// (e.g., "/home/user/go/src/birdnet-go/internal/telemetry/sentry.go" becomes
+// "<redacted>/internal/telemetry"). Windows backslash separators are normalized
+// to forward slashes. Paths with two or fewer segments are returned as-is after
+// normalization, since they contain no sensitive directory information.
+func AnonymizeStacktracePath(path string) string {
+	if path == "" {
+		return path
+	}
+	// Normalize Windows paths
+	normalized := strings.ReplaceAll(path, windowsPathSeparator, unixPathSeparator)
+	parts := strings.Split(normalized, unixPathSeparator)
+	if len(parts) <= stacktracePathSegments {
+		return normalized // Short paths like "telemetry/sentry.go" are safe
+	}
+	return redactedPathPrefix + unixPathSeparator + strings.Join(parts[len(parts)-stacktracePathSegments:], unixPathSeparator)
 }
 
 // isBot checks if the user agent string indicates a bot, crawler, or spider

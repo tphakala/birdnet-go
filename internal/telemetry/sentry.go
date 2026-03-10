@@ -234,26 +234,11 @@ func scrubStacktrace(st *sentry.Stacktrace) {
 	}
 	for j := range st.Frames {
 		frame := &st.Frames[j]
-		frame.AbsPath = anonymizeFilePath(frame.AbsPath)
+		frame.AbsPath = privacy.AnonymizeStacktracePath(frame.AbsPath)
 		if strings.Contains(frame.Filename, "/") || strings.Contains(frame.Filename, "\\") {
-			frame.Filename = anonymizeFilePath(frame.Filename)
+			frame.Filename = privacy.AnonymizeStacktracePath(frame.Filename)
 		}
 	}
-}
-
-// anonymizeFilePath replaces directory paths with generic markers, preserving
-// the last two path segments for debugging context (e.g., "telemetry/sentry.go").
-func anonymizeFilePath(path string) string {
-	if path == "" {
-		return path
-	}
-	// Normalize Windows paths
-	normalized := strings.ReplaceAll(path, "\\", "/")
-	parts := strings.Split(normalized, "/")
-	if len(parts) <= 2 {
-		return normalized // Short paths like "telemetry/sentry.go" are safe
-	}
-	return "<redacted>/" + strings.Join(parts[len(parts)-2:], "/")
 }
 
 // applyPrivacyFiltersWithLogging applies privacy filters and logs what was removed
