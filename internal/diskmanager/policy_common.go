@@ -22,6 +22,9 @@ const deletionThrottleDelay = 100 * time.Millisecond
 // to prevent excessive I/O impact and allow other processes to use the disk
 const maxDeletionsPerRun = 1000
 
+// configKeyRetentionMaxUsage is the config key for the retention max usage percentage setting
+const configKeyRetentionMaxUsage = "retention.max_usage"
+
 // Package-level metrics with explicit synchronization
 var (
 	// Thread-safe diskMetrics with explicit synchronization
@@ -397,7 +400,7 @@ func categorizeFilePath(path string) string {
 //   - err: error if check failed (nil on success)
 func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error) {
 	// Parse the threshold percentage
-	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage, "retention.max_usage")
+	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage, configKeyRetentionMaxUsage)
 	if parseErr != nil {
 		return false, 0, parseErr
 	}
