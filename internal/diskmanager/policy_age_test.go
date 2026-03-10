@@ -11,25 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
-
-// Define variables for mocking
-var (
-	// Function variables for mocking
-	diskUsageFunc            = GetDiskUsage
-	parseRetentionPeriodFunc = conf.ParseRetentionPeriod
-)
-
-// Mock functions
-func mockGetDiskUsage(path string, usage float64) (float64, error) {
-	return usage, nil
-}
-
-func mockParseRetentionPeriod(period string, hours int) (int, error) {
-	return hours, nil
-}
 
 // MockDB is a mock implementation of the database interface for testing
 type MockDB struct{}
@@ -515,8 +498,8 @@ func deleteTestFile(file *FileInfo, deletedFiles map[string]bool, speciesTotalCo
 // simulateAgeBasedCleanup is a test-specific helper that simulates the core logic
 // of AgeBasedCleanup using real files in a temporary directory.
 func simulateAgeBasedCleanup(
-	quit <-chan struct{},
-	db Interface,
+	_ <-chan struct{},
+	_ Interface,
 	baseDir string,
 	testFiles []string,
 	deletedFiles map[string]bool,

@@ -13,14 +13,6 @@ import (
 	mock_diskmanager "github.com/tphakala/birdnet-go/internal/diskmanager/mocks"
 )
 
-// Original function signature references for testing
-var (
-	originalGetDiskUsage    = GetDiskUsage
-	originalGetAudioFiles   = GetAudioFiles
-	originalOsRemove        = osRemove
-	originalConfGetSettings = conf.GetSettings
-)
-
 // MockFileInfo implements os.FileInfo for testing
 type MockFileInfo struct {
 	FileName    string
@@ -818,9 +810,9 @@ func TestUsageBasedCleanupReturnValues(t *testing.T) {
 
 // testUsageBasedCleanupWithRealFiles is a test-specific implementation that uses real files
 func testUsageBasedCleanupWithRealFiles(
-	quitChan chan struct{},
+	_ chan struct{},
 	db Interface,
-	baseDir string,
+	_ string,
 	testFiles []string,
 	deletedFiles map[string]bool,
 	initialDiskUsage float64,

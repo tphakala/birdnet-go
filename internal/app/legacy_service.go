@@ -30,8 +30,11 @@ type LegacyService struct {
 // NewLegacyService creates a LegacyService that wraps a blocking function.
 func NewLegacyService(name string, fn LegacyFunc) *LegacyService {
 	return &LegacyService{
-		name: name,
-		fn:   fn,
+		name:    name,
+		fn:      fn,
+		quit:    make(chan struct{}),
+		errChan: make(chan error, 1),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -54,9 +57,6 @@ func (l *LegacyService) Start(_ context.Context) error {
 	if l.started.Swap(true) {
 		return fmt.Errorf("service %q: Start called twice", l.name)
 	}
-	l.quit = make(chan struct{})
-	l.errChan = make(chan error, 1)
-	l.done = make(chan struct{})
 	go func() {
 		l.result = l.fn(l.quit)
 		l.errChan <- l.result

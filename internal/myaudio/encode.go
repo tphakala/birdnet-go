@@ -14,12 +14,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// seekableBuffer extends bytes.Buffer to add a Seek method, making it compatible with io.WriteSeeker.
-type seekableBuffer struct {
-	bytes.Buffer
-	pos int64
-}
-
 // recordFileOperationError is a helper function to record file operation errors and return the enhanced error
 func recordFileOperationError(operation, format, errorType string, enhancedErr error) error {
 	if fileMetrics != nil {

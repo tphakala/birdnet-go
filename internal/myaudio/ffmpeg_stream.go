@@ -2129,17 +2129,6 @@ func (s *FFmpegStream) logStreamHealth() {
 	}
 }
 
-// isCircuitOpen checks if the circuit breaker is open
-// isCircuitOpenSilent checks if the circuit breaker is open without logging.
-// This is used by IsRestarting() to avoid log spam during health checks.
-func (s *FFmpegStream) isCircuitOpenSilent() bool {
-	s.circuitMu.Lock()
-	defer s.circuitMu.Unlock()
-
-	// Check if circuit was opened and we're still in cooldown
-	return !s.circuitOpenTime.IsZero() && time.Since(s.circuitOpenTime) < circuitBreakerCooldown
-}
-
 // circuitCooldownRemaining returns (remaining, true) if the circuit is open, or (0, false) otherwise.
 // This allows waiting only for the remaining cooldown period instead of the full duration.
 func (s *FFmpegStream) circuitCooldownRemaining() (time.Duration, bool) {
