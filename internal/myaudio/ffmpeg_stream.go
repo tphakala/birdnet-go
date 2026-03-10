@@ -1341,7 +1341,7 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 			filterLen-- // Truncate to even length; trailing byte remains unfiltered
 		}
 		if filterLen > 0 {
-			if eqErr := ApplyFilters(data[:filterLen]); eqErr != nil {
+			if eqErr := ApplySourceFilters(s.source.ID, data[:filterLen]); eqErr != nil {
 				getStreamLogger().Warn("error applying audio EQ filters",
 					logger.String("url", privacy.SanitizeStreamUrl(s.source.SafeString)),
 					logger.Error(eqErr),

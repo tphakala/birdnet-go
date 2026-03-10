@@ -89,11 +89,18 @@ func BytesToFloat64PCM16(samples []byte) []float64 {
 	}
 	sampleCount := len(samples) / 2
 	floatSamples := make([]float64, sampleCount)
-	// Iterate by sample count to safely ignore any trailing odd byte
-	for i := range sampleCount {
-		floatSamples[i] = float64(int16(binary.LittleEndian.Uint16(samples[i*2:]))) / pcm16ScaleFactor //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
-	}
+	BytesToFloat64PCM16Into(floatSamples, samples)
 	return floatSamples
+}
+
+// BytesToFloat64PCM16Into converts 16-bit PCM byte data into a pre-allocated float64 slice.
+// dst must have length >= len(samples)/2 (the function indexes dst[i] directly).
+// This avoids allocation when used with pooled buffers.
+func BytesToFloat64PCM16Into(dst []float64, samples []byte) {
+	sampleCount := len(samples) / 2
+	for i := range sampleCount {
+		dst[i] = float64(int16(binary.LittleEndian.Uint16(samples[i*2:]))) / pcm16ScaleFactor //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
+	}
 }
 
 // Float64ToBytesPCM16 converts normalized float64 [-1.0, 1.0] to 16-bit PCM bytes with clamping.

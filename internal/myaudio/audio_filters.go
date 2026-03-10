@@ -10,14 +10,26 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
-// Global variables for filter chain and mutex
+// Global variables for filter metrics
 var (
-	filterChain        *equalizer.FilterChain
-	filterMutex        sync.RWMutex
 	filterMetrics      *metrics.MyAudioMetrics // Global metrics instance for filter operations
 	filterMetricsMutex sync.RWMutex            // Mutex for thread-safe access to filterMetrics
 	filterMetricsOnce  sync.Once               // Ensures metrics are only set once
 )
+
+// maxFloat64PoolSize is the maximum number of float64 samples pooled.
+// 144000 = 48kHz * 3 seconds, which is the typical analysis buffer size.
+const maxFloat64PoolSize = 144000
+
+// float64Pool provides reusable float64 slices for audio filter processing.
+// Uses *[]float64 pointers with reslicing to handle variable-length FFmpeg reads,
+// following the s16BufferPool pattern from capture.go.
+var float64Pool = sync.Pool{
+	New: func() any {
+		buf := make([]float64, maxFloat64PoolSize)
+		return &buf
+	},
+}
 
 // Sentinel errors for myaudio operations
 var (
@@ -44,211 +56,67 @@ func getFilterMetrics() *metrics.MyAudioMetrics {
 	return filterMetrics
 }
 
-// InitializeFilterChain sets up the initial filter chain based on settings
-func InitializeFilterChain(settings *conf.Settings) error {
-	start := time.Now()
-
-	// Validate input
+// NewFilterChainFromSettings creates a new filter chain configured from settings.
+// Each audio source should have its own chain to avoid biquad state corruption.
+func NewFilterChainFromSettings(settings *conf.Settings) (*equalizer.FilterChain, error) {
 	if settings == nil {
-		enhancedErr := errors.Newf("settings parameter is nil").
+		return nil, errors.Newf("settings parameter is nil").
 			Component("myaudio").
 			Category(errors.CategoryValidation).
-			Context("operation", "initialize_filter_chain").
+			Context("operation", "new_filter_chain").
 			Build()
-
-		if m := getFilterMetrics(); m != nil {
-			m.RecordAudioProcessing("initialize_filters", "system", "error")
-			m.RecordAudioProcessingError("initialize_filters", "system", "nil_settings")
-		}
-		return enhancedErr
 	}
 
-	filterMutex.Lock()
-	defer filterMutex.Unlock()
-
-	// Create a new filter chain
-	filterChain = equalizer.NewFilterChain()
-	if filterChain == nil {
-		enhancedErr := errors.Newf("failed to create new filter chain").
+	chain := equalizer.NewFilterChain()
+	if chain == nil {
+		return nil, errors.Newf("failed to create new filter chain").
 			Component("myaudio").
 			Category(errors.CategorySystem).
-			Context("operation", "initialize_filter_chain").
+			Context("operation", "new_filter_chain").
 			Build()
-
-		if m := getFilterMetrics(); m != nil {
-			m.RecordAudioProcessing("initialize_filters", "system", "error")
-			m.RecordAudioProcessingError("initialize_filters", "system", "chain_creation_failed")
-		}
-		return enhancedErr
 	}
 
-	filterCount := 0
-	// If equalizer is enabled in settings, add filters
-	if settings.Realtime.Audio.Equalizer.Enabled {
-		for i, filterConfig := range settings.Realtime.Audio.Equalizer.Filters {
-			// Create and add each filter
-			filter, err := createFilter(filterConfig, float64(conf.SampleRate))
-			if err != nil {
-				// Skip disabled filters (not an error condition)
-				if errors.Is(err, ErrFilterDisabled) {
-					continue
-				}
+	if !settings.Realtime.Audio.Equalizer.Enabled {
+		return chain, nil
+	}
 
-				enhancedErr := errors.New(err).
-					Component("myaudio").
-					Category(errors.CategoryConfiguration).
-					Context("operation", "initialize_filter_chain").
-					Context("filter_index", i).
-					Context("filter_type", filterConfig.Type).
-					Context("filter_frequency", filterConfig.Frequency).
-					Build()
-
-				if m := getFilterMetrics(); m != nil {
-					m.RecordAudioProcessing("initialize_filters", "system", "error")
-					m.RecordAudioProcessingError("initialize_filters", "system", "filter_creation_failed")
-				}
-				return enhancedErr
+	for i, filterConfig := range settings.Realtime.Audio.Equalizer.Filters {
+		filter, err := createFilter(filterConfig, float64(conf.SampleRate))
+		if err != nil {
+			if errors.Is(err, ErrFilterDisabled) {
+				continue
 			}
-			if filter != nil {
-				if err := filterChain.AddFilter(filter); err != nil {
-					enhancedErr := errors.New(err).
-						Component("myaudio").
-						Category(errors.CategorySystem).
-						Context("operation", "initialize_filter_chain").
-						Context("filter_index", i).
-						Context("filter_type", filterConfig.Type).
-						Build()
-
-					if m := getFilterMetrics(); m != nil {
-						m.RecordAudioProcessing("initialize_filters", "system", "error")
-						m.RecordAudioProcessingError("initialize_filters", "system", "filter_add_failed")
-					}
-					return enhancedErr
-				}
-				filterCount++
-			}
+			return nil, errors.New(err).
+				Component("myaudio").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "new_filter_chain").
+				Context("filter_index", i).
+				Context("filter_type", filterConfig.Type).
+				Context("filter_frequency", filterConfig.Frequency).
+				Build()
 		}
-	}
-
-	// Record successful initialization
-	if m := getFilterMetrics(); m != nil {
-		duration := time.Since(start).Seconds()
-		m.RecordAudioProcessing("initialize_filters", "system", "success")
-		m.RecordAudioProcessingDuration("initialize_filters", "system", duration)
-	}
-
-	return nil
-}
-
-// UpdateFilterChain updates the filter chain based on new settings
-func UpdateFilterChain(settings *conf.Settings) error {
-	start := time.Now()
-
-	// Validate input
-	if settings == nil {
-		enhancedErr := errors.Newf("settings parameter is nil").
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "update_filter_chain").
-			Build()
-
-		if m := getFilterMetrics(); m != nil {
-			m.RecordAudioProcessing("update_filters", "system", "error")
-			m.RecordAudioProcessingError("update_filters", "system", "nil_settings")
-		}
-		return enhancedErr
-	}
-
-	// Lock the mutex to ensure thread-safety
-	filterMutex.Lock()
-	defer filterMutex.Unlock()
-
-	// Create a new filter chain
-	newChain := equalizer.NewFilterChain()
-	if newChain == nil {
-		enhancedErr := errors.Newf("failed to create new filter chain for update").
-			Component("myaudio").
-			Category(errors.CategorySystem).
-			Context("operation", "update_filter_chain").
-			Build()
-
-		if m := getFilterMetrics(); m != nil {
-			m.RecordAudioProcessing("update_filters", "system", "error")
-			m.RecordAudioProcessingError("update_filters", "system", "chain_creation_failed")
-		}
-		return enhancedErr
-	}
-
-	filterCount := 0
-	// If equalizer is enabled in settings, add filters
-	if settings.Realtime.Audio.Equalizer.Enabled {
-		// Iterate through each filter configuration
-		for i, filterConfig := range settings.Realtime.Audio.Equalizer.Filters {
-			// Create a new filter based on the configuration
-			filter, err := createFilter(filterConfig, float64(conf.SampleRate))
-			if err != nil {
-				// Skip disabled filters (not an error condition)
-				if errors.Is(err, ErrFilterDisabled) {
-					continue
-				}
-
-				enhancedErr := errors.New(err).
+		if filter != nil {
+			if err := chain.AddFilter(filter); err != nil {
+				return nil, errors.New(err).
 					Component("myaudio").
-					Category(errors.CategoryConfiguration).
-					Context("operation", "update_filter_chain").
+					Category(errors.CategorySystem).
+					Context("operation", "new_filter_chain").
 					Context("filter_index", i).
 					Context("filter_type", filterConfig.Type).
 					Build()
-
-				if m := getFilterMetrics(); m != nil {
-					m.RecordAudioProcessing("update_filters", "system", "error")
-					m.RecordAudioProcessingError("update_filters", "system", "filter_creation_failed")
-				}
-				return enhancedErr
-			}
-			// If filter was successfully created, add it to the new chain
-			if filter != nil {
-				if err := newChain.AddFilter(filter); err != nil {
-					enhancedErr := errors.New(err).
-						Component("myaudio").
-						Category(errors.CategorySystem).
-						Context("operation", "update_filter_chain").
-						Context("filter_index", i).
-						Context("filter_type", filterConfig.Type).
-						Build()
-
-					if m := getFilterMetrics(); m != nil {
-						m.RecordAudioProcessing("update_filters", "system", "error")
-						m.RecordAudioProcessingError("update_filters", "system", "filter_add_failed")
-					}
-					return enhancedErr
-				}
-				filterCount++
 			}
 		}
 	}
 
-	// Replace the old filter chain with the new one
-	filterChain = newChain
-
-	// Record successful update
-	if m := getFilterMetrics(); m != nil {
-		duration := time.Since(start).Seconds()
-		m.RecordAudioProcessing("update_filters", "system", "success")
-		m.RecordAudioProcessingDuration("update_filters", "system", duration)
-	}
-
-	return nil
+	return chain, nil
 }
 
 // createFilter creates a single filter based on the configuration
 func createFilter(config conf.EqualizerFilter, sampleRate float64) (*equalizer.Filter, error) {
-	// If passes is 0 or less, return error indicating filter is disabled
 	if config.Passes <= 0 {
 		return nil, ErrFilterDisabled
 	}
 
-	// Create different types of filters based on the configuration
 	switch config.Type {
 	case "LowPass":
 		return equalizer.NewLowPass(sampleRate, config.Frequency, config.Q, config.Passes)
@@ -277,80 +145,111 @@ func createFilter(config conf.EqualizerFilter, sampleRate float64) (*equalizer.F
 	}
 }
 
-// ApplyFilters applies the current filter chain to a byte slice of audio samples
-func ApplyFilters(samples []byte) error {
+// ApplySourceFilters applies the given source's filter chain to audio samples.
+// Each source has its own filter chain with independent biquad state, so
+// concurrent calls for different sources are safe without synchronization.
+func ApplySourceFilters(sourceID string, samples []byte) error {
 	start := time.Now()
 
 	// Validate input
 	if len(samples) == 0 {
-		enhancedErr := errors.Newf("empty samples provided for filter application").
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "apply_filters").
-			Context("sample_size", 0).
-			Build()
-
 		if m := getFilterMetrics(); m != nil {
 			m.RecordAudioProcessing("apply_filters", "unknown", "error")
 			m.RecordAudioProcessingError("apply_filters", "unknown", "empty_samples")
 		}
-		return enhancedErr
-	}
-
-	if len(samples)%2 != 0 {
-		enhancedErr := errors.Newf("invalid sample length: %d bytes, must be even for 16-bit samples", len(samples)).
+		return errors.Newf("empty samples provided for filter application").
 			Component("myaudio").
 			Category(errors.CategoryValidation).
 			Context("operation", "apply_filters").
-			Context("sample_size", len(samples)).
+			Context("source_id", sourceID).
+			Context("sample_size", 0).
 			Build()
+	}
 
+	if len(samples)%2 != 0 {
 		if m := getFilterMetrics(); m != nil {
 			m.RecordAudioProcessing("apply_filters", "filter", "error")
 			m.RecordAudioProcessingError("apply_filters", "filter", "invalid_sample_length")
 			m.RecordAudioDataValidationError("filter", "alignment")
 		}
-		return enhancedErr
+		return errors.Newf("invalid sample length: %d bytes, must be even for 16-bit samples", len(samples)).
+			Component("myaudio").
+			Category(errors.CategoryValidation).
+			Context("operation", "apply_filters").
+			Context("source_id", sourceID).
+			Context("sample_size", len(samples)).
+			Build()
 	}
 
-	filterMutex.RLock()
-	defer filterMutex.RUnlock()
-
-	// If no filter chain or no filters configured, return early (no-op).
-	// A nil chain is functionally equivalent to an empty chain.
-	if filterChain == nil || filterChain.Length() == 0 {
+	// Look up the source's filter chain
+	registry := GetRegistry()
+	source, ok := registry.GetSourceByID(sourceID)
+	if !ok || source == nil {
+		// Source not found — no-op (source may have been removed)
 		if m := getFilterMetrics(); m != nil {
 			duration := time.Since(start).Seconds()
-			m.RecordAudioProcessing("apply_filters", "filter", "success")
+			m.RecordAudioProcessing("apply_filters", "filter", "skipped")
 			m.RecordAudioProcessingDuration("apply_filters", "filter", duration)
 		}
 		return nil
 	}
 
-	// Convert byte slice to float64 slice
-	floatSamples := BytesToFloat64PCM16(samples)
-	sampleCount := len(floatSamples)
+	chain := source.GetFilterChain() // atomic load — lock-free
+	if chain == nil || chain.Length() == 0 {
+		// No filters configured — record as skipped
+		if m := getFilterMetrics(); m != nil {
+			duration := time.Since(start).Seconds()
+			m.RecordAudioProcessing("apply_filters", "filter", "skipped")
+			m.RecordAudioProcessingDuration("apply_filters", "filter", duration)
+		}
+		return nil
+	}
 
-	// Apply filters to the float samples in batch
-	filterChain.ApplyBatch(floatSamples)
+	// Convert bytes to float64 using pooled buffer
+	sampleCount := len(samples) / 2
+	var floatSamples []float64
+	var bufPtr *[]float64
+	pooled := false
 
-	// Convert back to byte slice with SIMD-accelerated clamping
+	if sampleCount <= maxFloat64PoolSize {
+		bufPtr = float64Pool.Get().(*[]float64) //nolint:forcetypeassert // pool always returns *[]float64
+		floatSamples = (*bufPtr)[:sampleCount]
+		pooled = true
+	} else {
+		floatSamples = make([]float64, sampleCount)
+	}
+
+	BytesToFloat64PCM16Into(floatSamples, samples)
+
+	// Apply filters (each source's chain has independent biquad state)
+	chain.ApplyBatch(floatSamples)
+
+	// Convert back to bytes with SIMD-accelerated clamping
 	if err := Float64ToBytesPCM16(floatSamples, samples); err != nil {
-		enhancedErr := errors.New(err).
-			Component("myaudio").
-			Category(errors.CategorySystem).
-			Context("operation", "apply_filters").
-			Context("sample_count", sampleCount).
-			Build()
-
+		if pooled {
+			*bufPtr = (*bufPtr)[:cap(*bufPtr)]
+			float64Pool.Put(bufPtr) //nolint:staticcheck // SA6002: sync.Pool works with slices
+		}
 		if m := getFilterMetrics(); m != nil {
 			m.RecordAudioProcessing("apply_filters", "filter", "error")
 			m.RecordAudioProcessingError("apply_filters", "filter", "pcm16_conversion_failed")
 		}
-		return enhancedErr
+		return errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "apply_filters").
+			Context("source_id", sourceID).
+			Context("sample_count", sampleCount).
+			Build()
 	}
 
-	// Record successful filter application
+	// Return buffer to pool
+	if pooled {
+		*bufPtr = (*bufPtr)[:cap(*bufPtr)]
+		float64Pool.Put(bufPtr) //nolint:staticcheck // SA6002: sync.Pool works with slices
+	}
+
+	// Record success
 	if m := getFilterMetrics(); m != nil {
 		duration := time.Since(start).Seconds()
 		m.RecordAudioProcessing("apply_filters", "filter", "success")
