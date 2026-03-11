@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sort"
 	"strconv"
@@ -139,6 +140,10 @@ type Datastore struct {
 	// Used for display purposes in analytics and summary endpoints.
 	commonNameMap map[string]string
 
+	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
+	// Populated from 3-part label format "ScientificName_CommonName_SpeciesCode".
+	speciesCodeMap map[string]string
+
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
 	dbstatAvailable int32
@@ -238,18 +243,26 @@ func New(cfg *Config) (*Datastore, error) {
 	}
 
 	// Build species name maps from labels.
-	// Labels are in "ScientificName_CommonName" format (e.g., "Turdus merula_Eurasian Blackbird").
+	// Labels are in "ScientificName_CommonName[_SpeciesCode]" format
+	// (e.g., "Turdus merula_Eurasian Blackbird_eurbla1").
 	// See issue #1907 for context on speciesMap usage.
 	speciesMap := make(map[string]string)
 	commonNameMap := make(map[string]string)
+	speciesCodeMap := make(map[string]string)
 	for _, label := range cfg.Labels {
-		parts := strings.SplitN(label, "_", 2)
-		if len(parts) == 2 {
+		parts := strings.SplitN(label, "_", 3)
+		if len(parts) >= 2 {
 			scientificName := strings.TrimSpace(parts[0])
 			commonName := strings.TrimSpace(parts[1])
 			if commonName != "" && scientificName != "" {
 				speciesMap[strings.ToLower(commonName)] = scientificName
 				commonNameMap[scientificName] = commonName
+				if len(parts) == 3 {
+					code := strings.TrimSpace(parts[2])
+					if code != "" {
+						speciesCodeMap[scientificName] = code
+					}
+				}
 			}
 		}
 	}
@@ -272,6 +285,7 @@ func New(cfg *Config) (*Datastore, error) {
 		avesClassID:        avesClassID,
 		speciesMap:         speciesMap,
 		commonNameMap:      commonNameMap,
+		speciesCodeMap:     speciesCodeMap,
 		dbCounters:         dbCounters,
 	}, nil
 }
@@ -946,6 +960,7 @@ func (ds *Datastore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 		note := datastore.Note{
 			ScientificName: sciName,
 			CommonName:     commonName,
+			SpeciesCode:    ds.speciesCodeMap[sciName],
 			Confidence:     r.MaxConfidence,
 			Date:           selectedDate,
 			Time:           latestTime.Format(time.TimeOnly),
@@ -2089,7 +2104,7 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 // ============================================================
 
 // parseDateRange parses start and end date strings to Unix timestamps.
-// Returns (0, 0) if no dates provided, meaning no date filtering.
+// When no dates are provided, returns (0, math.MaxInt64) to match all records.
 // The end time is exclusive (start of next day) to be used with < in queries.
 func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64, err error) {
 	if startDate != "" {
@@ -2107,6 +2122,13 @@ func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64
 		// End time is exclusive (start of next day) - use with < in queries
 		end = t.Add(24 * time.Hour).Unix()
 	}
+
+	// When no end date specified, use max int64 to include all records.
+	// Without this, WHERE detected_at >= 0 AND detected_at < 0 matches nothing.
+	if end == 0 {
+		end = math.MaxInt64
+	}
+
 	return start, end, nil
 }
 
@@ -2137,7 +2159,7 @@ func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDa
 		result = append(result, datastore.SpeciesSummaryData{
 			ScientificName: sciName,
 			CommonName:     commonName,
-			SpeciesCode:    "", // Not available in v2 schema
+			SpeciesCode:    ds.speciesCodeMap[sciName],
 			Count:          int(d.TotalDetections),
 			FirstSeen:      time.Unix(d.FirstDetection, 0).In(ds.timezone),
 			LastSeen:       time.Unix(d.LastDetection, 0).In(ds.timezone),

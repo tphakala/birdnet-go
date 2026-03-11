@@ -1089,3 +1089,105 @@ func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, preds, 2, "duplicate label should be collapsed to single prediction")
 }
+
+// TestGetTopBirdsData_SpeciesCode verifies that species codes from 3-part labels
+// are populated in the GetTopBirdsData response. Regression test for issue #2191.
+func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
+	labels := []string{
+		"Corvus corax_Common Raven_comrav",
+		"Turdus merula_Eurasian Blackbird_eurbla1",
+		"Passer domesticus_House Sparrow", // 2-part label without species code
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	dateStr := now.Format(time.DateOnly)
+
+	// Save detections for all three species
+	for _, sci := range []string{"Corvus corax", "Turdus merula", "Passer domesticus"} {
+		note := &datastore.Note{
+			Date:           dateStr,
+			Time:           now.Format(time.TimeOnly),
+			ScientificName: sci,
+			Confidence:     0.9,
+		}
+		require.NoError(t, ds.Save(note, nil))
+	}
+
+	topBirds, err := ds.GetTopBirdsData(dateStr, 0.0, 10)
+	require.NoError(t, err)
+	require.Len(t, topBirds, 3)
+
+	// Build lookup for easy assertion
+	codeByScientific := make(map[string]string)
+	for _, n := range topBirds {
+		codeByScientific[n.ScientificName] = n.SpeciesCode
+	}
+
+	assert.Equal(t, "comrav", codeByScientific["Corvus corax"], "3-part label should have species code")
+	assert.Equal(t, "eurbla1", codeByScientific["Turdus merula"], "3-part label should have species code")
+	assert.Empty(t, codeByScientific["Passer domesticus"], "2-part label should have empty species code")
+}
+
+// TestGetSpeciesSummaryData_NoDateFilter verifies that species summary returns
+// data when no date filter is provided. Regression test for issue #2191.
+func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
+	labels := []string{
+		"Corvus corax_Common Raven_comrav",
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	now := time.Now().UTC()
+
+	// Save a detection
+	note := &datastore.Note{
+		Date:           now.Format(time.DateOnly),
+		Time:           now.Format(time.TimeOnly),
+		ScientificName: "Corvus corax",
+		CommonName:     "Common Raven",
+		Confidence:     0.9,
+	}
+	require.NoError(t, ds.Save(note, nil))
+
+	// Query with no date filter — this was returning empty before the fix
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "", "")
+	require.NoError(t, err)
+	require.NotEmpty(t, summaries, "summary should return data when no date filter is provided")
+	assert.Equal(t, "Corvus corax", summaries[0].ScientificName)
+	assert.Equal(t, "Common Raven", summaries[0].CommonName)
+	assert.Equal(t, "comrav", summaries[0].SpeciesCode)
+	assert.Equal(t, 1, summaries[0].Count)
+}
+
+// TestGetSpeciesSummaryData_WithDateFilter verifies that species summary correctly
+// filters by date range.
+func TestGetSpeciesSummaryData_WithDateFilter(t *testing.T) {
+	labels := []string{
+		"Corvus corax_Common Raven_comrav",
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	// Save detection on a specific date
+	note := &datastore.Note{
+		Date:           "2024-06-15",
+		Time:           "10:00:00",
+		ScientificName: "Corvus corax",
+		CommonName:     "Common Raven",
+		Confidence:     0.9,
+	}
+	require.NoError(t, ds.Save(note, nil))
+
+	// Query with matching date range
+	summaries, err := ds.GetSpeciesSummaryData(t.Context(), "2024-06-15", "2024-06-15")
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, 1, summaries[0].Count)
+
+	// Query with non-matching date range
+	summaries, err = ds.GetSpeciesSummaryData(t.Context(), "2024-07-01", "2024-07-31")
+	require.NoError(t, err)
+	assert.Empty(t, summaries, "should return empty for dates with no detections")
+}
