@@ -409,7 +409,7 @@ func (m *MyAudioMetrics) initMetrics() error {
 		prometheus.HistogramOpts{
 			Name:    "myaudio_birdnet_processing_overrun_ratio",
 			Help:    "Ratio of elapsed processing time to effective buffer duration (>1.0 means overrun)",
-			Buckets: []float64{1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0},
+			Buckets: BirdNETOverrunRatioBuckets,
 		},
 		[]string{"source"},
 	)

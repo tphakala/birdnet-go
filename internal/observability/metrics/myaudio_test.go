@@ -107,11 +107,12 @@ func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 func TestRecordBirdNETProcessingOverrun(t *testing.T) {
 	t.Parallel()
 
-	registry := prometheus.NewRegistry()
-	m, err := NewMyAudioMetrics(registry)
-	require.NoError(t, err)
-
 	t.Run("records counter and histograms", func(t *testing.T) {
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
+
 		m.RecordBirdNETProcessingOverrun("mic_0", 3.5, 2.4)
 
 		// Counter incremented
@@ -138,22 +139,42 @@ func TestRecordBirdNETProcessingOverrun(t *testing.T) {
 	})
 
 	t.Run("multiple overruns accumulate", func(t *testing.T) {
-		source := "rtsp://camera1"
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
+
 		for range 5 {
-			m.RecordBirdNETProcessingOverrun(source, 4.0, 2.4)
+			m.RecordBirdNETProcessingOverrun("rtsp_camera1", 4.0, 2.4)
 		}
 
-		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues(source))
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("rtsp_camera1"))
 		assert.InDelta(t, 5.0, count, 0.01)
 	})
 
 	t.Run("zero buffer length skips ratio", func(t *testing.T) {
-		source := "mic_zero"
-		// Should not panic with zero buffer length
-		m.RecordBirdNETProcessingOverrun(source, 3.0, 0)
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
 
-		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues(source))
+		m.RecordBirdNETProcessingOverrun("mic_zero", 3.0, 0)
+
+		// Counter should still increment
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("mic_zero"))
 		assert.InDelta(t, 1.0, count, 0.01)
+
+		// Ratio histogram should have zero samples (skipped due to zero buffer length)
+		metricFamilies, err := registry.Gather()
+		require.NoError(t, err)
+		for _, mf := range metricFamilies {
+			if mf.GetName() == "myaudio_birdnet_processing_overrun_ratio" {
+				for _, metric := range mf.GetMetric() {
+					assert.Zero(t, metric.GetHistogram().GetSampleCount(),
+						"ratio histogram should have no samples when buffer length is zero")
+				}
+			}
+		}
 	})
 }
 
