@@ -23,6 +23,11 @@ import (
 // constant in the myaudio package.
 const tempFileExt = ".temp"
 
+// errUnrecognizedFilename is returned when a file's name does not match the
+// expected BirdNET naming pattern (species_confidence_timestamp). Such files
+// are silently skipped during cleanup rather than being reported as errors.
+var errUnrecognizedFilename = fmt.Errorf("unrecognized filename format")
+
 // allowedFileTypes is the list of file extensions that are allowed to be deleted
 var allowedFileTypes = []string{".wav", ".flac", ".aac", ".opus", ".mp3", ".m4a"}
 
@@ -176,6 +181,14 @@ func processFile(path string, info os.FileInfo, state *walkState) {
 	// Process valid file
 	fileInfo, err := parseFileInfo(path, info, state.allowedExts)
 	if err != nil {
+		// Files that don't match BirdNET naming pattern are expected in the
+		// recordings directory (e.g. user files, system files). Skip gracefully.
+		if errors.Is(err, errUnrecognizedFilename) {
+			GetLogger().Debug("Skipping file with unrecognized filename format",
+				logger.String("path", path),
+				logger.String("filename", fileName))
+			return
+		}
 		// Track first error and count without storing all errors
 		if state.firstParseError == nil {
 			state.firstParseError = err
@@ -333,14 +346,7 @@ func parseFileInfo(path string, info os.FileInfo, allowedExts []string) (FileInf
 
 	parts := strings.Split(nameWithoutExt, "_")
 	if len(parts) < 3 {
-		// Lightweight error with format guidance
-		descriptiveErr := errors.Newf("diskmanager: invalid filename format").
-			Component("diskmanager").
-			Category(errors.CategoryValidation).
-			Context("expected_format", "species_confidence_timestamp").
-			Context("filename", name).
-			Build()
-		return FileInfo{}, descriptiveErr
+		return FileInfo{}, errUnrecognizedFilename
 	}
 
 	// The species name might contain underscores, so we need to handle the last two parts separately

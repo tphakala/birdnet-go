@@ -1,23 +1,24 @@
 package diskmanager
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestInvalidFileNameErrorMessages tests that the error messages for invalid file names are detailed
 func TestInvalidFileNameErrorMessages(t *testing.T) {
-	// Test cases with invalid file names
+	// Test cases with invalid file names that have enough parts but bad data
 	testCases := []struct {
 		filename        string
 		expectedErrText string
 	}{
-		// Too few parts
-		{"bubo_bubo.wav", "diskmanager: invalid filename format"},
 		// This actually gets parsed as species="bubo", confidence="bubo", which fails at the confidence parsing step
 		{"bubo_bubo_80p.wav", "diskmanager: invalid confidence value"},
 
@@ -30,7 +31,6 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.filename, func(t *testing.T) {
-			// Create a mock FileInfo
 			mockInfo := &MockFileInfo{
 				FileName:    tc.filename,
 				FileSize:    1024,
@@ -39,10 +39,84 @@ func TestInvalidFileNameErrorMessages(t *testing.T) {
 				FileIsDir:   false,
 			}
 
-			// Call parseFileInfo and check the error message
 			_, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
 			require.Error(t, err, "Should return an error for invalid file name")
 			assert.Contains(t, err.Error(), tc.expectedErrText, "Error message should contain expected text")
+		})
+	}
+}
+
+// TestParseFileInfoReturnsUnrecognizedForBadFormat tests that files with too few
+// underscore-separated parts return errUnrecognizedFilename instead of an EnhancedError.
+func TestParseFileInfoReturnsUnrecognizedForBadFormat(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		filename string
+	}{
+		{"single word", "oout.aac"},
+		{"two parts only", "bubo_bubo.wav"},
+		{"no underscores", "recording.mp3"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mockInfo := &MockFileInfo{
+				FileName:    tc.filename,
+				FileSize:    1024,
+				FileMode:    0o644,
+				FileModTime: parseTime("20210102T150405Z"),
+				FileIsDir:   false,
+			}
+
+			_, err := parseFileInfo("/test/"+tc.filename, mockInfo, allowedFileTypes)
+			require.ErrorIs(t, err, errUnrecognizedFilename)
+
+			// Must NOT be an EnhancedError (which would be reported to Sentry)
+			var enhanced *errors.EnhancedError
+			assert.False(t, errors.As(err, &enhanced), "should not be an EnhancedError")
+		})
+	}
+}
+
+// TestProcessFileSkipsUnrecognizedFilenames verifies that files with unrecognized
+// naming patterns are skipped without incrementing the parse error count.
+func TestProcessFileSkipsUnrecognizedFilenames(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name     string
+		filename string
+	}{
+		{"issue 2199 - oout.aac", "oout.aac"},
+		{"two-part name", "some_file.wav"},
+		{"single word", "recording.mp3"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			state := &walkState{
+				ctx:            context.Background(),
+				allowedExts:    allowedFileTypes,
+				lockedSet:      make(map[string]struct{}),
+				maxParseErrors: 10,
+			}
+
+			mockInfo := &MockFileInfo{
+				FileName:  tc.filename,
+				FileSize:  512,
+				FileMode:  0o644,
+				FileIsDir: false,
+			}
+
+			processFile("/recordings/"+tc.filename, mockInfo, state)
+
+			assert.Empty(t, state.files, "unrecognized file should not be added")
+			assert.Equal(t, 0, state.parseErrorCount, "unrecognized file should not count as parse error")
+			assert.NoError(t, state.firstParseError, "unrecognized file should not set firstParseError")
 		})
 	}
 }
@@ -104,6 +178,52 @@ func TestParseFileInfoWithDurationSuffix(t *testing.T) {
 			assert.Equal(t, tt.confidence, info.Confidence)
 		})
 	}
+}
+
+// TestGetAudioFilesSkipsNonBirdNETFiles verifies that files in the recordings
+// directory that don't match the BirdNET naming pattern are silently skipped
+// without reporting errors (issue #2199).
+func TestGetAudioFilesSkipsNonBirdNETFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Valid BirdNET file
+	validFile := filepath.Join(tempDir, "bubo_bubo_80p_20210102T150405Z.wav")
+	require.NoError(t, os.WriteFile(validFile, []byte("audio"), 0o600))
+
+	// Non-BirdNET files that should be silently skipped
+	nonBirdNETFiles := []string{
+		"oout.aac",      // The exact file from issue #2199
+		"recording.mp3", // Single-word name
+		"my_notes.wav",  // Two-part name
+		"test.flac",     // Another single-word name
+	}
+	for _, name := range nonBirdNETFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, name), []byte("data"), 0o600))
+	}
+
+	mockDB := &MockDB{}
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+
+	require.NoError(t, err, "non-BirdNET files should not cause errors")
+	require.Len(t, files, 1)
+	assert.Equal(t, "bubo_bubo", files[0].Species)
+}
+
+// TestGetAudioFilesOnlyNonBirdNETFiles verifies that a directory containing
+// only non-BirdNET files returns nil without error (not a parse failure).
+func TestGetAudioFilesOnlyNonBirdNETFiles(t *testing.T) {
+	tempDir := t.TempDir()
+
+	nonBirdNETFiles := []string{"oout.aac", "notes.wav", "test.mp3"}
+	for _, name := range nonBirdNETFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(tempDir, name), []byte("data"), 0o600))
+	}
+
+	mockDB := &MockDB{}
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+
+	require.NoError(t, err, "directory with only non-BirdNET files should not error")
+	assert.Empty(t, files)
 }
 
 // TestGetAudioFilesContinuesOnError tests that GetAudioFiles continues processing after encountering invalid files
