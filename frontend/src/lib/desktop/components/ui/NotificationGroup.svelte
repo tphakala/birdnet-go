@@ -6,7 +6,11 @@
     NotificationGroup as NotificationGroupType,
     Notification,
   } from '$lib/utils/notifications';
-  import { sanitizeNotificationMessage, translateNotification } from '$lib/utils/notifications';
+  import {
+    sanitizeNotificationMessage,
+    translateNotification,
+    getDisplayableContext,
+  } from '$lib/utils/notifications';
   import { safeGet } from '$lib/utils/security';
   import {
     ChevronDown,
@@ -250,6 +254,13 @@
               <p class="text-xs text-[var(--color-base-content)]/80">
                 {sanitizeNotificationMessage(translateNotification(notification).message)}
               </p>
+              {#if getDisplayableContext(notification.metadata).length > 0}
+                <p class="text-xs text-[var(--color-base-content)]/50 mt-0.5 font-mono">
+                  {getDisplayableContext(notification.metadata)
+                    .map(c => `${c.key}: ${c.value}`)
+                    .join(' | ')}
+                </p>
+              {/if}
               <time
                 class="text-xs text-[var(--color-base-content)]/50 mt-1 block"
                 datetime={notification.timestamp}

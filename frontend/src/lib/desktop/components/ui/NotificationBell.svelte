@@ -15,6 +15,7 @@
     shouldShowNotification,
     sanitizeNotificationMessage,
     translateNotification,
+    getDisplayableContext,
     mapApiNotification,
     mapApiNotifications,
   } from '$lib/utils/notifications';
@@ -546,6 +547,13 @@
                   <p class="text-sm text-[var(--color-base-content)]/80 mt-1">
                     {sanitizeNotificationMessage(notification.message)}
                   </p>
+                  {#if getDisplayableContext(notification.metadata).length > 0}
+                    <p class="text-xs text-[var(--color-base-content)]/50 mt-1 font-mono">
+                      {getDisplayableContext(notification.metadata)
+                        .map(c => `${c.key}: ${c.value}`)
+                        .join(' | ')}
+                    </p>
+                  {/if}
                   <div class="flex items-center gap-2 mt-2">
                     {#if notification.component}
                       <span class="badge badge-sm badge-ghost">{notification.component}</span>

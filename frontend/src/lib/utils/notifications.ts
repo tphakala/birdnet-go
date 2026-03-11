@@ -383,6 +383,70 @@ export function translateNotification(notification: Notification): {
 }
 
 // ============================================================================
+// Notification Context Display
+// Extracts displayable context from notification metadata for error details
+// ============================================================================
+
+/** Internal metadata keys that should not be shown as context */
+const INTERNAL_METADATA_KEYS = new Set([
+  // Notification system internals
+  'note_id',
+  'error_count',
+  'first_occurrence',
+  'last_occurrence',
+  // Toast notification metadata
+  'isToast',
+  'toastType',
+  'toastId',
+  'duration',
+  'action',
+  // Detection notification metadata
+  'is_new_species',
+  'species',
+  'scientific_name',
+  'confidence',
+  'location',
+  'days_since_first_seen',
+  // Stream worker metadata
+  'streamInfo',
+]);
+
+/**
+ * Extracts displayable context entries from notification metadata.
+ * Filters out internal keys (note_id, is_new_species, etc.) and returns
+ * remaining key-value pairs formatted for display.
+ *
+ * @param metadata - The notification metadata object
+ * @returns Array of {key, value} pairs for display, or empty array
+ */
+export function getDisplayableContext(
+  metadata: Record<string, unknown> | undefined
+): { key: string; value: string }[] {
+  if (!metadata) return [];
+
+  const entries: { key: string; value: string }[] = [];
+  for (const [key, value] of Object.entries(metadata)) {
+    if (
+      INTERNAL_METADATA_KEYS.has(key) ||
+      key.startsWith('bg_') ||
+      value === undefined ||
+      value === null
+    ) {
+      continue;
+    }
+    // Skip objects/arrays — only display scalar values
+    if (typeof value === 'object') {
+      continue;
+    }
+    entries.push({
+      key: key.replace(/_/g, ' '),
+      value: String(value),
+    });
+  }
+  return entries;
+}
+
+// ============================================================================
 // Notification Grouping Utilities
 // Groups similar notifications by title + component + type (ignoring message content)
 // ============================================================================
