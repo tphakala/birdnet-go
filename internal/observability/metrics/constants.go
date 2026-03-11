@@ -145,6 +145,10 @@ const (
 	PercentageFactor = 100.0
 )
 
+// BirdNET processing overrun ratio histogram buckets.
+// Values represent elapsed/buffer ratios where >1.0 means overrun.
+var BirdNETOverrunRatioBuckets = []float64{1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0}
+
 // String parsing constants.
 const (
 	// SplitPartsCount is the expected number of parts when splitting operation strings.

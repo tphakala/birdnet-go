@@ -104,6 +104,80 @@ func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 	}
 }
 
+func TestRecordBirdNETProcessingOverrun(t *testing.T) {
+	t.Parallel()
+
+	t.Run("records counter and histograms", func(t *testing.T) {
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
+
+		m.RecordBirdNETProcessingOverrun("mic_0", 3.5, 2.4)
+
+		// Counter incremented
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("mic_0"))
+		assert.InDelta(t, 1.0, count, 0.01)
+
+		// Verify histograms were observed by collecting all metrics from registry
+		metricFamilies, err := registry.Gather()
+		require.NoError(t, err)
+
+		var foundDuration, foundRatio bool
+		for _, mf := range metricFamilies {
+			switch mf.GetName() {
+			case "myaudio_birdnet_processing_overrun_duration_seconds":
+				foundDuration = true
+				assert.Positive(t, mf.GetMetric()[0].GetHistogram().GetSampleCount())
+			case "myaudio_birdnet_processing_overrun_ratio":
+				foundRatio = true
+				assert.Positive(t, mf.GetMetric()[0].GetHistogram().GetSampleCount())
+			}
+		}
+		assert.True(t, foundDuration, "duration histogram should be present")
+		assert.True(t, foundRatio, "ratio histogram should be present")
+	})
+
+	t.Run("multiple overruns accumulate", func(t *testing.T) {
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
+
+		for range 5 {
+			m.RecordBirdNETProcessingOverrun("rtsp_camera1", 4.0, 2.4)
+		}
+
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("rtsp_camera1"))
+		assert.InDelta(t, 5.0, count, 0.01)
+	})
+
+	t.Run("zero buffer length skips ratio", func(t *testing.T) {
+		t.Parallel()
+		registry := prometheus.NewRegistry()
+		m, err := NewMyAudioMetrics(registry)
+		require.NoError(t, err)
+
+		m.RecordBirdNETProcessingOverrun("mic_zero", 3.0, 0)
+
+		// Counter should still increment
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("mic_zero"))
+		assert.InDelta(t, 1.0, count, 0.01)
+
+		// Ratio histogram should have zero samples (skipped due to zero buffer length)
+		metricFamilies, err := registry.Gather()
+		require.NoError(t, err)
+		for _, mf := range metricFamilies {
+			if mf.GetName() == "myaudio_birdnet_processing_overrun_ratio" {
+				for _, metric := range mf.GetMetric() {
+					assert.Zero(t, metric.GetHistogram().GetSampleCount(),
+						"ratio histogram should have no samples when buffer length is zero")
+				}
+			}
+		}
+	})
+}
+
 func TestRecordBufferAllocationAttempt(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()
