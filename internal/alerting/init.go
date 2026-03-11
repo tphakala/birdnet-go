@@ -92,7 +92,6 @@ func Initialize(
 
 	log.Info("alerting engine initialized",
 		logger.Int("rules_loaded", len(engine.rules)))
-	at.ReportInitialized(len(engine.rules))
 
 	return engine, nil
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode"
 
 	"github.com/getsentry/sentry-go"
@@ -39,6 +40,24 @@ var (
 // ResourceSnapshotFunc is a callback for collecting resource metrics.
 // Set by the telemetry package to avoid circular imports.
 var ResourceSnapshotFunc func() map[string]any
+
+var (
+	lastDiskFullReport atomic.Int64                           // Unix timestamp of last disk-full report
+	diskFullCooldown   = int64(5 * time.Minute / time.Second) // 5 minutes between disk-full reports
+
+	// networkNoisePatterns are environmental network errors that indicate
+	// user infrastructure issues, not code bugs.
+	networkNoisePatterns = []string{
+		"no route to host",
+		"connection refused",
+		"connection reset by peer",
+		"server misbehaving", // DNS failure
+		"no such host",       // DNS failure
+		"network is unreachable",
+		"i/o timeout",
+		"tls handshake timeout",
+	}
+)
 
 // categoryOriginMap classifies error categories by their origin for telemetry tagging.
 var categoryOriginMap = map[ErrorCategory]string{
@@ -150,11 +169,32 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Add more filters here for other operational errors as needed
-	// Examples that could be added in future:
-	// - DNS resolution failures (user's network/config issue)
-	// - "connection refused" (service not running)
-	// - "no route to host" (network issue)
+	// Filter out network infrastructure errors (user's network/DNS issues)
+	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
+	case CategoryNetwork, CategoryMQTTConnection, CategoryRTSP, CategoryHTTP:
+		for _, pattern := range networkNoisePatterns {
+			if strings.Contains(errorMsg, pattern) {
+				return false
+			}
+		}
+	}
+
+	// Rate-limit disk-full errors — a single root cause creates cascading
+	// errors across many subsystems (database, FFmpeg, alerting, etc.)
+	if strings.Contains(errorMsg, "disk is full") ||
+		strings.Contains(errorMsg, "no space left on device") {
+		now := time.Now().Unix()
+		last := lastDiskFullReport.Load()
+		if now-last < diskFullCooldown {
+			return false // Suppress during cooldown
+		}
+		// Use CompareAndSwap to prevent concurrent errors from
+		// bypassing the cooldown (TOCTOU race)
+		if !lastDiskFullReport.CompareAndSwap(last, now) {
+			return false // Another goroutine won the race
+		}
+		// Allow this one through
+	}
 
 	return true // Report everything else
 }
@@ -221,8 +261,9 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Create exception with custom type (this is what Sentry displays as the title)
 		exception := sentry.Exception{
-			Type:  errorTitle,
-			Value: scrubbedMessage,
+			Type:       errorTitle,
+			Value:      scrubbedMessage,
+			Stacktrace: sentry.NewStacktrace(),
 		}
 		event.Exception = []sentry.Exception{exception}
 

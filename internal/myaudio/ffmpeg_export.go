@@ -419,7 +419,15 @@ func runFFmpegCommand(ffmpegPath string, pcmData []byte, tempFilePath string, se
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return fmt.Errorf("FFmpeg command timed out: %w", ctx.Err())
 		}
-		return fmt.Errorf("FFmpeg command failed: %w, stderr: %s", err, stderr.String())
+
+		// Extract exit code for telemetry
+		exitCode := -1
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+
+		return fmt.Errorf("FFmpeg command failed (exit_code=%d): %w, stderr: %s", exitCode, err, stderr.String())
 	}
 
 	// Return nil if everything succeeded

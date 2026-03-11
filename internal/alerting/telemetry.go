@@ -32,29 +32,6 @@ func NewAlertingTelemetry() *AlertingTelemetry {
 	return &AlertingTelemetry{}
 }
 
-// ReportInitialized reports that the alerting engine started successfully.
-func (at *AlertingTelemetry) ReportInitialized(rulesLoaded int) {
-	if at == nil {
-		return
-	}
-
-	sentry.WithScope(func(scope *sentry.Scope) {
-		scope.SetTag("component", telemetryComponent)
-		scope.SetTag("outcome", "initialized")
-		scope.SetFingerprint([]string{telemetryComponent, "initialized"})
-
-		scope.SetContext(telemetryComponent, map[string]any{
-			"rules_loaded": rulesLoaded,
-		})
-
-		telemetry.CaptureMessage(
-			fmt.Sprintf("Alerting engine initialized (%d rules)", rulesLoaded),
-			sentry.LevelInfo,
-			telemetryComponent,
-		)
-	})
-}
-
 // ReportInitFailed reports that the alerting engine failed to initialize.
 func (at *AlertingTelemetry) ReportInitFailed(errMsg string) {
 	if at == nil {
