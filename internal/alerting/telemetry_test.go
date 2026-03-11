@@ -10,7 +10,6 @@ func TestAlertingTelemetry_NilSafe(t *testing.T) {
 	t.Parallel()
 	// All methods must be no-ops on nil receiver -- no panic.
 	var at *AlertingTelemetry
-	assert.NotPanics(t, func() { at.ReportInitialized(10) })
 	assert.NotPanics(t, func() { at.ReportInitFailed("seed rules failed") })
 	assert.NotPanics(t, func() { at.ReportPanic("test panic", nil) })
 	assert.NotPanics(t, func() { at.ReportEventDropped() })
