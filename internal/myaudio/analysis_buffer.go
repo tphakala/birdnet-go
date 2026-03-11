@@ -387,6 +387,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 				m.RecordBufferWrite("analysis", sourceID, "success")
 				m.RecordBufferWriteDuration("analysis", sourceID, duration)
 				m.RecordBufferWriteBytes("analysis", sourceID, n)
+				m.RecordAudioDataSize(sourceID, n)
 			}
 
 			if n < len(data) {

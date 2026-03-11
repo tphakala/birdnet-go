@@ -167,6 +167,15 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	// get elapsed time
 	elapsedTime := time.Since(predictStart)
 
+	// Record inference duration and result count metrics
+	processMetricsMutex.RLock()
+	pm := processMetrics
+	processMetricsMutex.RUnlock()
+	if pm != nil {
+		pm.RecordAudioInferenceDuration(source, elapsedTime.Seconds())
+		pm.RecordBirdNETResults(source, len(results))
+	}
+
 	// DEBUG print all BirdNET results
 	if conf.Setting().BirdNET.Debug {
 		debugThreshold := float32(0) // set to 0 for now, maybe add a config option later
@@ -264,11 +273,15 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	// Note: No copy needed - ownership transfers to the queue consumer
 	select {
 	case birdnet.ResultsQueue <- resultsMessage:
-		// Results enqueued successfully
+		if pm != nil {
+			pm.RecordAudioQueueOperation(source, "enqueue", "success")
+		}
 	default:
 		log.Error("results queue is full",
 			logger.String("source", source))
-		// Queue is full
+		if pm != nil {
+			pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
+		}
 	}
 	return nil
 }
