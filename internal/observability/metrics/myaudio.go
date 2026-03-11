@@ -63,6 +63,11 @@ type MyAudioMetrics struct {
 	fileSizesTotal        *prometheus.CounterVec
 	audioFileInfoGauge    *prometheus.GaugeVec
 
+	// BirdNET processing buffer overrun metrics
+	birdnetProcessingOverrunsTotal   *prometheus.CounterVec
+	birdnetProcessingOverrunDuration *prometheus.HistogramVec
+	birdnetProcessingOverrunRatio    *prometheus.HistogramVec
+
 	// Audio processing metrics
 	audioProcessingTotal    *prometheus.CounterVec
 	audioProcessingDuration *prometheus.HistogramVec
@@ -382,6 +387,33 @@ func (m *MyAudioMetrics) initMetrics() error {
 		[]string{"format", "metric_type"}, // metric_type: sample_rate, channels, bit_depth, total_samples
 	)
 
+	// BirdNET processing buffer overrun metrics
+	m.birdnetProcessingOverrunsTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "myaudio_birdnet_processing_overruns_total",
+			Help: "Total number of BirdNET processing buffer overruns (inference exceeded effective buffer duration)",
+		},
+		[]string{"source"},
+	)
+
+	m.birdnetProcessingOverrunDuration = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_birdnet_processing_overrun_duration_seconds",
+			Help:    "Elapsed processing time when a buffer overrun occurred",
+			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount15), // 1ms to ~32s
+		},
+		[]string{"source"},
+	)
+
+	m.birdnetProcessingOverrunRatio = prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "myaudio_birdnet_processing_overrun_ratio",
+			Help:    "Ratio of elapsed processing time to effective buffer duration (>1.0 means overrun)",
+			Buckets: []float64{1.0, 1.25, 1.5, 2.0, 3.0, 5.0, 10.0},
+		},
+		[]string{"source"},
+	)
+
 	// Audio processing metrics
 	m.audioProcessingTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -510,6 +542,9 @@ func (m *MyAudioMetrics) initMetrics() error {
 		m.fileOperationErrors,
 		m.fileSizesTotal,
 		m.audioFileInfoGauge,
+		m.birdnetProcessingOverrunsTotal,
+		m.birdnetProcessingOverrunDuration,
+		m.birdnetProcessingOverrunRatio,
 		m.audioProcessingTotal,
 		m.audioProcessingDuration,
 		m.audioProcessingErrors,
@@ -656,6 +691,19 @@ func (m *MyAudioMetrics) RecordBufferUnderrun(bufferType, source string) {
 // RecordBufferWraparound records a buffer wraparound
 func (m *MyAudioMetrics) RecordBufferWraparound(bufferType, source string) {
 	m.bufferWraparoundsTotal.WithLabelValues(bufferType, source).Inc()
+}
+
+// BirdNET processing buffer overrun recording methods
+
+// RecordBirdNETProcessingOverrun records a BirdNET processing buffer overrun event.
+// elapsed is the actual processing duration in seconds.
+// bufferLen is the effective buffer duration in seconds.
+func (m *MyAudioMetrics) RecordBirdNETProcessingOverrun(source string, elapsedSeconds, bufferLenSeconds float64) {
+	m.birdnetProcessingOverrunsTotal.WithLabelValues(source).Inc()
+	m.birdnetProcessingOverrunDuration.WithLabelValues(source).Observe(elapsedSeconds)
+	if bufferLenSeconds > 0 {
+		m.birdnetProcessingOverrunRatio.WithLabelValues(source).Observe(elapsedSeconds / bufferLenSeconds)
+	}
 }
 
 // Analysis buffer specific recording methods

@@ -206,6 +206,14 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 			logger.Duration("buffer_length", effectiveBufferDuration),
 			logger.String("source", source))
 		recordBufferOverrun(elapsedTime, effectiveBufferDuration)
+
+		// Record Prometheus metrics for observability
+		processMetricsMutex.RLock()
+		m := processMetrics
+		processMetricsMutex.RUnlock()
+		if m != nil {
+			m.RecordBirdNETProcessingOverrun(source, elapsedTime.Seconds(), effectiveBufferDuration.Seconds())
+		}
 	}
 
 	// Get AudioSource struct from registry for the Results message

@@ -104,6 +104,59 @@ func BenchmarkRecordAudioConversionError_FmtSprintf(b *testing.B) {
 	}
 }
 
+func TestRecordBirdNETProcessingOverrun(t *testing.T) {
+	t.Parallel()
+
+	registry := prometheus.NewRegistry()
+	m, err := NewMyAudioMetrics(registry)
+	require.NoError(t, err)
+
+	t.Run("records counter and histograms", func(t *testing.T) {
+		m.RecordBirdNETProcessingOverrun("mic_0", 3.5, 2.4)
+
+		// Counter incremented
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues("mic_0"))
+		assert.InDelta(t, 1.0, count, 0.01)
+
+		// Verify histograms were observed by collecting all metrics from registry
+		metricFamilies, err := registry.Gather()
+		require.NoError(t, err)
+
+		var foundDuration, foundRatio bool
+		for _, mf := range metricFamilies {
+			switch mf.GetName() {
+			case "myaudio_birdnet_processing_overrun_duration_seconds":
+				foundDuration = true
+				assert.Positive(t, mf.GetMetric()[0].GetHistogram().GetSampleCount())
+			case "myaudio_birdnet_processing_overrun_ratio":
+				foundRatio = true
+				assert.Positive(t, mf.GetMetric()[0].GetHistogram().GetSampleCount())
+			}
+		}
+		assert.True(t, foundDuration, "duration histogram should be present")
+		assert.True(t, foundRatio, "ratio histogram should be present")
+	})
+
+	t.Run("multiple overruns accumulate", func(t *testing.T) {
+		source := "rtsp://camera1"
+		for range 5 {
+			m.RecordBirdNETProcessingOverrun(source, 4.0, 2.4)
+		}
+
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues(source))
+		assert.InDelta(t, 5.0, count, 0.01)
+	})
+
+	t.Run("zero buffer length skips ratio", func(t *testing.T) {
+		source := "mic_zero"
+		// Should not panic with zero buffer length
+		m.RecordBirdNETProcessingOverrun(source, 3.0, 0)
+
+		count := testutil.ToFloat64(m.birdnetProcessingOverrunsTotal.WithLabelValues(source))
+		assert.InDelta(t, 1.0, count, 0.01)
+	})
+}
+
 func TestRecordBufferAllocationAttempt(t *testing.T) {
 	// Create a new registry for testing
 	registry := prometheus.NewRegistry()
