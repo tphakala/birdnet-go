@@ -56,6 +56,7 @@ var (
 		"network is unreachable",
 		"i/o timeout",
 		"tls handshake timeout",
+		"eof", // Connection lost (e.g., MQTT broker disconnect)
 	}
 )
 

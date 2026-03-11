@@ -37,6 +37,11 @@ type client struct {
 	metrics           *metrics.MQTTMetrics
 	controlChan       chan string        // Channel for control signals
 	onConnectHandlers []OnConnectHandler // Handlers called on successful connection
+	// Reconnection backoff and error suppression state
+	reconnectAttempts  int       // consecutive failed reconnect attempts for backoff calculation
+	lastConnErrMsg     string    // last connection error message for deduplication
+	connErrCount       int       // count of consecutive identical connection errors
+	lastConnErrLogTime time.Time // when the repeated error was last logged
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
@@ -784,6 +789,13 @@ func (c *client) onConnect(client mqtt.Client) {
 		logger.String("client_id", c.config.ClientID))
 	c.metrics.UpdateConnectionStatus(true)
 
+	// Reset reconnection backoff state on successful connection
+	c.mu.Lock()
+	c.reconnectAttempts = 0
+	c.connErrCount = 0
+	c.lastConnErrMsg = ""
+	c.mu.Unlock()
+
 	// Publish MQTT connected alert event
 	alerting.TryPublish(&alerting.AlertEvent{
 		ObjectType: alerting.ObjectTypeIntegration,
@@ -829,19 +841,12 @@ func (c *client) onConnect(client mqtt.Client) {
 }
 
 func (c *client) onConnectionLost(client mqtt.Client, err error) {
-	// Enhance the connection lost error
-	enhancedErr := errors.New(err).
-		Component("mqtt").
-		Category(errors.CategoryMQTTConnection).
-		Context("broker", c.config.Broker).
-		Context("client_id", c.config.ClientID).
-		Context("operation", "connection_lost").
-		Build()
-
-	GetLogger().Error("Connection to MQTT broker lost",
+	// Connection loss is expected for long-running MQTT connections (EOF, network changes).
+	// Log as warning, not error, to avoid Sentry noise.
+	GetLogger().Warn("Connection to MQTT broker lost",
 		logger.String("broker", c.config.Broker),
 		logger.String("client_id", c.config.ClientID),
-		logger.Error(enhancedErr))
+		logger.Error(err))
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
 
@@ -878,8 +883,12 @@ func (c *client) startReconnectTimer() {
 		c.reconnectTimer.Stop()
 	}
 
-	reconnectDelay := c.config.ReconnectDelay
-	GetLogger().Info("Starting reconnect timer", logger.Duration("delay", reconnectDelay))
+	// Calculate delay with exponential backoff: baseDelay * 2^attempts, capped at MaxReconnectDelay
+	reconnectDelay := calculateBackoffDelay(c.config.ReconnectDelay, c.reconnectAttempts)
+
+	GetLogger().Info("Starting reconnect timer",
+		logger.Duration("delay", reconnectDelay),
+		logger.Int("attempt", c.reconnectAttempts+1))
 	c.reconnectTimer = time.AfterFunc(reconnectDelay, func() {
 		select {
 		case <-c.reconnectStop: // Check if disconnect was called before timer fired
@@ -914,15 +923,7 @@ func (c *client) reconnectWithBackoff() {
 
 	// Use connectWithOptions with isAutoReconnect=true to bypass cooldown check
 	if err := c.connectWithOptions(ctx, true); err != nil {
-		log.Error("Reconnect attempt failed", logger.Error(err))
-
-		// Extract error category for metrics
-		errorCategory := "generic"
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) {
-			errorCategory = enhancedErr.GetCategory()
-		}
-		c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")
+		c.handleReconnectFailure(log, err)
 
 		// Check if stopped *after* failed attempt before rescheduling
 		select {
@@ -930,14 +931,72 @@ func (c *client) reconnectWithBackoff() {
 			log.Info("Reconnect mechanism stopped after failed attempt, not rescheduling")
 			return
 		default:
-			// Schedule next attempt
-			c.startReconnectTimer() // Reschedule another attempt after delay
+			// Schedule next attempt with backoff
+			c.startReconnectTimer()
 		}
 	} else {
 		// Connection successful, logged by onConnect
 		log.Info("Reconnect successful")
-		// No need to call startReconnectTimer here, connection is established
 	}
+}
+
+// handleReconnectFailure processes a failed reconnect attempt, tracking attempts
+// for backoff and suppressing repeated identical errors.
+func (c *client) handleReconnectFailure(log logger.Logger, err error) {
+	errMsg := err.Error()
+
+	c.mu.Lock()
+	c.reconnectAttempts++
+	attempt := c.reconnectAttempts
+
+	// Check if this is the same error as last time
+	isSameError := c.lastConnErrMsg == errMsg
+	if isSameError {
+		c.connErrCount++
+	} else {
+		c.lastConnErrMsg = errMsg
+		c.connErrCount = 1
+		c.lastConnErrLogTime = time.Time{} // Reset to force immediate log
+	}
+
+	connErrCount := c.connErrCount
+	lastLogTime := c.lastConnErrLogTime
+	c.mu.Unlock()
+
+	// Determine whether to log this error
+	shouldLog := !isSameError || // Always log new/different errors
+		connErrCount == 1 || // Always log first occurrence
+		time.Since(lastLogTime) >= RepeatedErrorLogInterval // Periodic reminder
+
+	if shouldLog {
+		if connErrCount > 1 {
+			log.Warn("Reconnect attempt failed (repeated error)",
+				logger.Error(err),
+				logger.Int("attempt", attempt),
+				logger.Int("consecutive_same_errors", connErrCount))
+		} else {
+			log.Warn("Reconnect attempt failed",
+				logger.Error(err),
+				logger.Int("attempt", attempt))
+		}
+
+		c.mu.Lock()
+		c.lastConnErrLogTime = time.Now()
+		c.mu.Unlock()
+	} else {
+		log.Debug("Reconnect attempt failed (suppressed repeated error)",
+			logger.Error(err),
+			logger.Int("attempt", attempt),
+			logger.Int("consecutive_same_errors", connErrCount))
+	}
+
+	// Extract error category for metrics (always track, even when log is suppressed)
+	errorCategory := "generic"
+	var enhancedErr *errors.EnhancedError
+	if errors.As(err, &enhancedErr) {
+		errorCategory = enhancedErr.GetCategory()
+	}
+	c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")
 }
 
 // createTLSConfig creates a TLS configuration based on the client settings

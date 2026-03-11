@@ -31,7 +31,24 @@ const (
 	MinConnectTimeout = 500 * time.Millisecond
 	// ReconnectContextGrace is the additional time beyond ConnectTimeout for reconnect context
 	ReconnectContextGrace = 10 * time.Second
+	// MaxReconnectDelay is the maximum delay between reconnection attempts (backoff cap)
+	MaxReconnectDelay = 5 * time.Minute
+	// RepeatedErrorLogInterval controls how often repeated identical connection errors are logged
+	RepeatedErrorLogInterval = 5 * time.Minute
 )
+
+// calculateBackoffDelay computes the reconnect delay with exponential backoff.
+// The delay doubles with each attempt, capped at MaxReconnectDelay.
+func calculateBackoffDelay(baseDelay time.Duration, attempts int) time.Duration {
+	delay := baseDelay
+	for range attempts {
+		delay *= 2
+		if delay >= MaxReconnectDelay {
+			return MaxReconnectDelay
+		}
+	}
+	return delay
+}
 
 // durationToMillisUint safely converts a time.Duration to uint milliseconds.
 // Returns 0 for negative durations. This prevents integer overflow when

@@ -1275,3 +1275,164 @@ func TestTimeRoundingEdgeCase(t *testing.T) {
 		})
 	}
 }
+
+// TestCalculateBackoffDelay verifies exponential backoff delay calculation
+func TestCalculateBackoffDelay(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		baseDelay time.Duration
+		attempts  int
+		expected  time.Duration
+	}{
+		{
+			name:      "Zero attempts returns base delay",
+			baseDelay: 1 * time.Second,
+			attempts:  0,
+			expected:  1 * time.Second,
+		},
+		{
+			name:      "One attempt doubles delay",
+			baseDelay: 1 * time.Second,
+			attempts:  1,
+			expected:  2 * time.Second,
+		},
+		{
+			name:      "Two attempts quadruples delay",
+			baseDelay: 1 * time.Second,
+			attempts:  2,
+			expected:  4 * time.Second,
+		},
+		{
+			name:      "Three attempts gives 8x delay",
+			baseDelay: 1 * time.Second,
+			attempts:  3,
+			expected:  8 * time.Second,
+		},
+		{
+			name:      "Large attempts cap at MaxReconnectDelay",
+			baseDelay: 1 * time.Second,
+			attempts:  100,
+			expected:  MaxReconnectDelay,
+		},
+		{
+			name:      "Caps at boundary",
+			baseDelay: 1 * time.Second,
+			attempts:  20, // 2^20 seconds = ~1048576s, way past 5 min
+			expected:  MaxReconnectDelay,
+		},
+		{
+			name:      "Custom base delay",
+			baseDelay: 500 * time.Millisecond,
+			attempts:  1,
+			expected:  1 * time.Second,
+		},
+		{
+			name:      "Custom base delay caps correctly",
+			baseDelay: 2 * time.Minute,
+			attempts:  2, // 2min * 4 = 8min > MaxReconnectDelay (5min)
+			expected:  MaxReconnectDelay,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := calculateBackoffDelay(tt.baseDelay, tt.attempts)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHandleReconnectFailureErrorSuppression verifies that repeated identical
+// connection errors are suppressed after the first occurrence.
+func TestHandleReconnectFailureErrorSuppression(t *testing.T) {
+	t.Parallel()
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	config := DefaultConfig()
+	config.Broker = testExampleBroker
+	config.ClientID = testClientID
+
+	c := &client{
+		config:        config,
+		metrics:       metrics.MQTT,
+		reconnectStop: make(chan struct{}),
+	}
+
+	testLog := GetLogger().With(
+		logger.String("broker", config.Broker),
+		logger.String("client_id", config.ClientID))
+
+	testErr := errors.New("connection refused")
+
+	// First failure should set state
+	c.handleReconnectFailure(testLog, testErr)
+
+	c.mu.RLock()
+	assert.Equal(t, 1, c.reconnectAttempts, "First failure should increment attempts")
+	assert.Equal(t, testErr.Error(), c.lastConnErrMsg, "Should store error message")
+	assert.Equal(t, 1, c.connErrCount, "First occurrence count should be 1")
+	assert.False(t, c.lastConnErrLogTime.IsZero(), "Should record log time")
+	c.mu.RUnlock()
+
+	// Second failure with same error should increment count
+	c.handleReconnectFailure(testLog, testErr)
+
+	c.mu.RLock()
+	assert.Equal(t, 2, c.reconnectAttempts, "Second failure should increment attempts")
+	assert.Equal(t, 2, c.connErrCount, "Same error should increment count")
+	c.mu.RUnlock()
+
+	// Failure with different error should reset suppression state
+	differentErr := errors.New("no route to host")
+	c.handleReconnectFailure(testLog, differentErr)
+
+	c.mu.RLock()
+	assert.Equal(t, 3, c.reconnectAttempts, "Third failure should increment attempts")
+	assert.Equal(t, differentErr.Error(), c.lastConnErrMsg, "Should update to new error message")
+	assert.Equal(t, 1, c.connErrCount, "Different error should reset count to 1")
+	c.mu.RUnlock()
+}
+
+// TestOnConnectResetsBackoffState verifies that successful connection resets
+// all reconnection backoff state.
+func TestOnConnectResetsBackoffState(t *testing.T) {
+	t.Parallel()
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	config := DefaultConfig()
+	config.Broker = testExampleBroker
+	config.ClientID = testClientID
+
+	c := &client{
+		config:             config,
+		metrics:            metrics.MQTT,
+		reconnectStop:      make(chan struct{}),
+		reconnectAttempts:  5,
+		lastConnErrMsg:     "some error",
+		connErrCount:       3,
+		lastConnErrLogTime: time.Now(),
+	}
+
+	// Create a mock paho client that reports as connected
+	opts := paho.NewClientOptions()
+	opts.AddBroker(testExampleBroker)
+	opts.SetAutoReconnect(false)
+	mockClient := paho.NewClient(opts)
+
+	// Call onConnect (will fail to publish LWT since we're not really connected,
+	// but it should still reset backoff state)
+	c.onConnect(mockClient)
+
+	c.mu.RLock()
+	assert.Equal(t, 0, c.reconnectAttempts, "Should reset reconnect attempts")
+	assert.Equal(t, 0, c.connErrCount, "Should reset error count")
+	assert.Empty(t, c.lastConnErrMsg, "Should clear last error message")
+	c.mu.RUnlock()
+}
