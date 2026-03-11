@@ -21,14 +21,18 @@ const (
 	// MinValidAudioSize is the minimum size for a valid audio file (1KB)
 	MinValidAudioSize int64 = 1024
 
-	// MaxValidationAttempts is the maximum number of validation attempts
-	MaxValidationAttempts = 3
+	// MaxValidationAttempts is the maximum number of validation attempts.
+	// Set to 5 to accommodate slow storage (SD cards, network drives) on
+	// resource-constrained devices like Raspberry Pi / arm64 containers.
+	MaxValidationAttempts = 5
 
-	// ValidationRetryDelay is the delay between validation attempts
-	ValidationRetryDelay = 100 * time.Millisecond
+	// ValidationRetryDelay is the base delay between validation attempts.
+	// Increased from 100ms to 500ms to give slow storage enough time between retries.
+	ValidationRetryDelay = 500 * time.Millisecond
 
-	// FileStabilityCheckDuration is how long to wait to confirm file size is stable
-	FileStabilityCheckDuration = 50 * time.Millisecond
+	// FileStabilityCheckDuration is how long to wait to confirm file size is stable.
+	// Increased from 50ms to 200ms to handle slow I/O on SD cards and network drives.
+	FileStabilityCheckDuration = 200 * time.Millisecond
 
 	// FFprobeTimeout is the maximum time to wait for ffprobe validation
 	FFprobeTimeout = 3 * time.Second
