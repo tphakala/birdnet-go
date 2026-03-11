@@ -468,6 +468,11 @@ func (w *NotificationWorker) generateMessage(event events.ErrorEvent, priority P
 		templateName = "error_medium"
 	}
 
+	// Use context-aware template when event has context
+	if ctx := event.GetContext(); len(ctx) > 0 {
+		templateName = "error_with_context"
+	}
+
 	// Get template
 	w.templateMu.RLock()
 	tmpl, exists := w.templates[templateName]
