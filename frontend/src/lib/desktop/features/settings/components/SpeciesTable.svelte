@@ -243,7 +243,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each sortedSpecies as item (`${item.scientificName}_${item.commonName}`)}
+          {#each sortedSpecies as item, index (`${item.scientificName}_${item.commonName}_${index}`)}
             <tr
               class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
             >

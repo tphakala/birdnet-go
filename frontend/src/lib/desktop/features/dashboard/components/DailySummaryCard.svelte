@@ -1031,7 +1031,7 @@ Responsive Breakpoints:
 
           <!-- Species rows -->
           <div class="flex flex-col" style:gap="var(--grid-gap)">
-            {#each sortedData as item (item.scientific_name)}
+            {#each sortedData as item, index (`${item.scientific_name}_${index}`)}
               <div
                 class="flex items-center species-row"
                 class:new-species={item.isNew && !prefersReducedMotion}

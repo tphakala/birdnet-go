@@ -286,7 +286,7 @@
           </tr>
         </thead>
         <tbody>
-          {#each filteredSpecies as item (item)}
+          {#each filteredSpecies as item, index (`${item}_${index}`)}
             <tr
               class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
             >
@@ -379,7 +379,7 @@
           role="listbox"
           aria-label={t('settings.species.suggestions') || 'Species suggestions'}
         >
-          {#each filteredPredictions as prediction, idx (prediction)}
+          {#each filteredPredictions as prediction, idx (`${prediction}_${idx}`)}
             <button
               type="button"
               role="option"

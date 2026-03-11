@@ -140,7 +140,7 @@ Props:
 
     <!-- Card Content -->
     <div class="flex flex-wrap gap-3 p-4">
-      {#each displayDetections as detection (detection.source + detection.scientificName)}
+      {#each displayDetections as detection, index (`${detection.source}_${detection.scientificName}_${index}`)}
         {@const key = detection.source + detection.scientificName}
         <div
           class="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-300
