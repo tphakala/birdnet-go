@@ -319,10 +319,13 @@ func TestRefreshEntryFallbackToDBCache(t *testing.T) {
 	require.NoError(t, err, "Get should return stale data without error")
 	assert.Equal(t, "http://old.example.com/redpoll.jpg", img.URL, "Should return stale data initially")
 
-	// Wait for background refresh to complete
-	time.Sleep(500 * time.Millisecond)
+	// Poll for background refresh to complete (replaces fixed time.Sleep which was flaky in CI)
+	require.Eventually(t, func() bool {
+		img2, err := primaryCache.Get(species)
+		return err == nil && img2.URL == "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg"
+	}, 5*time.Second, 50*time.Millisecond, "Background refresh should update cache with wikimedia fallback URL")
 
-	// After refresh, the primary cache should now have the wikimedia image
+	// Verify full attribution after refresh
 	img2, err := primaryCache.Get(species)
 	require.NoError(t, err, "Get after refresh should succeed")
 	assert.Equal(t, "https://upload.wikimedia.org/Carduelis_flammea_CT6.jpg", img2.URL,
@@ -388,7 +391,10 @@ func TestRefreshEntryFallbackPolicyNone(t *testing.T) {
 	_, err := primaryCache.Get(species)
 	require.NoError(t, err)
 
-	time.Sleep(500 * time.Millisecond)
+	// Wait for background refresh goroutine to complete. Since policy is "none",
+	// no observable state change occurs (no fallback, no DB update), so we must
+	// use a fixed wait. 2s is generous for CI where the goroutine does minimal work.
+	time.Sleep(2 * time.Second)
 
 	// After refresh with policy "none", primary cache should NOT have wikimedia image
 	img, err := primaryCache.Get(species)
