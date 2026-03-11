@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode"
 
 	"github.com/getsentry/sentry-go"
@@ -39,6 +40,11 @@ var (
 // ResourceSnapshotFunc is a callback for collecting resource metrics.
 // Set by the telemetry package to avoid circular imports.
 var ResourceSnapshotFunc func() map[string]any
+
+var (
+	lastDiskFullReport atomic.Int64 // Unix timestamp of last disk-full report
+	diskFullCooldown   = int64(300) // 5 minutes between disk-full reports
+)
 
 // categoryOriginMap classifies error categories by their origin for telemetry tagging.
 var categoryOriginMap = map[ErrorCategory]string{
@@ -167,6 +173,23 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 				return false
 			}
 		}
+	}
+
+	// Rate-limit disk-full errors — a single root cause creates cascading
+	// errors across many subsystems (database, FFmpeg, alerting, etc.)
+	if strings.Contains(errorMsg, "disk is full") ||
+		strings.Contains(errorMsg, "no space left on device") {
+		now := time.Now().Unix()
+		last := lastDiskFullReport.Load()
+		if now-last < diskFullCooldown {
+			return false // Suppress during cooldown
+		}
+		// Use CompareAndSwap to prevent concurrent errors from
+		// bypassing the cooldown (TOCTOU race)
+		if !lastDiskFullReport.CompareAndSwap(last, now) {
+			return false // Another goroutine won the race
+		}
+		// Allow this one through
 	}
 
 	return true // Report everything else

@@ -105,3 +105,17 @@ func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 		Build()
 	assert.True(t, shouldReportToSentry(ee))
 }
+
+func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
+	// Not parallel — mutates package-level state
+	lastDiskFullReport.Store(0)
+	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+
+	ee1 := New(fmt.Errorf("database or disk is full")).
+		Component("datastore").Category(CategoryDatabase).Build()
+	ee2 := New(fmt.Errorf("database or disk is full")).
+		Component("myaudio").Category(CategorySystem).Build()
+
+	assert.True(t, shouldReportToSentry(ee1), "first disk-full should be reported")
+	assert.False(t, shouldReportToSentry(ee2), "second disk-full within cooldown should be suppressed")
+}
