@@ -528,7 +528,7 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 	})
 
 	// Bare v2-only tables that do NOT collide with legacy tables.
-	// Drop in reverse dependency order (children before parents) to avoid FK violations.
+	// Drop in reverse dependency order (children before parents).
 	// Table names use the OLD singular forms (migration_state, alert_history) because
 	// the orphaned tables were created by code with TableName() overrides.
 	orphanedTables := []string{
@@ -543,21 +543,39 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 		"detection_reviews",
 		"detection_predictions",
 		"detections",
-		// Reference tables (labels referenced by detections, so drop after)
+		// Labels before its reference tables (labels has FKs to ai_models, label_types, taxonomic_classes)
+		"labels",
 		"audio_sources",
 		"ai_models",
 		"taxonomic_classes",
 		"label_types",
-		"labels",
 		// Migration tracking
 		"migration_dirty_ids",
 		"migration_state",
 	}
 
-	for _, table := range orphanedTables {
-		if err := db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
-			reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
+	// Use db.Connection to pin all operations to a single pooled connection,
+	// ensuring SET FOREIGN_KEY_CHECKS applies to the same connection as the DROPs.
+	// FK checks must be disabled because preserved legacy tables (dynamic_thresholds,
+	// notification_histories, etc.) may have FK constraints pointing to orphaned tables.
+	if err := db.Connection(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			reportStartupError("mysql", "cleanupOrphanedTables_disableFK", err, database)
+			return err
 		}
+		for _, table := range orphanedTables {
+			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
+				reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
+			}
+		}
+
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
+			reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return
 	}
 
 	// Report successful cleanup

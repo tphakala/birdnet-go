@@ -181,18 +181,44 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 func seedOrphanedBareV2Tables(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	// Minimal DDL for v2-only tables that don't collide with legacy
+	// DDL for v2-only tables with FK constraints matching what GORM AutoMigrate creates.
+	// Reference tables must be created first, then tables that reference them.
+	// FK constraints are critical for reproducing the bug in #2194.
 	orphanedDDL := []string{
-		`CREATE TABLE labels (id BIGINT AUTO_INCREMENT PRIMARY KEY, scientific_name VARCHAR(255))`,
+		// Reference tables first (no FK dependencies)
 		`CREATE TABLE label_types (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50))`,
 		`CREATE TABLE taxonomic_classes (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100))`,
 		`CREATE TABLE ai_models (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100))`,
 		`CREATE TABLE audio_sources (id BIGINT AUTO_INCREMENT PRIMARY KEY, source_uri VARCHAR(500))`,
-		`CREATE TABLE detections (id BIGINT AUTO_INCREMENT PRIMARY KEY, label_id BIGINT)`,
-		`CREATE TABLE detection_predictions (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_comments (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
+		// Labels with FKs to reference tables
+		`CREATE TABLE labels (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			scientific_name VARCHAR(255),
+			model_id BIGINT, label_type_id BIGINT, taxonomic_class_id BIGINT,
+			CONSTRAINT fk_labels_model FOREIGN KEY (model_id) REFERENCES ai_models(id),
+			CONSTRAINT fk_labels_label_type FOREIGN KEY (label_type_id) REFERENCES label_types(id),
+			CONSTRAINT fk_labels_taxonomic_class FOREIGN KEY (taxonomic_class_id) REFERENCES taxonomic_classes(id)
+		)`,
+		// Detections with FKs to labels and ai_models
+		`CREATE TABLE detections (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			label_id BIGINT, model_id BIGINT,
+			CONSTRAINT fk_detections_label FOREIGN KEY (label_id) REFERENCES labels(id),
+			CONSTRAINT fk_detections_model FOREIGN KEY (model_id) REFERENCES ai_models(id)
+		)`,
+		// Detection children with FKs to detections
+		`CREATE TABLE detection_predictions (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			detection_id BIGINT, label_id BIGINT,
+			CONSTRAINT fk_predictions_detection FOREIGN KEY (detection_id) REFERENCES detections(id),
+			CONSTRAINT fk_predictions_label FOREIGN KEY (label_id) REFERENCES labels(id)
+		)`,
+		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT UNIQUE,
+			CONSTRAINT fk_reviews_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
+		`CREATE TABLE detection_comments (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+			CONSTRAINT fk_comments_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
+		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT UNIQUE,
+			CONSTRAINT fk_locks_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
 		// Old singular names from TableName() overrides
 		`CREATE TABLE migration_state (id BIGINT AUTO_INCREMENT PRIMARY KEY, state VARCHAR(50))`,
 		`CREATE TABLE migration_dirty_ids (id BIGINT AUTO_INCREMENT PRIMARY KEY)`,
@@ -205,6 +231,13 @@ func seedOrphanedBareV2Tables(t *testing.T, db *gorm.DB) {
 	for _, ddl := range orphanedDDL {
 		require.NoError(t, db.Exec(ddl).Error, "failed to create orphaned table: %s", ddl)
 	}
+
+	// Simulate v2 AutoMigrate contaminating a preserved legacy table:
+	// add a label_id column with FK to the orphaned labels table.
+	// This exercises the FK-toggle path where a non-dropped table references a dropped one.
+	require.NoError(t, db.Exec(
+		`ALTER TABLE dynamic_thresholds ADD COLUMN label_id BIGINT, ADD CONSTRAINT fk_dyn_thresh_label FOREIGN KEY (label_id) REFERENCES labels(id)`,
+	).Error, "failed to contaminate dynamic_thresholds with FK to labels")
 }
 
 // tableExists checks if a table exists in the given database.
@@ -411,13 +444,19 @@ func TestMySQL_StartupDetection_OrphanedV2WithLegacy_ReturnsLegacyMode(t *testin
 	assert.False(t, state.FreshInstall, "should not be a fresh install")
 	require.NoError(t, state.Error)
 
-	// Orphaned bare v2 tables should be cleaned up
-	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "detections"),
-		"orphaned detections should be cleaned up")
-	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "labels"),
-		"orphaned labels should be cleaned up")
+	// All orphaned bare v2 tables should be cleaned up
+	for _, table := range []string{
+		"labels", "label_types", "taxonomic_classes", "ai_models", "audio_sources",
+		"detections", "detection_predictions", "detection_reviews", "detection_comments", "detection_locks",
+		"alert_rules", "alert_conditions", "alert_actions", "alert_history",
+		"migration_state", "migration_dirty_ids",
+	} {
+		assert.False(t, tableExists(t, coexTestDB, coexTestDBName, table),
+			"orphaned %s should be cleaned up", table)
+	}
 
-	// Legacy tables should still be intact
+	// Legacy/preserved tables should still be intact (even though dynamic_thresholds
+	// had an FK pointing to the now-dropped labels table)
 	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "notes"),
 		"legacy notes should survive cleanup")
 	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "dynamic_thresholds"),
