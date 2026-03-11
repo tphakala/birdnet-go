@@ -7,15 +7,20 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// resetOverrunTracker resets the package-level overrun tracker to zero state.
+// resetOverrunTracker resets the package-level overrun tracker to zero state
+// and registers a t.Cleanup to restore it after the test completes.
 func resetOverrunTracker(t *testing.T) {
 	t.Helper()
-	overrunTracker.mu.Lock()
-	defer overrunTracker.mu.Unlock()
-	overrunTracker.overrunCount = 0
-	overrunTracker.maxElapsed = 0
-	overrunTracker.bufferLength = 0
-	overrunTracker.windowStart = time.Time{}
+	clearTracker := func() {
+		overrunTracker.mu.Lock()
+		defer overrunTracker.mu.Unlock()
+		overrunTracker.overrunCount = 0
+		overrunTracker.maxElapsed = 0
+		overrunTracker.bufferLength = 0
+		overrunTracker.windowStart = time.Time{}
+	}
+	clearTracker()
+	t.Cleanup(clearTracker)
 }
 
 func TestRecordBufferOverrun_CountsOverruns(t *testing.T) {
