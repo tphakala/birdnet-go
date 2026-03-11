@@ -229,6 +229,38 @@ func TestGetMountInfoFromPartitions_NoMatch(t *testing.T) {
 	}
 }
 
+func TestGroupPathsWithPartitions_FallbackForAccessiblePath(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a container environment: the path exists but no partition matches it
+	tempDir := t.TempDir()
+	partitions := []disk.PartitionStat{
+		{Device: "overlay", Mountpoint: "/mnt/nonexistent", Fstype: "overlay"},
+	}
+
+	groups := groupPathsWithPartitions([]string{tempDir}, partitions)
+
+	// The accessible path should still appear as a fallback group
+	require.Len(t, groups, 1)
+	assert.Equal(t, tempDir, groups[0].MountPoint)
+	assert.Empty(t, groups[0].Device)
+	assert.Empty(t, groups[0].Fstype)
+	assert.Equal(t, []string{tempDir}, groups[0].Paths)
+}
+
+func TestGroupPathsWithPartitions_SkipsInaccessiblePath(t *testing.T) {
+	t.Parallel()
+
+	// An inaccessible path with no matching partition should be skipped entirely
+	partitions := []disk.PartitionStat{
+		{Device: "overlay", Mountpoint: "/mnt/nonexistent", Fstype: "overlay"},
+	}
+
+	groups := groupPathsWithPartitions([]string{"/nonexistent/path/xyz/abc"}, partitions)
+
+	assert.Empty(t, groups)
+}
+
 func TestMountGroupFields(t *testing.T) {
 	t.Parallel()
 
