@@ -6,12 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 var (
@@ -25,7 +27,85 @@ const (
 	// Float32BufferSize is the number of float32 samples in a standard buffer
 	// For 16-bit audio: conf.BufferSize / 2 (bytes per sample) = 144384 samples
 	Float32BufferSize = conf.BufferSize / 2
+
+	// bufferOverrunReportCooldown is the tumbling window duration for aggregating overruns.
+	// Hardware constraints don't change dynamically, so 1 hour keeps max 24 events/day per device.
+	bufferOverrunReportCooldown = 1 * time.Hour
+
+	// bufferOverrunMinCount is the minimum number of overruns in a window before reporting.
+	bufferOverrunMinCount = 10
 )
+
+// bufferOverrunTracker tracks BirdNET processing buffer overruns using a tumbling window.
+// When the window expires and enough overruns have accumulated, a single Sentry event is sent.
+type bufferOverrunTracker struct {
+	mu           sync.Mutex
+	overrunCount int64
+	windowStart  time.Time
+	maxElapsed   time.Duration
+	bufferLength time.Duration
+}
+
+// overrunTracker is the package-level tracker instance.
+var overrunTracker bufferOverrunTracker
+
+// recordBufferOverrun records a buffer overrun event and reports to Sentry
+// when the tumbling window expires with enough accumulated overruns.
+func recordBufferOverrun(elapsed, bufferLen time.Duration) {
+	overrunTracker.mu.Lock()
+	defer overrunTracker.mu.Unlock()
+
+	now := time.Now()
+
+	// Initialize window on first overrun
+	if overrunTracker.windowStart.IsZero() {
+		overrunTracker.windowStart = now
+	}
+
+	// Check if window has expired
+	if now.Sub(overrunTracker.windowStart) >= bufferOverrunReportCooldown {
+		// Window expired — report if threshold met
+		if overrunTracker.overrunCount >= bufferOverrunMinCount {
+			reportBufferOverruns(
+				overrunTracker.overrunCount,
+				overrunTracker.maxElapsed,
+				overrunTracker.bufferLength,
+				now.Sub(overrunTracker.windowStart),
+			)
+		}
+		// Reset window regardless of whether we reported
+		overrunTracker.overrunCount = 0
+		overrunTracker.maxElapsed = 0
+		overrunTracker.windowStart = now
+	}
+
+	// Record this overrun
+	overrunTracker.overrunCount++
+	if elapsed > overrunTracker.maxElapsed {
+		overrunTracker.maxElapsed = elapsed
+		overrunTracker.bufferLength = bufferLen
+	}
+}
+
+// reportBufferOverruns sends a rate-limited Sentry event with overrun statistics.
+func reportBufferOverruns(count int64, maxElapsed, bufferLen, window time.Duration) {
+	if !telemetry.IsTelemetryEnabled() {
+		return
+	}
+
+	extras := map[string]any{
+		"overrun_count":            count,
+		"max_elapsed_ms":           maxElapsed.Milliseconds(),
+		"buffer_length_ms":         bufferLen.Milliseconds(),
+		"reporting_window_minutes": int(window.Minutes()),
+	}
+	telemetry.FastCaptureMessageWithExtras(
+		"sustained BirdNET processing buffer overruns detected",
+		sentry.LevelWarning,
+		"myaudio",
+		extras,
+	)
+}
 
 // SetProcessMetrics sets the metrics instance for audio processing operations.
 // This function is thread-safe and ensures metrics are only set once per process lifetime.
@@ -125,6 +205,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 			logger.Duration("elapsed_time", elapsedTime),
 			logger.Duration("buffer_length", effectiveBufferDuration),
 			logger.String("source", source))
+		recordBufferOverrun(elapsedTime, effectiveBufferDuration)
 	}
 
 	// Get AudioSource struct from registry for the Results message

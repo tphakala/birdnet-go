@@ -78,3 +78,17 @@ func FastCaptureMessage(message string, level sentry.Level, component string) {
 	// Slow path: actually capture
 	CaptureMessage(message, level, component)
 }
+
+// FastCaptureMessageWithExtras is an optimized version of CaptureMessageWithExtras
+// that checks telemetry state first via atomic flag.
+func FastCaptureMessageWithExtras(message string, level sentry.Level, component string, extras map[string]any) {
+	if !IsTelemetryEnabled() {
+		return
+	}
+
+	if level == sentry.LevelInfo || level == sentry.LevelDebug {
+		return
+	}
+
+	CaptureMessageWithExtras(message, level, component, extras)
+}
