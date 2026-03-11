@@ -10,10 +10,114 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 //go:embed data/genus_taxonomy.json
 var genusTaxonomyData []byte
+
+// birdnetSynonyms maps BirdNET model scientific names to their current eBird/Clements
+// taxonomy equivalents. The BirdNET model uses older taxonomic names for some species
+// that have since been reclassified in the eBird/Clements taxonomy (which is the source
+// for genus_taxonomy.json). Without these synonyms, genus lookups fail for affected
+// species because their BirdNET names don't exist in the eBird species index.
+//
+// Format: "birdnet name (lowercase)" → "ebird name (lowercase)"
+// All keys and values must be lowercase to match the normalized species index.
+var birdnetSynonyms = map[string]string{
+	// Cattle Egret: Bubulcus → Ardea (Ardeidae)
+	"bubulcus ibis": "ardea ibis",
+
+	// Bitterns: Ixobrychus → Botaurus (Ardeidae)
+	"ixobrychus cinnamomeus": "botaurus cinnamomeus",
+	"ixobrychus dubius":      "botaurus dubius",
+	"ixobrychus eurhythmus":  "botaurus eurhythmus",
+	"ixobrychus exilis":      "botaurus exilis",
+	"ixobrychus flavicollis": "botaurus flavicollis",
+	"ixobrychus involucris":  "botaurus involucris",
+	"ixobrychus minutus":     "botaurus minutus",
+	"ixobrychus sinensis":    "botaurus sinensis",
+
+	// Owls: Ciccaba → Strix (Strigidae)
+	"ciccaba albitarsis":   "strix albitarsis",
+	"ciccaba huhula":       "strix huhula",
+	"ciccaba nigrolineata": "strix nigrolineata",
+	"ciccaba virgata":      "strix virgata",
+
+	// Manakins: Antilophia → Chiroxiphia (Pipridae)
+	"antilophia bokermanni": "chiroxiphia bokermanni",
+	"antilophia galeata":    "chiroxiphia galeata",
+
+	// Bulbuls: Brachypodius → Microtarsus (Pycnonotidae)
+	"brachypodius eutilotus":      "microtarsus eutilotus",
+	"brachypodius melanocephalos": "microtarsus melanocephalos",
+	"brachypodius melanoleucos":   "microtarsus melanoleucos",
+	"brachypodius priocephalus":   "microtarsus priocephalus",
+	"brachypodius urostictus":     "microtarsus urostictus",
+
+	// Magpie-Jays and Jays: Calocitta/Psilorhinus → Cyanocorax (Corvidae)
+	"calocitta colliei": "cyanocorax colliei",
+	"psilorhinus morio": "cyanocorax morio",
+
+	// Caracaras: Milvago → Daptrius (Falconidae)
+	"milvago chimachima": "daptrius chimachima",
+	"milvago chimango":   "daptrius chimango",
+
+	// Turacos: Musophaga → Tauraco (Musophagidae)
+	"musophaga rossae": "tauraco rossae",
+
+	// Rails: Micropygia → Rufirallus (Rallidae)
+	"micropygia schomburgkii": "rufirallus schomburgkii",
+
+	// Thrushes: Otocichla/Psophocichla → Turdus (Turdidae)
+	"otocichla mupinensis":      "turdus mupinensis",
+	"psophocichla litsitsirupa": "turdus litsitsirupa",
+
+	// Parrotbills: Sinosuthora → Suthora (Sylviidae)
+	"sinosuthora webbiana": "suthora webbiana",
+
+	// Tanagers: Rhodothraupis → Periporphyrus (Cardinalidae)
+	"rhodothraupis celaeno": "periporphyrus celaeno",
+
+	// Australasian Robins: Tregellasia → Eopsaltria (Petroicidae)
+	"tregellasia capito": "eopsaltria capito",
+
+	// Australasian Robins: Peneothello → Melanodryas (Petroicidae)
+	"peneothello sigillata": "melanodryas sigillata",
+	"peneothello cyanus":    "melanodryas cyanus",
+
+	// Rails: Hapalocrex → Laterallus (Rallidae)
+	"hapalocrex flaviventer": "laterallus flaviventer",
+
+	// Cockatoos: Lophochroa → Cacatua (Cacatuidae)
+	"lophochroa leadbeateri": "cacatua leadbeateri",
+
+	// Lories: Pseudeos → Chalcopsitta (Psittaculidae)
+	"pseudeos cardinalis": "chalcopsitta cardinalis", //nolint:misspell // Latin species name, not English
+
+	// Go-away-birds: Corythaixoides → Crinifer (Musophagidae)
+	"corythaixoides concolor":    "crinifer concolor",
+	"corythaixoides leucogaster": "crinifer leucogaster",
+
+	// Hummingbirds: Leucolia → Ramosomyia (Trochilidae)
+	"leucolia violiceps": "ramosomyia violiceps",
+
+	// Hummingbirds: Clytolaema → Heliodoxa (Trochilidae)
+	"clytolaema rubricauda": "heliodoxa rubricauda",
+
+	// Woodpeckers: Reinwardtipicus → Chrysocolaptes (Picidae)
+	"reinwardtipicus validus": "chrysocolaptes validus",
+
+	// Eagles: Dryotriorchis → Circaetus (Accipitridae)
+	"dryotriorchis spectabilis": "circaetus spectabilis",
+
+	// Tyrant Flycatchers: Tumbezia → Ochthoeca (Tyrannidae)
+	"tumbezia salvini": "ochthoeca salvini",
+
+	// Mouse-Warblers: Crateroscelis → Origma (Acanthizidae)
+	"crateroscelis murina":  "origma murina",
+	"crateroscelis robusta": "origma robusta",
+}
 
 // TaxonomyDatabase represents the complete genus/family taxonomy database
 type TaxonomyDatabase struct {
@@ -83,6 +187,13 @@ func LoadTaxonomyDatabase() (*TaxonomyDatabase, error) {
 	db.SpeciesIndex = normalizeSpeciesIndexKeys(db.SpeciesIndex)
 	db.SpeciesIndex = normalizeSpeciesIndexValues(db.SpeciesIndex)
 
+	// Apply BirdNET taxonomy synonyms to the species index.
+	// This adds entries for BirdNET model names that map to the same genus
+	// as their current eBird equivalents, allowing genus lookup to succeed
+	// for species whose scientific names have changed since the BirdNET model
+	// was trained.
+	applyBirdNETSynonyms(db.SpeciesIndex)
+
 	return &db, nil
 }
 
@@ -140,6 +251,31 @@ func normalizeFamilyGeneraValues(families map[string]*FamilyMetadata) map[string
 		}
 	}
 	return normalized
+}
+
+// applyBirdNETSynonyms adds BirdNET model names as aliases in the species index.
+// For each synonym, it looks up the eBird equivalent to find the genus, then adds
+// the BirdNET name pointing to the same genus. Synonyms whose eBird target does not
+// exist in the species index are skipped with a warning log.
+func applyBirdNETSynonyms(speciesIndex map[string]string) {
+	log := GetLogger()
+	applied := 0
+	for birdnetName, ebirdName := range birdnetSynonyms {
+		genus, exists := speciesIndex[ebirdName]
+		if !exists {
+			log.Warn("BirdNET synonym target not found in species index",
+				logger.String("target", ebirdName),
+				logger.String("synonym", birdnetName))
+			continue
+		}
+		// Only add if the BirdNET name is not already in the index
+		if _, alreadyExists := speciesIndex[birdnetName]; !alreadyExists {
+			speciesIndex[birdnetName] = genus
+			applied++
+		}
+	}
+	log.Debug("Applied BirdNET taxonomy synonyms to species index",
+		logger.Int("count", applied))
 }
 
 // GetGenusByScientificName retrieves genus metadata by scientific name
