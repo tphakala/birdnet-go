@@ -569,7 +569,7 @@
     />
   {:else}
     <div class="space-y-3">
-      {#each streams as stream, index (stream.url)}
+      {#each streams as stream, index (`${stream.url}_${index}`)}
         <StreamCard
           {stream}
           {index}

@@ -504,7 +504,7 @@
             </tr>
           </thead>
           <tbody>
-            {#each filteredThresholds as threshold (threshold.speciesName)}
+            {#each filteredThresholds as threshold, index (`${threshold.speciesName}_${index}`)}
               {@const levelDisplay = getLevelDisplay(threshold.level as ThresholdLevel)}
               {@const isExpanded = expandedSpecies.has(threshold.speciesName)}
               {@const events = speciesEvents.get(threshold.speciesName) || []}

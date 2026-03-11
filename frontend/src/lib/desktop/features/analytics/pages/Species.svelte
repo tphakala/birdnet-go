@@ -506,7 +506,7 @@
       <!-- Mobile View - Compact List -->
       {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="sm:hidden space-y-2">
-          {#each filteredSpecies as species (species.scientific_name)}
+          {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
             <SpeciesCardMobile {species} variant="compact" onClick={handleSpeciesClick} />
           {/each}
         </div>
@@ -515,7 +515,7 @@
       <!-- Desktop Grid View -->
       {#if !isLoading && viewMode === 'grid' && filteredSpecies.length > 0}
         <div class="species-grid hidden sm:grid">
-          {#each filteredSpecies as species (species.scientific_name)}
+          {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
             <SpeciesCard {species} />
           {/each}
         </div>
@@ -536,7 +536,7 @@
               </tr>
             </thead>
             <tbody>
-              {#each filteredSpecies as species, index (species.scientific_name)}
+              {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
                 <tr
                   class={index % 2 === 0
                     ? 'bg-[var(--color-base-100)]'
@@ -594,7 +594,7 @@
           </table>
           <!-- Mobile list view -->
           <div class="sm:hidden space-y-2">
-            {#each filteredSpecies as species (species.scientific_name)}
+            {#each filteredSpecies as species, index (`${species.scientific_name}_${index}`)}
               <SpeciesCardMobile {species} variant="list" onClick={handleSpeciesClick} />
             {/each}
           </div>

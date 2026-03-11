@@ -2974,7 +2974,7 @@
           </div>
         {:else if rangeFilterState.species.length > 0}
           <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-            {#each rangeFilterState.species as species (species.label || `${species.scientificName}_${species.commonName}`)}
+            {#each rangeFilterState.species as species, index (`${species.scientificName}_${species.commonName}_${index}`)}
               <div class="p-3 rounded-lg hover:bg-[var(--color-base-200)]/50 transition-colors">
                 <div class="font-medium">{species.commonName}</div>
                 <div class="text-sm text-[var(--color-base-content)] opacity-60 italic">

@@ -662,7 +662,7 @@
             <div class="taxonomy-subspecies">
               <h4 class="taxonomy-subspecies-heading">{t('species.taxonomy.subspecies')}</h4>
               <div class="taxonomy-subspecies-list">
-                {#each subspeciesList as subspecies (subspecies.scientific_name)}
+                {#each subspeciesList as subspecies, index (`${subspecies.scientific_name}_${index}`)}
                   <div class="taxonomy-subspecies-item">
                     <span class="italic">{subspecies.scientific_name}</span>
                     {#if subspecies.common_name}

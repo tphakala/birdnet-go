@@ -305,7 +305,7 @@
           onfocus={handleFocus}
           {onkeydown}
         >
-          {#each options as option (option.value)}
+          {#each options as option, index (`${option.value}_${index}`)}
             <option value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
@@ -328,7 +328,7 @@
           {#if !required}
             <option value="">{t('forms.labels.selectOption')}</option>
           {/if}
-          {#each options as option (option.value)}
+          {#each options as option, index (`${option.value}_${index}`)}
             <option value={option.value} disabled={option.disabled}>
               {option.label}
             </option>
