@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -12,10 +13,21 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// validateFFmpegPath checks if FFmpeg is available
+// validateFFmpegPath checks if the FFmpeg path is valid for execution.
+// It rejects empty paths and paths that appear to be HTTP/proxy URL prefixes
+// rather than filesystem paths (e.g., ingress path contamination).
 func validateFFmpegPath(ffmpegPath string) error {
 	if ffmpegPath == "" {
 		return fmt.Errorf("FFmpeg is not available")
+	}
+	// Reject paths contaminated by HTTP proxy/ingress prefixes.
+	// A valid FFmpeg binary path should be a clean filesystem path,
+	// not contain URL-like segments such as "/api/" or "/ingress/".
+	if !filepath.IsAbs(ffmpegPath) {
+		return fmt.Errorf("FFmpeg path must be absolute, got: %s", ffmpegPath)
+	}
+	if strings.Contains(ffmpegPath, "/api/") || strings.Contains(ffmpegPath, "/ingress/") {
+		return fmt.Errorf("FFmpeg path appears contaminated by proxy/ingress prefix: %s", ffmpegPath)
 	}
 	return nil
 }
