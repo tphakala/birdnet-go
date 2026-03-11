@@ -563,12 +563,15 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 			reportStartupError("mysql", "cleanupOrphanedTables_disableFK", err, database)
 			return err
 		}
-		defer tx.Exec("SET FOREIGN_KEY_CHECKS = 1")
-
 		for _, table := range orphanedTables {
 			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
 				reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
 			}
+		}
+
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
+			reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
+			return err
 		}
 		return nil
 	}); err != nil {
