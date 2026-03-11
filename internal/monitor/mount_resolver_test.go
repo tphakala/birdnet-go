@@ -8,6 +8,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockPartitions returns a mock partition list for deterministic unit tests
@@ -204,6 +205,27 @@ func TestGroupPathsWithPartitionsEmptyInput(t *testing.T) {
 	groups := groupPathsWithPartitionsMock([]string{}, partitions)
 
 	assert.Empty(t, groups)
+}
+
+func TestGetMountInfoFromPartitions_NoMatch(t *testing.T) {
+	t.Parallel()
+
+	// Use partitions that don't cover /tmp (which exists on the filesystem)
+	partitions := []disk.PartitionStat{
+		{Mountpoint: "/mnt/data", Device: "/dev/sdb1", Fstype: "ext4"},
+	}
+	_, _, _, err := getMountInfoFromPartitions("/tmp", partitions)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no mount point found")
+
+	var enhErr *errors.EnhancedError
+	if errors.As(err, &enhErr) {
+		assert.Equal(t, "resolve_mount_path", enhErr.Context["operation"])
+		assert.Equal(t, 1, enhErr.Context["partition_count"])
+		assert.Contains(t, enhErr.Context["available_mountpoints"], "/mnt/data")
+	} else {
+		t.Fatal("expected EnhancedError type")
+	}
 }
 
 func TestMountGroupFields(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const componentMonitor = "monitor"
@@ -51,7 +52,18 @@ func getMountInfoFromPartitions(path string, partitions []disk.PartitionStat) (m
 	}
 
 	if bestLen == 0 {
-		return "", "", "", errors.Newf("no mount point found for path: %s", path).Component(componentMonitor).Category(errors.CategorySystem).Build()
+		// Collect available mountpoints for diagnostic context (anonymized for privacy)
+		mountpoints := make([]string, 0, len(partitions))
+		for _, p := range partitions {
+			mountpoints = append(mountpoints, privacy.AnonymizeStacktracePath(p.Mountpoint))
+		}
+		return "", "", "", errors.Newf("no mount point found for path: %s", path).
+			Component(componentMonitor).
+			Category(errors.CategorySystem).
+			Context("operation", "resolve_mount_path").
+			Context("partition_count", len(partitions)).
+			Context("available_mountpoints", strings.Join(mountpoints, ", ")).
+			Build()
 	}
 
 	return bestMatch.Mountpoint, bestMatch.Device, bestMatch.Fstype, nil
