@@ -19,6 +19,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -97,7 +98,6 @@ var (
 	ErrSpectrogramGeneration = errors.NewStd("failed to generate spectrogram")
 
 	// Image errors
-	ErrImageNotFound             = errors.NewStd("image not found")
 	ErrImageProviderNotAvailable = errors.NewStd("image provider not available")
 
 	// Sentinel errors for nilnil cases
@@ -207,7 +207,7 @@ func (c *Controller) translateSecureFSError(ctx echo.Context, err error, userMsg
 			logger.String("tunnel_provider", tunnelProvider),
 		)
 		return c.HandleError(ctx, err, "Requested resource is not a regular file", http.StatusForbidden)
-	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, ErrImageNotFound):
+	case errors.Is(err, os.ErrNotExist) || errors.Is(err, fs.ErrNotExist) || errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, imageprovider.ErrImageNotFound):
 		c.logInfoIfEnabled("Resource not found", // Info level as 404 is common
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
@@ -2000,7 +2000,7 @@ func (c *Controller) GetSpeciesImageInfo(ctx echo.Context) error {
 
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, imageprovider.ErrImageNotFound) {
 			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
 			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
 		}
@@ -2047,7 +2047,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 	// Look up metadata to know which provider owns this image
 	birdImage, err := c.BirdImageCache.Get(scientificName)
 	if err != nil {
-		if errors.Is(err, ErrImageNotFound) {
+		if errors.Is(err, imageprovider.ErrImageNotFound) {
 			ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
 			return c.HandleError(ctx, err, "Image not found for species", http.StatusNotFound)
 		}
@@ -2057,7 +2057,7 @@ func (c *Controller) ServeSpeciesImageProxy(ctx echo.Context) error {
 	// Negative cache entries have no real image URL
 	if birdImage.IsNegativeEntry() || birdImage.URL == "" {
 		ctx.Response().Header().Set("Cache-Control", fmt.Sprintf("public, max-age=%d", NotFoundCacheSeconds))
-		return c.HandleError(ctx, ErrImageNotFound, "Image not found for species", http.StatusNotFound)
+		return c.HandleError(ctx, imageprovider.ErrImageNotFound, "Image not found for species", http.StatusNotFound)
 	}
 
 	// Get the file cache from the BirdImageCache

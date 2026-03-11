@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -1230,6 +1231,76 @@ func TestIsValidFilename(t *testing.T) {
 			result := isValidFilename(tt.filename)
 			assert.Equal(t, tt.expected, result,
 				"isValidFilename(%q) = %v, want %v", tt.filename, result, tt.expected)
+		})
+	}
+}
+
+// TestSpeciesImageNotFound_Returns404 verifies that image endpoints return HTTP 404
+// (not 500) when the image provider has no image for a species.
+// Regression test for GitHub issue #2201.
+func TestSpeciesImageNotFound_Returns404(t *testing.T) {
+	t.Attr("component", "media")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2201")
+
+	// Setup test environment — the default mock provider returns images for any species
+	e, _, controller := setupTestEnvironment(t)
+
+	// Replace the mock provider with one that returns ErrImageNotFound for unknown species
+	notFoundProvider := &TestImageProvider{
+		FetchFunc: func(scientificName string) (imageprovider.BirdImage, error) {
+			return imageprovider.BirdImage{}, imageprovider.ErrImageNotFound
+		},
+	}
+	controller.BirdImageCache.SetImageProvider(notFoundProvider)
+
+	tests := []struct {
+		name    string
+		handler func(echo.Context) error
+		setup   func(*echo.Echo) echo.Context
+	}{
+		{
+			name:    "GetSpeciesImageInfo returns 404 for missing species image",
+			handler: controller.GetSpeciesImageInfo,
+			setup: func(e *echo.Echo) echo.Context {
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/media/species-image/info?name=Nonexistus+fictus", http.NoBody)
+				rec := httptest.NewRecorder()
+				return e.NewContext(req, rec)
+			},
+		},
+		{
+			name:    "ServeSpeciesImageProxy returns 404 for missing species image",
+			handler: controller.ServeSpeciesImageProxy,
+			setup: func(e *echo.Echo) echo.Context {
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/media/image/Nonexistus%20fictus", http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetParamNames("scientific_name")
+				c.SetParamValues("Nonexistus fictus")
+				return c
+			},
+		},
+		{
+			name:    "GetSpeciesImage returns 404 for missing species image",
+			handler: controller.GetSpeciesImage,
+			setup: func(e *echo.Echo) echo.Context {
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/media/species-image?name=Nonexistus+fictus", http.NoBody)
+				rec := httptest.NewRecorder()
+				return e.NewContext(req, rec)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := tt.setup(e)
+			_ = tt.handler(ctx)
+
+			rec := ctx.Response().Writer.(*httptest.ResponseRecorder)
+			assert.Equal(t, http.StatusNotFound, rec.Code,
+				"Expected 404 Not Found for missing species image, got %d", rec.Code)
+			assert.Contains(t, rec.Body.String(), "Image not found",
+				"Response body should indicate image was not found")
 		})
 	}
 }
