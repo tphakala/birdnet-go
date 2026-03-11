@@ -52,6 +52,19 @@ var ErrProviderNil = errors.Newf("image provider is nil").
 	Context("error_type", "provider_nil").
 	Build()
 
+// imageNotFoundFor wraps ErrImageNotFound with species and provider context so that
+// Sentry events and logs identify which lookup failed. The returned error still
+// satisfies errors.Is(err, ErrImageNotFound).
+func imageNotFoundFor(scientificName, provider, operation string) *errors.EnhancedError {
+	return errors.New(ErrImageNotFound).
+		Component("imageprovider").
+		Category(errors.CategoryImageFetch).
+		Context("scientific_name", scientificName).
+		Context("provider", provider).
+		Context("operation", operation).
+		Build()
+}
+
 // contextKey is a type used for context keys to avoid collisions
 type contextKey string
 
@@ -955,7 +968,7 @@ func (c *BirdImageCache) checkCachedEntryAfterLock(scientificName string, log lo
 	}
 
 	log.Debug("Returning valid negative cache entry after lock")
-	return BirdImage{}, true, true, ErrImageNotFound
+	return BirdImage{}, true, true, imageNotFoundFor(scientificName, c.providerName, "negative_cache_hit")
 }
 
 // tryInitialize ensures only one goroutine initializes a species image using mutexes.
@@ -1037,7 +1050,7 @@ func (c *BirdImageCache) tryFallbackOnGetError(err error, scientificName string,
 // Get retrieves a bird image from the cache, fetching if necessary.
 func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 	if scientificName == "" {
-		return BirdImage{}, ErrImageNotFound
+		return BirdImage{}, imageNotFoundFor("", c.providerName, "get_empty_name")
 	}
 
 	log := GetLogger().With(
@@ -1088,7 +1101,7 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 
 	if dbImage != nil {
 		if result, done := c.handleDBCacheHit(scientificName, dbImage); done {
-			err := c.getDBCacheError(&result)
+			err := c.getDBCacheError(&result, scientificName)
 			return result, err
 		}
 	}
@@ -1098,9 +1111,9 @@ func (c *BirdImageCache) fetchAndStore(scientificName string) (BirdImage, error)
 }
 
 // getDBCacheError returns the appropriate error for a DB cache result.
-func (c *BirdImageCache) getDBCacheError(result *BirdImage) error {
+func (c *BirdImageCache) getDBCacheError(result *BirdImage, scientificName string) error {
 	if result.URL == "" || result.IsNegativeEntry() {
-		return ErrImageNotFound
+		return imageNotFoundFor(scientificName, c.providerName, "db_cache_negative")
 	}
 	return nil
 }
@@ -1180,7 +1193,7 @@ func (c *BirdImageCache) fetchSingleFromProvider(scientificName string, fetchSta
 
 	if fetchedImage.URL == "" {
 		log.Warn("Provider returned success but with an empty image URL")
-		return BirdImage{}, ErrImageNotFound
+		return BirdImage{}, imageNotFoundFor(scientificName, c.providerName, "provider_empty_url")
 	}
 
 	result := c.storeSuccessfulFetch(scientificName, &fetchedImage)
@@ -1229,18 +1242,36 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 }
 
 // enhanceFetchError wraps a fetch error with context if needed.
+// For errors that are already EnhancedError with context (e.g., from imageNotFoundFor),
+// returns as-is. For enhanced errors missing context or plain errors, creates a new
+// wrapped error preserving the original category to avoid false positives in
+// category-based errors.Is matching.
 func (c *BirdImageCache) enhanceFetchError(fetchErr error, scientificName string) *errors.EnhancedError {
 	var enhancedErr *errors.EnhancedError
-	if !errors.As(fetchErr, &enhancedErr) {
-		enhancedErr = errors.New(fetchErr).
+	if errors.As(fetchErr, &enhancedErr) {
+		// Already enhanced — check if it has species context
+		if _, hasName := enhancedErr.Context["scientific_name"]; hasName {
+			return enhancedErr
+		}
+		// Missing context — wrap in a new error preserving the original category
+		// to avoid changing CategoryNetwork to CategoryImageFetch (which would
+		// cause false positives in errors.Is(err, ErrImageNotFound))
+		return errors.New(fetchErr).
 			Component("imageprovider").
-			Category(errors.CategoryImageFetch).
+			Category(enhancedErr.Category).
 			Context("provider", c.providerName).
 			Context("scientific_name", scientificName).
 			Context("operation", "provider_fetch").
 			Build()
 	}
-	return enhancedErr
+	// Plain error — wrap with full context
+	return errors.New(fetchErr).
+		Component("imageprovider").
+		Category(errors.CategoryImageFetch).
+		Context("provider", c.providerName).
+		Context("scientific_name", scientificName).
+		Context("operation", "provider_fetch").
+		Build()
 }
 
 // storeNegativeCacheEntry stores a negative cache entry for a not-found image.

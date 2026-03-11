@@ -1268,18 +1268,18 @@ func (l *wikiMediaProvider) queryAndGetFirstPageWithLimiter(ctx context.Context,
 	query, err := resp.GetObject("query")
 	if err != nil {
 		logQueryMissingError(resp, params, fullURL, err)
-		return nil, ErrImageNotFound
+		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_query_missing")
 	}
 
 	pages, err := query.GetObjectArray("pages")
 	if err != nil {
 		logPagesMissingError(query, params, fullURL, err)
-		return nil, ErrImageNotFound
+		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_missing")
 	}
 
 	if len(pages) == 0 {
 		logEmptyPagesArray(resp, params, fullURL)
-		return nil, ErrImageNotFound
+		return nil, imageNotFoundFor(params["titles"], wikiProviderName, "wiki_pages_empty")
 	}
 
 	logFirstPageContent(pages, fullURL)
@@ -1498,7 +1498,7 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		log.Debug("No thumbnail URL found in page data", logger.Error(err))
 		// This is common for pages without images or with non-free images
 		// Don't create telemetry noise - treat as "not found"
-		return "", "", ErrImageNotFound
+		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_no_thumbnail")
 	}
 
 	fileName, err = page.GetString("pageimage")
@@ -1506,7 +1506,7 @@ func (l *wikiMediaProvider) queryThumbnail(ctx context.Context, reqID, scientifi
 		log.Debug("No pageimage filename found in page data", logger.Error(err))
 		// This is common for pages without proper image metadata
 		// Don't create telemetry noise - treat as "not found"
-		return "", "", ErrImageNotFound
+		return "", "", imageNotFoundFor(scientificName, wikiProviderName, "wiki_no_pageimage")
 	}
 
 	log.Debug("Successfully retrieved thumbnail URL and filename",
@@ -1570,7 +1570,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 			logger.Int("array_len", len(imgInfo)))
 		// This is common for files without metadata or processing issues
 		// Don't create telemetry noise - treat as "not found"
-		return nil, ErrImageNotFound
+		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_imageinfo")
 	}
 
 	extMetadata, err := imgInfo[0].GetObject("extmetadata")
@@ -1578,7 +1578,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		log.Debug("No extmetadata found in imageinfo", logger.Error(err))
 		// This is common for files without extended metadata
 		// Don't create telemetry noise - treat as "not found"
-		return nil, ErrImageNotFound
+		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_extmetadata")
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)

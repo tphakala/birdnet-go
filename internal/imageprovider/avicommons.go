@@ -168,7 +168,7 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	if !found {
 		log.Debug("Image not found in Avicommons data",
 			logger.String("normalized_name", normalizedSciName))
-		return BirdImage{}, ErrImageNotFound
+		return BirdImage{}, imageNotFoundFor(scientificName, aviCommonsProviderName, "avicommons_lookup")
 	}
 
 	// Construct the image URL
