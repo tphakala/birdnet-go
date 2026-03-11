@@ -1570,6 +1570,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 			logger.Int("array_len", len(imgInfo)))
 		// This is common for files without metadata or processing issues
 		// Don't create telemetry noise - treat as "not found"
+		// Note: thumbnailFileName used as lookup key since scientificName is not in scope here
 		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_imageinfo")
 	}
 
@@ -1578,7 +1579,7 @@ func (l *wikiMediaProvider) queryAuthorInfo(ctx context.Context, reqID, thumbnai
 		log.Debug("No extmetadata found in imageinfo", logger.Error(err))
 		// This is common for files without extended metadata
 		// Don't create telemetry noise - treat as "not found"
-		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_extmetadata")
+		return nil, imageNotFoundFor(thumbnailFileName, wikiProviderName, "wiki_no_extmetadata") // thumbnailFileName as lookup key
 	}
 
 	// Extract specific fields (Artist, LicenseShortName, LicenseUrl)
