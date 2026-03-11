@@ -213,11 +213,11 @@ func seedOrphanedBareV2Tables(t *testing.T, db *gorm.DB) {
 			CONSTRAINT fk_predictions_detection FOREIGN KEY (detection_id) REFERENCES detections(id),
 			CONSTRAINT fk_predictions_label FOREIGN KEY (label_id) REFERENCES labels(id)
 		)`,
-		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT UNIQUE,
 			CONSTRAINT fk_reviews_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
 		`CREATE TABLE detection_comments (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
 			CONSTRAINT fk_comments_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
-		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT UNIQUE,
 			CONSTRAINT fk_locks_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
 		// Old singular names from TableName() overrides
 		`CREATE TABLE migration_state (id BIGINT AUTO_INCREMENT PRIMARY KEY, state VARCHAR(50))`,
