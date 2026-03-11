@@ -873,8 +873,12 @@
           canplayTimeoutId = undefined;
         }
         isLoading = false;
-        // Reset retry counter on successful load (may have succeeded after retries)
+        // Reset retry state on successful load (may have succeeded after retries)
         audioRetryCount = 0;
+        if (audioRetryTimer) {
+          clearTimeout(audioRetryTimer);
+          audioRetryTimer = undefined;
+        }
       });
 
       addTrackedEventListener(audioElement, 'error', () => {
