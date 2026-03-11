@@ -816,7 +816,7 @@ func (s *FFmpegStream) startProcess() error {
 
 	// Validate FFmpeg path
 	settings := conf.Setting().Realtime.Audio
-	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
+	if err := ValidateFFmpegPath(settings.FfmpegPath); err != nil {
 		return errors.Newf("FFmpeg validation failed: %w", err).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-stream").
