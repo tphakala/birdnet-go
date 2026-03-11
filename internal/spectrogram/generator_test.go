@@ -604,7 +604,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			name:       "missing ffmpeg",
 			ffmpegPath: "",
 			soxPath:    testSoxPath,
-			errContain: "ffmpeg binary not configured",
+			errContain: "invalid FFmpeg path",
 		},
 		{
 			name:       "missing sox",
@@ -643,7 +643,7 @@ func TestGenerateWithFFmpeg_MissingBinary(t *testing.T) {
 
 	err := gen.generateWithFFmpeg(t.Context(), audioPath, outputPath, 400, false)
 	require.Error(t, err, "should error when FFmpeg binary not configured")
-	assert.Contains(t, err.Error(), "ffmpeg binary not configured", "error should mention ffmpeg binary")
+	assert.Contains(t, err.Error(), "invalid FFmpeg path", "error should mention ffmpeg binary")
 }
 
 // TestGenerateWithSoxPCM_MissingBinary tests error when Sox binary is not configured.

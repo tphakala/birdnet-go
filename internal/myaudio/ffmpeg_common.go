@@ -13,10 +13,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// validateFFmpegPath checks if the FFmpeg path is valid for execution.
+// ValidateFFmpegPath checks if the FFmpeg path is valid for execution.
 // It rejects empty paths and paths that appear to be HTTP/proxy URL prefixes
 // rather than filesystem paths (e.g., ingress path contamination).
-func validateFFmpegPath(ffmpegPath string) error {
+func ValidateFFmpegPath(ffmpegPath string) error {
 	if ffmpegPath == "" {
 		return fmt.Errorf("FFmpeg is not available")
 	}

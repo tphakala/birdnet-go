@@ -53,7 +53,7 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return enhancedErr
 	}
 
-	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
+	if err := ValidateFFmpegPath(settings.FfmpegPath); err != nil {
 		enhancedErr := errors.Newf("invalid FFmpeg path: %s", err).
 			Component("myaudio").
 			Category(errors.CategoryConfiguration).
@@ -576,7 +576,7 @@ func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte,
 		return nil, enhancedErr
 	}
 
-	if err := validateFFmpegPath(ffmpegPath); err != nil {
+	if err := ValidateFFmpegPath(ffmpegPath); err != nil {
 		enhancedErr := errors.Newf("invalid FFmpeg path: %s", err).
 			Component("myaudio").
 			Category(errors.CategoryConfiguration).
@@ -828,7 +828,7 @@ func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, er
 // This is the context-aware version of AnalyzeAudioLoudness that allows timeout/cancellation
 func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
 	log := GetLogger()
-	if err := validateFFmpegPath(ffmpegPath); err != nil {
+	if err := ValidateFFmpegPath(ffmpegPath); err != nil {
 		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
 	}
 

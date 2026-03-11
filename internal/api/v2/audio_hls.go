@@ -620,11 +620,11 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		return nil, err
 	}
 
-	// Get FFmpeg path
+	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
-	if ffmpegPath == "" {
+	if err := myaudio.ValidateFFmpegPath(ffmpegPath); err != nil {
 		streamCancel()
-		return nil, fmt.Errorf("ffmpeg not configured")
+		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
 	}
 
 	// Setup FIFO for audio streaming

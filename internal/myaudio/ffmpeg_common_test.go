@@ -117,7 +117,7 @@ func TestValidateFFmpegPath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			err := validateFFmpegPath(tt.path)
+			err := ValidateFFmpegPath(tt.path)
 
 			if tt.wantErr {
 				require.Error(t, err)
