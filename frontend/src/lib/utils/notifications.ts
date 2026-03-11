@@ -387,7 +387,7 @@ export function translateNotification(notification: Notification): {
 // Extracts displayable context from notification metadata for error details
 // ============================================================================
 
-/** Internal metadata keys that should not be shown as context */
+/** Internal metadata keys that should never be shown as context */
 const INTERNAL_METADATA_KEYS = new Set([
   // Notification system internals
   'note_id',
@@ -400,27 +400,35 @@ const INTERNAL_METADATA_KEYS = new Set([
   'toastId',
   'duration',
   'action',
-  // Detection notification metadata
+  // Stream worker metadata
+  'streamInfo',
+]);
+
+/** Detection-specific metadata keys hidden only for detection notifications
+ *  (these fields are already displayed elsewhere in the detection UI) */
+const DETECTION_METADATA_KEYS = new Set([
   'is_new_species',
   'species',
   'scientific_name',
   'confidence',
   'location',
   'days_since_first_seen',
-  // Stream worker metadata
-  'streamInfo',
 ]);
 
 /**
  * Extracts displayable context entries from notification metadata.
- * Filters out internal keys (note_id, is_new_species, etc.) and returns
- * remaining key-value pairs formatted for display.
+ * Filters out internal keys and detection-specific keys (only for detection
+ * notifications where those fields are shown elsewhere in the UI).
+ * For error/warning notifications, fields like scientific_name are shown
+ * as they provide critical diagnostic context.
  *
  * @param metadata - The notification metadata object
+ * @param notificationType - The notification type (e.g. 'error', 'detection')
  * @returns Array of {key, value} pairs for display, or empty array
  */
 export function getDisplayableContext(
-  metadata: Record<string, unknown> | undefined
+  metadata: Record<string, unknown> | undefined,
+  notificationType?: Notification['type']
 ): { key: string; value: string }[] {
   if (!metadata) return [];
 
@@ -428,6 +436,7 @@ export function getDisplayableContext(
   for (const [key, value] of Object.entries(metadata)) {
     if (
       INTERNAL_METADATA_KEYS.has(key) ||
+      (notificationType === 'detection' && DETECTION_METADATA_KEYS.has(key)) ||
       key.startsWith('bg_') ||
       value === undefined ||
       value === null

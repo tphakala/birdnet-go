@@ -254,9 +254,9 @@
               <p class="text-xs text-[var(--color-base-content)]/80">
                 {sanitizeNotificationMessage(translateNotification(notification).message)}
               </p>
-              {#if getDisplayableContext(notification.metadata).length > 0}
+              {#if getDisplayableContext(notification.metadata, notification.type).length > 0}
                 <p class="text-xs text-[var(--color-base-content)]/50 mt-0.5 font-mono">
-                  {getDisplayableContext(notification.metadata)
+                  {getDisplayableContext(notification.metadata, notification.type)
                     .map(c => `${c.key}: ${c.value}`)
                     .join(' | ')}
                 </p>
