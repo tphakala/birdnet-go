@@ -403,9 +403,12 @@ const INTERNAL_METADATA_KEYS = new Set([
   // Detection notification metadata
   'is_new_species',
   'species',
+  'scientific_name',
   'confidence',
   'location',
   'days_since_first_seen',
+  // Stream worker metadata
+  'streamInfo',
 ]);
 
 /**
@@ -429,6 +432,10 @@ export function getDisplayableContext(
       value === undefined ||
       value === null
     ) {
+      continue;
+    }
+    // Skip objects/arrays — only display scalar values
+    if (typeof value === 'object') {
       continue;
     }
     entries.push({
