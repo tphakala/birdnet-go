@@ -59,3 +59,49 @@ func TestReportError_IncludesStacktrace(t *testing.T) {
 	assert.NotNil(t, event.Exception[0].Stacktrace, "exception should have a stacktrace")
 	assert.NotEmpty(t, event.Exception[0].Stacktrace.Frames, "stacktrace should have frames")
 }
+
+func TestShouldReportToSentry_FiltersNoRouteToHost(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("dial tcp 192.168.1.1:1883: connect: no route to host")).
+		Component("mqtt").
+		Category(CategoryMQTTConnection).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
+func TestShouldReportToSentry_FiltersDNSErrors(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("dial tcp: lookup en.wikipedia.org: server misbehaving")).
+		Component("imageprovider").
+		Category(CategoryNetwork).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
+func TestShouldReportToSentry_FiltersConnectionRefused(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("dial tcp 10.0.0.1:8080: connection refused")).
+		Component("weather").
+		Category(CategoryHTTP).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
+func TestShouldReportToSentry_AllowsCodeErrors(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("species not found in taxonomy")).
+		Component("birdnet").
+		Category(CategoryNotFound).
+		Build()
+	assert.True(t, shouldReportToSentry(ee))
+}
+
+func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
+	t.Parallel()
+	// Network category error that is NOT environmental noise should still report
+	ee := New(fmt.Errorf("unexpected status code 500 from API")).
+		Component("imageprovider").
+		Category(CategoryNetwork).
+		Build()
+	assert.True(t, shouldReportToSentry(ee))
+}

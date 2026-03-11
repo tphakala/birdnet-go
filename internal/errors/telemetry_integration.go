@@ -150,11 +150,24 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Add more filters here for other operational errors as needed
-	// Examples that could be added in future:
-	// - DNS resolution failures (user's network/config issue)
-	// - "connection refused" (service not running)
-	// - "no route to host" (network issue)
+	// Filter out network infrastructure errors (user's network/DNS issues)
+	networkPatterns := []string{
+		"no route to host",
+		"connection refused",
+		"server misbehaving", // DNS failure
+		"no such host",       // DNS failure
+		"network is unreachable",
+		"i/o timeout",
+	}
+
+	if ee.Category == CategoryNetwork || ee.Category == CategoryMQTTConnection ||
+		ee.Category == CategoryRTSP || ee.Category == CategoryHTTP {
+		for _, pattern := range networkPatterns {
+			if strings.Contains(errorMsg, pattern) {
+				return false
+			}
+		}
+	}
 
 	return true // Report everything else
 }
