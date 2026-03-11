@@ -18,6 +18,12 @@ export const PROGRESS_UPDATE_INTERVAL_MS = 50;
 /** Minimum width in pixels to show full audio controls */
 export const MIN_CONTROLS_WIDTH_PX = 175;
 
+/** Maximum number of retries when audio fails to load (e.g., still being encoded) */
+export const MAX_AUDIO_LOAD_RETRIES = 3;
+
+/** Delay between audio load retries in milliseconds */
+export const AUDIO_RETRY_DELAY_MS = 2000;
+
 // =============================================================================
 // Playback Speed
 // =============================================================================

@@ -7,6 +7,7 @@ import {
 } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import { safeGet } from '$lib/utils/security';
+import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS } from '$lib/utils/audio';
 import AudioPlayer from './AudioPlayer.svelte';
 
 // Mock the i18n function
@@ -440,10 +441,19 @@ describe('AudioPlayer', () => {
       showSpectrogram: true,
     });
 
-    // Trigger error using mockAudioInstance
-    const errorHandlers = safeGet(eventHandlers, 'error', []);
-    if (errorHandlers.length > 0) {
-      errorHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('error')));
+    // The AudioPlayer retries up to MAX_AUDIO_LOAD_RETRIES times before
+    // showing the error. Exhaust all retries by firing errors and advancing timers.
+    for (let i = 0; i <= MAX_AUDIO_LOAD_RETRIES; i++) {
+      const errorHandlers = safeGet(eventHandlers, 'error', []);
+      if (errorHandlers.length > 0) {
+        errorHandlers.forEach(handler => {
+          handler.call(mockAudioInstance, new Event('error'));
+        });
+      }
+      if (i < MAX_AUDIO_LOAD_RETRIES) {
+        // Advance past the retry delay so the retry timer fires
+        await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS + 500);
+      }
     }
 
     await waitFor(() => {
