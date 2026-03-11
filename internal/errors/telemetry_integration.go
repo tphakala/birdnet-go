@@ -44,6 +44,19 @@ var ResourceSnapshotFunc func() map[string]any
 var (
 	lastDiskFullReport atomic.Int64 // Unix timestamp of last disk-full report
 	diskFullCooldown   = int64(300) // 5 minutes between disk-full reports
+
+	// networkNoisePatterns are environmental network errors that indicate
+	// user infrastructure issues, not code bugs.
+	networkNoisePatterns = []string{
+		"no route to host",
+		"connection refused",
+		"connection reset by peer",
+		"server misbehaving", // DNS failure
+		"no such host",       // DNS failure
+		"network is unreachable",
+		"i/o timeout",
+		"tls handshake timeout",
+	}
 )
 
 // categoryOriginMap classifies error categories by their origin for telemetry tagging.
@@ -157,20 +170,9 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	}
 
 	// Filter out network infrastructure errors (user's network/DNS issues)
-	networkPatterns := []string{
-		"no route to host",
-		"connection refused",
-		"connection reset by peer",
-		"server misbehaving", // DNS failure
-		"no such host",       // DNS failure
-		"network is unreachable",
-		"i/o timeout",
-		"tls handshake timeout",
-	}
-
 	if ee.Category == CategoryNetwork || ee.Category == CategoryMQTTConnection ||
 		ee.Category == CategoryRTSP || ee.Category == CategoryHTTP {
-		for _, pattern := range networkPatterns {
+		for _, pattern := range networkNoisePatterns {
 			if strings.Contains(errorMsg, pattern) {
 				return false
 			}

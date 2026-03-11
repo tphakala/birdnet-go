@@ -57,7 +57,7 @@ func getMountInfoFromPartitions(path string, partitions []disk.PartitionStat) (m
 		for _, p := range partitions {
 			mountpoints = append(mountpoints, privacy.AnonymizeStacktracePath(p.Mountpoint))
 		}
-		return "", "", "", errors.Newf("no mount point found for path: %s", path).
+		return "", "", "", errors.Newf("no mount point found for path: %s", privacy.AnonymizeStacktracePath(path)).
 			Component(componentMonitor).
 			Category(errors.CategorySystem).
 			Context("operation", "resolve_mount_path").

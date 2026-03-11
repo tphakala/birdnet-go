@@ -222,7 +222,7 @@ func TestGetMountInfoFromPartitions_NoMatch(t *testing.T) {
 	if errors.As(err, &enhErr) {
 		assert.Equal(t, "resolve_mount_path", enhErr.Context["operation"])
 		assert.Equal(t, 1, enhErr.Context["partition_count"])
-		assert.Contains(t, enhErr.Context["available_mountpoints"], "/mnt/data")
+		assert.Contains(t, enhErr.Context["available_mountpoints"], "<redacted>/mnt/data")
 	} else {
 		t.Fatal("expected EnhancedError type")
 	}
