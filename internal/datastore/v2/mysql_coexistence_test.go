@@ -181,18 +181,44 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 func seedOrphanedBareV2Tables(t *testing.T, db *gorm.DB) {
 	t.Helper()
 
-	// Minimal DDL for v2-only tables that don't collide with legacy
+	// DDL for v2-only tables with FK constraints matching what GORM AutoMigrate creates.
+	// Reference tables must be created first, then tables that reference them.
+	// FK constraints are critical for reproducing the bug in #2194.
 	orphanedDDL := []string{
-		`CREATE TABLE labels (id BIGINT AUTO_INCREMENT PRIMARY KEY, scientific_name VARCHAR(255))`,
+		// Reference tables first (no FK dependencies)
 		`CREATE TABLE label_types (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50))`,
 		`CREATE TABLE taxonomic_classes (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100))`,
 		`CREATE TABLE ai_models (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100))`,
 		`CREATE TABLE audio_sources (id BIGINT AUTO_INCREMENT PRIMARY KEY, source_uri VARCHAR(500))`,
-		`CREATE TABLE detections (id BIGINT AUTO_INCREMENT PRIMARY KEY, label_id BIGINT)`,
-		`CREATE TABLE detection_predictions (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_comments (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
-		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT)`,
+		// Labels with FKs to reference tables
+		`CREATE TABLE labels (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			scientific_name VARCHAR(255),
+			model_id BIGINT, label_type_id BIGINT, taxonomic_class_id BIGINT,
+			CONSTRAINT fk_labels_model FOREIGN KEY (model_id) REFERENCES ai_models(id),
+			CONSTRAINT fk_labels_label_type FOREIGN KEY (label_type_id) REFERENCES label_types(id),
+			CONSTRAINT fk_labels_taxonomic_class FOREIGN KEY (taxonomic_class_id) REFERENCES taxonomic_classes(id)
+		)`,
+		// Detections with FKs to labels and ai_models
+		`CREATE TABLE detections (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			label_id BIGINT, model_id BIGINT,
+			CONSTRAINT fk_detections_label FOREIGN KEY (label_id) REFERENCES labels(id),
+			CONSTRAINT fk_detections_model FOREIGN KEY (model_id) REFERENCES ai_models(id)
+		)`,
+		// Detection children with FKs to detections
+		`CREATE TABLE detection_predictions (
+			id BIGINT AUTO_INCREMENT PRIMARY KEY,
+			detection_id BIGINT, label_id BIGINT,
+			CONSTRAINT fk_predictions_detection FOREIGN KEY (detection_id) REFERENCES detections(id),
+			CONSTRAINT fk_predictions_label FOREIGN KEY (label_id) REFERENCES labels(id)
+		)`,
+		`CREATE TABLE detection_reviews (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+			CONSTRAINT fk_reviews_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
+		`CREATE TABLE detection_comments (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+			CONSTRAINT fk_comments_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
+		`CREATE TABLE detection_locks (id BIGINT AUTO_INCREMENT PRIMARY KEY, detection_id BIGINT,
+			CONSTRAINT fk_locks_detection FOREIGN KEY (detection_id) REFERENCES detections(id))`,
 		// Old singular names from TableName() overrides
 		`CREATE TABLE migration_state (id BIGINT AUTO_INCREMENT PRIMARY KEY, state VARCHAR(50))`,
 		`CREATE TABLE migration_dirty_ids (id BIGINT AUTO_INCREMENT PRIMARY KEY)`,
