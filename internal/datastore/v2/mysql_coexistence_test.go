@@ -231,6 +231,13 @@ func seedOrphanedBareV2Tables(t *testing.T, db *gorm.DB) {
 	for _, ddl := range orphanedDDL {
 		require.NoError(t, db.Exec(ddl).Error, "failed to create orphaned table: %s", ddl)
 	}
+
+	// Simulate v2 AutoMigrate contaminating a preserved legacy table:
+	// add a label_id column with FK to the orphaned labels table.
+	// This exercises the FK-toggle path where a non-dropped table references a dropped one.
+	require.NoError(t, db.Exec(
+		`ALTER TABLE dynamic_thresholds ADD COLUMN label_id BIGINT, ADD CONSTRAINT fk_dyn_thresh_label FOREIGN KEY (label_id) REFERENCES labels(id)`,
+	).Error, "failed to contaminate dynamic_thresholds with FK to labels")
 }
 
 // tableExists checks if a table exists in the given database.
@@ -437,13 +444,19 @@ func TestMySQL_StartupDetection_OrphanedV2WithLegacy_ReturnsLegacyMode(t *testin
 	assert.False(t, state.FreshInstall, "should not be a fresh install")
 	require.NoError(t, state.Error)
 
-	// Orphaned bare v2 tables should be cleaned up
-	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "detections"),
-		"orphaned detections should be cleaned up")
-	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "labels"),
-		"orphaned labels should be cleaned up")
+	// All orphaned bare v2 tables should be cleaned up
+	for _, table := range []string{
+		"labels", "label_types", "taxonomic_classes", "ai_models", "audio_sources",
+		"detections", "detection_predictions", "detection_reviews", "detection_comments", "detection_locks",
+		"alert_rules", "alert_conditions", "alert_actions", "alert_history",
+		"migration_state", "migration_dirty_ids",
+	} {
+		assert.False(t, tableExists(t, coexTestDB, coexTestDBName, table),
+			"orphaned %s should be cleaned up", table)
+	}
 
-	// Legacy tables should still be intact
+	// Legacy/preserved tables should still be intact (even though dynamic_thresholds
+	// had an FK pointing to the now-dropped labels table)
 	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "notes"),
 		"legacy notes should survive cleanup")
 	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "dynamic_thresholds"),
