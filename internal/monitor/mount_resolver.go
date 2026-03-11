@@ -89,12 +89,25 @@ func groupPathsWithPartitions(paths []string, partitions []disk.PartitionStat) [
 	for _, path := range paths {
 		mountPoint, device, fstype, err := getMountInfoFromPartitions(path, partitions)
 		if err != nil {
-			// Log but skip invalid paths
-			GetLogger().Debug("Skipping path for mount grouping",
-				logger.String("path", path),
-				logger.Error(err),
-			)
-			continue
+			// Mount point detection failed — common in containers with overlay filesystems.
+			// If the path is accessible, use it directly as its own mount group so that
+			// disk.Usage() can still report usage stats.
+			if _, statErr := os.Stat(path); statErr == nil {
+				GetLogger().Debug("Mount point detection failed, monitoring path directly",
+					logger.String("path", path),
+					logger.Error(err),
+				)
+				mountPoint = path
+				device = ""
+				fstype = ""
+			} else {
+				GetLogger().Debug("Skipping inaccessible path for mount grouping",
+					logger.String("path", path),
+					logger.Error(err),
+					logger.String("stat_error", statErr.Error()),
+				)
+				continue
+			}
 		}
 
 		if group, exists := groups[mountPoint]; exists {
