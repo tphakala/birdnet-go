@@ -219,8 +219,9 @@ func ValidateAudioFileWithRetry(ctx context.Context, audioPath string) (*AudioVa
 			m.RecordFileOperation("validate_retry", result.Format, fmt.Sprintf("attempt_%d", attempt))
 		}
 
-		// If there's a specific retry suggestion, use it
-		if result.RetryAfter > 0 {
+		// Honor the retry suggestion only if it's longer than the current
+		// exponential backoff delay, so that backoff growth is preserved.
+		if result.RetryAfter > retryDelay {
 			retryDelay = result.RetryAfter
 		}
 
