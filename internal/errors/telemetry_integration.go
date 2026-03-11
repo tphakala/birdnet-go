@@ -160,10 +160,12 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	networkPatterns := []string{
 		"no route to host",
 		"connection refused",
+		"connection reset by peer",
 		"server misbehaving", // DNS failure
 		"no such host",       // DNS failure
 		"network is unreachable",
 		"i/o timeout",
+		"tls handshake timeout",
 	}
 
 	if ee.Category == CategoryNetwork || ee.Category == CategoryMQTTConnection ||

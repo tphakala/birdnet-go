@@ -119,3 +119,15 @@ func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 	assert.True(t, shouldReportToSentry(ee1), "first disk-full should be reported")
 	assert.False(t, shouldReportToSentry(ee2), "second disk-full within cooldown should be suppressed")
 }
+
+func TestShouldReportToSentry_DiskFullCooldownExpiry(t *testing.T) {
+	// Not parallel — mutates package-level state
+	// Simulate a disk-full report from past the cooldown window
+	lastDiskFullReport.Store(time.Now().Unix() - diskFullCooldown - 1)
+	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+
+	ee := New(fmt.Errorf("database or disk is full")).
+		Component("datastore").Category(CategoryDatabase).Build()
+
+	assert.True(t, shouldReportToSentry(ee), "disk-full should be reported after cooldown expires")
+}
