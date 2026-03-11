@@ -152,7 +152,9 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	}
 
 	// run BirdNET inference
+	inferenceStart := time.Now()
 	results, err := bn.Predict(sampleData)
+	inferenceDuration := time.Since(inferenceStart)
 
 	// Return float32 buffer to pool after prediction
 	// This is safe because Predict copies the data to the input tensor
@@ -160,19 +162,23 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 		ReturnFloat32Buffer(sampleData[0])
 	}
 
-	if err != nil {
-		return fmt.Errorf("error predicting species: %w", err)
-	}
-
-	// get elapsed time
-	elapsedTime := time.Since(predictStart)
-
-	// Record inference duration and result count metrics
+	// Record inference duration metric (always, even on error)
 	processMetricsMutex.RLock()
 	pm := processMetrics
 	processMetricsMutex.RUnlock()
 	if pm != nil {
-		pm.RecordAudioInferenceDuration(source, elapsedTime.Seconds())
+		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
+	}
+
+	if err != nil {
+		return fmt.Errorf("error predicting species: %w", err)
+	}
+
+	// get elapsed time (includes conversion + inference for overrun check)
+	elapsedTime := time.Since(predictStart)
+
+	// Record result count metric
+	if pm != nil {
 		pm.RecordBirdNETResults(source, len(results))
 	}
 
