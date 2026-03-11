@@ -221,8 +221,9 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Create exception with custom type (this is what Sentry displays as the title)
 		exception := sentry.Exception{
-			Type:  errorTitle,
-			Value: scrubbedMessage,
+			Type:       errorTitle,
+			Value:      scrubbedMessage,
+			Stacktrace: sentry.NewStacktrace(),
 		}
 		event.Exception = []sentry.Exception{exception}
 
