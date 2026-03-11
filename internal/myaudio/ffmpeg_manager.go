@@ -162,14 +162,19 @@ func (m *FFmpegManager) StopStream(url string) error {
 			Build()
 	}
 
+	// Capture source ID before removing from map — buffers and processors
+	// are keyed by source ID (e.g., "rtsp_abcd1234"), not the raw URL.
+	sourceID := stream.source.ID
+
 	// Stop the stream and remove from map while holding lock
 	stream.Stop()
 	delete(m.streams, url)
 
-	// Unregister sound level processor while holding lock
-	UnregisterSoundLevelProcessor(url)
+	// Unregister sound level processor using source ID (registered with source ID)
+	UnregisterSoundLevelProcessor(sourceID)
 	getManagerLogger().Debug("unregistered sound level processor",
 		logger.String("url", privacy.SanitizeStreamUrl(url)),
+		logger.String("source_id", sourceID),
 		logger.String("operation", "stop_stream"))
 
 	// Clean up watchdog tracking for this stream to prevent memory leak
@@ -182,27 +187,30 @@ func (m *FFmpegManager) StopStream(url string) error {
 	// because goroutines waiting on the mutex are not durably blocked, preventing time advancement
 	m.streamsMu.Unlock()
 
-	// Clean up buffers for the stream
+	// Clean up buffers for the stream using source ID (buffers are keyed by source ID)
 	// Wait a short time for any in-flight writes to complete
 	// This sleep is now safe for synctest since mutex is released
 	time.Sleep(100 * time.Millisecond)
 
-	if err := RemoveAnalysisBuffer(url); err != nil {
+	if err := RemoveAnalysisBuffer(sourceID); err != nil {
 		getManagerLogger().Warn("failed to remove analysis buffer",
 			logger.String("url", privacy.SanitizeStreamUrl(url)),
+			logger.String("source_id", sourceID),
 			logger.Error(err),
 			logger.String("operation", "stop_stream_buffer_cleanup"))
 	}
 
-	if err := RemoveCaptureBuffer(url); err != nil {
+	if err := RemoveCaptureBuffer(sourceID); err != nil {
 		getManagerLogger().Warn("failed to remove capture buffer",
 			logger.String("url", privacy.SanitizeStreamUrl(url)),
+			logger.String("source_id", sourceID),
 			logger.Error(err),
 			logger.String("operation", "stop_stream_buffer_cleanup"))
 	}
 
 	getManagerLogger().Info("stopped FFmpeg stream",
 		logger.String("url", privacy.SanitizeStreamUrl(url)),
+		logger.String("source_id", sourceID),
 		logger.String("operation", "stop_stream"))
 	return nil
 }

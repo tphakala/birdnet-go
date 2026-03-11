@@ -310,20 +310,11 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 	abMutex.RUnlock()
 
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for source ID: %s (%s)", sourceID, displayName).
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "write_to_analysis_buffer").
-			Context("source_id", sourceID).
-			Context("display_name", displayName).
-			Context("data_size", len(data)).
-			Build()
-
 		if m := getAnalysisMetrics(); m != nil {
 			m.RecordBufferWrite("analysis", sourceID, "error")
 			m.RecordBufferWriteError("analysis", sourceID, "buffer_not_found")
 		}
-		return enhancedErr
+		return fmt.Errorf("%w: source ID %s (%s)", ErrBufferNotFound, sourceID, displayName)
 	}
 
 	// Get buffer capacity information
@@ -512,19 +503,11 @@ func ReadFromAnalysisBuffer(sourceID string) ([]byte, error) {
 	// Get the ring buffer for the given source ID
 	ab, exists := analysisBuffers[sourceID]
 	if !exists {
-		enhancedErr := errors.Newf("no analysis buffer found for source ID: %s (%s)", sourceID, displayName).
-			Component("myaudio").
-			Category(errors.CategoryValidation).
-			Context("operation", "read_from_analysis_buffer").
-			Context("source_id", sourceID).
-			Context("display_name", displayName).
-			Build()
-
 		if m := getAnalysisMetrics(); m != nil {
 			m.RecordBufferRead("analysis", sourceID, "error")
 			m.RecordBufferReadError("analysis", sourceID, "buffer_not_found")
 		}
-		return nil, enhancedErr
+		return nil, fmt.Errorf("%w: source ID %s (%s)", ErrBufferNotFound, sourceID, displayName)
 	}
 
 	// Calculate the number of bytes written to the buffer
@@ -641,6 +624,14 @@ func AnalysisBufferMonitor(_ *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan
 		case <-ticker.C: // Wait for the next tick
 			data, err := ReadFromAnalysisBuffer(sourceID)
 			if err != nil {
+				// If the buffer was removed (e.g., stream stopped), exit gracefully
+				// instead of retrying forever and flooding logs
+				if errors.Is(err, ErrBufferNotFound) {
+					log.Info("analysis buffer removed, stopping monitor",
+						logger.String("source_id", sourceID))
+					return
+				}
+
 				log.Error("buffer read error",
 					logger.String("source_id", sourceID),
 					logger.Error(err))
