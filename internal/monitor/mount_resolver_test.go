@@ -210,11 +210,12 @@ func TestGroupPathsWithPartitionsEmptyInput(t *testing.T) {
 func TestGetMountInfoFromPartitions_NoMatch(t *testing.T) {
 	t.Parallel()
 
-	// Use partitions that don't cover /tmp (which exists on the filesystem)
+	// Use a real path that exists but is not covered by the mock partition list
+	tempDir := t.TempDir()
 	partitions := []disk.PartitionStat{
 		{Mountpoint: "/mnt/data", Device: "/dev/sdb1", Fstype: "ext4"},
 	}
-	_, _, _, err := getMountInfoFromPartitions("/tmp", partitions)
+	_, _, _, err := getMountInfoFromPartitions(tempDir, partitions)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no mount point found")
 

@@ -42,8 +42,8 @@ var (
 var ResourceSnapshotFunc func() map[string]any
 
 var (
-	lastDiskFullReport atomic.Int64 // Unix timestamp of last disk-full report
-	diskFullCooldown   = int64(300) // 5 minutes between disk-full reports
+	lastDiskFullReport atomic.Int64                           // Unix timestamp of last disk-full report
+	diskFullCooldown   = int64(5 * time.Minute / time.Second) // 5 minutes between disk-full reports
 
 	// networkNoisePatterns are environmental network errors that indicate
 	// user infrastructure issues, not code bugs.
@@ -170,8 +170,8 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	}
 
 	// Filter out network infrastructure errors (user's network/DNS issues)
-	if ee.Category == CategoryNetwork || ee.Category == CategoryMQTTConnection ||
-		ee.Category == CategoryRTSP || ee.Category == CategoryHTTP {
+	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
+	case CategoryNetwork, CategoryMQTTConnection, CategoryRTSP, CategoryHTTP:
 		for _, pattern := range networkNoisePatterns {
 			if strings.Contains(errorMsg, pattern) {
 				return false
