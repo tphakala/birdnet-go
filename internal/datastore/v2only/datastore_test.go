@@ -1090,16 +1090,24 @@ func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
 	assert.Len(t, preds, 2, "duplicate label should be collapsed to single prediction")
 }
 
-// TestGetTopBirdsData_SpeciesCode verifies that species codes from 3-part labels
+// TestGetTopBirdsData_SpeciesCode verifies that species codes from eBird taxonomy
 // are populated in the GetTopBirdsData response. Regression test for issue #2191.
 func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 	labels := []string{
-		"Corvus corax_Common Raven_comrav",
-		"Turdus merula_Eurasian Blackbird_eurbla1",
-		"Passer domesticus_House Sparrow", // 2-part label without species code
+		"Corvus corax_Common Raven",
+		"Turdus merula_Eurasian Blackbird",
+		"Passer domesticus_House Sparrow",
 	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
-	defer cleanup()
+	speciesCodeMap := map[string]string{
+		"Corvus corax":  "comrav",
+		"Turdus merula": "eurbla1",
+		// Passer domesticus intentionally omitted
+	}
+	cfg, cfgCleanup := buildTestConfig(t, labels)
+	cfg.SpeciesCodeMap = speciesCodeMap
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close(); cfgCleanup() }()
 
 	now := time.Now().UTC()
 	dateStr := now.Format(time.DateOnly)
@@ -1125,19 +1133,25 @@ func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
 		codeByScientific[n.ScientificName] = n.SpeciesCode
 	}
 
-	assert.Equal(t, "comrav", codeByScientific["Corvus corax"], "3-part label should have species code")
-	assert.Equal(t, "eurbla1", codeByScientific["Turdus merula"], "3-part label should have species code")
-	assert.Empty(t, codeByScientific["Passer domesticus"], "2-part label should have empty species code")
+	assert.Equal(t, "comrav", codeByScientific["Corvus corax"], "taxonomy species code should be populated")
+	assert.Equal(t, "eurbla1", codeByScientific["Turdus merula"], "taxonomy species code should be populated")
+	assert.Empty(t, codeByScientific["Passer domesticus"], "species not in taxonomy should have empty code")
 }
 
 // TestGetSpeciesSummaryData_NoDateFilter verifies that species summary returns
 // data when no date filter is provided. Regression test for issue #2191.
 func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 	labels := []string{
-		"Corvus corax_Common Raven_comrav",
+		"Corvus corax_Common Raven",
 	}
-	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
-	defer cleanup()
+	speciesCodeMap := map[string]string{
+		"Corvus corax": "comrav",
+	}
+	cfg, cfgCleanup := buildTestConfig(t, labels)
+	cfg.SpeciesCodeMap = speciesCodeMap
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close(); cfgCleanup() }()
 
 	now := time.Now().UTC()
 
@@ -1165,7 +1179,7 @@ func TestGetSpeciesSummaryData_NoDateFilter(t *testing.T) {
 // filters by date range.
 func TestGetSpeciesSummaryData_WithDateFilter(t *testing.T) {
 	labels := []string{
-		"Corvus corax_Common Raven_comrav",
+		"Corvus corax_Common Raven",
 	}
 	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
 	defer cleanup()

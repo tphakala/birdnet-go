@@ -141,7 +141,7 @@ type Datastore struct {
 	commonNameMap map[string]string
 
 	// speciesCodeMap provides O(1) lookup from scientific name to eBird species code.
-	// Populated from 3-part label format "ScientificName_CommonName_SpeciesCode".
+	// Populated from the eBird taxonomy data passed via Config.SpeciesCodeMap.
 	speciesCodeMap map[string]string
 
 	// dbstatAvailable caches whether the dbstat virtual table exists.
@@ -175,6 +175,10 @@ type Config struct {
 	// Labels provides species label mappings in "ScientificName_CommonName" format.
 	// Used to build speciesMap for GetThresholdEvents workaround. See issue #1907.
 	Labels []string
+
+	// SpeciesCodeMap maps scientific names to eBird species codes.
+	// Built from taxonomy data (e.g., birdnet.CreateScientificNameIndex).
+	SpeciesCodeMap map[string]string
 }
 
 // New creates a new V2-only Datastore.
@@ -243,28 +247,25 @@ func New(cfg *Config) (*Datastore, error) {
 	}
 
 	// Build species name maps from labels.
-	// Labels are in "ScientificName_CommonName[_SpeciesCode]" format
-	// (e.g., "Turdus merula_Eurasian Blackbird_eurbla1").
+	// Labels are in "ScientificName_CommonName" format.
 	// See issue #1907 for context on speciesMap usage.
 	speciesMap := make(map[string]string)
 	commonNameMap := make(map[string]string)
-	speciesCodeMap := make(map[string]string)
 	for _, label := range cfg.Labels {
-		parts := strings.SplitN(label, "_", 3)
-		if len(parts) >= 2 {
-			scientificName := strings.TrimSpace(parts[0])
-			commonName := strings.TrimSpace(parts[1])
+		if scientificName, commonName, found := strings.Cut(label, "_"); found {
+			scientificName = strings.TrimSpace(scientificName)
+			commonName = strings.TrimSpace(commonName)
 			if commonName != "" && scientificName != "" {
 				speciesMap[strings.ToLower(commonName)] = scientificName
 				commonNameMap[scientificName] = commonName
-				if len(parts) == 3 {
-					code := strings.TrimSpace(parts[2])
-					if code != "" {
-						speciesCodeMap[scientificName] = code
-					}
-				}
 			}
 		}
+	}
+
+	// Use species code map from taxonomy data (injected via config).
+	speciesCodeMap := cfg.SpeciesCodeMap
+	if speciesCodeMap == nil {
+		speciesCodeMap = make(map[string]string)
 	}
 
 	return &Datastore{

@@ -25,7 +25,7 @@ func TestInitializeFreshInstall_SQLite(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = dbPath
 
-	ds, err := InitializeFreshInstall(settings, nil)
+	ds, err := InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -53,7 +53,7 @@ func TestInitializeFreshInstall_SQLite_CustomPath(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = customPath
 
-	ds, err := InitializeFreshInstall(settings, nil)
+	ds, err := InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -78,7 +78,7 @@ func TestInitializeFreshInstall_MigrationStateCompleted(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = dbPath
 
-	ds, err := InitializeFreshInstall(settings, nil)
+	ds, err := InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -103,7 +103,7 @@ func TestInitializeFreshInstall_CanSaveAndRetrieve(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = dbPath
 
-	ds, err := InitializeFreshInstall(settings, nil)
+	ds, err := InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -131,7 +131,7 @@ func TestInitializeFreshInstall_NoDatabase(t *testing.T) {
 	settings := &conf.Settings{}
 	// No database configured
 
-	_, err := InitializeFreshInstall(settings, nil)
+	_, err := InitializeFreshInstall(settings, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no database configured")
 }
@@ -144,7 +144,7 @@ func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = "" // Empty path
 
-	_, err := InitializeFreshInstall(settings, nil)
+	_, err := InitializeFreshInstall(settings, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sqlite path is empty")
 }

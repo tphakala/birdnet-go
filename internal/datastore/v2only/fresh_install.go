@@ -24,7 +24,7 @@ import (
 //   - User wants to start fresh with v2 schema
 //
 // The function also sets the global enhanced database flag via v2.SetEnhancedDatabaseMode().
-func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datastore, error) {
+func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesCodeMap map[string]string) (*Datastore, error) {
 	if log == nil {
 		log = logger.Global().Module("datastore")
 	}
@@ -137,6 +137,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger) (*Datast
 		DefaultModelID:     defaultModel.ID,
 		SpeciesLabelTypeID: speciesLabelType.ID,
 		AvesClassID:        &avesClassID,
+		SpeciesCodeMap:     speciesCodeMap,
 	})
 	if err != nil {
 		_ = manager.Close()
