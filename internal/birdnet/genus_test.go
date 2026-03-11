@@ -505,6 +505,107 @@ func TestGetAllSpeciesInOrder_NotFound(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestBirdNETSynonyms verifies that BirdNET model names that differ from
+// current eBird taxonomy are resolved correctly via the synonym mapping.
+func TestBirdNETSynonyms(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "birdnet-genus")
+	t.Attr("category", "synonyms")
+
+	db, err := LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	tests := []struct {
+		name           string
+		scientificName string
+		wantGenus      string
+		wantFamily     string
+	}{
+		{
+			name:           "cattle egret (Bubulcus → Ardea)",
+			scientificName: "Bubulcus ibis",
+			wantGenus:      "ardea",
+			wantFamily:     "Ardeidae",
+		},
+		{
+			name:           "yellow bittern (Ixobrychus → Botaurus)",
+			scientificName: "Ixobrychus sinensis",
+			wantGenus:      "botaurus",
+			wantFamily:     "Ardeidae",
+		},
+		{
+			name:           "mottled owl (Ciccaba → Strix)",
+			scientificName: "Ciccaba virgata",
+			wantGenus:      "strix",
+			wantFamily:     "Strigidae",
+		},
+		{
+			name:           "araripe manakin (Antilophia → Chiroxiphia)",
+			scientificName: "Antilophia bokermanni",
+			wantGenus:      "chiroxiphia",
+			wantFamily:     "Pipridae",
+		},
+		{
+			name:           "yellow-bellied caracara (Milvago → Daptrius)",
+			scientificName: "Milvago chimachima",
+			wantGenus:      "daptrius",
+			wantFamily:     "Falconidae",
+		},
+		{
+			name:           "ross turaco (Musophaga → Tauraco)",
+			scientificName: "Musophaga rossae",
+			wantGenus:      "tauraco",
+			wantFamily:     "Musophagidae",
+		},
+		{
+			name:           "groundscraper thrush (Psophocichla → Turdus)",
+			scientificName: "Psophocichla litsitsirupa",
+			wantGenus:      "turdus",
+			wantFamily:     "Turdidae",
+		},
+		{
+			name:           "major mitchell cockatoo (Lophochroa → Cacatua)",
+			scientificName: "Lophochroa leadbeateri",
+			wantGenus:      "cacatua",
+			wantFamily:     "Cacatuidae",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			genusName, metadata, err := db.GetGenusByScientificName(tt.scientificName)
+
+			require.NoError(t, err, "Synonym lookup should succeed for %s", tt.scientificName)
+			assert.Equal(t, tt.wantGenus, genusName)
+			require.NotNil(t, metadata)
+			assert.Equal(t, tt.wantFamily, metadata.Family)
+		})
+	}
+}
+
+// TestBirdNETSynonymCount verifies that the expected number of synonyms were applied.
+func TestBirdNETSynonymCount(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "birdnet-genus")
+	t.Attr("category", "synonyms")
+
+	db, err := LoadTaxonomyDatabase()
+	require.NoError(t, err, "Failed to load taxonomy database")
+
+	// Count how many BirdNET synonym keys are present in the species index
+	found := 0
+	for birdnetName := range birdnetSynonyms {
+		if _, exists := db.SpeciesIndex[birdnetName]; exists {
+			found++
+		}
+	}
+
+	assert.Equal(t, len(birdnetSynonyms), found,
+		"All BirdNET synonyms should be present in species index")
+}
+
 // BenchmarkLoadTaxonomyDatabase benchmarks database loading
 func BenchmarkLoadTaxonomyDatabase(b *testing.B) {
 	b.ReportAllocs()
