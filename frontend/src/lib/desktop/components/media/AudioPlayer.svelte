@@ -887,6 +887,10 @@
         // Retry loading if under the retry limit — the audio file may still
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
+          if (audioRetryTimer) {
+            clearTimeout(audioRetryTimer);
+            audioRetryTimer = undefined;
+          }
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
           audioRetryTimer = setTimeout(() => {

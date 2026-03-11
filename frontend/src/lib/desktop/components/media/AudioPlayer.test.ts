@@ -446,7 +446,9 @@ describe('AudioPlayer', () => {
     for (let i = 0; i <= MAX_AUDIO_LOAD_RETRIES; i++) {
       const errorHandlers = safeGet(eventHandlers, 'error', []);
       if (errorHandlers.length > 0) {
-        errorHandlers.forEach(handler => handler.call(mockAudioInstance, new Event('error')));
+        errorHandlers.forEach(handler => {
+          handler.call(mockAudioInstance, new Event('error'));
+        });
       }
       if (i < MAX_AUDIO_LOAD_RETRIES) {
         // Advance past the retry delay so the retry timer fires

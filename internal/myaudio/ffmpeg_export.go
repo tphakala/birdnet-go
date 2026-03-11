@@ -190,10 +190,16 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return enhancedErr
 	}
 
+	// Ensure temp file is cleaned up unless finalization succeeds
+	tempFileFinalized := false
+	defer func() {
+		if !tempFileFinalized {
+			cleanupTempFile(tempFilePath)
+		}
+	}()
+
 	// Run the FFmpeg command to process the audio
 	if err := runFFmpegCommand(settings.FfmpegPath, pcmData, tempFilePath, settings); err != nil {
-		cleanupTempFile(tempFilePath)
-
 		enhancedErr := errors.New(err).
 			Component("myaudio").
 			Category(errors.CategorySystem).
@@ -224,6 +230,8 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		}
 		return enhancedErr
 	}
+
+	tempFileFinalized = true
 
 	// Record successful operation
 	if fileMetrics != nil {
