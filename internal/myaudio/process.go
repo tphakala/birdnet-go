@@ -152,7 +152,9 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	}
 
 	// run BirdNET inference
+	inferenceStart := time.Now()
 	results, err := bn.Predict(sampleData)
+	inferenceDuration := time.Since(inferenceStart)
 
 	// Return float32 buffer to pool after prediction
 	// This is safe because Predict copies the data to the input tensor
@@ -160,12 +162,25 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 		ReturnFloat32Buffer(sampleData[0])
 	}
 
+	// Record inference duration metric (always, even on error)
+	processMetricsMutex.RLock()
+	pm := processMetrics
+	processMetricsMutex.RUnlock()
+	if pm != nil {
+		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
+	}
+
 	if err != nil {
 		return fmt.Errorf("error predicting species: %w", err)
 	}
 
-	// get elapsed time
+	// get elapsed time (includes conversion + inference for overrun check)
 	elapsedTime := time.Since(predictStart)
+
+	// Record result count metric
+	if pm != nil {
+		pm.RecordBirdNETResults(source, len(results))
+	}
 
 	// DEBUG print all BirdNET results
 	if conf.Setting().BirdNET.Debug {
@@ -264,11 +279,15 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 	// Note: No copy needed - ownership transfers to the queue consumer
 	select {
 	case birdnet.ResultsQueue <- resultsMessage:
-		// Results enqueued successfully
+		if pm != nil {
+			pm.RecordAudioQueueOperation(source, "enqueue", "success")
+		}
 	default:
 		log.Error("results queue is full",
 			logger.String("source", source))
-		// Queue is full
+		if pm != nil {
+			pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
+		}
 	}
 	return nil
 }
