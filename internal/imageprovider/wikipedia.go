@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/antonholmquist/jason"
@@ -39,6 +41,7 @@ const (
 	circuitBreakerBlockedDuration        = 5 * time.Minute  // Access blocked circuit breaker duration
 	circuitBreakerUserAgentDuration      = 10 * time.Minute // User-Agent violation circuit breaker duration
 	circuitBreakerServiceUnavailDuration = 30 * time.Second // Service unavailable circuit breaker duration
+	circuitBreakerNetworkDuration        = 2 * time.Minute  // Network/DNS failure circuit breaker duration
 
 	// HTTP client configuration
 	httpClientTimeout         = 30 * time.Second
@@ -94,6 +97,9 @@ type wikiMediaProvider struct {
 	circuitOpenUntil time.Time // When the circuit breaker can be closed again
 	circuitFailures  int       // Number of consecutive failures
 	circuitLastError string    // Last error message for logging
+
+	// Track whether a network error has been logged at Error level to avoid log spam
+	networkErrorLogged atomic.Bool
 }
 
 // wikiMediaAuthor represents the author information for a Wikipedia image.
@@ -145,6 +151,7 @@ func (l *wikiMediaProvider) resetCircuit() {
 	l.circuitOpenUntil = time.Time{}
 	l.circuitFailures = 0
 	l.circuitLastError = ""
+	l.networkErrorLogged.Store(false)
 }
 
 // makeAPIRequest performs a direct HTTP GET request to Wikipedia API with proper headers.
@@ -825,6 +832,28 @@ func logAPIError(category apiErrorCategory, reqID, species string, err error) {
 		logger.String("troubleshooting_hint", getTroubleshootingHint(category)))
 }
 
+// logNetworkError logs network errors, downgrading to debug level after the first occurrence
+// to avoid log spam when DNS/network is persistently broken.
+func (l *wikiMediaProvider) logNetworkError(category apiErrorCategory, reqID, species string, err error) {
+	fields := []logger.Field{
+		logger.String("provider", wikiProviderName),
+		logger.String("error_category", category.Type),
+		logger.String("error_description", category.Description),
+		logger.String("error_severity", category.Severity),
+		logger.Bool("actionable", category.Actionable),
+		logger.String("request_id", reqID),
+		logger.String("species_query", species),
+		logger.String("original_error", err.Error()),
+		logger.String("troubleshooting_hint", getTroubleshootingHint(category)),
+	}
+
+	if l.networkErrorLogged.CompareAndSwap(false, true) {
+		GetLogger().Error("Wikipedia API error - categorized for diagnostics", fields...)
+	} else {
+		GetLogger().Debug("Wikipedia API error (repeated, suppressed)", fields...)
+	}
+}
+
 // getTroubleshootingHint provides actionable troubleshooting advice based on error category
 func getTroubleshootingHint(category apiErrorCategory) string {
 	switch category.Type {
@@ -1001,6 +1030,22 @@ func buildRetryExhaustedError(lastErr error, reqID string, params map[string]str
 		Build()
 }
 
+// isNetworkError checks if an error is a network-level failure (DNS, dial, connection refused).
+func isNetworkError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr *net.OpError
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) || errors.As(err, &netErr) {
+		return true
+	}
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "dial tcp") ||
+		strings.Contains(errMsg, "no such host") ||
+		strings.Contains(errMsg, "connection refused")
+}
+
 // queryWithRetryAndLimiter performs a query with retry logic using the specified rate limiter.
 // The context is used for cancellation, deadlines, and rate limiting.
 func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID string, params map[string]string, limiter *rate.Limiter) (*jason.Object, error) {
@@ -1050,7 +1095,14 @@ func (l *wikiMediaProvider) queryWithRetryAndLimiter(ctx context.Context, reqID 
 		time.Sleep(waitDuration)
 	}
 
-	logAPIError(errorCategoryNetworkFailure, reqID, params["titles"], lastErr)
+	if isNetworkError(lastErr) {
+		l.openCircuit(circuitBreakerNetworkDuration,
+			fmt.Sprintf("Network/DNS failure: %s", lastErr.Error()))
+		l.logNetworkError(errorCategoryNetworkFailure, reqID, params["titles"], lastErr)
+	} else {
+		logAPIError(errorCategoryNetworkFailure, reqID, params["titles"], lastErr)
+	}
+
 	return nil, buildRetryExhaustedError(lastErr, reqID, params, l.maxRetries)
 }
 
