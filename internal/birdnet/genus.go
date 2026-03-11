@@ -117,6 +117,39 @@ var birdnetSynonyms = map[string]string{
 	// Mouse-Warblers: Crateroscelis → Origma (Acanthizidae)
 	"crateroscelis murina":  "origma murina",
 	"crateroscelis robusta": "origma robusta",
+
+	// Magpie-Jays: Calocitta formosa → Cyanocorax formosus (Corvidae)
+	// Note: epithet spelling change formosa → formosus
+	"calocitta formosa": "cyanocorax formosus",
+
+	// Parrotbills: Cholornis → Paradoxornis (Paradoxornithidae)
+	"cholornis unicolor": "paradoxornis unicolor",
+
+	// Parrotbills: Conostoma → Paradoxornis (Paradoxornithidae)
+	// Note: epithet spelling change aemodium → aemodius
+	"conostoma aemodium": "paradoxornis aemodius",
+
+	// Lorikeets: Glossopsitta → Trichoglossus (Psittaculidae)
+	// Note: epithet spelling change concinna → concinnus
+	"glossopsitta concinna": "trichoglossus concinnus",
+
+	// Lorikeets: Parvipsitta → Psitteuteles (Psittaculidae)
+	// Note: epithet gender change porphyrocephala → porphyrocephalus
+	"parvipsitta porphyrocephala": "psitteuteles porphyrocephalus",
+
+	// Lorikeets: Parvipsitta → Psitteuteles (Psittaculidae)
+	// Note: epithet gender change pusilla → pusillus
+	"parvipsitta pusilla": "psitteuteles pusillus",
+
+	// Parrotbills: Psittiparus → Paradoxornis (Paradoxornithidae)
+	"psittiparus gularis": "paradoxornis gularis",
+
+	// Plovers: Elseyornis → Anarhynchus (Charadriidae)
+	"elseyornis melanops": "anarhynchus melanops",
+
+	// Buntings: Spodiornis → Emberiza (Emberizidae)
+	// Note: epithet change rusticus → rustica
+	"spodiornis rusticus": "emberiza rustica",
 }
 
 // TaxonomyDatabase represents the complete genus/family taxonomy database

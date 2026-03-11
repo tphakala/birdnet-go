@@ -569,6 +569,48 @@ func TestBirdNETSynonyms(t *testing.T) {
 			wantGenus:      "cacatua",
 			wantFamily:     "Cacatuidae",
 		},
+		{
+			name:           "white-throated magpie-jay (Calocitta → Cyanocorax)",
+			scientificName: "Calocitta formosa",
+			wantGenus:      "cyanocorax",
+			wantFamily:     "Corvidae",
+		},
+		{
+			name:           "brown parrotbill (Cholornis → Paradoxornis)",
+			scientificName: "Cholornis unicolor",
+			wantGenus:      "paradoxornis",
+			wantFamily:     "Paradoxornithidae",
+		},
+		{
+			name:           "musk lorikeet (Glossopsitta → Trichoglossus)",
+			scientificName: "Glossopsitta concinna",
+			wantGenus:      "trichoglossus",
+			wantFamily:     "Psittaculidae",
+		},
+		{
+			name:           "purple-crowned lorikeet (Parvipsitta → Psitteuteles)",
+			scientificName: "Parvipsitta porphyrocephala",
+			wantGenus:      "psitteuteles",
+			wantFamily:     "Psittaculidae",
+		},
+		{
+			name:           "rustic bunting (Spodiornis → Emberiza)",
+			scientificName: "Spodiornis rusticus",
+			wantGenus:      "emberiza",
+			wantFamily:     "Emberizidae",
+		},
+		{
+			name:           "black-fronted dotterel (Elseyornis → Anarhynchus)",
+			scientificName: "Elseyornis melanops",
+			wantGenus:      "anarhynchus",
+			wantFamily:     "Charadriidae",
+		},
+		{
+			name:           "mouse-colored tyrannulet (Phaeomyias, added to DB)",
+			scientificName: "Phaeomyias murina",
+			wantGenus:      "phaeomyias",
+			wantFamily:     "Tyrannidae",
+		},
 	}
 
 	for _, tt := range tests {

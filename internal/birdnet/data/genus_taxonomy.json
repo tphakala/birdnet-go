@@ -5,7 +5,7 @@
   "updated_at": "2025-10-26",
   "license": "Derived from eBird data - Non-commercial use with attribution",
   "attribution": "Taxonomy data © Cornell Lab of Ornithology. Derived from eBird/Clements Checklist under eBird API Terms of Use.",
-  "genus_count": 2374,
+  "genus_count": 2375,
   "family_count": 254,
   "genera": {
     "abeillia": {
@@ -1290,7 +1290,8 @@
         "Anarhynchus marginatus",
         "Anarhynchus javanicus",
         "Anarhynchus alexandrinus",
-        "Anarhynchus dealbatus"
+        "Anarhynchus dealbatus",
+        "Anarhynchus melanops"
       ]
     },
     "anas": {
@@ -27947,6 +27948,14 @@
         "Zosterornis latistriatus",
         "Zosterornis nigrorum"
       ]
+    },
+    "phaeomyias": {
+      "family": "Tyrannidae",
+      "family_common": "Tyrant Flycatchers",
+      "order": "Passeriformes",
+      "species": [
+        "Phaeomyias murina"
+      ]
     }
   },
   "families": {
@@ -28649,7 +28658,7 @@
         "peltohyas",
         "zonibyx"
       ],
-      "species_count": 69
+      "species_count": 70
     },
     "chionidae": {
       "family_common": "Sheathbills",
@@ -31993,9 +32002,10 @@
         "elaenia",
         "leptopogon",
         "colorhamphus",
-        "zimmerius"
+        "zimmerius",
+        "phaeomyias"
       ],
-      "species_count": 440
+      "species_count": 441
     },
     "tytonidae": {
       "family_common": "Barn-Owls",
@@ -43425,6 +43435,8 @@
     "telophorus sulfureopectus": "telophorus",
     "trachyphonus purpuratus": "trachyphonus",
     "urosphena pallidipes": "urosphena",
-    "vanellus cayanus": "vanellus"
+    "vanellus cayanus": "vanellus",
+    "anarhynchus melanops": "anarhynchus",
+    "phaeomyias murina": "phaeomyias"
   }
 }
