@@ -355,6 +355,11 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"max_attempts":      true,
 		// HTTP response diagnostics (numeric, no PII)
 		"status_code": true,
+		// Audio processing performance diagnostics (numeric only)
+		"overrun_count":            true,
+		"max_elapsed_ms":           true,
+		"buffer_length_ms":         true,
+		"reporting_window_minutes": true,
 	}
 
 	for k := range extra {
@@ -738,6 +743,40 @@ func CaptureMessage(message string, level sentry.Level, component string) {
 
 	// Log successful submission
 	log.Debug("message event sent successfully",
+		logger.String("component", component),
+		logger.String("sentry_level", string(level)))
+}
+
+// CaptureMessageWithExtras captures a message with additional context fields attached to the Sentry event scope.
+// Extra fields are subject to the privacy allowlist in removePrivacyExtraFields.
+func CaptureMessageWithExtras(message string, level sentry.Level, component string, extras map[string]any) {
+	if shouldSkipTelemetry() {
+		return
+	}
+
+	if level == sentry.LevelInfo || level == sentry.LevelDebug {
+		return
+	}
+
+	scrubbedMessage := privacy.ScrubMessage(message)
+	log := GetLogger()
+
+	log.Debug("sending message event with extras",
+		logger.String("event_type", "message"),
+		logger.String("sentry_level", string(level)),
+		logger.String("component", component),
+		logger.Int("extras_count", len(extras)))
+
+	sentry.WithScope(func(scope *sentry.Scope) {
+		scope.SetTag("component", component)
+		scope.SetLevel(level)
+		for k, v := range extras {
+			scope.SetExtra(k, v)
+		}
+		sentry.CaptureMessage(scrubbedMessage)
+	})
+
+	log.Debug("message event with extras sent successfully",
 		logger.String("component", component),
 		logger.String("sentry_level", string(level)))
 }
