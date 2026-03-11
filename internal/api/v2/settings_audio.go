@@ -48,6 +48,8 @@ func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
 // getAudioBlockedFields returns the blocked fields map for the audio section
 func getAudioBlockedFields() map[string]any {
 	return map[string]any{
+		"FfmpegPath":    true, // Runtime: validated at startup by ValidateToolPath, must not be overwritten by API
+		"SoxPath":       true, // Runtime: validated at startup by ValidateToolPath, must not be overwritten by API
 		"SoxAudioTypes": true, // Runtime list of supported audio types
 	}
 }

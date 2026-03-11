@@ -98,7 +98,11 @@ func setupTestSettings(t *testing.T, streamURL, streamType, transport string) {
 	originalSettings := conf.GetTestSettings()
 
 	settings := conf.GetTestSettings()
-	settings.Realtime.Audio.FfmpegPath = "ffmpeg" // Use system FFmpeg
+	ffmpegPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		t.Fatalf("FFmpeg not found in PATH: %v", err)
+	}
+	settings.Realtime.Audio.FfmpegPath = ffmpegPath // Use resolved absolute path
 	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 		{
 			Name:      "Integration Test Stream",

@@ -53,16 +53,17 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 		return enhancedErr
 	}
 
-	if settings.FfmpegPath == "" {
-		enhancedErr := errors.Newf("FFmpeg path is not configured or invalid").
+	if err := validateFFmpegPath(settings.FfmpegPath); err != nil {
+		enhancedErr := errors.Newf("invalid FFmpeg path: %s", err).
 			Component("myaudio").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "export_audio_ffmpeg").
+			Context("ffmpeg_path", settings.FfmpegPath).
 			Build()
 
 		if fileMetrics != nil {
 			fileMetrics.RecordFileOperation("export_ffmpeg", "unknown", "error")
-			fileMetrics.RecordFileOperationError("export_ffmpeg", "unknown", "missing_ffmpeg_path")
+			fileMetrics.RecordFileOperationError("export_ffmpeg", "unknown", "invalid_ffmpeg_path")
 		}
 		return enhancedErr
 	}
@@ -575,16 +576,17 @@ func ExportAudioWithCustomFFmpegArgsContext(ctx context.Context, pcmData []byte,
 		return nil, enhancedErr
 	}
 
-	if ffmpegPath == "" {
-		enhancedErr := errors.Newf("FFmpeg path provided is empty").
+	if err := validateFFmpegPath(ffmpegPath); err != nil {
+		enhancedErr := errors.Newf("invalid FFmpeg path: %s", err).
 			Component("myaudio").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "export_custom_ffmpeg_context").
+			Context("ffmpeg_path", ffmpegPath).
 			Build()
 
 		if fileMetrics != nil {
 			fileMetrics.RecordFileOperation("export_custom_ffmpeg", "unknown", "error")
-			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "unknown", "empty_ffmpeg_path")
+			fileMetrics.RecordFileOperationError("export_custom_ffmpeg", "unknown", "invalid_ffmpeg_path")
 		}
 		return nil, enhancedErr
 	}
@@ -826,9 +828,8 @@ func AnalyzeAudioLoudness(pcmData []byte, ffmpegPath string) (*LoudnessStats, er
 // This is the context-aware version of AnalyzeAudioLoudness that allows timeout/cancellation
 func AnalyzeAudioLoudnessWithContext(ctx context.Context, pcmData []byte, ffmpegPath string) (*LoudnessStats, error) {
 	log := GetLogger()
-	// Assume ffmpegPath is valid (validated by caller, usually via conf.ValidateAudioSettings)
-	if ffmpegPath == "" {
-		return nil, fmt.Errorf("FFmpeg path provided is empty")
+	if err := validateFFmpegPath(ffmpegPath); err != nil {
+		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
 	}
 
 	// Get standard input format arguments
