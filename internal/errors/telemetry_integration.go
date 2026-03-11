@@ -170,6 +170,13 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
+	// Filter out "image not found" errors — expected when Wikipedia lacks an image for a species
+	if ee.Category == CategoryImageFetch {
+		if strings.Contains(errorMsg, "image not found") {
+			return false
+		}
+	}
+
 	// Filter out network infrastructure errors (user's network/DNS issues)
 	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
 	case CategoryNetwork, CategoryMQTTConnection, CategoryRTSP, CategoryHTTP:

@@ -63,8 +63,8 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 		return PriorityHigh // System resources issues
 	case string(errors.CategoryConfiguration):
 		return PriorityHigh // May prevent proper operation
-	case string(errors.CategoryImageProvider):
-		return PriorityLow // Most ImageProvider issues are expected (missing Wikipedia pages)
+	case string(errors.CategoryImageProvider), string(errors.CategoryImageFetch):
+		return PriorityLow // Most image issues are expected (missing Wikipedia pages)
 	case string(errors.CategoryMQTTConnection), string(errors.CategoryMQTTAuth):
 		return PriorityHigh // Connection/auth failures need immediate attention
 	case string(errors.CategoryJobQueue), string(errors.CategoryBuffer):
