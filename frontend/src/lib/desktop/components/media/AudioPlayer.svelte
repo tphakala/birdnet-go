@@ -42,6 +42,8 @@
     CANPLAY_TIMEOUT_MS,
     PROGRESS_UPDATE_INTERVAL_MS,
     MIN_CONTROLS_WIDTH_PX,
+    MAX_AUDIO_LOAD_RETRIES,
+    AUDIO_RETRY_DELAY_MS,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -146,6 +148,11 @@
   let spectrogramRetryTimer: ReturnType<typeof setTimeout> | undefined;
   // Cache key for forcing spectrogram reload via Svelte reactivity (instead of direct DOM manipulation)
   let spectrogramCacheKey = $state(0);
+
+  // Audio load retry state — handles race condition where detection DB record
+  // exists but audio file is still being encoded by FFmpeg (backend returns 503)
+  let audioRetryCount = 0;
+  let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Spectrogram generation status
   let spectrogramStatus = $state<{
@@ -763,6 +770,11 @@
         progress = 0;
         duration = 0;
         error = null;
+        audioRetryCount = 0;
+        if (audioRetryTimer) {
+          clearTimeout(audioRetryTimer);
+          audioRetryTimer = undefined;
+        }
       }
     }
   });
@@ -861,6 +873,8 @@
           canplayTimeoutId = undefined;
         }
         isLoading = false;
+        // Reset retry counter on successful load (may have succeeded after retries)
+        audioRetryCount = 0;
       });
 
       addTrackedEventListener(audioElement, 'error', () => {
@@ -869,6 +883,21 @@
           clearTimeout(canplayTimeoutId);
           canplayTimeoutId = undefined;
         }
+
+        // Retry loading if under the retry limit — the audio file may still
+        // be encoding (backend returns 503 which the browser treats as a load error)
+        if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
+          audioRetryCount++;
+          debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
+          audioRetryTimer = setTimeout(() => {
+            if (audioElement) {
+              audioElement.src = audioUrl;
+              audioElement.load();
+            }
+          }, AUDIO_RETRY_DELAY_MS);
+          return;
+        }
+
         error = t('media.audio.error');
         isLoading = false;
       });
@@ -909,6 +938,10 @@
       clearSpectrogramRetryTimer();
       clearStatusPollTimer();
       spectrogramLoader.cleanup();
+      if (audioRetryTimer) {
+        clearTimeout(audioRetryTimer);
+        audioRetryTimer = undefined;
+      }
 
       // Clear canplay safety timeout
       if (canplayTimeoutId) {

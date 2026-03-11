@@ -118,6 +118,15 @@ const (
 	spectrogramStatusNotStarted = "not_started"
 )
 
+// audioEncodingMaxAge is the maximum age of a temp file to be considered
+// "still encoding". Temp files older than this are likely stale from a
+// failed FFmpeg export and should not trigger a 503 response.
+const audioEncodingMaxAge = 30 * time.Second
+
+// audioRetryAfterSeconds is the Retry-After header value returned when
+// an audio file is still being encoded.
+const audioRetryAfterSeconds = "2"
+
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
 	c.logInfoIfEnabled("Initializing media routes")
@@ -277,6 +286,30 @@ func parseRawParameter(rawParam string) bool {
 	}
 }
 
+// isAudioBeingEncoded checks if an audio file at the given relative path is
+// currently being encoded by FFmpeg. FFmpeg exports use a temporary file with
+// a ".temp" suffix that is atomically renamed upon completion. If a recent
+// temp file exists, the audio is still being written and the caller should
+// return 503 instead of 404.
+func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
+	tempPath := relClipPath + myaudio.TempExt
+	info, err := c.SFS.StatRel(tempPath)
+	if err != nil {
+		return false
+	}
+	// Guard against stale temp files from failed exports
+	return time.Since(info.ModTime()) < audioEncodingMaxAge
+}
+
+// handleAudioNotReady returns a 503 Service Unavailable response with a
+// Retry-After header, indicating that the audio file is still being encoded.
+func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
+	ctx.Response().Header().Set("Retry-After", audioRetryAfterSeconds)
+	return c.HandleError(ctx, myaudio.ErrAudioFileNotReady,
+		"Audio file is still being processed, please retry",
+		http.StatusServiceUnavailable)
+}
+
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -311,6 +344,15 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
 
 	if err != nil {
+		// Check if this is a 404 for a file that's still being encoded by FFmpeg.
+		// The detection DB record is committed before audio export completes, so the
+		// frontend may request the file before it exists on disk.
+		var httpErr *echo.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+			if c.isAudioBeingEncoded(normalizedFilename) {
+				return c.handleAudioNotReady(ctx)
+			}
+		}
 		// Error logging is handled within translateSecureFSError
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
@@ -388,6 +430,15 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	// Use ServeRelativeFile as clipPath is already relative to the baseDir
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
 	if err != nil {
+		// Check if this is a 404 for a file that's still being encoded by FFmpeg.
+		// The detection DB record is committed before audio export completes, so the
+		// frontend may request the file before it exists on disk.
+		var httpErr *echo.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+			if c.isAudioBeingEncoded(normalizedClipPath) {
+				return c.handleAudioNotReady(ctx)
+			}
+		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
 

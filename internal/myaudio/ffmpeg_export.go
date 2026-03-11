@@ -32,6 +32,16 @@ const (
 	FormatMP3  = "mp3"
 )
 
+// cleanupTempFile removes a temporary FFmpeg output file, preventing stale
+// temp files from causing permanent 503 responses in the audio serving path.
+func cleanupTempFile(path string) {
+	if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+		GetLogger().Warn("Failed to clean up temp file after FFmpeg error",
+			logger.String("temp_file", path),
+			logger.Error(removeErr))
+	}
+}
+
 // ExportAudioWithFFmpeg exports PCM data to the specified format using FFmpeg
 // outputPath is full path with audio file name and extension based on format
 // pcmData is the PCM data to export
@@ -182,6 +192,8 @@ func ExportAudioWithFFmpeg(pcmData []byte, outputPath string, settings *conf.Aud
 
 	// Run the FFmpeg command to process the audio
 	if err := runFFmpegCommand(settings.FfmpegPath, pcmData, tempFilePath, settings); err != nil {
+		cleanupTempFile(tempFilePath)
+
 		enhancedErr := errors.New(err).
 			Component("myaudio").
 			Category(errors.CategorySystem).
