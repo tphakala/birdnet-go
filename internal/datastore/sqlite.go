@@ -286,7 +286,7 @@ func (s *SQLiteStore) Open() error {
 	}
 
 	// Perform auto-migration
-	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", dbPath); err != nil {
+	if err := performAutoMigration(db, s.Settings.Debug, "SQLite", ""); err != nil {
 		// Send migration error to telemetry with enhanced context
 		if s.telemetry != nil {
 			s.telemetry.CaptureEnhancedError(err, "auto_migration", s)

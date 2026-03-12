@@ -2,14 +2,12 @@ package datastore
 
 import (
 	"fmt"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/privacy"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
@@ -304,14 +302,16 @@ func hasV2ImageCacheContaminationSQLite(db *gorm.DB) bool {
 
 // performAutoMigration automates database migrations with error handling.
 // It checks the schema of the image_caches table and drops/recreates it if incorrect.
-func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string) error {
+// For MySQL, dbName is the database name used for information_schema queries.
+// For SQLite, dbName is unused (pass "").
+func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error {
 	migrationStart := time.Now()
 	migrationLogger := GetLogger().With(logger.String("db_type", dbType))
 
 	migrationLogger.Debug("Starting database migration")
 
 	// Validate and fix schema if needed
-	if err := validateAndFixSchema(db, dbType, connectionInfo, debug, migrationLogger); err != nil {
+	if err := validateAndFixSchema(db, dbType, dbName, debug, migrationLogger); err != nil {
 		return err
 	}
 
@@ -335,106 +335,10 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, connectionInfo string
 	return nil
 }
 
-// extractDBNameFromMySQLInfo parses the database name from a MySQL DSN string.
-// Example DSNs:
-//
-//	user:pass@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4
-//	user:pass@unix(/path/to/socket)/dbname
-//	user:pass@/dbname?charset=utf8mb4 (no host/protocol)
-//	/dbname (only path)
-func extractDBNameFromMySQLInfo(connectionInfo string) string {
-	// The go-sql-driver/mysql doesn't strictly require a scheme,
-	// but net/url.Parse needs one for correct parsing. Add a dummy scheme if missing.
-	// We need to handle cases where the DSN might *only* be the path, e.g., "/dbname".
-	// Also handle cases like "user:pass@/dbname"
-	parseInput := connectionInfo
-	if !strings.Contains(parseInput, "://") && !strings.HasPrefix(parseInput, "/") {
-		// If no scheme and not starting with '/', add dummy scheme for parsing.
-		parseInput = "dummy://" + parseInput
-	} else if strings.HasPrefix(parseInput, "/") {
-		// Case like "/dbname?params=value"
-		parseInput = "dummy://dummyhost" + parseInput // Add dummy scheme and host
-	}
-
-	u, err := url.Parse(parseInput)
-	if err != nil {
-		sanitizedConnectionInfo := redactSensitiveInfo(connectionInfo)
-		GetLogger().Warn("Failed to parse MySQL connection info as URL",
-			logger.String("dsn", sanitizedConnectionInfo),
-			logger.Error(err))
-		return "" // Return empty on parse error
-	}
-
-	// The database name is the path component, stripping the leading '/' if present.
-	dbName := u.Path
-	dbName = strings.TrimPrefix(dbName, "/") // Use TrimPrefix directly
-
-	// The go-sql-driver/mysql can handle DSNs without a path/dbname
-	// (e.g., connecting to the default database). Return empty string in that case.
-	if dbName == "" {
-		return ""
-	}
-
-	// The Path might still contain parameters if the original DSN was just `/dbname?param=val`
-	// and we added a dummy host. Check for '?' again.
-	if qMark := strings.Index(dbName, "?"); qMark != -1 {
-		dbName = dbName[:qMark]
-	}
-
-	return dbName
-}
-
-// redactSensitiveInfo redacts sensitive information (e.g., password) from a MySQL DSN string.
-func redactSensitiveInfo(dsn string) string {
-	// Parse the DSN to extract components. Add a dummy scheme if needed for parsing,
-	// similar to how extractDBNameFromMySQLInfo does, but focus just on enabling parsing.
-	parseInput := dsn
-	needsDummyScheme := false
-	if !strings.Contains(parseInput, "://") {
-		// Add dummy scheme if it's likely a DSN needing one (contains '@' or starts without '/')
-		if strings.Contains(parseInput, "@") || (!strings.HasPrefix(parseInput, "/") && strings.Contains(parseInput, "(")) {
-			parseInput = "dummy://" + parseInput
-			needsDummyScheme = true
-		} else if strings.HasPrefix(parseInput, "/") {
-			// Handle path-only or path-with-params DSNs like "/dbname?..."
-			parseInput = "dummy://dummyhost" + parseInput
-			needsDummyScheme = true
-		}
-		// Note: Plain "dbname" without scheme/user/host/params might fail parsing, which is acceptable.
-	}
-
-	u, err := url.Parse(parseInput)
-	if err != nil {
-		// If parsing fails even with added scheme, return a generic redacted string
-		// as we cannot reliably locate the password. Avoid logging the raw DSN.
-		GetLogger().Debug("Failed to parse DSN for redaction, returning generic redaction",
-			logger.Error(err))
-		return "[REDACTED DSN]"
-	}
-
-	// Redact the password if present in the UserInfo
-	if u.User != nil {
-		_, hasPassword := u.User.Password()
-		if hasPassword {
-			u.User = url.UserPassword(u.User.Username(), privacy.RedactedMarker)
-		}
-	}
-
-	// Reconstruct the string. If we added a dummy scheme/host, remove it.
-	sanitized := u.String()
-	if needsDummyScheme {
-		if after, ok := strings.CutPrefix(sanitized, "dummy://dummyhost"); ok {
-			sanitized = after
-		} else if after, ok := strings.CutPrefix(sanitized, "dummy://"); ok {
-			sanitized = after
-		}
-	}
-
-	return sanitized
-}
-
-// validateAndFixSchema checks and fixes the database schema if needed
-func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool, log logger.Logger) error {
+// validateAndFixSchema checks and fixes the database schema if needed.
+// For MySQL, dbName is the database name used for information_schema queries.
+// For SQLite, dbName is unused.
+func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log logger.Logger) error {
 	migrator := db.Migrator()
 	var schemaCorrect bool
 	var err error
@@ -459,10 +363,8 @@ func validateAndFixSchema(db *gorm.DB, dbType, connectionInfo string, debug bool
 			GetLogger().Warn("Detected v2 column contamination (label_id) in legacy image_caches table, will recreate")
 		}
 	case "mysql":
-		// Need to extract dbName from connectionInfo for MySQL check
-		dbName := extractDBNameFromMySQLInfo(connectionInfo)
 		if dbName == "" {
-			GetLogger().Warn("Could not determine database name from connection info for MySQL schema check. Assuming schema is correct.")
+			GetLogger().Warn("Empty database name provided for MySQL schema check. Assuming schema is correct.")
 			schemaCorrect = true // Avoid dropping if we can't check
 		} else {
 			schemaCorrect, err = hasCorrectImageCacheIndexMySQL(db, dbName, debug)
