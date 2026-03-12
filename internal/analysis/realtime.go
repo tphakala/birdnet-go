@@ -243,8 +243,10 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 
 	case freshInstall:
 		// Fresh install: create at configured path with v2 schema
+		// Load eBird taxonomy for species code lookups in analytics endpoints.
+		_, freshSciIndex, _ := birdnet.LoadTaxonomyData("")
 		var err error
-		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger())
+		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
 		if err != nil {
 			// Fresh install failed, fall back to legacy mode
 			GetLogger().Warn("fresh install failed, falling back to legacy mode",
@@ -2185,20 +2187,28 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
 	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
 
+	// Load eBird taxonomy for species code lookups in analytics endpoints.
+	_, scientificIndex, taxonomyErr := birdnet.LoadTaxonomyData("")
+	if taxonomyErr != nil {
+		log.Warn("failed to load taxonomy data for species codes",
+			logger.String("error", taxonomyErr.Error()))
+	}
+
 	// Create V2OnlyDatastore
 	ds, err := v2only.New(&v2only.Config{
-		Manager:      v2Manager,
-		Detection:    detectionRepo,
-		Label:        labelRepo,
-		Model:        modelRepo,
-		Source:       sourceRepo,
-		Weather:      weatherRepo,
-		ImageCache:   imageCacheRepo,
-		Threshold:    thresholdRepo,
-		Notification: notificationRepo,
-		Logger:       log,
-		Timezone:     time.Local,
-		Labels:       settings.BirdNET.Labels, // For GetThresholdEvents workaround (#1907)
+		Manager:        v2Manager,
+		Detection:      detectionRepo,
+		Label:          labelRepo,
+		Model:          modelRepo,
+		Source:         sourceRepo,
+		Weather:        weatherRepo,
+		ImageCache:     imageCacheRepo,
+		Threshold:      thresholdRepo,
+		Notification:   notificationRepo,
+		Logger:         log,
+		Timezone:       time.Local,
+		Labels:         settings.BirdNET.Labels, // For GetThresholdEvents workaround (#1907)
+		SpeciesCodeMap: scientificIndex,
 	})
 	if err != nil {
 		_ = v2Manager.Close()

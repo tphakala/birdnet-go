@@ -30,7 +30,7 @@ func TestFreshInstall_CreatesDBAtConfiguredPath(t *testing.T) {
 	require.True(t, state.FreshInstall, "should detect fresh install")
 
 	// Initialize fresh install
-	ds, err := v2only.InitializeFreshInstall(settings, nil)
+	ds, err := v2only.InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -59,7 +59,7 @@ func TestFreshInstall_CustomPathWithSubdirectory(t *testing.T) {
 	state := datastoreV2.CheckMigrationStateBeforeStartup(settings)
 	require.True(t, state.FreshInstall, "should detect fresh install with custom path")
 
-	ds, err := v2only.InitializeFreshInstall(settings, nil)
+	ds, err := v2only.InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -87,7 +87,7 @@ func TestFreshInstall_SetsEnhancedDatabaseMode(t *testing.T) {
 	// Before initialization, should not be enhanced
 	assert.False(t, datastoreV2.IsEnhancedDatabase(), "should not be enhanced before init")
 
-	ds, err := v2only.InitializeFreshInstall(settings, nil)
+	ds, err := v2only.InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
@@ -107,7 +107,7 @@ func TestFreshInstall_RestartDetectsExistingV2(t *testing.T) {
 	settings.Output.SQLite.Path = configuredPath
 
 	// First: fresh install
-	ds, err := v2only.InitializeFreshInstall(settings, nil)
+	ds, err := v2only.InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 	require.NoError(t, ds.Close())
 
@@ -160,7 +160,7 @@ func TestFreshInstall_InitializeV2OnlyModeCanOpenDB(t *testing.T) {
 	settings.Output.SQLite.Path = configuredPath
 
 	// Step 1: Fresh install creates DB at configured path
-	ds, err := v2only.InitializeFreshInstall(settings, nil)
+	ds, err := v2only.InitializeFreshInstall(settings, nil, nil)
 	require.NoError(t, err)
 
 	// Save a detection for later verification
