@@ -89,7 +89,7 @@ func (store *MySQLStore) Open() error {
 		logger.String("port", store.Settings.Output.MySQL.Port),
 		logger.String("database", store.Settings.Output.MySQL.Database))
 
-	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", dsn); err != nil {
+	if err := performAutoMigration(db, store.Settings.Debug, "MySQL", store.Settings.Output.MySQL.Database); err != nil {
 		return err
 	}
 
