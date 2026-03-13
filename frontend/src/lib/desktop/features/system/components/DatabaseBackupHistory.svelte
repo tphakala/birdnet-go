@@ -80,20 +80,18 @@
       case 'pending':
         return 'bg-slate-500/10 text-muted';
       case 'in_progress':
-        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400';
+        return 'badge-status-info';
       case 'completed':
-        return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        return 'badge-status-success';
       case 'failed':
-        return 'bg-red-500/10 text-red-600 dark:text-red-400';
+        return 'badge-status-error';
       default:
         return 'bg-slate-500/10 text-muted';
     }
   }
 
   function dbTypeClasses(dbType: string): string {
-    return dbType === 'legacy'
-      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
-      : 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400';
+    return dbType === 'legacy' ? 'badge-status-info' : 'badge-status-success';
   }
 
   function statusLabel(status: string): string {
@@ -145,7 +143,7 @@
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
                 scope="col"
                 tabindex="0"
                 aria-sort={sortColumn === col.key
@@ -215,7 +213,7 @@
                   {#if backup.status === 'completed' && backup.download_url}
                     <a
                       href={backup.download_url}
-                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-blue-500/10 text-blue-600 dark:text-blue-400"
+                      class="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded transition-colors hover:bg-[color-mix(in_srgb,var(--color-primary)_10%,transparent)] text-[var(--color-info)]"
                       download
                     >
                       <Download class="w-3 h-3" />
@@ -223,13 +221,13 @@
                     </a>
                   {:else if backup.status === 'in_progress'}
                     <span
-                      class="inline-flex items-center gap-1 text-xs tabular-nums text-blue-600 dark:text-blue-400"
+                      class="inline-flex items-center gap-1 text-xs tabular-nums text-[var(--color-info)]"
                     >
                       <Loader2 class="w-3 h-3 animate-spin" />
                       {backup.progress}%
                     </span>
                   {:else if backup.status === 'failed'}
-                    <span class="text-xs text-red-600 dark:text-red-400" title={backup.error ?? ''}>
+                    <span class="text-xs text-[var(--color-error)]" title={backup.error ?? ''}>
                       {t('system.database.backup.history.failed')}
                     </span>
                   {:else}

@@ -4,12 +4,12 @@
   A circular badge displaying confidence level with color coding.
   Designed for overlay on spectrogram cards.
 
-  Color Thresholds:
-  - ≥90%: green (bg-green-500)
-  - ≥70%: lime (bg-lime-500)
-  - ≥50%: yellow (bg-yellow-400, dark text)
-  - ≥30%: orange (bg-orange-400)
-  - <30%: red (bg-red-500)
+  Color Thresholds (uses CSS variables for theme support):
+  - ≥90%: success
+  - ≥70%: success/warning blend
+  - ≥50%: warning
+  - ≥30%: warning/error blend
+  - <30%: error
 
   Props:
   - confidence: number - Confidence value (0-1 or 0-100)
@@ -37,11 +37,13 @@
 
   // Get color classes based on confidence level
   function getColorClasses(percent: number): string {
-    if (percent >= 90) return 'bg-green-500 text-white';
-    if (percent >= 70) return 'bg-lime-500 text-white';
-    if (percent >= 50) return 'bg-yellow-400 text-slate-900';
-    if (percent >= 30) return 'bg-orange-400 text-white';
-    return 'bg-red-500 text-white';
+    if (percent >= 90) return 'bg-[var(--color-success)] text-[var(--color-success-content)]';
+    if (percent >= 70)
+      return 'bg-[color-mix(in_srgb,var(--color-success)_80%,var(--color-warning))] text-white';
+    if (percent >= 50) return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
+    if (percent >= 30)
+      return 'bg-[color-mix(in_srgb,var(--color-warning)_60%,var(--color-error))] text-white';
+    return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
   }
 
   const colorClasses = $derived(getColorClasses(confidencePercent));

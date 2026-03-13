@@ -154,17 +154,16 @@
       <div class="flex items-center gap-2">
         {#if inferenceStatus === 'ok'}
           <span
-            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-success"
             >{t('system.metrics.statusOk')}</span
           >
         {:else if inferenceStatus === 'warning'}
           <span
-            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-warning"
             >{t('system.metrics.statusWarning')}</span
           >
         {:else if inferenceStatus === 'critical'}
-          <span
-            class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-red-500/15 text-red-600 dark:text-red-400"
+          <span class="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded badge-status-error"
             >{t('system.metrics.statusCritical')}</span
           >
         {/if}

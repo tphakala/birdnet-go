@@ -1255,11 +1255,23 @@
 
   function objectTypeColor(typeName: string): { bg: string; text: string } {
     const colors: Record<string, { bg: string; text: string }> = {
-      detection: { bg: 'bg-emerald-500/10', text: 'text-emerald-500' },
-      stream: { bg: 'bg-blue-500/10', text: 'text-blue-500' },
+      detection: {
+        bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
+        text: 'text-[var(--color-success)]',
+      },
+      stream: {
+        bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
+        text: 'text-[var(--color-info)]',
+      },
       device: { bg: 'bg-violet-500/10', text: 'text-violet-500' },
-      system: { bg: 'bg-red-500/10', text: 'text-red-500' },
-      integration: { bg: 'bg-amber-500/10', text: 'text-amber-500' },
+      system: {
+        bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
+        text: 'text-[var(--color-error)]',
+      },
+      integration: {
+        bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
+        text: 'text-[var(--color-warning)]',
+      },
     };
     return (
       colors[typeName] ?? {
@@ -2371,7 +2383,7 @@
                   <span
                     class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium {action.target ===
                     'bell'
-                      ? 'bg-blue-500/10 text-blue-500'
+                      ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
                       : 'bg-violet-500/10 text-violet-500'}"
                   >
                     {#if action.target === 'bell'}

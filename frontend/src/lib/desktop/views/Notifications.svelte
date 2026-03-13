@@ -630,7 +630,7 @@
                     {#if !notification.read}
                       <button
                         onclick={e => markAsRead(notification.id, e)}
-                        class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        class="p-1 text-[var(--color-base-content)]/50 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded transition-colors"
                         aria-label={t('notifications.actions.markAsRead')}
                       >
                         <Eye class="size-3" />
@@ -639,7 +639,7 @@
                     {#if notification.read && notification.status !== 'acknowledged'}
                       <button
                         onclick={e => acknowledge(notification.id, e)}
-                        class="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        class="p-1 text-[var(--color-base-content)]/50 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded transition-colors"
                         aria-label={t('notifications.actions.acknowledge')}
                       >
                         <Check class="size-3" />
@@ -647,7 +647,7 @@
                     {/if}
                     <button
                       onclick={e => deleteNotification(notification.id, e)}
-                      class="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                      class="p-1 text-[var(--color-error)] hover:text-[var(--color-error-hover)] hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] rounded transition-colors"
                       aria-label={t('notifications.actions.delete')}
                     >
                       <Trash2 class="size-3" />
@@ -695,7 +695,7 @@
   <!-- Delete Confirmation Modal -->
   <dialog
     bind:this={deleteModal}
-    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-[var(--color-base-100)] shadow-xl backdrop:bg-black/50"
     onclose={() => (pendingDeleteId = null)}
     onclick={e => {
       if (e.currentTarget === e.target) {
@@ -704,24 +704,24 @@
     }}
   >
     <div class="p-6">
-      <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
+      <h3 class="font-bold text-lg text-[var(--color-base-content)]">
         {t('notifications.actions.confirmDelete')}
       </h3>
-      <p class="py-4 text-gray-600 dark:text-gray-300">
+      <p class="py-4 text-[var(--color-base-content)]/70">
         {t('notifications.actions.deleteConfirmation')}
       </p>
       <div class="flex justify-end gap-2 mt-4">
         <button
           type="button"
           onclick={() => deleteModal?.close()}
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          class="px-4 py-2 text-sm font-medium text-[var(--color-base-content)]/70 bg-[var(--color-base-200)] hover:bg-[var(--color-base-300)] rounded-lg transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
           type="button"
           onclick={confirmDelete}
-          class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+          class="px-4 py-2 text-sm font-medium text-[var(--color-error-content)] bg-[var(--color-error)] hover:bg-[var(--color-error-hover)] rounded-lg transition-colors"
         >
           {t('common.delete')}
         </button>
@@ -732,7 +732,7 @@
   <!-- Bulk Delete Confirmation Modal -->
   <dialog
     bind:this={bulkDeleteModal}
-    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-white dark:bg-gray-800 shadow-xl backdrop:bg-black/50"
+    class="fixed inset-0 z-50 m-auto max-w-sm w-full rounded-lg bg-[var(--color-base-100)] shadow-xl backdrop:bg-black/50"
     onclose={() => (pendingBulkDeleteIds = null)}
     onclick={e => {
       if (e.currentTarget === e.target) {
@@ -741,10 +741,10 @@
     }}
   >
     <div class="p-6">
-      <h3 class="font-bold text-lg text-gray-900 dark:text-gray-100">
+      <h3 class="font-bold text-lg text-[var(--color-base-content)]">
         {t('notifications.groups.confirmBulkDelete')}
       </h3>
-      <p class="py-4 text-gray-600 dark:text-gray-300">
+      <p class="py-4 text-[var(--color-base-content)]/70">
         {t('notifications.groups.bulkDeleteConfirmation', {
           count: pendingBulkDeleteIds?.length ?? 0,
         })}
@@ -753,14 +753,14 @@
         <button
           type="button"
           onclick={() => bulkDeleteModal?.close()}
-          class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+          class="px-4 py-2 text-sm font-medium text-[var(--color-base-content)]/70 bg-[var(--color-base-200)] hover:bg-[var(--color-base-300)] rounded-lg transition-colors"
         >
           {t('common.cancel')}
         </button>
         <button
           type="button"
           onclick={confirmBulkDelete}
-          class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+          class="px-4 py-2 text-sm font-medium text-[var(--color-error-content)] bg-[var(--color-error)] hover:bg-[var(--color-error-hover)] rounded-lg transition-colors"
         >
           {t('common.delete')}
         </button>

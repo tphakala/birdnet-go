@@ -485,7 +485,7 @@
     </div>
   {:else if overviewError || !overview}
     <div
-      class="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-sm text-red-600 dark:text-red-400"
+      class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
     >
       {overviewError ?? t('system.database.dashboard.fetchFailed')}
     </div>

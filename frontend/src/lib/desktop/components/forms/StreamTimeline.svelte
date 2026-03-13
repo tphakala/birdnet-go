@@ -89,20 +89,20 @@
   // Get node color based on event type and data
   function getNodeColor(event: TimelineEvent): { bg: string; border: string } {
     if (event.type === 'error') {
-      return { bg: 'bg-red-400', border: 'border-red-400' };
+      return { bg: 'bg-[var(--color-error)]', border: 'border-[var(--color-error)]' };
     }
 
     const state = event.data as StateTransition;
     const toState = state.to_state?.toLowerCase() ?? '';
 
     if (toState === 'running' || toState === 'started' || toState === 'healthy') {
-      return { bg: 'bg-green-400', border: 'border-green-400' };
+      return { bg: 'bg-[var(--color-success)]', border: 'border-[var(--color-success)]' };
     }
     if (toState === 'restarting' || toState === 'backoff') {
-      return { bg: 'bg-amber-400', border: 'border-amber-400' };
+      return { bg: 'bg-[var(--color-warning)]', border: 'border-[var(--color-warning)]' };
     }
     if (toState === 'circuit_open' || toState === 'stopped' || toState === 'failed') {
-      return { bg: 'bg-red-400', border: 'border-red-400' };
+      return { bg: 'bg-[var(--color-error)]', border: 'border-[var(--color-error)]' };
     }
 
     return { bg: 'bg-gray-400', border: 'border-gray-400' };

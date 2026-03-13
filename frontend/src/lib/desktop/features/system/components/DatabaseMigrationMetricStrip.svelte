@@ -52,17 +52,17 @@
       case 'dual_write':
       case 'migrating':
       case 'migrating_predictions':
-        return 'bg-blue-500/15 text-blue-600 dark:text-blue-400';
+        return 'badge-status-info';
       case 'paused':
-        return 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
+        return 'badge-status-warning';
       case 'validating':
         return 'bg-violet-500/15 text-violet-600 dark:text-violet-400';
       case 'cutover':
-        return 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
+        return 'badge-status-warning';
       case 'completed':
-        return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        return 'badge-status-success';
       case 'failed':
-        return 'bg-red-500/15 text-red-600 dark:text-red-400';
+        return 'badge-status-error';
       default:
         return 'bg-slate-500/15 text-muted';
     }
@@ -93,13 +93,13 @@
       </div>
       <div class="flex items-center gap-1">
         {#if legacyStats?.connected}
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium"
+          <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
+          <span class="text-xs text-[var(--color-success)] font-medium"
             >{t('system.database.stats.connected')}</span
           >
         {:else}
-          <span class="w-2 h-2 rounded-full bg-red-500"></span>
-          <span class="text-xs text-red-600 dark:text-red-400 font-medium"
+          <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
+          <span class="text-xs text-[var(--color-error)] font-medium"
             >{t('system.database.stats.disconnected')}</span
           >
         {/if}
@@ -140,13 +140,13 @@
       </div>
       <div class="flex items-center gap-1">
         {#if v2Stats?.connected}
-          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-          <span class="text-xs text-emerald-600 dark:text-emerald-400 font-medium"
+          <span class="w-2 h-2 rounded-full bg-[var(--color-success)] animate-pulse"></span>
+          <span class="text-xs text-[var(--color-success)] font-medium"
             >{t('system.database.migration.strip.active')}</span
           >
         {:else}
-          <span class="w-2 h-2 rounded-full bg-red-500"></span>
-          <span class="text-xs text-red-600 dark:text-red-400 font-medium"
+          <span class="w-2 h-2 rounded-full bg-[var(--color-error)]"></span>
+          <span class="text-xs text-[var(--color-error)] font-medium"
             >{t('system.database.stats.disconnected')}</span
           >
         {/if}
@@ -219,9 +219,7 @@
     </div>
 
     {#if isCompleted}
-      <div
-        class="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400 font-medium"
-      >
+      <div class="flex items-center gap-2 text-sm text-[var(--color-success)] font-medium">
         <CheckCircle class="w-4 h-4" />
         <span>{t('system.database.migration.strip.complete')}</span>
       </div>
@@ -251,7 +249,7 @@
         </div>
       </div>
     {:else if isFailed}
-      <div class="flex items-center gap-2 text-sm text-red-600 dark:text-red-400 font-medium">
+      <div class="flex items-center gap-2 text-sm text-[var(--color-error)] font-medium">
         <XCircle class="w-4 h-4" />
         <span>{t('system.database.migration.strip.validationFailed')}</span>
       </div>
@@ -261,7 +259,7 @@
         <div>
           <div class="h-2 rounded-full overflow-hidden bg-slate-200 dark:bg-slate-700">
             <div
-              class="h-full rounded-full bg-blue-500 transition-all duration-300"
+              class="h-full rounded-full bg-primary transition-all duration-300"
               style:width="{Math.min(migrationStatus?.progress_percent ?? 0, 100).toFixed(1)}%"
             ></div>
           </div>

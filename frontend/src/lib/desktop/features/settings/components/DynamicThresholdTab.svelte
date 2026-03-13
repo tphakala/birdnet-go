@@ -253,8 +253,8 @@
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
       >
         <div class="flex items-center gap-2 mb-1.5">
-          <div class="p-1 rounded-md bg-orange-500/10">
-            <TrendingDown class="w-3.5 h-3.5 text-orange-500" />
+          <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]">
+            <TrendingDown class="w-3.5 h-3.5 text-[var(--color-warning)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.atMinimum')}</span
@@ -269,8 +269,8 @@
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
       >
         <div class="flex items-center gap-2 mb-1.5">
-          <div class="p-1 rounded-md bg-emerald-500/10">
-            <Gauge class="w-3.5 h-3.5 text-emerald-500" />
+          <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]">
+            <Gauge class="w-3.5 h-3.5 text-[var(--color-success)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.minThreshold')}</span
@@ -285,8 +285,8 @@
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
       >
         <div class="flex items-center gap-2 mb-1.5">
-          <div class="p-1 rounded-md bg-blue-500/10">
-            <Clock class="w-3.5 h-3.5 text-blue-500" />
+          <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
+            <Clock class="w-3.5 h-3.5 text-[var(--color-info)]" />
           </div>
           <span class="text-xs font-medium text-muted"
             >{t('settings.species.dynamicThreshold.stats.validityPeriod')}</span
@@ -351,7 +351,7 @@
         {#if activeThresholds.length > 0}
           <button
             type="button"
-            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={() => (resetAllConfirm = true)}
             disabled={resetting}
           >
@@ -364,7 +364,7 @@
     {#if loading}
       <div class="flex items-center justify-center py-12">
         <div
-          class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+          class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
         ></div>
       </div>
     {:else if filteredThresholds.length === 0}
@@ -381,7 +381,7 @@
               <th class="w-8 py-2 px-2"><span class="sr-only">{t('common.toggle')}</span></th>
               <th class="w-10 py-2 px-1"><span class="sr-only">{t('common.image')}</span></th>
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
                 role="columnheader"
                 tabindex="0"
                 aria-sort={sortColumn === 'species'
@@ -411,7 +411,7 @@
                 </div>
               </th>
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
                 role="columnheader"
                 tabindex="0"
                 aria-sort={sortColumn === 'scientificName'
@@ -441,7 +441,7 @@
                 </div>
               </th>
               <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted w-24"
+                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
                 role="columnheader"
                 tabindex="0"
                 aria-sort={sortColumn === 'threshold'
@@ -471,7 +471,7 @@
                 </div>
               </th>
               <th
-                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted w-24"
+                class="text-center py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted w-24"
                 role="columnheader"
                 tabindex="0"
                 aria-sort={sortColumn === 'expires'
@@ -564,7 +564,7 @@
                   {#if threshold.isActive}
                     <span class="text-xs font-medium">{getTimeRemaining(threshold.expiresAt)}</span>
                   {:else}
-                    <span class="text-xs font-medium text-amber-500"
+                    <span class="text-xs font-medium text-[var(--color-warning)]"
                       >{t('settings.species.dynamicThreshold.expired')}</span
                     >
                   {/if}
@@ -574,7 +574,7 @@
                     <div class="flex items-center gap-1">
                       <button
                         type="button"
-                        class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+                        class="inline-flex items-center justify-center px-2 py-1 text-[10px] font-medium rounded-md bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors disabled:opacity-50"
                         onclick={() => resetThreshold(threshold.speciesName)}
                         disabled={resetting}
                       >
@@ -591,7 +591,7 @@
                   {:else}
                     <button
                       type="button"
-                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-red-500/10 text-muted hover:text-red-500"
+                      class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)]"
                       onclick={() => (resetConfirmSpecies = threshold.speciesName)}
                       title={t('settings.species.dynamicThreshold.resetSpecies')}
                       aria-label={t('settings.species.dynamicThreshold.resetSpecies')}
@@ -610,7 +610,7 @@
                       {#if isLoadingEvents}
                         <div class="flex items-center gap-2 py-2 text-muted">
                           <div
-                            class="inline-block w-3 h-3 border-2 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+                            class="inline-block w-3 h-3 border-2 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
                           ></div>
                           <span class="text-xs">{t('common.loading')}</span>
                         </div>
@@ -625,11 +625,11 @@
                               <div
                                 class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 {event.changeReason ===
                                 'high_confidence'
-                                  ? 'bg-blue-500'
+                                  ? 'bg-[var(--color-info)]'
                                   : event.changeReason === 'expiry'
                                     ? 'bg-gray-400'
                                     : event.changeReason === 'manual_reset'
-                                      ? 'bg-orange-500'
+                                      ? 'bg-[var(--color-warning)]'
                                       : 'bg-slate-400'}"
                               ></div>
                               <div class="flex-1 min-w-0">
@@ -693,7 +693,7 @@
       class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-lg p-6 max-w-md mx-4"
     >
       <h3 id="reset-modal-title" class="font-bold text-lg flex items-center gap-2">
-        <AlertTriangle class="size-5 text-amber-500" />
+        <AlertTriangle class="size-5 text-[var(--color-warning)]" />
         {t('settings.species.dynamicThreshold.resetAllConfirm.title')}
       </h3>
       <p class="text-sm text-muted mt-3">
@@ -712,7 +712,7 @@
         </button>
         <button
           type="button"
-          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+          class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors disabled:opacity-50"
           onclick={resetAllThresholds}
           disabled={resetting}
         >
