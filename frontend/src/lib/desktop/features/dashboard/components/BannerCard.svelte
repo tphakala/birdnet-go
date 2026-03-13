@@ -5,6 +5,7 @@
 -->
 <script lang="ts">
   import { Cloud } from '@lucide/svelte';
+  import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
   import BannerLocationMap from './BannerLocationMap.svelte';
   import { birdnetSettings } from '$lib/stores/settings';
@@ -38,7 +39,7 @@
           <div class="shrink-0">
             <img
               src={config.imagePath}
-              alt={config.title || 'Station banner'}
+              alt={config.title || t('dashboard.editMode.stationBanner')}
               class="h-auto w-full rounded-xl object-cover md:w-48"
             />
           </div>
@@ -62,7 +63,7 @@
           {#if config.showWeather}
             <div class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50">
               <Cloud class="size-4" />
-              <span>Weather conditions will appear here when available</span>
+              <span>{t('dashboard.editMode.weatherPlaceholder')}</span>
             </div>
           {/if}
         </div>

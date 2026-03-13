@@ -15,6 +15,7 @@
   import ElementConfigModal from './ElementConfigModal.svelte';
   import { api } from '$lib/utils/api';
   import { getLogger } from '$lib/utils/logger';
+  import { t } from '$lib/i18n';
   import type { Snippet } from 'svelte';
 
   const logger = getLogger('dashboard');
@@ -58,10 +59,16 @@
   async function saveLayout() {
     isSaving = true;
     try {
-      // Strip the temporary id field before saving
-      const cleanElements: DashboardElement[] = editElements.map(
-        ({ id: _id, ...el }) => el as DashboardElement
-      );
+      // Preserve id field for stable element identification
+      const cleanElements: DashboardElement[] = editElements.map(el => ({
+        id: el.id,
+        type: el.type,
+        enabled: el.enabled,
+        ...(el.banner ? { banner: el.banner } : {}),
+        ...(el.video ? { video: el.video } : {}),
+        ...(el.summary ? { summary: el.summary } : {}),
+        ...(el.grid ? { grid: el.grid } : {}),
+      }));
       const newLayout: DashboardLayout = { elements: cleanElements };
 
       await api.patch('/api/v2/settings/dashboard', { layout: newLayout });
@@ -114,7 +121,7 @@
       class="flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2.5 text-[var(--color-primary-content)] shadow-lg transition-all hover:opacity-90"
     >
       <Pencil class="size-4" />
-      <span class="text-sm font-medium">Edit Dashboard</span>
+      <span class="text-sm font-medium">{t('dashboard.editMode.editButton')}</span>
     </button>
   </div>
 {/if}
@@ -124,7 +131,9 @@
   <div
     class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--color-base-200)] bg-[var(--color-base-100)] px-4 py-2 shadow-xl"
   >
-    <span class="text-sm font-medium text-[var(--color-base-content)]/70">Editing Dashboard</span>
+    <span class="text-sm font-medium text-[var(--color-base-content)]/70"
+      >{t('dashboard.editMode.editing')}</span
+    >
     <div class="h-5 w-px bg-[var(--color-base-200)]"></div>
     <button
       onclick={saveLayout}
@@ -132,14 +141,14 @@
       class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)] px-3 py-1.5 text-sm font-medium text-[var(--color-primary-content)] transition-colors hover:opacity-90 disabled:opacity-50"
     >
       <Save class="size-3.5" />
-      {isSaving ? 'Saving...' : 'Save'}
+      {isSaving ? t('dashboard.editMode.saving') : t('dashboard.editMode.save')}
     </button>
     <button
       onclick={cancelEdit}
       class="flex items-center gap-1.5 rounded-lg border border-[var(--color-base-content)]/30 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/10"
     >
       <X class="size-3.5" />
-      Cancel
+      {t('dashboard.editMode.cancel')}
     </button>
   </div>
 

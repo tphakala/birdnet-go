@@ -4,6 +4,7 @@
   @component
 -->
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { VideoEmbedConfig } from '$lib/stores/settings';
 
   interface Props {
@@ -53,7 +54,7 @@
       <div class="relative w-full" style:padding-bottom="56.25%">
         <iframe
           src={embedUrl}
-          title={config.title || 'Live bird feed'}
+          title={config.title || t('dashboard.editMode.liveBirdFeed')}
           class="absolute inset-0 h-full w-full rounded-xl"
           frameborder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"

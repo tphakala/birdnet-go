@@ -18,9 +18,14 @@
   let mapContainer: HTMLDivElement;
 
   let map: import('maplibre-gl').Map | undefined;
+  let marker: import('maplibre-gl').Marker | undefined;
 
   onMount(() => {
+    let mounted = true;
+
     import('maplibre-gl').then(maplibre => {
+      if (!mounted) return;
+
       map = new maplibre.Map({
         container: mapContainer,
         style: createMapStyle(),
@@ -30,10 +35,21 @@
         attributionControl: false,
       });
 
-      new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
+      marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
     });
 
-    return () => map?.remove();
+    return () => {
+      mounted = false;
+      map?.remove();
+    };
+  });
+
+  // Reactively update map center and marker when coordinates change
+  $effect(() => {
+    if (map && marker) {
+      map.setCenter([longitude, latitude]);
+      marker.setLngLat([longitude, latitude]);
+    }
   });
 </script>
 

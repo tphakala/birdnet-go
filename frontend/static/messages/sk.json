@@ -679,7 +679,15 @@
       "disabled": "disabled",
       "noConfig": "No additional configuration options available yet.",
       "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available."
+      "notAvailable": "Configuration for this element type is not yet available.",
+      "enableElement": "Povoliť element",
+      "disableElement": "Zakázať element",
+      "configureElement": "Konfigurovať element",
+      "closeModal": "Zavrieť",
+      "configureTitle": "Konfigurovať {element}",
+      "weatherPlaceholder": "Poveternostné podmienky sa zobrazia tu, keď budú dostupné",
+      "stationBanner": "Banner stanice",
+      "liveBirdFeed": "Živý prenos vtákov"
     },
     "elements": {
       "banner": "Dashboard Banner",

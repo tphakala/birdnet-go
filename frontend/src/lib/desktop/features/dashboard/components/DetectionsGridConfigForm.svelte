@@ -4,6 +4,7 @@
   @component
 -->
 <script lang="ts">
+  import { t } from '$lib/i18n';
   import type { DetectionsGridConfig } from '$lib/stores/settings';
 
   interface Props {
@@ -16,5 +17,5 @@
 </script>
 
 <div class="text-sm text-[var(--color-base-content)]/60">
-  No additional configuration options available yet.
+  {t('dashboard.editMode.noConfig')}
 </div>

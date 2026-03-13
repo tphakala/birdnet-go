@@ -679,7 +679,15 @@
       "disabled": "disabled",
       "noConfig": "No additional configuration options available yet.",
       "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available."
+      "notAvailable": "Configuration for this element type is not yet available.",
+      "enableElement": "Ota elementti käyttöön",
+      "disableElement": "Poista elementti käytöstä",
+      "configureElement": "Määritä elementti",
+      "closeModal": "Sulje",
+      "configureTitle": "Määritä {element}",
+      "weatherPlaceholder": "Säätiedot näkyvät täällä, kun ne ovat saatavilla",
+      "stationBanner": "Aseman banneri",
+      "liveBirdFeed": "Lintujen livesyöte"
     },
     "elements": {
       "banner": "Dashboard Banner",

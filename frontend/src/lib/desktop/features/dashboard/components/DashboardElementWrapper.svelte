@@ -9,6 +9,8 @@
   import type { Snippet } from 'svelte';
   import { GripVertical, Settings, Eye, EyeOff } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn.js';
+  import { t } from '$lib/i18n';
+  import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
 
   interface Props {
     elementType: string;
@@ -20,18 +22,6 @@
   }
 
   let { elementType, enabled, editMode, onToggle, onConfigure, children }: Props = $props();
-
-  const elementLabels = new Map<string, string>([
-    ['banner', 'Dashboard Banner'],
-    ['daily-summary', 'Daily Summary'],
-    ['currently-hearing', 'Currently Hearing'],
-    ['detections-grid', 'Recent Detections'],
-    ['video-embed', 'Video Embed'],
-  ]);
-
-  function getLabel(type: string): string {
-    return elementLabels.get(type) ?? type;
-  }
 </script>
 
 {#if editMode}
@@ -52,14 +42,16 @@
 
       <!-- Element label -->
       <span class="flex-1 text-sm font-medium text-[var(--color-base-content)]/70">
-        {getLabel(elementType)}
+        {getElementLabel(elementType)}
       </span>
 
       <!-- Enable/disable toggle -->
       <button
         onclick={() => onToggle(!enabled)}
         class="rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-        aria-label={enabled ? 'Disable element' : 'Enable element'}
+        aria-label={enabled
+          ? t('dashboard.editMode.disableElement')
+          : t('dashboard.editMode.enableElement')}
       >
         {#if enabled}
           <Eye class="size-4 text-[var(--color-success)]" />
@@ -72,7 +64,7 @@
       <button
         onclick={onConfigure}
         class="rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-        aria-label="Configure element"
+        aria-label={t('dashboard.editMode.configureElement')}
       >
         <Settings class="size-4 text-[var(--color-base-content)]/60" />
       </button>
@@ -84,7 +76,7 @@
         {@render children()}
       {:else}
         <div class="py-8 text-center text-sm text-[var(--color-base-content)]/40">
-          {getLabel(elementType)} — disabled
+          {getElementLabel(elementType)} — {t('dashboard.editMode.disabled')}
         </div>
       {/if}
     </div>

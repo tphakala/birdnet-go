@@ -679,7 +679,15 @@
       "disabled": "disabled",
       "noConfig": "No additional configuration options available yet.",
       "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available."
+      "notAvailable": "Configuration for this element type is not yet available.",
+      "enableElement": "Activer l'élément",
+      "disableElement": "Désactiver l'élément",
+      "configureElement": "Configurer l'élément",
+      "closeModal": "Fermer",
+      "configureTitle": "Configurer {element}",
+      "weatherPlaceholder": "Les conditions météo apparaîtront ici lorsqu'elles seront disponibles",
+      "stationBanner": "Bannière de station",
+      "liveBirdFeed": "Flux d'oiseaux en direct"
     },
     "elements": {
       "banner": "Dashboard Banner",
