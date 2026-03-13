@@ -1472,6 +1472,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Migrate dashboard layout for existing installations
+	if settings.MigrateDashboardLayout() {
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				GetLogger().Warn("Failed to save migrated dashboard layout config", logger.Error(err))
+			} else {
+				GetLogger().Info("Saved migrated dashboard layout configuration", logger.String("path", configFile))
+			}
+		}
+	}
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
