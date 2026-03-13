@@ -687,14 +687,23 @@
       "configureTitle": "Konfigurovať {element}",
       "weatherPlaceholder": "Poveternostné podmienky sa zobrazia tu, keď budú dostupné",
       "stationBanner": "Banner stanice",
-      "liveBirdFeed": "Živý prenos vtákov"
+      "liveBirdFeed": "Živý prenos vtákov",
+      "hideElement": "Skryť prvok",
+      "unhideElement": "Zobraziť prvok",
+      "deleteElement": "Odstrániť prvok",
+      "deleteConfirm": "Odstrániť tento prvok? Jeho konfigurácia sa stratí.",
+      "addElement": "Pridať prvok",
+      "noElementsAvailable": "Všetky typy prvkov sú už na paneli.",
+      "searchNote": "Vyhľadávací panel umožňuje vyhľadávanie druhov. Nie je potrebná žiadna ďalšia konfigurácia.",
+      "editDashboard": "Upraviť panel"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Video Embed",
+      "search": "Vyhľadávanie"
     }
   },
   "detections": {

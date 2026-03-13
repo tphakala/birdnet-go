@@ -687,14 +687,23 @@
       "configureTitle": "Configure {element}",
       "weatherPlaceholder": "Weather conditions will appear here when available",
       "stationBanner": "Station banner",
-      "liveBirdFeed": "Live bird feed"
+      "liveBirdFeed": "Live bird feed",
+      "hideElement": "Hide element",
+      "unhideElement": "Show element",
+      "deleteElement": "Remove element",
+      "deleteConfirm": "Remove this element? Its configuration will be lost.",
+      "addElement": "Add element",
+      "noElementsAvailable": "All element types are already on the dashboard.",
+      "searchNote": "The search bar allows searching for species. No additional configuration needed.",
+      "editDashboard": "Edit Dashboard"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Video Embed",
+      "search": "Search"
     }
   },
   "detections": {

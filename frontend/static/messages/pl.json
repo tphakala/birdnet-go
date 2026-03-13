@@ -687,14 +687,23 @@
       "configureTitle": "Konfiguruj {element}",
       "weatherPlaceholder": "Warunki pogodowe pojawią się tutaj, gdy będą dostępne",
       "stationBanner": "Baner stacji",
-      "liveBirdFeed": "Transmisja ptaków na żywo"
+      "liveBirdFeed": "Transmisja ptaków na żywo",
+      "hideElement": "Ukryj element",
+      "unhideElement": "Pokaż element",
+      "deleteElement": "Usuń element",
+      "deleteConfirm": "Usunąć ten element? Jego konfiguracja zostanie utracona.",
+      "addElement": "Dodaj element",
+      "noElementsAvailable": "Wszystkie typy elementów są już na pulpicie.",
+      "searchNote": "Pasek wyszukiwania umożliwia wyszukiwanie gatunków. Dodatkowa konfiguracja nie jest wymagana.",
+      "editDashboard": "Edytuj pulpit"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Video Embed",
+      "search": "Szukaj"
     }
   },
   "detections": {

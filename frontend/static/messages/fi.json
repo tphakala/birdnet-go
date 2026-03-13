@@ -687,14 +687,23 @@
       "configureTitle": "Määritä {element}",
       "weatherPlaceholder": "Säätiedot näkyvät täällä, kun ne ovat saatavilla",
       "stationBanner": "Aseman banneri",
-      "liveBirdFeed": "Lintujen livesyöte"
+      "liveBirdFeed": "Lintujen livesyöte",
+      "hideElement": "Piilota elementti",
+      "unhideElement": "Näytä elementti",
+      "deleteElement": "Poista elementti",
+      "deleteConfirm": "Poistetaanko tämä elementti? Sen asetukset menetetään.",
+      "addElement": "Lisää elementti",
+      "noElementsAvailable": "Kaikki elementtityypit ovat jo kojelaudalla.",
+      "searchNote": "Hakupalkilla voi etsiä lajeja. Lisäasetuksia ei tarvita.",
+      "editDashboard": "Muokkaa kojelautaa"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Video Embed",
+      "search": "Haku"
     }
   },
   "detections": {

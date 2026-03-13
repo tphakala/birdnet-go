@@ -687,14 +687,23 @@
       "configureTitle": "{element} configureren",
       "weatherPlaceholder": "Weersomstandigheden verschijnen hier wanneer beschikbaar",
       "stationBanner": "Stationsbanner",
-      "liveBirdFeed": "Live vogelfeed"
+      "liveBirdFeed": "Live vogelfeed",
+      "hideElement": "Element verbergen",
+      "unhideElement": "Element tonen",
+      "deleteElement": "Element verwijderen",
+      "deleteConfirm": "Dit element verwijderen? De configuratie gaat verloren.",
+      "addElement": "Element toevoegen",
+      "noElementsAvailable": "Alle elementtypen staan al op het dashboard.",
+      "searchNote": "De zoekbalk maakt het mogelijk om soorten te zoeken. Geen aanvullende configuratie nodig.",
+      "editDashboard": "Dashboard bewerken"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Video Embed",
+      "search": "Zoeken"
     }
   },
   "detections": {
