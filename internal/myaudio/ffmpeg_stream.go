@@ -87,6 +87,12 @@ const (
 	maxErrorHistorySize       = 100             // Maximum number of error contexts to store internally per stream
 	maxErrorHistoryExposed    = 10              // Number of most recent errors exposed via StreamHealth API
 	earlyErrorDetectionWindow = 5 * time.Second // Check stderr in first 5 seconds for early detection
+
+	// Audio EQ filter diagnostics settings
+	filterTimingWarmupCalls = 3   // Skip first N calls from slow-path stats (cache warming, pool alloc)
+	filterDiagInitialCalls  = 5   // Number of initial calls to log for diagnostics
+	filterDiagInterval      = 500 // Log every Nth call after initial burst
+	filterSlowLogInterval   = 100 // Log every Nth slow-filter occurrence to avoid log flooding
 )
 
 // getStreamLogger returns the logger for FFmpeg stream.
@@ -1416,33 +1422,36 @@ func (s *FFmpegStream) handleAudioData(data []byte) error {
 			}
 			filterDurUsec := time.Since(filterStart).Microseconds()
 			callNum := s.handleDataCount.Add(1)
+			warmedUp := callNum > filterTimingWarmupCalls
 
-			// Track max filter duration
-			for {
-				cur := s.maxFilterDurUsec.Load()
-				if filterDurUsec <= cur || s.maxFilterDurUsec.CompareAndSwap(cur, filterDurUsec) {
-					break
+			// Track max filter duration (single writer per stream — no CAS needed)
+			if warmedUp {
+				if cur := s.maxFilterDurUsec.Load(); filterDurUsec > cur {
+					s.maxFilterDurUsec.Store(filterDurUsec)
 				}
 			}
 
 			// Warn if filter processing exceeds the audio chunk's real-time budget
 			chunkDurationUs := int64(filterLen/2) * 1_000_000 / int64(conf.SampleRate)
-			if filterDurUsec > chunkDurationUs {
+			if warmedUp && filterDurUsec > chunkDurationUs {
 				slowCount := s.filterSlowCount.Add(1)
-				getStreamLogger().Warn("audio EQ filter exceeded real-time budget",
-					logger.String("source_id", s.source.ID),
-					logger.Int("data_bytes", len(data)),
-					logger.Int("samples", filterLen/2),
-					logger.Int64("filter_usec", filterDurUsec),
-					logger.Int64("budget_usec", chunkDurationUs),
-					logger.Int64("slow_count", slowCount),
-					logger.Int64("total_calls", callNum),
-					logger.String("component", "ffmpeg-stream"),
-					logger.String("operation", "filter_timing"))
+				// Rate-limit warnings to avoid log flooding on persistently slow streams
+				if slowCount <= filterDiagInitialCalls || slowCount%filterSlowLogInterval == 0 {
+					getStreamLogger().Warn("audio EQ filter exceeded real-time budget",
+						logger.String("source_id", s.source.ID),
+						logger.Int("data_bytes", len(data)),
+						logger.Int("samples", filterLen/2),
+						logger.Int64("filter_usec", filterDurUsec),
+						logger.Int64("budget_usec", chunkDurationUs),
+						logger.Int64("slow_count", slowCount),
+						logger.Int64("total_calls", callNum),
+						logger.String("component", "ffmpeg-stream"),
+						logger.String("operation", "filter_timing"))
+				}
 			}
 
-			// Periodic debug log: first 5 calls + every 500th call
-			if callNum <= 5 || callNum%500 == 0 {
+			// Periodic debug log: first N calls + every Nth call
+			if callNum <= filterDiagInitialCalls || callNum%filterDiagInterval == 0 {
 				getStreamLogger().Debug("audio EQ filter timing",
 					logger.String("source_id", s.source.ID),
 					logger.Int("data_bytes", len(data)),
@@ -2139,6 +2148,11 @@ func (s *FFmpegStream) resetDataTracking() {
 	s.bytesReceivedMu.Lock()
 	s.totalBytesReceived = 0
 	s.bytesReceivedMu.Unlock()
+
+	// Reset audio EQ filter diagnostics so metrics reflect current process health
+	s.handleDataCount.Store(0)
+	s.filterSlowCount.Store(0)
+	s.maxFilterDurUsec.Store(0)
 }
 
 // logStreamHealth logs the current stream health status
