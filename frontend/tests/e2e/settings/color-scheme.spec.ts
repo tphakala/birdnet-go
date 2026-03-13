@@ -11,37 +11,35 @@ import { test, expect, type Page } from '@playwright/test';
  */
 
 /** Navigate to settings and wait for the Interface section to load. */
-async function navigateToSettings(page: Page) {
+const navigateToSettings = async (page: Page) => {
   await page.goto('/ui/settings', { timeout: 15000 });
   await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
-}
+};
 
 /** Get the computed value of a CSS custom property on the document root. */
-async function getCSSVariable(page: Page, varName: string): Promise<string> {
-  return page.evaluate(name => {
+const getCSSVariable = (page: Page, varName: string): Promise<string> =>
+  page.evaluate(name => {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   }, varName);
-}
 
 /** Get the data-scheme attribute from the html element. */
-async function getDataScheme(page: Page): Promise<string | null> {
-  return page.evaluate(() => document.documentElement.getAttribute('data-scheme'));
-}
+const getDataScheme = (page: Page): Promise<string | null> =>
+  page.evaluate(() => document.documentElement.getAttribute('data-scheme'));
 
 /** Click a color scheme swatch button by its aria-label text. */
-async function selectScheme(page: Page, labelText: string) {
+const selectScheme = async (page: Page, labelText: string) => {
   const swatch = page.locator(`button[role="radio"][aria-label="${labelText}"]`);
-  await expect(swatch).toBeVisible({ timeout: 5000 });
+  await expect(swatch).toBeVisible();
   await swatch.click();
-}
+};
 
 /** Clear localStorage color scheme keys to start with clean state. */
-async function clearSchemeStorage(page: Page) {
+const clearSchemeStorage = async (page: Page) => {
   await page.evaluate(() => {
     localStorage.removeItem('color-scheme');
     localStorage.removeItem('custom-scheme-colors');
   });
-}
+};
 
 test.describe('Color Scheme Switching', () => {
   test.setTimeout(30000);
@@ -158,6 +156,7 @@ test.describe('Color Scheme with Dark Mode', () => {
     await page.evaluate(() => {
       localStorage.setItem('theme', 'dark');
       document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme-controller', 'dark');
     });
 
     await navigateToSettings(page);
@@ -178,6 +177,7 @@ test.describe('Color Scheme with Dark Mode', () => {
     await page.evaluate(() => {
       localStorage.setItem('theme', 'dark');
       document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-theme-controller', 'dark');
     });
 
     await navigateToSettings(page);
@@ -237,8 +237,8 @@ test.describe('Custom Color Scheme', () => {
       'input[type="color"][aria-label="settings.appearance.customAccent"]'
     );
 
-    await expect(primaryInput).toBeVisible({ timeout: 5000 });
-    await expect(accentInput).toBeVisible({ timeout: 5000 });
+    await expect(primaryInput).toBeVisible();
+    await expect(accentInput).toBeVisible();
   });
 
   test('custom scheme uses custom CSS variables', async ({ page }) => {
@@ -302,7 +302,7 @@ test.describe('Color Scheme Accessibility', () => {
 
     // Should have a radiogroup
     const radiogroup = page.locator('[role="radiogroup"]');
-    await expect(radiogroup).toBeVisible({ timeout: 5000 });
+    await expect(radiogroup).toBeVisible();
 
     // Should have radio buttons for each scheme (blue, forest, amber, violet, rose, custom)
     const radios = radiogroup.locator('button[role="radio"]');
