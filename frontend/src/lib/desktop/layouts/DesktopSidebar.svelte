@@ -335,7 +335,7 @@ Performance Optimizations:
           class={cn('flex items-center gap-3 group', isCollapsed && 'justify-center')}
           aria-label="BirdNET-Go Home"
         >
-          <LogoBadge size="md" variant="ocean" />
+          <LogoBadge size="md" variant="scheme" />
           {#if !isCollapsed}
             <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]"
               >BirdNET-Go</span

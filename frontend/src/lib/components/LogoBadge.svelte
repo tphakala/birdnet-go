@@ -6,7 +6,8 @@ Designed for use in collapsed sidebars or compact UI areas.
 
 Props:
 - size?: 'sm' | 'md' | 'lg' - Badge size (default: 'md')
-- variant?: 'sunset' | 'ocean' | 'forest' | 'aurora' - Color theme (default: 'sunset')
+- variant?: 'sunset' | 'ocean' | 'forest' | 'aurora' | 'scheme' - Color theme (default: 'sunset')
+  'scheme' follows the active color scheme via --color-primary/--color-accent CSS variables
 - className?: string - Additional CSS classes
 -->
 <script lang="ts">
@@ -15,7 +16,7 @@ Props:
 
   interface Props {
     size?: 'sm' | 'md' | 'lg';
-    variant?: 'sunset' | 'ocean' | 'forest' | 'aurora';
+    variant?: 'sunset' | 'ocean' | 'forest' | 'aurora' | 'scheme';
     className?: string;
   }
 
@@ -36,6 +37,7 @@ Props:
 
   // Vibrant gradient variants
   function getVariantClass(v: typeof variant): string {
+    if (v === 'scheme') return 'logo-badge-scheme';
     if (v === 'ocean') return 'logo-badge-ocean';
     if (v === 'forest') return 'logo-badge-forest';
     if (v === 'aurora') return 'logo-badge-aurora';
@@ -91,5 +93,21 @@ Props:
     background: linear-gradient(135deg, #a855f7 0%, #6366f1 50%, #06b6d4 100%);
 
     --glow-color: rgba(99, 102, 241, 0.5);
+  }
+
+  /* Scheme gradient - follows active color scheme */
+  .logo-badge-scheme {
+    background: linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--color-primary) 80%, white) 0%,
+      var(--color-primary) 45%,
+      var(--color-accent) 100%
+    );
+    color: var(--color-primary-content);
+    transition:
+      background 0.3s ease,
+      box-shadow 0.3s ease;
+
+    --glow-color: color-mix(in srgb, var(--color-primary) 50%, transparent);
   }
 </style>
