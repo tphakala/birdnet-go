@@ -6,6 +6,7 @@
   import { cn } from '$lib/utils/cn';
   import { Check } from '@lucide/svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
+  import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
 
   interface Props {
     disabled?: boolean;
@@ -49,27 +50,27 @@
 
   function updateCustomPrimary(e: Event) {
     const target = e.target as HTMLInputElement;
-    scheme.setCustomColors({ ...$customColorsStore, primary: target.value });
+    const newColors = { ...$customColorsStore, primary: target.value };
+    scheme.setCustomColors(newColors);
+    if ($dashboardSettings) {
+      settingsActions.updateSection('realtime', {
+        dashboard: { ...$dashboardSettings, customColors: newColors },
+      });
+    }
   }
 
   function updateCustomAccent(e: Event) {
     const target = e.target as HTMLInputElement;
-    scheme.setCustomColors({ ...$customColorsStore, accent: target.value });
+    const newColors = { ...$customColorsStore, accent: target.value };
+    scheme.setCustomColors(newColors);
+    if ($dashboardSettings) {
+      settingsActions.updateSection('realtime', {
+        dashboard: { ...$dashboardSettings, customColors: newColors },
+      });
+    }
   }
 
-  // Map each scheme to its dedicated vibrant gradient variant
-  type LogoVariant = 'ocean' | 'forest' | 'amber' | 'violet' | 'rose' | 'scheme' | 'solid';
-  const SCHEME_GRADIENT_MAP: Record<string, LogoVariant> = {
-    blue: 'ocean',
-    forest: 'forest',
-    amber: 'amber',
-    violet: 'violet',
-    rose: 'rose',
-    custom: 'scheme',
-  };
-
   // Logo preview variant based on current style and scheme
-   
   let logoPreviewVariant: LogoVariant = $derived(
     $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
   );

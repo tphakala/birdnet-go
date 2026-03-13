@@ -3907,17 +3907,5 @@
       "requestTimeout": "Pyyntö aikakatkaistiin.",
       "networkError": "Verkkovirhe. Tarkista yhteytesi."
     }
-  },
-  "settings.appearance.colorScheme": "Värimaailma",
-  "settings.appearance.colorSchemeDescription": "Valitse käyttöliittymän värimaailma",
-  "settings.appearance.schemeBlue": "Sininen",
-  "settings.appearance.schemeForest": "Metsä",
-  "settings.appearance.schemeAmber": "Meripihka",
-  "settings.appearance.schemeViolet": "Violetti",
-  "settings.appearance.schemeRose": "Ruusu",
-  "settings.appearance.schemeCustom": "Mukautettu",
-  "settings.appearance.customPrimary": "Pääväri",
-  "settings.appearance.customAccent": "Korostusväri",
-  "settings.appearance.logoGradient": "Liukuvärinen logo",
-  "settings.appearance.logoGradientDescription": "Käytä liukuväritehosteella sivupalkin logossa"
+  }
 }

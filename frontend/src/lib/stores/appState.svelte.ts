@@ -58,6 +58,7 @@ interface AppConfigResponse {
   version: string;
   basePath?: string;
   colorScheme?: string;
+  customColors?: { primary: string; accent: string };
   logoStyle?: string;
 }
 
@@ -191,7 +192,7 @@ export async function initApp(): Promise<boolean> {
 
       // Apply server-configured appearance settings
       if (config.colorScheme) {
-        scheme.applyServerScheme(config.colorScheme);
+        scheme.applyServerScheme(config.colorScheme, config.customColors);
       }
       if (config.logoStyle === 'gradient' || config.logoStyle === 'solid') {
         logoStyle.setStyle(config.logoStyle);

@@ -3907,17 +3907,5 @@
       "requestTimeout": "Przekroczono limit czasu żądania.",
       "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
     }
-  },
-  "settings.appearance.colorScheme": "Schemat kolorów",
-  "settings.appearance.colorSchemeDescription": "Wybierz schemat kolorów dla interfejsu",
-  "settings.appearance.schemeBlue": "Niebieski",
-  "settings.appearance.schemeForest": "Leśny",
-  "settings.appearance.schemeAmber": "Bursztynowy",
-  "settings.appearance.schemeViolet": "Fioletowy",
-  "settings.appearance.schemeRose": "Różowy",
-  "settings.appearance.schemeCustom": "Niestandardowy",
-  "settings.appearance.customPrimary": "Kolor podstawowy",
-  "settings.appearance.customAccent": "Kolor akcentu",
-  "settings.appearance.logoGradient": "Logo z gradientem",
-  "settings.appearance.logoGradientDescription": "Użyj efektu gradientu na logo paska bocznego"
+  }
 }

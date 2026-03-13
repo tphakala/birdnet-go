@@ -76,6 +76,7 @@ Performance Optimizations:
   import LogoBadge from '$lib/components/LogoBadge.svelte';
   import { scheme } from '$lib/stores/scheme';
   import { logoStyle } from '$lib/stores/logoStyle';
+  import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
 
   interface Props {
     securityEnabled?: boolean;
@@ -100,19 +101,7 @@ Performance Optimizations:
     },
   }: Props = $props();
 
-  // Map each scheme to its dedicated vibrant gradient variant
-  type LogoVariant = 'ocean' | 'forest' | 'amber' | 'violet' | 'rose' | 'scheme' | 'solid';
-  const SCHEME_GRADIENT_MAP: Record<string, LogoVariant> = {
-    blue: 'ocean',
-    forest: 'forest',
-    amber: 'amber',
-    violet: 'violet',
-    rose: 'rose',
-    custom: 'scheme',
-  };
-
   // Logo variant: solid uses flat color, gradient uses per-scheme handcrafted gradient
-   
   let logoVariant: LogoVariant = $derived(
     $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
   );

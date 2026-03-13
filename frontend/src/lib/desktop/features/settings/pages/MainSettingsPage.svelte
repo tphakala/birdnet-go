@@ -267,6 +267,7 @@
           thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
           spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
           colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
+          customColors: store.originalData.realtime?.dashboard?.customColors,
           logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
         },
         {
@@ -275,6 +276,7 @@
           thumbnails: store.formData.realtime?.dashboard?.thumbnails,
           spectrogram: store.formData.realtime?.dashboard?.spectrogram,
           colorScheme: store.formData.realtime?.dashboard?.colorScheme,
+          customColors: store.formData.realtime?.dashboard?.customColors,
           logoStyle: store.formData.realtime?.dashboard?.logoStyle,
         }
       ) ||

@@ -131,10 +131,14 @@ function createSchemeStore() {
     },
 
     /** Apply server-configured scheme (overrides localStorage for visitors) */
-    applyServerScheme(serverScheme: string) {
+    applyServerScheme(serverScheme: string, serverCustomColors?: CustomColors) {
       if (!serverScheme || !isValidScheme(serverScheme)) return;
       set(serverScheme);
       applyScheme(serverScheme);
+      if (serverScheme === 'custom' && serverCustomColors) {
+        customColors.set(serverCustomColors);
+        applyCustomColors(serverCustomColors);
+      }
     },
   };
 }
