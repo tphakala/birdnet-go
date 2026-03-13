@@ -46,6 +46,12 @@
   // Dropdown UI state
   let dropOpen = $state(false);
 
+  // Format host:port for output, bracketing bare IPv6 addresses
+  function formatListen(h: string, p: number): string {
+    const bracketed = h.includes(':') && !(h.startsWith('[') && h.endsWith(']')) ? `[${h}]` : h;
+    return `${bracketed}:${p}`;
+  }
+
   // Parse listen prop into host and port, with IPv6 support
   function parseListen(value: string): { host: string; port: number } {
     // Handle bracketed IPv6 addresses e.g. [::1]:8090
@@ -101,21 +107,25 @@
 
   // Fetch network interfaces on mount (the single legitimate side effect)
   $effect(() => {
-    fetchInterfaces();
-  });
+    let disposed = false;
 
-  async function fetchInterfaces() {
-    try {
-      const response = await api.get<{ interfaces: NetworkInterface[] }>(
-        '/api/v2/system/network-interfaces'
-      );
-      if (response.interfaces && response.interfaces.length > 0) {
-        apiInterfaces = response.interfaces;
+    void (async () => {
+      try {
+        const response = await api.get<{ interfaces: NetworkInterface[] }>(
+          '/api/v2/system/network-interfaces'
+        );
+        if (!disposed && response.interfaces && response.interfaces.length > 0) {
+          apiInterfaces = response.interfaces;
+        }
+      } catch {
+        // Keep empty apiInterfaces — defaults are merged in via $derived.by
       }
-    } catch {
-      // Keep empty apiInterfaces — defaults are merged in via $derived.by
-    }
-  }
+    })();
+
+    return () => {
+      disposed = true;
+    };
+  });
 
   // Translate built-in interface labels; pass through labels from the OS
   function getLocalizedLabel(iface: NetworkInterface): string {
@@ -130,11 +140,11 @@
 
   function selectHost(address: string) {
     dropOpen = false;
-    onchange(`${address}:${port}`);
+    onchange(formatListen(address, port));
   }
 
   function updatePort(newPort: number) {
-    onchange(`${host}:${newPort}`);
+    onchange(formatListen(host, newPort));
   }
 
   function handleClickOutside(event: MouseEvent) {
