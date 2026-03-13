@@ -651,26 +651,26 @@
       "configFetch": "Échec de la récupération de la configuration du tableau de bord : {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
+      "title": "Titre",
+      "titlePlaceholder": "Ma station ornithologique",
       "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "descriptionPlaceholder": "Une brève description de votre station de surveillance des oiseaux...",
+      "subElements": "Sous-éléments",
+      "showImage": "Afficher une image personnalisée",
+      "imageUrl": "URL ou chemin de l'image",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Entrez une URL vers une image. Le téléchargement d'images sera disponible dans une future mise à jour.",
+      "showLocationMap": "Afficher la carte de localisation",
+      "showLocationMapHelp": "Affiche une petite carte en utilisant la latitude/longitude de vos paramètres principaux",
+      "showWeather": "Afficher la météo actuelle",
+      "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Collez n'importe quelle URL YouTube (watch, embed ou lien court). Elle sera convertie en intégration respectueuse de la vie privée.",
+      "titleLabel": "Titre (optionnel)",
+      "titlePlaceholder": "Mangeoire à oiseaux en direct"
     },
     "editMode": {
       "editing": "Modification du tableau de bord",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Pleine largeur uniquement"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Bannière du tableau de bord",
+      "dailySummary": "Résumé quotidien",
+      "currentlyHearing": "En écoute actuellement",
+      "detectionsGrid": "Détections récentes",
+      "videoEmbed": "Vidéo intégrée"
     }
   },
   "detections": {

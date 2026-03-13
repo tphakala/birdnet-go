@@ -5,7 +5,7 @@
   @component
 -->
 <script lang="ts">
-  import { Cloud, Image, Map, CloudSun } from '@lucide/svelte';
+  import { Cloud, Image, Map as MapIcon, CloudSun } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
   import BannerLocationMap from './BannerLocationMap.svelte';
@@ -108,7 +108,7 @@
                 onclick={() => update({ showLocationMap: false })}
                 class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/20"
               >
-                <Map class="size-3.5" />
+                <MapIcon class="size-3.5" />
                 {t('dashboard.banner.showLocationMap')}
               </button>
             {:else}
@@ -116,7 +116,7 @@
                 onclick={() => update({ showLocationMap: true })}
                 class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-base-300)] px-3 py-1.5 text-xs text-[var(--color-base-content)]/40 transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-base-content)]/60"
               >
-                <Map class="size-3.5" />
+                <MapIcon class="size-3.5" />
                 {t('dashboard.banner.showLocationMap')}
               </button>
             {/if}

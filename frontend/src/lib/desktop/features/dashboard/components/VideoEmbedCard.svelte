@@ -61,6 +61,7 @@
         type="text"
         value={config.title}
         placeholder={t('dashboard.videoEmbed.titlePlaceholder')}
+        aria-label={t('dashboard.videoEmbed.titlePlaceholder')}
         class="w-full border-0 border-b-2 border-transparent bg-transparent text-lg font-semibold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
         oninput={e => update({ title: inputValue(e) })}
       />
@@ -68,6 +69,7 @@
         type="text"
         value={config.url}
         placeholder={t('dashboard.videoEmbed.youtubeUrlPlaceholder')}
+        aria-label={t('dashboard.videoEmbed.youtubeUrlPlaceholder')}
         class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-3 py-1.5 text-sm text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
         oninput={e => update({ url: inputValue(e) })}
       />

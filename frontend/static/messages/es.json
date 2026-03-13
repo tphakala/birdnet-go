@@ -651,26 +651,26 @@
       "configFetch": "Error al obtener la configuración del panel: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Título",
+      "titlePlaceholder": "Mi estación de aves",
+      "description": "Descripción",
+      "descriptionPlaceholder": "Una breve descripción de su estación de monitoreo de aves...",
+      "subElements": "Subelementos",
+      "showImage": "Mostrar imagen personalizada",
+      "imageUrl": "URL o ruta de imagen",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Introduzca una URL de imagen. La carga de imágenes estará disponible en una actualización futura.",
+      "showLocationMap": "Mostrar mapa de ubicación",
+      "showLocationMapHelp": "Muestra un pequeño mapa usando la latitud/longitud de sus ajustes principales",
+      "showWeather": "Mostrar clima actual",
+      "showWeatherHelp": "Muestra las condiciones climáticas actuales (requiere que la integración del clima esté habilitada)"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "URL de YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Pegue cualquier URL de YouTube (watch, embed o enlace corto). Se convertirá en una incrustación con privacidad mejorada.",
+      "titleLabel": "Título (opcional)",
+      "titlePlaceholder": "Comedero de aves en vivo"
     },
     "editMode": {
       "editing": "Editando panel",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Solo ancho completo"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Banner del panel",
+      "dailySummary": "Resumen diario",
+      "currentlyHearing": "Escuchando actualmente",
+      "detectionsGrid": "Detecciones recientes",
+      "videoEmbed": "Video incrustado"
     }
   },
   "detections": {

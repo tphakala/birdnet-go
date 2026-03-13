@@ -651,26 +651,26 @@
       "configFetch": "Nie udało się pobrać konfiguracji panelu: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Tytuł",
+      "titlePlaceholder": "Moja stacja ptaków",
+      "description": "Opis",
+      "descriptionPlaceholder": "Krótki opis stacji monitorowania ptaków...",
+      "subElements": "Podelementy",
+      "showImage": "Pokaż własny obraz",
+      "imageUrl": "URL lub ścieżka obrazu",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Wprowadź URL do obrazu. Przesyłanie obrazów będzie dostępne w przyszłej aktualizacji.",
+      "showLocationMap": "Pokaż mapę lokalizacji",
+      "showLocationMapHelp": "Wyświetla małą mapę z szerokością/długością geograficzną z ustawień głównych",
+      "showWeather": "Pokaż aktualną pogodę",
+      "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Wklej dowolny URL YouTube (watch, embed lub krótki link). Zostanie przekonwertowany na osadzenie z większą prywatnością.",
+      "titleLabel": "Tytuł (opcjonalnie)",
+      "titlePlaceholder": "Karmnik na żywo"
     },
     "editMode": {
       "editing": "Edycja pulpitu",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Tylko pełna szerokość"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Baner pulpitu",
+      "dailySummary": "Podsumowanie dnia",
+      "currentlyHearing": "Aktualnie słyszane",
+      "detectionsGrid": "Ostatnie detekcje",
+      "videoEmbed": "Osadzenie wideo"
     }
   },
   "detections": {
