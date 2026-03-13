@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	"gorm.io/gorm"
@@ -46,18 +47,21 @@ const (
 
 // SystemInfo represents basic system information
 type SystemInfo struct {
-	Hostname      string    `json:"hostname"`
-	PlatformVer   string    `json:"platform_version"`
-	KernelVersion string    `json:"kernel_version"`
-	UpTime        uint64    `json:"uptime_seconds"`
-	BootTime      time.Time `json:"boot_time"`
-	AppStart      time.Time `json:"app_start_time"`
-	AppUptime     int64     `json:"app_uptime_seconds"`
-	NumCPU        int       `json:"num_cpu"`
-	SystemModel   string    `json:"system_model,omitempty"`
-	TimeZone      string    `json:"time_zone,omitempty"`
-	OSDisplay     string    `json:"os_display"`
-	Architecture  string    `json:"architecture"`
+	Hostname       string    `json:"hostname"`
+	PlatformVer    string    `json:"platform_version"`
+	KernelVersion  string    `json:"kernel_version"`
+	UpTime         uint64    `json:"uptime_seconds"`
+	BootTime       time.Time `json:"boot_time"`
+	AppStart       time.Time `json:"app_start_time"`
+	AppUptime      int64     `json:"app_uptime_seconds"`
+	NumCPU         int       `json:"num_cpu"`
+	SystemModel    string    `json:"system_model,omitempty"`
+	TimeZone       string    `json:"time_zone,omitempty"`
+	OSDisplay      string    `json:"os_display"`
+	Architecture   string    `json:"architecture"`
+	CPUModel       string    `json:"cpu_model,omitempty"`
+	Environment    string    `json:"environment"`
+	Virtualization string    `json:"virtualization,omitempty"`
 }
 
 // ResourceInfo represents system resource usage data
@@ -427,20 +431,24 @@ func (c *Controller) GetSystemInfo(ctx echo.Context) error {
 
 	hostname := c.getHostnameWithFallback(ip, path)
 	systemModel := c.getSystemModelWithLogging(ip, path)
+	envType, envDetail := sysinfo.GetEnvironment()
 
 	info := SystemInfo{
-		Architecture:  runtime.GOARCH,
-		Hostname:      hostname,
-		PlatformVer:   hostInfo.PlatformVersion,
-		KernelVersion: hostInfo.KernelVersion,
-		UpTime:        hostInfo.Uptime,
-		BootTime:      time.Unix(int64(hostInfo.BootTime), 0), // #nosec G115 -- BootTime from system APIs, safe conversion for timestamp
-		AppStart:      startTime,
-		AppUptime:     int64(time.Since(startMonotonicTime).Seconds()),
-		NumCPU:        runtime.NumCPU(),
-		SystemModel:   systemModel,
-		TimeZone:      getTimeZoneString(),
-		OSDisplay:     getOSDisplayString(hostInfo.Platform),
+		Architecture:   sysinfo.GetCPUArch(),
+		Hostname:       hostname,
+		PlatformVer:    hostInfo.PlatformVersion,
+		KernelVersion:  hostInfo.KernelVersion,
+		UpTime:         hostInfo.Uptime,
+		BootTime:       time.Unix(int64(hostInfo.BootTime), 0), // #nosec G115 -- BootTime from system APIs, safe conversion for timestamp
+		AppStart:       startTime,
+		AppUptime:      int64(time.Since(startMonotonicTime).Seconds()),
+		NumCPU:         runtime.NumCPU(),
+		SystemModel:    systemModel,
+		TimeZone:       getTimeZoneString(),
+		OSDisplay:      getOSDisplayString(hostInfo.Platform),
+		CPUModel:       sysinfo.GetCPUModel(),
+		Environment:    envType,
+		Virtualization: envDetail,
 	}
 
 	c.logInfoIfEnabled("System information retrieved successfully", logger.String("os_display", info.OSDisplay), logger.String("arch", info.Architecture), logger.String("hostname", info.Hostname), logger.Any("uptime", info.UpTime), logger.Int64("app_uptime", info.AppUptime), logger.String("timezone", info.TimeZone), logger.String("path", path), logger.String("ip", ip))
