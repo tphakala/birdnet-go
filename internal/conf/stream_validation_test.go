@@ -472,7 +472,7 @@ func TestApplyStreamDefaults(t *testing.T) {
 			streams: []StreamConfig{
 				{Name: "Cam1", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP},
 			},
-			expectedTransport: []string{"tcp"},
+			expectedTransport: []string{DefaultTransport},
 		},
 		{
 			name:            "mixed stream types only applies to RTSP and RTMP",

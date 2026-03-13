@@ -787,6 +787,9 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
+	// Apply default transport before stream validation
+	settings.RTSP.ApplyStreamDefaults()
+
 	// Validate stream configurations
 	if err := settings.RTSP.ValidateStreams(); err != nil {
 		return errors.New(err).
