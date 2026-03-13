@@ -3893,5 +3893,15 @@
       "requestTimeout": "Tiempo de espera agotado.",
       "networkError": "Error de red. Compruebe su conexión."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Esquema de colores",
+  "settings.appearance.colorSchemeDescription": "Elija un esquema de colores para la interfaz",
+  "settings.appearance.schemeBlue": "Azul",
+  "settings.appearance.schemeForest": "Bosque",
+  "settings.appearance.schemeAmber": "Ámbar",
+  "settings.appearance.schemeViolet": "Violeta",
+  "settings.appearance.schemeRose": "Rosa",
+  "settings.appearance.schemeCustom": "Personalizado",
+  "settings.appearance.customPrimary": "Color primario",
+  "settings.appearance.customAccent": "Color de acento"
 }

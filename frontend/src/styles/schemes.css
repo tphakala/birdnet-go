@@ -1,0 +1,127 @@
+/* ================================================
+   COLOR SCHEMES
+   Each scheme overrides --color-primary-* and
+   --color-accent-*. Status colors, base/surface
+   tones, and neutrals are universal.
+
+   Hover/active variants use color-mix() to
+   auto-derive from the base primary color.
+   ================================================ */
+
+/* --- Blue (default) ---
+   No overrides needed — @theme values in tailwind.css
+   already define the blue scheme. This selector exists
+   only for explicitness and to match the data-scheme
+   attribute set by the scheme store. */
+[data-scheme='blue'] {
+  /* Uses @theme defaults */
+}
+
+/* --- Forest (green) ---
+   Uses teal-leaning greens to stay visually distinct from
+   --color-success (#22c55e / emerald). Forest primary is
+   darker and cooler (pine green), not the bright emerald
+   used for success indicators. */
+[data-scheme='forest'] {
+  --color-primary: #047857;
+  --color-primary-hover: color-mix(in srgb, #047857 85%, black);
+  --color-primary-active: color-mix(in srgb, #047857 70%, black);
+  --color-primary-content: #ffffff;
+  --color-accent: #0f766e;
+  --color-accent-hover: color-mix(in srgb, #0f766e 85%, black);
+  --color-accent-content: #ffffff;
+}
+
+[data-theme='dark'][data-scheme='forest'] {
+  --color-primary: #059669;
+  --color-primary-hover: color-mix(in srgb, #059669 80%, white);
+  --color-primary-active: color-mix(in srgb, #059669 85%, black);
+  --color-primary-content: #ffffff;
+  --color-accent: #0d9488;
+  --color-accent-hover: color-mix(in srgb, #0d9488 80%, white);
+  --color-accent-content: #ffffff;
+}
+
+/* --- Amber (warm) --- */
+[data-scheme='amber'] {
+  --color-primary: #d97706;
+  --color-primary-hover: color-mix(in srgb, #d97706 85%, black);
+  --color-primary-active: color-mix(in srgb, #d97706 70%, black);
+  --color-primary-content: #ffffff;
+  --color-accent: #ea580c;
+  --color-accent-hover: color-mix(in srgb, #ea580c 85%, black);
+  --color-accent-content: #ffffff;
+}
+
+[data-theme='dark'][data-scheme='amber'] {
+  --color-primary: #f59e0b;
+  --color-primary-hover: color-mix(in srgb, #f59e0b 80%, white);
+  --color-primary-active: color-mix(in srgb, #f59e0b 85%, black);
+  --color-primary-content: #020617;
+  --color-accent: #f97316;
+  --color-accent-hover: color-mix(in srgb, #f97316 80%, white);
+  --color-accent-content: #020617;
+}
+
+/* --- Violet (purple) --- */
+[data-scheme='violet'] {
+  --color-primary: #7c3aed;
+  --color-primary-hover: color-mix(in srgb, #7c3aed 85%, black);
+  --color-primary-active: color-mix(in srgb, #7c3aed 70%, black);
+  --color-primary-content: #ffffff;
+  --color-accent: #a855f7;
+  --color-accent-hover: color-mix(in srgb, #a855f7 85%, black);
+  --color-accent-content: #ffffff;
+}
+
+[data-theme='dark'][data-scheme='violet'] {
+  --color-primary: #8b5cf6;
+  --color-primary-hover: color-mix(in srgb, #8b5cf6 80%, white);
+  --color-primary-active: color-mix(in srgb, #8b5cf6 85%, black);
+  --color-primary-content: #020617;
+  --color-accent: #c084fc;
+  --color-accent-hover: color-mix(in srgb, #c084fc 80%, white);
+  --color-accent-content: #020617;
+}
+
+/* --- Rose (pink) --- */
+[data-scheme='rose'] {
+  --color-primary: #e11d48;
+  --color-primary-hover: color-mix(in srgb, #e11d48 85%, black);
+  --color-primary-active: color-mix(in srgb, #e11d48 70%, black);
+  --color-primary-content: #ffffff;
+  --color-accent: #f43f5e;
+  --color-accent-hover: color-mix(in srgb, #f43f5e 85%, black);
+  --color-accent-content: #ffffff;
+}
+
+[data-theme='dark'][data-scheme='rose'] {
+  --color-primary: #fb7185;
+  --color-primary-hover: color-mix(in srgb, #fb7185 80%, white);
+  --color-primary-active: color-mix(in srgb, #fb7185 85%, black);
+  --color-primary-content: #020617;
+  --color-accent: #fda4af;
+  --color-accent-hover: color-mix(in srgb, #fda4af 80%, white);
+  --color-accent-content: #020617;
+}
+
+/* --- Custom (user-defined) ---
+   JS sets --custom-primary and --custom-accent on
+   document.documentElement.style. Hover/active variants
+   are auto-derived via color-mix(). Content color
+   (black or white) is computed by JS based on luminance. */
+[data-scheme='custom'] {
+  --color-primary: var(--custom-primary, #2563eb);
+  --color-primary-hover: color-mix(in srgb, var(--custom-primary, #2563eb) 85%, black);
+  --color-primary-active: color-mix(in srgb, var(--custom-primary, #2563eb) 70%, black);
+  --color-primary-content: var(--custom-primary-content, #ffffff);
+  --color-accent: var(--custom-accent, #0284c7);
+  --color-accent-hover: color-mix(in srgb, var(--custom-accent, #0284c7) 85%, black);
+  --color-accent-content: var(--custom-accent-content, #ffffff);
+}
+
+[data-theme='dark'][data-scheme='custom'] {
+  --color-primary-hover: color-mix(in srgb, var(--custom-primary, #3b82f6) 80%, white);
+  --color-primary-active: color-mix(in srgb, var(--custom-primary, #3b82f6) 85%, black);
+  --color-accent-hover: color-mix(in srgb, var(--custom-accent, #0369a1) 80%, white);
+}
