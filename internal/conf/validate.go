@@ -1093,7 +1093,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 				Build()
 		}
 
-		if el.Summary != nil && (el.Summary.SummaryLimit < 10 || el.Summary.SummaryLimit > 1000) {
+		if el.Summary != nil && el.Summary.SummaryLimit != 0 && (el.Summary.SummaryLimit < 10 || el.Summary.SummaryLimit > 1000) {
 			return errors.Newf("Dashboard layout element %d SummaryLimit must be between 10 and 1000", i).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "dashboard-layout-summary-limit").

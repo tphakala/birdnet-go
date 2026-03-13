@@ -3594,7 +3594,7 @@
     "userInterface": {
       "tabs": {
         "appearance": "Erscheinungsbild",
-        "language": "Sprache & Regional",
+        "language": "Sprache & Region",
         "visualContent": "Visuelle Inhalte"
       },
       "appearance": {
@@ -3602,7 +3602,7 @@
         "description": "Passen Sie das Aussehen Ihrer BirdNET-Go-Oberfläche an"
       },
       "language": {
-        "title": "Sprache & Regional",
+        "title": "Sprache & Region",
         "description": "Sprache, Temperatureinheiten und regionale Anzeigeeinstellungen"
       },
       "visualContent": {
