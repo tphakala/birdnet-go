@@ -2752,7 +2752,13 @@
         "disabled": "Havainnointi-integraatio ei ole käytössä",
         "listenAddress": {
           "label": "Kuunteluosoite",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Sidontaosoite",
+          "portLabel": "Portti",
+          "allInterfaces": "Kaikki liitännät",
+          "loopback": "Loopback",
+          "customAddress": "Mukautettu osoite",
+          "interfaceDown": "pois käytöstä"
         }
       },
       "weather": {

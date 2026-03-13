@@ -360,6 +360,7 @@ routeInitializers := []struct {
 | GET    | `/system/audio/devices`          | `GetAudioDevices`         | ✅   | Available audio devices              |
 | GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                  |
 | GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
+| GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 
 ### Events (`events.go`, `events_aggregation.go`)
 

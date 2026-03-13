@@ -2410,7 +2410,13 @@
         "disabled": "L'intégration d'observabilité n'est pas activée",
         "listenAddress": {
           "label": "Adresse d'écoute",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Adresse de liaison",
+          "portLabel": "Port",
+          "allInterfaces": "Toutes les interfaces",
+          "loopback": "Loopback",
+          "customAddress": "Adresse personnalisée",
+          "interfaceDown": "inactif"
         }
       },
       "weather": {

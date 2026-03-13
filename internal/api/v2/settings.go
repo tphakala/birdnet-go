@@ -187,6 +187,12 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		settings.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
 	}
 
+	// Run full settings validation after field updates
+	if err := conf.ValidateSettings(settings); err != nil {
+		*settings = oldSettings
+		return c.HandleError(ctx, err, "Invalid settings", http.StatusBadRequest)
+	}
+
 	// Check if any important settings have changed and trigger actions as needed
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
 		// Attempt to rollback changes if applying them failed
@@ -525,6 +531,14 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
 		}
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
+	}
+
+	// Run full settings validation after section merge to catch invalid values
+	// (e.g., malformed telemetry listen address, invalid port ranges, etc.)
+	if err := conf.ValidateSettings(settings); err != nil {
+		*settings = oldSettings
+		return c.HandleError(ctx, err,
+			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 	}
 
 	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
