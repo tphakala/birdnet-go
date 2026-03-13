@@ -1041,13 +1041,26 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 // Add this new function
 func validateDashboardSettings(settings *Dashboard) error {
-	// Validate SummaryLimit
-	if settings.SummaryLimit < 10 || settings.SummaryLimit > 1000 {
+	// Validate deprecated root SummaryLimit (only when non-zero, i.e. not yet migrated)
+	if settings.SummaryLimit != 0 && (settings.SummaryLimit < 10 || settings.SummaryLimit > 1000) {
 		return errors.Newf("Dashboard SummaryLimit must be between 10 and 1000").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "dashboard-summary-limit").
 			Context("summary_limit", settings.SummaryLimit).
 			Build()
+	}
+
+	// Validate layout element configs
+	for i, el := range settings.Layout.Elements {
+		if el.Summary != nil && (el.Summary.SummaryLimit < 10 || el.Summary.SummaryLimit > 1000) {
+			return errors.Newf("Dashboard layout element %d SummaryLimit must be between 10 and 1000", i).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "dashboard-layout-summary-limit").
+				Context("element_index", i).
+				Context("element_type", el.Type).
+				Context("summary_limit", el.Summary.SummaryLimit).
+				Build()
+		}
 	}
 
 	// Validate UI locale if provided

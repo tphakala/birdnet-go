@@ -520,6 +520,7 @@ export type DashboardElementType =
 
 // A single configurable element on the dashboard
 export interface DashboardElement {
+  id?: string; // unique identifier (e.g., "daily-summary-0"); stable across reorders
   type: DashboardElementType;
   enabled: boolean;
   banner?: BannerConfig;
@@ -899,14 +900,19 @@ function createEmptySettings(): SettingsFormData {
           imageProvider: 'avicommons',
           fallbackPolicy: 'none',
         },
-        summaryLimit: 100,
+        summaryLimit: 30,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
         temperatureUnit: 'celsius',
         layout: {
           elements: [
-            { type: 'daily-summary', enabled: true, summary: { summaryLimit: 100 } },
-            { type: 'currently-hearing', enabled: true },
-            { type: 'detections-grid', enabled: true },
+            {
+              id: 'daily-summary-0',
+              type: 'daily-summary',
+              enabled: true,
+              summary: { summaryLimit: 30 },
+            },
+            { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+            { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
           ],
         },
       },

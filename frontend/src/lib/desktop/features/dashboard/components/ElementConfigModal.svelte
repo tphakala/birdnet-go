@@ -101,7 +101,7 @@
           />
         {:else if editElement.type === 'daily-summary'}
           <DailySummaryConfigForm
-            config={editElement.summary ?? { summaryLimit: 100 }}
+            config={editElement.summary ?? { summaryLimit: 30 }}
             onUpdate={config => {
               editElement = { ...editElement, summary: config };
             }}

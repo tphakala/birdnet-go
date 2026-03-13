@@ -149,7 +149,7 @@
           imageProvider: 'avicommons',
           fallbackPolicy: 'none',
         },
-        summaryLimit: 100,
+        summaryLimit: 30,
       }),
       locale: $dashboardSettings?.locale ?? (getLocale() as string),
       spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,

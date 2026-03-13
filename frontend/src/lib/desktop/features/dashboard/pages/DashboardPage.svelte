@@ -132,9 +132,9 @@ Performance Optimizations:
 
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
-    { type: 'daily-summary', enabled: true, summary: { summaryLimit: 100 } },
-    { type: 'currently-hearing', enabled: true },
-    { type: 'detections-grid', enabled: true },
+    { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
+    { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+    { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
   ];
   let layoutElements = $derived($dashboardLayout?.elements ?? defaultElements);
 

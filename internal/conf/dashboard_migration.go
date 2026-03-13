@@ -1,6 +1,6 @@
 package conf
 
-const defaultDashboardSummaryLimit = 100
+const defaultDashboardSummaryLimit = 30
 
 // MigrateDashboardLayout migrates existing installations to the new dashboard layout format.
 // It creates a default layout with the three existing elements (daily-summary, currently-hearing,
@@ -21,6 +21,7 @@ func (s *Settings) MigrateDashboardLayout() bool {
 	s.Realtime.Dashboard.Layout = DashboardLayout{
 		Elements: []DashboardElement{
 			{
+				ID:      "daily-summary-0",
 				Type:    "daily-summary",
 				Enabled: true,
 				Summary: &DailySummaryConfig{
@@ -28,15 +29,20 @@ func (s *Settings) MigrateDashboardLayout() bool {
 				},
 			},
 			{
+				ID:      "currently-hearing-0",
 				Type:    "currently-hearing",
 				Enabled: true,
 			},
 			{
+				ID:      "detections-grid-0",
 				Type:    "detections-grid",
 				Enabled: true,
 			},
 		},
 	}
+
+	// Zero out deprecated field now that it's migrated into the layout element
+	s.Realtime.Dashboard.SummaryLimit = 0
 
 	return true
 }

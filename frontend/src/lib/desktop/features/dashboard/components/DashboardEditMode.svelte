@@ -39,7 +39,7 @@
   function enterEditMode() {
     editElements = layout.elements.map((el, i) => ({
       ...(JSON.parse(JSON.stringify(el)) as DashboardElement),
-      id: `${el.type}-${i}`,
+      id: el.id ?? `${el.type}-${i}`,
     }));
     editMode = true;
     onEditModeChange(true);
@@ -100,7 +100,9 @@
 
   // Save element config from modal
   function saveElementConfig(updated: DashboardElement) {
-    editElements = editElements.map(el => (el.type === updated.type ? { ...el, ...updated } : el));
+    editElements = editElements.map(el =>
+      el.id === (updated.id ?? updated.type) ? { ...el, ...updated } : el
+    );
   }
 </script>
 
@@ -175,7 +177,7 @@
   {/if}
 {:else}
   <!-- Normal mode: render elements from layout -->
-  {#each layout.elements.filter(e => e.enabled) as element (element.type)}
+  {#each layout.elements.filter(e => e.enabled) as element (element.id ?? element.type)}
     {@render renderElement(element, false)}
   {/each}
 {/if}
