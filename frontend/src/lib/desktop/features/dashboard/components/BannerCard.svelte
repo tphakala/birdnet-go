@@ -58,6 +58,7 @@
           type="text"
           value={config.title}
           placeholder={t('dashboard.banner.titlePlaceholder')}
+          aria-label={t('dashboard.banner.titlePlaceholder')}
           class="w-full border-0 border-b-2 border-transparent bg-transparent text-xl font-bold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
           oninput={e => update({ title: inputValue(e) })}
         />
@@ -66,6 +67,7 @@
         <textarea
           value={config.description}
           placeholder={t('dashboard.banner.descriptionPlaceholder')}
+          aria-label={t('dashboard.banner.descriptionPlaceholder')}
           class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
           rows="2"
           oninput={e => update({ description: textareaValue(e) })}
@@ -87,6 +89,7 @@
                 type="text"
                 value={config.imagePath}
                 placeholder={t('dashboard.banner.imageUrlPlaceholder')}
+                aria-label={t('dashboard.banner.imageUrlPlaceholder')}
                 class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
                 oninput={e => update({ imagePath: inputValue(e) })}
               />
