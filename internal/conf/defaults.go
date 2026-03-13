@@ -230,7 +230,7 @@ func setDefaultConfig() {
 
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})
-	viper.SetDefault("realtime.rtsp.transport", "tcp")
+	viper.SetDefault("realtime.rtsp.transport", DefaultTransport)
 	viper.SetDefault("realtime.rtsp.health.healthydatathreshold", 60)
 	viper.SetDefault("realtime.rtsp.health.monitoringinterval", 30)
 	viper.SetDefault("realtime.rtsp.ffmpegparameters", []string{})

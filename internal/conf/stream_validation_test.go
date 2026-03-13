@@ -408,3 +408,106 @@ func BenchmarkRTSPSettings_ValidateStreams(b *testing.B) {
 		_ = rtsp.ValidateStreams()
 	}
 }
+
+func TestApplyStreamDefaults(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name              string
+		globalTransport   string
+		streams           []StreamConfig
+		expectedTransport []string // expected transport per stream after apply
+	}{
+		{
+			name:            "propagates global transport to RTSP streams with empty transport",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "Cam1", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP},
+				{Name: "Cam2", URL: "rtsp://192.168.1.11/stream", Type: StreamTypeRTSP},
+			},
+			expectedTransport: []string{"tcp", "tcp"},
+		},
+		{
+			name:            "propagates global transport to RTMP streams with empty transport",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "OBS", URL: "rtmp://192.168.1.50/live/birdcam", Type: StreamTypeRTMP},
+			},
+			expectedTransport: []string{"tcp"},
+		},
+		{
+			name:            "does not override existing per-stream transport",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "Cam1", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP, Transport: "udp"},
+			},
+			expectedTransport: []string{"udp"},
+		},
+		{
+			name:            "does not set transport for HTTP streams",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "Icecast", URL: "http://192.168.1.50:8000/audio", Type: StreamTypeHTTP},
+			},
+			expectedTransport: []string{""},
+		},
+		{
+			name:            "does not set transport for HLS streams",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "HLS", URL: "https://camera.local/live/playlist.m3u8", Type: StreamTypeHLS},
+			},
+			expectedTransport: []string{""},
+		},
+		{
+			name:            "does not set transport for UDP streams",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "ESP32", URL: "udp://192.168.1.5:1234", Type: StreamTypeUDP},
+			},
+			expectedTransport: []string{""},
+		},
+		{
+			name:            "defaults to tcp when global transport is empty",
+			globalTransport: "",
+			streams: []StreamConfig{
+				{Name: "Cam1", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP},
+			},
+			expectedTransport: []string{"tcp"},
+		},
+		{
+			name:            "mixed stream types only applies to RTSP and RTMP",
+			globalTransport: "tcp",
+			streams: []StreamConfig{
+				{Name: "Cam1", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP},
+				{Name: "Icecast", URL: "http://192.168.1.50:8000/audio", Type: StreamTypeHTTP},
+				{Name: "OBS", URL: "rtmp://192.168.1.50/live/birdcam", Type: StreamTypeRTMP},
+				{Name: "ESP32", URL: "udp://192.168.1.5:1234", Type: StreamTypeUDP},
+			},
+			expectedTransport: []string{"tcp", "", "tcp", ""},
+		},
+		{
+			name:              "no streams is a no-op",
+			globalTransport:   "tcp",
+			streams:           []StreamConfig{},
+			expectedTransport: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			rtsp := &RTSPSettings{
+				Transport: tt.globalTransport,
+				Streams:   tt.streams,
+			}
+
+			rtsp.ApplyStreamDefaults()
+
+			require.Len(t, rtsp.Streams, len(tt.expectedTransport))
+			for i, expected := range tt.expectedTransport {
+				assert.Equal(t, expected, rtsp.Streams[i].Transport,
+					"stream %d (%s) transport mismatch", i, rtsp.Streams[i].Name)
+			}
+		})
+	}
+}

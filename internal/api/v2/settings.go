@@ -850,6 +850,9 @@ func validateStreamsSection(data json.RawMessage) error {
 		return err
 	}
 
+	// Apply default transport before validation (propagates global transport to streams)
+	rtspSettings.ApplyStreamDefaults()
+
 	// Validate RTSP streams
 	return rtspSettings.ValidateStreams()
 }
