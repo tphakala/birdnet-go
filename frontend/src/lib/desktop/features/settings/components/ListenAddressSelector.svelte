@@ -80,8 +80,9 @@
   }
 
   // Derived state from listen prop — no $effect needed
-  let host = $derived(parseListen(listen).host);
-  let port = $derived(parseListen(listen).port);
+  const parsed = $derived(parseListen(listen));
+  let host = $derived(parsed.host);
+  let port = $derived(parsed.port);
 
   // Derived interface list: merge API results + defaults + current host
   let interfaces = $derived.by(() => {
