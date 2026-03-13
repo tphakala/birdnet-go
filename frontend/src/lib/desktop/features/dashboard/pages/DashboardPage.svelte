@@ -66,6 +66,7 @@ Performance Optimizations:
   import { dashboardLayout } from '$lib/stores/settings';
   import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
+  import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import { auth } from '$lib/stores/auth';
 
@@ -1254,6 +1255,8 @@ Performance Optimizations:
           updatesAreFrozen={freezeCount > 0}
           className="mt-4"
         />
+      {:else if element.type === 'video-embed' && element.video}
+        <VideoEmbedCard config={element.video} />
       {/if}
     {/snippet}
   </DashboardEditMode>

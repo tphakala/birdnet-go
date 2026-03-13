@@ -9,6 +9,7 @@
   import BannerConfigForm from './BannerConfigForm.svelte';
   import DailySummaryConfigForm from './DailySummaryConfigForm.svelte';
   import DetectionsGridConfigForm from './DetectionsGridConfigForm.svelte';
+  import VideoEmbedConfigForm from './VideoEmbedConfigForm.svelte';
 
   interface Props {
     element: DashboardElement;
@@ -110,6 +111,13 @@
             config={editElement.grid ?? {}}
             onUpdate={config => {
               editElement = { ...editElement, grid: config };
+            }}
+          />
+        {:else if editElement.type === 'video-embed'}
+          <VideoEmbedConfigForm
+            config={editElement.video ?? { url: '', title: '' }}
+            onUpdate={config => {
+              editElement = { ...editElement, video: config };
             }}
           />
         {:else if editElement.type === 'currently-hearing'}
