@@ -2,7 +2,6 @@
 @import url('./custom.css') layer(base);
 
 @import 'tailwindcss';
-@import url('./schemes.css');
 
 /* Custom text utilities */
 @utility text-muted {
