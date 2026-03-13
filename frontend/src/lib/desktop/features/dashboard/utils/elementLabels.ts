@@ -6,6 +6,7 @@ const elementLabelKeys = new Map<string, string>([
   ['currently-hearing', 'dashboard.elements.currentlyHearing'],
   ['detections-grid', 'dashboard.elements.detectionsGrid'],
   ['video-embed', 'dashboard.elements.videoEmbed'],
+  ['search', 'dashboard.elements.search'],
 ]);
 
 export function getElementLabel(type: string): string {

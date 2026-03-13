@@ -516,7 +516,8 @@ export type DashboardElementType =
   | 'daily-summary'
   | 'currently-hearing'
   | 'detections-grid'
-  | 'video-embed';
+  | 'video-embed'
+  | 'search';
 
 // A single configurable element on the dashboard
 export interface DashboardElement {
@@ -905,6 +906,7 @@ function createEmptySettings(): SettingsFormData {
         temperatureUnit: 'celsius',
         layout: {
           elements: [
+            { id: 'search-0', type: 'search', enabled: true },
             {
               id: 'daily-summary-0',
               type: 'daily-summary',
