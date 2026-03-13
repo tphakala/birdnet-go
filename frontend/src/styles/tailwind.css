@@ -30,46 +30,34 @@
   --grid-template-columns-24: repeat(24, minmax(0, 1fr));
   --grid-template-columns-12: repeat(12, minmax(0, 1fr));
   --grid-template-columns-4: repeat(4, minmax(0, 1fr));
-}
 
-/* ============================================
-   DESIGN TOKENS - Color System
-   ============================================ */
-
-:root,
-[data-theme='light'] {
-  color-scheme: light;
-
-  /* Primary colors */
+  /* Primary & accent — Blue scheme defaults.
+     Other schemes override via [data-scheme] selectors in schemes.css. */
   --color-primary: #2563eb;
   --color-primary-hover: #1d4ed8;
   --color-primary-active: #1e40af;
   --color-primary-content: #ffffff;
-
-  /* Secondary colors */
-  --color-secondary: #4b5563;
-  --color-secondary-hover: #374151;
-  --color-secondary-active: #1f2937;
-  --color-secondary-content: #ffffff;
-
-  /* Accent colors */
   --color-accent: #0284c7;
   --color-accent-hover: #0369a1;
   --color-accent-active: #075985;
   --color-accent-content: #ffffff;
 
-  /* Neutral colors */
+  /* Secondary/neutral */
+  --color-secondary: #4b5563;
+  --color-secondary-hover: #374151;
+  --color-secondary-active: #1f2937;
+  --color-secondary-content: #ffffff;
   --color-neutral: #1f2937;
   --color-neutral-hover: #111827;
   --color-neutral-content: #ffffff;
 
-  /* Base/Surface colors */
+  /* Base/Surface */
   --color-base-100: #ffffff;
   --color-base-200: #f3f4f6;
   --color-base-300: #e5e7eb;
   --color-base-content: #1f2937;
 
-  /* Status colors */
+  /* Status colors — universal, not scheme-dependent */
   --color-info: #0ea5e9;
   --color-info-hover: #0284c7;
   --color-info-content: #ffffff;
@@ -82,6 +70,18 @@
   --color-error: #ef4444;
   --color-error-hover: #dc2626;
   --color-error-content: #ffffff;
+}
+
+/* ============================================
+   DESIGN TOKENS - Color System
+   ============================================ */
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Color variables are now registered in @theme above.
+     Only non-color tokens remain here. */
 
   /* Surface colors */
   --surface-100: #ffffff;
@@ -488,7 +488,7 @@
   .input:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
   }
 
   .input:disabled {
@@ -549,7 +549,7 @@
 
   .input-error:focus {
     border-color: var(--color-error);
-    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-error) 12%, transparent);
   }
 
   .input-success {
@@ -558,7 +558,7 @@
 
   .input-success:focus {
     border-color: var(--color-success);
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-success) 12%, transparent);
   }
 
   .input-warning {
@@ -567,7 +567,7 @@
 
   .input-warning:focus {
     border-color: var(--color-warning);
-    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-warning) 12%, transparent);
   }
 
   /* ----------------------------------------
