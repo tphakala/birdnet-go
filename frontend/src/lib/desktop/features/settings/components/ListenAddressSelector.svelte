@@ -17,7 +17,6 @@
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
-  import { untrack } from 'svelte';
   import { ChevronDown, Check, Globe, Monitor } from '@lucide/svelte';
 
   interface NetworkInterface {
@@ -33,7 +32,7 @@
     disabled?: boolean;
   }
 
-  let { listen: initialListen, onchange, disabled = false }: Props = $props();
+  let { listen, onchange, disabled = false }: Props = $props();
 
   // Parse host:port from listen string
   let host = $state('0.0.0.0');
@@ -41,26 +40,49 @@
 
   // Dropdown state
   let dropOpen = $state(false);
-  let interfaces = $state<NetworkInterface[]>([
+
+  // Default interfaces used as fallback and merged with API results
+  const defaultInterfaces: NetworkInterface[] = [
     { address: '0.0.0.0', name: 'all', label: 'All interfaces', status: 'up' },
     { address: '127.0.0.1', name: 'lo', label: 'Loopback', status: 'up' },
-  ]);
-  // Parse the listen prop into host and port
+  ];
+
+  let interfaces = $state<NetworkInterface[]>([...defaultInterfaces]);
+
+  // Parse the listen prop into host and port, with IPv6 support
   function parseListen(value: string): { host: string; port: number } {
+    // Handle bracketed IPv6 addresses e.g. [::1]:8090
+    if (value.startsWith('[') && value.includes(']')) {
+      const endBracketIndex = value.lastIndexOf(']');
+      if (endBracketIndex > 0 && value.charAt(endBracketIndex + 1) === ':') {
+        const h = value.substring(0, endBracketIndex + 1);
+        const portStr = value.substring(endBracketIndex + 2);
+        const p = parseInt(portStr, 10);
+        return { host: h, port: isNaN(p) ? 8090 : p };
+      }
+      // Bracketed IPv6 without a port
+      return { host: value, port: 8090 };
+    }
+
     const lastColon = value.lastIndexOf(':');
-    if (lastColon === -1) return { host: value, port: 8090 };
+    // No colon or multiple colons (bare IPv6) — treat as host-only
+    if (lastColon === -1 || value.indexOf(':') !== lastColon) {
+      return { host: value, port: 8090 };
+    }
+
+    // IPv4 or hostname with port
     const h = value.substring(0, lastColon);
     const p = parseInt(value.substring(lastColon + 1), 10);
     return { host: h, port: isNaN(p) ? 8090 : p };
   }
 
-  // Initialize from prop — untrack() reads the prop once without creating a reactive
-  // dependency, so host/port are owned state (not kept in sync with the prop after mount)
-  {
-    const parsed = untrack(() => parseListen(initialListen));
+  // Reactively sync host/port when the listen prop changes (e.g. async settings load)
+  $effect(() => {
+    const parsed = parseListen(listen);
     host = parsed.host;
     port = parsed.port;
-  }
+    ensureCurrentHostInList();
+  });
 
   // Fetch network interfaces on mount
   $effect(() => {
@@ -73,12 +95,17 @@
         '/api/v2/system/network-interfaces'
       );
       if (response.interfaces && response.interfaces.length > 0) {
-        interfaces = response.interfaces;
+        // Merge fetched interfaces with defaults so 0.0.0.0 and 127.0.0.1 are always available
+        const fetchedInterfaces = response.interfaces;
+        const fetchedAddresses = new Set(fetchedInterfaces.map(i => i.address));
+        interfaces = [
+          ...fetchedInterfaces,
+          ...defaultInterfaces.filter(i => !fetchedAddresses.has(i.address)),
+        ];
       }
     } catch {
       // Keep fallback defaults (0.0.0.0 + 127.0.0.1)
     } finally {
-      // If current host isn't in the list, add it as a custom entry
       ensureCurrentHostInList();
     }
   }
@@ -97,6 +124,17 @@
     }
   }
 
+  // Translate built-in interface labels; pass through labels from the OS
+  function getLocalizedLabel(iface: NetworkInterface): string {
+    if (iface.name === 'all' && iface.address === '0.0.0.0') {
+      return t('settings.integration.observability.listenAddress.allInterfaces');
+    }
+    if (iface.name === 'lo' && iface.address === '127.0.0.1') {
+      return t('settings.integration.observability.listenAddress.loopback');
+    }
+    return iface.label;
+  }
+
   function selectHost(address: string) {
     host = address;
     dropOpen = false;
@@ -109,9 +147,8 @@
   }
 
   function handleClickOutside(event: MouseEvent) {
-    const target = event.target as Node | null;
-    const el = target instanceof HTMLElement ? target : null;
-    if (!el?.closest('[data-listen-dropdown]')) {
+    const target = (event.target as HTMLElement | null)?.closest('[data-listen-dropdown]');
+    if (!target) {
       dropOpen = false;
     }
   }
@@ -122,8 +159,15 @@
     return Monitor;
   }
 
-  // Derived icon for the trigger button (avoids {@const} outside {#each}/{#if})
-  let selectedIface = $derived(interfaces.find(i => i.address === host) ?? interfaces[0]);
+  // Derived selected interface with custom fallback instead of interfaces[0]
+  let selectedIface = $derived(
+    interfaces.find(i => i.address === host) ?? {
+      address: host,
+      name: 'custom',
+      label: t('settings.integration.observability.listenAddress.customAddress'),
+      status: 'unknown',
+    }
+  );
   let SelectedIcon = $derived(getIcon(selectedIface));
 </script>
 
@@ -189,7 +233,7 @@
                 {iface.address}
               </div>
               <div class="text-[11px] text-[var(--color-base-content)]/40">
-                {iface.label} ({iface.name}){#if iface.status === 'down'}&middot; {t(
+                {getLocalizedLabel(iface)} ({iface.name}){#if iface.status === 'down'}&middot; {t(
                     'settings.integration.observability.listenAddress.interfaceDown'
                   )}{/if}
               </div>

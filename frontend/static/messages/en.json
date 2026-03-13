@@ -2449,6 +2449,8 @@
           "placeholder": "0.0.0.0:8090",
           "ipLabel": "Bind Address",
           "portLabel": "Port",
+          "allInterfaces": "All interfaces",
+          "loopback": "Loopback",
           "customAddress": "Custom address",
           "interfaceDown": "down"
         }

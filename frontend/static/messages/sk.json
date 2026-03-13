@@ -2250,6 +2250,8 @@
           "placeholder": "0.0.0.0:8090",
           "ipLabel": "Adresa viazania",
           "portLabel": "Port",
+          "allInterfaces": "Všetky rozhrania",
+          "loopback": "Loopback",
           "customAddress": "Vlastná adresa",
           "interfaceDown": "neaktívne"
         }

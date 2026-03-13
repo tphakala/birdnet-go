@@ -2413,6 +2413,8 @@
           "placeholder": "0.0.0.0:8090",
           "ipLabel": "Bindadres",
           "portLabel": "Poort",
+          "allInterfaces": "Alle interfaces",
+          "loopback": "Loopback",
           "customAddress": "Aangepast adres",
           "interfaceDown": "inactief"
         }

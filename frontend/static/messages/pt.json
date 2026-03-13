@@ -2755,6 +2755,8 @@
           "placeholder": "0.0.0.0:8090",
           "ipLabel": "Endereço de ligação",
           "portLabel": "Porta",
+          "allInterfaces": "Todas as interfaces",
+          "loopback": "Loopback",
           "customAddress": "Endereço personalizado",
           "interfaceDown": "inativo"
         }

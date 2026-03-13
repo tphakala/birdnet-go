@@ -2413,6 +2413,8 @@
           "placeholder": "0.0.0.0:8090",
           "ipLabel": "Adresse de liaison",
           "portLabel": "Port",
+          "allInterfaces": "Toutes les interfaces",
+          "loopback": "Loopback",
           "customAddress": "Adresse personnalisée",
           "interfaceDown": "inactif"
         }
