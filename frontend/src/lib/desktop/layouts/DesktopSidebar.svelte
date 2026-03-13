@@ -69,6 +69,7 @@ Performance Optimizations:
     Puzzle,
     Shield,
     LifeBuoy,
+    Paintbrush,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
@@ -221,6 +222,7 @@ Performance Optimizations:
     settingsIntegrations: actualRoute === '/ui/settings/integrations',
     settingsSecurity: actualRoute === '/ui/settings/security',
     settingsSupport: actualRoute === '/ui/settings/support',
+    settingsUserInterface: actualRoute === '/ui/settings/userinterface',
   }));
 
   // Auto-expand sections when route matches (only when not collapsed)
@@ -261,6 +263,7 @@ Performance Optimizations:
     settingsIntegrations: onNavigate ? '/settings/integrations' : '/ui/settings/integrations',
     settingsSecurity: onNavigate ? '/settings/security' : '/ui/settings/security',
     settingsSupport: onNavigate ? '/settings/support' : '/ui/settings/support',
+    settingsUserInterface: onNavigate ? '/settings/userinterface' : '/ui/settings/userinterface',
   });
 
   function navigate(url: string) {
@@ -770,6 +773,17 @@ Performance Optimizations:
                       <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
                     </button>
                     <button
+                      onclick={() => navigate(navigationUrls.settingsUserInterface)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.settingsUserInterface
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <Paintbrush class="size-4 shrink-0" />{t('settings.sections.userinterface')}
+                    </button>
+                    <button
                       onclick={() => navigate(navigationUrls.settingsAudio)}
                       class={cn(
                         'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
@@ -886,6 +900,17 @@ Performance Optimizations:
                     )}
                   >
                     <SlidersHorizontal class="size-4 shrink-0" />{t('settings.sections.node')}
+                  </button>
+                  <button
+                    onclick={() => navigate(navigationUrls.settingsUserInterface)}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.settingsUserInterface
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <Paintbrush class="size-4 shrink-0" />{t('settings.sections.userinterface')}
                   </button>
                   <button
                     onclick={() => navigate(navigationUrls.settingsAudio)}
