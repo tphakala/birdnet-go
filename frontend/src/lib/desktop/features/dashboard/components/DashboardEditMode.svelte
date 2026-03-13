@@ -91,9 +91,18 @@
     editElements = e.detail.items;
   }
 
-  // Toggle element enabled/disabled
-  function toggleElement(index: number, enabled: boolean) {
-    editElements = editElements.map((el, i) => (i === index ? { ...el, enabled } : el));
+  // Hide/unhide element
+  function hideElement(index: number) {
+    editElements = editElements.map((el, i) => (i === index ? { ...el, enabled: false } : el));
+  }
+
+  function unhideElement(index: number) {
+    editElements = editElements.map((el, i) => (i === index ? { ...el, enabled: true } : el));
+  }
+
+  // Delete element from layout
+  function deleteElement(index: number) {
+    editElements = editElements.filter((_, i) => i !== index);
   }
 
   // Open config modal for an element
@@ -164,7 +173,9 @@
         elementType={element.type}
         enabled={element.enabled}
         {editMode}
-        onToggle={enabled => toggleElement(index, enabled)}
+        onHide={() => hideElement(index)}
+        onUnhide={() => unhideElement(index)}
+        onDelete={() => deleteElement(index)}
         onConfigure={() => configureElement(index)}
       >
         {@render renderElement(element, true)}

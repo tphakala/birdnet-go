@@ -7,7 +7,7 @@
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { GripVertical, Settings, Eye, EyeOff } from '@lucide/svelte';
+  import { GripVertical, Settings, EyeOff, Eye, Trash2 } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
@@ -16,12 +16,15 @@
     elementType: string;
     enabled: boolean;
     editMode: boolean;
-    onToggle: (_enabled: boolean) => void;
+    onHide: () => void;
+    onUnhide: () => void;
+    onDelete: () => void;
     onConfigure: () => void;
     children: Snippet;
   }
 
-  let { elementType, enabled, editMode, onToggle, onConfigure, children }: Props = $props();
+  let { elementType, enabled, editMode, onHide, onUnhide, onDelete, onConfigure, children }: Props =
+    $props();
 </script>
 
 {#if editMode}
@@ -45,19 +48,28 @@
         {getElementLabel(elementType)}
       </span>
 
-      <!-- Enable/disable toggle -->
+      <!-- Hide/Unhide button -->
       <button
-        onclick={() => onToggle(!enabled)}
+        onclick={() => (enabled ? onHide() : onUnhide())}
         class="rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
         aria-label={enabled
-          ? t('dashboard.editMode.disableElement')
-          : t('dashboard.editMode.enableElement')}
+          ? t('dashboard.editMode.hideElement')
+          : t('dashboard.editMode.unhideElement')}
       >
         {#if enabled}
-          <Eye class="size-4 text-[var(--color-success)]" />
+          <EyeOff class="size-4 text-[var(--color-base-content)]/60" />
         {:else}
-          <EyeOff class="size-4 text-[var(--color-base-content)]/40" />
+          <Eye class="size-4 text-[var(--color-success)]" />
         {/if}
+      </button>
+
+      <!-- Delete button -->
+      <button
+        onclick={onDelete}
+        class="rounded-md p-1.5 transition-colors hover:bg-[var(--color-error)]/10"
+        aria-label={t('dashboard.editMode.deleteElement')}
+      >
+        <Trash2 class="size-4 text-[var(--color-error)]/60" />
       </button>
 
       <!-- Configure button -->
@@ -70,12 +82,15 @@
       </button>
     </div>
 
-    <!-- Element content (dimmed if disabled) -->
+    <!-- Element content -->
     <div class={cn('p-2', !enabled && 'pointer-events-none')}>
       {#if enabled}
         {@render children()}
       {:else}
-        <div class="py-8 text-center text-sm text-[var(--color-base-content)]/40">
+        <div
+          class="flex items-center justify-center py-4 text-sm text-[var(--color-base-content)]/40"
+        >
+          <EyeOff class="mr-2 size-4" />
           {getElementLabel(elementType)} — {t('dashboard.editMode.disabled')}
         </div>
       {/if}
