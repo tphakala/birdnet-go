@@ -47,6 +47,10 @@
     num_cpu: number;
     system_model?: string;
     time_zone?: string;
+    architecture?: string;
+    cpu_model?: string;
+    environment?: string;
+    virtualization?: string;
   }
 
   interface DiskInfo {
@@ -511,6 +515,10 @@
         uptimeSeconds={systemInfo.uptime_seconds ?? 0}
         timeZone={systemInfo.time_zone}
         cpuCores={systemInfo.num_cpu ?? 0}
+        cpuArch={systemInfo.architecture ?? ''}
+        cpuModel={systemInfo.cpu_model}
+        environment={systemInfo.environment}
+        virtualization={systemInfo.virtualization}
         temperatureAvailable={systemTemperature.is_available}
         temperatureValue={temperatureDisplay}
         {tempSymbol}

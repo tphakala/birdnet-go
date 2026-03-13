@@ -832,7 +832,9 @@
       "temperature": "Température du processeur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Données de température non disponibles",
-      "cpuCores": "Cœurs CPU"
+      "cpuCores": "Cœurs CPU",
+      "cpuDetails": "Processeur",
+      "environment": "Environnement"
     },
     "diskUsage": {
       "title": "Utilisation du disque",
