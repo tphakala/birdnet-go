@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Sottomenu analisi",
     "settingsSubmenu": "Sottomenu impostazioni",
     "systemSubmenu": "Sottomenu sistema",
+    "dashboardSubmenu": "Sottomenu dashboard",
     "systemTerminal": "Terminale"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Approvato",
     "currentlyHearing": {
       "title": "In ascolto",
-      "subtitle": "Specie identificate in tempo reale"
+      "subtitle": "Specie identificate in tempo reale",
+      "empty": "Tutto tranquillo — nessun uccello rilevato al momento"
     },
     "rejected": "Rifiutato",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Impossibile recuperare i rilevamenti recenti: {status}",
       "recentDetectionsLoad": "Impossibile caricare i rilevamenti recenti",
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
+    },
+    "banner": {
+      "title": "Titolo",
+      "titlePlaceholder": "La mia stazione ornitologica",
+      "description": "Descrizione",
+      "descriptionPlaceholder": "Una breve descrizione della tua stazione di monitoraggio uccelli...",
+      "subElements": "Sotto-elementi",
+      "showImage": "Mostra immagine personalizzata",
+      "imageUrl": "URL o percorso immagine",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Inserisci un URL di un'immagine. Il caricamento di immagini sarà disponibile in un aggiornamento futuro.",
+      "showLocationMap": "Mostra mappa posizione",
+      "showLocationMapHelp": "Mostra una piccola mappa usando la latitudine/longitudine dalle impostazioni principali",
+      "showWeather": "Mostra meteo attuale",
+      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "URL YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Incolla qualsiasi URL YouTube (watch, embed o link breve). Verrà convertito in un embed con privacy migliorata.",
+      "titleLabel": "Titolo (opzionale)",
+      "titlePlaceholder": "Mangiatoia per uccelli in diretta"
+    },
+    "editMode": {
+      "editing": "Modifica dashboard",
+      "save": "Salva",
+      "saving": "Salvataggio...",
+      "cancel": "Annulla",
+      "disabled": "nascosto",
+      "noConfig": "Nessuna opzione di configurazione aggiuntiva ancora disponibile.",
+      "currentlyHearingNote": "Questo elemento mostra gli uccelli attualmente rilevati quando si visualizza la data odierna. Nessuna configurazione aggiuntiva necessaria.",
+      "notAvailable": "La configurazione per questo tipo di elemento non è ancora disponibile.",
+      "configureElement": "Configura elemento",
+      "closeModal": "Chiudi",
+      "configureTitle": "Configura {element}",
+      "weatherPlaceholder": "Le condizioni meteo appariranno qui quando disponibili",
+      "stationBanner": "Banner della stazione",
+      "liveBirdFeed": "Feed uccelli in diretta",
+      "hideElement": "Nascondi elemento",
+      "unhideElement": "Mostra elemento",
+      "deleteElement": "Rimuovi elemento",
+      "deleteConfirm": "Rimuovere questo elemento? La configurazione andrà persa.",
+      "addElement": "Aggiungi elemento",
+      "noElementsAvailable": "Tutti i tipi di elementi sono già nella dashboard.",
+      "editDashboard": "Modifica dashboard",
+      "widthFull": "Larghezza intera",
+      "widthHalf": "Mezza larghezza",
+      "fullWidthOnly": "Solo larghezza intera"
+    },
+    "elements": {
+      "banner": "Banner della dashboard",
+      "dailySummary": "Riepilogo giornaliero",
+      "currentlyHearing": "In ascolto ora",
+      "detectionsGrid": "Rilevamenti recenti",
+      "videoEmbed": "Video incorporato"
     }
   },
   "detections": {
@@ -3330,6 +3387,25 @@
       "customAccent": "Colore di accento",
       "logoGradient": "Logo sfumato",
       "logoGradientDescription": "Usa un effetto sfumato sul logo della barra laterale"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Aspetto",
+        "language": "Lingua e regionale",
+        "visualContent": "Contenuti visivi"
+      },
+      "appearance": {
+        "title": "Aspetto",
+        "description": "Personalizza l'aspetto della tua interfaccia BirdNET-Go"
+      },
+      "language": {
+        "title": "Lingua e regionale",
+        "description": "Lingua, unità di temperatura e preferenze di visualizzazione regionali"
+      },
+      "visualContent": {
+        "title": "Contenuti visivi",
+        "description": "Configura le immagini degli uccelli e le impostazioni di visualizzazione dello spettrogramma"
+      }
     }
   },
   "auth": {

@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Podmenu analityki",
     "settingsSubmenu": "Podmenu ustawień",
     "systemSubmenu": "Podmenu systemu",
+    "dashboardSubmenu": "Podmenu pulpitu",
     "systemTerminal": "Terminal"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Zatwierdzone",
     "currentlyHearing": {
       "title": "Aktualnie słychać",
-      "subtitle": "Gatunki identyfikowane w czasie rzeczywistym"
+      "subtitle": "Gatunki identyfikowane w czasie rzeczywistym",
+      "empty": "Cisza — nie wykryto żadnych ptaków w tej chwili"
     },
     "rejected": "Odrzucone",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Nie udało się pobrać ostatnich detekcji: {status}",
       "recentDetectionsLoad": "Nie udało się załadować ostatnich detekcji",
       "configFetch": "Nie udało się pobrać konfiguracji panelu: {status}"
+    },
+    "banner": {
+      "title": "Tytuł",
+      "titlePlaceholder": "Moja stacja ptaków",
+      "description": "Opis",
+      "descriptionPlaceholder": "Krótki opis stacji monitorowania ptaków...",
+      "subElements": "Podelementy",
+      "showImage": "Pokaż własny obraz",
+      "imageUrl": "URL lub ścieżka obrazu",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Wprowadź URL do obrazu. Przesyłanie obrazów będzie dostępne w przyszłej aktualizacji.",
+      "showLocationMap": "Pokaż mapę lokalizacji",
+      "showLocationMapHelp": "Wyświetla małą mapę z szerokością/długością geograficzną z ustawień głównych",
+      "showWeather": "Pokaż aktualną pogodę",
+      "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "URL YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Wklej dowolny URL YouTube (watch, embed lub krótki link). Zostanie przekonwertowany na osadzenie z większą prywatnością.",
+      "titleLabel": "Tytuł (opcjonalnie)",
+      "titlePlaceholder": "Karmnik na żywo"
+    },
+    "editMode": {
+      "editing": "Edycja pulpitu",
+      "save": "Zapisz",
+      "saving": "Zapisywanie...",
+      "cancel": "Anuluj",
+      "disabled": "ukryty",
+      "noConfig": "Brak dodatkowych opcji konfiguracji.",
+      "currentlyHearingNote": "Ten element pokazuje aktualnie wykryte ptaki podczas przeglądania dzisiejszej daty. Dodatkowa konfiguracja nie jest wymagana.",
+      "notAvailable": "Konfiguracja tego typu elementu nie jest jeszcze dostępna.",
+      "configureElement": "Konfiguruj element",
+      "closeModal": "Zamknij",
+      "configureTitle": "Konfiguruj {element}",
+      "weatherPlaceholder": "Warunki pogodowe pojawią się tutaj, gdy będą dostępne",
+      "stationBanner": "Baner stacji",
+      "liveBirdFeed": "Transmisja ptaków na żywo",
+      "hideElement": "Ukryj element",
+      "unhideElement": "Pokaż element",
+      "deleteElement": "Usuń element",
+      "deleteConfirm": "Usunąć ten element? Jego konfiguracja zostanie utracona.",
+      "addElement": "Dodaj element",
+      "noElementsAvailable": "Wszystkie typy elementów są już na pulpicie.",
+      "editDashboard": "Edytuj pulpit",
+      "widthFull": "Pełna szerokość",
+      "widthHalf": "Połowa szerokości",
+      "fullWidthOnly": "Tylko pełna szerokość"
+    },
+    "elements": {
+      "banner": "Baner pulpitu",
+      "dailySummary": "Podsumowanie dnia",
+      "currentlyHearing": "Aktualnie słyszane",
+      "detectionsGrid": "Ostatnie detekcje",
+      "videoEmbed": "Osadzenie wideo"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Kolor akcentu",
       "logoGradient": "Logo z gradientem",
       "logoGradientDescription": "Użyj efektu gradientu na logo paska bocznego"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Wygląd",
+        "language": "Język i regionalne",
+        "visualContent": "Treści wizualne"
+      },
+      "appearance": {
+        "title": "Wygląd",
+        "description": "Dostosuj wygląd interfejsu BirdNET-Go"
+      },
+      "language": {
+        "title": "Język i regionalne",
+        "description": "Język, jednostki temperatury i regionalne preferencje wyświetlania"
+      },
+      "visualContent": {
+        "title": "Treści wizualne",
+        "description": "Konfiguruj obrazy ptaków i ustawienia wyświetlania spektrogramu"
+      }
     }
   },
   "auth": {

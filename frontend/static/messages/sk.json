@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Podponuka analytiky",
     "settingsSubmenu": "Podponuka nastavení",
     "systemSubmenu": "Podponuka systému",
+    "dashboardSubmenu": "Podponuka dashboardu",
     "systemTerminal": "Terminál"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Schválené",
     "currentlyHearing": {
       "title": "Práve počuť",
-      "subtitle": "Druhy identifikované v reálnom čase"
+      "subtitle": "Druhy identifikované v reálnom čase",
+      "empty": "Všetko ticho — momentálne žiadne vtáky nezistené"
     },
     "rejected": "Zamietnuté",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Nepodarilo sa získať nedávne detekcie: {status}",
       "recentDetectionsLoad": "Nepodarilo sa načítať nedávne detekcie",
       "configFetch": "Nepodarilo sa získať konfiguráciu prehľadu: {status}"
+    },
+    "banner": {
+      "title": "Názov",
+      "titlePlaceholder": "Moja vtáčia stanica",
+      "description": "Popis",
+      "descriptionPlaceholder": "Stručný popis vašej stanice na pozorovanie vtákov...",
+      "subElements": "Podelementy",
+      "showImage": "Zobraziť vlastný obrázok",
+      "imageUrl": "URL alebo cesta k obrázku",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Zadajte URL obrázka. Nahrávanie obrázkov bude dostupné v budúcej aktualizácii.",
+      "showLocationMap": "Zobraziť mapu polohy",
+      "showLocationMapHelp": "Zobrazí malú mapu pomocou zemepisnej šírky/dĺžky z vašich hlavných nastavení",
+      "showWeather": "Zobraziť aktuálne počasie",
+      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "YouTube URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Vložte akúkoľvek YouTube URL (watch, embed alebo krátky odkaz). Bude prevedená na vloženie s vylepšeným súkromím.",
+      "titleLabel": "Názov (voliteľný)",
+      "titlePlaceholder": "Živé kŕmidlo pre vtáky"
+    },
+    "editMode": {
+      "editing": "Úprava panelu",
+      "save": "Uložiť",
+      "saving": "Ukladá sa...",
+      "cancel": "Zrušiť",
+      "disabled": "skrytý",
+      "noConfig": "Zatiaľ nie sú k dispozícii žiadne ďalšie možnosti konfigurácie.",
+      "currentlyHearingNote": "Tento prvok zobrazuje aktuálne detegované vtáky pri zobrazení dnešného dátumu. Nie je potrebná žiadna ďalšia konfigurácia.",
+      "notAvailable": "Konfigurácia pre tento typ prvku zatiaľ nie je k dispozícii.",
+      "configureElement": "Konfigurovať element",
+      "closeModal": "Zavrieť",
+      "configureTitle": "Konfigurovať {element}",
+      "weatherPlaceholder": "Poveternostné podmienky sa zobrazia tu, keď budú dostupné",
+      "stationBanner": "Banner stanice",
+      "liveBirdFeed": "Živý prenos vtákov",
+      "hideElement": "Skryť prvok",
+      "unhideElement": "Zobraziť prvok",
+      "deleteElement": "Odstrániť prvok",
+      "deleteConfirm": "Odstrániť tento prvok? Jeho konfigurácia sa stratí.",
+      "addElement": "Pridať prvok",
+      "noElementsAvailable": "Všetky typy prvkov sú už na paneli.",
+      "editDashboard": "Upraviť panel",
+      "widthFull": "Plná šírka",
+      "widthHalf": "Polovičná šírka",
+      "fullWidthOnly": "Iba plná šírka"
+    },
+    "elements": {
+      "banner": "Banner panela",
+      "dailySummary": "Denný prehľad",
+      "currentlyHearing": "Práve počuté",
+      "detectionsGrid": "Nedávne detekcie",
+      "videoEmbed": "Vložené video"
     }
   },
   "detections": {
@@ -3364,6 +3421,25 @@
       "customAccent": "Akcentová farba",
       "logoGradient": "Logo s prechodom",
       "logoGradientDescription": "Použiť efekt prechodu na logo bočného panela"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Vzhľad",
+        "language": "Jazyk a regionálne",
+        "visualContent": "Vizuálny obsah"
+      },
+      "appearance": {
+        "title": "Vzhľad",
+        "description": "Prispôsobte vzhľad vášho rozhrania BirdNET-Go"
+      },
+      "language": {
+        "title": "Jazyk a regionálne",
+        "description": "Jazyk, jednotky teploty a regionálne predvoľby zobrazenia"
+      },
+      "visualContent": {
+        "title": "Vizuálny obsah",
+        "description": "Nakonfigurujte obrázky vtákov a nastavenia zobrazenia spektrogramu"
+      }
     }
   },
   "auth": {

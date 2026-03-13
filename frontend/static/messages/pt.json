@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Submenu de análises",
     "settingsSubmenu": "Submenu de configurações",
     "systemSubmenu": "Submenu do sistema",
+    "dashboardSubmenu": "Submenu do painel",
     "systemTerminal": "Terminal"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Aprovado",
     "currentlyHearing": {
       "title": "Ouvindo agora",
-      "subtitle": "Espécies identificadas em tempo real"
+      "subtitle": "Espécies identificadas em tempo real",
+      "empty": "Tudo calmo — nenhuma ave detectada no momento"
     },
     "rejected": "Rejeitado",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Falha ao buscar detecções recentes: {status}",
       "recentDetectionsLoad": "Falha ao carregar detecções recentes",
       "configFetch": "Falha ao buscar configuração do painel: {status}"
+    },
+    "banner": {
+      "title": "Título",
+      "titlePlaceholder": "Minha estação de aves",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Uma breve descrição da sua estação de monitoramento de aves...",
+      "subElements": "Subelementos",
+      "showImage": "Mostrar imagem personalizada",
+      "imageUrl": "URL ou caminho da imagem",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Insira uma URL para uma imagem. O upload de imagens estará disponível em uma atualização futura.",
+      "showLocationMap": "Mostrar mapa de localização",
+      "showLocationMapHelp": "Exibe um pequeno mapa usando a latitude/longitude das suas configurações principais",
+      "showWeather": "Mostrar clima atual",
+      "showWeatherHelp": "Exibe as condições climáticas atuais (requer que a integração climática esteja habilitada)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "URL do YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Cole qualquer URL do YouTube (watch, embed ou link curto). Será convertido em uma incorporação com privacidade aprimorada.",
+      "titleLabel": "Título (opcional)",
+      "titlePlaceholder": "Comedouro de aves ao vivo"
+    },
+    "editMode": {
+      "editing": "Editando painel",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "cancel": "Cancelar",
+      "disabled": "oculto",
+      "noConfig": "Ainda não há opções de configuração adicionais disponíveis.",
+      "currentlyHearingNote": "Este elemento mostra as aves atualmente detetadas ao visualizar a data de hoje. Nenhuma configuração adicional necessária.",
+      "notAvailable": "A configuração para este tipo de elemento ainda não está disponível.",
+      "configureElement": "Configurar elemento",
+      "closeModal": "Fechar",
+      "configureTitle": "Configurar {element}",
+      "weatherPlaceholder": "As condições meteorológicas aparecerão aqui quando disponíveis",
+      "stationBanner": "Banner da estação",
+      "liveBirdFeed": "Feed de aves ao vivo",
+      "hideElement": "Ocultar elemento",
+      "unhideElement": "Mostrar elemento",
+      "deleteElement": "Remover elemento",
+      "deleteConfirm": "Remover este elemento? A configuração será perdida.",
+      "addElement": "Adicionar elemento",
+      "noElementsAvailable": "Todos os tipos de elementos já estão no painel.",
+      "editDashboard": "Editar painel",
+      "widthFull": "Largura total",
+      "widthHalf": "Meia largura",
+      "fullWidthOnly": "Apenas largura total"
+    },
+    "elements": {
+      "banner": "Banner do painel",
+      "dailySummary": "Resumo diário",
+      "currentlyHearing": "Ouvindo atualmente",
+      "detectionsGrid": "Detecções recentes",
+      "videoEmbed": "Vídeo incorporado"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Cor de destaque",
       "logoGradient": "Logo com gradiente",
       "logoGradientDescription": "Usar efeito de gradiente no logo da barra lateral"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Aparência",
+        "language": "Idioma e regional",
+        "visualContent": "Conteúdo visual"
+      },
+      "appearance": {
+        "title": "Aparência",
+        "description": "Personalize a aparência da sua interface BirdNET-Go"
+      },
+      "language": {
+        "title": "Idioma e regional",
+        "description": "Idioma, unidades de temperatura e preferências de exibição regional"
+      },
+      "visualContent": {
+        "title": "Conteúdo visual",
+        "description": "Configure imagens de aves e configurações de exibição do espectrograma"
+      }
     }
   },
   "auth": {

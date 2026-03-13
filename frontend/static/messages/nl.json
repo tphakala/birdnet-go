@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
     "systemSubmenu": "Systeemmenu",
+    "dashboardSubmenu": "Dashboard submenu",
     "systemTerminal": "Terminal"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Goedgekeurd",
     "currentlyHearing": {
       "title": "Nu te horen",
-      "subtitle": "Soorten worden in realtime geïdentificeerd"
+      "subtitle": "Soorten worden in realtime geïdentificeerd",
+      "empty": "Alles rustig — momenteel geen vogels gedetecteerd"
     },
     "rejected": "Afgewezen",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Kon Recent herkend niet inlezen: {status}",
       "recentDetectionsLoad": "Kon Recent herkend niet weergeven",
       "configFetch": "Kon Overzicht instellingen niet inlezen: {status}"
+    },
+    "banner": {
+      "title": "Titel",
+      "titlePlaceholder": "Mijn vogelstation",
+      "description": "Beschrijving",
+      "descriptionPlaceholder": "Een korte beschrijving van uw vogelmonitoringstation...",
+      "subElements": "Subelementen",
+      "showImage": "Aangepaste afbeelding tonen",
+      "imageUrl": "Afbeelding-URL of pad",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Voer een URL naar een afbeelding in. Het uploaden van afbeeldingen wordt beschikbaar in een toekomstige update.",
+      "showLocationMap": "Locatiekaart tonen",
+      "showLocationMapHelp": "Toont een kleine kaart met de breedte-/lengtegraad uit uw hoofdinstellingen",
+      "showWeather": "Huidig weer tonen",
+      "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "YouTube-URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Plak een willekeurige YouTube-URL (watch, embed of korte link). Deze wordt omgezet naar een privacyvriendelijke inbedding.",
+      "titleLabel": "Titel (optioneel)",
+      "titlePlaceholder": "Live vogelvoederplaats"
+    },
+    "editMode": {
+      "editing": "Dashboard bewerken",
+      "save": "Opslaan",
+      "saving": "Opslaan...",
+      "cancel": "Annuleren",
+      "disabled": "verborgen",
+      "noConfig": "Er zijn nog geen aanvullende configuratieopties beschikbaar.",
+      "currentlyHearingNote": "Dit element toont momenteel gedetecteerde vogels wanneer de datum van vandaag wordt bekeken. Geen aanvullende configuratie nodig.",
+      "notAvailable": "De configuratie voor dit elementtype is nog niet beschikbaar.",
+      "configureElement": "Element configureren",
+      "closeModal": "Sluiten",
+      "configureTitle": "{element} configureren",
+      "weatherPlaceholder": "Weersomstandigheden verschijnen hier wanneer beschikbaar",
+      "stationBanner": "Stationsbanner",
+      "liveBirdFeed": "Live vogelfeed",
+      "hideElement": "Element verbergen",
+      "unhideElement": "Element tonen",
+      "deleteElement": "Element verwijderen",
+      "deleteConfirm": "Dit element verwijderen? De configuratie gaat verloren.",
+      "addElement": "Element toevoegen",
+      "noElementsAvailable": "Alle elementtypen staan al op het dashboard.",
+      "editDashboard": "Dashboard bewerken",
+      "widthFull": "Volledige breedte",
+      "widthHalf": "Halve breedte",
+      "fullWidthOnly": "Alleen volledige breedte"
+    },
+    "elements": {
+      "banner": "Dashboard-banner",
+      "dailySummary": "Dagelijks overzicht",
+      "currentlyHearing": "Momenteel gehoord",
+      "detectionsGrid": "Recente detecties",
+      "videoEmbed": "Video-inbedding"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Accentkleur",
       "logoGradient": "Verloop-logo",
       "logoGradientDescription": "Gebruik een verloopeffect op het zijbalklogo"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Uiterlijk",
+        "language": "Taal en regionaal",
+        "visualContent": "Visuele inhoud"
+      },
+      "appearance": {
+        "title": "Uiterlijk",
+        "description": "Pas het uiterlijk van uw BirdNET-Go-interface aan"
+      },
+      "language": {
+        "title": "Taal en regionaal",
+        "description": "Taal, temperatuureenheden en regionale weergavevoorkeuren"
+      },
+      "visualContent": {
+        "title": "Visuele inhoud",
+        "description": "Configureer vogelafbeeldingen en spectrogramweergave-instellingen"
+      }
     }
   },
   "auth": {

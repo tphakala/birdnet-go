@@ -212,6 +212,7 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
+    "dashboardSubmenu": "Kojelaudan alavalikko",
     "systemTerminal": "Terminaali"
   },
   "pageTitle": {
@@ -549,7 +550,8 @@
     "approved": "Hyväksytty",
     "currentlyHearing": {
       "title": "Kuunnellaan nyt",
-      "subtitle": "Lajeja tunnistetaan reaaliajassa"
+      "subtitle": "Lajeja tunnistetaan reaaliajassa",
+      "empty": "Kaikki hiljaista — lintuja ei havaittu juuri nyt"
     },
     "rejected": "Hylätty",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Viimeaikaisten havaintojen haku epäonnistui: {status}",
       "recentDetectionsLoad": "Viimeaikaisten havaintojen lataus epäonnistui",
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
+    },
+    "banner": {
+      "title": "Title",
+      "titlePlaceholder": "My Bird Station",
+      "description": "Description",
+      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
+      "subElements": "Sub-elements",
+      "showImage": "Show custom image",
+      "imageUrl": "Image URL or path",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
+      "showLocationMap": "Show location map",
+      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
+      "showWeather": "Show current weather",
+      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "YouTube URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
+      "titleLabel": "Title (optional)",
+      "titlePlaceholder": "Live Bird Feeder"
+    },
+    "editMode": {
+      "editing": "Kojelautaa muokataan",
+      "save": "Tallenna",
+      "saving": "Tallennetaan...",
+      "cancel": "Peruuta",
+      "disabled": "piilotettu",
+      "noConfig": "Lisäasetuksia ei ole vielä saatavilla.",
+      "currentlyHearingNote": "Tämä elementti näyttää tällä hetkellä havaitut linnut, kun tarkastelet tämän päivän päivämäärää. Lisäasetuksia ei tarvita.",
+      "notAvailable": "Tämän elementtityypin asetukset eivät ole vielä saatavilla.",
+      "configureElement": "Määritä elementti",
+      "closeModal": "Sulje",
+      "configureTitle": "Määritä {element}",
+      "weatherPlaceholder": "Säätiedot näkyvät täällä, kun ne ovat saatavilla",
+      "stationBanner": "Aseman banneri",
+      "liveBirdFeed": "Lintujen livesyöte",
+      "hideElement": "Piilota elementti",
+      "unhideElement": "Näytä elementti",
+      "deleteElement": "Poista elementti",
+      "deleteConfirm": "Poistetaanko tämä elementti? Sen asetukset menetetään.",
+      "addElement": "Lisää elementti",
+      "noElementsAvailable": "Kaikki elementtityypit ovat jo kojelaudalla.",
+      "editDashboard": "Muokkaa kojelautaa",
+      "widthFull": "Täysi leveys",
+      "widthHalf": "Puolikas leveys",
+      "fullWidthOnly": "Vain täysi leveys"
+    },
+    "elements": {
+      "banner": "Dashboard Banner",
+      "dailySummary": "Daily Summary",
+      "currentlyHearing": "Currently Hearing",
+      "detectionsGrid": "Recent Detections",
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Korostusväri",
       "logoGradient": "Liukuvärinen logo",
       "logoGradientDescription": "Käytä liukuväritehosteella sivupalkin logossa"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Appearance",
+        "language": "Language & Regional",
+        "visualContent": "Visual Content"
+      },
+      "appearance": {
+        "title": "Appearance",
+        "description": "Customize the look and feel of your BirdNET-Go interface"
+      },
+      "language": {
+        "title": "Language & Regional",
+        "description": "Language, temperature units, and regional display preferences"
+      },
+      "visualContent": {
+        "title": "Visual Content",
+        "description": "Configure bird images and spectrogram display settings"
+      }
     }
   },
   "auth": {

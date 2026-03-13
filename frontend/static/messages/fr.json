@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Sous-menu analyses",
     "settingsSubmenu": "Sous-menu paramètres",
     "systemSubmenu": "Sous-menu système",
+    "dashboardSubmenu": "Sous-menu tableau de bord",
     "systemTerminal": "Terminal"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Approuvé",
     "currentlyHearing": {
       "title": "En écoute",
-      "subtitle": "Espèces identifiées en temps réel"
+      "subtitle": "Espèces identifiées en temps réel",
+      "empty": "Tout est calme — aucun oiseau détecté pour le moment"
     },
     "rejected": "Rejeté",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Échec de la récupération des détections récentes : {status}",
       "recentDetectionsLoad": "Échec du chargement des détections récentes",
       "configFetch": "Échec de la récupération de la configuration du tableau de bord : {status}"
+    },
+    "banner": {
+      "title": "Titre",
+      "titlePlaceholder": "Ma station ornithologique",
+      "description": "Description",
+      "descriptionPlaceholder": "Une brève description de votre station de surveillance des oiseaux...",
+      "subElements": "Sous-éléments",
+      "showImage": "Afficher une image personnalisée",
+      "imageUrl": "URL ou chemin de l'image",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Entrez une URL vers une image. Le téléchargement d'images sera disponible dans une future mise à jour.",
+      "showLocationMap": "Afficher la carte de localisation",
+      "showLocationMapHelp": "Affiche une petite carte en utilisant la latitude/longitude de vos paramètres principaux",
+      "showWeather": "Afficher la météo actuelle",
+      "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "URL YouTube",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Collez n'importe quelle URL YouTube (watch, embed ou lien court). Elle sera convertie en intégration respectueuse de la vie privée.",
+      "titleLabel": "Titre (optionnel)",
+      "titlePlaceholder": "Mangeoire à oiseaux en direct"
+    },
+    "editMode": {
+      "editing": "Modification du tableau de bord",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler",
+      "disabled": "masqué",
+      "noConfig": "Aucune option de configuration supplémentaire disponible pour l'instant.",
+      "currentlyHearingNote": "Cet élément affiche les oiseaux actuellement détectés lorsque vous consultez la date d'aujourd'hui. Aucune configuration supplémentaire nécessaire.",
+      "notAvailable": "La configuration pour ce type d'élément n'est pas encore disponible.",
+      "configureElement": "Configurer l'élément",
+      "closeModal": "Fermer",
+      "configureTitle": "Configurer {element}",
+      "weatherPlaceholder": "Les conditions météo apparaîtront ici lorsqu'elles seront disponibles",
+      "stationBanner": "Bannière de station",
+      "liveBirdFeed": "Flux d'oiseaux en direct",
+      "hideElement": "Masquer l'élément",
+      "unhideElement": "Afficher l'élément",
+      "deleteElement": "Supprimer l'élément",
+      "deleteConfirm": "Supprimer cet élément ? Sa configuration sera perdue.",
+      "addElement": "Ajouter un élément",
+      "noElementsAvailable": "Tous les types d'éléments sont déjà sur le tableau de bord.",
+      "editDashboard": "Modifier le tableau de bord",
+      "widthFull": "Pleine largeur",
+      "widthHalf": "Demi-largeur",
+      "fullWidthOnly": "Pleine largeur uniquement"
+    },
+    "elements": {
+      "banner": "Bannière du tableau de bord",
+      "dailySummary": "Résumé quotidien",
+      "currentlyHearing": "En écoute actuellement",
+      "detectionsGrid": "Détections récentes",
+      "videoEmbed": "Vidéo intégrée"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Couleur d'accent",
       "logoGradient": "Logo en dégradé",
       "logoGradientDescription": "Utiliser un effet de dégradé sur le logo de la barre latérale"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Apparence",
+        "language": "Langue et régional",
+        "visualContent": "Contenu visuel"
+      },
+      "appearance": {
+        "title": "Apparence",
+        "description": "Personnalisez l'apparence de votre interface BirdNET-Go"
+      },
+      "language": {
+        "title": "Langue et régional",
+        "description": "Langue, unités de température et préférences d'affichage régionales"
+      },
+      "visualContent": {
+        "title": "Contenu visuel",
+        "description": "Configurez les images d'oiseaux et les paramètres d'affichage du spectrogramme"
+      }
     }
   },
   "auth": {

@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Analysen-Untermenü",
     "settingsSubmenu": "Einstellungen-Untermenü",
     "systemSubmenu": "System-Untermenü",
+    "dashboardSubmenu": "Dashboard-Untermenü",
     "systemTerminal": "Terminal"
   },
   "about": {
@@ -549,7 +550,8 @@
     "approved": "Genehmigt",
     "currentlyHearing": {
       "title": "Gerade gehört",
-      "subtitle": "Arten werden in Echtzeit identifiziert"
+      "subtitle": "Arten werden in Echtzeit identifiziert",
+      "empty": "Alles ruhig — derzeit keine Vögel erkannt"
     },
     "rejected": "Abgelehnt",
     "dailySummary": {
@@ -647,6 +649,61 @@
       "recentDetectionsFetch": "Fehler beim Abrufen aktueller Erkennungen: {status}",
       "recentDetectionsLoad": "Fehler beim Laden aktueller Erkennungen",
       "configFetch": "Fehler beim Abrufen der Dashboard-Konfiguration: {status}"
+    },
+    "banner": {
+      "title": "Titel",
+      "titlePlaceholder": "Meine Vogelstation",
+      "description": "Beschreibung",
+      "descriptionPlaceholder": "Eine kurze Beschreibung Ihrer Vogelbeobachtungsstation...",
+      "subElements": "Unterelemente",
+      "showImage": "Benutzerdefiniertes Bild anzeigen",
+      "imageUrl": "Bild-URL oder Pfad",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Geben Sie eine URL zu einem Bild ein. Der Bild-Upload wird in einem zukünftigen Update verfügbar sein.",
+      "showLocationMap": "Standortkarte anzeigen",
+      "showLocationMapHelp": "Zeigt eine kleine Karte mit dem Breiten-/Längengrad aus Ihren Haupteinstellungen an",
+      "showWeather": "Aktuelles Wetter anzeigen",
+      "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "YouTube-URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Fügen Sie eine beliebige YouTube-URL ein (Watch, Embed oder Kurzlink). Sie wird in eine datenschutzfreundliche Einbettung umgewandelt.",
+      "titleLabel": "Titel (optional)",
+      "titlePlaceholder": "Live-Vogelfutterhaus"
+    },
+    "editMode": {
+      "editing": "Dashboard bearbeiten",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "cancel": "Abbrechen",
+      "disabled": "ausgeblendet",
+      "noConfig": "Noch keine weiteren Konfigurationsoptionen verfügbar.",
+      "currentlyHearingNote": "Dieses Element zeigt aktuell erkannte Vögel an, wenn das heutige Datum angezeigt wird. Keine zusätzliche Konfiguration erforderlich.",
+      "notAvailable": "Die Konfiguration für diesen Elementtyp ist noch nicht verfügbar.",
+      "configureElement": "Element konfigurieren",
+      "closeModal": "Schließen",
+      "configureTitle": "{element} konfigurieren",
+      "weatherPlaceholder": "Wetterbedingungen werden hier angezeigt, wenn verfügbar",
+      "stationBanner": "Stationsbanner",
+      "liveBirdFeed": "Live-Vogelfeed",
+      "hideElement": "Element ausblenden",
+      "unhideElement": "Element einblenden",
+      "deleteElement": "Element entfernen",
+      "deleteConfirm": "Dieses Element entfernen? Die Konfiguration geht verloren.",
+      "addElement": "Element hinzufügen",
+      "noElementsAvailable": "Alle Elementtypen sind bereits im Dashboard vorhanden.",
+      "editDashboard": "Dashboard bearbeiten",
+      "widthFull": "Volle Breite",
+      "widthHalf": "Halbe Breite",
+      "fullWidthOnly": "Nur volle Breite"
+    },
+    "elements": {
+      "banner": "Dashboard-Banner",
+      "dailySummary": "Tageszusammenfassung",
+      "currentlyHearing": "Aktuell erkannt",
+      "detectionsGrid": "Aktuelle Erkennungen",
+      "videoEmbed": "Video-Einbettung"
     }
   },
   "detections": {
@@ -3533,6 +3590,25 @@
       "customAccent": "Akzentfarbe",
       "logoGradient": "Farbverlauf-Logo",
       "logoGradientDescription": "Farbverlauf-Effekt für das Seitenleisten-Logo verwenden"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Erscheinungsbild",
+        "language": "Sprache & Region",
+        "visualContent": "Visuelle Inhalte"
+      },
+      "appearance": {
+        "title": "Erscheinungsbild",
+        "description": "Passen Sie das Aussehen Ihrer BirdNET-Go-Oberfläche an"
+      },
+      "language": {
+        "title": "Sprache & Region",
+        "description": "Sprache, Temperatureinheiten und regionale Anzeigeeinstellungen"
+      },
+      "visualContent": {
+        "title": "Visuelle Inhalte",
+        "description": "Konfigurieren Sie Vogelbilder und Spektrogramm-Anzeigeeinstellungen"
+      }
     }
   },
   "auth": {

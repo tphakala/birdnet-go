@@ -138,6 +138,7 @@
     "hls.js": "^1.6.7",
     "maplibre-gl": "^5.19.0",
     "reconnecting-eventsource": "^1.6.4",
+    "svelte-dnd-action": "^0.9.69",
     "svelte-portal": "^2.2.1"
   },
   "bundleDependencies": [
