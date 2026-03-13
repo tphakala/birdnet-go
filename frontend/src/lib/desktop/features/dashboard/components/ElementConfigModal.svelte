@@ -6,6 +6,7 @@
 <script lang="ts">
   import { X } from '@lucide/svelte';
   import type { DashboardElement } from '$lib/stores/settings';
+  import BannerConfigForm from './BannerConfigForm.svelte';
   import DailySummaryConfigForm from './DailySummaryConfigForm.svelte';
   import DetectionsGridConfigForm from './DetectionsGridConfigForm.svelte';
 
@@ -83,7 +84,21 @@
 
       <!-- Config form based on element type -->
       <div class="mb-6">
-        {#if editElement.type === 'daily-summary'}
+        {#if editElement.type === 'banner'}
+          <BannerConfigForm
+            config={editElement.banner ?? {
+              showImage: false,
+              imagePath: '',
+              title: '',
+              description: '',
+              showLocationMap: false,
+              showWeather: false,
+            }}
+            onUpdate={config => {
+              editElement = { ...editElement, banner: config };
+            }}
+          />
+        {:else if editElement.type === 'daily-summary'}
           <DailySummaryConfigForm
             config={editElement.summary ?? { summaryLimit: 100 }}
             onUpdate={config => {

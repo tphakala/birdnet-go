@@ -65,6 +65,7 @@ Performance Optimizations:
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dashboardLayout } from '$lib/stores/settings';
   import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
+  import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import { auth } from '$lib/stores/auth';
 
@@ -1222,7 +1223,9 @@ Performance Optimizations:
     onEditModeChange={handleEditModeChange}
   >
     {#snippet renderElement(element, _inEditMode)}
-      {#if element.type === 'daily-summary'}
+      {#if element.type === 'banner' && element.banner}
+        <BannerCard config={element.banner} />
+      {:else if element.type === 'daily-summary'}
         <DailySummaryCard
           data={dailySummary}
           loading={isLoadingSummary}
