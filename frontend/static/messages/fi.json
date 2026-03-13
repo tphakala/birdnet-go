@@ -3511,6 +3511,18 @@
       "saveFailed": "Asetusten tallentaminen epäonnistui",
       "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
+    },
+    "appearance": {
+      "colorScheme": "Värimaailma",
+      "colorSchemeDescription": "Valitse käyttöliittymän värimaailma",
+      "schemeBlue": "Sininen",
+      "schemeForest": "Metsä",
+      "schemeAmber": "Meripihka",
+      "schemeViolet": "Violetti",
+      "schemeRose": "Ruusu",
+      "schemeCustom": "Mukautettu",
+      "customPrimary": "Pääväri",
+      "customAccent": "Korostusväri"
     }
   },
   "auth": {
@@ -3893,15 +3905,5 @@
       "requestTimeout": "Pyyntö aikakatkaistiin.",
       "networkError": "Verkkovirhe. Tarkista yhteytesi."
     }
-  },
-  "settings.appearance.colorScheme": "Värimaailma",
-  "settings.appearance.colorSchemeDescription": "Valitse käyttöliittymän värimaailma",
-  "settings.appearance.schemeBlue": "Sininen",
-  "settings.appearance.schemeForest": "Metsä",
-  "settings.appearance.schemeAmber": "Meripihka",
-  "settings.appearance.schemeViolet": "Violetti",
-  "settings.appearance.schemeRose": "Ruusu",
-  "settings.appearance.schemeCustom": "Mukautettu",
-  "settings.appearance.customPrimary": "Pääväri",
-  "settings.appearance.customAccent": "Korostusväri"
+  }
 }

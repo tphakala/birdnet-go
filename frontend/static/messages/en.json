@@ -3535,6 +3535,18 @@
           "description": "Notifies when a BirdWeather upload fails"
         }
       }
+    },
+    "appearance": {
+      "colorScheme": "Color Scheme",
+      "colorSchemeDescription": "Choose a color scheme for the interface",
+      "schemeBlue": "Blue",
+      "schemeForest": "Forest",
+      "schemeAmber": "Amber",
+      "schemeViolet": "Violet",
+      "schemeRose": "Rose",
+      "schemeCustom": "Custom",
+      "customPrimary": "Primary Color",
+      "customAccent": "Accent Color"
     }
   },
   "auth": {
@@ -3893,15 +3905,5 @@
       "requestTimeout": "Request timeout.",
       "networkError": "Network error occurred. Please check your connection."
     }
-  },
-  "settings.appearance.colorScheme": "Color Scheme",
-  "settings.appearance.colorSchemeDescription": "Choose a color scheme for the interface",
-  "settings.appearance.schemeBlue": "Blue",
-  "settings.appearance.schemeForest": "Forest",
-  "settings.appearance.schemeAmber": "Amber",
-  "settings.appearance.schemeViolet": "Violet",
-  "settings.appearance.schemeRose": "Rose",
-  "settings.appearance.schemeCustom": "Custom",
-  "settings.appearance.customPrimary": "Primary Color",
-  "settings.appearance.customAccent": "Accent Color"
+  }
 }

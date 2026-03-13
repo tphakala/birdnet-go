@@ -3342,6 +3342,18 @@
       "saveFailed": "Nepodarilo sa uložiť nastavenia",
       "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
       "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
+    },
+    "appearance": {
+      "colorScheme": "Farebná schéma",
+      "colorSchemeDescription": "Vyberte farebnú schému pre rozhranie",
+      "schemeBlue": "Modrá",
+      "schemeForest": "Les",
+      "schemeAmber": "Jantárová",
+      "schemeViolet": "Fialová",
+      "schemeRose": "Ružová",
+      "schemeCustom": "Vlastná",
+      "customPrimary": "Primárna farba",
+      "customAccent": "Akcentová farba"
     }
   },
   "auth": {
@@ -3724,15 +3736,5 @@
       "requestTimeout": "Časový limit požiadavky vypršal.",
       "networkError": "Chyba siete. Skontrolujte pripojenie."
     }
-  },
-  "settings.appearance.colorScheme": "Farebná schéma",
-  "settings.appearance.colorSchemeDescription": "Vyberte farebnú schému pre rozhranie",
-  "settings.appearance.schemeBlue": "Modrá",
-  "settings.appearance.schemeForest": "Les",
-  "settings.appearance.schemeAmber": "Jantárová",
-  "settings.appearance.schemeViolet": "Fialová",
-  "settings.appearance.schemeRose": "Ružová",
-  "settings.appearance.schemeCustom": "Vlastná",
-  "settings.appearance.customPrimary": "Primárna farba",
-  "settings.appearance.customAccent": "Akcentová farba"
+  }
 }

@@ -3511,6 +3511,18 @@
       "saveFailed": "Falha ao salvar as configurações",
       "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
       "csvDownloadFailed": "Falha ao baixar o CSV"
+    },
+    "appearance": {
+      "colorScheme": "Esquema de cores",
+      "colorSchemeDescription": "Escolha um esquema de cores para a interface",
+      "schemeBlue": "Azul",
+      "schemeForest": "Floresta",
+      "schemeAmber": "Âmbar",
+      "schemeViolet": "Violeta",
+      "schemeRose": "Rosa",
+      "schemeCustom": "Personalizado",
+      "customPrimary": "Cor primária",
+      "customAccent": "Cor de destaque"
     }
   },
   "auth": {
@@ -3893,15 +3905,5 @@
       "requestTimeout": "Tempo limite da solicitação esgotado.",
       "networkError": "Erro de rede. Verifique a sua ligação."
     }
-  },
-  "settings.appearance.colorScheme": "Esquema de cores",
-  "settings.appearance.colorSchemeDescription": "Escolha um esquema de cores para a interface",
-  "settings.appearance.schemeBlue": "Azul",
-  "settings.appearance.schemeForest": "Floresta",
-  "settings.appearance.schemeAmber": "Âmbar",
-  "settings.appearance.schemeViolet": "Violeta",
-  "settings.appearance.schemeRose": "Rosa",
-  "settings.appearance.schemeCustom": "Personalizado",
-  "settings.appearance.customPrimary": "Cor primária",
-  "settings.appearance.customAccent": "Cor de destaque"
+  }
 }

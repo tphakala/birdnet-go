@@ -110,7 +110,7 @@
 
   {#if $scheme === 'custom'}
     <div
-      class="mt-4 flex flex-wrap gap-6 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-surface)]/50 p-4"
+      class="mt-4 flex flex-wrap gap-6 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--surface-200)] p-4"
     >
       <div class="flex items-center gap-3">
         <input
