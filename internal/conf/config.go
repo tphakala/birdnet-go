@@ -511,6 +511,9 @@ const (
 	StreamTypeUDP  = "udp"  // UDP/RTP - Low-latency LAN
 )
 
+// DefaultTransport is the default RTSP/RTMP transport protocol
+const DefaultTransport = "tcp"
+
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
 	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                   // Required: descriptive name like "Front Yard"
@@ -1487,6 +1490,9 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Apply default transport to RTSP/RTMP streams that don't specify one
+	settings.Realtime.RTSP.ApplyStreamDefaults()
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
@@ -1779,7 +1785,7 @@ func (s *Settings) MigrateRTSPConfig() bool {
 	// Get global transport, default to tcp
 	globalTransport := rtsp.Transport
 	if globalTransport == "" {
-		globalTransport = "tcp"
+		globalTransport = DefaultTransport
 	}
 
 	// Preallocate streams slice with capacity and track seen URLs for deduplication

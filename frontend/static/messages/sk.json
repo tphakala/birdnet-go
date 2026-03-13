@@ -884,7 +884,9 @@
       "temperature": "Teplota CPU",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Údaje o teplote nie sú k dispozícii",
-      "cpuCores": "Jadrá CPU"
+      "cpuCores": "Jadrá CPU",
+      "cpuDetails": "Procesor",
+      "environment": "Prostredie"
     },
     "diskUsage": {
       "title": "Využitie disku",

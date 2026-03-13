@@ -889,7 +889,9 @@
       "temperature": "CPU-Temperatur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperaturdaten nicht verfügbar",
-      "cpuCores": "CPU-Kerne"
+      "cpuCores": "CPU-Kerne",
+      "cpuDetails": "Prozessor",
+      "environment": "Umgebung"
     },
     "diskUsage": {
       "title": "Festplattennutzung",

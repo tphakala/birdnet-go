@@ -889,7 +889,9 @@
       "temperature": "Prosessorin lämpötila",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Lämpötilatiedot eivät ole saatavilla",
-      "cpuCores": "CPU-ytimet"
+      "cpuCores": "CPU-ytimet",
+      "cpuDetails": "Suoritin",
+      "environment": "Ympäristö"
     },
     "diskUsage": {
       "title": "Levyn käyttö",

@@ -233,6 +233,23 @@ func (s *StreamConfig) validateURLScheme() error {
 	return nil
 }
 
+// ApplyStreamDefaults sets default transport for RTSP/RTMP streams that have an empty
+// transport field. This handles the case where users write the new streams: YAML format
+// directly without specifying per-stream transport — the global RTSPSettings.Transport
+// (defaulting to "tcp") is propagated to each applicable stream.
+func (r *RTSPSettings) ApplyStreamDefaults() {
+	globalTransport := r.Transport
+	if globalTransport == "" {
+		globalTransport = DefaultTransport
+	}
+	for i := range r.Streams {
+		stream := &r.Streams[i]
+		if stream.Transport == "" && (stream.Type == StreamTypeRTSP || stream.Type == StreamTypeRTMP) {
+			stream.Transport = globalTransport
+		}
+	}
+}
+
 // ValidateStreams validates the streams collection for uniqueness and individual validity
 func (r *RTSPSettings) ValidateStreams() error {
 	names := make(map[string]bool)
@@ -769,6 +786,9 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 	if err := validateSpeciesConfigSettings(&settings.Species); err != nil {
 		return err
 	}
+
+	// Apply default transport before stream validation
+	settings.RTSP.ApplyStreamDefaults()
 
 	// Validate stream configurations
 	if err := settings.RTSP.ValidateStreams(); err != nil {
