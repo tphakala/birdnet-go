@@ -149,23 +149,21 @@ func TestSpeciesSettingsUpdate(t *testing.T) {
 
 	// Setup
 	e := echo.New()
-	controller := &Controller{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Interval: 15,
-				Species: conf.SpeciesSettings{
-					Include: []string{"Robin"},
-					Exclude: []string{"Crow"},
-					Config: map[string]conf.SpeciesConfig{
-						"initial bird": {
-							Threshold: 0.5,
-							Interval:  30,
-							Actions:   []conf.SpeciesAction{},
-						},
-					},
-				},
+	settings := newValidTestSettings()
+	settings.Realtime.Interval = 15
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Include: []string{"Robin"},
+		Exclude: []string{"Crow"},
+		Config: map[string]conf.SpeciesConfig{
+			"initial bird": {
+				Threshold: 0.5,
+				Interval:  30,
+				Actions:   []conf.SpeciesAction{},
 			},
 		},
+	}
+	controller := &Controller{
+		Settings:            settings,
 		DisableSaveSettings: true,
 	}
 
@@ -228,31 +226,29 @@ func TestPartialSpeciesConfigUpdate(t *testing.T) {
 
 	// Setup with existing configs (use lowercase keys since they're set directly)
 	e := echo.New()
-	controller := &Controller{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Species: conf.SpeciesSettings{
-					Config: map[string]conf.SpeciesConfig{
-						"bird a": {
-							Threshold: 0.7,
-							Interval:  30,
-							Actions: []conf.SpeciesAction{
-								{
-									Type:       "ExecuteCommand",
-									Command:    "/bin/notify",
-									Parameters: []string{"CommonName"},
-								},
-							},
-						},
-						"bird b": {
-							Threshold: 0.8,
-							Interval:  60,
-							Actions:   []conf.SpeciesAction{},
-						},
+	settings := newValidTestSettings()
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Config: map[string]conf.SpeciesConfig{
+			"bird a": {
+				Threshold: 0.7,
+				Interval:  30,
+				Actions: []conf.SpeciesAction{
+					{
+						Type:       "ExecuteCommand",
+						Command:    "/bin/notify",
+						Parameters: []string{"CommonName"},
 					},
 				},
 			},
+			"bird b": {
+				Threshold: 0.8,
+				Interval:  60,
+				Actions:   []conf.SpeciesAction{},
+			},
 		},
+	}
+	controller := &Controller{
+		Settings:            settings,
 		DisableSaveSettings: true,
 	}
 
@@ -300,23 +296,21 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 	// Setup controller with its own settings (simulating real usage)
 	// Use lowercase keys since they're set directly
 	e := echo.New()
-	controller := &Controller{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Interval: 15,
-				Species: conf.SpeciesSettings{
-					Include: []string{},
-					Exclude: []string{},
-					Config: map[string]conf.SpeciesConfig{
-						"test bird": {
-							Threshold: 0.5,
-							Interval:  30,
-							Actions:   []conf.SpeciesAction{},
-						},
-					},
-				},
+	settings := newValidTestSettings()
+	settings.Realtime.Interval = 15
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Include: []string{},
+		Exclude: []string{},
+		Config: map[string]conf.SpeciesConfig{
+			"test bird": {
+				Threshold: 0.5,
+				Interval:  30,
+				Actions:   []conf.SpeciesAction{},
 			},
 		},
+	}
+	controller := &Controller{
+		Settings:            settings,
 		DisableSaveSettings: true,
 	}
 
@@ -431,22 +425,15 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (echo.Context, *httptest.ResponseRecorder, *Controller) {
 	t.Helper()
 
+	settings := newValidTestSettings()
+	settings.Main.Name = "TestNode"
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Include: []string{},
+		Exclude: []string{},
+		Config:  map[string]conf.SpeciesConfig{},
+	}
 	controller := &Controller{
-		Settings: &conf.Settings{
-			Main: struct {
-				Name      string `json:"name"`
-				TimeAs24h bool   `json:"timeAs24h"`
-			}{
-				Name: "TestNode",
-			},
-			Realtime: conf.RealtimeSettings{
-				Species: conf.SpeciesSettings{
-					Include: []string{},
-					Exclude: []string{},
-					Config:  map[string]conf.SpeciesConfig{},
-				},
-			},
-		},
+		Settings:            settings,
 		DisableSaveSettings: true, // Disable file save for testing
 	}
 
@@ -513,16 +500,14 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 	t.Parallel()
 
 	e := echo.New()
+	settings := newValidTestSettings()
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Include: []string{},
+		Exclude: []string{},
+		Config:  make(map[string]conf.SpeciesConfig),
+	}
 	controller := &Controller{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Species: conf.SpeciesSettings{
-					Include: []string{},
-					Exclude: []string{},
-					Config:  make(map[string]conf.SpeciesConfig),
-				},
-			},
-		},
+		Settings:            settings,
 		DisableSaveSettings: true,
 	}
 
@@ -579,16 +564,15 @@ func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
 func createTestController(t *testing.T) *Controller {
 	t.Helper()
 
+	settings := newValidTestSettings()
+	settings.Realtime.Species = conf.SpeciesSettings{
+		Include: []string{},
+		Exclude: []string{},
+		Config:  map[string]conf.SpeciesConfig{},
+	}
+
 	return &Controller{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Species: conf.SpeciesSettings{
-					Include: []string{},
-					Exclude: []string{},
-					Config:  map[string]conf.SpeciesConfig{},
-				},
-			},
-		},
+		Settings:            settings,
 		DisableSaveSettings: true,
 	}
 }

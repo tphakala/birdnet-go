@@ -72,6 +72,7 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.Realtime.Audio.Export.Type = "wav"
 	settings.Realtime.Audio.Export.Path = "/clips"
 	settings.Realtime.Audio.Export.Bitrate = "192k"
+	settings.Realtime.Audio.Export.Length = 15
 
 	// Species settings
 	settings.Realtime.Species.Include = []string{"American Robin"}
@@ -80,6 +81,11 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	// WebServer settings
 	settings.WebServer.Port = "8080"
 	settings.WebServer.Enabled = true
+	settings.WebServer.LiveStream.BitRate = 128
+	settings.WebServer.LiveStream.SegmentLength = 5
+
+	// Security settings - session duration must be positive
+	settings.Security.SessionDuration = 168 * time.Hour // 7 days
 
 	// Output settings - SQLite path for prerequisite checks
 	// Use t.TempDir() for test-isolated, auto-cleaned directory

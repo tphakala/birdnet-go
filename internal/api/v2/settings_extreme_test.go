@@ -50,10 +50,10 @@ func TestExtremeValues(t *testing.T) {
 			name:    "Maximum integer values",
 			section: "dashboard",
 			extremeData: map[string]any{
-				"summaryLimit": 2147483647, // Max int32
+				"summaryLimit": 2147483647, // Max int32 - exceeds valid range 10-1000
 			},
-			expectedError: false,
-			description:   "Should handle max int values",
+			expectedError: true,
+			description:   "Should reject summaryLimit exceeding valid range",
 		},
 		{
 			name:    "Negative values where not allowed",
@@ -61,8 +61,8 @@ func TestExtremeValues(t *testing.T) {
 			extremeData: map[string]any{
 				"summaryLimit": -100,
 			},
-			expectedError: false, // Might be accepted but should be validated in business logic
-			description:   "Should handle negative values gracefully",
+			expectedError: true, // Rejected by ValidateSettings (range 10-1000)
+			description:   "Should reject negative summaryLimit",
 		},
 		{
 			name:    "Extreme coordinates",
@@ -117,10 +117,10 @@ func TestExtremeValues(t *testing.T) {
 			name:    "Maximum float values",
 			section: "birdnet",
 			extremeData: map[string]any{
-				"sensitivity": 1.7976931348623157e+308, // Close to max float64
+				"sensitivity": 1.7976931348623157e+308, // Close to max float64 - exceeds valid range 0-1.5
 			},
-			expectedError: false,
-			description:   "Should handle maximum float values",
+			expectedError: true,
+			description:   "Should reject sensitivity exceeding valid range",
 		},
 		{
 			name:    "Minimum positive float",

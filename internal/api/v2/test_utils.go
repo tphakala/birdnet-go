@@ -5,6 +5,7 @@ package api
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -141,12 +142,31 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	// Create mock datastore
 	mockDS := mocks.NewMockInterface(t)
 
-	// Create settings
+	// Create settings with values that pass conf.ValidateSettings()
 	settings := &conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Sensitivity: 1.0,
+			Threshold:   0.8,
+			Locale:      "en",
+		},
 		WebServer: conf.WebServerSettings{
 			Debug: true,
+			LiveStream: conf.LiveStreamSettings{
+				BitRate:       128,
+				SegmentLength: 5,
+			},
+		},
+		Security: conf.Security{
+			SessionDuration: 168 * time.Hour,
 		},
 		Realtime: conf.RealtimeSettings{
+			Interval: 15,
+			Dashboard: conf.Dashboard{
+				SummaryLimit: 100,
+			},
+			Weather: conf.WeatherSettings{
+				PollInterval: 30,
+			},
 			Audio: conf.AudioSettings{
 				Export: conf.ExportSettings{
 					Path: t.TempDir(), // Set the required path
@@ -196,6 +216,38 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	})
 
 	return e, mockDS, controller
+}
+
+// newValidTestSettings returns a *conf.Settings populated with minimal values
+// that pass conf.ValidateSettings(). Tests that create inline Controller structs
+// should call this and then override the fields they care about.
+func newValidTestSettings() *conf.Settings {
+	return &conf.Settings{
+		BirdNET: conf.BirdNETConfig{
+			Sensitivity: 1.0,
+			Threshold:   0.8,
+			Locale:      "en",
+		},
+		WebServer: conf.WebServerSettings{
+			Debug: true,
+			LiveStream: conf.LiveStreamSettings{
+				BitRate:       128,
+				SegmentLength: 5,
+			},
+		},
+		Security: conf.Security{
+			SessionDuration: 168 * time.Hour,
+		},
+		Realtime: conf.RealtimeSettings{
+			Interval: 15,
+			Dashboard: conf.Dashboard{
+				SummaryLimit: 100,
+			},
+			Weather: conf.WeatherSettings{
+				PollInterval: 30,
+			},
+		},
+	}
 }
 
 // assertRoutesRegistered verifies that all expected routes are registered in the Echo instance.
