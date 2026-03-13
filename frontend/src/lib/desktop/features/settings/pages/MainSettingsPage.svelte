@@ -44,19 +44,13 @@
     birdnetSettings,
     dynamicThresholdSettings,
     outputSettings,
-    dashboardSettings,
     realtimeSettings,
-    DEFAULT_SPECTROGRAM_SETTINGS,
-    type SpectrogramPreRender,
-    type SpectrogramStyle,
-    type SpectrogramDynamicRange,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
-  import ColorSchemePicker from '$lib/desktop/features/settings/components/ColorSchemePicker.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
@@ -71,8 +65,7 @@
     Download,
     RefreshCw,
   } from '@lucide/svelte';
-  import { t, getLocale } from '$lib/i18n';
-  import { LOCALES } from '$lib/i18n/config';
+  import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeArrayAccess } from '$lib/utils/security';
   import { formatBytes } from '$lib/utils/formatters';
@@ -87,66 +80,6 @@
 
   // Tab state
   let activeTab = $state('general');
-
-  // Extended option type for locale with typed locale code
-  interface LocaleOption extends SelectOption {
-    localeCode: FlagLocale;
-  }
-
-  // PERFORMANCE OPTIMIZATION: Static UI locales computed once
-  const uiLocales: LocaleOption[] = Object.entries(LOCALES).map(([code, info]) => ({
-    value: code,
-    label: info.name,
-    localeCode: code as FlagLocale,
-  }));
-
-  // Spectrogram style definitions with value→translationKey mapping
-  // Order: colorful styles first, then scientific styles side by side
-  const SPECTROGRAM_STYLES: { value: SpectrogramStyle; labelKey: string }[] = [
-    { value: 'default', labelKey: 'default' },
-    { value: 'high_contrast_dark', labelKey: 'highContrastDark' },
-    { value: 'scientific_dark', labelKey: 'scientificDark' },
-    { value: 'scientific', labelKey: 'scientific' },
-  ];
-
-  // Spectrogram style options - computed reactively to support locale changes
-  let spectrogramStyleOptions = $derived.by(() => {
-    getLocale(); // Trigger re-computation on locale change
-    return SPECTROGRAM_STYLES.map(style => ({
-      value: style.value,
-      label: t(
-        `settings.main.sections.userInterface.dashboard.spectrogram.style.options.${style.labelKey}`
-      ),
-    }));
-  });
-
-  // Get translation key for style description
-  function getStyleDescriptionKey(style: SpectrogramStyle): string {
-    return SPECTROGRAM_STYLES.find(s => s.value === style)?.labelKey ?? 'default';
-  }
-
-  // Dynamic range preset definitions with value→translationKey mapping
-  const DYNAMIC_RANGE_PRESETS: { value: SpectrogramDynamicRange; labelKey: string }[] = [
-    { value: '80', labelKey: 'highContrast' },
-    { value: '100', labelKey: 'standard' },
-    { value: '120', labelKey: 'extended' },
-  ];
-
-  // Dynamic range options - computed reactively to support locale changes
-  let dynamicRangeOptions = $derived.by(() => {
-    getLocale(); // Trigger re-computation on locale change
-    return DYNAMIC_RANGE_PRESETS.map(preset => ({
-      value: preset.value,
-      label: t(
-        `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.options.${preset.labelKey}`
-      ),
-    }));
-  });
-
-  // Get translation key for dynamic range description
-  function getDynamicRangeDescriptionKey(value: SpectrogramDynamicRange): string {
-    return DYNAMIC_RANGE_PRESETS.find(p => p.value === value)?.labelKey ?? 'standard';
-  }
 
   // Extended option type for weather provider
   interface WeatherOption extends SelectOption {
@@ -210,19 +143,6 @@
         port: '3306',
       },
     },
-    dashboard: {
-      ...($dashboardSettings ?? {
-        thumbnails: {
-          summary: true,
-          recent: true,
-          imageProvider: 'avicommons',
-          fallbackPolicy: 'none',
-        },
-        summaryLimit: 100,
-      }),
-      locale: $dashboardSettings?.locale ?? (getLocale() as string),
-      spectrogram: $dashboardSettings?.spectrogram ?? DEFAULT_SPECTROGRAM_SETTINGS,
-    },
     weather: $realtimeSettings?.weather || weatherDefaults,
     sentry: $settingsStore.formData.sentry || {
       enabled: false,
@@ -233,16 +153,6 @@
   });
 
   let store = $derived($settingsStore);
-
-  // Current spectrogram style for preview
-  let currentSpectrogramStyle = $derived<SpectrogramStyle>(
-    (settings.dashboard.spectrogram?.style as SpectrogramStyle) ?? 'default'
-  );
-
-  // Current dynamic range for description
-  let currentDynamicRange = $derived<SpectrogramDynamicRange>(
-    (settings.dashboard.spectrogram?.dynamicRange as SpectrogramDynamicRange) ?? '100'
-  );
 
   // Database type selection
   let selectedDatabaseType = $state('sqlite');
@@ -257,29 +167,9 @@
     }
   });
 
-  // Change detection per tab - General now includes UI settings and telemetry
+  // Change detection per tab - General includes node identity and telemetry
   let generalTabHasChanges = $derived(
     hasSettingsChanged(store.originalData.main, store.formData.main) ||
-      hasSettingsChanged(
-        {
-          locale: store.originalData.realtime?.dashboard?.locale,
-          summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
-          thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
-          spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
-          colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
-          customColors: store.originalData.realtime?.dashboard?.customColors,
-          logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
-        },
-        {
-          locale: store.formData.realtime?.dashboard?.locale,
-          summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
-          thumbnails: store.formData.realtime?.dashboard?.thumbnails,
-          spectrogram: store.formData.realtime?.dashboard?.spectrogram,
-          colorScheme: store.formData.realtime?.dashboard?.colorScheme,
-          customColors: store.formData.realtime?.dashboard?.customColors,
-          logoStyle: store.formData.realtime?.dashboard?.logoStyle,
-        }
-      ) ||
       hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
   );
 
@@ -347,14 +237,6 @@
     error: null,
     data: [],
   });
-
-  // Image provider options for dashboard thumbnails
-  let providerOptions = $state<ApiState<Array<{ value: string; label: string }>>>({
-    loading: true,
-    error: null,
-    data: [],
-  });
-  let multipleProvidersAvailable = $derived(providerOptions.data.length > 1);
 
   // Transform birdnetLocales to include flag locale code
   let birdnetLocaleOptions = $derived<BirdnetLocaleOption[]>(
@@ -634,7 +516,7 @@
   });
 
   async function loadInitialData() {
-    await Promise.all([loadBirdnetLocales(), loadRangeFilterCount(), loadImageProviders()]);
+    await Promise.all([loadBirdnetLocales(), loadRangeFilterCount()]);
   }
 
   async function loadBirdnetLocales() {
@@ -655,34 +537,6 @@
       birdnetLocales.data = [{ value: 'en', label: 'English' }];
     } finally {
       birdnetLocales.loading = false;
-    }
-  }
-
-  async function loadImageProviders() {
-    providerOptions.loading = true;
-    providerOptions.error = null;
-
-    try {
-      const providersData = await api.get<{
-        providers?: Array<{ value: string; display: string }>;
-      }>('/api/v2/settings/imageproviders');
-
-      // Map v2 API response format to client format
-      providerOptions.data = (providersData?.providers || []).map(
-        (provider: { value: string; display: string }) => ({
-          value: provider.value,
-          label: provider.display,
-        })
-      );
-    } catch (error) {
-      if (error instanceof ApiError) {
-        toastActions.warning(t('settings.main.errors.providersLoadFailed'));
-      }
-      providerOptions.error = t('settings.main.errors.providersLoadFailed');
-      // Fallback to basic provider so form still works
-      providerOptions.data = [{ value: 'wikipedia', label: 'Wikipedia' }];
-    } finally {
-      providerOptions.loading = false;
     }
   }
 
@@ -1155,37 +1009,6 @@
     });
   }
 
-  // Dashboard settings update handlers
-  function updateDashboardSetting(key: string, value: string | number | boolean) {
-    settingsActions.updateSection('realtime', {
-      dashboard: { ...settings.dashboard, [key]: value },
-    });
-  }
-
-  function updateThumbnailSetting(key: string, value: string | boolean) {
-    settingsActions.updateSection('realtime', {
-      dashboard: {
-        ...settings.dashboard,
-        thumbnails: { ...settings.dashboard.thumbnails, [key]: value },
-      },
-    });
-  }
-
-  function updateSpectrogramSetting(key: keyof SpectrogramPreRender, value: boolean | string) {
-    settingsActions.updateSection('realtime', {
-      dashboard: {
-        ...settings.dashboard,
-        spectrogram: { ...settings.dashboard.spectrogram, [key]: value },
-      },
-    });
-  }
-
-  function updateUILocale(locale: string) {
-    settingsActions.updateSection('realtime', {
-      dashboard: { ...settings.dashboard, locale },
-    });
-  }
-
   // Telemetry update handler
   function updateTelemetryEnabled(enabled: boolean) {
     settingsActions.updateSection('sentry', {
@@ -1592,306 +1415,6 @@
         disabled={store.isLoading || store.isSaving}
         onchange={updateMainName}
       />
-    </SettingsSection>
-
-    <!-- Interface Card (combines UI settings + display settings) -->
-    <SettingsSection
-      title={t('settings.main.sections.interface.title')}
-      description={t('settings.main.sections.interface.description')}
-      originalData={{
-        locale: store.originalData.realtime?.dashboard?.locale,
-        summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
-      }}
-      currentData={{
-        locale: store.formData.realtime?.dashboard?.locale,
-        summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
-      }}
-    >
-      <div class="space-y-6">
-        <!-- Language Settings -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <SelectDropdown
-            options={uiLocales}
-            value={settings.dashboard.locale}
-            label={t('settings.main.sections.userInterface.interface.locale.label')}
-            helpText={t('settings.main.sections.userInterface.interface.locale.helpText')}
-            disabled={store.isLoading || store.isSaving}
-            variant="select"
-            groupBy={false}
-            onChange={value => updateUILocale(value as string)}
-          >
-            {#snippet renderOption(option)}
-              {@const localeOption = option as LocaleOption}
-              <div class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </div>
-            {/snippet}
-            {#snippet renderSelected(options)}
-              {@const localeOption = options[0] as LocaleOption}
-              <span class="flex items-center gap-2">
-                <FlagIcon locale={localeOption.localeCode} className="size-4" />
-                <span>{localeOption.label}</span>
-              </span>
-            {/snippet}
-          </SelectDropdown>
-        </div>
-
-        <!-- Summary Limit -->
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-          <NumberField
-            label={t('settings.main.sections.userInterface.dashboard.summaryLimit.label')}
-            value={settings.dashboard.summaryLimit}
-            onUpdate={value => updateDashboardSetting('summaryLimit', value)}
-            min={10}
-            max={1000}
-            helpText={t('settings.main.sections.userInterface.dashboard.summaryLimit.helpText')}
-            disabled={store.isLoading || store.isSaving}
-          />
-        </div>
-
-        <!-- Color Scheme -->
-        <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
-      </div>
-    </SettingsSection>
-
-    <!-- Visual Content Card (combines bird images + spectrograms) -->
-    <SettingsSection
-      title={t('settings.main.sections.visualContent.title')}
-      description={t('settings.main.sections.visualContent.description')}
-      originalData={{
-        thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
-        spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
-      }}
-      currentData={{
-        thumbnails: store.formData.realtime?.dashboard?.thumbnails,
-        spectrogram: store.formData.realtime?.dashboard?.spectrogram,
-      }}
-    >
-      <div class="space-y-6">
-        <!-- Bird Images Section -->
-        <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
-            {t('settings.main.sections.userInterface.dashboard.birdImages.title')}
-          </h4>
-
-          <Checkbox
-            checked={settings.dashboard.thumbnails.summary}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.summary.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.summary.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('summary', value)}
-          />
-
-          <Checkbox
-            checked={settings.dashboard.thumbnails.recent}
-            label={t('settings.main.sections.userInterface.dashboard.thumbnails.recent.label')}
-            helpText={t(
-              'settings.main.sections.userInterface.dashboard.thumbnails.recent.helpText'
-            )}
-            disabled={store.isLoading || store.isSaving}
-            onchange={value => updateThumbnailSetting('recent', value)}
-          />
-
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
-            <div class:opacity-50={!multipleProvidersAvailable}>
-              <SelectDropdown
-                options={providerOptions.data}
-                value={settings.dashboard.thumbnails.imageProvider}
-                label={t(
-                  'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.label'
-                )}
-                helpText={t(
-                  'settings.main.sections.userInterface.dashboard.thumbnails.imageProvider.helpText'
-                )}
-                disabled={store.isLoading ||
-                  store.isSaving ||
-                  !multipleProvidersAvailable ||
-                  providerOptions.loading}
-                variant="select"
-                groupBy={false}
-                menuSize="sm"
-                onChange={value => updateThumbnailSetting('imageProvider', value as string)}
-              />
-            </div>
-
-            {#if multipleProvidersAvailable}
-              <SelectDropdown
-                options={[
-                  {
-                    value: 'all',
-                    label: t(
-                      'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.all'
-                    ),
-                  },
-                  {
-                    value: 'none',
-                    label: t(
-                      'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.options.none'
-                    ),
-                  },
-                ]}
-                value={settings.dashboard.thumbnails.fallbackPolicy}
-                label={t(
-                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.label'
-                )}
-                helpText={t(
-                  'settings.main.sections.userInterface.dashboard.thumbnails.fallbackPolicy.helpText'
-                )}
-                disabled={store.isLoading || store.isSaving}
-                variant="select"
-                groupBy={false}
-                menuSize="sm"
-                onChange={value => updateThumbnailSetting('fallbackPolicy', value as string)}
-              />
-            {/if}
-          </div>
-        </div>
-
-        <!-- Divider -->
-        <div class="border-t border-[var(--color-base-200)]"></div>
-
-        <!-- Spectrograms Section -->
-        <div class="space-y-4">
-          <h4 class="text-sm font-medium text-[var(--color-base-content)]/70">
-            {t('settings.main.sections.userInterface.dashboard.spectrogram.title')}
-          </h4>
-
-          <!-- Generation Mode with contextual note -->
-          <div class="space-y-3">
-            <SelectDropdown
-              options={[
-                {
-                  value: 'auto',
-                  label: t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.label'
-                  ),
-                },
-                {
-                  value: 'prerender',
-                  label: t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.label'
-                  ),
-                },
-                {
-                  value: 'user-requested',
-                  label: t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.label'
-                  ),
-                },
-              ]}
-              value={settings.dashboard.spectrogram?.mode ?? 'auto'}
-              label={t('settings.main.sections.userInterface.dashboard.spectrogram.mode.label')}
-              disabled={store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              menuSize="sm"
-              onChange={value => updateSpectrogramSetting('mode', value as string)}
-            />
-
-            <!-- Mode-specific note directly under dropdown -->
-            {#if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'auto'}
-              <SettingsNote>
-                <span>
-                  {t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.auto.helpText'
-                  )}
-                </span>
-              </SettingsNote>
-            {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'prerender'}
-              <SettingsNote>
-                <span>
-                  {t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.prerender.helpText'
-                  )}
-                </span>
-              </SettingsNote>
-            {:else if (settings.dashboard.spectrogram?.mode ?? 'auto') === 'user-requested'}
-              <SettingsNote>
-                <span>
-                  {t(
-                    'settings.main.sections.userInterface.dashboard.spectrogram.mode.userRequested.helpText'
-                  )}
-                </span>
-              </SettingsNote>
-            {/if}
-          </div>
-
-          <!-- Style Selection as visual cards (full width row) -->
-          <div class="mt-6">
-            <span class="text-sm font-medium">
-              {t('settings.main.sections.userInterface.dashboard.spectrogram.style.label')}
-            </span>
-            <p class="text-xs text-[var(--color-base-content)]/60 mt-1">
-              {t('settings.main.sections.userInterface.dashboard.spectrogram.style.helpText')}
-            </p>
-
-            <!-- Style Cards Grid - 4 cards in a row with good sizing -->
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
-              {#each spectrogramStyleOptions as style (style.value)}
-                {@const isSelected = currentSpectrogramStyle === style.value}
-                <button
-                  type="button"
-                  class="group relative flex flex-col items-center p-2 rounded-lg border transition-all focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50 {isSelected
-                    ? 'border-[var(--color-primary)]/60 bg-[var(--color-primary)]/10 shadow-[0_0_0_1px_rgba(37,99,235,0.3)]'
-                    : 'border-[var(--border-200)] bg-[var(--color-base-100)] hover:border-[var(--color-base-content)]/30'}"
-                  disabled={store.isLoading || store.isSaving}
-                  onclick={() => updateSpectrogramSetting('style', style.value)}
-                >
-                  <!-- Preview thumbnail -->
-                  <img
-                    src={`/ui/assets/images/spectrogram-preview-${style.value}.png`}
-                    alt={style.label}
-                    class="w-full aspect-[4/3] object-cover rounded"
-                  />
-                  <!-- Label -->
-                  <span
-                    class="mt-2 text-xs leading-tight text-center {isSelected
-                      ? 'text-[var(--color-primary)] font-medium'
-                      : 'text-[var(--color-base-content)]/70'}"
-                  >
-                    {style.label}
-                  </span>
-                </button>
-              {/each}
-            </div>
-
-            <!-- Selected style description -->
-            <p class="text-sm text-[var(--color-base-content)]/60 italic mt-4">
-              {t(
-                `settings.main.sections.userInterface.dashboard.spectrogram.style.descriptions.${getStyleDescriptionKey(currentSpectrogramStyle)}`
-              )}
-            </p>
-          </div>
-
-          <!-- Dynamic Range Selection -->
-          <div class="mt-6 space-y-3">
-            <SelectDropdown
-              options={dynamicRangeOptions}
-              value={currentDynamicRange}
-              label={t(
-                'settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.label'
-              )}
-              disabled={store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              menuSize="sm"
-              onChange={value => updateSpectrogramSetting('dynamicRange', value as string)}
-            />
-
-            <!-- Dynamic range contextual note -->
-            <SettingsNote>
-              <span>
-                {t(
-                  `settings.main.sections.userInterface.dashboard.spectrogram.dynamicRange.descriptions.${getDynamicRangeDescriptionKey(currentDynamicRange)}`
-                )}
-              </span>
-            </SettingsNote>
-          </div>
-        </div>
-      </div>
     </SettingsSection>
 
     <!-- Privacy & Telemetry Card -->
@@ -2478,30 +2001,6 @@
         {/if}
 
         {#if settings.weather.provider !== 'none'}
-          <!-- Temperature Display Unit -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <SelectDropdown
-              options={[
-                {
-                  value: 'celsius',
-                  label: t('settings.integration.weather.temperatureUnit.options.celsius'),
-                },
-                {
-                  value: 'fahrenheit',
-                  label: t('settings.integration.weather.temperatureUnit.options.fahrenheit'),
-                },
-              ]}
-              value={settings.dashboard.temperatureUnit || 'celsius'}
-              label={t('settings.integration.weather.temperatureUnit.label')}
-              helpText={t('settings.integration.weather.temperatureUnit.helpText')}
-              disabled={store.isLoading || store.isSaving}
-              variant="select"
-              groupBy={false}
-              menuSize="sm"
-              onChange={value => updateDashboardSetting('temperatureUnit', value as string)}
-            />
-          </div>
-
           <!-- Test Weather Provider -->
           <div class="space-y-4">
             <div class="flex items-center gap-3">
