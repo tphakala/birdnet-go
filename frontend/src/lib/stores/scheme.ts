@@ -35,8 +35,12 @@ function isValidScheme(value: string): value is SchemeId {
 
 function getInitialScheme(): SchemeId {
   if (typeof window === 'undefined') return DEFAULT_SCHEME;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored && isValidScheme(stored)) return stored;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored && isValidScheme(stored)) return stored;
+  } catch {
+    // localStorage unavailable (private browsing, storage full)
+  }
   return DEFAULT_SCHEME;
 }
 
@@ -84,7 +88,11 @@ function getContrastColor(hex: string): string {
 function applyScheme(scheme: SchemeId): void {
   if (typeof window === 'undefined') return;
   document.documentElement.setAttribute('data-scheme', scheme);
-  localStorage.setItem(STORAGE_KEY, scheme);
+  try {
+    localStorage.setItem(STORAGE_KEY, scheme);
+  } catch {
+    // localStorage unavailable (private browsing, storage full)
+  }
 }
 
 function applyCustomColors(colors: CustomColors): void {
@@ -94,7 +102,11 @@ function applyCustomColors(colors: CustomColors): void {
   root.setProperty('--custom-primary-content', getContrastColor(colors.primary));
   root.setProperty('--custom-accent', colors.accent);
   root.setProperty('--custom-accent-content', getContrastColor(colors.accent));
-  localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(colors));
+  try {
+    localStorage.setItem(CUSTOM_COLORS_KEY, JSON.stringify(colors));
+  } catch {
+    // localStorage unavailable (private browsing, storage full)
+  }
 }
 
 function createSchemeStore() {
