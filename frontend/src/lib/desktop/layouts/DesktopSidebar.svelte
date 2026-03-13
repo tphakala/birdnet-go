@@ -70,9 +70,11 @@ Performance Optimizations:
     Shield,
     LifeBuoy,
     Paintbrush,
+    Pencil,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { resetDateToToday } from '$lib/utils/datePersistence';
+  import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
   import { scheme } from '$lib/stores/scheme';
@@ -112,16 +114,19 @@ Performance Optimizations:
   let analyticsExpanded = $state(false);
   let settingsExpanded = $state(false);
   let systemExpanded = $state(false);
+  let dashboardExpanded = $state(false);
 
   // Flyout state for collapsed mode
   let analyticsFlyoutOpen = $state(false);
   let settingsFlyoutOpen = $state(false);
   let systemFlyoutOpen = $state(false);
+  let dashboardFlyoutOpen = $state(false);
 
   // Flyout position (for fixed positioning to escape overflow container)
   let analyticsFlyoutPosition = $state({ top: 0, left: 0 });
   let settingsFlyoutPosition = $state({ top: 0, left: 0 });
   let systemFlyoutPosition = $state({ top: 0, left: 0 });
+  let dashboardFlyoutPosition = $state({ top: 0, left: 0 });
 
   // Tooltip state for fixed positioning (escapes overflow containers)
   let tooltipText = $state('');
@@ -149,6 +154,7 @@ Performance Optimizations:
   let analyticsButtonRef = $state<HTMLButtonElement | null>(null);
   let settingsButtonRef = $state<HTMLButtonElement | null>(null);
   let systemButtonRef = $state<HTMLButtonElement | null>(null);
+  let dashboardButtonRef = $state<HTMLButtonElement | null>(null);
 
   // Toggle flyout with position calculation
   function toggleAnalyticsFlyout() {
@@ -163,6 +169,7 @@ Performance Optimizations:
     analyticsFlyoutOpen = !analyticsFlyoutOpen;
     settingsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    dashboardFlyoutOpen = false;
   }
 
   function toggleSettingsFlyout() {
@@ -177,6 +184,7 @@ Performance Optimizations:
     settingsFlyoutOpen = !settingsFlyoutOpen;
     analyticsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    dashboardFlyoutOpen = false;
   }
 
   function toggleSystemFlyout() {
@@ -191,6 +199,22 @@ Performance Optimizations:
     systemFlyoutOpen = !systemFlyoutOpen;
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
+    dashboardFlyoutOpen = false;
+  }
+
+  function toggleDashboardFlyout() {
+    hideTooltip();
+    if (!dashboardFlyoutOpen && dashboardButtonRef) {
+      const rect = dashboardButtonRef.getBoundingClientRect();
+      dashboardFlyoutPosition = {
+        top: rect.top,
+        left: rect.right + 8,
+      };
+    }
+    dashboardFlyoutOpen = !dashboardFlyoutOpen;
+    analyticsFlyoutOpen = false;
+    settingsFlyoutOpen = false;
+    systemFlyoutOpen = false;
   }
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
@@ -202,7 +226,9 @@ Performance Optimizations:
 
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
   let routeCache = $derived.by(() => ({
-    dashboard: actualRoute === '/ui/dashboard' || actualRoute === '/ui/',
+    dashboard: (actualRoute === '/ui/dashboard' || actualRoute === '/ui/') && !$dashboardEditMode,
+    dashboardEdit:
+      (actualRoute === '/ui/dashboard' || actualRoute === '/ui/') && $dashboardEditMode,
     analytics: actualRoute.startsWith('/ui/analytics'),
     analyticsExact: actualRoute === '/ui/analytics',
     analyticsAdvanced: actualRoute === '/ui/analytics/advanced',
@@ -228,6 +254,7 @@ Performance Optimizations:
   // Auto-expand sections when route matches (only when not collapsed)
   $effect(() => {
     if (!isCollapsed) {
+      if (routeCache.dashboard || routeCache.dashboardEdit) dashboardExpanded = true;
       if (routeCache.analytics) analyticsExpanded = true;
       if (routeCache.settings) settingsExpanded = true;
       if (routeCache.system) systemExpanded = true;
@@ -241,12 +268,14 @@ Performance Optimizations:
       analyticsFlyoutOpen = false;
       settingsFlyoutOpen = false;
       systemFlyoutOpen = false;
+      dashboardFlyoutOpen = false;
     }
   }
 
   // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
+    dashboardEdit: onNavigate ? '/' : '/ui/dashboard',
     analytics: onNavigate ? '/analytics' : '/ui/analytics',
     analyticsAdvanced: '/ui/analytics/advanced',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
@@ -274,12 +303,18 @@ Performance Optimizations:
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    dashboardFlyoutOpen = false;
     if (onNavigate) {
       onNavigate(url);
     } else {
       // Fallback to navigation store for proxy-aware navigation
       navigation.navigate(url);
     }
+  }
+
+  function navigateToEditDashboard() {
+    navigate(navigationUrls.dashboard);
+    dashboardEditMode.set(true);
   }
 
   async function handleLogout() {
@@ -298,6 +333,7 @@ Performance Optimizations:
   $effect(() => {
     if ($sidebar) {
       // Sidebar is now collapsed - close expanded sections
+      dashboardExpanded = false;
       analyticsExpanded = false;
       settingsExpanded = false;
       systemExpanded = false;
@@ -381,25 +417,125 @@ Performance Optimizations:
     <!-- Navigation Menu -->
     <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1" role="navigation">
-        <!-- Dashboard -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.dashboard)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.dashboard'))}
-            onmouseleave={hideTooltip}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.dashboard ? menuItemActive : menuItemDefault
-            )}
-            role="menuitem"
-            aria-current={routeCache.dashboard ? 'page' : undefined}
-          >
-            <LayoutDashboard class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('navigation.dashboard')}</span>
+        <!-- Dashboard (Collapsible) -->
+        <div class="flex flex-col relative flyout-container">
+          {#if isCollapsed}
+            <!-- Collapsed: Icon with flyout -->
+            <div class="relative">
+              <button
+                bind:this={dashboardButtonRef}
+                onclick={toggleDashboardFlyout}
+                onmouseenter={e =>
+                  !dashboardFlyoutOpen && showTooltip(e, t('navigation.dashboard'))}
+                onmouseleave={hideTooltip}
+                class={cn(
+                  menuItemBase,
+                  menuItemCollapsed,
+                  routeCache.dashboard || routeCache.dashboardEdit
+                    ? 'text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/80',
+                  'hover:text-[var(--color-base-content)] hover:menu-hover'
+                )}
+                aria-expanded={dashboardFlyoutOpen}
+                aria-label={t('navigation.dashboardSubmenu')}
+              >
+                <LayoutDashboard class="size-5 shrink-0" />
+              </button>
+            </div>
+            <!-- Flyout submenu (fixed positioning to escape overflow container) -->
+            {#if dashboardFlyoutOpen}
+              <div
+                class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
+                style:top="{dashboardFlyoutPosition.top}px"
+                style:left="{dashboardFlyoutPosition.left}px"
+              >
+                <div
+                  class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
+                >
+                  {t('navigation.dashboard')}
+                </div>
+                <div class="p-1">
+                  <button
+                    onclick={() => navigate(navigationUrls.dashboard)}
+                    class={cn(
+                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.dashboard
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <LayoutDashboard class="size-4 shrink-0" />{t('navigation.dashboard')}
+                  </button>
+                  {#if !securityEnabled || accessAllowed}
+                    <button
+                      onclick={navigateToEditDashboard}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.dashboardEdit
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <Pencil class="size-4 shrink-0" />{t('dashboard.editDashboard')}
+                    </button>
+                  {/if}
+                </div>
+              </div>
             {/if}
-          </button>
+          {:else}
+            <!-- Expanded: Regular collapsible -->
+            <button
+              onclick={() => (dashboardExpanded = !dashboardExpanded)}
+              class={cn(
+                menuItemBase,
+                routeCache.dashboard || routeCache.dashboardEdit
+                  ? 'text-[var(--color-primary)]'
+                  : 'text-[var(--color-base-content)]/80',
+                'hover:text-[var(--color-base-content)] hover:menu-hover'
+              )}
+              aria-expanded={dashboardExpanded}
+            >
+              <LayoutDashboard class="size-5 shrink-0" />
+              <span class="flex-1">{t('navigation.dashboard')}</span>
+              <ChevronDown
+                class={cn('size-4 shrink-0 transition-transform duration-200', {
+                  'rotate-180': dashboardExpanded,
+                })}
+              />
+            </button>
+
+            {#if dashboardExpanded}
+              <div
+                class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
+                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+              >
+                <button
+                  onclick={() => navigate(navigationUrls.dashboard)}
+                  class={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                    routeCache.dashboard
+                      ? 'menu-subitem-active'
+                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                  )}
+                >
+                  <LayoutDashboard class="size-4 shrink-0" />{t('navigation.dashboard')}
+                </button>
+                {#if !securityEnabled || accessAllowed}
+                  <button
+                    onclick={navigateToEditDashboard}
+                    class={cn(
+                      'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                      routeCache.dashboardEdit
+                        ? 'menu-subitem-active'
+                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    )}
+                  >
+                    <Pencil class="size-4 shrink-0" />{t('dashboard.editDashboard')}
+                  </button>
+                {/if}
+              </div>
+            {/if}
+          {/if}
         </div>
 
         <!-- Analytics (Collapsible) -->

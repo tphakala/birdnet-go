@@ -222,6 +222,7 @@
     "analyticsSubmenu": "Submenú de análisis",
     "settingsSubmenu": "Submenú de configuración",
     "systemSubmenu": "Submenú de sistema",
+    "dashboardSubmenu": "Submenú del panel",
     "systemTerminal": "Terminal"
   },
   "about": {
