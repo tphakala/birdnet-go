@@ -3905,5 +3905,15 @@
       "requestTimeout": "Request timeout.",
       "networkError": "Network error occurred. Please check your connection."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Color Scheme",
+  "settings.appearance.colorSchemeDescription": "Choose a color scheme for the interface",
+  "settings.appearance.schemeBlue": "Blue",
+  "settings.appearance.schemeForest": "Forest",
+  "settings.appearance.schemeAmber": "Amber",
+  "settings.appearance.schemeViolet": "Violet",
+  "settings.appearance.schemeRose": "Rose",
+  "settings.appearance.schemeCustom": "Custom",
+  "settings.appearance.customPrimary": "Primary Color",
+  "settings.appearance.customAccent": "Accent Color"
 }

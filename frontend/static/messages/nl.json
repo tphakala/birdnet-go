@@ -3905,5 +3905,15 @@
       "requestTimeout": "Time-out van het verzoek.",
       "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Kleurenschema",
+  "settings.appearance.colorSchemeDescription": "Kies een kleurenschema voor de interface",
+  "settings.appearance.schemeBlue": "Blauw",
+  "settings.appearance.schemeForest": "Bos",
+  "settings.appearance.schemeAmber": "Amber",
+  "settings.appearance.schemeViolet": "Violet",
+  "settings.appearance.schemeRose": "Roze",
+  "settings.appearance.schemeCustom": "Aangepast",
+  "settings.appearance.customPrimary": "Primaire kleur",
+  "settings.appearance.customAccent": "Accentkleur"
 }
