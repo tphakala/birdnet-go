@@ -1,37 +1,53 @@
 <!--
   DashboardElementWrapper - Wraps dashboard elements in edit mode with controls.
-  Shows drag handle, element label, enable/disable toggle, and config gear icon.
+  Shows drag handle, element label, enable/disable toggle, and width toggle.
+  Cards with config handle their own inline editing via editMode prop.
+  Daily summary config is shown inline here since the card itself is complex.
   In normal mode, renders children transparently with no visual overhead.
 
   @component
 -->
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  import { GripVertical, Settings, EyeOff, Eye, Trash2 } from '@lucide/svelte';
+  import type { DashboardElement } from '$lib/stores/settings';
+  import { GripVertical, EyeOff, Eye, Trash2, Columns2, Square } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
+  import DailySummaryConfigForm from './DailySummaryConfigForm.svelte';
+
+  // Element types that always require full width
+  const FULL_WIDTH_ONLY: string[] = ['daily-summary'];
+
+  // Element types that support half width
+  const SUPPORTS_HALF: string[] = ['banner', 'video-embed', 'currently-hearing', 'detections-grid'];
 
   interface Props {
-    elementType: string;
-    enabled: boolean;
+    element: DashboardElement;
     editMode: boolean;
     onHide: () => void;
     onUnhide: () => void;
     onDelete: () => void;
-    onConfigure: () => void;
+    onUpdate: (_element: DashboardElement) => void;
     children: Snippet;
   }
 
-  let { elementType, enabled, editMode, onHide, onUnhide, onDelete, onConfigure, children }: Props =
-    $props();
+  let { element, editMode, onHide, onUnhide, onDelete, onUpdate, children }: Props = $props();
+
+  let canHalf = $derived(SUPPORTS_HALF.includes(element.type));
+  let isFullWidthOnly = $derived(FULL_WIDTH_ONLY.includes(element.type));
+  let currentWidth = $derived(element.width ?? 'full');
+
+  function toggleWidth() {
+    onUpdate({ ...element, width: currentWidth === 'full' ? 'half' : 'full' });
+  }
 </script>
 
 {#if editMode}
   <div
     class={cn(
       'relative rounded-xl border-2 border-dashed transition-all',
-      enabled
+      element.enabled
         ? 'border-[var(--color-primary)]/40 bg-[var(--color-base-100)]'
         : 'border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 opacity-60'
     )}
@@ -45,18 +61,48 @@
 
       <!-- Element label -->
       <span class="flex-1 text-sm font-medium text-[var(--color-base-content)]/70">
-        {getElementLabel(elementType)}
+        {getElementLabel(element.type)}
       </span>
+
+      <!-- Width toggle (only for elements that support half width) -->
+      {#if canHalf}
+        <button
+          onclick={toggleWidth}
+          class="flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors hover:bg-black/5 dark:hover:bg-white/5"
+          aria-label={currentWidth === 'full'
+            ? t('dashboard.editMode.widthHalf')
+            : t('dashboard.editMode.widthFull')}
+          title={currentWidth === 'full'
+            ? t('dashboard.editMode.widthHalf')
+            : t('dashboard.editMode.widthFull')}
+        >
+          {#if currentWidth === 'half'}
+            <Square class="size-3.5 text-[var(--color-base-content)]/60" />
+            <span class="text-[var(--color-base-content)]/60"
+              >{t('dashboard.editMode.widthFull')}</span
+            >
+          {:else}
+            <Columns2 class="size-3.5 text-[var(--color-base-content)]/60" />
+            <span class="text-[var(--color-base-content)]/60"
+              >{t('dashboard.editMode.widthHalf')}</span
+            >
+          {/if}
+        </button>
+      {:else if isFullWidthOnly}
+        <span class="text-xs text-[var(--color-base-content)]/40">
+          {t('dashboard.editMode.fullWidthOnly')}
+        </span>
+      {/if}
 
       <!-- Hide/Unhide button -->
       <button
-        onclick={() => (enabled ? onHide() : onUnhide())}
+        onclick={() => (element.enabled ? onHide() : onUnhide())}
         class="rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-        aria-label={enabled
+        aria-label={element.enabled
           ? t('dashboard.editMode.hideElement')
           : t('dashboard.editMode.unhideElement')}
       >
-        {#if enabled}
+        {#if element.enabled}
           <EyeOff class="size-4 text-[var(--color-base-content)]/60" />
         {:else}
           <Eye class="size-4 text-[var(--color-success)]" />
@@ -71,27 +117,28 @@
       >
         <Trash2 class="size-4 text-[var(--color-error)]/60" />
       </button>
-
-      <!-- Configure button -->
-      <button
-        onclick={onConfigure}
-        class="rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5"
-        aria-label={t('dashboard.editMode.configureElement')}
-      >
-        <Settings class="size-4 text-[var(--color-base-content)]/60" />
-      </button>
     </div>
 
+    <!-- Daily summary inline config (other cards handle their own editing) -->
+    {#if element.type === 'daily-summary' && element.enabled}
+      <div class="border-b border-[var(--color-base-200)] bg-[var(--color-base-100)] px-4 py-3">
+        <DailySummaryConfigForm
+          config={element.summary ?? { summaryLimit: 30 }}
+          onUpdate={config => onUpdate({ ...element, summary: config })}
+        />
+      </div>
+    {/if}
+
     <!-- Element content -->
-    <div class={cn('p-2', !enabled && 'pointer-events-none')}>
-      {#if enabled}
+    <div class={cn('p-2', !element.enabled && 'pointer-events-none')}>
+      {#if element.enabled}
         {@render children()}
       {:else}
         <div
           class="flex items-center justify-center py-4 text-sm text-[var(--color-base-content)]/40"
         >
           <EyeOff class="mr-2 size-4" />
-          {getElementLabel(elementType)} — {t('dashboard.editMode.disabled')}
+          {getElementLabel(element.type)} — {t('dashboard.editMode.disabled')}
         </div>
       {/if}
     </div>

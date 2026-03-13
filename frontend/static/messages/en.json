@@ -550,7 +550,8 @@
     "approved": "Approved",
     "currentlyHearing": {
       "title": "Currently Hearing",
-      "subtitle": "Real-time species being identified"
+      "subtitle": "Real-time species being identified",
+      "empty": "All quiet — no birds detected right now"
     },
     "rejected": "Rejected",
     "dailySummary": {
@@ -676,13 +677,10 @@
       "save": "Save",
       "saving": "Saving...",
       "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
+      "disabled": "hidden",
       "noConfig": "No additional configuration options available yet.",
       "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
       "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Enable element",
-      "disableElement": "Disable element",
       "configureElement": "Configure element",
       "closeModal": "Close",
       "configureTitle": "Configure {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Remove this element? Its configuration will be lost.",
       "addElement": "Add element",
       "noElementsAvailable": "All element types are already on the dashboard.",
-      "searchNote": "The search bar allows searching for species. No additional configuration needed.",
-      "editDashboard": "Edit Dashboard"
+      "editDashboard": "Edit Dashboard",
+      "widthFull": "Full width",
+      "widthHalf": "Half width",
+      "fullWidthOnly": "Full width only"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Search"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

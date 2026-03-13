@@ -178,7 +178,7 @@
 
 <section
   class={cn(
-    'card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-hidden',
+    'card col-span-12 h-full bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-hidden',
     className
   )}
 >

@@ -550,7 +550,8 @@
     "approved": "Genehmigt",
     "currentlyHearing": {
       "title": "Gerade gehört",
-      "subtitle": "Arten werden in Echtzeit identifiziert"
+      "subtitle": "Arten werden in Echtzeit identifiziert",
+      "empty": "Alles ruhig — derzeit keine Vögel erkannt"
     },
     "rejected": "Abgelehnt",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Element aktivieren",
-      "disableElement": "Element deaktivieren",
+      "editing": "Dashboard bearbeiten",
+      "save": "Speichern",
+      "saving": "Wird gespeichert...",
+      "cancel": "Abbrechen",
+      "disabled": "ausgeblendet",
+      "noConfig": "Noch keine weiteren Konfigurationsoptionen verfügbar.",
+      "currentlyHearingNote": "Dieses Element zeigt aktuell erkannte Vögel an, wenn das heutige Datum angezeigt wird. Keine zusätzliche Konfiguration erforderlich.",
+      "notAvailable": "Die Konfiguration für diesen Elementtyp ist noch nicht verfügbar.",
       "configureElement": "Element konfigurieren",
       "closeModal": "Schließen",
       "configureTitle": "{element} konfigurieren",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Dieses Element entfernen? Die Konfiguration geht verloren.",
       "addElement": "Element hinzufügen",
       "noElementsAvailable": "Alle Elementtypen sind bereits im Dashboard vorhanden.",
-      "searchNote": "Die Suchleiste ermöglicht die Suche nach Arten. Keine zusätzliche Konfiguration erforderlich.",
-      "editDashboard": "Dashboard bearbeiten"
+      "editDashboard": "Dashboard bearbeiten",
+      "widthFull": "Volle Breite",
+      "widthHalf": "Halbe Breite",
+      "fullWidthOnly": "Nur volle Breite"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Suche"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

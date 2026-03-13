@@ -550,7 +550,8 @@
     "approved": "Approvato",
     "currentlyHearing": {
       "title": "In ascolto",
-      "subtitle": "Specie identificate in tempo reale"
+      "subtitle": "Specie identificate in tempo reale",
+      "empty": "Tutto tranquillo — nessun uccello rilevato al momento"
     },
     "rejected": "Rifiutato",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Attiva elemento",
-      "disableElement": "Disattiva elemento",
+      "editing": "Modifica dashboard",
+      "save": "Salva",
+      "saving": "Salvataggio...",
+      "cancel": "Annulla",
+      "disabled": "nascosto",
+      "noConfig": "Nessuna opzione di configurazione aggiuntiva ancora disponibile.",
+      "currentlyHearingNote": "Questo elemento mostra gli uccelli attualmente rilevati quando si visualizza la data odierna. Nessuna configurazione aggiuntiva necessaria.",
+      "notAvailable": "La configurazione per questo tipo di elemento non è ancora disponibile.",
       "configureElement": "Configura elemento",
       "closeModal": "Chiudi",
       "configureTitle": "Configura {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Rimuovere questo elemento? La configurazione andrà persa.",
       "addElement": "Aggiungi elemento",
       "noElementsAvailable": "Tutti i tipi di elementi sono già nella dashboard.",
-      "searchNote": "La barra di ricerca consente di cercare le specie. Nessuna configurazione aggiuntiva necessaria.",
-      "editDashboard": "Modifica dashboard"
+      "editDashboard": "Modifica dashboard",
+      "widthFull": "Larghezza intera",
+      "widthHalf": "Mezza larghezza",
+      "fullWidthOnly": "Solo larghezza intera"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Ricerca"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

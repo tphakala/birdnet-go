@@ -124,21 +124,21 @@ Props:
   });
 </script>
 
-{#if hasDisplayDetections}
-  <section
-    class="card col-span-12 mt-4 rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm {className}"
-  >
-    <!-- Card Header -->
-    <div class="flex items-center gap-2 border-b border-[var(--color-base-200)] px-6 py-4">
-      <div class="flex flex-col">
-        <h3 class="font-semibold">{t('dashboard.currentlyHearing.title')}</h3>
-        <p class="text-sm text-[var(--color-base-content)]/60">
-          {t('dashboard.currentlyHearing.subtitle')}
-        </p>
-      </div>
+<section
+  class="card col-span-12 flex h-full flex-col rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm {className}"
+>
+  <!-- Card Header -->
+  <div class="flex items-center gap-2 border-b border-[var(--color-base-200)] px-6 py-4">
+    <div class="flex flex-col">
+      <h3 class="font-semibold">{t('dashboard.currentlyHearing.title')}</h3>
+      <p class="text-sm text-[var(--color-base-content)]/60">
+        {t('dashboard.currentlyHearing.subtitle')}
+      </p>
     </div>
+  </div>
 
-    <!-- Card Content -->
+  <!-- Card Content -->
+  {#if hasDisplayDetections}
     <div class="flex flex-wrap gap-3 p-4">
       {#each displayDetections as detection, index (`${detection.source}_${detection.scientificName}_${index}`)}
         {@const key = detection.source + detection.scientificName}
@@ -194,5 +194,11 @@ Props:
         </div>
       {/each}
     </div>
-  </section>
-{/if}
+  {:else}
+    <div class="flex flex-1 items-center justify-center px-6 py-8">
+      <p class="text-sm text-[var(--color-base-content)]/40">
+        {t('dashboard.currentlyHearing.empty')}
+      </p>
+    </div>
+  {/if}
+</section>

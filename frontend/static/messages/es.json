@@ -550,7 +550,8 @@
     "approved": "Aprobado",
     "currentlyHearing": {
       "title": "Escuchando ahora",
-      "subtitle": "Especies identificadas en tiempo real"
+      "subtitle": "Especies identificadas en tiempo real",
+      "empty": "Todo tranquilo — no se detectan aves en este momento"
     },
     "rejected": "Rechazado",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Activar elemento",
-      "disableElement": "Desactivar elemento",
+      "editing": "Editando panel",
+      "save": "Guardar",
+      "saving": "Guardando...",
+      "cancel": "Cancelar",
+      "disabled": "oculto",
+      "noConfig": "Aún no hay opciones de configuración adicionales disponibles.",
+      "currentlyHearingNote": "Este elemento muestra las aves detectadas actualmente cuando se ve la fecha de hoy. No se necesita configuración adicional.",
+      "notAvailable": "La configuración para este tipo de elemento aún no está disponible.",
       "configureElement": "Configurar elemento",
       "closeModal": "Cerrar",
       "configureTitle": "Configurar {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "¿Eliminar este elemento? Se perderá su configuración.",
       "addElement": "Añadir elemento",
       "noElementsAvailable": "Todos los tipos de elementos ya están en el panel.",
-      "searchNote": "La barra de búsqueda permite buscar especies. No se necesita configuración adicional.",
-      "editDashboard": "Editar panel"
+      "editDashboard": "Editar panel",
+      "widthFull": "Ancho completo",
+      "widthHalf": "Medio ancho",
+      "fullWidthOnly": "Solo ancho completo"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Búsqueda"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

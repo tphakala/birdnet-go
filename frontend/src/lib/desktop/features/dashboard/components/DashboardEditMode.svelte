@@ -1,6 +1,7 @@
 <!--
   DashboardEditMode - Orchestrates dashboard editing.
-  Provides drag-and-drop reordering, element toggling, and save/cancel flow.
+  Provides drag-and-drop reordering, element toggling, width control, and save/cancel flow.
+  Uses CSS grid to support half-width cards side-by-side.
 
   Usage: Wraps the dashboard content area. When editMode is true,
   elements become draggable and configurable.
@@ -13,7 +14,6 @@
   import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import type { DashboardElementType } from '$lib/stores/settings';
   import DashboardElementWrapper from './DashboardElementWrapper.svelte';
-  import ElementConfigModal from './ElementConfigModal.svelte';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
   import { api } from '$lib/utils/api';
   import { getLogger } from '$lib/utils/logger';
@@ -27,20 +27,19 @@
     editMode: boolean;
     onLayoutChange: (_layout: DashboardLayout) => void;
     onEditModeChange: (_editing: boolean) => void;
-    renderElement: Snippet<[element: DashboardElement, editMode: boolean]>;
+    renderElement: Snippet<
+      [element: DashboardElement, editMode: boolean, onUpdate: (_el: DashboardElement) => void]
+    >;
   }
 
   let { layout, editMode, onLayoutChange, onEditModeChange, renderElement }: Props = $props();
 
   let editElements = $state<(DashboardElement & { id: string })[]>([]);
-  let configElement = $state<DashboardElement | null>(null);
-  let configModalOpen = $state(false);
   let isSaving = $state(false);
 
   let addDropdownOpen = $state(false);
 
   const ALL_ELEMENT_TYPES: DashboardElementType[] = [
-    'search',
     'banner',
     'daily-summary',
     'currently-hearing',
@@ -65,8 +64,6 @@
   // Cancel: discard changes
   function cancelEdit() {
     editElements = [];
-    configElement = null;
-    configModalOpen = false;
     addDropdownOpen = false;
     onEditModeChange(false);
   }
@@ -88,11 +85,11 @@
     addDropdownOpen = false;
     isSaving = true;
     try {
-      // Preserve id field for stable element identification
       const cleanElements: DashboardElement[] = editElements.map(el => ({
         id: el.id,
         type: el.type,
         enabled: el.enabled,
+        ...(el.width && el.width !== 'full' ? { width: el.width } : {}),
         ...(el.banner ? { banner: el.banner } : {}),
         ...(el.video ? { video: el.video } : {}),
         ...(el.summary ? { summary: el.summary } : {}),
@@ -102,6 +99,7 @@
 
       await api.patch('/api/v2/settings/dashboard', { layout: newLayout });
       onLayoutChange(newLayout);
+      editElements = [];
       onEditModeChange(false);
     } catch (error) {
       logger.error('Failed to save dashboard layout:', error);
@@ -133,24 +131,44 @@
     editElements = editElements.filter((_, i) => i !== index);
   }
 
-  // Open config modal for an element
-  function configureElement(index: number) {
-    const el = editElements.find((_, i) => i === index);
-    if (el) {
-      configElement = el;
-      configModalOpen = true;
+  // Update element (config changes, width changes)
+  function updateElement(index: number, updated: DashboardElement) {
+    editElements = editElements.map((el, i) =>
+      i === index ? { ...el, ...updated, id: el.id } : el
+    );
+  }
+
+  // Create a bound updater for a specific element index
+  function elementUpdater(index: number): (_el: DashboardElement) => void {
+    return (updated: DashboardElement) => updateElement(index, updated);
+  }
+
+  // No-op updater for normal mode
+  const noopUpdater = (_el: DashboardElement) => {};
+
+  // Close add dropdown on outside click
+  function handleClickOutside(event: MouseEvent) {
+    if (addDropdownOpen) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.add-dropdown-container')) {
+        addDropdownOpen = false;
+      }
     }
   }
 
-  // Save element config from modal
-  function saveElementConfig(updated: DashboardElement) {
-    editElements = editElements.map(el =>
-      el.id === (updated.id ?? updated.type) ? { ...el, ...updated } : el
-    );
+  // Get effective width for an element
+  function getEffectiveWidth(el: DashboardElement): 'full' | 'half' {
+    if (el.type === 'daily-summary') return 'full';
+    return el.width ?? 'full';
   }
 </script>
 
+<svelte:window onclick={handleClickOutside} />
+
 {#if editMode}
+  <!-- Backdrop overlay to dim/blur page behind toolbar -->
+  <div class="fixed inset-0 z-40 bg-black/20 backdrop-blur-[2px]"></div>
+
   <!-- Floating toolbar (top, centered) -->
   <div
     class="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-full border border-[var(--color-base-200)] bg-[var(--color-base-100)] px-4 py-2 shadow-xl"
@@ -175,7 +193,7 @@
       {t('dashboard.editMode.cancel')}
     </button>
     <div class="h-5 w-px bg-[var(--color-base-200)]"></div>
-    <div class="relative">
+    <div class="add-dropdown-container relative">
       <button
         onclick={() => {
           addDropdownOpen = !addDropdownOpen;
@@ -213,38 +231,30 @@
     use:dndzone={{ items: editElements, flipDurationMs: 200 }}
     onconsider={handleDndConsider}
     onfinalize={handleDndFinalize}
-    class="space-y-4 pt-16"
+    class="relative z-40 grid grid-cols-2 gap-4 pt-16"
   >
     {#each editElements as element, index (element.id)}
-      <DashboardElementWrapper
-        elementType={element.type}
-        enabled={element.enabled}
-        {editMode}
-        onHide={() => hideElement(index)}
-        onUnhide={() => unhideElement(index)}
-        onDelete={() => deleteElement(index)}
-        onConfigure={() => configureElement(index)}
-      >
-        {@render renderElement(element, true)}
-      </DashboardElementWrapper>
+      <div class={getEffectiveWidth(element) === 'half' ? 'col-span-1' : 'col-span-2'}>
+        <DashboardElementWrapper
+          {element}
+          {editMode}
+          onHide={() => hideElement(index)}
+          onUnhide={() => unhideElement(index)}
+          onDelete={() => deleteElement(index)}
+          onUpdate={updated => updateElement(index, updated)}
+        >
+          {@render renderElement(element, true, elementUpdater(index))}
+        </DashboardElementWrapper>
+      </div>
     {/each}
   </div>
-
-  <!-- Config modal -->
-  {#if configElement}
-    <ElementConfigModal
-      element={configElement}
-      open={configModalOpen}
-      onSave={saveElementConfig}
-      onClose={() => {
-        configModalOpen = false;
-        configElement = null;
-      }}
-    />
-  {/if}
 {:else}
-  <!-- Normal mode: render elements from layout -->
-  {#each layout.elements.filter(e => e.enabled) as element (element.id ?? element.type)}
-    {@render renderElement(element, false)}
-  {/each}
+  <!-- Normal mode: render elements from layout with grid -->
+  <div class="grid grid-cols-2 gap-4">
+    {#each layout.elements.filter(e => e.enabled) as element (element.id ?? element.type)}
+      <div class={getEffectiveWidth(element) === 'half' ? 'col-span-1' : 'col-span-2'}>
+        {@render renderElement(element, false, noopUpdater)}
+      </div>
+    {/each}
+  </div>
 {/if}

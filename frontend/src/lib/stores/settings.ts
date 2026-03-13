@@ -516,14 +516,14 @@ export type DashboardElementType =
   | 'daily-summary'
   | 'currently-hearing'
   | 'detections-grid'
-  | 'video-embed'
-  | 'search';
+  | 'video-embed';
 
 // A single configurable element on the dashboard
 export interface DashboardElement {
   id?: string; // unique identifier (e.g., "daily-summary-0"); stable across reorders
   type: DashboardElementType;
   enabled: boolean;
+  width?: 'full' | 'half'; // card width; defaults to "full" if omitted
   banner?: BannerConfig;
   video?: VideoEmbedConfig;
   summary?: DailySummaryConfig;
@@ -906,7 +906,6 @@ function createEmptySettings(): SettingsFormData {
         temperatureUnit: 'celsius',
         layout: {
           elements: [
-            { id: 'search-0', type: 'search', enabled: true },
             {
               id: 'daily-summary-0',
               type: 'daily-summary',

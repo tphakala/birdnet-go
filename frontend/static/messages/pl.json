@@ -550,7 +550,8 @@
     "approved": "Zatwierdzone",
     "currentlyHearing": {
       "title": "Aktualnie słychać",
-      "subtitle": "Gatunki identyfikowane w czasie rzeczywistym"
+      "subtitle": "Gatunki identyfikowane w czasie rzeczywistym",
+      "empty": "Cisza — nie wykryto żadnych ptaków w tej chwili"
     },
     "rejected": "Odrzucone",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Włącz element",
-      "disableElement": "Wyłącz element",
+      "editing": "Edycja pulpitu",
+      "save": "Zapisz",
+      "saving": "Zapisywanie...",
+      "cancel": "Anuluj",
+      "disabled": "ukryty",
+      "noConfig": "Brak dodatkowych opcji konfiguracji.",
+      "currentlyHearingNote": "Ten element pokazuje aktualnie wykryte ptaki podczas przeglądania dzisiejszej daty. Dodatkowa konfiguracja nie jest wymagana.",
+      "notAvailable": "Konfiguracja tego typu elementu nie jest jeszcze dostępna.",
       "configureElement": "Konfiguruj element",
       "closeModal": "Zamknij",
       "configureTitle": "Konfiguruj {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Usunąć ten element? Jego konfiguracja zostanie utracona.",
       "addElement": "Dodaj element",
       "noElementsAvailable": "Wszystkie typy elementów są już na pulpicie.",
-      "searchNote": "Pasek wyszukiwania umożliwia wyszukiwanie gatunków. Dodatkowa konfiguracja nie jest wymagana.",
-      "editDashboard": "Edytuj pulpit"
+      "editDashboard": "Edytuj pulpit",
+      "widthFull": "Pełna szerokość",
+      "widthHalf": "Połowa szerokości",
+      "fullWidthOnly": "Tylko pełna szerokość"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Szukaj"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

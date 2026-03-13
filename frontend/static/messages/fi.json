@@ -550,7 +550,8 @@
     "approved": "Hyväksytty",
     "currentlyHearing": {
       "title": "Kuunnellaan nyt",
-      "subtitle": "Lajeja tunnistetaan reaaliajassa"
+      "subtitle": "Lajeja tunnistetaan reaaliajassa",
+      "empty": "Kaikki hiljaista — lintuja ei havaittu juuri nyt"
     },
     "rejected": "Hylätty",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Ota elementti käyttöön",
-      "disableElement": "Poista elementti käytöstä",
+      "editing": "Kojelautaa muokataan",
+      "save": "Tallenna",
+      "saving": "Tallennetaan...",
+      "cancel": "Peruuta",
+      "disabled": "piilotettu",
+      "noConfig": "Lisäasetuksia ei ole vielä saatavilla.",
+      "currentlyHearingNote": "Tämä elementti näyttää tällä hetkellä havaitut linnut, kun tarkastelet tämän päivän päivämäärää. Lisäasetuksia ei tarvita.",
+      "notAvailable": "Tämän elementtityypin asetukset eivät ole vielä saatavilla.",
       "configureElement": "Määritä elementti",
       "closeModal": "Sulje",
       "configureTitle": "Määritä {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Poistetaanko tämä elementti? Sen asetukset menetetään.",
       "addElement": "Lisää elementti",
       "noElementsAvailable": "Kaikki elementtityypit ovat jo kojelaudalla.",
-      "searchNote": "Hakupalkilla voi etsiä lajeja. Lisäasetuksia ei tarvita.",
-      "editDashboard": "Muokkaa kojelautaa"
+      "editDashboard": "Muokkaa kojelautaa",
+      "widthFull": "Täysi leveys",
+      "widthHalf": "Puolikas leveys",
+      "fullWidthOnly": "Vain täysi leveys"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Haku"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

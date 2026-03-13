@@ -3,7 +3,7 @@ package conf
 const defaultDashboardSummaryLimit = 30
 
 // MigrateDashboardLayout migrates existing installations to the new dashboard layout format.
-// It creates a default layout with the four elements (search, daily-summary, currently-hearing,
+// It creates a default layout with the three elements (daily-summary, currently-hearing,
 // detections-grid) in their original fixed order, and moves SummaryLimit into the daily-summary
 // element config.
 //
@@ -20,11 +20,6 @@ func (s *Settings) MigrateDashboardLayout() bool {
 
 	s.Realtime.Dashboard.Layout = DashboardLayout{
 		Elements: []DashboardElement{
-			{
-				ID:      "search-0",
-				Type:    "search",
-				Enabled: true,
-			},
 			{
 				ID:      "daily-summary-0",
 				Type:    "daily-summary",

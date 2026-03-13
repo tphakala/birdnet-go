@@ -69,7 +69,6 @@ Performance Optimizations:
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
-  import { Search } from '@lucide/svelte';
 
   const logger = getLogger('app');
 
@@ -136,7 +135,6 @@ Performance Optimizations:
 
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
-    { id: 'search-0', type: 'search', enabled: true },
     { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
     { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
@@ -1257,21 +1255,20 @@ Performance Optimizations:
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
-    {#snippet renderElement(element, _inEditMode)}
-      {#if element.type === 'search'}
-        <div class="relative">
-          <Search
-            class="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-[var(--color-base-content)]/40"
-          />
-          <input
-            type="text"
-            placeholder={t('navigation.search')}
-            class="w-full rounded-xl border border-[var(--color-base-content)]/10 bg-[var(--color-base-200)]/50 py-3 pl-10 pr-4 text-sm text-[var(--color-base-content)] placeholder-[var(--color-base-content)]/40 transition-colors focus:border-[var(--color-primary)]/50 focus:outline-none"
-            onfocus={() => navigation.navigate('/ui/search')}
-          />
-        </div>
-      {:else if element.type === 'banner' && element.banner}
-        <BannerCard config={element.banner} />
+    {#snippet renderElement(element, inEditMode, onElementUpdate)}
+      {#if element.type === 'banner'}
+        <BannerCard
+          config={element.banner ?? {
+            showImage: false,
+            imagePath: '',
+            title: '',
+            description: '',
+            showLocationMap: false,
+            showWeather: false,
+          }}
+          editMode={inEditMode}
+          onUpdate={config => onElementUpdate({ ...element, banner: config })}
+        />
       {:else if element.type === 'daily-summary'}
         <DailySummaryCard
           data={dailySummary}
@@ -1285,8 +1282,8 @@ Performance Optimizations:
           onGoToToday={goToToday}
           onDateChange={handleDateChange}
         />
-      {:else if element.type === 'currently-hearing' && isViewingToday}
-        <CurrentlyHearingCard detections={pendingDetections} />
+      {:else if element.type === 'currently-hearing'}
+        <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
       {:else if element.type === 'detections-grid'}
         <DetectionCardGrid
           data={recentDetections}
@@ -1299,10 +1296,13 @@ Performance Optimizations:
           onFreezeStart={handleFreezeStart}
           onFreezeEnd={handleFreezeEnd}
           updatesAreFrozen={freezeCount > 0}
-          className="mt-4"
         />
-      {:else if element.type === 'video-embed' && element.video}
-        <VideoEmbedCard config={element.video} />
+      {:else if element.type === 'video-embed'}
+        <VideoEmbedCard
+          config={element.video ?? { url: '', title: '' }}
+          editMode={inEditMode}
+          onUpdate={config => onElementUpdate({ ...element, video: config })}
+        />
       {/if}
     {/snippet}
   </DashboardEditMode>

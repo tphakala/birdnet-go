@@ -254,7 +254,7 @@ Performance Optimizations:
   // Auto-expand sections when route matches (only when not collapsed)
   $effect(() => {
     if (!isCollapsed) {
-      if (routeCache.dashboard || routeCache.dashboardEdit) dashboardExpanded = true;
+      if (routeCache.dashboardEdit) dashboardExpanded = true;
       if (routeCache.analytics) analyticsExpanded = true;
       if (routeCache.settings) settingsExpanded = true;
       if (routeCache.system) systemExpanded = true;
@@ -417,56 +417,55 @@ Performance Optimizations:
     <!-- Navigation Menu -->
     <div class={cn('flex-1 overflow-y-auto py-4', isCollapsed ? 'px-2' : 'px-3')}>
       <div class="flex flex-col gap-1" role="navigation">
-        <!-- Dashboard (Collapsible) -->
+        <!-- Dashboard -->
         <div class="flex flex-col relative flyout-container">
           {#if isCollapsed}
-            <!-- Collapsed: Icon with flyout -->
-            <div class="relative">
-              <button
-                bind:this={dashboardButtonRef}
-                onclick={toggleDashboardFlyout}
-                onmouseenter={e =>
-                  !dashboardFlyoutOpen && showTooltip(e, t('navigation.dashboard'))}
-                onmouseleave={hideTooltip}
-                class={cn(
-                  menuItemBase,
-                  menuItemCollapsed,
-                  routeCache.dashboard || routeCache.dashboardEdit
-                    ? 'text-[var(--color-primary)]'
-                    : 'text-[var(--color-base-content)]/80',
-                  'hover:text-[var(--color-base-content)] hover:menu-hover'
-                )}
-                aria-expanded={dashboardFlyoutOpen}
-                aria-label={t('navigation.dashboardSubmenu')}
-              >
-                <LayoutDashboard class="size-5 shrink-0" />
-              </button>
-            </div>
-            <!-- Flyout submenu (fixed positioning to escape overflow container) -->
-            {#if dashboardFlyoutOpen}
-              <div
-                class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
-                style:top="{dashboardFlyoutPosition.top}px"
-                style:left="{dashboardFlyoutPosition.left}px"
-              >
-                <div
-                  class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
+            <!-- Collapsed: Icon with tooltip or flyout (flyout only if admin with edit option) -->
+            {#if !securityEnabled || accessAllowed}
+              <div class="relative">
+                <button
+                  bind:this={dashboardButtonRef}
+                  onclick={toggleDashboardFlyout}
+                  onmouseenter={e =>
+                    !dashboardFlyoutOpen && showTooltip(e, t('navigation.dashboard'))}
+                  onmouseleave={hideTooltip}
+                  class={cn(
+                    menuItemBase,
+                    menuItemCollapsed,
+                    routeCache.dashboard || routeCache.dashboardEdit
+                      ? menuItemActive
+                      : menuItemDefault
+                  )}
+                  aria-expanded={dashboardFlyoutOpen}
+                  aria-label={t('navigation.dashboard')}
                 >
-                  {t('navigation.dashboard')}
-                </div>
-                <div class="p-1">
-                  <button
-                    onclick={() => navigate(navigationUrls.dashboard)}
-                    class={cn(
-                      'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                      routeCache.dashboard
-                        ? 'menu-subitem-active'
-                        : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
-                    )}
+                  <LayoutDashboard class="size-5 shrink-0" />
+                </button>
+              </div>
+              <!-- Flyout with Dashboard + Edit Dashboard options -->
+              {#if dashboardFlyoutOpen}
+                <div
+                  class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
+                  style:top="{dashboardFlyoutPosition.top}px"
+                  style:left="{dashboardFlyoutPosition.left}px"
+                >
+                  <div
+                    class="px-3 py-2 border-b border-[var(--color-base-200)] font-medium text-sm text-[var(--color-base-content)]"
                   >
-                    <LayoutDashboard class="size-4 shrink-0" />{t('navigation.dashboard')}
-                  </button>
-                  {#if !securityEnabled || accessAllowed}
+                    {t('navigation.dashboard')}
+                  </div>
+                  <div class="p-1">
+                    <button
+                      onclick={() => navigate(navigationUrls.dashboard)}
+                      class={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 rounded-md text-sm transition-colors duration-150',
+                        routeCache.dashboard
+                          ? 'menu-subitem-active'
+                          : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                      )}
+                    >
+                      <LayoutDashboard class="size-4 shrink-0" />{t('navigation.dashboard')}
+                    </button>
                     <button
                       onclick={navigateToEditDashboard}
                       class={cn(
@@ -476,51 +475,64 @@ Performance Optimizations:
                           : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                       )}
                     >
-                      <Pencil class="size-4 shrink-0" />{t('dashboard.editDashboard')}
+                      <Pencil class="size-4 shrink-0" />{t('dashboard.editMode.editDashboard')}
                     </button>
-                  {/if}
+                  </div>
                 </div>
-              </div>
+              {/if}
+            {:else}
+              <!-- Guest: Simple icon button, no flyout -->
+              <button
+                onclick={() => navigate(navigationUrls.dashboard)}
+                onmouseenter={e => showTooltip(e, t('navigation.dashboard'))}
+                onmouseleave={hideTooltip}
+                class={cn(
+                  menuItemBase,
+                  menuItemCollapsed,
+                  routeCache.dashboard ? menuItemActive : menuItemDefault
+                )}
+                aria-label={t('navigation.dashboard')}
+              >
+                <LayoutDashboard class="size-5 shrink-0" />
+              </button>
             {/if}
           {:else}
-            <!-- Expanded: Regular collapsible -->
-            <button
-              onclick={() => (dashboardExpanded = !dashboardExpanded)}
-              class={cn(
-                menuItemBase,
-                routeCache.dashboard || routeCache.dashboardEdit
-                  ? 'text-[var(--color-primary)]'
-                  : 'text-[var(--color-base-content)]/80',
-                'hover:text-[var(--color-base-content)] hover:menu-hover'
-              )}
-              aria-expanded={dashboardExpanded}
-            >
-              <LayoutDashboard class="size-5 shrink-0" />
-              <span class="flex-1">{t('navigation.dashboard')}</span>
-              <ChevronDown
-                class={cn('size-4 shrink-0 transition-transform duration-200', {
-                  'rotate-180': dashboardExpanded,
-                })}
-              />
-            </button>
-
-            {#if dashboardExpanded}
-              <div
-                class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
-                style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
-              >
+            <!-- Expanded sidebar -->
+            {#if !securityEnabled || accessAllowed}
+              <!-- Admin: Dashboard navigates, chevron toggles edit sub-item -->
+              <div class="flex items-center">
                 <button
                   onclick={() => navigate(navigationUrls.dashboard)}
                   class={cn(
-                    'flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-150',
-                    routeCache.dashboard
-                      ? 'menu-subitem-active'
-                      : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
+                    menuItemBase,
+                    'flex-1',
+                    routeCache.dashboard || routeCache.dashboardEdit
+                      ? menuItemActive
+                      : menuItemDefault
                   )}
                 >
-                  <LayoutDashboard class="size-4 shrink-0" />{t('navigation.dashboard')}
+                  <LayoutDashboard class="size-5 shrink-0" />
+                  <span class="flex-1">{t('navigation.dashboard')}</span>
                 </button>
-                {#if !securityEnabled || accessAllowed}
+                <button
+                  onclick={() => (dashboardExpanded = !dashboardExpanded)}
+                  class="p-1.5 rounded-md text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] hover:bg-[var(--color-base-content)]/10 transition-colors duration-150"
+                  aria-expanded={dashboardExpanded}
+                  aria-label={t('dashboard.editMode.editDashboard')}
+                >
+                  <ChevronDown
+                    class={cn('size-4 shrink-0 transition-transform duration-200', {
+                      'rotate-180': dashboardExpanded,
+                    })}
+                  />
+                </button>
+              </div>
+
+              {#if dashboardExpanded}
+                <div
+                  class="ml-4 pl-4 border-l-2 border-[var(--color-primary)] mt-1 flex flex-col gap-0.5"
+                  style:border-color="color-mix(in oklch, var(--color-primary) 30%, transparent)"
+                >
                   <button
                     onclick={navigateToEditDashboard}
                     class={cn(
@@ -530,10 +542,19 @@ Performance Optimizations:
                         : 'text-[var(--color-base-content)]/80 hover:text-[var(--color-base-content)] hover:menu-hover'
                     )}
                   >
-                    <Pencil class="size-4 shrink-0" />{t('dashboard.editDashboard')}
+                    <Pencil class="size-4 shrink-0" />{t('dashboard.editMode.editDashboard')}
                   </button>
-                {/if}
-              </div>
+                </div>
+              {/if}
+            {:else}
+              <!-- Guest: Simple navigation item, no submenu -->
+              <button
+                onclick={() => navigate(navigationUrls.dashboard)}
+                class={cn(menuItemBase, routeCache.dashboard ? menuItemActive : menuItemDefault)}
+              >
+                <LayoutDashboard class="size-5 shrink-0" />
+                <span class="flex-1">{t('navigation.dashboard')}</span>
+              </button>
             {/if}
           {/if}
         </div>

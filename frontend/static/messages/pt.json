@@ -550,7 +550,8 @@
     "approved": "Aprovado",
     "currentlyHearing": {
       "title": "Ouvindo agora",
-      "subtitle": "Espécies identificadas em tempo real"
+      "subtitle": "Espécies identificadas em tempo real",
+      "empty": "Tudo calmo — nenhuma ave detectada no momento"
     },
     "rejected": "Rejeitado",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Ativar elemento",
-      "disableElement": "Desativar elemento",
+      "editing": "Editando painel",
+      "save": "Salvar",
+      "saving": "Salvando...",
+      "cancel": "Cancelar",
+      "disabled": "oculto",
+      "noConfig": "Ainda não há opções de configuração adicionais disponíveis.",
+      "currentlyHearingNote": "Este elemento mostra as aves atualmente detetadas ao visualizar a data de hoje. Nenhuma configuração adicional necessária.",
+      "notAvailable": "A configuração para este tipo de elemento ainda não está disponível.",
       "configureElement": "Configurar elemento",
       "closeModal": "Fechar",
       "configureTitle": "Configurar {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Remover este elemento? A configuração será perdida.",
       "addElement": "Adicionar elemento",
       "noElementsAvailable": "Todos os tipos de elementos já estão no painel.",
-      "searchNote": "A barra de pesquisa permite pesquisar espécies. Nenhuma configuração adicional necessária.",
-      "editDashboard": "Editar painel"
+      "editDashboard": "Editar painel",
+      "widthFull": "Largura total",
+      "widthHalf": "Meia largura",
+      "fullWidthOnly": "Apenas largura total"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Pesquisa"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

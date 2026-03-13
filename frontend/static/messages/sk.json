@@ -550,7 +550,8 @@
     "approved": "Schválené",
     "currentlyHearing": {
       "title": "Práve počuť",
-      "subtitle": "Druhy identifikované v reálnom čase"
+      "subtitle": "Druhy identifikované v reálnom čase",
+      "empty": "Všetko ticho — momentálne žiadne vtáky nezistené"
     },
     "rejected": "Zamietnuté",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Povoliť element",
-      "disableElement": "Zakázať element",
+      "editing": "Úprava panelu",
+      "save": "Uložiť",
+      "saving": "Ukladá sa...",
+      "cancel": "Zrušiť",
+      "disabled": "skrytý",
+      "noConfig": "Zatiaľ nie sú k dispozícii žiadne ďalšie možnosti konfigurácie.",
+      "currentlyHearingNote": "Tento prvok zobrazuje aktuálne detegované vtáky pri zobrazení dnešného dátumu. Nie je potrebná žiadna ďalšia konfigurácia.",
+      "notAvailable": "Konfigurácia pre tento typ prvku zatiaľ nie je k dispozícii.",
       "configureElement": "Konfigurovať element",
       "closeModal": "Zavrieť",
       "configureTitle": "Konfigurovať {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Odstrániť tento prvok? Jeho konfigurácia sa stratí.",
       "addElement": "Pridať prvok",
       "noElementsAvailable": "Všetky typy prvkov sú už na paneli.",
-      "searchNote": "Vyhľadávací panel umožňuje vyhľadávanie druhov. Nie je potrebná žiadna ďalšia konfigurácia.",
-      "editDashboard": "Upraviť panel"
+      "editDashboard": "Upraviť panel",
+      "widthFull": "Plná šírka",
+      "widthHalf": "Polovičná šírka",
+      "fullWidthOnly": "Iba plná šírka"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Vyhľadávanie"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

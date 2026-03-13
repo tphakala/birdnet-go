@@ -550,7 +550,8 @@
     "approved": "Approuvé",
     "currentlyHearing": {
       "title": "En écoute",
-      "subtitle": "Espèces identifiées en temps réel"
+      "subtitle": "Espèces identifiées en temps réel",
+      "empty": "Tout est calme — aucun oiseau détecté pour le moment"
     },
     "rejected": "Rejeté",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Activer l'élément",
-      "disableElement": "Désactiver l'élément",
+      "editing": "Modification du tableau de bord",
+      "save": "Enregistrer",
+      "saving": "Enregistrement...",
+      "cancel": "Annuler",
+      "disabled": "masqué",
+      "noConfig": "Aucune option de configuration supplémentaire disponible pour l'instant.",
+      "currentlyHearingNote": "Cet élément affiche les oiseaux actuellement détectés lorsque vous consultez la date d'aujourd'hui. Aucune configuration supplémentaire nécessaire.",
+      "notAvailable": "La configuration pour ce type d'élément n'est pas encore disponible.",
       "configureElement": "Configurer l'élément",
       "closeModal": "Fermer",
       "configureTitle": "Configurer {element}",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Supprimer cet élément ? Sa configuration sera perdue.",
       "addElement": "Ajouter un élément",
       "noElementsAvailable": "Tous les types d'éléments sont déjà sur le tableau de bord.",
-      "searchNote": "La barre de recherche permet de rechercher des espèces. Aucune configuration supplémentaire nécessaire.",
-      "editDashboard": "Modifier le tableau de bord"
+      "editDashboard": "Modifier le tableau de bord",
+      "widthFull": "Pleine largeur",
+      "widthHalf": "Demi-largeur",
+      "fullWidthOnly": "Pleine largeur uniquement"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Recherche"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {

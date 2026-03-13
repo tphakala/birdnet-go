@@ -550,7 +550,8 @@
     "approved": "Goedgekeurd",
     "currentlyHearing": {
       "title": "Nu te horen",
-      "subtitle": "Soorten worden in realtime geïdentificeerd"
+      "subtitle": "Soorten worden in realtime geïdentificeerd",
+      "empty": "Alles rustig — momenteel geen vogels gedetecteerd"
     },
     "rejected": "Afgewezen",
     "dailySummary": {
@@ -672,17 +673,14 @@
       "titlePlaceholder": "Live Bird Feeder"
     },
     "editMode": {
-      "editing": "Editing Dashboard",
-      "save": "Save",
-      "saving": "Saving...",
-      "cancel": "Cancel",
-      "editButton": "Edit Dashboard",
-      "disabled": "disabled",
-      "noConfig": "No additional configuration options available yet.",
-      "currentlyHearingNote": "This element shows currently detected birds when viewing today's date. No additional configuration needed.",
-      "notAvailable": "Configuration for this element type is not yet available.",
-      "enableElement": "Element inschakelen",
-      "disableElement": "Element uitschakelen",
+      "editing": "Dashboard bewerken",
+      "save": "Opslaan",
+      "saving": "Opslaan...",
+      "cancel": "Annuleren",
+      "disabled": "verborgen",
+      "noConfig": "Er zijn nog geen aanvullende configuratieopties beschikbaar.",
+      "currentlyHearingNote": "Dit element toont momenteel gedetecteerde vogels wanneer de datum van vandaag wordt bekeken. Geen aanvullende configuratie nodig.",
+      "notAvailable": "De configuratie voor dit elementtype is nog niet beschikbaar.",
       "configureElement": "Element configureren",
       "closeModal": "Sluiten",
       "configureTitle": "{element} configureren",
@@ -695,16 +693,17 @@
       "deleteConfirm": "Dit element verwijderen? De configuratie gaat verloren.",
       "addElement": "Element toevoegen",
       "noElementsAvailable": "Alle elementtypen staan al op het dashboard.",
-      "searchNote": "De zoekbalk maakt het mogelijk om soorten te zoeken. Geen aanvullende configuratie nodig.",
-      "editDashboard": "Dashboard bewerken"
+      "editDashboard": "Dashboard bewerken",
+      "widthFull": "Volledige breedte",
+      "widthHalf": "Halve breedte",
+      "fullWidthOnly": "Alleen volledige breedte"
     },
     "elements": {
       "banner": "Dashboard Banner",
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed",
-      "search": "Zoeken"
+      "videoEmbed": "Video Embed"
     }
   },
   "detections": {
