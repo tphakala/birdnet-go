@@ -166,7 +166,7 @@ func TestDetectEnvironment_BareMetal(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	envType, detail := DetectEnvironment(root)
-	assert.NotEmpty(t, envType)
+	assert.Equal(t, "Bare Metal", envType)
 	assert.Empty(t, detail)
 }
 

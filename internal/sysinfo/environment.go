@@ -49,12 +49,15 @@ func mapGOARCH(goarch string) string {
 // detectARMVariant reads /proc/cpuinfo to distinguish armv6l from armv7l.
 // Falls back to "arm" if detection fails.
 func detectARMVariant(rootPath string) string {
-	data, err := os.ReadFile(filepath.Join(rootPath, "proc", "cpuinfo"))
+	file, err := os.Open(filepath.Join(rootPath, "proc", "cpuinfo"))
 	if err != nil {
 		return armFallback
 	}
+	defer func() { _ = file.Close() }()
 
-	for line := range strings.SplitSeq(string(data), "\n") {
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
 		if strings.HasPrefix(line, "CPU architecture") {
 			parts := strings.SplitN(line, ":", 2)
 			if len(parts) == 2 {
