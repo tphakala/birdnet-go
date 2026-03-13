@@ -21,6 +21,44 @@
         document.documentElement.setAttribute('data-theme-controller', theme);
       })();
 
+      // Restore color scheme before content loads to prevent FOUC
+      (function () {
+        var VALID = ['blue', 'forest', 'amber', 'violet', 'rose', 'custom'];
+        var s = localStorage.getItem('color-scheme');
+        if (s && VALID.indexOf(s) !== -1) {
+          document.documentElement.setAttribute('data-scheme', s);
+          if (s === 'custom') {
+            try {
+              var c = JSON.parse(localStorage.getItem('custom-scheme-colors') || '{}');
+              if (c.primary) {
+                var root = document.documentElement.style;
+                root.setProperty('--custom-primary', c.primary);
+                root.setProperty('--custom-accent', c.accent || c.primary);
+                // Compute contrast colors (white or dark text)
+                function contrast(hex) {
+                  var n = parseInt(hex.replace('#', ''), 16);
+                  var r = (n >> 16) & 0xff,
+                    g = (n >> 8) & 0xff,
+                    b = n & 0xff;
+                  function lin(v) {
+                    var s = v / 255;
+                    return s <= 0.04045 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+                  }
+                  var L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+                  return L > 0.179 ? '#020617' : '#ffffff';
+                }
+                root.setProperty('--custom-primary-content', contrast(c.primary));
+                root.setProperty('--custom-accent-content', contrast(c.accent || c.primary));
+              }
+            } catch (e) {
+              // Invalid JSON, skip custom colors
+            }
+          }
+        } else {
+          document.documentElement.setAttribute('data-scheme', 'blue');
+        }
+      })();
+
       // Detect and set initial locale before content loads
       (function () {
         const SUPPORTED_LOCALES = ['en', 'de', 'fr', 'es', 'fi', 'nl', 'pl', 'pt'];

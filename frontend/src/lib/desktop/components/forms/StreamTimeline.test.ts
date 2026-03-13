@@ -159,8 +159,8 @@ describe('StreamTimeline', () => {
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('border-green-400');
-      expect(button).toHaveClass('bg-green-400');
+      expect(button).toHaveClass('border-[var(--color-success)]');
+      expect(button).toHaveClass('bg-[var(--color-success)]');
     });
 
     it('applies amber color for restarting state (hollow)', () => {
@@ -169,7 +169,7 @@ describe('StreamTimeline', () => {
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('border-amber-400');
+      expect(button).toHaveClass('border-[var(--color-warning)]');
       // Hollow nodes have base background (theme-aware)
       expect(button).toHaveClass('bg-[var(--color-base-100)]');
     });
@@ -180,8 +180,8 @@ describe('StreamTimeline', () => {
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('border-red-400');
-      expect(button).toHaveClass('bg-red-400');
+      expect(button).toHaveClass('border-[var(--color-error)]');
+      expect(button).toHaveClass('bg-[var(--color-error)]');
     });
 
     it('applies red color for circuit_open state', () => {
@@ -190,7 +190,7 @@ describe('StreamTimeline', () => {
       });
 
       const button = screen.getByRole('button');
-      expect(button).toHaveClass('border-red-400');
+      expect(button).toHaveClass('border-[var(--color-error)]');
     });
   });
 

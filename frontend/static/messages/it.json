@@ -3690,5 +3690,15 @@
       "requestTimeout": "Timeout della richiesta.",
       "networkError": "Errore di rete. Controllare la connessione."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Schema colori",
+  "settings.appearance.colorSchemeDescription": "Scegli uno schema di colori per l'interfaccia",
+  "settings.appearance.schemeBlue": "Blu",
+  "settings.appearance.schemeForest": "Foresta",
+  "settings.appearance.schemeAmber": "Ambra",
+  "settings.appearance.schemeViolet": "Viola",
+  "settings.appearance.schemeRose": "Rosa",
+  "settings.appearance.schemeCustom": "Personalizzato",
+  "settings.appearance.customPrimary": "Colore primario",
+  "settings.appearance.customAccent": "Colore di accento"
 }

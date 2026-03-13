@@ -2,6 +2,7 @@
 @import url('./custom.css') layer(base);
 
 @import 'tailwindcss';
+@import url('./schemes.css');
 
 /* Custom text utilities */
 @utility text-muted {
@@ -1101,6 +1102,9 @@
     border-radius: var(--radius-full);
     background-color: var(--color-base-300);
     color: var(--color-base-content);
+    transition:
+      background-color 0.25s ease,
+      color 0.25s ease;
   }
 
   .badge-primary {

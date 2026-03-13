@@ -3893,5 +3893,15 @@
       "requestTimeout": "Délai de la requête dépassé.",
       "networkError": "Erreur réseau. Veuillez vérifier votre connexion."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Thème de couleurs",
+  "settings.appearance.colorSchemeDescription": "Choisissez un thème de couleurs pour l'interface",
+  "settings.appearance.schemeBlue": "Bleu",
+  "settings.appearance.schemeForest": "Forêt",
+  "settings.appearance.schemeAmber": "Ambre",
+  "settings.appearance.schemeViolet": "Violet",
+  "settings.appearance.schemeRose": "Rose",
+  "settings.appearance.schemeCustom": "Personnalisé",
+  "settings.appearance.customPrimary": "Couleur principale",
+  "settings.appearance.customAccent": "Couleur d'accent"
 }
