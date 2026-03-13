@@ -3522,7 +3522,9 @@
       "schemeRose": "Rose",
       "schemeCustom": "Benutzerdefiniert",
       "customPrimary": "Primärfarbe",
-      "customAccent": "Akzentfarbe"
+      "customAccent": "Akzentfarbe",
+      "logoGradient": "Farbverlauf-Logo",
+      "logoGradientDescription": "Farbverlauf-Effekt für das Seitenleisten-Logo verwenden"
     }
   },
   "auth": {

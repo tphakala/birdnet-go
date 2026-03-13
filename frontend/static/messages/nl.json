@@ -3522,7 +3522,9 @@
       "schemeRose": "Roze",
       "schemeCustom": "Aangepast",
       "customPrimary": "Primaire kleur",
-      "customAccent": "Accentkleur"
+      "customAccent": "Accentkleur",
+      "logoGradient": "Verloop-logo",
+      "logoGradientDescription": "Gebruik een verloopeffect op het zijbalklogo"
     }
   },
   "auth": {

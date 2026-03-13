@@ -3522,7 +3522,9 @@
       "schemeRose": "Ruusu",
       "schemeCustom": "Mukautettu",
       "customPrimary": "Pääväri",
-      "customAccent": "Korostusväri"
+      "customAccent": "Korostusväri",
+      "logoGradient": "Liukuvärinen logo",
+      "logoGradientDescription": "Käytä liukuväritehosteella sivupalkin logossa"
     }
   },
   "auth": {

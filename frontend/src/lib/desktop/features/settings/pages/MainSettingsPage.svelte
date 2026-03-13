@@ -266,12 +266,18 @@
           summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
           spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
+          colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
+          customColors: store.originalData.realtime?.dashboard?.customColors,
+          logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
         },
         {
           locale: store.formData.realtime?.dashboard?.locale,
           summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.formData.realtime?.dashboard?.thumbnails,
           spectrogram: store.formData.realtime?.dashboard?.spectrogram,
+          colorScheme: store.formData.realtime?.dashboard?.colorScheme,
+          customColors: store.formData.realtime?.dashboard?.customColors,
+          logoStyle: store.formData.realtime?.dashboard?.logoStyle,
         }
       ) ||
       hasSettingsChanged(store.originalData.sentry, store.formData.sentry)

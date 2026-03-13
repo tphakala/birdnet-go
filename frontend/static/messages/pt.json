@@ -3522,7 +3522,9 @@
       "schemeRose": "Rosa",
       "schemeCustom": "Personalizado",
       "customPrimary": "Cor primária",
-      "customAccent": "Cor de destaque"
+      "customAccent": "Cor de destaque",
+      "logoGradient": "Logo com gradiente",
+      "logoGradientDescription": "Usar efeito de gradiente no logo da barra lateral"
     }
   },
   "auth": {

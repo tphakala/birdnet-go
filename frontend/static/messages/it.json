@@ -3319,7 +3319,9 @@
       "schemeRose": "Rosa",
       "schemeCustom": "Personalizzato",
       "customPrimary": "Colore primario",
-      "customAccent": "Colore di accento"
+      "customAccent": "Colore di accento",
+      "logoGradient": "Logo sfumato",
+      "logoGradientDescription": "Usa un effetto sfumato sul logo della barra laterale"
     }
   },
   "auth": {

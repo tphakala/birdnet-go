@@ -3546,7 +3546,9 @@
       "schemeRose": "Rose",
       "schemeCustom": "Custom",
       "customPrimary": "Primary Color",
-      "customAccent": "Accent Color"
+      "customAccent": "Accent Color",
+      "logoGradient": "Gradient Logo",
+      "logoGradientDescription": "Use a gradient effect on the sidebar logo"
     }
   },
   "auth": {

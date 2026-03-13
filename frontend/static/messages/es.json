@@ -3522,7 +3522,9 @@
       "schemeRose": "Rosa",
       "schemeCustom": "Personalizado",
       "customPrimary": "Color primario",
-      "customAccent": "Color de acento"
+      "customAccent": "Color de acento",
+      "logoGradient": "Logo con degradado",
+      "logoGradientDescription": "Usar un efecto de degradado en el logo de la barra lateral"
     }
   },
   "auth": {

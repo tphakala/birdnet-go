@@ -3353,7 +3353,9 @@
       "schemeRose": "Ružová",
       "schemeCustom": "Vlastná",
       "customPrimary": "Primárna farba",
-      "customAccent": "Akcentová farba"
+      "customAccent": "Akcentová farba",
+      "logoGradient": "Logo s prechodom",
+      "logoGradientDescription": "Použiť efekt prechodu na logo bočného panela"
     }
   },
   "auth": {
