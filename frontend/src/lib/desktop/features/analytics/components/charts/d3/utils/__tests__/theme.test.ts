@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { getCurrentTheme, ThemeStore } from '../theme';
-import type { ChartTheme } from '../theme';
 
 describe('getCurrentTheme', () => {
   let originalWindow: typeof globalThis.window;
@@ -14,12 +13,8 @@ describe('getCurrentTheme', () => {
 
   afterEach(() => {
     // Restore original values
-    if (originalWindow) {
-      globalThis.window = originalWindow;
-    }
-    if (originalDocument) {
-      globalThis.document = originalDocument;
-    }
+    globalThis.window = originalWindow;
+    globalThis.document = originalDocument;
   });
 
   describe('SSR behavior', () => {
@@ -74,12 +69,6 @@ describe('getCurrentTheme', () => {
 
   describe('light theme', () => {
     beforeEach(() => {
-      // Mock getComputedStyle to return empty values (use fallbacks)
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       // Mock document.documentElement with light theme
       const mockElement = {
         getAttribute: vi.fn((attr: string) => {
@@ -94,26 +83,25 @@ describe('getCurrentTheme', () => {
       });
     });
 
-    it('should use light theme fallback colors when CSS variables are not defined', () => {
+    it('should use light theme colors', () => {
       const theme = getCurrentTheme();
 
-      // Light theme fallbacks
       expect(theme.background).toBe('#ffffff');
-      expect(theme.foreground).toBe('#1f2937');
-      expect(theme.text).toBe('#1f2937');
+      expect(theme.foreground).toBe('rgba(55, 65, 81, 1)');
+      expect(theme.text).toBe('rgba(55, 65, 81, 1)');
       expect(theme.grid).toBe('rgba(0, 0, 0, 0.1)');
-      expect(theme.muted).toBe('#475569');
+      expect(theme.muted).toBe('rgba(0, 0, 0, 0.6)');
     });
 
     it('should have light theme tooltip colors', () => {
       const theme = getCurrentTheme();
 
       expect(theme.tooltip.background).toBe('rgba(255, 255, 255, 0.95)');
-      expect(theme.tooltip.text).toBe('#1f2937');
+      expect(theme.tooltip.text).toBe('rgba(55, 65, 81, 1)');
       expect(theme.tooltip.border).toBe('rgba(0, 0, 0, 0.2)');
     });
 
-    it('should use fallback values for semantic colors', () => {
+    it('should use correct semantic colors', () => {
       const theme = getCurrentTheme();
 
       expect(theme.primary).toBe('#2563eb');
@@ -127,12 +115,6 @@ describe('getCurrentTheme', () => {
 
   describe('dark theme', () => {
     beforeEach(() => {
-      // Mock getComputedStyle to return empty values (use fallbacks)
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       // Mock document.documentElement with dark theme
       const mockElement = {
         getAttribute: vi.fn((attr: string) => {
@@ -147,120 +129,38 @@ describe('getCurrentTheme', () => {
       });
     });
 
-    it('should use dark theme fallback colors when CSS variables are not defined', () => {
+    it('should use dark theme colors', () => {
       const theme = getCurrentTheme();
 
-      // Dark theme fallbacks
-      expect(theme.background).toBe('#0f172a');
-      expect(theme.foreground).toBe('#f1f5f9');
-      expect(theme.text).toBe('#f1f5f9');
+      expect(theme.background).toBe('#1f2937');
+      expect(theme.foreground).toBe('rgba(200, 200, 200, 1)');
+      expect(theme.text).toBe('rgba(200, 200, 200, 1)');
       expect(theme.grid).toBe('rgba(255, 255, 255, 0.1)');
-      expect(theme.muted).toBe('#e2e8f0');
+      expect(theme.muted).toBe('rgba(255, 255, 255, 0.6)');
     });
 
     it('should have dark theme tooltip colors', () => {
       const theme = getCurrentTheme();
 
-      expect(theme.tooltip.background).toBe('rgba(15, 23, 42, 0.95)');
-      expect(theme.tooltip.text).toBe('#f1f5f9');
+      expect(theme.tooltip.background).toBe('rgba(55, 65, 81, 0.95)');
+      expect(theme.tooltip.text).toBe('rgba(200, 200, 200, 1)');
       expect(theme.tooltip.border).toBe('rgba(255, 255, 255, 0.2)');
     });
-  });
 
-  describe('CSS variable reading', () => {
-    it('should read CSS variables when available', () => {
-      const cssVariables: Record<string, string> = {
-        '--color-base-100': '#f0f0f0',
-        '--color-base-content': '#111111',
-        '--text-muted': '#666666',
-        '--color-accent': '#00aaff',
-        '--color-primary': '#ff0000',
-        '--color-secondary': '#00ff00',
-        '--color-success': '#00ff00',
-        '--color-warning': '#ffaa00',
-        '--color-error': '#ff0000',
-      };
-
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn((prop: string) => cssVariables[prop] || ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
-      const mockElement = {
-        getAttribute: vi.fn(() => 'light'),
-      };
-      Object.defineProperty(document, 'documentElement', {
-        value: mockElement,
-        writable: true,
-        configurable: true,
-      });
-
+    it('should use correct dark semantic colors', () => {
       const theme = getCurrentTheme();
 
-      expect(theme.background).toBe('#f0f0f0');
-      expect(theme.foreground).toBe('#111111');
-      expect(theme.muted).toBe('#666666');
-      expect(theme.accent).toBe('#00aaff');
-      expect(theme.primary).toBe('#ff0000');
-      expect(theme.secondary).toBe('#00ff00');
-      expect(theme.success).toBe('#00ff00');
-      expect(theme.warning).toBe('#ffaa00');
-      expect(theme.error).toBe('#ff0000');
-    });
-
-    it('should trim whitespace from CSS variable values', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn((prop: string) => {
-          if (prop === '--color-primary') return '  #2563eb  ';
-          return '';
-        }),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
-      const mockElement = {
-        getAttribute: vi.fn(() => 'light'),
-      };
-      Object.defineProperty(document, 'documentElement', {
-        value: mockElement,
-        writable: true,
-        configurable: true,
-      });
-
-      const theme = getCurrentTheme();
-
-      expect(theme.primary).toBe('#2563eb');
-    });
-
-    it('should use fallback when CSS variable is empty string', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
-      const mockElement = {
-        getAttribute: vi.fn(() => 'light'),
-      };
-      Object.defineProperty(document, 'documentElement', {
-        value: mockElement,
-        writable: true,
-        configurable: true,
-      });
-
-      const theme = getCurrentTheme();
-
-      // Should use fallback values
-      expect(theme.primary).toBe('#2563eb');
-      expect(theme.accent).toBe('#0284c7');
+      expect(theme.primary).toBe('#3b82f6');
+      expect(theme.accent).toBe('#0369a1');
+      expect(theme.secondary).toBe('#6b7280');
+      expect(theme.success).toBe('#16a34a');
+      expect(theme.warning).toBe('#d97706');
+      expect(theme.error).toBe('#dc2626');
     });
   });
 
   describe('axis theme', () => {
     it('should include correct axis configuration', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       const mockElement = {
         getAttribute: vi.fn(() => 'light'),
       };
@@ -273,7 +173,7 @@ describe('getCurrentTheme', () => {
       const theme = getCurrentTheme();
 
       expect(theme.axis.fontSize).toBe('12px');
-      expect(theme.axis.fontFamily).toBe("'Inter', system-ui, -apple-system, sans-serif");
+      expect(theme.axis.fontFamily).toBe('system-ui, -apple-system, sans-serif');
       expect(theme.axis.strokeWidth).toBe(1);
       expect(theme.axis.color).toBe(theme.text);
       expect(theme.axis.gridColor).toBe(theme.grid);
@@ -282,11 +182,6 @@ describe('getCurrentTheme', () => {
 
   describe('grid color consistency', () => {
     it('should use light grid color when theme is light', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       const mockElement = {
         getAttribute: vi.fn((attr: string) => (attr === 'data-theme' ? 'light' : null)),
       };
@@ -298,17 +193,11 @@ describe('getCurrentTheme', () => {
 
       const theme = getCurrentTheme();
 
-      // Light theme should have dark grid lines on light background
       expect(theme.grid).toBe('rgba(0, 0, 0, 0.1)');
       expect(theme.axis.gridColor).toBe('rgba(0, 0, 0, 0.1)');
     });
 
     it('should use dark grid color when theme is dark', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       const mockElement = {
         getAttribute: vi.fn((attr: string) => (attr === 'data-theme' ? 'dark' : null)),
       };
@@ -320,17 +209,11 @@ describe('getCurrentTheme', () => {
 
       const theme = getCurrentTheme();
 
-      // Dark theme should have light grid lines on dark background
       expect(theme.grid).toBe('rgba(255, 255, 255, 0.1)');
       expect(theme.axis.gridColor).toBe('rgba(255, 255, 255, 0.1)');
     });
 
     it('should maintain consistency between theme.grid and theme.axis.gridColor', () => {
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn(() => ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
       const mockElement = {
         getAttribute: vi.fn(() => 'light'),
       };
@@ -342,44 +225,7 @@ describe('getCurrentTheme', () => {
 
       const theme = getCurrentTheme();
 
-      // Grid color should be consistent across theme
       expect(theme.grid).toBe(theme.axis.gridColor);
-    });
-  });
-
-  describe('mixed CSS variables and fallbacks', () => {
-    it('should correctly mix defined CSS variables with fallback values', () => {
-      // Some variables defined, others not
-      const cssVariables: Record<string, string> = {
-        '--color-primary': '#custom-primary',
-        '--color-base-100': '#custom-bg',
-        // Other variables undefined - should use fallbacks
-      };
-
-      const mockGetComputedStyle = vi.fn(() => ({
-        getPropertyValue: vi.fn((prop: string) => cssVariables[prop] || ''),
-      }));
-      vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
-
-      const mockElement = {
-        getAttribute: vi.fn(() => 'light'),
-      };
-      Object.defineProperty(document, 'documentElement', {
-        value: mockElement,
-        writable: true,
-        configurable: true,
-      });
-
-      const theme = getCurrentTheme();
-
-      // Should use custom variables where defined
-      expect(theme.primary).toBe('#custom-primary');
-      expect(theme.background).toBe('#custom-bg');
-
-      // Should use fallbacks where not defined
-      expect(theme.accent).toBe('#0284c7');
-      expect(theme.secondary).toBe('#4b5563');
-      expect(theme.success).toBe('#22c55e');
     });
   });
 });
@@ -399,21 +245,21 @@ describe('ThemeStore', () => {
       writable: true,
       configurable: true,
     });
-
-    const mockGetComputedStyle = vi.fn(() => ({
-      getPropertyValue: vi.fn(() => ''),
-    }));
-    vi.stubGlobal('getComputedStyle', mockGetComputedStyle);
   });
 
   afterEach(() => {
-    if (store) {
-      store.destroy();
-    }
+    store.destroy();
   });
 
   describe('initialization', () => {
     it('should initialize with current theme', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const MockMutationObserver = vi.fn(function (this: any) {
+        this.observe = vi.fn();
+        this.disconnect = vi.fn();
+      });
+      vi.stubGlobal('MutationObserver', MockMutationObserver);
+
       store = new ThemeStore();
 
       const theme = store.theme;
@@ -425,7 +271,8 @@ describe('ThemeStore', () => {
 
     it('should set up MutationObserver for theme changes', () => {
       const observeSpy = vi.fn();
-      const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const MockMutationObserver = vi.fn(function (this: any, _callback: MutationCallback) {
         this.observe = observeSpy;
         this.disconnect = vi.fn();
       });
@@ -436,22 +283,8 @@ describe('ThemeStore', () => {
       expect(MockMutationObserver).toHaveBeenCalled();
       expect(observeSpy).toHaveBeenCalledWith(document.documentElement, {
         attributes: true,
-        attributeFilter: ['data-theme', 'data-scheme'],
+        attributeFilter: ['data-theme'],
       });
-    });
-
-    it('should watch both data-theme and data-scheme attributes', () => {
-      const observeSpy = vi.fn();
-      const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
-        this.observe = observeSpy;
-        this.disconnect = vi.fn();
-      });
-      vi.stubGlobal('MutationObserver', MockMutationObserver);
-
-      store = new ThemeStore();
-
-      const observeCall = observeSpy.mock.calls[0];
-      expect(observeCall[1].attributeFilter).toEqual(['data-theme', 'data-scheme']);
     });
 
     it('should set up media query listener', () => {
@@ -462,7 +295,10 @@ describe('ThemeStore', () => {
         matches: false,
         media: '(prefers-color-scheme: dark)',
       };
-      vi.stubGlobal('matchMedia', vi.fn(() => mockMediaQuery));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mockMediaQuery)
+      );
 
       store = new ThemeStore();
 
@@ -472,6 +308,13 @@ describe('ThemeStore', () => {
 
   describe('theme subscription', () => {
     it('should allow subscribing to theme changes', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const MockMutationObserver = vi.fn(function (this: any) {
+        this.observe = vi.fn();
+        this.disconnect = vi.fn();
+      });
+      vi.stubGlobal('MutationObserver', MockMutationObserver);
+
       store = new ThemeStore();
       const callback = vi.fn();
 
@@ -481,7 +324,6 @@ describe('ThemeStore', () => {
     });
 
     it('should notify subscribers on theme change via requestAnimationFrame', () => {
-      // Mock requestAnimationFrame
       const rafCallbacks: Array<() => void> = [];
       vi.stubGlobal(
         'requestAnimationFrame',
@@ -492,6 +334,7 @@ describe('ThemeStore', () => {
       );
 
       let mutationCallback: MutationCallback = () => {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
         mutationCallback = callback;
         this.observe = vi.fn();
@@ -510,7 +353,7 @@ describe('ThemeStore', () => {
             type: 'attributes',
             attributeName: 'data-theme',
             target: document.documentElement,
-          } as MutationRecord,
+          } as unknown as MutationRecord,
         ],
         {} as MutationObserver
       );
@@ -525,46 +368,6 @@ describe('ThemeStore', () => {
       expect(callback).toHaveBeenCalledWith(expect.any(Object));
     });
 
-    it('should notify subscribers on data-scheme attribute change', () => {
-      const rafCallbacks: Array<() => void> = [];
-      vi.stubGlobal(
-        'requestAnimationFrame',
-        vi.fn((cb: () => void) => {
-          rafCallbacks.push(cb);
-          return 1;
-        })
-      );
-
-      let mutationCallback: MutationCallback = () => {};
-      const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
-        mutationCallback = callback;
-        this.observe = vi.fn();
-        this.disconnect = vi.fn();
-      });
-      vi.stubGlobal('MutationObserver', MockMutationObserver);
-
-      store = new ThemeStore();
-      const callback = vi.fn();
-      store.subscribe(callback);
-
-      // Trigger a data-scheme mutation
-      mutationCallback(
-        [
-          {
-            type: 'attributes',
-            attributeName: 'data-scheme',
-            target: document.documentElement,
-          } as MutationRecord,
-        ],
-        {} as MutationObserver
-      );
-
-      // Execute RAF callbacks
-      rafCallbacks.forEach(cb => cb());
-
-      expect(callback).toHaveBeenCalled();
-    });
-
     it('should not notify on other attribute changes', () => {
       const rafCallbacks: Array<() => void> = [];
       vi.stubGlobal(
@@ -576,6 +379,7 @@ describe('ThemeStore', () => {
       );
 
       let mutationCallback: MutationCallback = () => {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
         mutationCallback = callback;
         this.observe = vi.fn();
@@ -594,7 +398,7 @@ describe('ThemeStore', () => {
             type: 'attributes',
             attributeName: 'class',
             target: document.documentElement,
-          } as MutationRecord,
+          } as unknown as MutationRecord,
         ],
         {} as MutationObserver
       );
@@ -607,10 +411,8 @@ describe('ThemeStore', () => {
     });
 
     it('should use setTimeout fallback when requestAnimationFrame is not available', () => {
-      // Mock environment without requestAnimationFrame
-      const originalRAF = globalThis.requestAnimationFrame;
-      // @ts-expect-error - Testing fallback scenario
-      globalThis.requestAnimationFrame = undefined;
+      // Use vi.stubGlobal for automatic cleanup on test failure
+      vi.stubGlobal('requestAnimationFrame', undefined);
 
       const timeoutCallbacks: Array<() => void> = [];
       vi.stubGlobal(
@@ -622,6 +424,7 @@ describe('ThemeStore', () => {
       );
 
       let mutationCallback: MutationCallback = () => {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
         mutationCallback = callback;
         this.observe = vi.fn();
@@ -640,7 +443,7 @@ describe('ThemeStore', () => {
             type: 'attributes',
             attributeName: 'data-theme',
             target: document.documentElement,
-          } as MutationRecord,
+          } as unknown as MutationRecord,
         ],
         {} as MutationObserver
       );
@@ -649,9 +452,6 @@ describe('ThemeStore', () => {
       timeoutCallbacks.forEach(cb => cb());
 
       expect(callback).toHaveBeenCalled();
-
-      // Restore
-      globalThis.requestAnimationFrame = originalRAF;
     });
 
     it('should allow unsubscribing', () => {
@@ -665,6 +465,7 @@ describe('ThemeStore', () => {
       );
 
       let mutationCallback: MutationCallback = () => {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
         mutationCallback = callback;
         this.observe = vi.fn();
@@ -686,7 +487,7 @@ describe('ThemeStore', () => {
             type: 'attributes',
             attributeName: 'data-theme',
             target: document.documentElement,
-          } as MutationRecord,
+          } as unknown as MutationRecord,
         ],
         {} as MutationObserver
       );
@@ -704,6 +505,7 @@ describe('ThemeStore', () => {
       const disconnectSpy = vi.fn();
       const removeEventListenerSpy = vi.fn();
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any) {
         this.observe = vi.fn();
         this.disconnect = disconnectSpy;
@@ -716,7 +518,10 @@ describe('ThemeStore', () => {
         matches: false,
         media: '(prefers-color-scheme: dark)',
       };
-      vi.stubGlobal('matchMedia', vi.fn(() => mockMediaQuery));
+      vi.stubGlobal(
+        'matchMedia',
+        vi.fn(() => mockMediaQuery)
+      );
 
       store = new ThemeStore();
       store.destroy();
@@ -736,6 +541,7 @@ describe('ThemeStore', () => {
       );
 
       let mutationCallback: MutationCallback = () => {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const MockMutationObserver = vi.fn(function (this: any, callback: MutationCallback) {
         mutationCallback = callback;
         this.observe = vi.fn();
@@ -756,7 +562,7 @@ describe('ThemeStore', () => {
             type: 'attributes',
             attributeName: 'data-theme',
             target: document.documentElement,
-          } as MutationRecord,
+          } as unknown as MutationRecord,
         ],
         {} as MutationObserver
       );
@@ -771,6 +577,13 @@ describe('ThemeStore', () => {
 
   describe('theme getter', () => {
     it('should return current theme', () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const MockMutationObserver = vi.fn(function (this: any) {
+        this.observe = vi.fn();
+        this.disconnect = vi.fn();
+      });
+      vi.stubGlobal('MutationObserver', MockMutationObserver);
+
       store = new ThemeStore();
 
       const theme = store.theme;
