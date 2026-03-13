@@ -185,19 +185,24 @@ func mapContainerEnvVar(value string) (envType, detail string) {
 
 // detectFromCgroup reads /proc/self/cgroup and looks for container runtime names.
 func detectFromCgroup(path string) string {
-	data, err := os.ReadFile(path)
+	file, err := os.Open(path)
 	if err != nil {
 		return ""
 	}
-	content := string(data)
-	if strings.Contains(content, "docker") {
-		return envDocker
-	}
-	if strings.Contains(content, "podman") {
-		return envPodman
-	}
-	if strings.Contains(content, "lxc") {
-		return envLXC
+	defer func() { _ = file.Close() }()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, "docker") {
+			return envDocker
+		}
+		if strings.Contains(line, "podman") {
+			return envPodman
+		}
+		if strings.Contains(line, "lxc") {
+			return envLXC
+		}
 	}
 	return ""
 }
