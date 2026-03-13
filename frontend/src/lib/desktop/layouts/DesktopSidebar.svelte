@@ -75,6 +75,7 @@ Performance Optimizations:
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
   import { scheme } from '$lib/stores/scheme';
+  import { logoStyle } from '$lib/stores/logoStyle';
 
   interface Props {
     securityEnabled?: boolean;
@@ -99,8 +100,10 @@ Performance Optimizations:
     },
   }: Props = $props();
 
-  // Use ocean gradient for default blue scheme, scheme-derived gradient for others
-  let logoVariant = $derived($scheme === 'blue' ? 'ocean' : 'scheme') as 'ocean' | 'scheme';
+  // Logo variant: solid uses flat color, gradient uses ocean for blue scheme or scheme-derived for others
+  let logoVariant = $derived(
+    $logoStyle === 'solid' ? 'solid' : $scheme === 'blue' ? 'ocean' : 'scheme'
+  ) as 'ocean' | 'scheme' | 'solid';
 
   // State for login modal and collapsible sections
   let showLoginModal = $state(false);

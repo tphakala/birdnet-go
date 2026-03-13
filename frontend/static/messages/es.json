@@ -3522,7 +3522,9 @@
       "schemeRose": "Rosa",
       "schemeCustom": "Personalizado",
       "customPrimary": "Color primario",
-      "customAccent": "Color de acento"
+      "customAccent": "Color de acento",
+      "logoGradient": "Logo con degradado",
+      "logoGradientDescription": "Usar un efecto de degradado en el logo de la barra lateral"
     }
   },
   "auth": {
@@ -3915,5 +3917,7 @@
   "settings.appearance.schemeRose": "Rosa",
   "settings.appearance.schemeCustom": "Personalizado",
   "settings.appearance.customPrimary": "Color primario",
-  "settings.appearance.customAccent": "Color de acento"
+  "settings.appearance.customAccent": "Color de acento",
+  "settings.appearance.logoGradient": "Logo con degradado",
+  "settings.appearance.logoGradientDescription": "Usar un efecto de degradado en el logo de la barra lateral"
 }

@@ -1,8 +1,10 @@
 <script lang="ts">
   import { scheme, type SchemeId } from '$lib/stores/scheme';
+  import { logoStyle } from '$lib/stores/logoStyle';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { Check } from '@lucide/svelte';
+  import LogoBadge from '$lib/components/LogoBadge.svelte';
 
   interface Props {
     disabled?: boolean;
@@ -46,6 +48,16 @@
   function updateCustomAccent(e: Event) {
     const target = e.target as HTMLInputElement;
     scheme.setCustomColors({ ...$customColorsStore, accent: target.value });
+  }
+
+  // Logo preview variant based on current style and scheme
+  let logoPreviewVariant = $derived(
+    $logoStyle === 'solid' ? 'solid' : $scheme === 'blue' ? 'ocean' : 'scheme'
+  ) as 'ocean' | 'scheme' | 'solid';
+
+  function toggleLogoStyle() {
+    if (disabled) return;
+    logoStyle.setStyle($logoStyle === 'gradient' ? 'solid' : 'gradient');
   }
 </script>
 
@@ -150,4 +162,43 @@
       </div>
     </div>
   {/if}
+
+  <!-- Logo style toggle -->
+  <div
+    class="mt-4 flex items-center justify-between rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--surface-200)] p-4"
+  >
+    <div class="flex items-center gap-3">
+      <LogoBadge size="sm" variant={logoPreviewVariant} />
+      <div>
+        <span class="text-sm font-medium text-[var(--color-base-content)]">
+          {t('settings.appearance.logoGradient')}
+        </span>
+        <p class="text-xs text-[var(--color-base-content)]/60">
+          {t('settings.appearance.logoGradientDescription')}
+        </p>
+      </div>
+    </div>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={$logoStyle === 'gradient'}
+      aria-label={t('settings.appearance.logoGradient')}
+      class={cn(
+        'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors',
+        $logoStyle === 'gradient'
+          ? 'bg-[var(--color-primary)]'
+          : 'bg-[var(--color-base-content)]/20',
+        disabled && 'opacity-50 cursor-not-allowed'
+      )}
+      onclick={toggleLogoStyle}
+      {disabled}
+    >
+      <span
+        class={cn(
+          'pointer-events-none inline-block size-5 rounded-full bg-white shadow-lg ring-0 transition-transform',
+          $logoStyle === 'gradient' ? 'translate-x-5' : 'translate-x-0'
+        )}
+      ></span>
+    </button>
+  </div>
 </div>

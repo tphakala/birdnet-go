@@ -3522,7 +3522,9 @@
       "schemeRose": "Rose",
       "schemeCustom": "Benutzerdefiniert",
       "customPrimary": "Primärfarbe",
-      "customAccent": "Akzentfarbe"
+      "customAccent": "Akzentfarbe",
+      "logoGradient": "Farbverlauf-Logo",
+      "logoGradientDescription": "Farbverlauf-Effekt für das Seitenleisten-Logo verwenden"
     }
   },
   "auth": {
@@ -3915,5 +3917,7 @@
   "settings.appearance.schemeRose": "Rose",
   "settings.appearance.schemeCustom": "Benutzerdefiniert",
   "settings.appearance.customPrimary": "Primärfarbe",
-  "settings.appearance.customAccent": "Akzentfarbe"
+  "settings.appearance.customAccent": "Akzentfarbe",
+  "settings.appearance.logoGradient": "Farbverlauf-Logo",
+  "settings.appearance.logoGradientDescription": "Farbverlauf-Effekt für das Seitenleisten-Logo verwenden"
 }

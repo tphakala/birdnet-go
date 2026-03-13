@@ -3522,7 +3522,9 @@
       "schemeRose": "Różowy",
       "schemeCustom": "Niestandardowy",
       "customPrimary": "Kolor podstawowy",
-      "customAccent": "Kolor akcentu"
+      "customAccent": "Kolor akcentu",
+      "logoGradient": "Logo z gradientem",
+      "logoGradientDescription": "Użyj efektu gradientu na logo paska bocznego"
     }
   },
   "auth": {
@@ -3915,5 +3917,7 @@
   "settings.appearance.schemeRose": "Różowy",
   "settings.appearance.schemeCustom": "Niestandardowy",
   "settings.appearance.customPrimary": "Kolor podstawowy",
-  "settings.appearance.customAccent": "Kolor akcentu"
+  "settings.appearance.customAccent": "Kolor akcentu",
+  "settings.appearance.logoGradient": "Logo z gradientem",
+  "settings.appearance.logoGradientDescription": "Użyj efektu gradientu na logo paska bocznego"
 }

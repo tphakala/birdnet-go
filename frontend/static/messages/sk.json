@@ -3353,7 +3353,9 @@
       "schemeRose": "Ružová",
       "schemeCustom": "Vlastná",
       "customPrimary": "Primárna farba",
-      "customAccent": "Akcentová farba"
+      "customAccent": "Akcentová farba",
+      "logoGradient": "Logo s prechodom",
+      "logoGradientDescription": "Použiť efekt prechodu na logo bočného panela"
     }
   },
   "auth": {
@@ -3746,5 +3748,7 @@
   "settings.appearance.schemeRose": "Ružová",
   "settings.appearance.schemeCustom": "Vlastná",
   "settings.appearance.customPrimary": "Primárna farba",
-  "settings.appearance.customAccent": "Akcentová farba"
+  "settings.appearance.customAccent": "Akcentová farba",
+  "settings.appearance.logoGradient": "Logo s prechodom",
+  "settings.appearance.logoGradientDescription": "Použiť efekt prechodu na logo bočného panela"
 }

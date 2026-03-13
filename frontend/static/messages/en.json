@@ -3546,7 +3546,9 @@
       "schemeRose": "Rose",
       "schemeCustom": "Custom",
       "customPrimary": "Primary Color",
-      "customAccent": "Accent Color"
+      "customAccent": "Accent Color",
+      "logoGradient": "Gradient Logo",
+      "logoGradientDescription": "Use a gradient effect on the sidebar logo"
     }
   },
   "auth": {
@@ -3915,5 +3917,7 @@
   "settings.appearance.schemeRose": "Rose",
   "settings.appearance.schemeCustom": "Custom",
   "settings.appearance.customPrimary": "Primary Color",
-  "settings.appearance.customAccent": "Accent Color"
+  "settings.appearance.customAccent": "Accent Color",
+  "settings.appearance.logoGradient": "Gradient Logo",
+  "settings.appearance.logoGradientDescription": "Use a gradient effect on the sidebar logo"
 }

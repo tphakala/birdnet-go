@@ -3522,7 +3522,9 @@
       "schemeRose": "Rose",
       "schemeCustom": "Personnalisé",
       "customPrimary": "Couleur principale",
-      "customAccent": "Couleur d'accent"
+      "customAccent": "Couleur d'accent",
+      "logoGradient": "Logo en dégradé",
+      "logoGradientDescription": "Utiliser un effet de dégradé sur le logo de la barre latérale"
     }
   },
   "auth": {
@@ -3915,5 +3917,7 @@
   "settings.appearance.schemeRose": "Rose",
   "settings.appearance.schemeCustom": "Personnalisé",
   "settings.appearance.customPrimary": "Couleur principale",
-  "settings.appearance.customAccent": "Couleur d'accent"
+  "settings.appearance.customAccent": "Couleur d'accent",
+  "settings.appearance.logoGradient": "Logo en dégradé",
+  "settings.appearance.logoGradientDescription": "Utiliser un effet de dégradé sur le logo de la barre latérale"
 }
