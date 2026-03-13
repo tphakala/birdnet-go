@@ -34,22 +34,19 @@
 
   let { listen, onchange, disabled = false }: Props = $props();
 
-  // Parse host:port from listen string
-  let host = $state('0.0.0.0');
-  let port = $state(8090);
-
-  // Dropdown state
-  let dropOpen = $state(false);
-
-  // Default interfaces used as fallback and merged with API results
+  // Default interfaces — always available as fallbacks
   const defaultInterfaces: NetworkInterface[] = [
     { address: '0.0.0.0', name: 'all', label: 'All interfaces', status: 'up' },
     { address: '127.0.0.1', name: 'lo', label: 'Loopback', status: 'up' },
   ];
 
-  let interfaces = $state<NetworkInterface[]>([...defaultInterfaces]);
+  // The only true mutable state: API-fetched interfaces
+  let apiInterfaces = $state<NetworkInterface[]>([]);
 
-  // Parse the listen prop into host and port, with IPv6 support
+  // Dropdown UI state
+  let dropOpen = $state(false);
+
+  // Parse listen prop into host and port, with IPv6 support
   function parseListen(value: string): { host: string; port: number } {
     // Handle bracketed IPv6 addresses e.g. [::1]:8090
     if (value.startsWith('[') && value.includes(']')) {
@@ -76,15 +73,33 @@
     return { host: h, port: isNaN(p) ? 8090 : p };
   }
 
-  // Reactively sync host/port when the listen prop changes (e.g. async settings load)
-  $effect(() => {
-    const parsed = parseListen(listen);
-    host = parsed.host;
-    port = parsed.port;
-    ensureCurrentHostInList();
+  // Derived state from listen prop — no $effect needed
+  let host = $derived(parseListen(listen).host);
+  let port = $derived(parseListen(listen).port);
+
+  // Derived interface list: merge API results + defaults + current host
+  let interfaces = $derived.by(() => {
+    // Start with API interfaces (empty until fetch completes)
+    const apiAddresses = new Set(apiInterfaces.map(i => i.address));
+    const merged = [
+      ...apiInterfaces,
+      ...defaultInterfaces.filter(i => !apiAddresses.has(i.address)),
+    ];
+
+    // Ensure current host is in the list
+    if (host && !merged.some(iface => iface.address === host)) {
+      merged.push({
+        address: host,
+        name: 'custom',
+        label: t('settings.integration.observability.listenAddress.customAddress'),
+        status: 'unknown',
+      });
+    }
+
+    return merged;
   });
 
-  // Fetch network interfaces on mount
+  // Fetch network interfaces on mount (the single legitimate side effect)
   $effect(() => {
     fetchInterfaces();
   });
@@ -95,32 +110,10 @@
         '/api/v2/system/network-interfaces'
       );
       if (response.interfaces && response.interfaces.length > 0) {
-        // Merge fetched interfaces with defaults so 0.0.0.0 and 127.0.0.1 are always available
-        const fetchedInterfaces = response.interfaces;
-        const fetchedAddresses = new Set(fetchedInterfaces.map(i => i.address));
-        interfaces = [
-          ...fetchedInterfaces,
-          ...defaultInterfaces.filter(i => !fetchedAddresses.has(i.address)),
-        ];
+        apiInterfaces = response.interfaces;
       }
     } catch {
-      // Keep fallback defaults (0.0.0.0 + 127.0.0.1)
-    } finally {
-      ensureCurrentHostInList();
-    }
-  }
-
-  function ensureCurrentHostInList() {
-    if (!interfaces.some(iface => iface.address === host)) {
-      interfaces = [
-        ...interfaces,
-        {
-          address: host,
-          name: 'custom',
-          label: t('settings.integration.observability.listenAddress.customAddress'),
-          status: 'unknown',
-        },
-      ];
+      // Keep empty apiInterfaces — defaults are merged in via $derived.by
     }
   }
 
@@ -136,14 +129,12 @@
   }
 
   function selectHost(address: string) {
-    host = address;
     dropOpen = false;
-    onchange(`${host}:${port}`);
+    onchange(`${address}:${port}`);
   }
 
   function updatePort(newPort: number) {
-    port = newPort;
-    onchange(`${host}:${port}`);
+    onchange(`${host}:${newPort}`);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -159,7 +150,7 @@
     return Monitor;
   }
 
-  // Derived selected interface with custom fallback instead of interfaces[0]
+  // Derived selected interface with custom fallback
   let selectedIface = $derived(
     interfaces.find(i => i.address === host) ?? {
       address: host,
