@@ -147,6 +147,50 @@ type Dashboard struct {
 	ColorScheme     string               `json:"colorScheme,omitempty"`  // color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
 	CustomColors    *CustomColors        `json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
 	LogoStyle       string               `json:"logoStyle,omitempty"`    // logo display style: "gradient" or "solid"
+	Layout          DashboardLayout      `json:"layout"`                 // configurable dashboard element layout
+}
+
+// DashboardLayout defines the ordered list of elements displayed on the dashboard.
+// Element order is determined by array index position.
+type DashboardLayout struct {
+	Elements []DashboardElement `json:"elements"`
+}
+
+// DashboardElement represents a single configurable element on the dashboard.
+// The Type field determines which optional config pointer is used.
+type DashboardElement struct {
+	Type    string                `json:"type"`              // "banner", "daily-summary", "currently-hearing", "detections-grid", "video-embed"
+	Enabled bool                  `json:"enabled"`           // whether this element is visible
+	Banner  *BannerConfig         `json:"banner,omitempty"`  // config for banner element
+	Video   *VideoEmbedConfig     `json:"video,omitempty"`   // config for video embed element
+	Summary *DailySummaryConfig   `json:"summary,omitempty"` // config for daily summary element
+	Grid    *DetectionsGridConfig `json:"grid,omitempty"`    // config for detections grid element
+}
+
+// BannerConfig holds configuration for the dashboard banner element.
+type BannerConfig struct {
+	ShowImage       bool   `json:"showImage"`       // whether to show a custom image
+	ImagePath       string `json:"imagePath"`       // relative path or URL to the banner image
+	Title           string `json:"title"`           // station name or custom title
+	Description     string `json:"description"`     // brief description text
+	ShowLocationMap bool   `json:"showLocationMap"` // whether to show the location map
+	ShowWeather     bool   `json:"showWeather"`     // whether to show weather conditions
+}
+
+// VideoEmbedConfig holds configuration for the YouTube video embed element.
+type VideoEmbedConfig struct {
+	URL   string `json:"url"`   // YouTube URL or video ID
+	Title string `json:"title"` // optional display title
+}
+
+// DailySummaryConfig holds configuration for the daily summary element.
+type DailySummaryConfig struct {
+	SummaryLimit int `json:"summaryLimit"` // number of species to show
+}
+
+// DetectionsGridConfig holds configuration for the detections grid element.
+type DetectionsGridConfig struct {
+	// Future: card display options
 }
 
 // Spectrogram generation mode constants
