@@ -28,6 +28,7 @@
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import PasswordField from '$lib/desktop/components/forms/PasswordField.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import ListenAddressSelector from '$lib/desktop/features/settings/components/ListenAddressSelector.svelte';
   import MultiStageOperation from '$lib/desktop/components/ui/MultiStageOperation.svelte';
   import type { Stage } from '$lib/desktop/components/ui/MultiStageOperation.types';
   import TestSuccessNote from '$lib/desktop/components/ui/TestSuccessNote.svelte';
@@ -1189,18 +1190,13 @@
             class="transition-opacity duration-200"
             class:opacity-50={!settings.observability?.prometheus.enabled}
           >
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <TextInput
-                id="observability-listen"
-                value={`0.0.0.0:${settings.observability!.prometheus.port}`}
-                label={t('settings.integration.observability.listenAddress.label')}
-                placeholder={t('settings.integration.observability.listenAddress.placeholder')}
-                disabled={!settings.observability?.prometheus.enabled ||
-                  store.isLoading ||
-                  store.isSaving}
-                onchange={updateObservabilityListen}
-              />
-            </div>
+            <ListenAddressSelector
+              listen={$realtimeSettings?.telemetry?.listen ?? '0.0.0.0:8090'}
+              onchange={updateObservabilityListen}
+              disabled={!settings.observability?.prometheus.enabled ||
+                store.isLoading ||
+                store.isSaving}
+            />
           </div>
         </fieldset>
       </div>
