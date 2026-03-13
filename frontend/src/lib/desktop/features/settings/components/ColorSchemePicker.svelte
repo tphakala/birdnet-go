@@ -1,6 +1,7 @@
 <script lang="ts">
   import { scheme, type SchemeId } from '$lib/stores/scheme';
   import { logoStyle } from '$lib/stores/logoStyle';
+  import { settingsActions, dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { Check } from '@lucide/svelte';
@@ -38,6 +39,12 @@
   function selectScheme(id: SchemeId) {
     if (disabled) return;
     scheme.setScheme(id);
+    // Persist to server settings so all visitors see the chosen scheme
+    if ($dashboardSettings) {
+      settingsActions.updateSection('realtime', {
+        dashboard: { ...$dashboardSettings, colorScheme: id },
+      });
+    }
   }
 
   function updateCustomPrimary(e: Event) {
@@ -50,14 +57,33 @@
     scheme.setCustomColors({ ...$customColorsStore, accent: target.value });
   }
 
+  // Map each scheme to its dedicated vibrant gradient variant
+  type LogoVariant = 'ocean' | 'forest' | 'amber' | 'violet' | 'rose' | 'scheme' | 'solid';
+  const SCHEME_GRADIENT_MAP: Record<string, LogoVariant> = {
+    blue: 'ocean',
+    forest: 'forest',
+    amber: 'amber',
+    violet: 'violet',
+    rose: 'rose',
+    custom: 'scheme',
+  };
+
   // Logo preview variant based on current style and scheme
-  let logoPreviewVariant = $derived(
-    $logoStyle === 'solid' ? 'solid' : $scheme === 'blue' ? 'ocean' : 'scheme'
-  ) as 'ocean' | 'scheme' | 'solid';
+   
+  let logoPreviewVariant: LogoVariant = $derived(
+    $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
+  );
 
   function toggleLogoStyle() {
     if (disabled) return;
-    logoStyle.setStyle($logoStyle === 'gradient' ? 'solid' : 'gradient');
+    const newStyle = $logoStyle === 'gradient' ? 'solid' : 'gradient';
+    logoStyle.setStyle(newStyle);
+    // Persist to server settings so all visitors see the chosen style
+    if ($dashboardSettings) {
+      settingsActions.updateSection('realtime', {
+        dashboard: { ...$dashboardSettings, logoStyle: newStyle },
+      });
+    }
   }
 </script>
 

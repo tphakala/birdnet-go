@@ -25,6 +25,8 @@
 import type { AuthConfig } from '../../app.d';
 import { getLogger } from '../utils/logger';
 import { buildAppUrl, setBasePath } from '../utils/urlHelpers';
+import { scheme } from './scheme';
+import { logoStyle } from './logoStyle';
 
 const logger = getLogger('appState');
 
@@ -55,6 +57,8 @@ interface AppConfigResponse {
   };
   version: string;
   basePath?: string;
+  colorScheme?: string;
+  logoStyle?: string;
 }
 
 /**
@@ -184,6 +188,14 @@ export async function initApp(): Promise<boolean> {
           enabledProviders: config.security.authConfig.enabledProviders,
         },
       };
+
+      // Apply server-configured appearance settings
+      if (config.colorScheme) {
+        scheme.applyServerScheme(config.colorScheme);
+      }
+      if (config.logoStyle === 'gradient' || config.logoStyle === 'solid') {
+        logoStyle.setStyle(config.logoStyle);
+      }
 
       appState.initialized = true;
       appState.loading = false;

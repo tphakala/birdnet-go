@@ -20,10 +20,12 @@ const (
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
-	CSRFToken string            `json:"csrfToken"`
-	Security  SecurityConfigDTO `json:"security"`
-	Version   string            `json:"version"`
-	BasePath  string            `json:"basePath"` // reverse proxy prefix for frontend URL construction
+	CSRFToken   string            `json:"csrfToken"`
+	Security    SecurityConfigDTO `json:"security"`
+	Version     string            `json:"version"`
+	BasePath    string            `json:"basePath"`              // reverse proxy prefix for frontend URL construction
+	ColorScheme string            `json:"colorScheme,omitempty"` // admin-configured color scheme for all visitors
+	LogoStyle   string            `json:"logoStyle,omitempty"`   // admin-configured logo style: "gradient" or "solid"
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -97,8 +99,10 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 				EnabledProviders: enabledProviders,
 			},
 		},
-		Version:  c.Settings.Version,
-		BasePath: basePath,
+		Version:     c.Settings.Version,
+		BasePath:    basePath,
+		ColorScheme: c.Settings.Realtime.Dashboard.ColorScheme,
+		LogoStyle:   c.Settings.Realtime.Dashboard.LogoStyle,
 	}
 
 	c.logDebugIfEnabled("Serving app config",

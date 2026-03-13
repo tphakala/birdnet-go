@@ -100,10 +100,22 @@ Performance Optimizations:
     },
   }: Props = $props();
 
-  // Logo variant: solid uses flat color, gradient uses ocean for blue scheme or scheme-derived for others
-  let logoVariant = $derived(
-    $logoStyle === 'solid' ? 'solid' : $scheme === 'blue' ? 'ocean' : 'scheme'
-  ) as 'ocean' | 'scheme' | 'solid';
+  // Map each scheme to its dedicated vibrant gradient variant
+  type LogoVariant = 'ocean' | 'forest' | 'amber' | 'violet' | 'rose' | 'scheme' | 'solid';
+  const SCHEME_GRADIENT_MAP: Record<string, LogoVariant> = {
+    blue: 'ocean',
+    forest: 'forest',
+    amber: 'amber',
+    violet: 'violet',
+    rose: 'rose',
+    custom: 'scheme',
+  };
+
+  // Logo variant: solid uses flat color, gradient uses per-scheme handcrafted gradient
+   
+  let logoVariant: LogoVariant = $derived(
+    $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
+  );
 
   // State for login modal and collapsible sections
   let showLoginModal = $state(false);
