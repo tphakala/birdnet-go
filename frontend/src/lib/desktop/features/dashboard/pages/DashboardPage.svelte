@@ -64,7 +64,9 @@ Performance Optimizations:
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dashboardLayout } from '$lib/stores/settings';
-  import type { DashboardElement } from '$lib/stores/settings';
+  import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
+  import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
+  import { auth } from '$lib/stores/auth';
 
   const logger = getLogger('app');
 
@@ -133,6 +135,27 @@ Performance Optimizations:
     { type: 'detections-grid', enabled: true },
   ];
   let layoutElements = $derived($dashboardLayout?.elements ?? defaultElements);
+
+  // Current layout as a DashboardLayout object for DashboardEditMode
+  let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
+
+  // Admin detection: security off (everyone is admin) or user has access
+  let authState = $derived($auth);
+  let isAdmin = $derived(!authState.security.enabled || authState.security.accessAllowed);
+
+  function handleEditModeChange(editing: boolean) {
+    if (editing) {
+      handleFreezeStart();
+    } else {
+      handleFreezeEnd();
+    }
+  }
+
+  function handleLayoutChange(_newLayout: DashboardLayout) {
+    // Layout was saved by DashboardEditMode via API
+    // Reload dashboard config to pick up the new layout
+    fetchDashboardConfig();
+  }
 
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1192,36 +1215,43 @@ Performance Optimizations:
 </script>
 
 <div class="col-span-12">
-  {#each layoutElements.filter(e => e.enabled) as element (element.type)}
-    {#if element.type === 'daily-summary'}
-      <DailySummaryCard
-        data={dailySummary}
-        loading={isLoadingSummary}
-        error={summaryError}
-        {selectedDate}
-        {showThumbnails}
-        speciesLimit={summaryLimit}
-        onPreviousDay={previousDay}
-        onNextDay={nextDay}
-        onGoToToday={goToToday}
-        onDateChange={handleDateChange}
-      />
-    {:else if element.type === 'currently-hearing' && isViewingToday}
-      <CurrentlyHearingCard detections={pendingDetections} />
-    {:else if element.type === 'detections-grid'}
-      <DetectionCardGrid
-        data={recentDetections}
-        loading={isLoadingDetections}
-        error={detectionsError}
-        limit={detectionLimit}
-        onLimitChange={handleDetectionLimitChange}
-        onRefresh={handleManualRefresh}
-        {newDetectionIds}
-        onFreezeStart={handleFreezeStart}
-        onFreezeEnd={handleFreezeEnd}
-        updatesAreFrozen={freezeCount > 0}
-        className="mt-4"
-      />
-    {/if}
-  {/each}
+  <DashboardEditMode
+    layout={currentLayout}
+    {isAdmin}
+    onLayoutChange={handleLayoutChange}
+    onEditModeChange={handleEditModeChange}
+  >
+    {#snippet renderElement(element, _inEditMode)}
+      {#if element.type === 'daily-summary'}
+        <DailySummaryCard
+          data={dailySummary}
+          loading={isLoadingSummary}
+          error={summaryError}
+          {selectedDate}
+          {showThumbnails}
+          speciesLimit={summaryLimit}
+          onPreviousDay={previousDay}
+          onNextDay={nextDay}
+          onGoToToday={goToToday}
+          onDateChange={handleDateChange}
+        />
+      {:else if element.type === 'currently-hearing' && isViewingToday}
+        <CurrentlyHearingCard detections={pendingDetections} />
+      {:else if element.type === 'detections-grid'}
+        <DetectionCardGrid
+          data={recentDetections}
+          loading={isLoadingDetections}
+          error={detectionsError}
+          limit={detectionLimit}
+          onLimitChange={handleDetectionLimitChange}
+          onRefresh={handleManualRefresh}
+          {newDetectionIds}
+          onFreezeStart={handleFreezeStart}
+          onFreezeEnd={handleFreezeEnd}
+          updatesAreFrozen={freezeCount > 0}
+          className="mt-4"
+        />
+      {/if}
+    {/snippet}
+  </DashboardEditMode>
 </div>
