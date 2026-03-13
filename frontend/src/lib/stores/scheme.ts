@@ -109,7 +109,9 @@ function createSchemeStore() {
       set(scheme);
       applyScheme(scheme);
       if (scheme === 'custom') {
-        applyCustomColors(getInitialCustomColors());
+        const colors = getInitialCustomColors();
+        customColors.set(colors);
+        applyCustomColors(colors);
       }
     },
 
@@ -122,7 +124,9 @@ function createSchemeStore() {
       const scheme = getInitialScheme();
       applyScheme(scheme);
       if (scheme === 'custom') {
-        applyCustomColors(getInitialCustomColors());
+        const colors = getInitialCustomColors();
+        customColors.set(colors);
+        applyCustomColors(colors);
       }
     },
   };
