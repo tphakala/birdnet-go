@@ -3593,21 +3593,21 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content"
+        "appearance": "Apparence",
+        "language": "Langue et régional",
+        "visualContent": "Contenu visuel"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Apparence",
+        "description": "Personnalisez l'apparence de votre interface BirdNET-Go"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Langue et régional",
+        "description": "Langue, unités de température et préférences d'affichage régionales"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Contenu visuel",
+        "description": "Configurez les images d'oiseaux et les paramètres d'affichage du spectrogramme"
       }
     }
   },

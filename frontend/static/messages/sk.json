@@ -651,26 +651,26 @@
       "configFetch": "Nepodarilo sa získať konfiguráciu prehľadu: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Názov",
+      "titlePlaceholder": "Moja vtáčia stanica",
+      "description": "Popis",
+      "descriptionPlaceholder": "Stručný popis vašej stanice na pozorovanie vtákov...",
+      "subElements": "Podelementy",
+      "showImage": "Zobraziť vlastný obrázok",
+      "imageUrl": "URL alebo cesta k obrázku",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Zadajte URL obrázka. Nahrávanie obrázkov bude dostupné v budúcej aktualizácii.",
+      "showLocationMap": "Zobraziť mapu polohy",
+      "showLocationMapHelp": "Zobrazí malú mapu pomocou zemepisnej šírky/dĺžky z vašich hlavných nastavení",
+      "showWeather": "Zobraziť aktuálne počasie",
+      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Vložte akúkoľvek YouTube URL (watch, embed alebo krátky odkaz). Bude prevedená na vloženie s vylepšeným súkromím.",
+      "titleLabel": "Názov (voliteľný)",
+      "titlePlaceholder": "Živé kŕmidlo pre vtáky"
     },
     "editMode": {
       "editing": "Úprava panelu",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Iba plná šírka"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Banner panela",
+      "dailySummary": "Denný prehľad",
+      "currentlyHearing": "Práve počuté",
+      "detectionsGrid": "Nedávne detekcie",
+      "videoEmbed": "Vložené video"
     }
   },
   "detections": {
@@ -3424,21 +3424,21 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content"
+        "appearance": "Vzhľad",
+        "language": "Jazyk a regionálne",
+        "visualContent": "Vizuálny obsah"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Vzhľad",
+        "description": "Prispôsobte vzhľad vášho rozhrania BirdNET-Go"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Jazyk a regionálne",
+        "description": "Jazyk, jednotky teploty a regionálne predvoľby zobrazenia"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Vizuálny obsah",
+        "description": "Nakonfigurujte obrázky vtákov a nastavenia zobrazenia spektrogramu"
       }
     }
   },

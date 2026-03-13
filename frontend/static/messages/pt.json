@@ -651,26 +651,26 @@
       "configFetch": "Falha ao buscar configuração do painel: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Título",
+      "titlePlaceholder": "Minha estação de aves",
+      "description": "Descrição",
+      "descriptionPlaceholder": "Uma breve descrição da sua estação de monitoramento de aves...",
+      "subElements": "Subelementos",
+      "showImage": "Mostrar imagem personalizada",
+      "imageUrl": "URL ou caminho da imagem",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Insira uma URL para uma imagem. O upload de imagens estará disponível em uma atualização futura.",
+      "showLocationMap": "Mostrar mapa de localização",
+      "showLocationMapHelp": "Exibe um pequeno mapa usando a latitude/longitude das suas configurações principais",
+      "showWeather": "Mostrar clima atual",
+      "showWeatherHelp": "Exibe as condições climáticas atuais (requer que a integração climática esteja habilitada)"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "URL do YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Cole qualquer URL do YouTube (watch, embed ou link curto). Será convertido em uma incorporação com privacidade aprimorada.",
+      "titleLabel": "Título (opcional)",
+      "titlePlaceholder": "Comedouro de aves ao vivo"
     },
     "editMode": {
       "editing": "Editando painel",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Apenas largura total"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Banner do painel",
+      "dailySummary": "Resumo diário",
+      "currentlyHearing": "Ouvindo atualmente",
+      "detectionsGrid": "Detecções recentes",
+      "videoEmbed": "Vídeo incorporado"
     }
   },
   "detections": {
@@ -3593,21 +3593,21 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content"
+        "appearance": "Aparência",
+        "language": "Idioma e regional",
+        "visualContent": "Conteúdo visual"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Aparência",
+        "description": "Personalize a aparência da sua interface BirdNET-Go"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Idioma e regional",
+        "description": "Idioma, unidades de temperatura e preferências de exibição regional"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Conteúdo visual",
+        "description": "Configure imagens de aves e configurações de exibição do espectrograma"
       }
     }
   },

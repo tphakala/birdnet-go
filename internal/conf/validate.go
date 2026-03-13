@@ -1071,7 +1071,28 @@ func validateDashboardSettings(settings *Dashboard) error {
 	}
 
 	// Validate layout element configs
+	validElementTypes := []string{"banner", "daily-summary", "currently-hearing", "detections-grid", "video-embed"}
+	validWidths := []string{"", "full", "half"}
+
 	for i, el := range settings.Layout.Elements {
+		if !slices.Contains(validElementTypes, el.Type) {
+			return errors.Newf("Dashboard layout element %d has invalid type %q", i, el.Type).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "dashboard-element-type").
+				Context("element_index", i).
+				Context("element_type", el.Type).
+				Build()
+		}
+
+		if !slices.Contains(validWidths, el.Width) {
+			return errors.Newf("Dashboard layout element %d has invalid width %q (must be \"full\" or \"half\")", i, el.Width).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "dashboard-element-width").
+				Context("element_index", i).
+				Context("element_width", el.Width).
+				Build()
+		}
+
 		if el.Summary != nil && (el.Summary.SummaryLimit < 10 || el.Summary.SummaryLimit > 1000) {
 			return errors.Newf("Dashboard layout element %d SummaryLimit must be between 10 and 1000", i).
 				Category(errors.CategoryValidation).

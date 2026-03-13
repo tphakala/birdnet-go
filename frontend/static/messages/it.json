@@ -651,26 +651,26 @@
       "configFetch": "Impossibile recuperare la configurazione della dashboard: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Titolo",
+      "titlePlaceholder": "La mia stazione ornitologica",
+      "description": "Descrizione",
+      "descriptionPlaceholder": "Una breve descrizione della tua stazione di monitoraggio uccelli...",
+      "subElements": "Sotto-elementi",
+      "showImage": "Mostra immagine personalizzata",
+      "imageUrl": "URL o percorso immagine",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "imageUrlHelp": "Inserisci un URL di un'immagine. Il caricamento di immagini sarà disponibile in un aggiornamento futuro.",
+      "showLocationMap": "Mostra mappa posizione",
+      "showLocationMapHelp": "Mostra una piccola mappa usando la latitudine/longitudine dalle impostazioni principali",
+      "showWeather": "Mostra meteo attuale",
+      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)"
     },
     "videoEmbed": {
-      "youtubeUrl": "YouTube URL",
+      "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "youtubeUrlHelp": "Incolla qualsiasi URL YouTube (watch, embed o link breve). Verrà convertito in un embed con privacy migliorata.",
+      "titleLabel": "Titolo (opzionale)",
+      "titlePlaceholder": "Mangiatoia per uccelli in diretta"
     },
     "editMode": {
       "editing": "Modifica dashboard",
@@ -699,11 +699,11 @@
       "fullWidthOnly": "Solo larghezza intera"
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
-      "videoEmbed": "Video Embed"
+      "banner": "Banner della dashboard",
+      "dailySummary": "Riepilogo giornaliero",
+      "currentlyHearing": "In ascolto ora",
+      "detectionsGrid": "Rilevamenti recenti",
+      "videoEmbed": "Video incorporato"
     }
   },
   "detections": {
@@ -3390,21 +3390,21 @@
     },
     "userInterface": {
       "tabs": {
-        "appearance": "Appearance",
-        "language": "Language & Regional",
-        "visualContent": "Visual Content"
+        "appearance": "Aspetto",
+        "language": "Lingua e regionale",
+        "visualContent": "Contenuti visivi"
       },
       "appearance": {
-        "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "title": "Aspetto",
+        "description": "Personalizza l'aspetto della tua interfaccia BirdNET-Go"
       },
       "language": {
-        "title": "Language & Regional",
-        "description": "Language, temperature units, and regional display preferences"
+        "title": "Lingua e regionale",
+        "description": "Lingua, unità di temperatura e preferenze di visualizzazione regionali"
       },
       "visualContent": {
-        "title": "Visual Content",
-        "description": "Configure bird images and spectrogram display settings"
+        "title": "Contenuti visivi",
+        "description": "Configura le immagini degli uccelli e le impostazioni di visualizzazione dello spettrogramma"
       }
     }
   },
