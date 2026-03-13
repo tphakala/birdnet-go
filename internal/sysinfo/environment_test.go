@@ -57,6 +57,7 @@ func TestDetectARMVariant(t *testing.T) {
 	}{
 		{name: "armv7l from cpuinfo", cpuinfo: "processor\t: 0\nmodel name\t: ARMv7 Processor\nCPU architecture: 7\n", expected: "armv7l"},
 		{name: "armv6l from cpuinfo", cpuinfo: "processor\t: 0\nmodel name\t: ARMv6-compatible\nCPU architecture: 6\n", expected: "armv6l"},
+		{name: "armv5l from cpuinfo", cpuinfo: "processor\t: 0\nmodel name\t: ARMv5 Processor\nCPU architecture: 5\n", expected: "armv5l"},
 		{name: "missing cpuinfo falls back to arm", cpuinfo: "", expected: "arm"},
 		{name: "no architecture field falls back to arm", cpuinfo: "processor\t: 0\nmodel name\t: ARM Processor\n", expected: "arm"},
 	}

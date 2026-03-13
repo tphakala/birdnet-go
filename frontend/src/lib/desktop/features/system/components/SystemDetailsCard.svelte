@@ -44,11 +44,14 @@
     tempSymbol,
   }: Props = $props();
 
-  let cpuDisplay = $derived(cpuArch && cpuModel ? `${cpuArch} / ${cpuModel}` : (cpuArch ?? ''));
+  let cpuDisplay = $derived([cpuArch, cpuModel].filter(Boolean).join(' / '));
 
   let environmentDisplay = $derived(
     environment && virtualization ? `${environment} (${virtualization})` : (environment ?? '')
   );
+
+  const containerTypes = ['Docker', 'Podman', 'LXC', 'Container', 'systemd-nspawn'];
+  let isContainer = $derived(containerTypes.some(ct => environment?.startsWith(ct) ?? false));
 </script>
 
 <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
@@ -62,7 +65,11 @@
     </div>
     {#if environment}
       <div class="flex items-center gap-3" title={t('system.systemInfo.environment')}>
-        <Container class="w-3.5 h-3.5 shrink-0 text-muted" />
+        {#if isContainer}
+          <Container class="w-3.5 h-3.5 shrink-0 text-muted" />
+        {:else}
+          <Server class="w-3.5 h-3.5 shrink-0 text-muted" />
+        {/if}
         <span class="text-sm truncate">{environmentDisplay}</span>
       </div>
     {/if}

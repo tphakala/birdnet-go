@@ -23,9 +23,11 @@ const (
 
 // Cached detection results — environment never changes at runtime.
 var (
+	cachedCPUArch   string
 	cachedCPUModel  string
 	cachedEnvType   string
 	cachedEnvDetail string
+	archOnce        sync.Once
 	cpuOnce         sync.Once
 	envOnce         sync.Once
 )
@@ -74,11 +76,16 @@ func detectARMVariant(rootPath string) string {
 
 // GetCPUArch returns the human-readable CPU architecture name.
 // For ARM 32-bit, it reads /proc/cpuinfo to distinguish armv6l/armv7l.
+// Results are cached with sync.Once since architecture never changes at runtime.
 func GetCPUArch() string {
-	if runtime.GOARCH == "arm" {
-		return detectARMVariant("/")
-	}
-	return mapGOARCH(runtime.GOARCH)
+	archOnce.Do(func() {
+		if runtime.GOARCH == "arm" {
+			cachedCPUArch = detectARMVariant("/")
+		} else {
+			cachedCPUArch = mapGOARCH(runtime.GOARCH)
+		}
+	})
+	return cachedCPUArch
 }
 
 // GetCPUModel returns the CPU model name using gopsutil.
@@ -208,14 +215,16 @@ func detectFromSystemdContainer(path string) (envType, detail string) {
 	return mapContainerEnvVar(value)
 }
 
-// isWSL2 checks /proc/version for Microsoft WSL2 indicators.
+// isWSL2 checks /proc/version for WSL2-specific kernel identifiers.
+// Uses "microsoft-standard-wsl" to distinguish WSL2 from WSL1, which has
+// a different kernel string (e.g., "Microsoft" without "standard-wsl").
 func isWSL2(path string) bool {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return false
 	}
 	content := strings.ToLower(string(data))
-	return strings.Contains(content, "microsoft") || strings.Contains(content, "wsl")
+	return strings.Contains(content, "microsoft-standard-wsl")
 }
 
 // detectFromDMI reads /sys/class/dmi/id/ files to identify hypervisors.
@@ -248,7 +257,9 @@ func detectFromDMI(root string) (envType, detail string) {
 	return "", ""
 }
 
-// hasHypervisorFlag checks /proc/cpuinfo for the hypervisor CPU flag.
+// hasHypervisorFlag checks the first CPU's flags in /proc/cpuinfo for the
+// hypervisor flag. Only the first flags line is checked since the hypervisor
+// flag is consistent across all cores on a given system.
 func hasHypervisorFlag(path string) bool {
 	file, err := os.Open(path)
 	if err != nil {
