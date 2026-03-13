@@ -13,8 +13,12 @@ const DEFAULT_STYLE: LogoStyle = 'gradient';
 
 function getInitialStyle(): LogoStyle {
   if (typeof window === 'undefined') return DEFAULT_STYLE;
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === 'gradient' || stored === 'solid') return stored;
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === 'gradient' || stored === 'solid') return stored;
+  } catch {
+    // localStorage unavailable (private browsing, storage full)
+  }
   return DEFAULT_STYLE;
 }
 
@@ -26,7 +30,11 @@ function createLogoStyleStore() {
     setStyle(style: LogoStyle) {
       set(style);
       if (typeof window !== 'undefined') {
-        localStorage.setItem(STORAGE_KEY, style);
+        try {
+          localStorage.setItem(STORAGE_KEY, style);
+        } catch {
+          // localStorage unavailable (private browsing, storage full)
+        }
       }
     },
   };
