@@ -616,7 +616,7 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 	// Use net.SplitHostPort for robust parsing (handles IPv6 brackets)
 	_, portStr, err := net.SplitHostPort(address)
 	if err != nil {
-		return errors.Newf("invalid listen address format: %v (expected 'host:port', e.g. '0.0.0.0:8090')", err).
+		return errors.Newf("invalid listen address format: %v (expected 'host:port', e.g. '0.0.0.0:8090' or '[::1]:8090')", err).
 			Component("analysis").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "validate_listen_address").

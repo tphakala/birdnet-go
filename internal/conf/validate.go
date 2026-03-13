@@ -545,7 +545,7 @@ func ValidateTelemetrySettings(settings *TelemetrySettings) ValidationResult {
 	_, portStr, err := net.SplitHostPort(settings.Listen)
 	if err != nil {
 		result.Valid = false
-		result.Errors = append(result.Errors, fmt.Sprintf("telemetry listen address has invalid format: %v (expected 'host:port', e.g. '0.0.0.0:8090')", err))
+		result.Errors = append(result.Errors, fmt.Sprintf("telemetry listen address has invalid format: %v (expected 'host:port', e.g. '0.0.0.0:8090' or '[::1]:8090')", err))
 		return result
 	}
 

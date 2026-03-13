@@ -285,6 +285,8 @@ type NetworkInterface struct {
 // GetNetworkInterfaces returns the IPv4 network interfaces available for binding.
 // GET /api/v2/system/network-interfaces
 func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting network interfaces")
+
 	interfaces := []NetworkInterface{
 		{Address: "0.0.0.0", Name: "all", Label: "All interfaces", Status: "up"},
 	}
@@ -299,6 +301,8 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 		interfaces = append(interfaces, NetworkInterface{
 			Address: "127.0.0.1", Name: "lo", Label: "Loopback", Status: "up",
 		})
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved (fallback)",
+			logger.Int("count", len(interfaces)))
 		return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
 	}
 
@@ -348,6 +352,8 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 		}
 	}
 
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved successfully",
+		logger.Int("count", len(interfaces)))
 	return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
 }
 

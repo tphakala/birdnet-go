@@ -142,38 +142,9 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	// Create mock datastore
 	mockDS := mocks.NewMockInterface(t)
 
-	// Create settings with values that pass conf.ValidateSettings()
-	settings := &conf.Settings{
-		BirdNET: conf.BirdNETConfig{
-			Sensitivity: 1.0,
-			Threshold:   0.8,
-			Locale:      "en",
-		},
-		WebServer: conf.WebServerSettings{
-			Debug: true,
-			LiveStream: conf.LiveStreamSettings{
-				BitRate:       128,
-				SegmentLength: 5,
-			},
-		},
-		Security: conf.Security{
-			SessionDuration: 168 * time.Hour,
-		},
-		Realtime: conf.RealtimeSettings{
-			Interval: 15,
-			Dashboard: conf.Dashboard{
-				SummaryLimit: 100,
-			},
-			Weather: conf.WeatherSettings{
-				PollInterval: 30,
-			},
-			Audio: conf.AudioSettings{
-				Export: conf.ExportSettings{
-					Path: t.TempDir(), // Set the required path
-				},
-			},
-		},
-	}
+	// Create settings from shared valid defaults, with test-specific overrides
+	settings := newValidTestSettings()
+	settings.Realtime.Audio.Export.Path = t.TempDir()
 
 	// Create a mock ImageProvider for testing
 	mockImageProvider := new(MockImageProvider)

@@ -536,6 +536,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// Run full settings validation after section merge to catch invalid values
 	// (e.g., malformed telemetry listen address, invalid port ranges, etc.)
 	if err := conf.ValidateSettings(settings); err != nil {
+		*settings = oldSettings
 		return c.HandleError(ctx, err,
 			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 	}
