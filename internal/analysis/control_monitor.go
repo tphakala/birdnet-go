@@ -3,8 +3,8 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -613,9 +613,10 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 			Build()
 	}
 
-	// Check if it contains a colon (for port)
-	if !strings.Contains(address, ":") {
-		return errors.Newf("listen address must include port (e.g., '0.0.0.0:8090')").
+	// Use net.SplitHostPort for robust parsing (handles IPv6 brackets)
+	_, portStr, err := net.SplitHostPort(address)
+	if err != nil {
+		return errors.Newf("invalid listen address format: %v (expected 'host:port', e.g. '0.0.0.0:8090' or '[::1]:8090')", err).
 			Component("analysis").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "validate_listen_address").
@@ -623,10 +624,10 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 			Build()
 	}
 
-	// Split and validate components
-	parts := strings.Split(address, ":")
-	if len(parts) != 2 {
-		return errors.Newf("invalid address format, expected 'host:port'").
+	// Validate port is numeric and in valid range
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return errors.Newf("invalid port number: %s", portStr).
 			Component("analysis").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "validate_listen_address").
@@ -634,10 +635,8 @@ func (cm *ControlMonitor) validateListenAddress(address string) error {
 			Build()
 	}
 
-	// Validate port is numeric
-	port := parts[1]
-	if _, err := strconv.Atoi(port); err != nil {
-		return errors.Newf("invalid port number: %s", port).
+	if port < 1 || port > 65535 {
+		return errors.Newf("port must be between 1 and 65535, got %d", port).
 			Component("analysis").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "validate_listen_address").

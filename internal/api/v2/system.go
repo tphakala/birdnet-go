@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -273,6 +274,89 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, statsMap)
 }
 
+// NetworkInterface represents a bindable network interface address.
+type NetworkInterface struct {
+	Address string `json:"address"`
+	Name    string `json:"name"`
+	Label   string `json:"label"`
+	Status  string `json:"status"`
+}
+
+// GetNetworkInterfaces returns the IPv4 network interfaces available for binding.
+// GET /api/v2/system/network-interfaces
+func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting network interfaces")
+
+	interfaces := []NetworkInterface{
+		{Address: "0.0.0.0", Name: "all", Label: "All interfaces", Status: "up"},
+	}
+
+	// Track addresses to avoid duplicates
+	seen := map[string]bool{"0.0.0.0": true}
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		// Log but don't fail — return at least the wildcard and loopback
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to enumerate network interfaces", logger.Error(err))
+		interfaces = append(interfaces, NetworkInterface{
+			Address: "127.0.0.1", Name: "lo", Label: "Loopback", Status: "up",
+		})
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved (fallback)",
+			logger.Int("count", len(interfaces)))
+		return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
+	}
+
+	for _, iface := range ifaces {
+		// Determine interface status
+		status := "down"
+		if iface.Flags&net.FlagUp != 0 {
+			status = "up"
+		}
+
+		addrs, err := iface.Addrs()
+		if err != nil {
+			continue
+		}
+
+		for _, addr := range addrs {
+			var ip net.IP
+			switch v := addr.(type) {
+			case *net.IPNet:
+				ip = v.IP
+			case *net.IPAddr:
+				ip = v.IP
+			}
+
+			// Skip non-IPv4 addresses
+			if ip == nil || ip.To4() == nil {
+				continue
+			}
+
+			addrStr := ip.String()
+			if seen[addrStr] {
+				continue
+			}
+			seen[addrStr] = true
+
+			label := iface.Name
+			if ip.IsLoopback() {
+				label = "Loopback"
+			}
+
+			interfaces = append(interfaces, NetworkInterface{
+				Address: addrStr,
+				Name:    iface.Name,
+				Label:   label,
+				Status:  status,
+			})
+		}
+	}
+
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Network interfaces retrieved successfully",
+		logger.Int("count", len(interfaces)))
+	return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
+}
+
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
 	c.logInfoIfEnabled("Initializing system routes")
@@ -304,6 +388,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/database/stats", c.GetDatabaseStats)
 	protectedGroup.GET("/database/v2/stats", c.GetV2DatabaseStats)
 	protectedGroup.POST("/database/backup", c.DownloadDatabaseBackup)
+	protectedGroup.GET("/network-interfaces", c.GetNetworkInterfaces)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")

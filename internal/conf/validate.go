@@ -527,6 +527,43 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 	return result
 }
 
+// ValidateTelemetrySettings validates the telemetry endpoint configuration.
+// Returns validation result with errors if enabled and listen address is malformed.
+func ValidateTelemetrySettings(settings *TelemetrySettings) ValidationResult {
+	result := ValidationResult{Valid: true}
+
+	if !settings.Enabled {
+		return result
+	}
+
+	if settings.Listen == "" {
+		result.Valid = false
+		result.Errors = append(result.Errors, "telemetry listen address cannot be empty when enabled")
+		return result
+	}
+
+	_, portStr, err := net.SplitHostPort(settings.Listen)
+	if err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("telemetry listen address has invalid format: %v (expected 'host:port', e.g. '0.0.0.0:8090' or '[::1]:8090')", err))
+		return result
+	}
+
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("telemetry listen port is not a valid number: %s", portStr))
+		return result
+	}
+
+	if port < 1 || port > 65535 {
+		result.Valid = false
+		result.Errors = append(result.Errors, fmt.Sprintf("telemetry listen port must be between 1 and 65535, got %d", port))
+	}
+
+	return result
+}
+
 // ValidateSettings validates the entire Settings struct
 func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
@@ -741,6 +778,11 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 			Build()
 	}
 
+	// Validate telemetry settings
+	if err := validateTelemetrySettings(&settings.Telemetry); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -761,6 +803,19 @@ func validateMQTTSettings(settings *MQTTSettings) error {
 			Build()
 	}
 
+	return nil
+}
+
+// validateTelemetrySettings validates the telemetry-specific settings.
+// This function uses ValidateTelemetrySettings internally and handles error formatting.
+func validateTelemetrySettings(settings *TelemetrySettings) error {
+	result := ValidateTelemetrySettings(settings)
+	if !result.Valid {
+		return errors.Newf("%s", result.Errors[0]).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "telemetry-listen-address").
+			Build()
+	}
 	return nil
 }
 

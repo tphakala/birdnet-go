@@ -861,3 +861,66 @@ func TestSystemTemperatureStructure(t *testing.T) {
 	assert.Equal(t, temp.SensorDetails, parsed.SensorDetails)
 	assert.Equal(t, temp.Message, parsed.Message)
 }
+
+// TestGetNetworkInterfaces tests the network interfaces endpoint
+func TestGetNetworkInterfaces(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "network-interfaces")
+
+	e, controller := setupSystemTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/network-interfaces", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	err := controller.GetNetworkInterfaces(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response struct {
+		Interfaces []struct {
+			Address string `json:"address"`
+			Name    string `json:"name"`
+			Label   string `json:"label"`
+			Status  string `json:"status"`
+		} `json:"interfaces"`
+	}
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Should always have at least the wildcard entry
+	require.NotEmpty(t, response.Interfaces, "should have at least one interface")
+
+	// First entry should always be the all-interfaces wildcard
+	assert.Equal(t, "0.0.0.0", response.Interfaces[0].Address)
+	assert.Equal(t, "all", response.Interfaces[0].Name)
+	assert.Equal(t, "up", response.Interfaces[0].Status)
+
+	// Should contain loopback (status may vary in restricted CI environments)
+	var hasLoopback bool
+	for _, iface := range response.Interfaces {
+		if iface.Address == "127.0.0.1" {
+			hasLoopback = true
+			assert.Contains(t, []string{"up", "down"}, iface.Status,
+				"loopback status should be valid")
+			break
+		}
+	}
+	assert.True(t, hasLoopback, "should include loopback interface")
+
+	// All entries should have non-empty address and name
+	for _, iface := range response.Interfaces {
+		assert.NotEmpty(t, iface.Address, "address should not be empty")
+		assert.NotEmpty(t, iface.Name, "name should not be empty")
+		assert.Contains(t, []string{"up", "down"}, iface.Status, "status should be up or down")
+	}
+
+	// No duplicate addresses
+	seen := make(map[string]bool)
+	for _, iface := range response.Interfaces {
+		assert.False(t, seen[iface.Address], "duplicate address: %s", iface.Address)
+		seen[iface.Address] = true
+	}
+}
