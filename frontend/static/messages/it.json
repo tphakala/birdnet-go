@@ -2213,7 +2213,11 @@
         "disabled": "Integrazione osservabilità non è abilitata",
         "listenAddress": {
           "label": "Indirizzo Ascolto",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Indirizzo di binding",
+          "portLabel": "Porta",
+          "customAddress": "Indirizzo personalizzato",
+          "interfaceDown": "inattivo"
         }
       },
       "weather": {

@@ -2410,7 +2410,11 @@
         "disabled": "Observability-Integration ist nicht aktiviert",
         "listenAddress": {
           "label": "Listen-Adresse",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Bindungsadresse",
+          "portLabel": "Port",
+          "customAddress": "Benutzerdefinierte Adresse",
+          "interfaceDown": "inaktiv"
         }
       },
       "weather": {

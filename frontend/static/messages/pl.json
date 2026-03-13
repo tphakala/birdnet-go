@@ -2416,7 +2416,11 @@
         "disabled": "Integracja obserwowalności nie jest włączona",
         "listenAddress": {
           "label": "Adres Nasłuchiwania",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Adres nasłuchiwania",
+          "portLabel": "Port",
+          "customAddress": "Adres niestandardowy",
+          "interfaceDown": "nieaktywny"
         }
       },
       "weather": {

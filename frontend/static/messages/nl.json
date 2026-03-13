@@ -2410,7 +2410,11 @@
         "disabled": "Observeerbaar integratie is niet ingeschakeld",
         "listenAddress": {
           "label": "Luister Adres",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Bindadres",
+          "portLabel": "Poort",
+          "customAddress": "Aangepast adres",
+          "interfaceDown": "inactief"
         }
       },
       "weather": {
