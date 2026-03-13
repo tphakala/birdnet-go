@@ -9,10 +9,12 @@
 -->
 <script lang="ts">
   import { dndzone } from 'svelte-dnd-action';
-  import { Pencil, Save, X } from '@lucide/svelte';
+  import { Plus, Save, X } from '@lucide/svelte';
   import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
+  import type { DashboardElementType } from '$lib/stores/settings';
   import DashboardElementWrapper from './DashboardElementWrapper.svelte';
   import ElementConfigModal from './ElementConfigModal.svelte';
+  import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
   import { api } from '$lib/utils/api';
   import { getLogger } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -22,41 +24,68 @@
 
   interface Props {
     layout: DashboardLayout;
-    isAdmin: boolean;
+    editMode: boolean;
     onLayoutChange: (_layout: DashboardLayout) => void;
     onEditModeChange: (_editing: boolean) => void;
     renderElement: Snippet<[element: DashboardElement, editMode: boolean]>;
   }
 
-  let { layout, isAdmin, onLayoutChange, onEditModeChange, renderElement }: Props = $props();
+  let { layout, editMode, onLayoutChange, onEditModeChange, renderElement }: Props = $props();
 
-  let editMode = $state(false);
   let editElements = $state<(DashboardElement & { id: string })[]>([]);
   let configElement = $state<DashboardElement | null>(null);
   let configModalOpen = $state(false);
   let isSaving = $state(false);
 
-  // Enter edit mode: clone layout for editing
-  function enterEditMode() {
-    editElements = layout.elements.map((el, i) => ({
-      ...(JSON.parse(JSON.stringify(el)) as DashboardElement),
-      id: el.id ?? `${el.type}-${i}`,
-    }));
-    editMode = true;
-    onEditModeChange(true);
-  }
+  let addDropdownOpen = $state(false);
+
+  const ALL_ELEMENT_TYPES: DashboardElementType[] = [
+    'search',
+    'banner',
+    'daily-summary',
+    'currently-hearing',
+    'detections-grid',
+    'video-embed',
+  ];
+
+  let missingTypes = $derived(
+    ALL_ELEMENT_TYPES.filter(type => !editElements.some(el => el.type === type))
+  );
+
+  // Initialize editElements when editMode becomes true
+  $effect(() => {
+    if (editMode && editElements.length === 0) {
+      editElements = layout.elements.map((el, i) => ({
+        ...(JSON.parse(JSON.stringify(el)) as DashboardElement),
+        id: el.id ?? `${el.type}-${i}`,
+      }));
+    }
+  });
 
   // Cancel: discard changes
   function cancelEdit() {
-    editMode = false;
     editElements = [];
     configElement = null;
     configModalOpen = false;
+    addDropdownOpen = false;
     onEditModeChange(false);
+  }
+
+  // Add a new element to the layout
+  function addElement(type: DashboardElementType) {
+    const id = `${type}-${Date.now()}`;
+    const newElement: DashboardElement & { id: string } = {
+      id,
+      type,
+      enabled: true,
+    };
+    editElements = [...editElements, newElement];
+    addDropdownOpen = false;
   }
 
   // Save: persist layout via dashboard API
   async function saveLayout() {
+    addDropdownOpen = false;
     isSaving = true;
     try {
       // Preserve id field for stable element identification
@@ -73,7 +102,6 @@
 
       await api.patch('/api/v2/settings/dashboard', { layout: newLayout });
       onLayoutChange(newLayout);
-      editMode = false;
       onEditModeChange(false);
     } catch (error) {
       logger.error('Failed to save dashboard layout:', error);
@@ -122,19 +150,6 @@
   }
 </script>
 
-{#if isAdmin && !editMode}
-  <!-- Edit button (floating, bottom-right) -->
-  <div class="fixed bottom-6 right-6 z-40">
-    <button
-      onclick={enterEditMode}
-      class="flex items-center gap-2 rounded-full bg-[var(--color-primary)] px-4 py-2.5 text-[var(--color-primary-content)] shadow-lg transition-all hover:opacity-90"
-    >
-      <Pencil class="size-4" />
-      <span class="text-sm font-medium">{t('dashboard.editMode.editButton')}</span>
-    </button>
-  </div>
-{/if}
-
 {#if editMode}
   <!-- Floating toolbar (top, centered) -->
   <div
@@ -159,6 +174,38 @@
       <X class="size-3.5" />
       {t('dashboard.editMode.cancel')}
     </button>
+    <div class="h-5 w-px bg-[var(--color-base-200)]"></div>
+    <div class="relative">
+      <button
+        onclick={() => {
+          addDropdownOpen = !addDropdownOpen;
+        }}
+        disabled={missingTypes.length === 0}
+        class="flex items-center gap-1.5 rounded-lg border border-[var(--color-base-content)]/30 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-black/5 disabled:opacity-50 dark:hover:bg-white/10"
+        aria-label={t('dashboard.editMode.addElement')}
+      >
+        <Plus class="size-3.5" />
+        {t('dashboard.editMode.addElement')}
+      </button>
+
+      {#if addDropdownOpen && missingTypes.length > 0}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] py-1 shadow-xl"
+          onclick={e => e.stopPropagation()}
+          onkeydown={e => e.stopPropagation()}
+        >
+          {#each missingTypes as type}
+            <button
+              onclick={() => addElement(type)}
+              class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--color-base-200)]"
+            >
+              {getElementLabel(type)}
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- Drag-and-drop zone -->

@@ -114,6 +114,10 @@
           <p class="text-sm text-[var(--color-base-content)]/60">
             {t('dashboard.editMode.currentlyHearingNote')}
           </p>
+        {:else if editElement.type === 'search'}
+          <p class="text-sm text-[var(--color-base-content)]/60">
+            {t('dashboard.editMode.searchNote')}
+          </p>
         {:else}
           <p class="text-sm text-[var(--color-base-content)]/60">
             {t('dashboard.editMode.notAvailable')}

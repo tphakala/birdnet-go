@@ -63,12 +63,13 @@ Performance Optimizations:
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { dashboardLayout } from '$lib/stores/settings';
-  import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
+  import { dashboardLayout, settingsStore } from '$lib/stores/settings';
+  import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
+  import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
-  import { auth } from '$lib/stores/auth';
+  import { Search } from '@lucide/svelte';
 
   const logger = getLogger('app');
 
@@ -130,8 +131,12 @@ Performance Optimizations:
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
   let pendingDetections = $state<PendingDetection[]>([]);
 
+  // Subscribe to edit mode store
+  let isEditing = $derived($dashboardEditMode);
+
   // Dashboard layout: derive enabled elements from layout config with fallback
   const defaultElements: DashboardElement[] = [
+    { id: 'search-0', type: 'search', enabled: true },
     { id: 'daily-summary-0', type: 'daily-summary', enabled: true, summary: { summaryLimit: 30 } },
     { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
@@ -141,11 +146,9 @@ Performance Optimizations:
   // Current layout as a DashboardLayout object for DashboardEditMode
   let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
 
-  // Admin detection: security off (everyone is admin) or user has access
-  let authState = $derived($auth);
-  let isAdmin = $derived(!authState.security.enabled || authState.security.accessAllowed);
-
   function handleEditModeChange(editing: boolean) {
+    dashboardEditMode.set(editing);
+
     if (editing) {
       handleFreezeStart();
     } else {
@@ -153,9 +156,40 @@ Performance Optimizations:
     }
   }
 
-  function handleLayoutChange(_newLayout: DashboardLayout) {
-    // Layout was saved by DashboardEditMode via API
-    // Reload dashboard config to pick up the new layout
+  function handleLayoutChange(newLayout: DashboardLayout) {
+    // Update settings store directly for immediate reactivity
+    const defaultDashboard: Dashboard = {
+      thumbnails: { summary: true, recent: true, imageProvider: '', fallbackPolicy: '' },
+      summaryLimit: 30,
+    };
+
+    settingsStore.update(state => ({
+      ...state,
+      formData: {
+        ...state.formData,
+        realtime: {
+          ...state.formData.realtime,
+          dashboard: {
+            ...defaultDashboard,
+            ...state.formData.realtime?.dashboard,
+            layout: newLayout,
+          },
+        },
+      },
+      originalData: {
+        ...state.originalData,
+        realtime: {
+          ...state.originalData.realtime,
+          dashboard: {
+            ...defaultDashboard,
+            ...state.originalData.realtime?.dashboard,
+            layout: newLayout,
+          },
+        },
+      },
+    }));
+
+    // Also refresh non-layout config (summaryLimit, thumbnails)
     fetchDashboardConfig();
   }
 
@@ -1219,12 +1253,24 @@ Performance Optimizations:
 <div class="col-span-12">
   <DashboardEditMode
     layout={currentLayout}
-    {isAdmin}
+    editMode={isEditing}
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
     {#snippet renderElement(element, _inEditMode)}
-      {#if element.type === 'banner' && element.banner}
+      {#if element.type === 'search'}
+        <div class="relative">
+          <Search
+            class="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-[var(--color-base-content)]/40"
+          />
+          <input
+            type="text"
+            placeholder={t('navigation.search')}
+            class="w-full rounded-xl border border-[var(--color-base-content)]/10 bg-[var(--color-base-200)]/50 py-3 pl-10 pr-4 text-sm text-[var(--color-base-content)] placeholder-[var(--color-base-content)]/40 transition-colors focus:border-[var(--color-primary)]/50 focus:outline-none"
+            onfocus={() => navigation.navigate('/ui/search')}
+          />
+        </div>
+      {:else if element.type === 'banner' && element.banner}
         <BannerCard config={element.banner} />
       {:else if element.type === 'daily-summary'}
         <DailySummaryCard
