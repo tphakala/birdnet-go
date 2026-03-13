@@ -2752,7 +2752,13 @@
         "disabled": "La integración de observabilidad no está habilitada",
         "listenAddress": {
           "label": "Dirección de escucha",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Dirección de enlace",
+          "portLabel": "Puerto",
+          "allInterfaces": "Todas las interfaces",
+          "loopback": "Loopback",
+          "customAddress": "Dirección personalizada",
+          "interfaceDown": "inactivo"
         }
       },
       "weather": {

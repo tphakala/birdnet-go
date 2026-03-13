@@ -2247,7 +2247,13 @@
         "disabled": "Integrácia pozorovateľnosti nie je povolená",
         "listenAddress": {
           "label": "Adresa počúvania",
-          "placeholder": "0.0.0.0:8090"
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Adresa viazania",
+          "portLabel": "Port",
+          "allInterfaces": "Všetky rozhrania",
+          "loopback": "Loopback",
+          "customAddress": "Vlastná adresa",
+          "interfaceDown": "neaktívne"
         }
       },
       "weather": {
