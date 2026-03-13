@@ -832,7 +832,9 @@
       "temperature": "CPU Temperature",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperature data unavailable",
-      "cpuCores": "CPU cores"
+      "cpuCores": "CPU cores",
+      "cpuDetails": "CPU",
+      "environment": "Environment"
     },
     "diskUsage": {
       "title": "Disk Usage",

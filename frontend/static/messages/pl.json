@@ -832,7 +832,9 @@
       "temperature": "Temperatura CPU",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Dane temperatury niedostępne",
-      "cpuCores": "Rdzenie CPU"
+      "cpuCores": "Rdzenie CPU",
+      "cpuDetails": "Procesor",
+      "environment": "Środowisko"
     },
     "diskUsage": {
       "title": "Użycie Dysku",

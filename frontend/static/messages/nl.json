@@ -832,7 +832,9 @@
       "temperature": "Processor temperatuur",
       "temperatureValue": "{temp}°C",
       "temperatureUnavailable": "Temperatuur informatie niet beschikbaar",
-      "cpuCores": "CPU-kernen"
+      "cpuCores": "CPU-kernen",
+      "cpuDetails": "Processor",
+      "environment": "Omgeving"
     },
     "diskUsage": {
       "title": "Opslag gebruik",
