@@ -63,6 +63,8 @@ Performance Optimizations:
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { dashboardLayout } from '$lib/stores/settings';
+  import type { DashboardElement } from '$lib/stores/settings';
 
   const logger = getLogger('app');
 
@@ -123,6 +125,14 @@ Performance Optimizations:
   let summaryLimit = $state(30); // Default from backend (conf/defaults.go) - species count limit for daily summary
   let configLoaded = $state(false); // Gates reactive preloading until config is loaded
   let pendingDetections = $state<PendingDetection[]>([]);
+
+  // Dashboard layout: derive enabled elements from layout config with fallback
+  const defaultElements: DashboardElement[] = [
+    { type: 'daily-summary', enabled: true, summary: { summaryLimit: 100 } },
+    { type: 'currently-hearing', enabled: true },
+    { type: 'detections-grid', enabled: true },
+  ];
+  let layoutElements = $derived($dashboardLayout?.elements ?? defaultElements);
 
   // SSE throttling timer
   let sseFetchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -349,11 +359,15 @@ Performance Optimizations:
       interface DashboardConfig {
         thumbnails?: { summary?: boolean };
         summaryLimit?: number;
+        layout?: { elements?: DashboardElement[] };
       }
       const config = await api.get<DashboardConfig>('/api/v2/settings/dashboard');
       // API returns lowercase field names matching Go JSON tags
       showThumbnails = config.thumbnails?.summary ?? true;
-      summaryLimit = config.summaryLimit ?? 30;
+      // Extract summaryLimit from layout element if available, fall back to top-level field
+      const layoutSummaryLimit = config.layout?.elements?.find(e => e.type === 'daily-summary')
+        ?.summary?.summaryLimit;
+      summaryLimit = layoutSummaryLimit ?? config.summaryLimit ?? 30;
       logger.debug('Dashboard config loaded:', {
         thumbnails: config.thumbnails,
         showThumbnails,
@@ -1178,37 +1192,36 @@ Performance Optimizations:
 </script>
 
 <div class="col-span-12">
-  <!-- Daily Summary Section -->
-  <DailySummaryCard
-    data={dailySummary}
-    loading={isLoadingSummary}
-    error={summaryError}
-    {selectedDate}
-    {showThumbnails}
-    speciesLimit={summaryLimit}
-    onPreviousDay={previousDay}
-    onNextDay={nextDay}
-    onGoToToday={goToToday}
-    onDateChange={handleDateChange}
-  />
-
-  <!-- Currently Hearing Section -->
-  {#if isViewingToday}
-    <CurrentlyHearingCard detections={pendingDetections} />
-  {/if}
-
-  <!-- Recent Detections Section -->
-  <DetectionCardGrid
-    data={recentDetections}
-    loading={isLoadingDetections}
-    error={detectionsError}
-    limit={detectionLimit}
-    onLimitChange={handleDetectionLimitChange}
-    onRefresh={handleManualRefresh}
-    {newDetectionIds}
-    onFreezeStart={handleFreezeStart}
-    onFreezeEnd={handleFreezeEnd}
-    updatesAreFrozen={freezeCount > 0}
-    className="mt-4"
-  />
+  {#each layoutElements.filter(e => e.enabled) as element (element.type)}
+    {#if element.type === 'daily-summary'}
+      <DailySummaryCard
+        data={dailySummary}
+        loading={isLoadingSummary}
+        error={summaryError}
+        {selectedDate}
+        {showThumbnails}
+        speciesLimit={summaryLimit}
+        onPreviousDay={previousDay}
+        onNextDay={nextDay}
+        onGoToToday={goToToday}
+        onDateChange={handleDateChange}
+      />
+    {:else if element.type === 'currently-hearing' && isViewingToday}
+      <CurrentlyHearingCard detections={pendingDetections} />
+    {:else if element.type === 'detections-grid'}
+      <DetectionCardGrid
+        data={recentDetections}
+        loading={isLoadingDetections}
+        error={detectionsError}
+        limit={detectionLimit}
+        onLimitChange={handleDetectionLimitChange}
+        onRefresh={handleManualRefresh}
+        {newDetectionIds}
+        onFreezeStart={handleFreezeStart}
+        onFreezeEnd={handleFreezeEnd}
+        updatesAreFrozen={freezeCount > 0}
+        className="mt-4"
+      />
+    {/if}
+  {/each}
 </div>
