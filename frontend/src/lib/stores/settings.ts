@@ -502,7 +502,55 @@ export interface Dashboard {
   colorScheme?: string; // Color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
   customColors?: { primary: string; accent: string }; // Custom scheme hex colors
   logoStyle?: string; // Logo display style: "gradient" or "solid"
+  layout?: DashboardLayout; // Configurable dashboard element layout
 }
+
+// Dashboard layout configuration
+export interface DashboardLayout {
+  elements: DashboardElement[];
+}
+
+// Dashboard element types
+export type DashboardElementType =
+  | 'banner'
+  | 'daily-summary'
+  | 'currently-hearing'
+  | 'detections-grid'
+  | 'video-embed';
+
+// A single configurable element on the dashboard
+export interface DashboardElement {
+  type: DashboardElementType;
+  enabled: boolean;
+  banner?: BannerConfig;
+  video?: VideoEmbedConfig;
+  summary?: DailySummaryConfig;
+  grid?: DetectionsGridConfig;
+}
+
+// Banner element configuration
+export interface BannerConfig {
+  showImage: boolean;
+  imagePath: string;
+  title: string;
+  description: string;
+  showLocationMap: boolean;
+  showWeather: boolean;
+}
+
+// Video embed element configuration
+export interface VideoEmbedConfig {
+  url: string;
+  title: string;
+}
+
+// Daily summary element configuration
+export interface DailySummaryConfig {
+  summaryLimit: number;
+}
+
+// Detections grid element configuration (placeholder for future card display options)
+export type DetectionsGridConfig = Record<string, never>;
 
 export interface Thumbnails {
   debug?: boolean;
@@ -854,6 +902,13 @@ function createEmptySettings(): SettingsFormData {
         summaryLimit: 100,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
         temperatureUnit: 'celsius',
+        layout: {
+          elements: [
+            { type: 'daily-summary', enabled: true, summary: { summaryLimit: 100 } },
+            { type: 'currently-hearing', enabled: true },
+            { type: 'detections-grid', enabled: true },
+          ],
+        },
       },
     },
     webServer: {},
@@ -973,6 +1028,11 @@ export const speciesSettings = derived(settingsStore, $store => $store.formData.
 export const dashboardSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.dashboard
+);
+
+export const dashboardLayout = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.dashboard?.layout
 );
 
 export const securitySettings = derived(settingsStore, $store => $store.formData.security);
