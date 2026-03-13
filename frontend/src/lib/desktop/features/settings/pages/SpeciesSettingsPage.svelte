@@ -971,8 +971,10 @@
           class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
         >
           <div class="flex items-center gap-2 mb-1.5">
-            <div class="p-1 rounded-md bg-emerald-500/10">
-              <Bird class="w-3.5 h-3.5 text-emerald-500" />
+            <div
+              class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
+            >
+              <Bird class="w-3.5 h-3.5 text-[var(--color-success)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.species')}</span
@@ -987,8 +989,8 @@
           class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
         >
           <div class="flex items-center gap-2 mb-1.5">
-            <div class="p-1 rounded-md bg-blue-500/10">
-              <MapPin class="w-3.5 h-3.5 text-blue-500" />
+            <div class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]">
+              <MapPin class="w-3.5 h-3.5 text-[var(--color-info)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.location')}</span
@@ -1021,8 +1023,10 @@
           class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-3 shadow-sm"
         >
           <div class="flex items-center gap-2 mb-1.5">
-            <div class="p-1 rounded-md bg-orange-500/10">
-              <Clock class="w-3.5 h-3.5 text-orange-500" />
+            <div
+              class="p-1 rounded-md bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]"
+            >
+              <Clock class="w-3.5 h-3.5 text-[var(--color-warning)]" />
             </div>
             <span class="text-xs font-medium text-muted"
               >{t('settings.species.activeSpecies.stats.updated')}</span
@@ -1040,7 +1044,7 @@
       <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
         <div class="flex items-center justify-center py-12">
           <div
-            class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+            class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
           ></div>
         </div>
       </div>
@@ -1048,11 +1052,13 @@
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
       >
-        <div class="flex items-start gap-3 p-4 rounded-lg bg-red-500/10">
-          <p class="text-sm text-red-600 dark:text-red-400">{activeSpeciesState.error}</p>
+        <div
+          class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
+        >
+          <p class="text-sm text-[var(--color-error)]">{activeSpeciesState.error}</p>
           <button
             type="button"
-            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-600 dark:text-red-400 transition-colors"
+            class="mt-2 inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[color-mix(in_srgb,var(--color-error)_20%,transparent)] hover:bg-[color-mix(in_srgb,var(--color-error)_30%,transparent)] text-[var(--color-error)] transition-colors"
             onclick={() => {
               const birdnetData = store.formData?.birdnet;
               if (birdnetData?.latitude !== undefined && birdnetData?.longitude !== undefined) {
@@ -1068,11 +1074,13 @@
       <div
         class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm p-4"
       >
-        <div class="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20">
+        <div
+          class="p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)]"
+        >
           <div class="flex items-start gap-3">
-            <MapPin class="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+            <MapPin class="w-5 h-5 text-[var(--color-warning)] shrink-0 mt-0.5" />
             <div>
-              <p class="font-medium text-amber-600 dark:text-amber-400">
+              <p class="font-medium text-[var(--color-warning)]">
                 {t('settings.species.activeSpecies.locationNotConfigured.title') ||
                   'Location Not Configured'}
               </p>
@@ -1082,7 +1090,7 @@
               </p>
               <a
                 href="/ui/settings/main"
-                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition-colors mt-3"
+                class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:bg-[var(--color-warning-hover)] transition-colors mt-3"
               >
                 {t('settings.species.activeSpecies.locationNotConfigured.action') ||
                   'Configure Location'}
@@ -1517,7 +1525,7 @@
                       </button>
                       <button
                         type="button"
-                        class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-red-500/10 text-muted hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                         onclick={() => removeConfig(species)}
                         title={t('settings.species.customConfiguration.list.removeTitle')}
                         aria-label={t('settings.species.customConfiguration.list.removeTitle')}

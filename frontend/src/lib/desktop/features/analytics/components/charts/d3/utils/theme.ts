@@ -32,114 +32,77 @@ export interface ChartTheme {
 }
 
 /**
- * Get current theme from DaisyUI CSS variables
- * Following the pattern from chartHelpers.ts for consistency
+ * Get current theme by reading CSS custom properties via getComputedStyle.
+ * Adapts automatically to color scheme changes since the CSS variables
+ * are overridden by [data-scheme] and [data-theme] selectors.
  */
 export function getCurrentTheme(): ChartTheme {
   // SSR guard - return safe default theme when running server-side
   if (typeof window === 'undefined' || typeof document === 'undefined') {
-    // Return light theme as default for SSR
-    const textColor = 'rgba(55, 65, 81, 1)';
-    const gridColor = 'rgba(0, 0, 0, 0.1)';
-
-    return {
-      background: '#ffffff',
-      foreground: textColor,
-      muted: 'rgba(0, 0, 0, 0.6)',
-      accent: '#0284c7',
-      primary: '#2563eb',
-      secondary: '#4b5563',
-      success: '#22c55e',
-      warning: '#f59e0b',
-      error: '#ef4444',
-      text: textColor,
-      grid: gridColor,
-      axis: {
-        color: textColor,
-        fontSize: '12px',
-        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-        strokeWidth: 1,
-        gridColor,
-      },
-      tooltip: {
-        background: 'rgba(255, 255, 255, 0.95)',
-        text: textColor,
-        border: 'rgba(0, 0, 0, 0.2)',
-      },
-    };
+    return getSSRFallbackTheme();
   }
 
-  const root = document.documentElement;
-  // Check if we're in dark mode
-  const isDark = root.getAttribute('data-theme') === 'dark';
+  const styles = getComputedStyle(document.documentElement);
+  const get = (name: string, fallback: string) => styles.getPropertyValue(name).trim() || fallback;
 
-  // Define colors based on theme - matching the approach in Analytics.svelte and chartHelpers.ts
-  let textColor: string;
-  let gridColor: string;
-  let primary: string;
-  let secondary: string;
-  let accent: string;
-  let success: string;
-  let warning: string;
-  let error: string;
-  let background: string;
-  let muted: string;
-  let tooltipBgColor: string;
-  let tooltipBorderColor: string;
-
-  if (isDark) {
-    // Dark theme colors
-    textColor = 'rgba(200, 200, 200, 1)';
-    gridColor = 'rgba(255, 255, 255, 0.1)';
-    primary = '#3b82f6'; // Bright blue
-    secondary = '#6b7280'; // Medium gray
-    accent = '#0369a1'; // Darker sky blue
-    success = '#16a34a'; // Success green
-    warning = '#d97706'; // Warning yellow
-    error = '#dc2626'; // Error red
-    background = '#1f2937'; // Dark background
-    muted = 'rgba(255, 255, 255, 0.6)';
-    tooltipBgColor = 'rgba(55, 65, 81, 0.95)';
-    tooltipBorderColor = 'rgba(255, 255, 255, 0.2)';
-  } else {
-    // Light theme colors
-    textColor = 'rgba(55, 65, 81, 1)';
-    gridColor = 'rgba(0, 0, 0, 0.1)';
-    primary = '#2563eb'; // Blue
-    secondary = '#4b5563'; // Gray
-    accent = '#0284c7'; // Sky blue
-    success = '#22c55e'; // Success green
-    warning = '#f59e0b'; // Warning yellow
-    error = '#ef4444'; // Error red
-    background = '#ffffff'; // White background
-    muted = 'rgba(0, 0, 0, 0.6)';
-    tooltipBgColor = 'rgba(255, 255, 255, 0.95)';
-    tooltipBorderColor = 'rgba(0, 0, 0, 0.2)';
-  }
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const textColor = get('--color-base-content', isDark ? '#f1f5f9' : '#1f2937');
+  const gridColor = isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.1)';
+  const mutedColor = get('--text-muted', isDark ? '#e2e8f0' : '#475569');
 
   return {
-    background,
+    background: get('--color-base-100', isDark ? '#0f172a' : '#ffffff'),
     foreground: textColor,
-    muted,
-    accent,
-    primary,
-    secondary,
-    success,
-    warning,
-    error,
+    muted: mutedColor,
+    accent: get('--color-accent', '#0284c7'),
+    primary: get('--color-primary', '#2563eb'),
+    secondary: get('--color-secondary', '#4b5563'),
+    success: get('--color-success', '#22c55e'),
+    warning: get('--color-warning', '#f59e0b'),
+    error: get('--color-error', '#ef4444'),
     text: textColor,
     grid: gridColor,
     axis: {
       color: textColor,
       fontSize: '12px',
-      fontFamily: 'system-ui, -apple-system, sans-serif',
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
       strokeWidth: 1,
       gridColor,
     },
     tooltip: {
-      background: tooltipBgColor,
+      background: isDark ? 'rgba(15, 23, 42, 0.95)' : 'rgba(255, 255, 255, 0.95)',
       text: textColor,
-      border: tooltipBorderColor,
+      border: isDark ? 'rgba(255, 255, 255, 0.2)' : 'rgba(0, 0, 0, 0.2)',
+    },
+  };
+}
+
+function getSSRFallbackTheme(): ChartTheme {
+  const textColor = 'rgba(55, 65, 81, 1)';
+  const gridColor = 'rgba(0, 0, 0, 0.1)';
+  return {
+    background: '#ffffff',
+    foreground: textColor,
+    muted: 'rgba(0, 0, 0, 0.6)',
+    accent: '#0284c7',
+    primary: '#2563eb',
+    secondary: '#4b5563',
+    success: '#22c55e',
+    warning: '#f59e0b',
+    error: '#ef4444',
+    text: textColor,
+    grid: gridColor,
+    axis: {
+      color: textColor,
+      fontSize: '12px',
+      fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+      strokeWidth: 1,
+      gridColor,
+    },
+    tooltip: {
+      background: 'rgba(255, 255, 255, 0.95)',
+      text: textColor,
+      border: 'rgba(0, 0, 0, 0.2)',
     },
   };
 }
@@ -163,7 +126,10 @@ export class ThemeStore {
     // Watch for theme changes on the document element
     this.observer = new MutationObserver(mutations => {
       mutations.forEach(mutation => {
-        if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+        if (
+          mutation.type === 'attributes' &&
+          (mutation.attributeName === 'data-theme' || mutation.attributeName === 'data-scheme')
+        ) {
           this.updateTheme();
         }
       });
@@ -171,7 +137,7 @@ export class ThemeStore {
 
     this.observer.observe(document.documentElement, {
       attributes: true,
-      attributeFilter: ['data-theme'],
+      attributeFilter: ['data-theme', 'data-scheme'],
     });
 
     // Also listen for CSS variable changes

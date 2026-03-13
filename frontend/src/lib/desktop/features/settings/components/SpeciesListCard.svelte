@@ -63,10 +63,22 @@
   }: Props = $props();
 
   const colorMap: Record<string, { bg: string; text: string }> = {
-    emerald: { bg: 'bg-emerald-500/10', text: 'text-emerald-500' },
-    red: { bg: 'bg-red-500/10', text: 'text-red-500' },
-    orange: { bg: 'bg-orange-500/10', text: 'text-orange-500' },
-    blue: { bg: 'bg-blue-500/10', text: 'text-blue-500' },
+    emerald: {
+      bg: 'bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]',
+      text: 'text-[var(--color-success)]',
+    },
+    red: {
+      bg: 'bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]',
+      text: 'text-[var(--color-error)]',
+    },
+    orange: {
+      bg: 'bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
+      text: 'text-[var(--color-warning)]',
+    },
+    blue: {
+      bg: 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)]',
+      text: 'text-[var(--color-info)]',
+    },
     teal: { bg: 'bg-teal-500/10', text: 'text-teal-500' },
   };
 
@@ -223,7 +235,7 @@
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr class="border-b border-[var(--border-100)]">
             <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
               role="columnheader"
               tabindex="0"
               aria-sort={sortColumn === 'commonName'
@@ -253,7 +265,7 @@
               </div>
             </th>
             <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
               role="columnheader"
               tabindex="0"
               aria-sort={sortColumn === 'scientificName'
@@ -301,7 +313,7 @@
               <td class="py-2 px-3 w-12 text-right">
                 <button
                   type="button"
-                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-red-500/10 text-muted hover:text-red-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                  class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
                   onclick={() => onRemove(item)}
                   {disabled}
                   aria-label={t('settings.species.remove') || `Remove ${item}`}
@@ -363,7 +375,7 @@
           type="button"
           onclick={handleAdd}
           disabled={disabled || !inputValue.trim()}
-          class="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          class="inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium rounded-lg bg-primary text-[var(--color-primary-content)] hover:bg-[var(--color-primary-hover)] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label={inputLabel}
         >
           <Plus class="w-4 h-4" aria-hidden="true" />
@@ -386,7 +398,7 @@
               aria-selected={idx === selectedPredictionIndex}
               class="w-full text-left px-3 py-2 text-sm transition-colors cursor-pointer hover:bg-black/[0.04] dark:hover:bg-white/[0.04] {idx ===
               selectedPredictionIndex
-                ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+                ? 'bg-[color-mix(in_srgb,var(--color-info)_10%,transparent)] text-[var(--color-info)]'
                 : ''}"
               onmousedown={() => selectPrediction(prediction)}
             >

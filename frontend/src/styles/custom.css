@@ -59,26 +59,29 @@
   z-index: 1;
 }
 
-/* Confidence level color schemes */
+/* Confidence level color schemes
+   --lighter-color: used by .confidence-circle and .confidence-circle-track
+   in light mode only (dark mode uses --darker-color instead, selected by
+   the [data-theme='dark'] .confidence-circle rules above). */
 .confidence-high {
-  color: #059669;
+  color: var(--color-success);
 
-  --lighter-color: #ecfdf5;
-  --darker-color: rgb(6 78 59 / 0.2);
+  --lighter-color: color-mix(in srgb, var(--color-success) 8%, white);
+  --darker-color: color-mix(in srgb, var(--color-success) 20%, transparent);
 }
 
 .confidence-medium {
-  color: #d97706;
+  color: var(--color-warning);
 
-  --lighter-color: #fffbeb;
-  --darker-color: rgb(120 53 15 / 0.2);
+  --lighter-color: color-mix(in srgb, var(--color-warning) 8%, white);
+  --darker-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
 }
 
 .confidence-low {
-  color: #dc2626;
+  color: var(--color-error);
 
-  --lighter-color: #fef2f2;
-  --darker-color: rgb(127 29 29 / 0.2);
+  --lighter-color: color-mix(in srgb, var(--color-error) 8%, white);
+  --darker-color: color-mix(in srgb, var(--color-error) 20%, transparent);
 }
 
 .confidence-circle-text {
@@ -104,23 +107,29 @@
   stroke-width: 3;
 }
 
-/* Dark theme adjustments */
+/* Dark theme adjustments — --lighter-color is NOT used in dark mode
+   (the component switches to --darker-color via the [data-theme='dark']
+   .confidence-circle selector). We still override it defensively in case
+   any code path reads it. */
 [data-theme='dark'] .confidence-high {
-  color: #34d399;
+  color: color-mix(in srgb, var(--color-success) 80%, white);
 
-  --darker-color: rgb(6 78 59);
+  --lighter-color: color-mix(in srgb, var(--color-success) 15%, black);
+  --darker-color: color-mix(in srgb, var(--color-success) 30%, transparent);
 }
 
 [data-theme='dark'] .confidence-medium {
-  color: #fbbf24;
+  color: color-mix(in srgb, var(--color-warning) 80%, white);
 
-  --darker-color: rgb(120 53 15);
+  --lighter-color: color-mix(in srgb, var(--color-warning) 15%, black);
+  --darker-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
 }
 
 [data-theme='dark'] .confidence-low {
-  color: #f87171;
+  color: color-mix(in srgb, var(--color-error) 80%, white);
 
-  --darker-color: rgb(127 29 29);
+  --lighter-color: color-mix(in srgb, var(--color-error) 15%, black);
+  --darker-color: color-mix(in srgb, var(--color-error) 30%, transparent);
 }
 
 /* ========================================================================
@@ -213,7 +222,7 @@
 .select:focus-visible {
   outline: 1px solid transparent;
   outline-offset: 0;
-  box-shadow: 0 0 0 2px rgb(164 202 254 / 0.45);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 35%, transparent);
 }
 
 /* Progress minimum height */

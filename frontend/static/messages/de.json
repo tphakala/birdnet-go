@@ -3517,6 +3517,20 @@
       "saveFailed": "Einstellungen konnten nicht gespeichert werden",
       "databaseStatsFailed": "Datenbankstatistiken konnten nicht geladen werden",
       "csvDownloadFailed": "CSV-Download fehlgeschlagen"
+    },
+    "appearance": {
+      "colorScheme": "Farbschema",
+      "colorSchemeDescription": "Wählen Sie ein Farbschema für die Oberfläche",
+      "schemeBlue": "Blau",
+      "schemeForest": "Wald",
+      "schemeAmber": "Bernstein",
+      "schemeViolet": "Violett",
+      "schemeRose": "Rose",
+      "schemeCustom": "Benutzerdefiniert",
+      "customPrimary": "Primärfarbe",
+      "customAccent": "Akzentfarbe",
+      "logoGradient": "Farbverlauf-Logo",
+      "logoGradientDescription": "Farbverlauf-Effekt für das Seitenleisten-Logo verwenden"
     }
   },
   "auth": {

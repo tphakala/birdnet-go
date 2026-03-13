@@ -3541,6 +3541,20 @@
           "description": "Notifies when a BirdWeather upload fails"
         }
       }
+    },
+    "appearance": {
+      "colorScheme": "Color Scheme",
+      "colorSchemeDescription": "Choose a color scheme for the interface",
+      "schemeBlue": "Blue",
+      "schemeForest": "Forest",
+      "schemeAmber": "Amber",
+      "schemeViolet": "Violet",
+      "schemeRose": "Rose",
+      "schemeCustom": "Custom",
+      "customPrimary": "Primary Color",
+      "customAccent": "Accent Color",
+      "logoGradient": "Gradient Logo",
+      "logoGradientDescription": "Use a gradient effect on the sidebar logo"
     }
   },
   "auth": {

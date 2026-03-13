@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { theme } from '$lib/stores/theme';
+  import { scheme } from '$lib/stores/scheme';
   import { cn } from '$lib/utils/cn';
   import { Sun, Moon } from '@lucide/svelte';
 
@@ -27,6 +28,7 @@
   // Initialize theme on mount
   onMount(() => {
     const cleanup = theme.initialize();
+    scheme.initialize();
     mounted = true;
 
     return () => {

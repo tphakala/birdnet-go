@@ -1,5 +1,6 @@
 import { mount } from 'svelte';
 import './styles/tailwind.css';
+import './styles/schemes.css';
 import './lib/styles/species-display.css';
 import App from './App.svelte';
 

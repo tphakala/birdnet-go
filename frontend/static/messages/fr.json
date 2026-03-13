@@ -3517,6 +3517,20 @@
       "saveFailed": "Échec de l'enregistrement des paramètres",
       "databaseStatsFailed": "Échec du chargement des statistiques de la base de données",
       "csvDownloadFailed": "Échec du téléchargement du CSV"
+    },
+    "appearance": {
+      "colorScheme": "Thème de couleurs",
+      "colorSchemeDescription": "Choisissez un thème de couleurs pour l'interface",
+      "schemeBlue": "Bleu",
+      "schemeForest": "Forêt",
+      "schemeAmber": "Ambre",
+      "schemeViolet": "Violet",
+      "schemeRose": "Rose",
+      "schemeCustom": "Personnalisé",
+      "customPrimary": "Couleur principale",
+      "customAccent": "Couleur d'accent",
+      "logoGradient": "Logo en dégradé",
+      "logoGradientDescription": "Utiliser un effet de dégradé sur le logo de la barre latérale"
     }
   },
   "auth": {

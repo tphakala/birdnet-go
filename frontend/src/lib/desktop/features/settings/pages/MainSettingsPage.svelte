@@ -56,6 +56,7 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import ColorSchemePicker from '$lib/desktop/features/settings/components/ColorSchemePicker.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
@@ -265,12 +266,18 @@
           summaryLimit: store.originalData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.originalData.realtime?.dashboard?.thumbnails,
           spectrogram: store.originalData.realtime?.dashboard?.spectrogram,
+          colorScheme: store.originalData.realtime?.dashboard?.colorScheme,
+          customColors: store.originalData.realtime?.dashboard?.customColors,
+          logoStyle: store.originalData.realtime?.dashboard?.logoStyle,
         },
         {
           locale: store.formData.realtime?.dashboard?.locale,
           summaryLimit: store.formData.realtime?.dashboard?.summaryLimit,
           thumbnails: store.formData.realtime?.dashboard?.thumbnails,
           spectrogram: store.formData.realtime?.dashboard?.spectrogram,
+          colorScheme: store.formData.realtime?.dashboard?.colorScheme,
+          customColors: store.formData.realtime?.dashboard?.customColors,
+          logoStyle: store.formData.realtime?.dashboard?.logoStyle,
         }
       ) ||
       hasSettingsChanged(store.originalData.sentry, store.formData.sentry)
@@ -1642,6 +1649,9 @@
             disabled={store.isLoading || store.isSaving}
           />
         </div>
+
+        <!-- Color Scheme -->
+        <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
       </div>
     </SettingsSection>
 

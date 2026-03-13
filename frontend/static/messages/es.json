@@ -3517,6 +3517,20 @@
       "saveFailed": "Error al guardar la configuración",
       "databaseStatsFailed": "Error al cargar las estadísticas de la base de datos",
       "csvDownloadFailed": "Error al descargar el CSV"
+    },
+    "appearance": {
+      "colorScheme": "Esquema de colores",
+      "colorSchemeDescription": "Elija un esquema de colores para la interfaz",
+      "schemeBlue": "Azul",
+      "schemeForest": "Bosque",
+      "schemeAmber": "Ámbar",
+      "schemeViolet": "Violeta",
+      "schemeRose": "Rosa",
+      "schemeCustom": "Personalizado",
+      "customPrimary": "Color primario",
+      "customAccent": "Color de acento",
+      "logoGradient": "Logo con degradado",
+      "logoGradientDescription": "Usar un efecto de degradado en el logo de la barra lateral"
     }
   },
   "auth": {

@@ -3348,6 +3348,20 @@
       "saveFailed": "Nepodarilo sa uložiť nastavenia",
       "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
       "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
+    },
+    "appearance": {
+      "colorScheme": "Farebná schéma",
+      "colorSchemeDescription": "Vyberte farebnú schému pre rozhranie",
+      "schemeBlue": "Modrá",
+      "schemeForest": "Les",
+      "schemeAmber": "Jantárová",
+      "schemeViolet": "Fialová",
+      "schemeRose": "Ružová",
+      "schemeCustom": "Vlastná",
+      "customPrimary": "Primárna farba",
+      "customAccent": "Akcentová farba",
+      "logoGradient": "Logo s prechodom",
+      "logoGradientDescription": "Použiť efekt prechodu na logo bočného panela"
     }
   },
   "auth": {

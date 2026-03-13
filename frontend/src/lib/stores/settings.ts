@@ -499,6 +499,9 @@ export interface Dashboard {
   locale?: string; // UI locale setting
   spectrogram?: SpectrogramPreRender; // Spectrogram pre-rendering settings
   temperatureUnit?: string; // Temperature display unit: "celsius" or "fahrenheit"
+  colorScheme?: string; // Color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
+  customColors?: { primary: string; accent: string }; // Custom scheme hex colors
+  logoStyle?: string; // Logo display style: "gradient" or "solid"
 }
 
 export interface Thumbnails {

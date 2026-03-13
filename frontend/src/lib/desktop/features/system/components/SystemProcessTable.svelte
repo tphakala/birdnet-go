@@ -70,12 +70,12 @@
   function statusBadgeClass(status: string): string {
     switch (status) {
       case 'running':
-        return 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400';
+        return 'badge-status-success';
       case 'sleeping':
       case 'sleep':
-        return 'bg-amber-500/15 text-amber-600 dark:text-amber-400';
+        return 'badge-status-warning';
       case 'zombie':
-        return 'bg-red-500/15 text-red-600 dark:text-red-400';
+        return 'badge-status-error';
       default:
         return 'bg-slate-500/15 text-muted';
     }
@@ -107,7 +107,7 @@
       <button
         type="button"
         class="relative w-8 h-4 rounded-full transition-colors cursor-pointer {showAllProcesses
-          ? 'bg-blue-500'
+          ? 'bg-primary'
           : 'bg-[var(--surface-300)]'}"
         role="switch"
         aria-checked={showAllProcesses}
@@ -128,7 +128,7 @@
         <tr class="border-b border-[var(--border-100)]">
           {#each columns as col (col.key)}
             <th
-              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+              class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
               role="columnheader"
               tabindex="0"
               aria-sort={sortColumn === col.key
@@ -192,7 +192,7 @@
               <div class="flex items-center gap-2">
                 <div class="w-12 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
                   <div
-                    class="h-full rounded-full bg-blue-500 transition-[width] duration-600 ease-out"
+                    class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
                     style:width="{Math.min(proc.cpu, 100)}%"
                   ></div>
                 </div>

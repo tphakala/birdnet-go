@@ -113,8 +113,10 @@
     <div class="flex items-center gap-3">
       {#if title}
         <div class="flex items-center gap-2">
-          <div class="p-1.5 rounded-lg bg-emerald-500/10">
-            <Bird class="w-4 h-4 text-emerald-500" />
+          <div
+            class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
+          >
+            <Bird class="w-4 h-4 text-[var(--color-success)]" />
           </div>
           <div>
             <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">{title}</h3>
@@ -193,7 +195,7 @@
   {#if loading}
     <div class="flex items-center justify-center py-12">
       <div
-        class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-blue-500 rounded-full animate-spin"
+        class="inline-block w-8 h-8 border-4 border-[var(--surface-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
       ></div>
     </div>
   {:else if sortedSpecies.length > 0}
@@ -207,7 +209,7 @@
           <tr class="border-b border-[var(--border-100)]">
             {#each columns as col (col.key)}
               <th
-                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-blue-500 transition-colors text-muted"
+                class="text-left py-2 px-3 text-xs font-medium cursor-pointer select-none hover:text-primary transition-colors text-muted"
                 role="columnheader"
                 tabindex="0"
                 aria-sort={sortColumn === col.key
@@ -257,7 +259,7 @@
                 <div class="flex items-center gap-2">
                   <div class="w-16 h-1.5 rounded-full overflow-hidden bg-[var(--surface-300)]">
                     <div
-                      class="h-full rounded-full bg-blue-500 transition-[width] duration-600 ease-out"
+                      class="h-full rounded-full bg-primary transition-[width] duration-600 ease-out"
                       style:width="{item.score * 100}%"
                     ></div>
                   </div>
@@ -268,7 +270,7 @@
                 <div class="flex items-center gap-1.5 justify-end flex-nowrap">
                   {#if item.isManuallyIncluded}
                     <span
-                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      class="inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-medium badge-status-success"
                     >
                       + {t('settings.species.activeSpecies.badges.included')}
                     </span>

@@ -3517,6 +3517,20 @@
       "saveFailed": "Nie udało się zapisać ustawień",
       "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
       "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
+    },
+    "appearance": {
+      "colorScheme": "Schemat kolorów",
+      "colorSchemeDescription": "Wybierz schemat kolorów dla interfejsu",
+      "schemeBlue": "Niebieski",
+      "schemeForest": "Leśny",
+      "schemeAmber": "Bursztynowy",
+      "schemeViolet": "Fioletowy",
+      "schemeRose": "Różowy",
+      "schemeCustom": "Niestandardowy",
+      "customPrimary": "Kolor podstawowy",
+      "customAccent": "Kolor akcentu",
+      "logoGradient": "Logo z gradientem",
+      "logoGradientDescription": "Użyj efektu gradientu na logo paska bocznego"
     }
   },
   "auth": {

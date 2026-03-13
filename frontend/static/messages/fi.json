@@ -3517,6 +3517,20 @@
       "saveFailed": "Asetusten tallentaminen epäonnistui",
       "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
+    },
+    "appearance": {
+      "colorScheme": "Värimaailma",
+      "colorSchemeDescription": "Valitse käyttöliittymän värimaailma",
+      "schemeBlue": "Sininen",
+      "schemeForest": "Metsä",
+      "schemeAmber": "Meripihka",
+      "schemeViolet": "Violetti",
+      "schemeRose": "Ruusu",
+      "schemeCustom": "Mukautettu",
+      "customPrimary": "Pääväri",
+      "customAccent": "Korostusväri",
+      "logoGradient": "Liukuvärinen logo",
+      "logoGradientDescription": "Käytä liukuväritehosteella sivupalkin logossa"
     }
   },
   "auth": {

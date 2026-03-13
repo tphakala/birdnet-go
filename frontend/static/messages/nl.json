@@ -3517,6 +3517,20 @@
       "saveFailed": "Instellingen konden niet worden opgeslagen",
       "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
       "csvDownloadFailed": "CSV-download mislukt"
+    },
+    "appearance": {
+      "colorScheme": "Kleurenschema",
+      "colorSchemeDescription": "Kies een kleurenschema voor de interface",
+      "schemeBlue": "Blauw",
+      "schemeForest": "Bos",
+      "schemeAmber": "Amber",
+      "schemeViolet": "Violet",
+      "schemeRose": "Roze",
+      "schemeCustom": "Aangepast",
+      "customPrimary": "Primaire kleur",
+      "customAccent": "Accentkleur",
+      "logoGradient": "Verloop-logo",
+      "logoGradientDescription": "Gebruik een verloopeffect op het zijbalklogo"
     }
   },
   "auth": {

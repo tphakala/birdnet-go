@@ -140,44 +140,6 @@
     height: 100%;
   }
 
-  /* Confidence level color schemes */
-  .confidence-circle :global(.confidence-high) {
-    color: #059669;
-
-    --lighter-color: #ecfdf5;
-    --darker-color: rgb(6 78 59 / 0.2);
-  }
-
-  .confidence-circle :global(.confidence-medium) {
-    color: #d97706;
-
-    --lighter-color: #fffbeb;
-    --darker-color: rgb(120 53 15 / 0.2);
-  }
-
-  .confidence-circle :global(.confidence-low) {
-    color: #dc2626;
-
-    --lighter-color: #fef2f2;
-    --darker-color: rgb(127 29 29 / 0.2);
-  }
-
-  /* Dark theme adjustments */
-  :global([data-theme='dark']) .confidence-circle :global(.confidence-high) {
-    color: #34d399;
-
-    --darker-color: rgb(6 78 59);
-  }
-
-  :global([data-theme='dark']) .confidence-circle :global(.confidence-medium) {
-    color: #fbbf24;
-
-    --darker-color: rgb(120 53 15);
-  }
-
-  :global([data-theme='dark']) .confidence-circle :global(.confidence-low) {
-    color: #f87171;
-
-    --darker-color: rgb(127 29 29);
-  }
+  /* Confidence level colors are defined globally in custom.css
+     using CSS variables (--color-success, --color-warning, --color-error) */
 </style>

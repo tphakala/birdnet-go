@@ -74,6 +74,9 @@ Performance Optimizations:
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
+  import { scheme } from '$lib/stores/scheme';
+  import { logoStyle } from '$lib/stores/logoStyle';
+  import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
 
   interface Props {
     securityEnabled?: boolean;
@@ -97,6 +100,11 @@ Performance Optimizations:
       enabledProviders: [],
     },
   }: Props = $props();
+
+  // Logo variant: solid uses flat color, gradient uses per-scheme handcrafted gradient
+  let logoVariant: LogoVariant = $derived(
+    $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
+  );
 
   // State for login modal and collapsible sections
   let showLoginModal = $state(false);
@@ -335,7 +343,7 @@ Performance Optimizations:
           class={cn('flex items-center gap-3 group', isCollapsed && 'justify-center')}
           aria-label="BirdNET-Go Home"
         >
-          <LogoBadge size="md" variant="ocean" />
+          <LogoBadge size="md" variant={logoVariant} />
           {#if !isCollapsed}
             <span class="text-xl font-bold tracking-tight text-[var(--color-base-content)]"
               >BirdNET-Go</span
