@@ -23,7 +23,7 @@
           <Gauge class="w-3.5 h-3.5 text-muted" />
           <span class="text-muted">{t('system.database.dashboard.innodb.bufferPoolHitRate')}</span>
         </div>
-        <span class="font-mono tabular-nums font-medium text-emerald-600 dark:text-emerald-400"
+        <span class="font-mono tabular-nums font-medium text-[var(--color-success)]"
           >{details.buffer_pool_hit_rate.toFixed(1)}%</span
         >
       </div>
@@ -56,8 +56,8 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.deadlocks > 0
-            ? 'text-red-600 dark:text-red-400'
-            : 'text-emerald-600 dark:text-emerald-400'}">{formatNumber(details.deadlocks)}</span
+            ? 'text-[var(--color-error)]'
+            : 'text-[var(--color-success)]'}">{formatNumber(details.deadlocks)}</span
         >
       </div>
       <div class="flex justify-between text-sm">

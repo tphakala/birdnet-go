@@ -2,6 +2,7 @@
 @import url('./custom.css') layer(base);
 
 @import 'tailwindcss';
+@import url('./schemes.css');
 
 /* Custom text utilities */
 @utility text-muted {
@@ -420,6 +421,34 @@
     border-color: var(--color-error-hover);
   }
 
+  /* ----------------------------------------
+     STATUS BADGES
+     ---------------------------------------- */
+  .badge-status-success {
+    background: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+  }
+
+  .badge-status-warning {
+    background: color-mix(in srgb, var(--color-warning) 15%, transparent);
+    color: var(--color-warning);
+  }
+
+  .badge-status-error {
+    background: color-mix(in srgb, var(--color-error) 15%, transparent);
+    color: var(--color-error);
+  }
+
+  .badge-status-info {
+    background: color-mix(in srgb, var(--color-info) 15%, transparent);
+    color: var(--color-info);
+  }
+
+  .badge-status-neutral {
+    background: color-mix(in srgb, var(--color-base-content) 10%, transparent);
+    color: var(--text-muted);
+  }
+
   /* Button sizes */
   .btn-xs {
     padding: 0.25rem 0.5rem;
@@ -599,7 +628,7 @@
   .select:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
   }
 
   .select:disabled {
@@ -666,7 +695,7 @@
   .textarea:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 12%, transparent);
   }
 
   .textarea:disabled {
@@ -1073,6 +1102,9 @@
     border-radius: var(--radius-full);
     background-color: var(--color-base-300);
     color: var(--color-base-content);
+    transition:
+      background-color 0.25s ease,
+      color 0.25s ease;
   }
 
   .badge-primary {

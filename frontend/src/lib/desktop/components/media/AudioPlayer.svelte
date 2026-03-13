@@ -1186,7 +1186,7 @@
         }}
       >
         <div
-          class="bg-blue-600 h-1.5 rounded-full transition-all duration-100"
+          class="bg-primary h-1.5 rounded-full transition-all duration-100"
           style:width="{progress}%"
         ></div>
       </div>
@@ -1211,9 +1211,9 @@
   <!-- Error message -->
   {#if error}
     <div
-      class="absolute inset-0 flex items-center justify-center bg-red-100 dark:bg-red-900 rounded-md"
+      class="absolute inset-0 flex items-center justify-center bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] rounded-md"
     >
-      <span class="text-red-600 dark:text-red-300 text-sm">{error}</span>
+      <span class="text-[var(--color-error)] text-sm">{error}</span>
     </div>
   {/if}
 </div>

@@ -748,8 +748,10 @@
         <div class="flex items-center gap-3">
           <!-- Icon + label -->
           <div class="flex items-center gap-2">
-            <div class="p-1.5 rounded-lg bg-emerald-500/10">
-              <TerminalSquare class="w-4 h-4 text-emerald-500" />
+            <div
+              class="p-1.5 rounded-lg bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]"
+            >
+              <TerminalSquare class="w-4 h-4 text-[var(--color-success)]" />
             </div>
             <span
               class="text-xs font-semibold uppercase tracking-wider"
@@ -763,15 +765,17 @@
           <!-- Connection status -->
           <div class="flex items-center gap-1.5">
             <span
-              class="w-2 h-2 rounded-full {isConnected ? 'bg-emerald-500' : 'bg-red-500'}"
+              class="w-2 h-2 rounded-full {isConnected
+                ? 'bg-[var(--color-success)]'
+                : 'bg-[var(--color-error)]'}"
               class:animate-pulse={isConnected}
             ></span>
             <span
               role="status"
               aria-live="polite"
               class="text-xs font-medium {isConnected
-                ? 'text-emerald-600 dark:text-emerald-400'
-                : 'text-red-600 dark:text-red-400'}"
+                ? 'text-[var(--color-success)]'
+                : 'text-[var(--color-error)]'}"
             >
               {statusMessage}
             </span>
@@ -826,7 +830,7 @@
                   ></span>
                   {t('terminal.themeDark')}
                   {#if activeThemeId === 'dark'}
-                    <Check class="w-3 h-3 ml-auto text-emerald-500" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
                   {/if}
                 </button>
                 <button
@@ -842,7 +846,7 @@
                   ></span>
                   {t('terminal.themeLight')}
                   {#if activeThemeId === 'light'}
-                    <Check class="w-3 h-3 ml-auto text-emerald-500" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
                   {/if}
                 </button>
                 <button
@@ -858,7 +862,7 @@
                   ></span>
                   {t('terminal.themeHighContrast')}
                   {#if activeThemeId === 'highContrast'}
-                    <Check class="w-3 h-3 ml-auto text-emerald-500" />
+                    <Check class="w-3 h-3 ml-auto text-[var(--color-success)]" />
                   {/if}
                 </button>
               </div>
@@ -875,7 +879,7 @@
             aria-label={t('terminal.copySelection')}
           >
             {#if isCopied}
-              <Check class="w-3.5 h-3.5 text-emerald-500" />
+              <Check class="w-3.5 h-3.5 text-[var(--color-success)]" />
             {:else}
               <Copy class="w-3.5 h-3.5" />
             {/if}

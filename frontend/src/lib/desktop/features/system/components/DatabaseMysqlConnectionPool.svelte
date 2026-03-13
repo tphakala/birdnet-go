@@ -40,7 +40,7 @@
         aria-valuemax={100}
       >
         <div
-          class="h-full rounded-full bg-blue-500 transition-all duration-300"
+          class="h-full rounded-full bg-primary transition-all duration-300"
           style:width="{poolUsagePct}%"
         ></div>
       </div>
@@ -74,7 +74,7 @@
         </div>
         <span
           class="font-mono tabular-nums font-medium {details.connection_errors > 0
-            ? 'text-amber-600 dark:text-amber-400'
+            ? 'text-[var(--color-warning)]'
             : ''}">{details.connection_errors}</span
         >
       </div>

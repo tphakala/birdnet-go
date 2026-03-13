@@ -56,6 +56,7 @@
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
+  import ColorSchemePicker from '$lib/desktop/features/settings/components/ColorSchemePicker.svelte';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
@@ -1642,6 +1643,9 @@
             disabled={store.isLoading || store.isSaving}
           />
         </div>
+
+        <!-- Color Scheme -->
+        <ColorSchemePicker disabled={store.isLoading || store.isSaving} />
       </div>
     </SettingsSection>
 

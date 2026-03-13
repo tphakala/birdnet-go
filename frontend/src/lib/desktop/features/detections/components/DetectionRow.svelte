@@ -314,7 +314,7 @@
       <div class="sp-species-names">
         <button
           onclick={handleDetailsClick}
-          class="sp-species-common-name hover:text-blue-600 transition-colors cursor-pointer text-left"
+          class="sp-species-common-name hover:text-primary transition-colors cursor-pointer text-left"
         >
           {detection.commonName}
         </button>

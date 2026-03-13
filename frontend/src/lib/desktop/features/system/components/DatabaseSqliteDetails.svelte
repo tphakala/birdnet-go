@@ -46,8 +46,8 @@
         <span class="text-muted">{t('system.database.dashboard.details.integrity')}</span>
         <span
           class="font-medium {details.integrity_check === 'ok'
-            ? 'text-emerald-600 dark:text-emerald-400'
-            : 'text-red-600 dark:text-red-400'}">{details.integrity_check.toUpperCase()}</span
+            ? 'text-[var(--color-success)]'
+            : 'text-[var(--color-error)]'}">{details.integrity_check.toUpperCase()}</span
         >
       </div>
     </div>

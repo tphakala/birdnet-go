@@ -3893,5 +3893,15 @@
       "requestTimeout": "Zeitüberschreitung der Anfrage.",
       "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
     }
-  }
+  },
+  "settings.appearance.colorScheme": "Farbschema",
+  "settings.appearance.colorSchemeDescription": "Wählen Sie ein Farbschema für die Oberfläche",
+  "settings.appearance.schemeBlue": "Blau",
+  "settings.appearance.schemeForest": "Wald",
+  "settings.appearance.schemeAmber": "Bernstein",
+  "settings.appearance.schemeViolet": "Violett",
+  "settings.appearance.schemeRose": "Rose",
+  "settings.appearance.schemeCustom": "Benutzerdefiniert",
+  "settings.appearance.customPrimary": "Primärfarbe",
+  "settings.appearance.customAccent": "Akzentfarbe"
 }

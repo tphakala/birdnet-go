@@ -51,19 +51,19 @@
 
   /** Status icon color classes */
   const statusIconColor: Record<PrerequisiteCheckStatus, string> = {
-    passed: 'text-emerald-600 dark:text-emerald-400',
-    failed: 'text-red-600 dark:text-red-400',
-    error: 'text-red-600 dark:text-red-400',
-    warning: 'text-amber-600 dark:text-amber-400',
+    passed: 'text-[var(--color-success)]',
+    failed: 'text-[var(--color-error)]',
+    error: 'text-[var(--color-error)]',
+    warning: 'text-[var(--color-warning)]',
     skipped: 'text-muted',
   };
 
   /** Status badge color classes */
   const statusBadgeColor: Record<PrerequisiteCheckStatus, string> = {
-    passed: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-    failed: 'bg-red-500/10 text-red-600 dark:text-red-400',
-    error: 'bg-red-500/10 text-red-600 dark:text-red-400',
-    warning: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    passed: 'badge-status-success',
+    failed: 'badge-status-error',
+    error: 'badge-status-error',
+    warning: 'badge-status-warning',
     skipped: 'bg-slate-500/10 text-muted',
   };
 
@@ -96,7 +96,7 @@
 
       {#if prerequisites}
         <span
-          class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+          class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium badge-status-success"
         >
           {t('system.database.migration.prerequisites.passedCount', {
             passed: passedCount,
@@ -106,7 +106,7 @@
 
         {#if prerequisites.critical_failures > 0}
           <span
-            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-red-500/10 text-red-600 dark:text-red-400"
+            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium badge-status-error"
           >
             {t('system.database.migration.prerequisites.criticalCount', {
               count: prerequisites.critical_failures,
@@ -116,7 +116,7 @@
 
         {#if prerequisites.warnings > 0}
           <span
-            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium badge-status-warning"
           >
             {t('system.database.migration.prerequisites.warningCount', {
               count: prerequisites.warnings,
@@ -140,7 +140,7 @@
 
       <button
         type="button"
-        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-blue-500 text-muted"
+        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
         onclick={() => (showDetails = !showDetails)}
         aria-expanded={showDetails}
         aria-controls="prerequisites-details"
@@ -175,7 +175,7 @@
 
           {#if check.severity === 'critical' && check.status !== 'passed'}
             <span
-              class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold bg-red-500/10 text-red-600 dark:text-red-400"
+              class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
             >
               {t('system.database.migration.prerequisites.critical')}
             </span>

@@ -508,7 +508,7 @@
   <!-- Error Display -->
   {#if error}
     <div
-      class="p-4 bg-red-50 border border-red-300 text-red-800 rounded-lg flex items-center gap-3"
+      class="p-4 bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[var(--color-error)] text-[var(--color-error)] rounded-lg flex items-center gap-3"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
