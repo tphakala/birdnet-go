@@ -41,6 +41,25 @@ const clearSchemeStorage = async (page: Page) => {
   });
 };
 
+/** Set the theme to dark mode. */
+const setDarkMode = async (page: Page) => {
+  await page.evaluate(() => {
+    localStorage.setItem('theme', 'dark');
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.setAttribute('data-theme-controller', 'dark');
+  });
+};
+
+/** Set custom scheme colors in localStorage. */
+const setCustomColorsInStorage = async (
+  page: Page,
+  colors: { primary: string; accent: string }
+) => {
+  await page.evaluate(c => {
+    localStorage.setItem('custom-scheme-colors', JSON.stringify(c));
+  }, colors);
+};
+
 test.describe('Color Scheme Switching', () => {
   test.setTimeout(30000);
 
@@ -152,13 +171,7 @@ test.describe('Color Scheme with Dark Mode', () => {
   });
 
   test('scheme works in dark mode', async ({ page }) => {
-    // Set dark theme
-    await page.evaluate(() => {
-      localStorage.setItem('theme', 'dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.setAttribute('data-theme-controller', 'dark');
-    });
-
+    await setDarkMode(page);
     await navigateToSettings(page);
 
     // Select forest scheme
@@ -173,13 +186,7 @@ test.describe('Color Scheme with Dark Mode', () => {
   });
 
   test('scheme overrides dark mode defaults', async ({ page }) => {
-    // Set dark theme
-    await page.evaluate(() => {
-      localStorage.setItem('theme', 'dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.setAttribute('data-theme-controller', 'dark');
-    });
-
+    await setDarkMode(page);
     await navigateToSettings(page);
 
     // The default dark blue primary is #3b82f6
@@ -200,11 +207,7 @@ test.describe('Color Scheme with Dark Mode', () => {
     expect(await getDataScheme(page)).toBe('violet');
 
     // Switch to dark mode
-    await page.evaluate(() => {
-      localStorage.setItem('theme', 'dark');
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.setAttribute('data-theme-controller', 'dark');
-    });
+    await setDarkMode(page);
 
     // Scheme should still be violet
     const scheme = await getDataScheme(page);
@@ -245,15 +248,7 @@ test.describe('Custom Color Scheme', () => {
     await navigateToSettings(page);
 
     // Set custom colors via localStorage before selecting custom scheme
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'custom-scheme-colors',
-        JSON.stringify({
-          primary: '#ff5500',
-          accent: '#00aa55',
-        })
-      );
-    });
+    await setCustomColorsInStorage(page, { primary: '#ff5500', accent: '#00aa55' });
 
     await selectScheme(page, 'settings.appearance.schemeCustom');
 
@@ -269,15 +264,7 @@ test.describe('Custom Color Scheme', () => {
     await navigateToSettings(page);
 
     // Set custom colors and select custom scheme
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'custom-scheme-colors',
-        JSON.stringify({
-          primary: '#cc3366',
-          accent: '#3366cc',
-        })
-      );
-    });
+    await setCustomColorsInStorage(page, { primary: '#cc3366', accent: '#3366cc' });
 
     await selectScheme(page, 'settings.appearance.schemeCustom');
     expect(await getDataScheme(page)).toBe('custom');
