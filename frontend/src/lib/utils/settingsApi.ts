@@ -6,6 +6,29 @@ import type {
   MQTTSettings,
 } from '$lib/stores/settings.js';
 
+export interface TLSCertificateInfo {
+  installed: boolean;
+  mode?: string;
+  subject?: string;
+  issuer?: string;
+  notBefore?: string;
+  notAfter?: string;
+  daysUntilExpiry?: number;
+  sans?: string[];
+  serialNumber?: string;
+  fingerprint?: string;
+}
+
+export interface TLSCertificateUpload {
+  certificate: string;
+  privateKey: string;
+  caCertificate?: string;
+}
+
+export interface TLSGenerateRequest {
+  validity?: string;
+}
+
 /**
  * Settings API client extending the base API client
  */
@@ -108,6 +131,22 @@ export const settingsAPI = {
     supportDump: (options: { includePrivateInfo: boolean }): Promise<{ downloadUrl: string }> => {
       return api.post('/api/v2/system/support-dump', options);
     },
+  },
+
+  /**
+   * TLS certificate management
+   */
+  tls: {
+    getCertificate: (): Promise<TLSCertificateInfo> =>
+      api.get<TLSCertificateInfo>('/api/v2/tls/certificate'),
+
+    uploadCertificate: (data: TLSCertificateUpload): Promise<TLSCertificateInfo> =>
+      api.post<TLSCertificateInfo>('/api/v2/tls/certificate', data),
+
+    deleteCertificate: (): Promise<unknown> => api.delete('/api/v2/tls/certificate'),
+
+    generateSelfSigned: (data?: TLSGenerateRequest): Promise<TLSCertificateInfo> =>
+      api.post<TLSCertificateInfo>('/api/v2/tls/certificate/generate', data ?? {}),
   },
 
   /**

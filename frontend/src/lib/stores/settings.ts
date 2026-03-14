@@ -364,6 +364,9 @@ export interface SecuritySettings {
   baseUrl: string;
   host: string;
   autoTls: boolean;
+  tlsMode: string; // "" | "autotls" | "manual" | "selfsigned"
+  selfSignedValidity: string;
+  redirectToHttps: boolean;
   basicAuth: {
     enabled: boolean;
     username: string;
@@ -923,6 +926,9 @@ function createEmptySettings(): SettingsFormData {
       baseUrl: '',
       host: '',
       autoTls: false,
+      tlsMode: '',
+      selfSignedValidity: '365d',
+      redirectToHttps: false,
       basicAuth: {
         enabled: false,
         username: '',
