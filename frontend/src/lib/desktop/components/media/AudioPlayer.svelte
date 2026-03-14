@@ -1094,7 +1094,7 @@
         fetchpriority="low"
         class={responsive
           ? 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
-          : 'w-full h-full object-cover rounded-md border border-[var(--color-base-300)]'}
+          : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
         style={responsive
           ? ''
