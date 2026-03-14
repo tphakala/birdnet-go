@@ -3900,5 +3900,22 @@
       "requestTimeout": "Časový limit požiadavky vypršal.",
       "networkError": "Chyba siete. Skontrolujte pripojenie."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nov",
+      "waxingCrescent": "Dorast. kosáčik",
+      "firstQuarter": "Prvá štvrť",
+      "waxingGibbous": "Dorast. mesiac",
+      "fullMoon": "Spln",
+      "waningGibbous": "Ubúd. mesiac",
+      "lastQuarter": "Posledná štvrť",
+      "waningCrescent": "Ubúd. kosáčik"
+    },
+    "birding": {
+      "excellent": "Bezvetrie — vynikajúce podmienky na počúvanie vtákov",
+      "moderate": "Mierny vietor — niektoré hlasy vtákov môžu byť ťažšie počuteľné",
+      "poor": "Silný vietor — hlasy vtákov takmer nepočuteľné"
+    }
   }
 }

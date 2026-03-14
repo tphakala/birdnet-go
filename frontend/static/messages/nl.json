@@ -4069,5 +4069,22 @@
       "requestTimeout": "Time-out van het verzoek.",
       "networkError": "Netwerkfout opgetreden. Controleer uw verbinding."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nieuwe Maan",
+      "waxingCrescent": "Wassende Sikkel",
+      "firstQuarter": "Eerste Kwartier",
+      "waxingGibbous": "Wassende Maan",
+      "fullMoon": "Volle Maan",
+      "waningGibbous": "Afnemende Maan",
+      "lastQuarter": "Laatste Kwartier",
+      "waningCrescent": "Afnemende Sikkel"
+    },
+    "birding": {
+      "excellent": "Windstil — uitstekend om vogelgeluiden te horen",
+      "moderate": "Matige wind — sommige vogelgeluiden moeilijker te horen",
+      "poor": "Harde wind — vogelgeluiden nauwelijks hoorbaar"
+    }
   }
 }

@@ -4069,5 +4069,22 @@
       "requestTimeout": "Przekroczono limit czasu żądania.",
       "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nów",
+      "waxingCrescent": "Sierp rosnący",
+      "firstQuarter": "Pierwsza kwadra",
+      "waxingGibbous": "Księżyc rosnący",
+      "fullMoon": "Pełnia",
+      "waningGibbous": "Księżyc malejący",
+      "lastQuarter": "Ostatnia kwadra",
+      "waningCrescent": "Sierp malejący"
+    },
+    "birding": {
+      "excellent": "Cisza — doskonałe warunki do słuchania ptaków",
+      "moderate": "Umiarkowany wiatr — niektóre głosy ptaków mogą być trudne do usłyszenia",
+      "poor": "Silny wiatr — głosy ptaków prawie niesłyszalne"
+    }
   }
 }

@@ -4069,5 +4069,22 @@
       "requestTimeout": "Pyyntö aikakatkaistiin.",
       "networkError": "Verkkovirhe. Tarkista yhteytesi."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Uusikuu",
+      "waxingCrescent": "Kasvava sirppi",
+      "firstQuarter": "Ensimmäinen neljännes",
+      "waxingGibbous": "Kasvava kupera",
+      "fullMoon": "Täysikuu",
+      "waningGibbous": "Vähenevä kupera",
+      "lastQuarter": "Viimeinen neljännes",
+      "waningCrescent": "Vähenevä sirppi"
+    },
+    "birding": {
+      "excellent": "Tyyntä — erinomaiset olosuhteet lintuhavainnoille",
+      "moderate": "Kohtalaista tuulta — osa linnunäänistä voi jäädä kuulematta",
+      "poor": "Kovaa tuulta — linnunäänet tuskin kuultavissa"
+    }
   }
 }

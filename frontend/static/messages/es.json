@@ -4069,5 +4069,22 @@
       "requestTimeout": "Tiempo de espera agotado.",
       "networkError": "Error de red. Compruebe su conexión."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Luna Nueva",
+      "waxingCrescent": "Luna Creciente",
+      "firstQuarter": "Cuarto Creciente",
+      "waxingGibbous": "Gibosa Creciente",
+      "fullMoon": "Luna Llena",
+      "waningGibbous": "Gibosa Menguante",
+      "lastQuarter": "Cuarto Menguante",
+      "waningCrescent": "Luna Menguante"
+    },
+    "birding": {
+      "excellent": "Calma — excelente para escuchar cantos de aves",
+      "moderate": "Viento moderado — algunos cantos pueden ser difíciles de oír",
+      "poor": "Viento fuerte — cantos de aves difícilmente audibles"
+    }
   }
 }

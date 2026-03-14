@@ -4069,5 +4069,22 @@
       "requestTimeout": "Délai de la requête dépassé.",
       "networkError": "Erreur réseau. Veuillez vérifier votre connexion."
     }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nouvelle Lune",
+      "waxingCrescent": "Premier Croissant",
+      "firstQuarter": "Premier Quartier",
+      "waxingGibbous": "Gibbeuse Croissante",
+      "fullMoon": "Pleine Lune",
+      "waningGibbous": "Gibbeuse Décroissante",
+      "lastQuarter": "Dernier Quartier",
+      "waningCrescent": "Dernier Croissant"
+    },
+    "birding": {
+      "excellent": "Calme — excellent pour entendre les chants d'oiseaux",
+      "moderate": "Vent modéré — certains chants peuvent être difficiles à entendre",
+      "poor": "Vent fort — chants d'oiseaux difficilement audibles"
+    }
   }
 }
