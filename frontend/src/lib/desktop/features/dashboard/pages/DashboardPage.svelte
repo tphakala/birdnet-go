@@ -1287,6 +1287,7 @@ Performance Optimizations:
                 ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                 : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
             )}
+            aria-pressed={bannerConfig.showImage}
           >
             <Image class="size-4" />
             {t('dashboard.banner.showImage')}
@@ -1321,6 +1322,7 @@ Performance Optimizations:
                   ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                   : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
               )}
+              aria-pressed={bannerConfig.showLocationMap}
             >
               <MapIcon class="size-4" />
               {t('dashboard.banner.showLocationMap')}
@@ -1365,6 +1367,7 @@ Performance Optimizations:
                     ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                     : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
                 )}
+                aria-pressed={bannerConfig.showPin ?? false}
               >
                 <MapPin class="size-4" />
                 {t('dashboard.banner.showPin')}
@@ -1386,6 +1389,7 @@ Performance Optimizations:
                     ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                     : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
                 )}
+                aria-pressed={bannerConfig.mapExpandable ?? true}
               >
                 <Maximize2 class="size-4" />
                 {t('dashboard.banner.mapExpandable')}
@@ -1406,6 +1410,7 @@ Performance Optimizations:
                 ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                 : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
             )}
+            aria-pressed={bannerConfig.showWeather}
           >
             <CloudSun class="size-4" />
             {t('dashboard.banner.showWeather')}

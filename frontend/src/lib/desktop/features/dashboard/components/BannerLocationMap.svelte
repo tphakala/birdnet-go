@@ -32,7 +32,7 @@
 
   let map: import('maplibre-gl').Map | undefined;
   let marker: import('maplibre-gl').Marker | undefined;
-  let maplibreModule: typeof import('maplibre-gl') | undefined;
+  let maplibreModule: typeof import('maplibre-gl') | undefined = $state();
 
   let expanded = $state(false);
   let expandedMapContainer: HTMLDivElement | undefined = $state();

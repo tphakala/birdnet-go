@@ -63,7 +63,12 @@
   }
 </script>
 
-<svelte:window onclick={handleSettingsClickOutside} />
+<svelte:window
+  onclick={handleSettingsClickOutside}
+  onkeydown={e => {
+    if (settingsOpen && e.key === 'Escape') settingsOpen = false;
+  }}
+/>
 
 {#if editMode}
   <div
@@ -134,7 +139,6 @@
 
       <!-- Cogwheel settings button (only when settingsContent is provided) -->
       {#if settingsContent}
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="relative" bind:this={dropdownRef}>
           <button
             onclick={() => {
@@ -146,6 +150,7 @@
             )}
             aria-label={t('dashboard.editMode.settings')}
             aria-expanded={settingsOpen}
+            aria-controls="settings-dropdown"
             title={t('dashboard.editMode.settings')}
           >
             <Settings class="size-4 text-[var(--color-base-content)]/60" />
@@ -154,11 +159,9 @@
           {#if settingsOpen}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
+              id="settings-dropdown"
               class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
               onmousedown={e => e.stopPropagation()}
-              onkeydown={e => {
-                if (e.key === 'Escape') settingsOpen = false;
-              }}
             >
               {@render settingsContent()}
             </div>
