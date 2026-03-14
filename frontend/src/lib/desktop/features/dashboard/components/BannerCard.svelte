@@ -192,7 +192,9 @@
       <span>{t('detections.weather.noDataAvailable')}</span>
     </div>
   {:else}
-    <div class="mt-3 flex items-center gap-4 text-sm text-[var(--color-base-content)]">
+    <div
+      class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--color-base-content)]"
+    >
       <span class="font-semibold">{formatTime(now)}</span>
       <span class="text-xs text-[var(--color-base-content)]/40">{timezone}</span>
       {@render sep()}
@@ -337,13 +339,13 @@
     {:else}
       <!-- Normal mode: container-query responsive layout -->
       <div class="banner-container flex flex-1 flex-col p-6">
-        <div class="flex flex-1 flex-col gap-6 md:flex-row">
+        <div class="flex flex-1 flex-col gap-6 @2xl:flex-row">
           {#if config.showImage && config.imagePath}
             <div class="shrink-0">
               <img
                 src={config.imagePath}
                 alt={config.title || t('dashboard.editMode.stationBanner')}
-                class="h-auto w-full rounded-xl object-cover md:w-48"
+                class="h-auto w-full rounded-xl object-cover @2xl:w-48"
               />
             </div>
           {/if}
@@ -363,14 +365,14 @@
 
             <!-- Weather inline: visible only on wide cards (≥1024px container) -->
             {#if config.showWeather}
-              <div class="hidden @5xl:block">
+              <div class="hidden @2xl:block">
                 {@render weatherFull()}
               </div>
             {/if}
           </div>
 
           {#if config.showLocationMap && hasLocation}
-            <div class="hidden w-full shrink-0 @xl:block md:w-64">
+            <div class="hidden w-full shrink-0 @2xl:block @2xl:w-64">
               <BannerLocationMap
                 {latitude}
                 {longitude}
@@ -385,7 +387,7 @@
 
         <!-- Weather below: visible only on narrow/medium cards (<1024px container) -->
         {#if config.showWeather}
-          <div class="@5xl:hidden">
+          <div class="@2xl:hidden">
             {@render weatherCompact()}
           </div>
         {/if}
