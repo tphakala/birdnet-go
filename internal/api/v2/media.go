@@ -337,9 +337,12 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool
 		if _, err := c.SFS.StatRel(relClipPath); err == nil {
 			return true
 		}
-		// If the temp file is gone, encoding has finished or failed. Stop waiting.
+		// If the temp file is gone, encoding has finished or failed.
+		// Re-check for the final file to handle the TOCTOU race where encoding
+		// completed (atomic rename) between the StatRel and isAudioBeingEncoded calls.
 		if !c.isAudioBeingEncoded(relClipPath) {
-			return false
+			_, err := c.SFS.StatRel(relClipPath)
+			return err == nil
 		}
 
 		// Wait for the next event.
@@ -409,8 +412,13 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 					)
 					return nil
 				}
-				// Encoding still in progress after timeout — tell client to retry
-				return c.handleAudioNotReady(ctx)
+				// Distinguish "still encoding" from "encoder exited/failed".
+				if c.isAudioBeingEncoded(normalizedFilename) {
+					return c.handleAudioNotReady(ctx)
+				}
+				// Temp file disappeared and final file is still missing —
+				// encoding failed, fall back to normal error translation.
+				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 			}
 		}
 		// Error logging is handled within translateSecureFSError
@@ -510,8 +518,13 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 					)
 					return nil
 				}
-				// Encoding still in progress after timeout — tell client to retry
-				return c.handleAudioNotReady(ctx)
+				// Distinguish "still encoding" from "encoder exited/failed".
+				if c.isAudioBeingEncoded(normalizedClipPath) {
+					return c.handleAudioNotReady(ctx)
+				}
+				// Temp file disappeared and final file is still missing —
+				// encoding failed, fall back to normal error translation.
+				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 			}
 		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
