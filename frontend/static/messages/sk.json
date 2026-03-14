@@ -669,7 +669,9 @@
       "showLocationMap": "Zobraziť mapu polohy",
       "showLocationMapHelp": "Zobrazí malú mapu pomocou zemepisnej šírky/dĺžky z vašich hlavných nastavení",
       "showWeather": "Zobraziť aktuálne počasie",
-      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)"
+      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)",
+      "mapZoom": "Priblíženie mapy",
+      "showPin": "Zobraziť značku polohy"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",

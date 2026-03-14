@@ -669,7 +669,9 @@
       "showLocationMap": "Mostra mappa posizione",
       "showLocationMapHelp": "Mostra una piccola mappa usando la latitudine/longitudine dalle impostazioni principali",
       "showWeather": "Mostra meteo attuale",
-      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)"
+      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)",
+      "mapZoom": "Zoom della mappa",
+      "showPin": "Mostra segnaposto posizione"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",

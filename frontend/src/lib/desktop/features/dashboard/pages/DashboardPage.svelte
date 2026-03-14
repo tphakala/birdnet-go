@@ -71,7 +71,7 @@ Performance Optimizations:
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
-  import { Image, Map as MapIcon, CloudSun } from '@lucide/svelte';
+  import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn } from '@lucide/svelte';
 
   const logger = getLogger('app');
 
@@ -1324,6 +1324,51 @@ Performance Optimizations:
               <MapIcon class="size-4" />
               {t('dashboard.banner.showLocationMap')}
             </button>
+
+            {#if bannerConfig.showLocationMap}
+              <!-- Map zoom level -->
+              <div class="flex items-center gap-2 rounded-lg px-3 py-2">
+                <ZoomIn class="size-4 shrink-0 text-[var(--color-base-content)]/60" />
+                <label for="banner-map-zoom" class="text-sm text-[var(--color-base-content)]/60"
+                  >{t('dashboard.banner.mapZoom')}</label
+                >
+                <input
+                  id="banner-map-zoom"
+                  type="number"
+                  min="5"
+                  max="18"
+                  value={bannerConfig.mapZoom ?? 11}
+                  oninput={e => {
+                    const val = parseInt((e.target as HTMLInputElement).value, 10);
+                    if (!isNaN(val) && val >= 5 && val <= 18) {
+                      onUpdate({
+                        ...element,
+                        banner: { ...bannerConfig, mapZoom: val },
+                      });
+                    }
+                  }}
+                  class="ml-auto w-16 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                />
+              </div>
+
+              <!-- Pin toggle -->
+              <button
+                onclick={() =>
+                  onUpdate({
+                    ...element,
+                    banner: { ...bannerConfig, showPin: !(bannerConfig.showPin ?? true) },
+                  })}
+                class={cn(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                  (bannerConfig.showPin ?? true)
+                    ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+                )}
+              >
+                <MapPin class="size-4" />
+                {t('dashboard.banner.showPin')}
+              </button>
+            {/if}
           {/if}
 
           <!-- Weather toggle -->

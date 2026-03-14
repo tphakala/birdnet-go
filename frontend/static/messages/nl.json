@@ -669,7 +669,9 @@
       "showLocationMap": "Locatiekaart tonen",
       "showLocationMapHelp": "Toont een kleine kaart met de breedte-/lengtegraad uit uw hoofdinstellingen",
       "showWeather": "Huidig weer tonen",
-      "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)"
+      "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)",
+      "mapZoom": "Kaartzoom",
+      "showPin": "Locatiemarkering tonen"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",

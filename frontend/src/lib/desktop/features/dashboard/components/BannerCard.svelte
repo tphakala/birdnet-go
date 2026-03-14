@@ -86,7 +86,13 @@
         {/if}
 
         {#if config.showLocationMap && hasLocation}
-          <BannerLocationMap {latitude} {longitude} className="h-32 rounded-xl" />
+          <BannerLocationMap
+            {latitude}
+            {longitude}
+            zoom={config.mapZoom}
+            showPin={config.showPin}
+            className="h-32 rounded-xl"
+          />
         {/if}
 
         {#if config.showWeather}
@@ -135,7 +141,13 @@
 
           {#if config.showLocationMap && hasLocation}
             <div class="w-full shrink-0 md:w-64">
-              <BannerLocationMap {latitude} {longitude} className="h-40" />
+              <BannerLocationMap
+                {latitude}
+                {longitude}
+                zoom={config.mapZoom}
+                showPin={config.showPin}
+                className="h-40"
+              />
             </div>
           {/if}
         </div>

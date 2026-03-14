@@ -669,7 +669,9 @@
       "showLocationMap": "Show location map",
       "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
       "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)"
+      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
+      "mapZoom": "Kartan zoomaus",
+      "showPin": "Näytä sijaintimerkki"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",

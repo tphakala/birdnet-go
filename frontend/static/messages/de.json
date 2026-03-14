@@ -669,7 +669,9 @@
       "showLocationMap": "Standortkarte anzeigen",
       "showLocationMapHelp": "Zeigt eine kleine Karte mit dem Breiten-/Längengrad aus Ihren Haupteinstellungen an",
       "showWeather": "Aktuelles Wetter anzeigen",
-      "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)"
+      "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)",
+      "mapZoom": "Kartenzoom",
+      "showPin": "Standortnadel anzeigen"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",

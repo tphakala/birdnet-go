@@ -10,15 +10,24 @@
   interface Props {
     latitude: number;
     longitude: number;
+    zoom?: number;
+    showPin?: boolean;
     className?: string;
   }
 
-  let { latitude, longitude, className = '' }: Props = $props();
+  let {
+    latitude,
+    longitude,
+    zoom = MAP_CONFIG.DEFAULT_ZOOM,
+    showPin = true,
+    className = '',
+  }: Props = $props();
 
   let mapContainer: HTMLDivElement;
 
   let map: import('maplibre-gl').Map | undefined;
   let marker: import('maplibre-gl').Marker | undefined;
+  let maplibreModule: typeof import('maplibre-gl') | undefined;
 
   onMount(() => {
     let mounted = true;
@@ -26,16 +35,20 @@
     import('maplibre-gl').then(maplibre => {
       if (!mounted) return;
 
+      maplibreModule = maplibre;
+
       map = new maplibre.Map({
         container: mapContainer,
         style: createMapStyle(),
         center: [longitude, latitude],
-        zoom: MAP_CONFIG.DEFAULT_ZOOM,
+        zoom: zoom,
         interactive: false,
         attributionControl: false,
       });
 
-      marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
+      if (showPin) {
+        marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
+      }
     });
 
     return () => {
@@ -49,6 +62,25 @@
     if (map && marker) {
       map.setCenter([longitude, latitude]);
       marker.setLngLat([longitude, latitude]);
+    }
+  });
+
+  // Reactively update zoom when prop changes
+  $effect(() => {
+    if (map) {
+      map.setZoom(zoom);
+    }
+  });
+
+  // Reactively add/remove marker when showPin changes
+  $effect(() => {
+    if (!map || !maplibreModule) return;
+
+    if (showPin && !marker) {
+      marker = new maplibreModule.Marker().setLngLat([longitude, latitude]).addTo(map);
+    } else if (!showPin && marker) {
+      marker.remove();
+      marker = undefined;
     }
   });
 </script>
