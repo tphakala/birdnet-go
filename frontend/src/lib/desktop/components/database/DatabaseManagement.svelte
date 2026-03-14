@@ -239,19 +239,32 @@
     }
   }
 
-  // Polling effect - uses local variable to avoid reactivity loop
+  // Polling effect - recursive setTimeout to prevent pile-up
   $effect(() => {
     if (!isActive) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
 
-    // Start polling when migration is active
-    const interval = setInterval(() => {
-      if (!connectionState.isOnline) return;
-      fetchMigrationStatus();
-      fetchV2Stats(); // Also refresh v2 stats to show growing detection count
-    }, STATUS_POLL_INTERVAL_MS);
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
 
-    // Cleanup when isActive becomes false or component unmounts
-    return () => clearInterval(interval);
+      await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   });
 
   // Initial fetch
@@ -269,17 +282,32 @@
     }
   });
 
-  // Poll during cleanup
+  // Poll during cleanup (recursive setTimeout to prevent pile-up)
   $effect(() => {
     if (!isCleanupActive) return;
+    let cancelled = false;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    async function poll() {
+      if (cancelled) return;
 
-    const interval = setInterval(() => {
-      if (!connectionState.isOnline) return;
-      fetchMigrationStatus();
-      fetchLegacyStatus();
-    }, STATUS_POLL_INTERVAL_MS);
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
 
-    return () => clearInterval(interval);
+      await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
+      if (!cancelled) {
+        timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+      }
+    }
+    timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   });
 </script>
 

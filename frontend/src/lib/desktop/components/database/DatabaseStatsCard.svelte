@@ -63,7 +63,7 @@
   let backupBytesWritten = $state(0);
   let backupTotalBytes = $state(0);
   let backupError = $state<string | null>(null);
-  let pollInterval: ReturnType<typeof setInterval> | null = null;
+  let pollTimeout: ReturnType<typeof setTimeout> | null = null;
 
   // Polling interval in milliseconds
   const POLL_INTERVAL_MS = 1500;
@@ -166,20 +166,33 @@
     }
   }
 
-  // Start polling for job status
+  // Start polling for job status (recursive setTimeout to prevent pile-up)
   function startPolling() {
-    if (pollInterval) return;
+    if (pollTimeout) return;
 
-    pollInterval = setInterval(pollJobStatus, POLL_INTERVAL_MS);
-    // Also poll immediately
+    // Poll immediately, then schedule next after completion
     pollJobStatus();
+    scheduleNextPoll();
+  }
+
+  // Schedule the next poll after POLL_INTERVAL_MS
+  function scheduleNextPoll() {
+    if (pollTimeout) return;
+    pollTimeout = setTimeout(async () => {
+      pollTimeout = null;
+      await pollJobStatus();
+      // Continue polling if we still have an active job
+      if (backupJobId && backupStatus !== 'completed' && backupStatus !== 'failed') {
+        scheduleNextPoll();
+      }
+    }, POLL_INTERVAL_MS);
   }
 
   // Stop polling
   function stopPolling() {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
+    if (pollTimeout) {
+      clearTimeout(pollTimeout);
+      pollTimeout = null;
     }
   }
 
