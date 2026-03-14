@@ -87,7 +87,9 @@
     onclick={toggleMenu}
     class="inline-flex items-center justify-center rounded-lg p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
     aria-label={t('navigation.settingsMenu')}
+    aria-haspopup="true"
     aria-expanded={isOpen}
+    aria-controls="header-settings-menu"
   >
     <Settings class="size-6" />
   </button>
@@ -95,6 +97,7 @@
   {#if isOpen}
     <div
       bind:this={dropdownRef}
+      id="header-settings-menu"
       class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
       style:z-index="1010"
       aria-label={t('navigation.settingsMenu')}
