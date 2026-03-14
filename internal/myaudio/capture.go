@@ -708,8 +708,10 @@ func processAudioFrame(
 	// Process sound level data if enabled (use the safe bufferToUse) - this may be nil if 10-second window isn't complete
 	if conf.Setting().Realtime.Audio.SoundLevel.Enabled {
 		if soundLevelData, err := ProcessSoundLevelData(sourceID, bufferToUse); err != nil {
-			// Only log actual errors, not normal conditions
-			if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) {
+			// Only log actual errors, not normal conditions.
+			// ErrSoundLevelProcessorNotRegistered is expected during startup race
+			// or hot-reload windows and should be silently ignored (issue #2249).
+			if !errors.Is(err, ErrIntervalIncomplete) && !errors.Is(err, ErrNoAudioData) && !errors.Is(err, ErrSoundLevelProcessorNotRegistered) {
 				log.Warn("error processing sound level data",
 					logger.Error(err),
 					logger.String("source_id", sourceID))
