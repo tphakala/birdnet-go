@@ -24,7 +24,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
-  import { hasReviewPermission } from '$lib/utils/auth';
+  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { formatLocalDateTime } from '$lib/utils/date';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
@@ -93,6 +93,7 @@
 
   // Use the existing auth store pattern (same as DesktopSidebar)
   let canReview = $derived(hasReviewPermission());
+  let clipExtractionEnabled = $derived(isAuthenticated());
   let detection = $state<Detection | null>(null);
   let speciesInfo = $state<SpeciesInfo | null>(null);
   let taxonomyInfo = $state<TaxonomyInfo | null>(null);
@@ -758,6 +759,7 @@
               spectrogramRaw={false}
               responsive={true}
               className="w-full"
+              enableClipExtraction={clipExtractionEnabled}
             />
           </div>
         </div>

@@ -10,6 +10,7 @@
   import { XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
+  import { isAuthenticated } from '$lib/utils/auth';
 
   interface Props {
     isOpen: boolean;
@@ -25,6 +26,8 @@
   }
 
   let { isOpen = false, detection = null, isExcluded = false, onClose, onSave }: Props = $props();
+
+  let clipExtractionEnabled = $derived(isAuthenticated());
 
   let reviewStatus = $state<'correct' | 'false_positive'>('correct');
   let lockDetection = $state(false);
@@ -207,6 +210,7 @@
               spectrogramRaw={false}
               responsive={true}
               className="w-full mx-auto"
+              enableClipExtraction={clipExtractionEnabled}
             />
           </div>
         </div>
