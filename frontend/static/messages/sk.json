@@ -3686,6 +3686,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Spojenie so serverom sa stratilo. Pokúšam sa o opätovné pripojenie..."
+  },
   "detection": {
     "actions": {
       "back": "Späť",

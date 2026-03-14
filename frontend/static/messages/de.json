@@ -3855,6 +3855,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Verbindung zum Server verloren. Verbindungsversuch wird durchgeführt..."
+  },
   "detection": {
     "actions": {
       "back": "Zurück",
