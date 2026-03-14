@@ -442,6 +442,35 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
 
+### TLS Certificate Management (`tls.go`)
+
+| Method | Route                          | Handler                          | Auth | Description                        |
+| ------ | ------------------------------ | -------------------------------- | ---- | ---------------------------------- |
+| GET    | `/tls/certificate`             | `GetTLSCertificate`              | ✅   | Get installed certificate info     |
+| POST   | `/tls/certificate`             | `UploadTLSCertificate`           | ✅   | Upload cert+key pair (manual TLS)  |
+| DELETE | `/tls/certificate`             | `DeleteTLSCertificate`           | ✅   | Remove certificates, reset to none |
+| POST   | `/tls/certificate/generate`    | `GenerateSelfSignedCertificate`  | ✅   | Generate self-signed certificate   |
+
+**GET /api/v2/tls/certificate** — Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
+
+**POST /api/v2/tls/certificate** — Upload a PEM-encoded certificate and private key. The pair is validated before saving. Sets TLS mode to `manual`.
+
+```json
+{
+  "certificate": "-----BEGIN CERTIFICATE-----\n...",
+  "privateKey": "-----BEGIN EC PRIVATE KEY-----\n...",
+  "caCertificate": "-----BEGIN CERTIFICATE-----\n..."
+}
+```
+
+**POST /api/v2/tls/certificate/generate** — Generate a self-signed certificate. Validity accepts duration strings like `30d`, `1y`, `8760h` (default: `365d`, min: `1d`, max: `10y`). SANs are auto-collected from configured host, base URL, and local network interfaces.
+
+```json
+{
+  "validity": "365d"
+}
+```
+
 ## Legend
 
 - ✅ = Authentication required

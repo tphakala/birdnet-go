@@ -49,6 +49,12 @@ func GetTLSManager() *TLSManager {
 	return globalTLSManager
 }
 
+// SetTLSManagerForTest replaces the global TLS manager instance.
+// This is intended for testing only — it allows tests to use a temporary directory.
+func SetTLSManagerForTest(tm *TLSManager) {
+	globalTLSManager = tm
+}
+
 // NewTLSManager creates a new TLS certificate manager
 func NewTLSManager(configDir string) *TLSManager {
 	return &TLSManager{
