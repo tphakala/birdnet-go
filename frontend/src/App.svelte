@@ -10,6 +10,7 @@
   import { appState, initApp, MAX_RETRIES } from './lib/stores/appState.svelte';
   import { navigation } from './lib/stores/navigation.svelte';
   import { settingsActions } from './lib/stores/settings.js';
+  import { activateWatchdog } from './lib/stores/connectionState.svelte';
 
   const logger = getLogger('app');
 
@@ -403,6 +404,9 @@
     if (sseNotifications) {
       logger.debug('SSE notifications manager initialized');
     }
+
+    // Activate connection watchdog now that app is initialized
+    activateWatchdog();
 
     // Load settings at app startup so they are available on any page the user navigates to
     // first (e.g. System → Terminal) without requiring a visit to the Settings page.

@@ -16,6 +16,7 @@ import {
 } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { t } from '$lib/i18n';
+import { markOnline } from '$lib/stores/connectionState.svelte';
 
 const logger = loggers.api;
 
@@ -345,6 +346,9 @@ export async function fetchWithCSRF<T = unknown>(
     const response = await fetch(buildAppUrl(url), finalOptions);
 
     clearTimeout(timeoutId);
+
+    // Any HTTP response (even 4xx/5xx) proves the backend is reachable
+    markOnline();
 
     // If 403 on a state-changing request, the CSRF token may have expired.
     // Refresh the token and retry once.

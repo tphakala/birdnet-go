@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { DatabaseOverviewResponse } from '$lib/types/database';
   import type { MigrationStatus, ApiState, PrerequisitesResponse } from '$lib/types/migration';
   import type { LegacyStatus } from '$lib/types/legacy';
@@ -89,6 +90,10 @@
 
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
+    if (!connectionState.isOnline) {
+      if (!overview) overviewLoading = false;
+      return;
+    }
     try {
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
@@ -407,6 +412,15 @@
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
@@ -429,6 +443,15 @@
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API call but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await fetchBackupJobs();
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
@@ -455,6 +478,15 @@
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);

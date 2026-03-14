@@ -3855,6 +3855,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Yhteys palvelimeen katkennut. Yritetään yhdistää uudelleen..."
+  },
   "detection": {
     "actions": {
       "back": "Takaisin",

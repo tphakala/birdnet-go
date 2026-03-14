@@ -3879,6 +3879,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Connection to server lost. Attempting to reconnect..."
+  },
   "detection": {
     "actions": {
       "back": "Back",

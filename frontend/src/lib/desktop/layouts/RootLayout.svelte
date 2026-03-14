@@ -8,6 +8,7 @@
   import { auth as authStore } from '$lib/stores/auth';
   import { sidebar } from '$lib/stores/sidebar';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
+  import OfflineBanner from '$lib/desktop/components/ui/OfflineBanner.svelte';
 
   interface Props {
     title?: string;
@@ -121,6 +122,11 @@
           onNavigate={handleNavigate}
         />
       </div>
+    </div>
+
+    <!-- Offline connectivity banner -->
+    <div class="mx-auto max-w-7xl px-3 lg:px-8">
+      <OfflineBanner />
     </div>
 
     <!-- Main content -->

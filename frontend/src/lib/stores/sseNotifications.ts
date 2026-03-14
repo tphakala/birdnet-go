@@ -9,6 +9,7 @@ import {
   translateField,
   type Notification,
 } from '$lib/utils/notifications';
+import { onSSEActivity, onSSEError } from '$lib/stores/connectionState.svelte';
 
 const logger = loggers.sse;
 
@@ -96,12 +97,14 @@ class SSENotificationManager {
       this.eventSource.onopen = () => {
         logger.info('SSE notification connection opened');
         this.isConnected = true;
+        onSSEActivity();
       };
 
       // Handle general messages (backwards compatibility)
       this.eventSource.onmessage = event => {
         try {
           const notification: SSENotification = JSON.parse(event.data);
+          onSSEActivity();
           this.handleNotification(notification);
         } catch (error) {
           // Log parsing errors for debugging while ignoring them for backwards compatibility
@@ -120,6 +123,7 @@ class SSENotificationManager {
           action: 'connection',
         });
         this.isConnected = false;
+        onSSEError();
         // ReconnectingEventSource handles reconnection automatically
       };
 
@@ -127,6 +131,7 @@ class SSENotificationManager {
       this.eventSource.addEventListener('connected', (event: Event) => {
         const messageEvent = event as MessageEvent;
         logger.info('SSE connected:', messageEvent.data);
+        onSSEActivity();
       });
 
       // Handle toast messages
@@ -134,6 +139,7 @@ class SSENotificationManager {
         try {
           const messageEvent = event as MessageEvent;
           const toastData: SSEToastData = JSON.parse(messageEvent.data);
+          onSSEActivity();
           this.handleToast(toastData);
         } catch (error) {
           logger.error('Error processing toast event', error, {
@@ -148,6 +154,7 @@ class SSENotificationManager {
         try {
           const messageEvent = event as MessageEvent;
           const parsed: unknown = JSON.parse(messageEvent.data);
+          onSSEActivity();
           if (!isValidNotification(parsed)) {
             logger.warn('Invalid notification event payload (ignored)', null, {
               component: 'sseNotifications',
@@ -162,6 +169,11 @@ class SSENotificationManager {
             action: 'handleNotification',
           });
         }
+      });
+
+      // Handle heartbeat events for connection state tracking
+      this.eventSource.addEventListener('heartbeat', () => {
+        onSSEActivity();
       });
     } catch (error) {
       logger.error('Failed to create SSE connection', error, {

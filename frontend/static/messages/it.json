@@ -3652,6 +3652,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Connessione al server persa. Tentativo di riconnessione..."
+  },
   "detection": {
     "actions": {
       "back": "Indietro",

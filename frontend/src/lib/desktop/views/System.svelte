@@ -16,6 +16,7 @@
     type TemperatureUnit,
   } from '$lib/utils/formatters';
   import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
 
   const logger = loggers.ui;
 
@@ -221,6 +222,14 @@
     async function poll(): Promise<void> {
       if (!active.current) return;
 
+      if (!connectionState.isOnline) {
+        // Skip API call but keep the polling loop alive
+        if (active.current) {
+          pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
+        }
+        return;
+      }
+
       try {
         const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
         if (!active.current) return;
@@ -402,6 +411,15 @@
   function startSlowRefresh(active: { current: boolean }): void {
     async function tick(): Promise<void> {
       if (!active.current) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the refresh loop alive
+        if (active.current) {
+          slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
       if (active.current) {
         slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
