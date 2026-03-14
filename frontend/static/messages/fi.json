@@ -197,6 +197,9 @@
   },
   "navigation": {
     "dashboard": "Yleiskatsaus",
+    "settingsMenu": "Asetusvalikko",
+    "theme": "Teema",
+    "github": "GitHub",
     "detections": "Havainnot",
     "search": "Haku",
     "analytics": "Analytiikka",
@@ -212,7 +215,6 @@
     "analyticsSubmenu": "Analytiikan alavalikko",
     "settingsSubmenu": "Asetusten alavalikko",
     "systemSubmenu": "Järjestelmän alavalikko",
-    "dashboardSubmenu": "Kojelaudan alavalikko",
     "systemTerminal": "Terminaali"
   },
   "pageTitle": {

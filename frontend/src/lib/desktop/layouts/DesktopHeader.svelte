@@ -4,7 +4,7 @@
   import QuietHoursIndicator from '$lib/desktop/components/ui/QuietHoursIndicator.svelte';
   import AudioLevelIndicator from '$lib/desktop/components/ui/AudioLevelIndicator.svelte';
   import NotificationBell from '$lib/desktop/components/ui/NotificationBell.svelte';
-  import ThemeToggle from '$lib/desktop/components/ui/ThemeToggle.svelte';
+  import HeaderSettingsMenu from '$lib/desktop/components/ui/HeaderSettingsMenu.svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { Menu } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -16,7 +16,6 @@
     showSearch?: boolean;
     showAudioLevel?: boolean;
     showNotifications?: boolean;
-    showThemeToggle?: boolean;
     debugMode?: boolean;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
@@ -33,7 +32,6 @@
     showSearch = true,
     showAudioLevel = true,
     showNotifications = true,
-    showThemeToggle = true,
     debugMode = false,
     securityEnabled = false,
     accessAllowed = true,
@@ -85,7 +83,7 @@
     {#if showSidebarToggle}
       <button
         onclick={handleSidebarToggle}
-        class="btn btn-ghost btn-sm p-0 sm:p-1 lg:hidden"
+        class="inline-flex items-center justify-center rounded-lg p-0 sm:p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10 lg:hidden"
         aria-label={t('navigation.toggleSidebar')}
       >
         <Menu class="size-6" />
@@ -123,9 +121,7 @@
       />
     {/if}
 
-    {#if showThemeToggle}
-      <ThemeToggle className="hidden md:block" showTooltip={true} />
-    {/if}
+    <HeaderSettingsMenu {securityEnabled} {accessAllowed} className="hidden md:block" />
   </div>
 </header>
 

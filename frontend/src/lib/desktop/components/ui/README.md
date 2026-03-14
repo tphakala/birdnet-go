@@ -51,6 +51,7 @@ A comprehensive collection of reusable Svelte 5 components for the BirdNET-Go de
 
 - [AudioLevelIndicator](#audiolevelindicator) - Audio level visualization
 - [ThemeToggle](#themetoggle) - Theme switching component
+- [HeaderSettingsMenu](#headersettingsmenu) - Header dropdown menu with theme toggle, edit dashboard, and links
 - [TimeOfDayIcon](#timeofdayicon) - Time-based icon display
 
 ### Advanced
@@ -451,6 +452,26 @@ interface Props {
 - 4 alert types with icons
 - Dismissible functionality
 - Message or snippet content
+
+---
+
+### HeaderSettingsMenu
+
+Cogwheel dropdown menu for the header bar. Contains theme toggle, edit dashboard (admin-only), and GitHub link.
+
+#### Props
+
+| Prop            | Type    | Default | Description                      |
+| --------------- | ------- | ------- | -------------------------------- |
+| securityEnabled | boolean | false   | Whether security/auth is enabled |
+| accessAllowed   | boolean | true    | Whether user has admin access    |
+| className       | string  | ''      | Additional CSS classes           |
+
+#### Usage
+
+```svelte
+<HeaderSettingsMenu {securityEnabled} {accessAllowed} className="hidden md:block" />
+```
 
 ---
 
