@@ -40,6 +40,10 @@ type SecurityConfig struct {
 	// ContentSecurityPolicy specifies the Content-Security-Policy header value.
 	// Leave empty to not set the header.
 	ContentSecurityPolicy string
+
+	// AllowEmbedding controls whether the application can be embedded in iframes.
+	// When true, the X-Frame-Options header is omitted, allowing embedding.
+	AllowEmbedding bool
 }
 
 // DefaultSecurityConfig returns a SecurityConfig with sensible defaults.
@@ -87,10 +91,15 @@ func NewCORS(config SecurityConfig) echo.MiddlewareFunc {
 
 // NewSecureHeaders creates a middleware that sets security-related HTTP headers.
 func NewSecureHeaders(config SecurityConfig) echo.MiddlewareFunc {
+	xFrameOptions := "SAMEORIGIN"
+	if config.AllowEmbedding {
+		xFrameOptions = ""
+	}
+
 	return middleware.SecureWithConfig(middleware.SecureConfig{
 		XSSProtection:         "1; mode=block",
 		ContentTypeNosniff:    "nosniff",
-		XFrameOptions:         "SAMEORIGIN",
+		XFrameOptions:         xFrameOptions,
 		HSTSMaxAge:            config.HSTSMaxAge,
 		HSTSExcludeSubdomains: config.HSTSExcludeSubdomains,
 		ContentSecurityPolicy: config.ContentSecurityPolicy,

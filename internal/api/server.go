@@ -252,6 +252,7 @@ func (s *Server) setupMiddleware() {
 		HSTSMaxAge:            mw.HSTSMaxAge,
 		HSTSExcludeSubdomains: false,
 		ContentSecurityPolicy: "",
+		AllowEmbedding:        s.config.AllowEmbedding,
 	}
 
 	// CORS middleware
