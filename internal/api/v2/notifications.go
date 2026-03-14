@@ -745,29 +745,11 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 
 // MarkNotificationRead marks a notification as read
 func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
-	id := ctx.Param("id")
-	if id == "" {
-		return c.HandleErrorWithKey(ctx, nil, "Notification ID is required", http.StatusBadRequest, notification.MsgErrNotifIDRequired, nil)
-	}
-
-	service := notification.GetService()
-
-	if err := service.MarkAsRead(id); err != nil {
-		if errors.Is(err, notification.ErrNotificationNotFound) {
-			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
-		}
-		c.logErrorIfEnabled("failed to mark notification as read",
-			logger.Error(err),
-			logger.String("id", id))
-		return c.HandleError(ctx, err, "Failed to mark notification as read", http.StatusInternalServerError)
-	}
-
-	if c.Settings != nil && c.Settings.WebServer.Debug {
-		c.logDebugIfEnabled("notification marked as read", logger.String("id", id))
-	}
-
-	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Notification marked as read",
+	return c.executeNotificationAction(ctx, notificationAction{
+		operation:      func(s *notification.Service, id string) error { return s.MarkAsRead(id) },
+		errorLogMsg:    "failed to mark notification as read",
+		errorRespMsg:   "Failed to mark notification as read",
+		successRespMsg: "Notification marked as read",
 	})
 }
 
