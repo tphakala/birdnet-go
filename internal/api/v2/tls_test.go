@@ -259,8 +259,8 @@ func TestTLSGenerateSelfSignedCertificate_DefaultValidity(t *testing.T) {
 	var info TLSCertificateInfo
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
 	assert.True(t, info.Installed)
-	// Default validity is 365 days, so DaysUntilExpiry should be around 364-365
-	assert.Greater(t, info.DaysUntilExpiry, 360)
+	// Default validity is 5 years (1825 days)
+	assert.InDelta(t, 1825, info.DaysUntilExpiry, 2) // 5 years ± 2 days
 }
 
 func TestTLSDownloadCertificate(t *testing.T) {

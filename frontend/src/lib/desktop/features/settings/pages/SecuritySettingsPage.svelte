@@ -139,13 +139,13 @@
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
       return t('settings.security.tls.autoTLSNoIP');
     }
+    // Must not be localhost (check before dot check since "localhost" has no dots)
+    if (host.toLowerCase() === 'localhost') {
+      return t('settings.security.tls.autoTLSNoLocalhost');
+    }
     // Must contain at least one dot (FQDN)
     if (!host.includes('.')) {
       return t('settings.security.tls.autoTLSNeedsFQDN');
-    }
-    // Must not be localhost
-    if (host.toLowerCase() === 'localhost') {
-      return t('settings.security.tls.autoTLSNoLocalhost');
     }
     // Must not use a private TLD
     const lower = host.toLowerCase();
@@ -182,6 +182,7 @@
       });
       // Reload settings to sync frontend with backend TLSMode change
       await settingsActions.loadSettings();
+      settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
       toastActions.error(
@@ -203,6 +204,7 @@
       });
       // Reload settings to sync frontend with backend TLSMode change
       await settingsActions.loadSettings();
+      settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.uploadSuccess'));
       // Clear upload form on success
       uploadCert = '';
@@ -225,6 +227,7 @@
       certInfo = null;
       // Reload settings to sync frontend with backend TLSMode reset to none
       await settingsActions.loadSettings();
+      settingsStore.update(state => ({ ...state, restartRequired: true }));
       toastActions.success(t('settings.security.tls.deleteSuccess'));
     } catch (err) {
       toastActions.error(

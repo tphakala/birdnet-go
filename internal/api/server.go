@@ -419,6 +419,10 @@ func (s *Server) startBlocking() error {
 
 		// Start HTTPS server on TLS port (this blocks)
 		err = s.echo.StartTLS(tlsAddr, s.config.TLSCertFile, s.config.TLSKeyFile)
+		// If HTTPS startup failed, shut down the redirect server
+		if err != nil && s.httpRedirectServer != nil {
+			_ = s.httpRedirectServer.Close()
+		}
 	default:
 		// Plain HTTP
 		err = s.echo.Start(addr)
@@ -517,7 +521,7 @@ func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 			target += ":" + tlsPort
 		}
 		target += r.URL.RequestURI()
-		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		http.Redirect(w, r, target, http.StatusPermanentRedirect)
 	})
 
 	return &http.Server{

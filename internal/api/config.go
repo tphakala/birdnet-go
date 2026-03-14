@@ -114,6 +114,13 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			if cfg.TLSPort == "" {
 				cfg.TLSPort = "8443"
 			}
+			if cfg.TLSPort == cfg.Port {
+				GetLogger().Warn("TLS port must differ from HTTP port, using default",
+					logger.String("http_port", cfg.Port),
+					logger.String("tls_port", cfg.TLSPort),
+				)
+				cfg.TLSPort = "8443"
+			}
 		}
 	default:
 		// TLSModeNone — plain HTTP

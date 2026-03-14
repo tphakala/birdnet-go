@@ -820,18 +820,18 @@ func validateAutoTLSHostname(hostname string) error {
 			Build()
 	}
 
-	// Must contain at least one dot (FQDN)
-	if !strings.Contains(hostname, ".") {
-		return errors.Newf("Let's Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname (%s)", hostname).
+	// Must not be localhost (check before dot check since "localhost" has no dots)
+	if strings.EqualFold(hostname, "localhost") {
+		return errors.Newf("Let's Encrypt cannot issue certificates for localhost").
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-autotls-hostname").
 			Context("hostname", hostname).
 			Build()
 	}
 
-	// Must not be localhost
-	if strings.EqualFold(hostname, "localhost") {
-		return errors.Newf("Let's Encrypt cannot issue certificates for localhost").
+	// Must contain at least one dot (FQDN)
+	if !strings.Contains(hostname, ".") {
+		return errors.Newf("Let's Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname (%s)", hostname).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-autotls-hostname").
 			Context("hostname", hostname).

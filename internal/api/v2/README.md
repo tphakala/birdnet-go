@@ -444,12 +444,13 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### TLS Certificate Management (`tls.go`)
 
-| Method | Route                          | Handler                          | Auth | Description                        |
-| ------ | ------------------------------ | -------------------------------- | ---- | ---------------------------------- |
-| GET    | `/tls/certificate`             | `GetTLSCertificate`              | ✅   | Get installed certificate info     |
-| POST   | `/tls/certificate`             | `UploadTLSCertificate`           | ✅   | Upload cert+key pair (manual TLS)  |
-| DELETE | `/tls/certificate`             | `DeleteTLSCertificate`           | ✅   | Remove certificates, reset to none |
-| POST   | `/tls/certificate/generate`    | `GenerateSelfSignedCertificate`  | ✅   | Generate self-signed certificate   |
+| Method | Route                          | Handler                          | Auth | Description                                |
+| ------ | ------------------------------ | -------------------------------- | ---- | ------------------------------------------ |
+| GET    | `/tls/certificate`             | `GetTLSCertificate`              | ✅   | Get installed certificate info             |
+| POST   | `/tls/certificate`             | `UploadTLSCertificate`           | ✅   | Upload cert+key pair (manual TLS)          |
+| DELETE | `/tls/certificate`             | `DeleteTLSCertificate`           | ✅   | Remove certificates, reset to none         |
+| POST   | `/tls/certificate/generate`    | `GenerateSelfSignedCertificate`  | ✅   | Generate self-signed certificate           |
+| GET    | `/tls/certificate/download`    | `DownloadTLSCertificate`         | ✅   | Download installed certificate as PEM file |
 
 **GET /api/v2/tls/certificate** — Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
 

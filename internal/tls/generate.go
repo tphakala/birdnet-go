@@ -29,6 +29,13 @@ const serialNumberBitLen = 128
 // GenerateSelfSigned creates a self-signed TLS certificate and private key
 // using EC P-256. It returns PEM-encoded certificate and key strings.
 func GenerateSelfSigned(opts SelfSignedOptions) (certPEM, keyPEM string, err error) {
+	if opts.Validity <= 0 {
+		return "", "", errors.Newf("certificate validity must be positive").
+			Component("tls-generate").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	// Generate EC P-256 private key
 	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
