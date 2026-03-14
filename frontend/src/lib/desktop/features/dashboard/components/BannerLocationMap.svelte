@@ -23,7 +23,7 @@
     latitude,
     longitude,
     zoom = MAP_CONFIG.DEFAULT_ZOOM,
-    showPin = true,
+    showPin = false,
     expandable = true,
     className = '',
   }: Props = $props();
@@ -42,24 +42,26 @@
   onMount(() => {
     let mounted = true;
 
-    import('maplibre-gl').then(maplibre => {
-      if (!mounted || !mapContainer) return;
+    Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
+      ([maplibre]) => {
+        if (!mounted || !mapContainer) return;
 
-      maplibreModule = maplibre;
+        maplibreModule = maplibre;
 
-      map = new maplibre.Map({
-        container: mapContainer,
-        style: createMapStyle(),
-        center: [longitude, latitude],
-        zoom: zoom,
-        interactive: false,
-        attributionControl: false,
-      });
+        map = new maplibre.Map({
+          container: mapContainer,
+          style: createMapStyle(),
+          center: [longitude, latitude],
+          zoom: zoom,
+          interactive: false,
+          attributionControl: false,
+        });
 
-      if (showPin) {
-        marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
+        if (showPin) {
+          marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;

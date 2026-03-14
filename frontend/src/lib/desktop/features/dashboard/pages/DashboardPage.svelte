@@ -1357,11 +1357,11 @@ Performance Optimizations:
                 onclick={() =>
                   onUpdate({
                     ...element,
-                    banner: { ...bannerConfig, showPin: !(bannerConfig.showPin ?? true) },
+                    banner: { ...bannerConfig, showPin: !(bannerConfig.showPin ?? false) },
                   })}
                 class={cn(
                   'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-                  (bannerConfig.showPin ?? true)
+                  (bannerConfig.showPin ?? false)
                     ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
                     : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
                 )}
