@@ -42,7 +42,9 @@
     type OAuthProviderConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
-  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal } from '@lucide/svelte';
+  import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
+  import { toastActions } from '$lib/stores/toast';
+  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, AlertTriangle } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -70,6 +72,9 @@
       baseUrl: '',
       host: '',
       autoTls: false,
+      tlsMode: '',
+      selfSignedValidity: '365d',
+      redirectToHttps: false,
       basicAuth: {
         enabled: false,
         username: '',
@@ -83,6 +88,139 @@
     }
   );
 
+  // TLS certificate state
+  let certInfo = $state<TLSCertificateInfo | null>(null);
+  let certLoading = $state(false);
+  let certError = $state<string | null>(null);
+  let generateLoading = $state(false);
+  let uploadLoading = $state(false);
+
+  // Certificate upload form
+  let uploadCert = $state('');
+  let uploadKey = $state('');
+  let uploadCA = $state('');
+
+  // Self-signed validity options
+  const validityOptions: SelectOption[] = [
+    { value: '90d', label: t('settings.security.tls.validity90d') },
+    { value: '365d', label: t('settings.security.tls.validity365d') },
+    { value: '730d', label: t('settings.security.tls.validity730d') },
+  ];
+
+  // Load certificate info on mount and when TLS mode changes
+  $effect(() => {
+    const mode = settings?.tlsMode;
+    if (mode === 'manual' || mode === 'selfsigned') {
+      loadCertInfo();
+    }
+  });
+
+  async function loadCertInfo() {
+    certLoading = true;
+    certError = null;
+    try {
+      certInfo = await settingsAPI.tls.getCertificate();
+    } catch (err) {
+      certError = err instanceof Error ? err.message : t('settings.security.tls.loadError');
+    } finally {
+      certLoading = false;
+    }
+  }
+
+  function updateTLSMode(mode: string) {
+    // Also update autoTls for backward compatibility
+    settingsActions.updateSection('security', {
+      ...settings,
+      tlsMode: mode,
+      autoTls: mode === 'autotls',
+    });
+  }
+
+  async function handleGenerateCert() {
+    generateLoading = true;
+    try {
+      certInfo = await settingsAPI.tls.generateSelfSigned({
+        validity: settings?.selfSignedValidity ?? '365d',
+      });
+      toastActions.success(t('settings.security.tls.generateSuccess'));
+    } catch (err) {
+      toastActions.error(
+        err instanceof Error ? err.message : t('settings.security.tls.generateError')
+      );
+    } finally {
+      generateLoading = false;
+    }
+  }
+
+  async function handleUploadCert() {
+    if (!uploadCert || !uploadKey) return;
+    uploadLoading = true;
+    try {
+      certInfo = await settingsAPI.tls.uploadCertificate({
+        certificate: uploadCert,
+        privateKey: uploadKey,
+        caCertificate: uploadCA || undefined,
+      });
+      toastActions.success(t('settings.security.tls.uploadSuccess'));
+      // Clear upload form on success
+      uploadCert = '';
+      uploadKey = '';
+      uploadCA = '';
+    } catch (err) {
+      toastActions.error(
+        err instanceof Error ? err.message : t('settings.security.tls.uploadError')
+      );
+    } finally {
+      uploadLoading = false;
+    }
+  }
+
+  async function handleDeleteCert() {
+    const confirmed = window.confirm(t('settings.security.tls.deleteConfirm'));
+    if (!confirmed) return;
+    try {
+      await settingsAPI.tls.deleteCertificate();
+      certInfo = null;
+      toastActions.success(t('settings.security.tls.deleteSuccess'));
+    } catch (err) {
+      toastActions.error(
+        err instanceof Error ? err.message : t('settings.security.tls.deleteError')
+      );
+    }
+  }
+
+  function handleFileInput(
+    event: Event,
+    target: 'cert' | 'key' | 'ca'
+  ) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file) return;
+    // eslint-disable-next-line no-undef -- FileReader is a browser API
+    const reader = new FileReader();
+    reader.onload = () => {
+      const content = reader.result as string;
+      if (target === 'cert') uploadCert = content;
+      else if (target === 'key') uploadKey = content;
+      else uploadCA = content;
+    };
+    reader.readAsText(file);
+  }
+
+  function updateSelfSignedValidity(validity: string) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      selfSignedValidity: validity,
+    });
+  }
+
+  function updateRedirectToHttps(enabled: boolean) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      redirectToHttps: enabled,
+    });
+  }
+
   // OAuth providers from settings
   let oauthProviders = $derived(settings?.oauthProviders ?? []);
 
@@ -95,11 +233,17 @@
         baseUrl: store.originalData.security?.baseUrl,
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
+        tlsMode: store.originalData.security?.tlsMode,
+        selfSignedValidity: store.originalData.security?.selfSignedValidity,
+        redirectToHttps: store.originalData.security?.redirectToHttps,
       },
       {
         baseUrl: store.formData.security?.baseUrl,
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
+        tlsMode: store.formData.security?.tlsMode,
+        selfSignedValidity: store.formData.security?.selfSignedValidity,
+        redirectToHttps: store.formData.security?.redirectToHttps,
       }
     )
   );
@@ -223,13 +367,6 @@
     settingsActions.updateSection('security', {
       ...settings,
       baseUrl: baseUrl,
-    });
-  }
-
-  function updateAutoTLSEnabled(enabled: boolean) {
-    settingsActions.updateSection('security', {
-      ...settings,
-      autoTls: enabled,
     });
   }
 
@@ -447,11 +584,17 @@
         baseUrl: store.originalData.security?.baseUrl,
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
+        tlsMode: store.originalData.security?.tlsMode,
+        selfSignedValidity: store.originalData.security?.selfSignedValidity,
+        redirectToHttps: store.originalData.security?.redirectToHttps,
       }}
       currentData={{
         baseUrl: store.formData.security?.baseUrl,
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
+        tlsMode: store.formData.security?.tlsMode,
+        selfSignedValidity: store.formData.security?.selfSignedValidity,
+        redirectToHttps: store.formData.security?.redirectToHttps,
       }}
     >
     <div class="space-y-4">
@@ -480,27 +623,347 @@
       />
 
       <div class="border-t border-[var(--border-100)] pt-4 mt-4">
-        <h4 class="text-lg font-medium mb-2">{t('settings.security.httpsSettingsTitle')}</h4>
+        <h4 class="text-lg font-medium mb-2">{t('settings.security.tls.title')}</h4>
         <p class="text-sm text-[color:var(--color-base-content)] opacity-70 mb-4">
-          {t('settings.security.httpsSettingsDescription')}
+          {t('settings.security.tls.description')}
         </p>
 
-        <Checkbox
-          checked={settings.autoTls}
-          label={t('settings.security.serverConfiguration.autoTlsLabel')}
-          disabled={store.isLoading || store.isSaving}
-          onchange={updateAutoTLSEnabled}
-        />
+        <!-- TLS Mode Selector -->
+        <div class="mb-4">
+          <label class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
+            {t('settings.security.tls.modeLabel')}
+          </label>
+          <div class="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === ''
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              disabled={store.isLoading || store.isSaving}
+              onclick={() => updateTLSMode('')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]">
+                <Globe class="w-3.5 h-3.5" />
+                {t('settings.security.tls.modeNone')}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'autotls'
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              disabled={store.isLoading || store.isSaving}
+              onclick={() => updateTLSMode('autotls')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]">
+                <ShieldCheck class="w-3.5 h-3.5" />
+                {t('settings.security.tls.modeLetsEncrypt')}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'manual'
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              disabled={store.isLoading || store.isSaving}
+              onclick={() => updateTLSMode('manual')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]">
+                <Upload class="w-3.5 h-3.5" />
+                {t('settings.security.tls.modeManual')}
+              </span>
+            </button>
+            <button
+              type="button"
+              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'selfsigned'
+                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              disabled={store.isLoading || store.isSaving}
+              onclick={() => updateTLSMode('selfsigned')}
+            >
+              <span class="flex items-center gap-1.5 justify-center text-[var(--color-base-content)]">
+                <KeyRound class="w-3.5 h-3.5" />
+                {t('settings.security.tls.modeSelfSigned')}
+              </span>
+            </button>
+          </div>
+        </div>
 
-        <SettingsNote>
-          <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
-          <ul class="list-disc list-inside mt-1">
-            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainRequired')}</li>
-            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainPointing')}</li>
-            <li>{t('settings.security.serverConfiguration.autoTlsRequirements.portsAccessible')}</li>
-          </ul>
-        </SettingsNote>
-        
+        <!-- Let's Encrypt mode -->
+        {#if settings.tlsMode === 'autotls'}
+          <div class="space-y-3">
+            <SettingsNote>
+              <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
+              <ul class="list-disc list-inside mt-1">
+                <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainRequired')}</li>
+                <li>{t('settings.security.serverConfiguration.autoTlsRequirements.domainPointing')}</li>
+                <li>{t('settings.security.serverConfiguration.autoTlsRequirements.portsAccessible')}</li>
+              </ul>
+            </SettingsNote>
+          </div>
+        {/if}
+
+        <!-- Manual Certificate mode -->
+        {#if settings.tlsMode === 'manual'}
+          <div class="space-y-4">
+            {#if !certInfo?.installed}
+              <!-- Upload form -->
+              <div class="space-y-3">
+                <div>
+                  <label for="upload-cert" class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
+                    {t('settings.security.tls.certificateLabel')} *
+                  </label>
+                  <div class="flex gap-2">
+                    <textarea
+                      id="upload-cert"
+                      bind:value={uploadCert}
+                      class="flex-1 px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] font-mono resize-y min-h-[80px]"
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      disabled={store.isLoading || store.isSaving || uploadLoading}
+                    ></textarea>
+                    <label class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] cursor-pointer hover:bg-[var(--color-base-300)] transition-all self-start">
+                      {t('settings.security.tls.browseFile')}
+                      <input
+                        type="file"
+                        accept=".pem,.crt,.cer"
+                        class="hidden"
+                        onchange={(e) => handleFileInput(e, 'cert')}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label for="upload-key" class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
+                    {t('settings.security.tls.privateKeyLabel')} *
+                  </label>
+                  <div class="flex gap-2">
+                    <textarea
+                      id="upload-key"
+                      bind:value={uploadKey}
+                      class="flex-1 px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] font-mono resize-y min-h-[80px]"
+                      placeholder="-----BEGIN PRIVATE KEY-----"
+                      disabled={store.isLoading || store.isSaving || uploadLoading}
+                    ></textarea>
+                    <label class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] cursor-pointer hover:bg-[var(--color-base-300)] transition-all self-start">
+                      {t('settings.security.tls.browseFile')}
+                      <input
+                        type="file"
+                        accept=".pem,.key"
+                        class="hidden"
+                        onchange={(e) => handleFileInput(e, 'key')}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label for="upload-ca" class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
+                    {t('settings.security.tls.caCertificateLabel')}
+                  </label>
+                  <div class="flex gap-2">
+                    <textarea
+                      id="upload-ca"
+                      bind:value={uploadCA}
+                      class="flex-1 px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] font-mono resize-y min-h-[80px]"
+                      placeholder="-----BEGIN CERTIFICATE-----"
+                      disabled={store.isLoading || store.isSaving || uploadLoading}
+                    ></textarea>
+                    <label class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] cursor-pointer hover:bg-[var(--color-base-300)] transition-all self-start">
+                      {t('settings.security.tls.browseFile')}
+                      <input
+                        type="file"
+                        accept=".pem,.crt,.cer"
+                        class="hidden"
+                        onchange={(e) => handleFileInput(e, 'ca')}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+                  disabled={!uploadCert || !uploadKey || uploadLoading}
+                  onclick={handleUploadCert}
+                >
+                  {#if uploadLoading}
+                    <div class="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full"></div>
+                  {:else}
+                    <Upload class="w-3.5 h-3.5" />
+                  {/if}
+                  {t('settings.security.tls.uploadButton')}
+                </button>
+              </div>
+            {/if}
+
+            <!-- Plaintext warning when on HTTP -->
+            {#if typeof window !== 'undefined' && window.location.protocol === 'http:'}
+              <ErrorAlert type="warning">
+                {#snippet children()}
+                  <span>
+                    <strong>{t('settings.security.securityWarningTitle')}</strong>
+                    {t('settings.security.tls.plaintextWarning')}
+                  </span>
+                {/snippet}
+              </ErrorAlert>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Self-Signed mode -->
+        {#if settings.tlsMode === 'selfsigned'}
+          <div class="space-y-4">
+            <SelectDropdown
+              options={validityOptions}
+              value={settings.selfSignedValidity ?? '365d'}
+              label={t('settings.security.tls.validityLabel')}
+              helpText={t('settings.security.tls.validityHelpText')}
+              variant="select"
+              groupBy={false}
+              disabled={store.isLoading || store.isSaving}
+              onChange={(value) => {
+                if (typeof value === 'string') updateSelfSignedValidity(value);
+              }}
+            />
+
+            {#if !certInfo?.installed}
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+                disabled={generateLoading}
+                onclick={handleGenerateCert}
+              >
+                {#if generateLoading}
+                  <div class="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full"></div>
+                {:else}
+                  <RefreshCw class="w-3.5 h-3.5" />
+                {/if}
+                {t('settings.security.tls.generateButton')}
+              </button>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Certificate Info Card -->
+        {#if (settings.tlsMode === 'manual' || settings.tlsMode === 'selfsigned') && certInfo?.installed}
+          <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+              <ShieldCheck class="w-4 h-4 text-[var(--color-success)]" />
+              <span class="text-sm font-medium">{t('settings.security.tls.certificateInstalled')}</span>
+            </div>
+
+            {#if certLoading}
+              <div class="flex items-center gap-2 py-2">
+                <div class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"></div>
+                <span class="text-sm text-[var(--color-base-content)]/60">{t('settings.security.tls.loading')}</span>
+              </div>
+            {:else if certError}
+              <ErrorAlert type="error">
+                {#snippet children()}
+                  <span>{certError}</span>
+                {/snippet}
+              </ErrorAlert>
+            {:else}
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                {#if certInfo.subject}
+                  <div>
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.subject')}</span>
+                    <p class="font-mono text-xs">{certInfo.subject}</p>
+                  </div>
+                {/if}
+                {#if certInfo.issuer}
+                  <div>
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.issuer')}</span>
+                    <p class="font-mono text-xs">{certInfo.issuer}</p>
+                  </div>
+                {/if}
+                {#if certInfo.sans && certInfo.sans.length > 0}
+                  <div>
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.sans')}</span>
+                    <p class="font-mono text-xs">{certInfo.sans.join(', ')}</p>
+                  </div>
+                {/if}
+                {#if certInfo.notAfter}
+                  <div>
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.validUntil')}</span>
+                    <p class="font-mono text-xs">{certInfo.notAfter}</p>
+                  </div>
+                {/if}
+                {#if certInfo.daysUntilExpiry !== undefined}
+                  <div>
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.daysRemaining')}</span>
+                    <p class="font-mono text-xs" class:text-[var(--color-error)]={certInfo.daysUntilExpiry < 30}>
+                      {certInfo.daysUntilExpiry}
+                      {#if certInfo.daysUntilExpiry < 30}
+                        <AlertTriangle class="w-3 h-3 inline ml-1" />
+                      {/if}
+                    </p>
+                  </div>
+                {/if}
+                {#if certInfo.fingerprint}
+                  <div class="sm:col-span-2">
+                    <span class="text-xs text-[var(--color-base-content)]/60">{t('settings.security.tls.fingerprint')}</span>
+                    <p class="font-mono text-xs break-all">{certInfo.fingerprint}</p>
+                  </div>
+                {/if}
+              </div>
+
+              {#if certInfo.daysUntilExpiry !== undefined && certInfo.daysUntilExpiry < 30}
+                <ErrorAlert type="warning" className="mt-3">
+                  {#snippet children()}
+                    <span>{t('settings.security.tls.expiryWarning')}</span>
+                  {/snippet}
+                </ErrorAlert>
+              {/if}
+
+              <div class="mt-3 flex gap-2">
+                {#if settings.tlsMode === 'selfsigned'}
+                  <button
+                    type="button"
+                    class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={generateLoading}
+                    onclick={handleGenerateCert}
+                  >
+                    {#if generateLoading}
+                      <div class="animate-spin h-3 w-3 border-2 border-current border-t-transparent rounded-full"></div>
+                    {:else}
+                      <RefreshCw class="w-3 h-3" />
+                    {/if}
+                    {t('settings.security.tls.regenerateButton')}
+                  </button>
+                {/if}
+                <button
+                  type="button"
+                  class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all"
+                  onclick={handleDeleteCert}
+                >
+                  <Trash2 class="w-3 h-3" />
+                  {t('settings.security.tls.removeCertificate')}
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
+        <!-- Redirect to HTTPS checkbox -->
+        {#if settings.tlsMode !== ''}
+          <div class="mt-4">
+            <Checkbox
+              checked={settings.redirectToHttps}
+              label={t('settings.security.tls.redirectToHttps')}
+              disabled={store.isLoading || store.isSaving}
+              onchange={updateRedirectToHttps}
+            />
+          </div>
+        {/if}
+
+        <!-- Restart banner when TLS changes are pending -->
+        {#if serverConfigHasChanges}
+          <SettingsNote>
+            <p>{t('settings.security.tls.restartRequired')}</p>
+          </SettingsNote>
+        {/if}
       </div>
     </div>
     </SettingsSection>
