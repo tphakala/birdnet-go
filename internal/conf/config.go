@@ -1207,6 +1207,7 @@ type WebServerSettings struct {
 	Enabled        bool               `json:"enabled"`        // true to enable web server
 	Port           string             `json:"port"`           // port for web server
 	BasePath       string             `json:"basePath"`       // reverse proxy subpath prefix (e.g., "/birdnet")
+	AllowEmbedding bool               `json:"allowEmbedding"` // true to allow embedding in iframes (e.g., Home Assistant)
 	LiveStream     LiveStreamSettings `json:"liveStream"`     // live stream configuration
 	EnableTerminal bool               `json:"enableTerminal"` // Enable browser terminal (security risk)
 }

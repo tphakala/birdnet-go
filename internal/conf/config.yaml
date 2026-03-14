@@ -341,6 +341,7 @@ realtime:
 webserver:
   enabled: true           # true to enable web server
   port: 8080              # port for web server
+  allowembedding: false   # true to allow embedding in iframes (e.g., Home Assistant)
   log:
     enabled: false        # true to enable log file
     path: webui.log       # path to log file

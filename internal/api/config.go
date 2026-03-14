@@ -45,6 +45,7 @@ type Config struct {
 	// Security settings
 	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
 	AllowedOrigins  []string // CORS allowed origins
+	AllowEmbedding  bool     // Allow embedding in iframes (e.g., Home Assistant)
 
 	// Timeouts
 	ReadTimeout     time.Duration // Maximum duration for reading request
@@ -130,6 +131,9 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	default:
 		// TLSModeNone — plain HTTP
 	}
+
+	// Embedding
+	cfg.AllowEmbedding = settings.WebServer.AllowEmbedding
 
 	// Debug mode
 	cfg.Debug = settings.WebServer.Debug || settings.Debug
