@@ -92,6 +92,8 @@
     onPlayEnd?: () => void;
     /** Enable debug logging for troubleshooting multi-session issues */
     debug?: boolean;
+    /** Enable clip extraction with range selection on spectrogram */
+    enableClipExtraction?: boolean;
   }
 
   let {
@@ -108,6 +110,7 @@
     onPlayStart,
     onPlayEnd,
     debug = false,
+    enableClipExtraction = false,
   }: Props = $props();
 
   // Audio and UI elements
@@ -203,6 +206,20 @@
   let showControls = $state(true); // Will be set based on width
   let isMobile = $state(false);
 
+  // Clip extraction selection state
+  let selectionStartSec = $state<number | null>(null);
+  let selectionEndSec = $state<number | null>(null);
+  let isDragSelecting = $state(false);
+  let draggingHandle = $state<'start' | 'end' | null>(null);
+  let dragOriginX = $state(0);
+
+  // Clip extraction state
+  let extractionFormat = $state('wav');
+  let isExtracting = $state(false);
+  let extractionError = $state<string | null>(null);
+  let isPlayingSelection = $state(false);
+  let selectionPlaybackTimeout: ReturnType<typeof setTimeout> | undefined;
+
   // Constants
   const GAIN_MAX_DB = 24;
   const FILTER_HP_MIN_FREQ = 20;
@@ -238,6 +255,20 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Convert mouse/touch X position to time in seconds
+  const xToTime = (clientX: number): number => {
+    if (!playerContainer || duration <= 0) return 0;
+    const rect = playerContainer.getBoundingClientRect();
+    const relativeX = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    return (relativeX / rect.width) * duration;
+  };
+
+  // Convert time in seconds to percentage of container width
+  const timeToPercent = (timeSec: number): number => {
+    if (duration <= 0) return 0;
+    return (timeSec / duration) * 100;
+  };
+
   // Memory leak prevention helpers
   const addTrackedEventListener = (
     element: HTMLElement | Document | Window,
@@ -247,6 +278,265 @@
   ) => {
     element.addEventListener(event, handler, options);
     eventListeners.push({ element, event, handler });
+  };
+
+  // Minimum drag distance (pixels) to distinguish click from drag
+  const MIN_DRAG_DISTANCE = 5;
+
+  const handleSelectionMouseDown = (e: MouseEvent) => {
+    if (!enableClipExtraction || duration <= 0) return;
+    if (e.button !== 0) return;
+
+    dragOriginX = e.clientX;
+    const clickTime = xToTime(e.clientX);
+
+    // Check if clicking near an existing handle
+    if (selectionStartSec !== null && selectionEndSec !== null) {
+      const rect = playerContainer.getBoundingClientRect();
+      const startPx = (timeToPercent(selectionStartSec) / 100) * rect.width + rect.left;
+      const endPx = (timeToPercent(selectionEndSec) / 100) * rect.width + rect.left;
+      const handleThreshold = 8;
+
+      if (Math.abs(e.clientX - startPx) < handleThreshold) {
+        draggingHandle = 'start';
+        e.preventDefault();
+        return;
+      }
+      if (Math.abs(e.clientX - endPx) < handleThreshold) {
+        draggingHandle = 'end';
+        e.preventDefault();
+        return;
+      }
+    }
+
+    isDragSelecting = true;
+    selectionStartSec = clickTime;
+    selectionEndSec = clickTime;
+    e.preventDefault();
+  };
+
+  const handleSelectionMouseMove = (e: MouseEvent) => {
+    if (!enableClipExtraction) return;
+
+    if (draggingHandle) {
+      const newTime = xToTime(e.clientX);
+      if (draggingHandle === 'start' && selectionEndSec !== null) {
+        selectionStartSec = Math.min(newTime, selectionEndSec - 0.05);
+      } else if (draggingHandle === 'end' && selectionStartSec !== null) {
+        selectionEndSec = Math.max(newTime, selectionStartSec + 0.05);
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (isDragSelecting) {
+      selectionEndSec = xToTime(e.clientX);
+      e.preventDefault();
+    }
+  };
+
+  const handleSelectionMouseUp = (e: MouseEvent) => {
+    if (!enableClipExtraction) return;
+
+    if (draggingHandle) {
+      draggingHandle = null;
+      return;
+    }
+
+    if (isDragSelecting) {
+      isDragSelecting = false;
+
+      if (Math.abs(e.clientX - dragOriginX) < MIN_DRAG_DISTANCE) {
+        selectionStartSec = null;
+        selectionEndSec = null;
+        return;
+      }
+
+      if (
+        selectionStartSec !== null &&
+        selectionEndSec !== null &&
+        selectionStartSec > selectionEndSec
+      ) {
+        const temp = selectionStartSec;
+        selectionStartSec = selectionEndSec;
+        selectionEndSec = temp;
+      }
+    }
+  };
+
+  const clearSelection = () => {
+    selectionStartSec = null;
+    selectionEndSec = null;
+    isDragSelecting = false;
+    draggingHandle = null;
+    extractionError = null;
+  };
+
+  const handleSelectionTouchStart = (e: TouchEvent) => {
+    if (!enableClipExtraction || duration <= 0 || !e.touches[0]) return;
+    if (playerContainer) playerContainer.style.touchAction = 'none';
+
+    const touch = e.touches[0];
+    dragOriginX = touch.clientX;
+    const clickTime = xToTime(touch.clientX);
+
+    if (selectionStartSec !== null && selectionEndSec !== null) {
+      const rect = playerContainer.getBoundingClientRect();
+      const startPx = (timeToPercent(selectionStartSec) / 100) * rect.width + rect.left;
+      const endPx = (timeToPercent(selectionEndSec) / 100) * rect.width + rect.left;
+      const handleThreshold = 16;
+
+      if (Math.abs(touch.clientX - startPx) < handleThreshold) {
+        draggingHandle = 'start';
+        e.preventDefault();
+        return;
+      }
+      if (Math.abs(touch.clientX - endPx) < handleThreshold) {
+        draggingHandle = 'end';
+        e.preventDefault();
+        return;
+      }
+    }
+
+    isDragSelecting = true;
+    selectionStartSec = clickTime;
+    selectionEndSec = clickTime;
+    e.preventDefault();
+  };
+
+  const handleSelectionTouchMove = (e: TouchEvent) => {
+    if (!enableClipExtraction || !e.touches[0]) return;
+    const touch = e.touches[0];
+
+    if (draggingHandle) {
+      const newTime = xToTime(touch.clientX);
+      if (draggingHandle === 'start' && selectionEndSec !== null) {
+        selectionStartSec = Math.min(newTime, selectionEndSec - 0.05);
+      } else if (draggingHandle === 'end' && selectionStartSec !== null) {
+        selectionEndSec = Math.max(newTime, selectionStartSec + 0.05);
+      }
+      e.preventDefault();
+      return;
+    }
+
+    if (isDragSelecting) {
+      selectionEndSec = xToTime(touch.clientX);
+      e.preventDefault();
+    }
+  };
+
+  const handleSelectionTouchEnd = () => {
+    if (!enableClipExtraction) return;
+    if (playerContainer) playerContainer.style.touchAction = '';
+
+    if (draggingHandle) {
+      draggingHandle = null;
+      return;
+    }
+
+    if (isDragSelecting) {
+      isDragSelecting = false;
+      if (
+        selectionStartSec !== null &&
+        selectionEndSec !== null &&
+        selectionStartSec > selectionEndSec
+      ) {
+        const temp = selectionStartSec;
+        selectionStartSec = selectionEndSec;
+        selectionEndSec = temp;
+      }
+      if (
+        selectionStartSec !== null &&
+        selectionEndSec !== null &&
+        selectionEndSec - selectionStartSec < 0.05
+      ) {
+        clearSelection();
+      }
+    }
+  };
+
+  const playSelection = () => {
+    if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
+
+    const start = Math.min(selectionStartSec, selectionEndSec);
+    const end = Math.max(selectionStartSec, selectionEndSec);
+
+    if (selectionPlaybackTimeout) {
+      clearTimeout(selectionPlaybackTimeout);
+      selectionPlaybackTimeout = undefined;
+    }
+
+    audioElement.currentTime = start;
+    audioElement
+      .play()
+      .then(() => {
+        isPlayingSelection = true;
+        const durationMs = ((end - start) / playbackSpeed) * 1000;
+        selectionPlaybackTimeout = setTimeout(() => {
+          if (audioElement && isPlayingSelection) {
+            audioElement.pause();
+            isPlayingSelection = false;
+          }
+        }, durationMs);
+      })
+      .catch((err: unknown) => {
+        logger.error('Failed to play selection:', err);
+      });
+  };
+
+  const extractClip = async () => {
+    if (selectionStartSec === null || selectionEndSec === null || isExtracting) return;
+
+    const start = Math.min(selectionStartSec, selectionEndSec);
+    const end = Math.max(selectionStartSec, selectionEndSec);
+
+    isExtracting = true;
+    extractionError = null;
+
+    try {
+      const response = await fetch(
+        buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}/clip`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start, end, format: extractionFormat }),
+        }
+      );
+
+      if (!response.ok) {
+        let errorMsg = t('components.audioPlayer.clipExtraction.extractError');
+        try {
+          const errorData: { message?: string } = await response.json();
+          errorMsg = errorData.message ?? errorMsg;
+        } catch {
+          // Use default error message
+        }
+        throw new Error(errorMsg);
+      }
+
+      const blob = await response.blob();
+
+      let ext = extractionFormat;
+      if (ext === 'alac') ext = 'm4a';
+      const filename = `clip_${start.toFixed(1)}-${end.toFixed(1)}.${ext}`;
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      extractionError =
+        err instanceof Error
+          ? err.message
+          : t('components.audioPlayer.clipExtraction.extractError');
+      logger.error('Clip extraction failed:', err);
+    } finally {
+      isExtracting = false;
+    }
   };
 
   const clearPlayEndTimeout = () => {
@@ -775,6 +1065,12 @@
           clearTimeout(audioRetryTimer);
           audioRetryTimer = undefined;
         }
+        // Reset clip selection for new audio
+        selectionStartSec = null;
+        selectionEndSec = null;
+        isDragSelecting = false;
+        draggingHandle = null;
+        extractionError = null;
       }
     }
   });
@@ -827,6 +1123,11 @@
       addTrackedEventListener(audioElement, 'pause', () => {
         isPlaying = false;
         stopInterval();
+        isPlayingSelection = false;
+        if (selectionPlaybackTimeout) {
+          clearTimeout(selectionPlaybackTimeout);
+          selectionPlaybackTimeout = undefined;
+        }
         // Set delay before signaling play end to avoid disrupting UI during brief pauses
         clearPlayEndTimeout();
         playEndTimeout = setTimeout(() => {
@@ -930,6 +1231,27 @@
       spectrogramLoader.setLoading(false);
     }
 
+    // Global listeners for selection drag
+    if (enableClipExtraction) {
+      addTrackedEventListener(
+        document as unknown as HTMLElement,
+        'mousemove',
+        handleSelectionMouseMove as EventListener
+      );
+      addTrackedEventListener(
+        document as unknown as HTMLElement,
+        'mouseup',
+        handleSelectionMouseUp as EventListener
+      );
+      addTrackedEventListener(document as unknown as HTMLElement, 'keydown', ((
+        e: KeyboardEvent
+      ) => {
+        if (e.key === 'Escape' && (selectionStartSec !== null || selectionEndSec !== null)) {
+          clearSelection();
+        }
+      }) as EventListener);
+    }
+
     // Cleanup function (Svelte 5 pattern)
     return () => {
       debugLog('cleanup: component destroying', {
@@ -955,6 +1277,12 @@
       if (canplayTimeoutId) {
         clearTimeout(canplayTimeoutId);
         canplayTimeoutId = undefined;
+      }
+
+      // Clear selection playback timeout
+      if (selectionPlaybackTimeout) {
+        clearTimeout(selectionPlaybackTimeout);
+        selectionPlaybackTimeout = undefined;
       }
 
       // Remove all tracked event listeners
@@ -1084,6 +1412,7 @@
         {/if}
       </div>
     {:else}
+      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <img
         bind:this={spectrogramImage}
         id={`spectrogram-${detectionId}`}
@@ -1096,12 +1425,17 @@
           ? 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
           : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
+        class:cursor-crosshair={enableClipExtraction}
         style={responsive
           ? ''
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
         width={responsive ? 400 : undefined}
         onload={handleSpectrogramLoad}
         onerror={handleSpectrogramError}
+        onmousedown={enableClipExtraction ? handleSelectionMouseDown : undefined}
+        ontouchstart={enableClipExtraction ? handleSelectionTouchStart : undefined}
+        ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
+        ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
       />
     {/if}
   {/if}
@@ -1134,6 +1468,145 @@
     style:transition="left 0.1s linear"
     style:opacity={progress > 0 && progress < 100 ? '0.7' : '0'}
   ></div>
+
+  <!-- Clip selection overlay -->
+  {#if enableClipExtraction && selectionStartSec !== null && selectionEndSec !== null}
+    {@const startPct = timeToPercent(Math.min(selectionStartSec, selectionEndSec))}
+    {@const endPct = timeToPercent(Math.max(selectionStartSec, selectionEndSec))}
+
+    <!-- Selection highlight -->
+    <div
+      class="absolute top-0 bottom-0 bg-primary/20 pointer-events-none"
+      style:left="{startPct}%"
+      style:width="{endPct - startPct}%"
+      role="region"
+      aria-label={t('components.audioPlayer.clipExtraction.rangeLabel', {
+        start: Math.min(selectionStartSec, selectionEndSec).toFixed(1),
+        end: Math.max(selectionStartSec, selectionEndSec).toFixed(1),
+      })}
+    ></div>
+
+    <!-- Start handle -->
+    {#if !isDragSelecting}
+      <div
+        class="absolute top-0 bottom-0 w-1.5 bg-primary cursor-col-resize z-10 -translate-x-1/2"
+        style:left="{startPct}%"
+        role="slider"
+        tabindex="0"
+        aria-label="Selection start"
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.min(selectionStartSec, selectionEndSec)}
+        onkeydown={(e: KeyboardEvent) => {
+          if (e.key === 'ArrowLeft' && selectionStartSec !== null) {
+            selectionStartSec = Math.max(0, selectionStartSec - 0.1);
+          } else if (
+            e.key === 'ArrowRight' &&
+            selectionStartSec !== null &&
+            selectionEndSec !== null
+          ) {
+            selectionStartSec = Math.min(selectionStartSec + 0.1, selectionEndSec - 0.05);
+          }
+        }}
+      ></div>
+
+      <!-- End handle -->
+      <div
+        class="absolute top-0 bottom-0 w-1.5 bg-primary cursor-col-resize z-10 -translate-x-1/2"
+        style:left="{endPct}%"
+        role="slider"
+        tabindex="0"
+        aria-label="Selection end"
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.max(selectionStartSec, selectionEndSec)}
+        onkeydown={(e: KeyboardEvent) => {
+          if (e.key === 'ArrowRight' && selectionEndSec !== null) {
+            selectionEndSec = Math.min(duration, selectionEndSec + 0.1);
+          } else if (
+            e.key === 'ArrowLeft' &&
+            selectionEndSec !== null &&
+            selectionStartSec !== null
+          ) {
+            selectionEndSec = Math.max(selectionEndSec - 0.1, selectionStartSec + 0.05);
+          }
+        }}
+      ></div>
+
+      <!-- Selection toolbar -->
+      {@const toolbarLeftPct = (startPct + endPct) / 2}
+      <div
+        class="absolute z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-base-300)]/90 backdrop-blur-sm shadow-md text-xs"
+        style:top="4px"
+        style:left="{toolbarLeftPct}%"
+        style:transform="translateX(-50%)"
+      >
+        <!-- Time range display -->
+        <span class="text-[var(--color-base-content)] whitespace-nowrap font-medium">
+          {Math.min(selectionStartSec, selectionEndSec).toFixed(1)}s &ndash; {Math.max(
+            selectionStartSec,
+            selectionEndSec
+          ).toFixed(1)}s
+        </span>
+
+        <!-- Format picker -->
+        <select
+          class="select select-xs bg-[var(--color-base-200)] text-[var(--color-base-content)] border-[var(--color-base-300)] rounded"
+          bind:value={extractionFormat}
+          aria-label={t('components.audioPlayer.clipExtraction.formatLabel')}
+        >
+          <option value="wav">WAV</option>
+          <option value="mp3">MP3</option>
+          <option value="flac">FLAC</option>
+          <option value="opus">Opus</option>
+          <option value="aac">AAC</option>
+          <option value="alac">ALAC</option>
+        </select>
+
+        <!-- Play selection button -->
+        <button
+          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+          onclick={playSelection}
+          aria-label={t('components.audioPlayer.clipExtraction.playSelection')}
+          title={t('components.audioPlayer.clipExtraction.playSelection')}
+        >
+          <Play class="size-3.5" />
+        </button>
+
+        <!-- Extract/download button -->
+        <button
+          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+          onclick={extractClip}
+          disabled={isExtracting}
+          aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
+          title={t('components.audioPlayer.clipExtraction.extractClip')}
+        >
+          {#if isExtracting}
+            <div
+              class="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"
+            ></div>
+          {:else}
+            <Download class="size-3.5" />
+          {/if}
+        </button>
+
+        <!-- Clear selection button -->
+        <button
+          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+          onclick={clearSelection}
+          aria-label={t('components.audioPlayer.clipExtraction.clearSelection')}
+          title={t('components.audioPlayer.clipExtraction.clearSelection')}
+        >
+          <XCircle class="size-3.5" />
+        </button>
+
+        <!-- Extraction error -->
+        {#if extractionError}
+          <span class="text-[var(--color-error)] ml-1">{extractionError}</span>
+        {/if}
+      </div>
+    {/if}
+  {/if}
 
   <!-- Bottom overlay controls -->
   <div
