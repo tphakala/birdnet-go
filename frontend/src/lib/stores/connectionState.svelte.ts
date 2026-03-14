@@ -52,6 +52,9 @@ let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 /** Ping polling timer ID */
 let pingTimer: ReturnType<typeof setInterval> | null = null;
 
+/** Active ping request controller (for aborting in-flight requests) */
+let activePingController: AbortController | null = null;
+
 /** Whether the watchdog has been activated (after app init) */
 let activated = false;
 
@@ -166,9 +169,12 @@ function stopPingPolling(): void {
 
 /**
  * Make a single ping request.
+ * Uses a module-level AbortController so deactivateWatchdog() can cancel in-flight requests.
  */
 async function pingOnce(): Promise<void> {
+  activePingController?.abort();
   const controller = new AbortController();
+  activePingController = controller;
   const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
 
   try {
@@ -178,13 +184,16 @@ async function pingOnce(): Promise<void> {
       credentials: 'same-origin',
     });
 
-    if (response.ok) {
+    if (activated && response.ok) {
       markOnline();
     }
   } catch {
     // Ping failed — stay offline, will retry on next interval
   } finally {
     clearTimeout(timeoutId);
+    if (activePingController === controller) {
+      activePingController = null;
+    }
   }
 }
 
@@ -211,4 +220,6 @@ export function deactivateWatchdog(): void {
     watchdogTimer = null;
   }
   stopPingPolling();
+  activePingController?.abort();
+  activePingController = null;
 }
