@@ -120,6 +120,9 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 
 	service := notification.GetService()
 	if err := action.operation(service, id); err != nil {
+		if errors.Is(err, notification.ErrNotificationNotFound) {
+			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
+		}
 		c.logErrorIfEnabled(action.errorLogMsg,
 			logger.Error(err),
 			logger.String("id", id))
@@ -750,6 +753,9 @@ func (c *Controller) MarkNotificationRead(ctx echo.Context) error {
 	service := notification.GetService()
 
 	if err := service.MarkAsRead(id); err != nil {
+		if errors.Is(err, notification.ErrNotificationNotFound) {
+			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
+		}
 		c.logErrorIfEnabled("failed to mark notification as read",
 			logger.Error(err),
 			logger.String("id", id))
