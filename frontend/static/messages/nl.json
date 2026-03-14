@@ -3114,7 +3114,8 @@
         "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
         "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
         "downloadCertificate": "Download Certificate",
-        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings."
+        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
+        "fileReadError": "Failed to read the selected file"
       }
     },
     "species": {

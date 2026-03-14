@@ -413,7 +413,8 @@ func (s *Server) startBlocking() error {
 
 		// Start HTTP redirect server on the regular port if configured
 		if s.config.RedirectToHTTPS {
-			go s.startHTTPRedirectServer(addr, s.config.TLSPort)
+			s.httpRedirectServer = s.newHTTPRedirectServer(addr, s.config.TLSPort)
+			go s.serveHTTPRedirect()
 		}
 
 		// Start HTTPS server on TLS port (this blocks)
@@ -498,16 +499,12 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	return nil
 }
 
-// startHTTPRedirectServer starts a simple HTTP server that redirects all requests to HTTPS.
-func (s *Server) startHTTPRedirectServer(httpAddr, tlsPort string) {
+// newHTTPRedirectServer creates an HTTP server that redirects all requests to HTTPS.
+// The server is created synchronously to avoid a race between assignment and shutdown.
+func (s *Server) newHTTPRedirectServer(httpAddr, tlsPort string) *http.Server {
 	if tlsPort == "" {
 		tlsPort = "8443"
 	}
-
-	s.slogger.Info("Starting HTTP->HTTPS redirect server",
-		logger.String("http_address", httpAddr),
-		logger.String("https_port", tlsPort),
-	)
 
 	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Extract hostname, stripping any port from the Host header
@@ -523,12 +520,20 @@ func (s *Server) startHTTPRedirectServer(httpAddr, tlsPort string) {
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 	})
 
-	s.httpRedirectServer = &http.Server{
+	return &http.Server{
 		Addr:         httpAddr,
 		Handler:      redirectHandler,
 		ReadTimeout:  s.config.ReadTimeout,
 		WriteTimeout: s.config.WriteTimeout,
 	}
+}
+
+// serveHTTPRedirect starts listening on the HTTP redirect server.
+// Must be called in a goroutine after newHTTPRedirectServer.
+func (s *Server) serveHTTPRedirect() {
+	s.slogger.Info("Starting HTTP->HTTPS redirect server",
+		logger.String("http_address", s.httpRedirectServer.Addr),
+	)
 
 	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.slogger.Error("HTTP redirect server error", logger.Error(err))

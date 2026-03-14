@@ -172,6 +172,8 @@
       certInfo = await settingsAPI.tls.generateSelfSigned({
         validity: settings?.selfSignedValidity ?? '1825d',
       });
+      // Reload settings to sync frontend with backend TLSMode change
+      await settingsActions.loadSettings();
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
       toastActions.error(
@@ -191,6 +193,8 @@
         privateKey: uploadKey,
         caCertificate: uploadCA || undefined,
       });
+      // Reload settings to sync frontend with backend TLSMode change
+      await settingsActions.loadSettings();
       toastActions.success(t('settings.security.tls.uploadSuccess'));
       // Clear upload form on success
       uploadCert = '';
@@ -211,6 +215,8 @@
     try {
       await settingsAPI.tls.deleteCertificate();
       certInfo = null;
+      // Reload settings to sync frontend with backend TLSMode reset to none
+      await settingsActions.loadSettings();
       toastActions.success(t('settings.security.tls.deleteSuccess'));
     } catch (err) {
       toastActions.error(
@@ -233,6 +239,9 @@
       if (target === 'cert') uploadCert = content;
       else if (target === 'key') uploadKey = content;
       else uploadCA = content;
+    };
+    reader.onerror = () => {
+      toastActions.error(t('settings.security.tls.fileReadError'));
     };
     reader.readAsText(file);
   }
