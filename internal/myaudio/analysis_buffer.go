@@ -199,14 +199,15 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	analysisBuffers[sourceID] = ab
 	prevData[sourceID] = nil
 	warningCounter[sourceID] = 0
-	abMutex.Unlock()
 
-	// Create overwrite tracker for this source (outside abMutex to avoid nested locks)
+	// Create overwrite tracker atomically with buffer registration.
+	// Lock ordering is always abMutex -> overwriteTrackersMu, so no deadlock risk.
 	overwriteTrackersMu.Lock()
 	overwriteTrackers[sourceID] = &overwriteTracker{
 		windowStart: time.Now(),
 	}
 	overwriteTrackersMu.Unlock()
+	abMutex.Unlock()
 
 	// Acquire reference to this source using the migrated ID
 	registry := GetRegistry()
@@ -254,6 +255,12 @@ func RemoveAnalysisBuffer(sourceID string) error {
 	delete(prevData, sourceID)
 	delete(warningCounter, sourceID)
 
+	// Remove overwrite tracker atomically with buffer removal.
+	// Lock ordering is always abMutex -> overwriteTrackersMu, so no deadlock risk.
+	overwriteTrackersMu.Lock()
+	delete(overwriteTrackers, sourceID)
+	overwriteTrackersMu.Unlock()
+
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
 	if len(analysisBuffers) == 0 {
 		bufferPoolInitMu.Lock()
@@ -266,12 +273,7 @@ func RemoveAnalysisBuffer(sourceID string) error {
 		}
 		bufferPoolInitMu.Unlock()
 	}
-	abMutex.Unlock() // Release lock before acquiring other locks
-
-	// Remove overwrite tracker for this source (outside abMutex to avoid nested locks)
-	overwriteTrackersMu.Lock()
-	delete(overwriteTrackers, sourceID)
-	overwriteTrackersMu.Unlock()
+	abMutex.Unlock() // Release lock before calling registry
 
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
@@ -389,8 +391,10 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		abMutex.Lock()
 		defer abMutex.Unlock()
 
-		// Check inside the lock to avoid TOCTOU race with concurrent writes
-		willOverwrite = ab.Free() == 0
+		// Check inside the lock to avoid TOCTOU race with concurrent writes.
+		// Overwrite occurs when incoming data exceeds available free space,
+		// not only when the buffer is completely full.
+		willOverwrite = len(data) > ab.Free()
 
 		var writeErr error
 		n, writeErr = ab.Write(data)
