@@ -29,6 +29,12 @@
     onchange,
   }: Props = $props();
 
+  let fileInput: HTMLInputElement;
+
+  function triggerFileBrowse() {
+    if (!disabled) fileInput?.click();
+  }
+
   async function handleFileSelect(event: Event) {
     if (disabled) return;
     const input = event.target as HTMLInputElement;
@@ -61,20 +67,21 @@
       {disabled}
       oninput={e => onchange((e.target as HTMLTextAreaElement).value)}
     ></textarea>
-    <label
-      class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] transition-all self-start"
-      class:cursor-pointer={!disabled}
-      class:cursor-not-allowed={disabled}
-      class:opacity-50={disabled}
+    <button
+      type="button"
+      class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] transition-all self-start disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer hover:bg-[var(--color-base-300)]"
+      {disabled}
+      onclick={triggerFileBrowse}
     >
       {t('components.tls.browseFile')}
-      <input
-        type="file"
-        accept={acceptFiles}
-        class="hidden"
-        onchange={handleFileSelect}
-        {disabled}
-      />
-    </label>
+    </button>
+    <input
+      bind:this={fileInput}
+      type="file"
+      accept={acceptFiles}
+      class="hidden"
+      onchange={handleFileSelect}
+      tabindex={-1}
+    />
   </div>
 </div>
