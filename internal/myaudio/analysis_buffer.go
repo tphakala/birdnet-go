@@ -128,9 +128,6 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	// real-time audio: dropping stale samples is preferable to failing writes
 	// or dropping current samples.
 	ab := ringbuffer.New(capacity)
-	if ab != nil {
-		ab.SetOverwrite(true)
-	}
 	if ab == nil {
 		enhancedErr := errors.Newf("failed to allocate ring buffer memory for analysis buffer").
 			Component("myaudio").
@@ -146,6 +143,7 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 		}
 		return enhancedErr
 	}
+	ab.SetOverwrite(true)
 
 	// Update global variables safely
 	abMutex.Lock()
