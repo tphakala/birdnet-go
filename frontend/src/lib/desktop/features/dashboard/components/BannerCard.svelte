@@ -165,13 +165,13 @@
     {:else}
       <!-- Normal mode: container-query responsive layout -->
       <div class="banner-container flex flex-1 flex-col p-6">
-        <div class="flex flex-1 flex-col gap-6 @md:flex-row">
+        <div class="flex flex-1 flex-col gap-6 md:flex-row">
           {#if config.showImage && config.imagePath}
             <div class="shrink-0">
               <img
                 src={config.imagePath}
                 alt={config.title || t('dashboard.editMode.stationBanner')}
-                class="h-auto w-full rounded-xl object-cover @md:w-48"
+                class="h-auto w-full rounded-xl object-cover md:w-48"
               />
             </div>
           {/if}
@@ -279,7 +279,7 @@
           </div>
 
           {#if config.showLocationMap && hasLocation}
-            <div class="w-full shrink-0 @md:w-64">
+            <div class="w-full shrink-0 md:w-64">
               <BannerLocationMap
                 {latitude}
                 {longitude}
