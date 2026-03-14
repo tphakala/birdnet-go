@@ -57,30 +57,27 @@
     };
   });
 
-  // Reactively update map center and marker when coordinates change
+  // Reactively update map center, zoom, and marker.
+  // Read all reactive deps upfront to ensure proper subscription tracking —
+  // conditional reads (e.g. inside `if (map)`) miss subscriptions on first run.
   $effect(() => {
-    if (map && marker) {
-      map.setCenter([longitude, latitude]);
-      marker.setLngLat([longitude, latitude]);
-    }
-  });
+    const lng = longitude;
+    const lat = latitude;
+    const z = zoom;
+    const pin = showPin;
 
-  // Reactively update zoom when prop changes
-  $effect(() => {
-    if (map) {
-      map.setZoom(zoom);
-    }
-  });
+    if (!map) return;
 
-  // Reactively add/remove marker when showPin changes
-  $effect(() => {
-    if (!map || !maplibreModule) return;
+    map.setCenter([lng, lat]);
+    map.setZoom(z);
 
-    if (showPin && !marker) {
-      marker = new maplibreModule.Marker().setLngLat([longitude, latitude]).addTo(map);
-    } else if (!showPin && marker) {
+    if (pin && !marker && maplibreModule) {
+      marker = new maplibreModule.Marker().setLngLat([lng, lat]).addTo(map);
+    } else if (!pin && marker) {
       marker.remove();
       marker = undefined;
+    } else if (marker) {
+      marker.setLngLat([lng, lat]);
     }
   });
 </script>

@@ -52,55 +52,62 @@
     class="flex h-full flex-col overflow-hidden rounded-2xl bg-[var(--color-base-100)] shadow-xs"
   >
     {#if editMode}
-      <!-- Edit mode: WYSIWYG vertical stacked layout -->
-      <div class="flex flex-1 flex-col gap-4 p-4">
-        <!-- Title (inline WYSIWYG) -->
-        <input
-          type="text"
-          value={config.title}
-          placeholder={t('dashboard.banner.titlePlaceholder')}
-          aria-label={t('dashboard.banner.titlePlaceholder')}
-          class="w-full border-0 border-b-2 border-transparent bg-transparent text-xl font-bold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
-          oninput={e => update({ title: inputValue(e) })}
-        />
+      <!-- Edit mode: horizontal layout matching normal mode (WYSIWYG) -->
+      <div class="flex flex-1 p-4">
+        <div class="flex flex-1 flex-col gap-4 md:flex-row md:gap-6">
+          {#if config.showImage && config.imagePath}
+            <div class="shrink-0">
+              <img
+                src={config.imagePath}
+                alt={config.title || t('dashboard.editMode.stationBanner')}
+                class="h-auto w-full rounded-xl object-cover md:w-48"
+              />
+            </div>
+          {/if}
 
-        <!-- Description (inline WYSIWYG) -->
-        <textarea
-          value={config.description}
-          placeholder={t('dashboard.banner.descriptionPlaceholder')}
-          aria-label={t('dashboard.banner.descriptionPlaceholder')}
-          class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
-          rows="2"
-          oninput={e => update({ description: textareaValue(e) })}
-        ></textarea>
-
-        <!-- Preview of enabled sub-elements -->
-        {#if config.showImage && config.imagePath}
-          <div class="relative">
-            <img
-              src={config.imagePath}
-              alt={config.title || t('dashboard.editMode.stationBanner')}
-              class="h-auto max-h-40 w-full rounded-xl object-cover"
+          <div class="min-w-0 flex-1 space-y-2">
+            <!-- Title (inline WYSIWYG) -->
+            <input
+              type="text"
+              value={config.title}
+              placeholder={t('dashboard.banner.titlePlaceholder')}
+              aria-label={t('dashboard.banner.titlePlaceholder')}
+              class="w-full border-0 border-b-2 border-transparent bg-transparent text-xl font-bold text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
+              oninput={e => update({ title: inputValue(e) })}
             />
-          </div>
-        {/if}
 
-        {#if config.showLocationMap && hasLocation}
-          <BannerLocationMap
-            {latitude}
-            {longitude}
-            zoom={config.mapZoom}
-            showPin={config.showPin}
-            className="h-32 rounded-xl"
-          />
-        {/if}
+            <!-- Description (inline WYSIWYG) -->
+            <textarea
+              value={config.description}
+              placeholder={t('dashboard.banner.descriptionPlaceholder')}
+              aria-label={t('dashboard.banner.descriptionPlaceholder')}
+              class="w-full resize-y border-0 border-b-2 border-transparent bg-transparent text-sm leading-relaxed text-[var(--color-base-content)]/70 placeholder:text-[var(--color-base-content)]/30 focus:border-[var(--color-primary)]/50 focus:outline-none"
+              rows="2"
+              oninput={e => update({ description: textareaValue(e) })}
+            ></textarea>
 
-        {#if config.showWeather}
-          <div class="flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50">
-            <Cloud class="size-4" />
-            <span>{t('dashboard.editMode.weatherPlaceholder')}</span>
+            {#if config.showWeather}
+              <div
+                class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+              >
+                <Cloud class="size-4" />
+                <span>{t('dashboard.editMode.weatherPlaceholder')}</span>
+              </div>
+            {/if}
           </div>
-        {/if}
+
+          {#if config.showLocationMap && hasLocation}
+            <div class="w-full shrink-0 md:w-64">
+              <BannerLocationMap
+                {latitude}
+                {longitude}
+                zoom={config.mapZoom}
+                showPin={config.showPin}
+                className="h-40"
+              />
+            </div>
+          {/if}
+        </div>
       </div>
     {:else}
       <!-- Normal mode: horizontal layout -->
