@@ -179,7 +179,7 @@ type BannerConfig struct {
 	ShowLocationMap bool   `json:"showLocationMap"`   // whether to show the location map
 	ShowWeather     bool   `json:"showWeather"`       // whether to show weather conditions
 	MapZoom         int    `json:"mapZoom,omitempty"` // zoom level for the location map (default 11)
-	ShowPin         *bool  `json:"showPin,omitempty"` // whether to show the location pin marker (default true)
+	ShowPin         *bool  `json:"showPin,omitzero"`  // whether to show the location pin marker (default true)
 }
 
 // VideoEmbedConfig holds configuration for the YouTube video embed element.
