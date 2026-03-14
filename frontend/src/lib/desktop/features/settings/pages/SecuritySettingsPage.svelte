@@ -95,6 +95,7 @@
   let certError = $state<string | null>(null);
   let generateLoading = $state(false);
   let uploadLoading = $state(false);
+  let deleteLoading = $state(false);
 
   // Certificate upload form
   let uploadCert = $state('');
@@ -223,8 +224,10 @@
   }
 
   async function handleDeleteCert() {
+    if (deleteLoading) return;
     const confirmed = window.confirm(t('settings.security.tls.deleteConfirm'));
     if (!confirmed) return;
+    deleteLoading = true;
     try {
       await settingsAPI.tls.deleteCertificate();
       certInfo = null;
@@ -236,6 +239,8 @@
       toastActions.error(
         err instanceof Error ? err.message : t('settings.security.tls.deleteError')
       );
+    } finally {
+      deleteLoading = false;
     }
   }
 
