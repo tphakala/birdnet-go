@@ -291,15 +291,6 @@
                       </div>
                     </div>
                   {/if}
-
-                  <!-- Refresh button -->
-                  <button
-                    class="ml-auto shrink-0 rounded-lg p-1.5 text-[var(--color-base-content)]/40 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]/70"
-                    onclick={() => fetchWeather()}
-                    aria-label={t('common.refresh')}
-                  >
-                    <RefreshCw class="size-4" />
-                  </button>
                 </div>
               {/if}
             {/if}
