@@ -461,11 +461,11 @@ Cogwheel dropdown menu for the header bar. Contains theme toggle, edit dashboard
 
 #### Props
 
-| Prop | Type | Default | Description |
-| ---- | ---- | ------- | ----------- |
-| securityEnabled | boolean | false | Whether security/auth is enabled |
-| accessAllowed | boolean | true | Whether user has admin access |
-| className | string | '' | Additional CSS classes |
+| Prop            | Type    | Default | Description                      |
+| --------------- | ------- | ------- | -------------------------------- |
+| securityEnabled | boolean | false   | Whether security/auth is enabled |
+| accessAllowed   | boolean | true    | Whether user has admin access    |
+| className       | string  | ''      | Additional CSS classes           |
 
 #### Usage
 
