@@ -3855,6 +3855,9 @@
       }
     }
   },
+  "connectivity": {
+    "offline": "Conexão com o servidor perdida. Tentando reconectar..."
+  },
   "detection": {
     "actions": {
       "back": "Voltar",
