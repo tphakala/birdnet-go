@@ -16,6 +16,7 @@ import {
 } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { t } from '$lib/i18n';
+import { markOnline } from '$lib/stores/connectionState.svelte';
 
 const logger = loggers.api;
 
@@ -364,6 +365,7 @@ export async function fetchWithCSRF<T = unknown>(
     }
 
     const result = await handleResponse<T>(response);
+    markOnline();
     logger.debug(`Response from ${url} received successfully`);
     return result;
   } catch (error) {
