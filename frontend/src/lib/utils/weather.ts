@@ -314,11 +314,11 @@ export function getBirdingConditionLevel(windSpeed: number): BirdingConditionLev
 export function getBirdingConditionColor(level: BirdingConditionLevel): string {
   switch (level) {
     case 'excellent':
-      return 'text-green-500';
+      return 'text-green-600';
     case 'moderate':
-      return 'text-amber-500';
+      return 'text-amber-700';
     case 'poor':
-      return 'text-red-500';
+      return 'text-red-600';
   }
 }
 

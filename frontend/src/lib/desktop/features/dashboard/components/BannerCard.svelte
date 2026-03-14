@@ -206,15 +206,15 @@
                   <span>{t('detections.weather.noDataAvailable')}</span>
                 </div>
               {:else}
-                <div class="mt-4 flex flex-wrap items-start gap-6">
+                <div class="mt-4 flex items-center gap-6">
                   <!-- Group 1: Weather Condition -->
-                  <div class="flex items-center gap-3">
+                  <div class="flex items-center gap-2">
                     <WeatherSvgIcon
                       icon={getBasmiliusIconName(
                         weatherData.hourly.weather_icon ?? '',
                         weatherData.hourly.weather_desc
                       )}
-                      size={40}
+                      size={48}
                       title={weatherData.hourly.weather_desc ?? ''}
                     />
                     <div>
@@ -237,14 +237,17 @@
                     </div>
                   </div>
 
+                  <!-- Separator -->
+                  <div class="h-8 w-px bg-[var(--color-base-content)]/10"></div>
+
                   <!-- Group 2: Wind & Birding Conditions -->
                   {#if weatherData.hourly.wind_speed !== undefined}
                     {@const windSpeed = weatherData.hourly.wind_speed}
                     {@const birdingLevel = getBirdingConditionLevel(windSpeed)}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
                       <WeatherSvgIcon
                         icon="wind"
-                        size={32}
+                        size={40}
                         title={t('detections.weather.labels.wind')}
                       />
                       <div>
@@ -267,9 +270,12 @@
                     </div>
                   {/if}
 
+                  <!-- Separator -->
+                  <div class="h-8 w-px bg-[var(--color-base-content)]/10"></div>
+
                   <!-- Group 3: Moon Phase -->
                   {#if weatherData.moon}
-                    <div class="flex items-center gap-3">
+                    <div class="flex items-center gap-2">
                       <WeatherSvgIcon
                         icon={weatherData.moon.iconName}
                         size={32}
@@ -288,7 +294,7 @@
 
                   <!-- Refresh button -->
                   <button
-                    class="ml-auto self-center rounded-lg p-1.5 text-[var(--color-base-content)]/40 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]/70"
+                    class="ml-auto shrink-0 rounded-lg p-1.5 text-[var(--color-base-content)]/40 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]/70"
                     onclick={() => fetchWeather()}
                     aria-label={t('common.refresh')}
                   >
