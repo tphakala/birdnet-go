@@ -232,7 +232,7 @@
           timeOfDay={detection.timeOfDay}
         />
       {/if}
-      {#if detection.weather?.moonPhaseName}
+      {#if detection.weather?.moonPhaseName && detection.timeOfDay === 'night'}
         <MoonBadge moonPhaseName={detection.weather.moonPhaseName} />
       {/if}
     </div>

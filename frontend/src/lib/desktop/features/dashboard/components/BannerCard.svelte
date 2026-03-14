@@ -20,6 +20,14 @@
     getMoonPhaseI18nKey,
     translateWeatherCondition,
   } from '$lib/utils/weather';
+  import {
+    type TemperatureUnit,
+    convertTemperature,
+    getTemperatureSymbol,
+    convertWindSpeed,
+    getWindSpeedUnit,
+  } from '$lib/utils/formatters';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface Props {
     config: BannerConfig;
@@ -47,16 +55,25 @@
   let weatherData = $state<LatestWeatherResponse | null>(null);
   let weatherLoading = $state(false);
   let weatherError = $state(false);
+  let temperatureUnit = $state<TemperatureUnit>('metric');
 
-  async function fetchWeather() {
+  async function fetchWeather(signal?: AbortSignal) {
     if (!config.showWeather || editMode) return;
     weatherLoading = true;
     weatherError = false;
     try {
-      const response = await fetch('/api/v2/weather/latest');
-      if (!response.ok) throw new Error('Failed to fetch weather');
-      weatherData = await response.json();
-    } catch {
+      const [weatherResp, configResp] = await Promise.all([
+        fetch('/api/v2/weather/latest', { signal }),
+        fetch(buildAppUrl('/api/v2/settings/dashboard'), { signal }),
+      ]);
+      if (!weatherResp.ok) throw new Error('Failed to fetch weather');
+      weatherData = await weatherResp.json();
+      if (configResp.ok) {
+        const dashConfig = await configResp.json();
+        temperatureUnit = dashConfig.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric';
+      }
+    } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return;
       weatherError = true;
     } finally {
       weatherLoading = false;
@@ -65,7 +82,9 @@
 
   $effect(() => {
     if (config.showWeather && !editMode) {
-      fetchWeather();
+      const controller = new AbortController();
+      fetchWeather(controller.signal);
+      return () => controller.abort();
     }
   });
 
@@ -200,10 +219,14 @@
                     />
                     <div>
                       <div class="text-lg font-semibold text-[var(--color-base-content)]">
-                        {Math.round(weatherData.hourly.temperature ?? 0)}°
+                        {Math.round(
+                          convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
+                        )}{getTemperatureSymbol(temperatureUnit)}
                         <span class="text-sm font-normal text-[var(--color-base-content)]/60">
                           / {t('detections.weather.labels.temperature')}
-                          {Math.round(weatherData.hourly.feels_like ?? 0)}°
+                          {Math.round(
+                            convertTemperature(weatherData.hourly.feels_like ?? 0, temperatureUnit)
+                          )}{getTemperatureSymbol(temperatureUnit)}
                         </span>
                       </div>
                       <div class="text-sm text-[var(--color-base-content)]/60">
@@ -226,10 +249,14 @@
                       />
                       <div>
                         <div class="text-sm font-medium text-[var(--color-base-content)]">
-                          {windSpeed.toFixed(1)} m/s
+                          {convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
+                          {getWindSpeedUnit(temperatureUnit)}
                           {#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
                             <span class="text-[var(--color-base-content)]/50">
-                              ({weatherData.hourly.wind_gust.toFixed(1)})
+                              ({convertWindSpeed(
+                                weatherData.hourly.wind_gust,
+                                temperatureUnit
+                              ).toFixed(1)})
                             </span>
                           {/if}
                         </div>
@@ -246,7 +273,7 @@
                       <WeatherSvgIcon
                         icon={weatherData.moon.iconName}
                         size={32}
-                        title={weatherData.moon.phaseName}
+                        title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
                       />
                       <div>
                         <div class="text-sm font-medium text-[var(--color-base-content)]">
@@ -262,8 +289,8 @@
                   <!-- Refresh button -->
                   <button
                     class="ml-auto self-center rounded-lg p-1.5 text-[var(--color-base-content)]/40 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]/70"
-                    onclick={fetchWeather}
-                    aria-label={t('detections.weather.loading')}
+                    onclick={() => fetchWeather()}
+                    aria-label={t('common.refresh')}
                   >
                     <RefreshCw class="size-4" />
                   </button>

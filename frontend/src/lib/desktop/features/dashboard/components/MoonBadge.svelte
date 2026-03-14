@@ -4,7 +4,8 @@
   @component
 -->
 <script lang="ts">
-  import { getMoonPhaseEmoji } from '$lib/utils/weather';
+  import { t } from '$lib/i18n';
+  import { getMoonPhaseEmoji, getMoonPhaseI18nKey } from '$lib/utils/weather';
 
   interface Props {
     moonPhaseName: string;
@@ -14,13 +15,14 @@
   let { moonPhaseName, className = '' }: Props = $props();
 
   let emoji = $derived(getMoonPhaseEmoji(moonPhaseName));
+  let translatedName = $derived(t(`weather.moon.${getMoonPhaseI18nKey(moonPhaseName)}`));
 </script>
 
 <div
   class="flex items-center justify-center rounded-full bg-black/50 px-1.5 py-0.5 backdrop-blur-sm {className}"
-  title={moonPhaseName}
+  title={translatedName}
   role="img"
-  aria-label={moonPhaseName}
+  aria-label={translatedName}
 >
   <span class="text-sm leading-none">{emoji}</span>
 </div>
