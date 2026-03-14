@@ -17,8 +17,6 @@ import (
 
 const (
 	pollInterval             = time.Millisecond * 10
-	maxRetries               = 3
-	retryDelay               = time.Millisecond * 10
 	warningCapacityThreshold = 0.9 // 90% full
 )
 
@@ -124,8 +122,15 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	}
 	bufferPoolInitMu.Unlock()
 
-	// Initialize the analysis ring buffer
+	// Initialize the analysis ring buffer with overwrite mode enabled.
+	// When the buffer is full, new writes overwrite the oldest data instead of
+	// returning ErrIsFull. This provides graceful backpressure handling for
+	// real-time audio: dropping stale samples is preferable to failing writes
+	// or dropping current samples.
 	ab := ringbuffer.New(capacity)
+	if ab != nil {
+		ab.SetOverwrite(true)
+	}
 	if ab == nil {
 		enhancedErr := errors.Newf("failed to allocate ring buffer memory for analysis buffer").
 			Component("myaudio").
@@ -336,7 +341,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		return enhancedErr
 	}
 
-	// Check buffer capacity and update metrics
+	// Check buffer capacity and update metrics before writing
 	currentLength := ab.Length()
 	capacityUsed := float64(currentLength) / float64(capacity)
 
@@ -345,6 +350,55 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		m.UpdateBufferSize("analysis", sourceID, currentLength)
 	}
 
+	// Write data to the ring buffer.
+	// With overwrite mode enabled, writes always succeed by discarding oldest data
+	// when the buffer is full, so no retry logic is needed.
+	var n int
+	err := func() error {
+		abMutex.Lock()
+		defer abMutex.Unlock()
+
+		var writeErr error
+		n, writeErr = ab.Write(data)
+		return writeErr
+	}()
+
+	if err != nil {
+		// Unexpected error (overwrite mode should prevent ErrIsFull)
+		log.Error("unexpected error writing to analysis buffer",
+			logger.String("display_name", displayName),
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.Int("capacity", capacity),
+			logger.Int("used_bytes", ab.Length()),
+			logger.Int("free_bytes", ab.Free()))
+
+		if m := getAnalysisMetrics(); m != nil {
+			m.RecordBufferWrite("analysis", sourceID, "error")
+			m.RecordBufferWriteError("analysis", sourceID, "write_failed")
+		}
+
+		return errors.New(err).
+			Component("myaudio").
+			Category(errors.CategorySystem).
+			Context("operation", "write_to_analysis_buffer").
+			Context("source_id", sourceID).
+			Context("data_size", len(data)).
+			Context("buffer_capacity", capacity).
+			Context("capacity_utilization", capacityUsed).
+			Build()
+	}
+
+	// Record successful write metrics
+	if m := getAnalysisMetrics(); m != nil {
+		duration := time.Since(start).Seconds()
+		m.RecordBufferWrite("analysis", sourceID, "success")
+		m.RecordBufferWriteDuration("analysis", sourceID, duration)
+		m.RecordBufferWriteBytes("analysis", sourceID, n)
+		m.RecordAudioDataSize(sourceID, n)
+	}
+
+	// Log if the buffer was near capacity (data was likely overwritten)
 	if capacityUsed > warningCapacityThreshold {
 		warningCounterMutex.Lock()
 		warningCounter[sourceID]++
@@ -352,11 +406,11 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		warningCounterMutex.Unlock()
 
 		if shouldLog {
-			log.Warn("analysis buffer near capacity",
+			log.Warn("analysis buffer overwriting oldest data due to high utilization",
 				logger.String("display_name", displayName),
 				logger.String("source_id", sourceID),
 				logger.Float64("capacity_percent", capacityUsed*100),
-				logger.Int("used_bytes", currentLength),
+				logger.Int("used_bytes", ab.Length()),
 				logger.Int("capacity_bytes", capacity))
 		}
 
@@ -365,122 +419,7 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		}
 	}
 
-	// Write data to the ring buffer with retry logic
-	var lastErr error
-	var n int
-	for retry := range maxRetries {
-		// Use anonymous function with defer to ensure mutex is always unlocked
-		// This prevents deadlocks even if ab.Write panics
-		err := func() error {
-			abMutex.Lock()
-			defer abMutex.Unlock() // Always unlock, even on panic
-
-			var writeErr error
-			n, writeErr = ab.Write(data) // Write data to the ring buffer
-			return writeErr
-		}()
-
-		if err == nil {
-			// Record successful write metrics
-			if m := getAnalysisMetrics(); m != nil {
-				duration := time.Since(start).Seconds()
-				m.RecordBufferWrite("analysis", sourceID, "success")
-				m.RecordBufferWriteDuration("analysis", sourceID, duration)
-				m.RecordBufferWriteBytes("analysis", sourceID, n)
-				m.RecordAudioDataSize(sourceID, n)
-			}
-
-			if n < len(data) {
-				// Partial write - log and record metrics
-				// Note: ringbuffer's Free() method is thread-safe
-				log.Warn("partial write to analysis buffer",
-					logger.String("display_name", displayName),
-					logger.String("source_id", sourceID),
-					logger.Int("bytes_written", n),
-					logger.Int("bytes_requested", len(data)),
-					logger.Int("capacity", capacity),
-					logger.Int("free_bytes", ab.Free()))
-
-				if m := getAnalysisMetrics(); m != nil {
-					m.RecordBufferWrite("analysis", sourceID, "partial")
-				}
-			}
-
-			return nil
-		}
-
-		lastErr = err
-
-		// Log detailed buffer state
-		// Note: ringbuffer's Free() and Length() methods are thread-safe
-		log.Warn("analysis buffer write failed",
-			logger.String("display_name", displayName),
-			logger.String("source_id", sourceID),
-			logger.Int("free_bytes", ab.Free()),
-			logger.Int("capacity", capacity),
-			logger.Int("used_bytes", ab.Length()),
-			logger.Int("write_bytes", len(data)))
-
-		// Record retry metrics
-		if m := getAnalysisMetrics(); m != nil {
-			if errors.Is(err, ringbuffer.ErrIsFull) {
-				m.RecordBufferWriteRetry("analysis", sourceID, "buffer_full")
-			} else {
-				m.RecordBufferWriteRetry("analysis", sourceID, "unexpected_error")
-			}
-		}
-
-		if errors.Is(err, ringbuffer.ErrIsFull) {
-			log.Warn("analysis buffer full, retrying",
-				logger.String("display_name", displayName),
-				logger.String("source_id", sourceID),
-				logger.Int("retry", retry+1),
-				logger.Int("max_retries", maxRetries))
-		} else {
-			log.Error("unexpected error writing to analysis buffer",
-				logger.String("display_name", displayName),
-				logger.String("source_id", sourceID),
-				logger.Error(err))
-		}
-
-		// System resource utilization capture disabled to prevent disk space issues
-
-		if retry < maxRetries-1 {
-			time.Sleep(retryDelay)
-		}
-	}
-
-	// If we've reached this point, we've failed all retries
-	log.Error("failed to write to analysis buffer after all retries",
-		logger.String("display_name", displayName),
-		logger.String("source_id", sourceID),
-		logger.Int("attempts", maxRetries),
-		logger.Int("dropped_bytes", len(data)),
-		logger.Int("capacity", capacity),
-		logger.Int("used_bytes", ab.Length()),
-		logger.Int("free_bytes", ab.Free()))
-
-	// Record data drop metrics
-	if m := getAnalysisMetrics(); m != nil {
-		m.RecordBufferWrite("analysis", sourceID, "error")
-		m.RecordBufferWriteError("analysis", sourceID, "retry_exhausted")
-		m.RecordAnalysisBufferDataDrop(sourceID, "retry_exhausted")
-	}
-
-	enhancedErr := errors.New(lastErr).
-		Component("myaudio").
-		Category(errors.CategorySystem).
-		Context("operation", "write_to_analysis_buffer").
-		Context("source_id", sourceID).
-		Context("data_size", len(data)).
-		Context("buffer_capacity", capacity).
-		Context("used_bytes", ab.Length()).
-		Context("free_bytes", ab.Free()).
-		Context("max_retries", maxRetries).
-		Context("capacity_utilization", capacityUsed).
-		Build()
-
-	return enhancedErr
+	return nil
 }
 
 // ReadFromAnalysisBuffer reads a sliding chunk of audio data from the ring buffer for a given source ID.
