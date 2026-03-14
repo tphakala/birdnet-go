@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Zeigt eine kleine Karte mit dem Breiten-/Längengrad aus Ihren Haupteinstellungen an",
       "showWeather": "Aktuelles Wetter anzeigen",
       "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)",
+      "timeFormat": "Zeitformat",
       "mapZoom": "Kartenzoom",
       "showPin": "Standortnadel anzeigen",
       "mapExpandable": "Kartenvergrößerung erlauben",

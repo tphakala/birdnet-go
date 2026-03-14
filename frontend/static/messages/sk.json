@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Zobrazí malú mapu pomocou zemepisnej šírky/dĺžky z vašich hlavných nastavení",
       "showWeather": "Zobraziť aktuálne počasie",
       "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)",
+      "timeFormat": "Formát času",
       "mapZoom": "Priblíženie mapy",
       "showPin": "Zobraziť značku polohy",
       "mapExpandable": "Povoliť zväčšenie mapy",

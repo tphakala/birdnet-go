@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
       "showWeather": "Show current weather",
       "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
+      "timeFormat": "Aikamuoto",
       "mapZoom": "Kartan zoomaus",
       "showPin": "Näytä sijaintimerkki",
       "mapExpandable": "Salli kartan laajentaminen",

@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Muestra un pequeño mapa usando la latitud/longitud de sus ajustes principales",
       "showWeather": "Mostrar clima actual",
       "showWeatherHelp": "Muestra las condiciones climáticas actuales (requiere que la integración del clima esté habilitada)",
+      "timeFormat": "Formato de hora",
       "mapZoom": "Zoom del mapa",
       "showPin": "Mostrar marcador de ubicación",
       "mapExpandable": "Permitir expansión del mapa",

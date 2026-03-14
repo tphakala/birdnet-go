@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Wyświetla małą mapę z szerokością/długością geograficzną z ustawień głównych",
       "showWeather": "Pokaż aktualną pogodę",
       "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)",
+      "timeFormat": "Format czasu",
       "mapZoom": "Powiększenie mapy",
       "showPin": "Pokaż znacznik lokalizacji",
       "mapExpandable": "Zezwól na powiększanie mapy",

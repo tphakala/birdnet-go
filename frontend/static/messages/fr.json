@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Affiche une petite carte en utilisant la latitude/longitude de vos paramètres principaux",
       "showWeather": "Afficher la météo actuelle",
       "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)",
+      "timeFormat": "Format d'heure",
       "mapZoom": "Zoom de la carte",
       "showPin": "Afficher le marqueur de position",
       "mapExpandable": "Autoriser l'agrandissement de la carte",

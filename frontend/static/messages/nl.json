@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Toont een kleine kaart met de breedte-/lengtegraad uit uw hoofdinstellingen",
       "showWeather": "Huidig weer tonen",
       "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)",
+      "timeFormat": "Tijdnotatie",
       "mapZoom": "Kaartzoom",
       "showPin": "Locatiemarkering tonen",
       "mapExpandable": "Kaart vergroten toestaan",

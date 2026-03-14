@@ -6,7 +6,7 @@
   @component
 -->
 <script lang="ts">
-  import { Cloud, RefreshCw } from '@lucide/svelte';
+  import { Cloud, RefreshCw, Sunrise, Sunset } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
   import type { LatestWeatherResponse } from '$lib/types/detection.types';
@@ -86,6 +86,34 @@
     }
   });
 
+  // Local time clock (updates every minute)
+  let now = $state(new Date());
+  $effect(() => {
+    const id = setInterval(() => (now = new Date()), 60_000);
+    return () => clearInterval(id);
+  });
+
+  let is24h = $derived(config.timeFormat !== '12h');
+
+  function formatTime(date: Date): string {
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: !is24h,
+    });
+  }
+
+  function formatSunTime(isoString: string): string {
+    const date = new Date(isoString);
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: !is24h,
+    });
+  }
+
+  let timezone = $derived(Intl.DateTimeFormat().resolvedOptions().timeZone.replace(/_/g, ' '));
+
   function update(partial: Partial<BannerConfig>) {
     onUpdate?.({ ...config, ...partial });
   }
@@ -98,6 +126,109 @@
     return (e.target as HTMLTextAreaElement).value;
   }
 </script>
+
+{#snippet weatherRow(extraClass: string)}
+  {#if weatherLoading}
+    <div class="flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50 {extraClass}">
+      <RefreshCw class="size-4 animate-spin" />
+      <span>{t('detections.weather.loading')}</span>
+    </div>
+  {:else if weatherError || !weatherData?.hourly}
+    <div class="flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50 {extraClass}">
+      <span>{t('detections.weather.noDataAvailable')}</span>
+    </div>
+  {:else}
+    <div
+      class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-[var(--color-base-content)] {extraClass}"
+    >
+      <!-- Local time + timezone -->
+      <span class="font-semibold">{formatTime(now)}</span>
+      <span class="text-[var(--color-base-content)]/50">{timezone}</span>
+
+      <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+
+      <!-- Weather condition -->
+      <div class="flex items-center gap-1.5">
+        <WeatherSvgIcon
+          icon={getBasmiliusIconName(
+            weatherData.hourly.weather_icon ?? '',
+            weatherData.hourly.weather_desc
+          )}
+          size={36}
+          title={weatherData.hourly.weather_desc ?? ''}
+        />
+        <span>
+          <span class="font-semibold"
+            >{Math.round(
+              convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
+            )}{getTemperatureSymbol(temperatureUnit)}</span
+          >
+          <span class="text-[var(--color-base-content)]/60"
+            >{translateWeatherCondition(
+              weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
+            )}</span
+          >
+        </span>
+      </div>
+
+      <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+
+      <!-- Wind -->
+      {#if weatherData.hourly.wind_speed !== undefined}
+        {@const windSpeed = weatherData.hourly.wind_speed}
+        <div class="flex items-center gap-1.5">
+          <WeatherSvgIcon icon="wind" size={28} title={t('detections.weather.labels.wind')} />
+          <span>
+            {convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
+            {getWindSpeedUnit(temperatureUnit)}
+            {#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
+              <span class="text-[var(--color-base-content)]/50"
+                >({convertWindSpeed(weatherData.hourly.wind_gust, temperatureUnit).toFixed(
+                  1
+                )})</span
+              >
+            {/if}
+          </span>
+        </div>
+      {/if}
+
+      <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+
+      <!-- Sunrise / Sunset -->
+      {#if weatherData.daily?.sunrise}
+        <div class="flex items-center gap-1">
+          <Sunrise class="size-4 text-[var(--color-base-content)]/50" />
+          <span>{formatSunTime(weatherData.daily.sunrise)}</span>
+        </div>
+      {/if}
+      {#if weatherData.daily?.sunset}
+        <div class="flex items-center gap-1">
+          <Sunset class="size-4 text-[var(--color-base-content)]/50" />
+          <span>{formatSunTime(weatherData.daily.sunset)}</span>
+        </div>
+      {/if}
+
+      <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+
+      <!-- Moon phase -->
+      {#if weatherData.moon}
+        <div class="flex items-center gap-1.5">
+          <WeatherSvgIcon
+            icon={weatherData.moon.iconName}
+            size={24}
+            title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+          />
+          <span>
+            {t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+            <span class="text-[var(--color-base-content)]/50"
+              >{Math.round(weatherData.moon.illumination)}%</span
+            >
+          </span>
+        </div>
+      {/if}
+    </div>
+  {/if}
+{/snippet}
 
 {#if hasAnyContent}
   <div
@@ -192,88 +323,7 @@
             <!-- Weather inline: visible only on wide cards -->
             {#if config.showWeather}
               <div class="hidden @2xl:block">
-                {#if weatherLoading}
-                  <div
-                    class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
-                  >
-                    <RefreshCw class="size-4 animate-spin" />
-                    <span>{t('detections.weather.loading')}</span>
-                  </div>
-                {:else if weatherError || !weatherData?.hourly}
-                  <div
-                    class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
-                  >
-                    <span>{t('detections.weather.noDataAvailable')}</span>
-                  </div>
-                {:else}
-                  <div
-                    class="mt-3 flex items-center gap-4 text-sm text-[var(--color-base-content)]"
-                  >
-                    <div class="flex items-center gap-1.5">
-                      <WeatherSvgIcon
-                        icon={getBasmiliusIconName(
-                          weatherData.hourly.weather_icon ?? '',
-                          weatherData.hourly.weather_desc
-                        )}
-                        size={36}
-                        title={weatherData.hourly.weather_desc ?? ''}
-                      />
-                      <span
-                        ><span class="font-semibold"
-                          >{Math.round(
-                            convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-                          )}{getTemperatureSymbol(temperatureUnit)}</span
-                        >
-                        <span class="text-[var(--color-base-content)]/60"
-                          >{translateWeatherCondition(
-                            weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
-                          )}</span
-                        ></span
-                      >
-                    </div>
-                    <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-                    {#if weatherData.hourly.wind_speed !== undefined}
-                      {@const windSpeed = weatherData.hourly.wind_speed}
-                      <div class="flex items-center gap-1.5">
-                        <WeatherSvgIcon
-                          icon="wind"
-                          size={28}
-                          title={t('detections.weather.labels.wind')}
-                        />
-                        <span
-                          >{convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
-                          {getWindSpeedUnit(
-                            temperatureUnit
-                          )}{#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
-                            <span class="text-[var(--color-base-content)]/50"
-                              >({convertWindSpeed(
-                                weatherData.hourly.wind_gust,
-                                temperatureUnit
-                              ).toFixed(1)})</span
-                            >{/if}</span
-                        >
-                      </div>
-                    {/if}
-                    <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-                    {#if weatherData.moon}
-                      <div class="flex items-center gap-1.5">
-                        <WeatherSvgIcon
-                          icon={weatherData.moon.iconName}
-                          size={24}
-                          title={t(
-                            `weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`
-                          )}
-                        />
-                        <span
-                          >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
-                          <span class="text-[var(--color-base-content)]/50"
-                            >{Math.round(weatherData.moon.illumination)}%</span
-                          ></span
-                        >
-                      </div>
-                    {/if}
-                  </div>
-                {/if}
+                {@render weatherRow('mt-3')}
               </div>
             {/if}
           </div>
@@ -295,86 +345,7 @@
         <!-- Weather below: visible only on narrow cards -->
         {#if config.showWeather}
           <div class="@2xl:hidden">
-            {#if weatherLoading}
-              <div
-                class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
-              >
-                <RefreshCw class="size-4 animate-spin" />
-                <span>{t('detections.weather.loading')}</span>
-              </div>
-            {:else if weatherError || !weatherData?.hourly}
-              <div
-                class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
-              >
-                <span>{t('detections.weather.noDataAvailable')}</span>
-              </div>
-            {:else}
-              <div
-                class="mt-4 flex items-center gap-4 border-t border-[var(--color-base-content)]/5 pt-4 text-sm text-[var(--color-base-content)]"
-              >
-                <div class="flex items-center gap-1.5">
-                  <WeatherSvgIcon
-                    icon={getBasmiliusIconName(
-                      weatherData.hourly.weather_icon ?? '',
-                      weatherData.hourly.weather_desc
-                    )}
-                    size={36}
-                    title={weatherData.hourly.weather_desc ?? ''}
-                  />
-                  <span
-                    ><span class="font-semibold"
-                      >{Math.round(
-                        convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-                      )}{getTemperatureSymbol(temperatureUnit)}</span
-                    >
-                    <span class="text-[var(--color-base-content)]/60"
-                      >{translateWeatherCondition(
-                        weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
-                      )}</span
-                    ></span
-                  >
-                </div>
-                <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-                {#if weatherData.hourly.wind_speed !== undefined}
-                  {@const windSpeed = weatherData.hourly.wind_speed}
-                  <div class="flex items-center gap-1.5">
-                    <WeatherSvgIcon
-                      icon="wind"
-                      size={28}
-                      title={t('detections.weather.labels.wind')}
-                    />
-                    <span
-                      >{convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
-                      {getWindSpeedUnit(
-                        temperatureUnit
-                      )}{#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
-                        <span class="text-[var(--color-base-content)]/50"
-                          >({convertWindSpeed(
-                            weatherData.hourly.wind_gust,
-                            temperatureUnit
-                          ).toFixed(1)})</span
-                        >{/if}</span
-                    >
-                  </div>
-                {/if}
-                <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-                {#if weatherData.moon}
-                  <div class="flex items-center gap-1.5">
-                    <WeatherSvgIcon
-                      icon={weatherData.moon.iconName}
-                      size={24}
-                      title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
-                    />
-                    <span
-                      >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
-                      <span class="text-[var(--color-base-content)]/50"
-                        >{Math.round(weatherData.moon.illumination)}%</span
-                      ></span
-                    >
-                  </div>
-                {/if}
-              </div>
-            {/if}
+            {@render weatherRow('mt-4 border-t border-[var(--color-base-content)]/5 pt-4')}
           </div>
         {/if}
       </div>
