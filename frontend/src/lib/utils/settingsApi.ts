@@ -29,6 +29,18 @@ export interface TLSGenerateRequest {
   validity?: string;
 }
 
+export interface MQTTTLSCertificateInfo {
+  ca: TLSCertificateInfo;
+  client: TLSCertificateInfo;
+  hasKey: boolean;
+}
+
+export interface MQTTTLSCertificateUpload {
+  caCertificate?: string;
+  clientCertificate?: string;
+  clientKey?: string;
+}
+
 /**
  * Settings API client extending the base API client
  */
@@ -147,6 +159,20 @@ export const settingsAPI = {
 
     generateSelfSigned: (data?: TLSGenerateRequest): Promise<TLSCertificateInfo> =>
       api.post<TLSCertificateInfo>('/api/v2/tls/certificate/generate', data ?? {}),
+  },
+
+  /**
+   * MQTT TLS certificate management
+   */
+  mqttTls: {
+    getCertificates: (): Promise<MQTTTLSCertificateInfo> =>
+      api.get<MQTTTLSCertificateInfo>('/api/v2/integrations/mqtt/tls/certificate'),
+
+    uploadCertificates: (data: MQTTTLSCertificateUpload): Promise<MQTTTLSCertificateInfo> =>
+      api.post<MQTTTLSCertificateInfo>('/api/v2/integrations/mqtt/tls/certificate', data),
+
+    deleteCertificates: (): Promise<unknown> =>
+      api.delete('/api/v2/integrations/mqtt/tls/certificate'),
   },
 
   /**
