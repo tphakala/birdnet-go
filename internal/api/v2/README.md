@@ -130,6 +130,9 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/integrations/mqtt/status`                  | `GetMQTTStatus`                 | ✅   | MQTT connection status                |
 | POST   | `/integrations/mqtt/test`                    | `TestMQTTConnection`            | ✅   | Test MQTT connection                  |
 | POST   | `/integrations/mqtt/homeassistant/discovery` | `TriggerHomeAssistantDiscovery` | ✅   | Trigger Home Assistant MQTT discovery |
+| GET    | `/integrations/mqtt/tls/certificate`         | `GetMQTTTLSCertificate`         | ✅   | Get MQTT TLS certificate status       |
+| POST   | `/integrations/mqtt/tls/certificate`         | `UploadMQTTTLSCertificate`      | ✅   | Upload MQTT TLS certificates          |
+| DELETE | `/integrations/mqtt/tls/certificate`         | `DeleteMQTTTLSCertificate`      | ✅   | Remove MQTT TLS certificates          |
 | GET    | `/integrations/birdweather/status`           | `GetBirdWeatherStatus`          | ✅   | BirdWeather integration status        |
 | POST   | `/integrations/birdweather/test`             | `TestBirdWeatherConnection`     | ✅   | Test BirdWeather connection           |
 | POST   | `/integrations/weather/test`                 | `TestWeatherConnection`         | ✅   | Test weather provider connection      |
