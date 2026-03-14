@@ -15,7 +15,6 @@ Props:
   import { Check, X } from '@lucide/svelte';
   import { fade } from 'svelte/transition';
   import { t } from '$lib/i18n';
-  import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { PendingDetection } from '$lib/types/pending.types';
 
   interface Props {
@@ -97,7 +96,6 @@ Props:
   $effect(() => {
     if (!hasDisplayDetections) return;
     const interval = setInterval(() => {
-      if (!connectionState.isOnline) return;
       tick++;
     }, 1000);
     return () => clearInterval(interval);
