@@ -128,6 +128,35 @@
     }
   }
 
+  // Let's Encrypt hostname validation
+  const privateTLDs = ['.local', '.internal', '.lan', '.home', '.localdomain', '.localhost', '.test', '.example', '.invalid'];
+
+  let autoTLSHostError = $derived.by(() => {
+    if (settings?.tlsMode !== 'autotls') return null;
+    const host = settings?.host?.trim() || '';
+    if (!host) return t('settings.security.tls.autoTLSHostRequired');
+    // Must not be an IP address
+    if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host)) {
+      return t('settings.security.tls.autoTLSNoIP');
+    }
+    // Must contain at least one dot (FQDN)
+    if (!host.includes('.')) {
+      return t('settings.security.tls.autoTLSNeedsFQDN');
+    }
+    // Must not be localhost
+    if (host.toLowerCase() === 'localhost') {
+      return t('settings.security.tls.autoTLSNoLocalhost');
+    }
+    // Must not use a private TLD
+    const lower = host.toLowerCase();
+    for (const tld of privateTLDs) {
+      if (lower.endsWith(tld)) {
+        return t('settings.security.tls.autoTLSPrivateTLD', { tld });
+      }
+    }
+    return null;
+  });
+
   function updateTLSMode(mode: string) {
     // Also update autoTls for backward compatibility
     settingsActions.updateSection('security', {
@@ -704,6 +733,13 @@
         <!-- Let's Encrypt mode -->
         {#if settings.tlsMode === 'autotls'}
           <div class="space-y-3">
+            {#if autoTLSHostError}
+              <ErrorAlert type="error">
+                {#snippet children()}
+                  <span>{autoTLSHostError}</span>
+                {/snippet}
+              </ErrorAlert>
+            {/if}
             <SettingsNote>
               <p><strong>{t('settings.security.serverConfiguration.autoTlsRequirements.title')}</strong></p>
               <ul class="list-disc list-inside mt-1">

@@ -179,16 +179,57 @@ func TestValidateSecuritySettings_TLSMode(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "TLSMode autotls with IP address host - should pass",
+			name: "TLSMode autotls with IP address - should fail",
 			security: Security{
 				Host:            "192.168.1.100",
 				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
-			wantErr: false,
+			wantErr: true,
+			errType: "security-autotls-hostname",
 		},
 		{
-			name: "TLSMode autotls with subdomain - should pass",
+			name: "TLSMode autotls with bare hostname - should fail",
+			security: Security{
+				Host:            "myserver",
+				TLSMode:         TLSModeAutoTLS,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-autotls-hostname",
+		},
+		{
+			name: "TLSMode autotls with localhost - should fail",
+			security: Security{
+				Host:            "localhost",
+				TLSMode:         TLSModeAutoTLS,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-autotls-hostname",
+		},
+		{
+			name: "TLSMode autotls with .local domain - should fail",
+			security: Security{
+				Host:            "birdnet.local",
+				TLSMode:         TLSModeAutoTLS,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-autotls-hostname",
+		},
+		{
+			name: "TLSMode autotls with .internal domain - should fail",
+			security: Security{
+				Host:            "birdnet.internal",
+				TLSMode:         TLSModeAutoTLS,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-autotls-hostname",
+		},
+		{
+			name: "TLSMode autotls with valid public domain - should pass",
 			security: Security{
 				Host:            "birdnet.home.arpa",
 				TLSMode:         TLSModeAutoTLS,

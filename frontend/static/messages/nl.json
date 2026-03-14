@@ -3107,7 +3107,12 @@
         "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
         "restartRequired": "TLS changes require a server restart to take effect.",
         "noCertificate": "No certificate installed",
-        "validity1825d": "5 years"
+        "validity1825d": "5 years",
+        "autoTLSHostRequired": "A hostname is required for Let’s Encrypt. Enter your public domain name in the Host field above.",
+        "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
+        "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
+        "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
+        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable)."
       }
     },
     "species": {
