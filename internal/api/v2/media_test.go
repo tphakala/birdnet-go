@@ -1336,17 +1336,26 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
 	require.NoError(t, err)
 
-	// Simulate the file appearing after a short delay (encoding completes)
+	// Simulate the file appearing after a short delay (encoding completes).
+	// Use an error channel to propagate failures from the background goroutine.
+	errChan := make(chan error, 1)
 	go func() {
 		time.Sleep(500 * time.Millisecond)
 		// Create the final audio file
 		createErr := createTestAudioFile(t, audioFilePath)
 		if createErr != nil {
-			t.Logf("Failed to create test audio file in goroutine: %v", createErr)
+			errChan <- createErr
+			return
 		}
 		// Remove the temp file to simulate FFmpeg completing
 		os.Remove(tempFilePath) //nolint:errcheck // best-effort cleanup in test
+		errChan <- nil
 	}()
+	t.Cleanup(func() {
+		if bgErr := <-errChan; bgErr != nil {
+			t.Errorf("Background goroutine failed: %v", bgErr)
+		}
+	})
 
 	// Make the request — should wait for the file and serve it
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)

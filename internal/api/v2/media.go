@@ -325,31 +325,34 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 // This reduces 503 responses by waiting server-side instead of requiring
 // the client to retry.
 func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool {
-	reqCtx := ctx.Request().Context()
-	deadline := time.After(audioWaitTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioWaitTimeout)
+	defer cancel()
+
 	ticker := time.NewTicker(audioWaitPollInterval)
 	defer ticker.Stop()
 
 	for {
+		// Check for the file before waiting. This avoids a race condition where
+		// the file appears after the last tick but before the timeout.
+		if _, err := c.SFS.StatRel(relClipPath); err == nil {
+			return true
+		}
+		// If the temp file is gone, encoding has finished or failed. Stop waiting.
+		if !c.isAudioBeingEncoded(relClipPath) {
+			return false
+		}
+
+		// Wait for the next event.
 		select {
-		case <-reqCtx.Done():
-			// Client disconnected
-			return false
-		case <-deadline:
-			// Timeout reached — check one last time whether encoding is still active.
-			// If the temp file is gone but the final file never appeared, the export
-			// may have failed; returning false lets the caller fall through to 404.
-			return false
-		case <-ticker.C:
-			// Check if the final file now exists
+		case <-waitCtx.Done():
+			// Timeout or client disconnect — final check in case file appeared
+			// between the last tick and the deadline.
 			if _, err := c.SFS.StatRel(relClipPath); err == nil {
 				return true
 			}
-			// If the temp file is gone, encoding either finished (and we missed it)
-			// or failed. Stop waiting.
-			if !c.isAudioBeingEncoded(relClipPath) {
-				return false
-			}
+			return false
+		case <-ticker.C:
+			// Loop to check again.
 		}
 	}
 }
