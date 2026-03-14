@@ -220,8 +220,15 @@
     }
 
     async function poll(): Promise<void> {
-      if (!connectionState.isOnline) return;
       if (!active.current) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API call but keep the polling loop alive
+        if (active.current) {
+          pollingTimeout = setTimeout(poll, POLLING_INTERVAL_MS);
+        }
+        return;
+      }
 
       try {
         const data = await api.get<ResourcesResponse>('/api/v2/system/resources');
@@ -403,8 +410,16 @@
   // Uses recursive setTimeout (like startPollingFallback) to avoid overlapping requests.
   function startSlowRefresh(active: { current: boolean }): void {
     async function tick(): Promise<void> {
-      if (!connectionState.isOnline) return;
       if (!active.current) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the refresh loop alive
+        if (active.current) {
+          slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
       if (active.current) {
         slowRefreshTimeout = setTimeout(tick, SLOW_REFRESH_INTERVAL_MS);

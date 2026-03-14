@@ -408,8 +408,16 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
-      if (!connectionState.isOnline) return;
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
@@ -431,8 +439,16 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
-      if (!connectionState.isOnline) return;
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API call but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await fetchBackupJobs();
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
@@ -458,8 +474,16 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
-      if (!connectionState.isOnline) return;
       if (cancelled) return;
+
+      if (!connectionState.isOnline) {
+        // Skip API calls but keep the polling loop alive
+        if (!cancelled) {
+          timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);
+        }
+        return;
+      }
+
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
       if (!cancelled) {
         timeoutId = setTimeout(poll, STATUS_POLL_INTERVAL_MS);

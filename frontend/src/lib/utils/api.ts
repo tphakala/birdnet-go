@@ -364,8 +364,9 @@ export async function fetchWithCSRF<T = unknown>(
       }
     }
 
-    const result = await handleResponse<T>(response);
+    // Any HTTP response (even 4xx/5xx) proves the backend is reachable
     markOnline();
+    const result = await handleResponse<T>(response);
     logger.debug(`Response from ${url} received successfully`);
     return result;
   } catch (error) {
