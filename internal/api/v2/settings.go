@@ -1769,7 +1769,7 @@ func webserverSettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	newSec := currentSettings.Security
 
 	if oldSec.Host != newSec.Host ||
-		oldSec.AutoTLS != newSec.AutoTLS ||
+		oldSec.AutoTLS != newSec.AutoTLS || //nolint:staticcheck // Intentional: backward-compatible migration
 		oldSec.RedirectToHTTPS != newSec.RedirectToHTTPS {
 		return true
 	}

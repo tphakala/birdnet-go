@@ -93,8 +93,8 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	cfg.Host = "" // Bind to all interfaces (0.0.0.0)
 
 	// TLS settings
-	cfg.AutoTLS = settings.Security.AutoTLS
-	cfg.TLSEnabled = settings.Security.AutoTLS // AutoTLS implies TLS enabled
+	cfg.AutoTLS = settings.Security.AutoTLS    //nolint:staticcheck // Intentional: backward-compatible migration
+	cfg.TLSEnabled = settings.Security.AutoTLS //nolint:staticcheck // Intentional: backward-compatible migration
 	cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
 
 	// Debug mode
