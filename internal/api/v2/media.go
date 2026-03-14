@@ -347,10 +347,8 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool
 		case <-waitCtx.Done():
 			// Timeout or client disconnect — final check in case file appeared
 			// between the last tick and the deadline.
-			if _, err := c.SFS.StatRel(relClipPath); err == nil {
-				return true
-			}
-			return false
+			_, err := c.SFS.StatRel(relClipPath)
+			return err == nil
 		case <-ticker.C:
 			// Loop to check again.
 		}
@@ -505,6 +503,11 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedClipPath); retryErr != nil {
 						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
 					}
+					c.logInfoIfEnabled("Successfully served audio clip by ID after waiting for encoding",
+						logger.String("note_id", noteID),
+						logger.String("path", ctx.Request().URL.Path),
+						logger.String("ip", ctx.RealIP()),
+					)
 					return nil
 				}
 				// Encoding still in progress after timeout — tell client to retry
