@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Wklej dowolny URL YouTube (watch, embed lub krótki link). Zostanie przekonwertowany na osadzenie z większą prywatnością.",
       "titleLabel": "Tytuł (opcjonalnie)",
-      "titlePlaceholder": "Karmnik na żywo"
+      "titlePlaceholder": "Wprowadź tytuł wideo (opcjonalnie)"
     },
     "editMode": {
       "editing": "Edycja pulpitu",

@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
       "titleLabel": "Title (optional)",
-      "titlePlaceholder": "Live Bird Feeder"
+      "titlePlaceholder": "Enter video title (optional)"
     },
     "editMode": {
       "editing": "Editing Dashboard",

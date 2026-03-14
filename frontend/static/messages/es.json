@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Pegue cualquier URL de YouTube (watch, embed o enlace corto). Se convertirá en una incrustación con privacidad mejorada.",
       "titleLabel": "Título (opcional)",
-      "titlePlaceholder": "Comedero de aves en vivo"
+      "titlePlaceholder": "Ingrese el título del video (opcional)"
     },
     "editMode": {
       "editing": "Editando panel",

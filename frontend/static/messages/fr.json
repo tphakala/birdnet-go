@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Collez n'importe quelle URL YouTube (watch, embed ou lien court). Elle sera convertie en intégration respectueuse de la vie privée.",
       "titleLabel": "Titre (optionnel)",
-      "titlePlaceholder": "Mangeoire à oiseaux en direct"
+      "titlePlaceholder": "Entrez le titre de la vidéo (facultatif)"
     },
     "editMode": {
       "editing": "Modification du tableau de bord",

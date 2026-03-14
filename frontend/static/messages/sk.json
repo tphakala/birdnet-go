@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Vložte akúkoľvek YouTube URL (watch, embed alebo krátky odkaz). Bude prevedená na vloženie s vylepšeným súkromím.",
       "titleLabel": "Názov (voliteľný)",
-      "titlePlaceholder": "Živé kŕmidlo pre vtáky"
+      "titlePlaceholder": "Zadajte názov videa (voliteľné)"
     },
     "editMode": {
       "editing": "Úprava panelu",

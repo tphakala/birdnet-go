@@ -676,7 +676,7 @@
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Cole qualquer URL do YouTube (watch, embed ou link curto). Será convertido em uma incorporação com privacidade aprimorada.",
       "titleLabel": "Título (opcional)",
-      "titlePlaceholder": "Comedouro de aves ao vivo"
+      "titlePlaceholder": "Digite o título do vídeo (opcional)"
     },
     "editMode": {
       "editing": "Editando painel",
