@@ -137,8 +137,7 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div class="relative" bind:this={dropdownRef}>
           <button
-            onclick={e => {
-              e.stopPropagation();
+            onclick={() => {
               settingsOpen = !settingsOpen;
             }}
             class={cn(
@@ -157,9 +156,7 @@
             <div
               class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
               onmousedown={e => e.stopPropagation()}
-              onclick={e => e.stopPropagation()}
               onkeydown={e => {
-                e.stopPropagation();
                 if (e.key === 'Escape') settingsOpen = false;
               }}
             >

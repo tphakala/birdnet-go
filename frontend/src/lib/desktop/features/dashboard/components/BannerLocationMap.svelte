@@ -5,7 +5,7 @@
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { Maximize2, X } from '@lucide/svelte';
   import { MAP_CONFIG, createMapStyle } from '$lib/desktop/features/settings/utils/mapConfig';
   import { t } from '$lib/i18n';
@@ -92,15 +92,21 @@
   });
 
   // Initialize expanded map when overlay opens.
+  // Use untrack() for prop reads — the expanded map is interactive, so it should
+  // be created once with current values and NOT destroyed/recreated when props change.
   $effect(() => {
-    const lng = longitude;
-    const lat = latitude;
-    const z = zoom;
-    const pin = showPin;
     if (!expanded || !expandedMapContainer || !maplibreModule) return;
 
-    expandedMap = new maplibreModule.Map({
-      container: expandedMapContainer,
+    const mod = maplibreModule;
+    const container = expandedMapContainer;
+
+    const lng = untrack(() => longitude);
+    const lat = untrack(() => latitude);
+    const z = untrack(() => zoom);
+    const pin = untrack(() => showPin);
+
+    expandedMap = new mod.Map({
+      container,
       style: createMapStyle(),
       center: [lng, lat],
       zoom: z,
@@ -109,7 +115,7 @@
     });
 
     if (pin) {
-      expandedMarker = new maplibreModule.Marker().setLngLat([lng, lat]).addTo(expandedMap);
+      expandedMarker = new mod.Marker().setLngLat([lng, lat]).addTo(expandedMap);
     }
 
     return () => {
