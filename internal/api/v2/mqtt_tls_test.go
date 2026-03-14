@@ -211,6 +211,25 @@ func TestUploadMQTTTLSCertificate_KeyWithoutCert(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
+// TestUploadMQTTTLSCertificate_InvalidPEM verifies that invalid PEM content
+// is rejected by TLSManager's validation.
+func TestUploadMQTTTLSCertificate_InvalidPEM(t *testing.T) {
+	e, controller, _ := setupTLSTestEnvironment(t)
+
+	invalidPEM := "not-valid-pem-content"
+	body, err := json.Marshal(MQTTTLSCertificateUpload{CACertificate: &invalidPEM})
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/tls/certificate", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err = controller.UploadMQTTTLSCertificate(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, rec.Code)
+}
+
 // TestUploadMQTTTLSCertificate_EmptyRequest verifies that an empty JSON object
 // (all nil pointer fields) returns 400.
 func TestUploadMQTTTLSCertificate_EmptyRequest(t *testing.T) {
