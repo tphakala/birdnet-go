@@ -207,6 +207,9 @@
   },
   "navigation": {
     "dashboard": "Dashboard",
+    "settingsMenu": "Settings menu",
+    "theme": "Theme",
+    "github": "GitHub",
     "detections": "Detections",
     "search": "Search",
     "analytics": "Analytics",
@@ -222,7 +225,6 @@
     "analyticsSubmenu": "Analytics submenu",
     "settingsSubmenu": "Settings submenu",
     "systemSubmenu": "System submenu",
-    "dashboardSubmenu": "Dashboard submenu",
     "systemTerminal": "Terminal"
   },
   "about": {

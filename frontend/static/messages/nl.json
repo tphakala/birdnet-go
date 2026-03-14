@@ -207,6 +207,9 @@
   },
   "navigation": {
     "dashboard": "Overzicht",
+    "settingsMenu": "Instellingenmenu",
+    "theme": "Thema",
+    "github": "GitHub",
     "detections": "Herkend",
     "search": "Zoeken",
     "analytics": "Statistiek",
@@ -222,7 +225,6 @@
     "analyticsSubmenu": "Statistiek submenu",
     "settingsSubmenu": "Instellingen submenu",
     "systemSubmenu": "Systeemmenu",
-    "dashboardSubmenu": "Dashboard submenu",
     "systemTerminal": "Terminal"
   },
   "about": {
