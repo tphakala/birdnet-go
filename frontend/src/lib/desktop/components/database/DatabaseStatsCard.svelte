@@ -17,6 +17,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
   import { getCsrfToken } from '$lib/utils/api';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytes } from '$lib/utils/formatters';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { Database, Download, X } from '@lucide/svelte';
@@ -184,6 +185,7 @@
 
   // Poll for job status
   async function pollJobStatus() {
+    if (!connectionState.isOnline) return;
     if (!backupJobId) {
       stopPolling();
       return;

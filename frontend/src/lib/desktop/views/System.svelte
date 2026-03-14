@@ -16,6 +16,7 @@
     type TemperatureUnit,
   } from '$lib/utils/formatters';
   import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
 
   const logger = loggers.ui;
 
@@ -219,6 +220,7 @@
     }
 
     async function poll(): Promise<void> {
+      if (!connectionState.isOnline) return;
       if (!active.current) return;
 
       try {
@@ -401,6 +403,7 @@
   // Uses recursive setTimeout (like startPollingFallback) to avoid overlapping requests.
   function startSlowRefresh(active: { current: boolean }): void {
     async function tick(): Promise<void> {
+      if (!connectionState.isOnline) return;
       if (!active.current) return;
       await Promise.all([loadSystemInfo(), loadDiskUsage(), loadProcesses()]);
       if (active.current) {

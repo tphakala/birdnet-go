@@ -16,6 +16,7 @@
 <script lang="ts">
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
   import DatabaseStatsCard from './DatabaseStatsCard.svelte';
   import MigrationControlCard from './MigrationControlCard.svelte';
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
@@ -244,6 +245,7 @@
 
     // Start polling when migration is active
     const interval = setInterval(() => {
+      if (!connectionState.isOnline) return;
       fetchMigrationStatus();
       fetchV2Stats(); // Also refresh v2 stats to show growing detection count
     }, STATUS_POLL_INTERVAL_MS);
@@ -272,6 +274,7 @@
     if (!isCleanupActive) return;
 
     const interval = setInterval(() => {
+      if (!connectionState.isOnline) return;
       fetchMigrationStatus();
       fetchLegacyStatus();
     }, STATUS_POLL_INTERVAL_MS);

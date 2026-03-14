@@ -3,6 +3,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import ReconnectingEventSource from 'reconnecting-eventsource';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
   import type { DatabaseOverviewResponse } from '$lib/types/database';
   import type { MigrationStatus, ApiState, PrerequisitesResponse } from '$lib/types/migration';
   import type { LegacyStatus } from '$lib/types/legacy';
@@ -89,6 +90,7 @@
 
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
+    if (!connectionState.isOnline) return;
     try {
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
@@ -406,6 +408,7 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      if (!connectionState.isOnline) return;
       if (cancelled) return;
       await Promise.all([fetchMigrationStatus(), fetchV2Stats()]);
       if (!cancelled) {
@@ -428,6 +431,7 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      if (!connectionState.isOnline) return;
       if (cancelled) return;
       await fetchBackupJobs();
       if (!cancelled) {
@@ -454,6 +458,7 @@
     let cancelled = false;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     async function poll() {
+      if (!connectionState.isOnline) return;
       if (cancelled) return;
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
       if (!cancelled) {
