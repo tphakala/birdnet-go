@@ -130,4 +130,9 @@ func TestMarkNotificationAcknowledged_NotFound(t *testing.T) {
 	require.NoError(t, err, "handler should return nil and write error to response")
 
 	assert.Equal(t, http.StatusNotFound, rec.Code, "expected 404 for missing notification")
+
+	var body map[string]any
+	err = json.Unmarshal(rec.Body.Bytes(), &body)
+	require.NoError(t, err)
+	assert.Contains(t, body["message"], "Notification not found")
 }
