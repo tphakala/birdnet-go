@@ -411,6 +411,10 @@
         "failedTitle": "Vyčistenie starej databázy zlyhalo",
         "failedMessage": "Nepodarilo sa odstrániť starú databázu. Skontrolujte záznamy pre podrobnosti."
       },
+      "buffer": {
+        "overloadTitle": "Analýza zvuku preťažená",
+        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek, pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktuálna hodnota: {value}% (prahová hodnota: {threshold}%)",

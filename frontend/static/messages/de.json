@@ -411,6 +411,10 @@
         "failedTitle": "Bereinigung der alten Datenbank fehlgeschlagen",
         "failedMessage": "Alte Datenbank konnte nicht entfernt werden. Überprüfen Sie die Protokolle für Details."
       },
+      "buffer": {
+        "overloadTitle": "Audioanalyse überlastet",
+        "overloadMessage": "Ihr System verwirft {dropRate} % der Audioaufnahmen, da es mit der Analyse nicht Schritt halten kann. Reduzieren Sie den BirdNET-Überlappungswert in den Erkennungseinstellungen oder erwägen Sie ein Upgrade auf eine schnellere CPU."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
