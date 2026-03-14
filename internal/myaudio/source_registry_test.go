@@ -4,6 +4,7 @@ package myaudio
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -213,6 +214,62 @@ func TestBackwardCompatibility(t *testing.T) {
 	source2 := registry.GetOrCreateSource(testURL, SourceTypeRTSP)
 	require.NotNil(t, source2)
 	assert.Equal(t, source.ID, source2.ID, "GetOrCreateSource should be idempotent")
+}
+
+func TestGetOrCreateSourceUpdatesDisplayName(t *testing.T) {
+	registry := newTestRegistry()
+
+	// Create a source initially (no display name provided)
+	source1 := registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP)
+	require.NotNil(t, source1)
+	originalName := source1.DisplayName
+
+	// Calling with a display name should update it
+	source2 := registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP, "Front Yard Camera")
+	require.NotNil(t, source2)
+	assert.Equal(t, source1.ID, source2.ID, "Should return same source")
+	assert.Equal(t, "Front Yard Camera", source2.DisplayName, "DisplayName should be updated")
+
+	// Calling without display name should NOT reset it
+	source3 := registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP)
+	require.NotNil(t, source3)
+	assert.Equal(t, "Front Yard Camera", source3.DisplayName, "DisplayName should persist when not provided")
+
+	// Calling with empty string should NOT reset it
+	source4 := registry.GetOrCreateSource("rtsp://cam1.local/stream", SourceTypeRTSP, "")
+	require.NotNil(t, source4)
+	assert.Equal(t, "Front Yard Camera", source4.DisplayName, "Empty display name should not reset existing name")
+
+	// Verify the original auto-generated name was different
+	assert.NotEqual(t, "Front Yard Camera", originalName, "Original auto-generated name should differ from update")
+}
+
+func TestGetOrCreateSourceConcurrentDisplayNameUpdate(t *testing.T) {
+	registry := newTestRegistry()
+	url := "rtsp://concurrent-rename.test/stream"
+
+	// Create the source first
+	source := registry.GetOrCreateSource(url, SourceTypeRTSP)
+	require.NotNil(t, source)
+
+	// Concurrently update display name from multiple goroutines
+	var wg sync.WaitGroup
+	expectedNames := make([]string, 0, 10)
+	for i := range 10 {
+		name := fmt.Sprintf("Name-%d", i)
+		expectedNames = append(expectedNames, name)
+		wg.Go(func() {
+			registry.GetOrCreateSource(url, SourceTypeRTSP, name)
+		})
+	}
+	wg.Wait()
+
+	// Final name should be one of the exact names written by goroutines
+	result, exists := registry.GetSourceByConnection(url)
+	require.True(t, exists)
+	assert.Equal(t, source.ID, result.ID, "Concurrent updates should keep the original source entry")
+	assert.Contains(t, expectedNames, result.DisplayName, "DisplayName should be one of the concurrent updates")
+	assert.Len(t, registry.ListSources(), 1, "Concurrent updates should not create duplicate sources")
 }
 
 func TestSourceMetricsUpdate(t *testing.T) {

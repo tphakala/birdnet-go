@@ -666,7 +666,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 		// Get or create the stream source in the registry
 		registry := myaudio.GetRegistry()
-		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type))
+		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name)
 		if audioSource == nil {
 			errs = append(errs, errors.Newf("failed to get/create stream source").
 				Component("realtime-analysis").
