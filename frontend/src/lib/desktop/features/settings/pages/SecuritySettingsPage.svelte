@@ -44,7 +44,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
-  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, AlertTriangle } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw, AlertTriangle, Download } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -965,7 +965,15 @@
                 </ErrorAlert>
               {/if}
 
-              <div class="mt-3 flex gap-2">
+              <div class="mt-3 flex gap-2 flex-wrap">
+                <a
+                  href="/api/v2/tls/certificate/download"
+                  download="birdnet-go.crt"
+                  class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] hover:bg-[var(--color-base-300)] cursor-pointer transition-all no-underline text-[var(--color-base-content)]"
+                >
+                  <Download class="w-3 h-3" />
+                  {t('settings.security.tls.downloadCertificate')}
+                </a>
                 {#if settings.tlsMode === 'selfsigned'}
                   <button
                     type="button"

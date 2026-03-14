@@ -62,6 +62,7 @@ func (c *Controller) initTLSRoutes() {
 	tlsGroup.POST("/certificate", c.UploadTLSCertificate)
 	tlsGroup.DELETE("/certificate", c.DeleteTLSCertificate)
 	tlsGroup.POST("/certificate/generate", c.GenerateSelfSignedCertificate)
+	tlsGroup.GET("/certificate/download", c.DownloadTLSCertificate)
 
 	c.logInfoIfEnabled("TLS routes initialized successfully")
 }
@@ -252,6 +253,23 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 	info.Mode = string(conf.TLSModeSelfSigned)
 
 	return ctx.JSON(http.StatusOK, info)
+}
+
+// DownloadTLSCertificate handles GET /api/v2/tls/certificate/download.
+// Serves the installed server certificate as a downloadable PEM file.
+// Users can install this in their OS trust store to avoid browser warnings
+// when using self-signed certificates.
+func (c *Controller) DownloadTLSCertificate(ctx echo.Context) error {
+	tlsMgr := conf.GetTLSManager()
+	if !tlsMgr.CertificateExists(tlsServiceName, conf.TLSCertTypeServerCert) {
+		return c.HandleError(ctx, nil, "No certificate installed", http.StatusNotFound)
+	}
+
+	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
+
+	ctx.Response().Header().Set("Content-Disposition", `attachment; filename="birdnet-go.crt"`)
+
+	return ctx.File(certPath)
 }
 
 // parseCertificateInfo reads a PEM certificate file and extracts its metadata.

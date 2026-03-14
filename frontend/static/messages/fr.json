@@ -3112,7 +3112,9 @@
         "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
         "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
         "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
-        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable)."
+        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
+        "downloadCertificate": "Download Certificate",
+        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings."
       }
     },
     "species": {

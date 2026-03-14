@@ -263,6 +263,39 @@ func TestTLSGenerateSelfSignedCertificate_DefaultValidity(t *testing.T) {
 	assert.Greater(t, info.DaysUntilExpiry, 360)
 }
 
+func TestTLSDownloadCertificate(t *testing.T) {
+	e, controller, tlsMgr := setupTLSTestEnvironment(t)
+
+	// Save a test certificate
+	certPEM, keyPEM := generateTestCertKeyPair(t)
+	_, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerCert, certPEM)
+	require.NoError(t, err)
+	_, err = tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerKey, keyPEM)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/tls/certificate/download", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err = controller.DownloadTLSCertificate(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Contains(t, rec.Header().Get("Content-Disposition"), "birdnet-go.crt")
+	assert.Contains(t, rec.Body.String(), "BEGIN CERTIFICATE")
+}
+
+func TestTLSDownloadCertificate_NoCert(t *testing.T) {
+	e, controller, _ := setupTLSTestEnvironment(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/tls/certificate/download", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.DownloadTLSCertificate(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+}
+
 func TestTLSRouteRegistration(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 
@@ -273,6 +306,7 @@ func TestTLSRouteRegistration(t *testing.T) {
 		"POST /api/v2/tls/certificate",
 		"DELETE /api/v2/tls/certificate",
 		"POST /api/v2/tls/certificate/generate",
+		"GET /api/v2/tls/certificate/download",
 	}
 	assertRoutesRegistered(t, e, expectedRoutes)
 }
