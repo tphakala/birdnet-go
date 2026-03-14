@@ -280,35 +280,54 @@
     eventListeners.push({ element, event, handler });
   };
 
-  // Minimum drag distance (pixels) to distinguish click from drag
-  const MIN_DRAG_DISTANCE = 5;
+  // Selection interaction constants
+  const MIN_DRAG_DISTANCE = 5; // Pixels — distinguishes click from drag
+  const MOUSE_HANDLE_THRESHOLD = 8; // Pixels — snap zone for mouse handle grab
+  const TOUCH_HANDLE_THRESHOLD = 16; // Pixels — larger snap zone for touch
+  const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
+  const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
+
+  // Check if a pointer X position is near a selection handle, returning which handle
+  const detectHandleGrab = (clientX: number, thresholdPx: number): 'start' | 'end' | null => {
+    if (selectionStartSec === null || selectionEndSec === null) return null;
+    const rect = playerContainer.getBoundingClientRect();
+    const startPx = (timeToPercent(selectionStartSec) / 100) * rect.width + rect.left;
+    const endPx = (timeToPercent(selectionEndSec) / 100) * rect.width + rect.left;
+
+    if (Math.abs(clientX - startPx) < thresholdPx) return 'start';
+    if (Math.abs(clientX - endPx) < thresholdPx) return 'end';
+    return null;
+  };
+
+  // Normalize selection so start < end, and clear if too short
+  const normalizeSelection = () => {
+    if (selectionStartSec === null || selectionEndSec === null) return;
+    if (selectionStartSec > selectionEndSec) {
+      const temp = selectionStartSec;
+      selectionStartSec = selectionEndSec;
+      selectionEndSec = temp;
+    }
+    if (selectionEndSec - selectionStartSec < MIN_SELECTION_DURATION) {
+      clearSelection();
+    }
+  };
 
   const handleSelectionMouseDown = (e: MouseEvent) => {
     if (!enableClipExtraction || duration <= 0) return;
     if (e.button !== 0) return;
 
     dragOriginX = e.clientX;
-    const clickTime = xToTime(e.clientX);
 
     // Check if clicking near an existing handle
-    if (selectionStartSec !== null && selectionEndSec !== null) {
-      const rect = playerContainer.getBoundingClientRect();
-      const startPx = (timeToPercent(selectionStartSec) / 100) * rect.width + rect.left;
-      const endPx = (timeToPercent(selectionEndSec) / 100) * rect.width + rect.left;
-      const handleThreshold = 8;
-
-      if (Math.abs(e.clientX - startPx) < handleThreshold) {
-        draggingHandle = 'start';
-        e.preventDefault();
-        return;
-      }
-      if (Math.abs(e.clientX - endPx) < handleThreshold) {
-        draggingHandle = 'end';
-        e.preventDefault();
-        return;
-      }
+    const handle = detectHandleGrab(e.clientX, MOUSE_HANDLE_THRESHOLD);
+    if (handle) {
+      draggingHandle = handle;
+      e.preventDefault();
+      return;
     }
 
+    // Start new selection
+    const clickTime = xToTime(e.clientX);
     isDragSelecting = true;
     selectionStartSec = clickTime;
     selectionEndSec = clickTime;
@@ -321,9 +340,9 @@
     if (draggingHandle) {
       const newTime = xToTime(e.clientX);
       if (draggingHandle === 'start' && selectionEndSec !== null) {
-        selectionStartSec = Math.min(newTime, selectionEndSec - 0.05);
+        selectionStartSec = Math.min(newTime, selectionEndSec - MIN_SELECTION_DURATION);
       } else if (draggingHandle === 'end' && selectionStartSec !== null) {
-        selectionEndSec = Math.max(newTime, selectionStartSec + 0.05);
+        selectionEndSec = Math.max(newTime, selectionStartSec + MIN_SELECTION_DURATION);
       }
       e.preventDefault();
       return;
@@ -352,15 +371,7 @@
         return;
       }
 
-      if (
-        selectionStartSec !== null &&
-        selectionEndSec !== null &&
-        selectionStartSec > selectionEndSec
-      ) {
-        const temp = selectionStartSec;
-        selectionStartSec = selectionEndSec;
-        selectionEndSec = temp;
-      }
+      normalizeSelection();
     }
   };
 
@@ -378,26 +389,17 @@
 
     const touch = e.touches[0];
     dragOriginX = touch.clientX;
-    const clickTime = xToTime(touch.clientX);
 
-    if (selectionStartSec !== null && selectionEndSec !== null) {
-      const rect = playerContainer.getBoundingClientRect();
-      const startPx = (timeToPercent(selectionStartSec) / 100) * rect.width + rect.left;
-      const endPx = (timeToPercent(selectionEndSec) / 100) * rect.width + rect.left;
-      const handleThreshold = 16;
-
-      if (Math.abs(touch.clientX - startPx) < handleThreshold) {
-        draggingHandle = 'start';
-        e.preventDefault();
-        return;
-      }
-      if (Math.abs(touch.clientX - endPx) < handleThreshold) {
-        draggingHandle = 'end';
-        e.preventDefault();
-        return;
-      }
+    // Check if touching near an existing handle
+    const handle = detectHandleGrab(touch.clientX, TOUCH_HANDLE_THRESHOLD);
+    if (handle) {
+      draggingHandle = handle;
+      e.preventDefault();
+      return;
     }
 
+    // Start new selection
+    const clickTime = xToTime(touch.clientX);
     isDragSelecting = true;
     selectionStartSec = clickTime;
     selectionEndSec = clickTime;
@@ -411,9 +413,9 @@
     if (draggingHandle) {
       const newTime = xToTime(touch.clientX);
       if (draggingHandle === 'start' && selectionEndSec !== null) {
-        selectionStartSec = Math.min(newTime, selectionEndSec - 0.05);
+        selectionStartSec = Math.min(newTime, selectionEndSec - MIN_SELECTION_DURATION);
       } else if (draggingHandle === 'end' && selectionStartSec !== null) {
-        selectionEndSec = Math.max(newTime, selectionStartSec + 0.05);
+        selectionEndSec = Math.max(newTime, selectionStartSec + MIN_SELECTION_DURATION);
       }
       e.preventDefault();
       return;
@@ -436,22 +438,7 @@
 
     if (isDragSelecting) {
       isDragSelecting = false;
-      if (
-        selectionStartSec !== null &&
-        selectionEndSec !== null &&
-        selectionStartSec > selectionEndSec
-      ) {
-        const temp = selectionStartSec;
-        selectionStartSec = selectionEndSec;
-        selectionEndSec = temp;
-      }
-      if (
-        selectionStartSec !== null &&
-        selectionEndSec !== null &&
-        selectionEndSec - selectionStartSec < 0.05
-      ) {
-        clearSelection();
-      }
+      normalizeSelection();
     }
   };
 
@@ -1499,13 +1486,16 @@
         aria-valuenow={Math.min(selectionStartSec, selectionEndSec)}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'ArrowLeft' && selectionStartSec !== null) {
-            selectionStartSec = Math.max(0, selectionStartSec - 0.1);
+            selectionStartSec = Math.max(0, selectionStartSec - ARROW_KEY_STEP);
           } else if (
             e.key === 'ArrowRight' &&
             selectionStartSec !== null &&
             selectionEndSec !== null
           ) {
-            selectionStartSec = Math.min(selectionStartSec + 0.1, selectionEndSec - 0.05);
+            selectionStartSec = Math.min(
+              selectionStartSec + ARROW_KEY_STEP,
+              selectionEndSec - MIN_SELECTION_DURATION
+            );
           }
         }}
       ></div>
@@ -1522,13 +1512,16 @@
         aria-valuenow={Math.max(selectionStartSec, selectionEndSec)}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'ArrowRight' && selectionEndSec !== null) {
-            selectionEndSec = Math.min(duration, selectionEndSec + 0.1);
+            selectionEndSec = Math.min(duration, selectionEndSec + ARROW_KEY_STEP);
           } else if (
             e.key === 'ArrowLeft' &&
             selectionEndSec !== null &&
             selectionStartSec !== null
           ) {
-            selectionEndSec = Math.max(selectionEndSec - 0.1, selectionStartSec + 0.05);
+            selectionEndSec = Math.max(
+              selectionEndSec - ARROW_KEY_STEP,
+              selectionStartSec + MIN_SELECTION_DURATION
+            );
           }
         }}
       ></div>

@@ -431,6 +431,10 @@ func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Controller, string) {
 	// (though SecureFS should make this less necessary)
 	controller.Settings.Realtime.Audio.Export.Path = tempDir
 
+	// Inject passthrough auth middleware so authenticated routes (e.g. clip extraction)
+	// can be registered and tested without a real auth service
+	WithAuthMiddleware(passthroughMiddleware())(controller)
+
 	// Initialize media routes on the controller instance that has the correct SFS
 	controller.initMediaRoutes()
 

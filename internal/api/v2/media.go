@@ -158,11 +158,7 @@ func (c *Controller) initMediaRoutes() {
 	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID)
 
 	// Clip extraction (requires authentication)
-	if c.authMiddleware != nil {
-		c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.authMiddleware)
-	} else {
-		c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID)
-	}
+	c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.authMiddleware)
 
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
