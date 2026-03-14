@@ -671,7 +671,8 @@
       "showWeather": "Afficher la météo actuelle",
       "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)",
       "mapZoom": "Zoom de la carte",
-      "showPin": "Afficher le marqueur de position"
+      "showPin": "Afficher le marqueur de position",
+      "mapExpandable": "Autoriser l'agrandissement de la carte"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",

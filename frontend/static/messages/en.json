@@ -671,7 +671,8 @@
       "showWeather": "Show current weather",
       "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
       "mapZoom": "Map zoom",
-      "showPin": "Show location pin"
+      "showPin": "Show location pin",
+      "mapExpandable": "Allow map expansion"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",

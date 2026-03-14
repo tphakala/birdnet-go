@@ -103,6 +103,7 @@
                 {longitude}
                 zoom={config.mapZoom}
                 showPin={config.showPin}
+                expandable={config.mapExpandable}
                 className="h-40"
               />
             </div>
@@ -153,6 +154,7 @@
                 {longitude}
                 zoom={config.mapZoom}
                 showPin={config.showPin}
+                expandable={config.mapExpandable}
                 className="h-40"
               />
             </div>

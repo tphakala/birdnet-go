@@ -671,7 +671,8 @@
       "showWeather": "Mostrar clima actual",
       "showWeatherHelp": "Muestra las condiciones climáticas actuales (requiere que la integración del clima esté habilitada)",
       "mapZoom": "Zoom del mapa",
-      "showPin": "Mostrar marcador de ubicación"
+      "showPin": "Mostrar marcador de ubicación",
+      "mapExpandable": "Permitir expansión del mapa"
     },
     "videoEmbed": {
       "youtubeUrl": "URL de YouTube",

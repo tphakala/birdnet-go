@@ -671,7 +671,8 @@
       "showWeather": "Aktuelles Wetter anzeigen",
       "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)",
       "mapZoom": "Kartenzoom",
-      "showPin": "Standortnadel anzeigen"
+      "showPin": "Standortnadel anzeigen",
+      "mapExpandable": "Kartenvergrößerung erlauben"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",

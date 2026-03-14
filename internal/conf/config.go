@@ -172,14 +172,15 @@ type DashboardElement struct {
 
 // BannerConfig holds configuration for the dashboard banner element.
 type BannerConfig struct {
-	ShowImage       bool   `json:"showImage"`         // whether to show a custom image
-	ImagePath       string `json:"imagePath"`         // relative path or URL to the banner image
-	Title           string `json:"title"`             // station name or custom title
-	Description     string `json:"description"`       // brief description text
-	ShowLocationMap bool   `json:"showLocationMap"`   // whether to show the location map
-	ShowWeather     bool   `json:"showWeather"`       // whether to show weather conditions
-	MapZoom         int    `json:"mapZoom,omitempty"` // zoom level for the location map (default 11)
-	ShowPin         *bool  `json:"showPin,omitzero"`  // whether to show the location pin marker (default true)
+	ShowImage       bool   `json:"showImage"`              // whether to show a custom image
+	ImagePath       string `json:"imagePath"`              // relative path or URL to the banner image
+	Title           string `json:"title"`                  // station name or custom title
+	Description     string `json:"description"`            // brief description text
+	ShowLocationMap bool   `json:"showLocationMap"`        // whether to show the location map
+	ShowWeather     bool   `json:"showWeather"`            // whether to show weather conditions
+	MapZoom         int    `json:"mapZoom,omitempty"`      // zoom level for the location map (default 11)
+	ShowPin         *bool  `json:"showPin,omitzero"`       // whether to show the location pin marker (default true)
+	MapExpandable   *bool  `json:"mapExpandable,omitzero"` // whether visitors can expand the map (default true)
 }
 
 // VideoEmbedConfig holds configuration for the YouTube video embed element.

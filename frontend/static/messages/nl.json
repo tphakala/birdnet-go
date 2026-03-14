@@ -671,7 +671,8 @@
       "showWeather": "Huidig weer tonen",
       "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)",
       "mapZoom": "Kaartzoom",
-      "showPin": "Locatiemarkering tonen"
+      "showPin": "Locatiemarkering tonen",
+      "mapExpandable": "Kaart vergroten toestaan"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",

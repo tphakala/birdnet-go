@@ -540,6 +540,7 @@ export interface BannerConfig {
   showWeather: boolean;
   mapZoom?: number;
   showPin?: boolean;
+  mapExpandable?: boolean;
 }
 
 // Video embed element configuration

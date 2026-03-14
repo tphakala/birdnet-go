@@ -671,7 +671,8 @@
       "showWeather": "Pokaż aktualną pogodę",
       "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)",
       "mapZoom": "Powiększenie mapy",
-      "showPin": "Pokaż znacznik lokalizacji"
+      "showPin": "Pokaż znacznik lokalizacji",
+      "mapExpandable": "Zezwól na powiększanie mapy"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",

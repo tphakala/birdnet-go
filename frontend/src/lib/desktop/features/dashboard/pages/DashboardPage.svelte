@@ -71,7 +71,7 @@ Performance Optimizations:
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
-  import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn } from '@lucide/svelte';
+  import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn, Maximize2 } from '@lucide/svelte';
 
   const logger = getLogger('app');
 
@@ -1367,6 +1367,27 @@ Performance Optimizations:
               >
                 <MapPin class="size-4" />
                 {t('dashboard.banner.showPin')}
+              </button>
+
+              <!-- Expandable toggle -->
+              <button
+                onclick={() =>
+                  onUpdate({
+                    ...element,
+                    banner: {
+                      ...bannerConfig,
+                      mapExpandable: !(bannerConfig.mapExpandable ?? true),
+                    },
+                  })}
+                class={cn(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                  (bannerConfig.mapExpandable ?? true)
+                    ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+                )}
+              >
+                <Maximize2 class="size-4" />
+                {t('dashboard.banner.mapExpandable')}
               </button>
             {/if}
           {/if}

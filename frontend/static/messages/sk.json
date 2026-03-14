@@ -671,7 +671,8 @@
       "showWeather": "Zobraziť aktuálne počasie",
       "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)",
       "mapZoom": "Priblíženie mapy",
-      "showPin": "Zobraziť značku polohy"
+      "showPin": "Zobraziť značku polohy",
+      "mapExpandable": "Povoliť zväčšenie mapy"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",
