@@ -583,9 +583,10 @@ func ProcessSoundLevelData(source string, audioData []byte) (*SoundLevelData, er
 	soundLevelProcessorMutex.RUnlock()
 
 	if !exists {
-		return nil, errors.New(ErrSoundLevelProcessorNotRegistered).
-			Context("source", source).
-			Build()
+		// Return the sentinel error directly without Build() to avoid triggering
+		// Sentry telemetry. This is an expected condition during startup race or
+		// hot-reload windows, not a real error (issue #2249).
+		return nil, fmt.Errorf("%w: source=%s", ErrSoundLevelProcessorNotRegistered, source)
 	}
 
 	return processor.ProcessAudioData(audioData)
