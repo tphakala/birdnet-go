@@ -108,11 +108,14 @@
     { value: '1825d', label: t('settings.security.tls.validity1825d') },
   ];
 
-  // Load certificate info on mount and when TLS mode changes
+  // Load certificate info when TLS mode is manual/selfsigned, clear when switching away
   $effect(() => {
     const mode = settings?.tlsMode;
     if (mode === 'manual' || mode === 'selfsigned') {
       loadCertInfo();
+    } else {
+      certInfo = null;
+      certError = null;
     }
   });
 
