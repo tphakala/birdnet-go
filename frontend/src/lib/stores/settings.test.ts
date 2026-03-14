@@ -65,6 +65,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
+      restartRequired: false,
     });
   });
 
@@ -279,6 +280,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
+      restartRequired: false,
     });
   });
 

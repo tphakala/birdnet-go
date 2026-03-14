@@ -69,6 +69,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
+      restartRequired: false,
     });
   });
 

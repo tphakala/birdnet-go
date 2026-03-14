@@ -513,6 +513,7 @@ func (c *Controller) initRoutes() {
 		{"dynamic threshold routes", c.initDynamicThresholdRoutes},
 		{"alert routes", c.initAlertRoutes},
 		{"insights routes", c.initInsightsRoutes},
+		{"tls routes", c.initTLSRoutes},
 	}
 
 	for _, initializer := range routeInitializers {

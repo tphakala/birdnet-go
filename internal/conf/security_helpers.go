@@ -22,7 +22,7 @@ const (
 // GetBaseURL returns the base URL for notifications and OAuth redirects.
 // Priority order:
 //  1. BaseURL field (if set, used as-is with trailing slash trimmed)
-//  2. Constructed from Host + port + AutoTLS scheme
+//  2. Constructed from Host + port + TLSMode scheme
 //  3. Empty string if no host is available
 //
 // This method does NOT fall back to localhost - callers should handle empty returns.
@@ -32,7 +32,7 @@ func (s *Security) GetBaseURL(port string) string {
 		return baseURL
 	}
 
-	// Priority 2: Construct from Host + port + AutoTLS
+	// Priority 2: Construct from Host + port + TLSMode
 	if s.Host == "" {
 		return ""
 	}
@@ -40,11 +40,11 @@ func (s *Security) GetBaseURL(port string) string {
 	return s.buildURLFromHost(port)
 }
 
-// buildURLFromHost constructs a URL from Host, port, and AutoTLS settings.
+// buildURLFromHost constructs a URL from Host, port, and TLSMode settings.
 // Default ports (80 for HTTP, 443 for HTTPS) are omitted for cleaner URLs.
 func (s *Security) buildURLFromHost(port string) string {
 	scheme := SchemeHTTP
-	if s.AutoTLS {
+	if s.TLSMode != TLSModeNone {
 		scheme = SchemeHTTPS
 	}
 

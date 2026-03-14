@@ -1129,6 +1129,20 @@ type OAuthProviderConfig struct {
 	UserID       string `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
 }
 
+// TLSMode represents the TLS certificate management mode.
+type TLSMode string
+
+const (
+	// TLSModeNone disables TLS certificate management.
+	TLSModeNone TLSMode = ""
+	// TLSModeAutoTLS enables automatic TLS via Let's Encrypt.
+	TLSModeAutoTLS TLSMode = "autotls"
+	// TLSModeManual uses user-provided TLS certificates.
+	TLSModeManual TLSMode = "manual"
+	// TLSModeSelfSigned generates self-signed TLS certificates.
+	TLSModeSelfSigned TLSMode = "selfsigned"
+)
+
 // SecurityConfig handles all security-related settings and validations
 // for the application, including authentication, TLS, and access control.
 type Security struct {
@@ -1150,13 +1164,25 @@ type Security struct {
 	// Can be overridden with BIRDNET_HOST environment variable.
 	Host string `json:"host"`
 
-	// AutoTLS enables automatic TLS certificate management using
-	// Let's Encrypt. Requires Host to be set and port 80/443 access.
-	AutoTLS bool `json:"autoTls"`
+	// Deprecated: AutoTLS is replaced by TLSMode. Kept for backward-compatible
+	// config migration. Will be removed in a future version.
+	AutoTLS bool `yaml:"autoTls,omitempty" json:"autoTls,omitempty"` //nolint:modernize // Deprecated: use TLSMode
 
-	RedirectToHTTPS   bool              `json:"redirectToHttps"`   // true to redirect to HTTPS
-	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"` // subnet bypass configuration
-	BasicAuth         BasicAuth         `json:"basicAuth"`         // password authentication configuration
+	// TLSMode controls TLS certificate management. Valid values:
+	//   "" (none)      - TLS disabled
+	//   "autotls"      - automatic via Let's Encrypt
+	//   "manual"       - user-provided certificates
+	//   "selfsigned"   - auto-generated self-signed certificates
+	TLSMode TLSMode `yaml:"tlsMode" json:"tlsMode"`
+
+	// SelfSignedValidity is the validity duration for self-signed certificates.
+	// Uses Go duration format with day/month suffixes (e.g., "365d", "1y").
+	SelfSignedValidity string `yaml:"selfSignedValidity" json:"selfSignedValidity"`
+
+	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"` // port for HTTPS (default: 8443)
+	RedirectToHTTPS   bool              `json:"redirectToHttps"`        // true to redirect to HTTPS
+	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"`      // subnet bypass configuration
+	BasicAuth         BasicAuth         `json:"basicAuth"`              // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
 	// This is the preferred format for configuring OAuth providers.
@@ -1422,6 +1448,8 @@ var (
 )
 
 // Load reads the configuration file and environment variables into GlobalConfig.
+//
+//nolint:gocognit // Config loading is inherently complex; splitting adds indirection without clarity.
 func Load() (*Settings, error) {
 	settingsMutex.Lock()
 	defer settingsMutex.Unlock()
@@ -1450,6 +1478,18 @@ func Load() (*Settings, error) {
 	// to match the lowercase species names used in detection lookup (fixes #1701)
 	if settings.Realtime.Species.Config != nil {
 		settings.Realtime.Species.Config = NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+	}
+
+	// Migrate legacy AutoTLS boolean to new TLSMode field
+	if settings.MigrateTLSConfig() {
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				GetLogger().Warn("Failed to save migrated TLS config", logger.Error(err))
+			} else {
+				GetLogger().Info("Saved migrated TLS configuration", logger.String("path", configFile))
+			}
+		}
 	}
 
 	// Migrate legacy OAuth configuration to new array format
@@ -1698,6 +1738,24 @@ func migrateLegacyProvider(providerName string, legacy SocialProvider) *OAuthPro
 		RedirectURI:  legacy.RedirectURI,
 		UserID:       legacy.UserId,
 	}
+}
+
+// MigrateTLSConfig migrates the legacy AutoTLS boolean to the new TLSMode field.
+// If TLSMode is already set, migration is skipped (already migrated or user has
+// explicitly configured the new field). Returns true if migration occurred.
+func (s *Settings) MigrateTLSConfig() bool {
+	// Skip if TLSMode is already set (already migrated or explicitly configured)
+	if s.Security.TLSMode != TLSModeNone {
+		return false
+	}
+
+	// Migrate AutoTLS=true to TLSMode="autotls"
+	if s.Security.AutoTLS {
+		s.Security.TLSMode = TLSModeAutoTLS
+		return true
+	}
+
+	return false
 }
 
 // MigrateOAuthConfig migrates legacy OAuth configuration (GoogleAuth, GithubAuth, MicrosoftAuth)

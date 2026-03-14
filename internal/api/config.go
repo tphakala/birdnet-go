@@ -40,6 +40,7 @@ type Config struct {
 	AutoTLS     bool   // Use Let's Encrypt automatic TLS
 	TLSCertFile string // Path to TLS certificate file (manual TLS)
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
+	TLSPort     string // Port for HTTPS (when using manual/self-signed TLS)
 
 	// Security settings
 	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
@@ -69,6 +70,7 @@ func DefaultConfig() *Config {
 		Port:            "8080",
 		TLSEnabled:      false,
 		AutoTLS:         false,
+		TLSPort:         "8443",
 		RedirectToHTTPS: false,
 		AllowedOrigins:  []string{"*"},
 		ReadTimeout:     DefaultReadTimeout,
@@ -92,10 +94,42 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	cfg.Port = settings.WebServer.Port
 	cfg.Host = "" // Bind to all interfaces (0.0.0.0)
 
-	// TLS settings
-	cfg.AutoTLS = settings.Security.AutoTLS
-	cfg.TLSEnabled = settings.Security.AutoTLS // AutoTLS implies TLS enabled
-	cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+	// TLS settings - map from TLSMode to server config
+	switch settings.Security.TLSMode {
+	case conf.TLSModeAutoTLS:
+		cfg.AutoTLS = true
+		cfg.TLSEnabled = true
+		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+	case conf.TLSModeManual, conf.TLSModeSelfSigned:
+		tm := conf.GetTLSManager()
+		certPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerCert)
+		keyPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerKey)
+		if tm.CertificateExists("webserver", conf.TLSCertTypeServerCert) &&
+			tm.CertificateExists("webserver", conf.TLSCertTypeServerKey) {
+			cfg.TLSEnabled = true
+			cfg.TLSCertFile = certPath
+			cfg.TLSKeyFile = keyPath
+			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+			cfg.TLSPort = settings.Security.TLSPort
+			if cfg.TLSPort == "" {
+				cfg.TLSPort = "8443"
+			}
+			if cfg.TLSPort == cfg.Port {
+				fallback := "8443"
+				if cfg.Port == "8443" {
+					fallback = "8444"
+				}
+				GetLogger().Warn("TLS port must differ from HTTP port",
+					logger.String("http_port", cfg.Port),
+					logger.String("configured_tls_port", cfg.TLSPort),
+					logger.String("resolved_tls_port", fallback),
+				)
+				cfg.TLSPort = fallback
+			}
+		}
+	default:
+		// TLSModeNone — plain HTTP
+	}
 
 	// Debug mode
 	cfg.Debug = settings.WebServer.Debug || settings.Debug
@@ -136,6 +170,18 @@ func (c *Config) Address() string {
 		return ":" + c.Port
 	}
 	return c.Host + ":" + c.Port
+}
+
+// TLSAddress returns the full address string for the HTTPS server to listen on.
+func (c *Config) TLSAddress() string {
+	port := c.TLSPort
+	if port == "" {
+		port = "8443"
+	}
+	if c.Host == "" {
+		return ":" + port
+	}
+	return c.Host + ":" + port
 }
 
 // String returns a human-readable representation of the config.

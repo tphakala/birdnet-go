@@ -150,6 +150,18 @@ func TestTLSManager(t *testing.T) {
 	t.Run("DirectoryPermissions", func(t *testing.T) {
 		testDirectoryPermissions(t, tempDir, testData.caCert)
 	})
+
+	t.Run("SaveServerCertificate", func(t *testing.T) {
+		testSaveServerCertificate(t, tm, testData.clientCert)
+	})
+
+	t.Run("SaveServerKey", func(t *testing.T) {
+		testSaveServerKey(t, tm, testData.clientKey)
+	})
+
+	t.Run("RemoveAllCertificates_IncludesServerTypes", func(t *testing.T) {
+		testRemoveAllCertificatesIncludesServerTypes(t, tm, testData)
+	})
 }
 
 // testSaveAndRetrieveCertificates tests saving and retrieving certificates
@@ -307,6 +319,50 @@ func testDirectoryPermissions(t *testing.T, tempDir, caCert string) {
 	verifyCertificatePermissions(t, serviceDir, 0o700)
 }
 
+// testSaveServerCertificate tests saving a server certificate
+func testSaveServerCertificate(t *testing.T, tm *TLSManager, certPEM string) {
+	t.Helper()
+	path, err := tm.SaveCertificate("webserver", TLSCertTypeServerCert, certPEM)
+	require.NoError(t, err, "Failed to save server certificate")
+	assert.Contains(t, path, "webserver_server.crt", "Server cert path should contain webserver_server.crt")
+	verifyCertificatePermissions(t, path, 0o644)
+	assert.True(t, tm.CertificateExists("webserver", TLSCertTypeServerCert), "Server certificate should exist")
+}
+
+// testSaveServerKey tests saving a server private key
+func testSaveServerKey(t *testing.T, tm *TLSManager, keyPEM string) {
+	t.Helper()
+	path, err := tm.SaveCertificate("webserver", TLSCertTypeServerKey, keyPEM)
+	require.NoError(t, err, "Failed to save server key")
+	assert.Contains(t, path, "webserver_server.key", "Server key path should contain webserver_server.key")
+	verifyCertificatePermissions(t, path, 0o600)
+	assert.True(t, tm.CertificateExists("webserver", TLSCertTypeServerKey), "Server key should exist")
+}
+
+// testRemoveAllCertificatesIncludesServerTypes tests that RemoveAllCertificates removes server cert and key
+func testRemoveAllCertificatesIncludesServerTypes(t *testing.T, tm *TLSManager, data testCertificateData) {
+	t.Helper()
+	service := "webserver-remove-test"
+
+	// Save server cert and key
+	_, err := tm.SaveCertificate(service, TLSCertTypeServerCert, data.clientCert)
+	require.NoError(t, err, "Failed to save server certificate")
+	_, err = tm.SaveCertificate(service, TLSCertTypeServerKey, data.clientKey)
+	require.NoError(t, err, "Failed to save server key")
+
+	// Verify they exist
+	assert.True(t, tm.CertificateExists(service, TLSCertTypeServerCert), "Server certificate should exist before removal")
+	assert.True(t, tm.CertificateExists(service, TLSCertTypeServerKey), "Server key should exist before removal")
+
+	// Remove all
+	err = tm.RemoveAllCertificates(service)
+	require.NoError(t, err, "Failed to remove all certificates")
+
+	// Verify they are gone
+	assert.False(t, tm.CertificateExists(service, TLSCertTypeServerCert), "Server certificate should not exist after removal")
+	assert.False(t, tm.CertificateExists(service, TLSCertTypeServerKey), "Server key should not exist after removal")
+}
+
 func TestGetTLSManager(t *testing.T) {
 	t.Parallel()
 	// Test that GetTLSManager returns a valid manager
@@ -357,7 +413,9 @@ func TestValidateCertificateContent(t *testing.T) {
 	}{
 		{"Valid CA certificate", TLSCertTypeCA, certPEM, false},
 		{"Valid client certificate", TLSCertTypeClient, certPEM, false},
+		{"Valid server certificate", TLSCertTypeServerCert, certPEM, false},
 		{"Valid RSA private key", TLSCertTypeKey, keyPEM, false},
+		{"Valid server RSA private key", TLSCertTypeServerKey, keyPEM, false},
 		{"Valid EC private key", TLSCertTypeKey, ecKeyPEM, false},
 		{"Valid PKCS8 private key", TLSCertTypeKey, pkcs8KeyPEM, false},
 		{"Empty content", TLSCertTypeCA, "", true},

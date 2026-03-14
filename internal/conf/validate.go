@@ -717,15 +717,21 @@ func validateSecuritySettings(settings *Security) error {
 			Build()
 	}
 
-	// AutoTLS validation
-	if settings.AutoTLS {
+	// TLS mode validation
+	switch settings.TLSMode {
+	case TLSModeAutoTLS:
 		// Host is required for AutoTLS (can be extracted from BaseURL)
 		hostname := settings.GetHostnameForCertificates()
 		if hostname == "" {
-			return errors.Newf("security.host (or hostname in security.baseUrl) must be set when AutoTLS is enabled").
+			return errors.Newf("security.host (or hostname in security.baseUrl) must be set when TLS mode is autotls").
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-autotls-host").
 				Build()
+		}
+
+		// Validate hostname is suitable for Let's Encrypt
+		if err := validateAutoTLSHostname(hostname); err != nil {
+			return err
 		}
 
 		// Warning about port requirements when running in container
@@ -734,6 +740,31 @@ func validateSecuritySettings(settings *Security) error {
 				logger.String("ports", "80:80 (ACME HTTP-01), 443:443 (HTTPS)"),
 				logger.String("hint", "Consider using docker-compose.autotls.yml for proper AutoTLS configuration"))
 		}
+
+	case TLSModeManual:
+		// Warn if no server certificate is installed
+		tm := GetTLSManager()
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
+			GetLogger().Warn("TLS mode is 'manual' but no server certificate is installed",
+				logger.String("hint", "Upload a server certificate via the settings page or API"))
+		}
+
+	case TLSModeSelfSigned:
+		// Warn if no server certificate is installed (will be generated on startup)
+		tm := GetTLSManager()
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
+			GetLogger().Info("TLS mode is 'selfsigned' - a self-signed certificate will be generated on startup")
+		}
+
+	case TLSModeNone:
+		// No TLS validation needed
+
+	default:
+		return errors.Newf("security.tlsMode has invalid value %q (valid: autotls, manual, selfsigned, or empty)", settings.TLSMode).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-tlsmode-invalid").
+			Context("tls_mode", string(settings.TLSMode)).
+			Build()
 	}
 
 	// Validate the subnet bypass setting against the allowed pattern
@@ -757,6 +788,67 @@ func validateSecuritySettings(settings *Security) error {
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-session-duration").
 			Build()
+	}
+
+	return nil
+}
+
+// privateTLDs lists TLD suffixes that are not publicly resolvable
+// and therefore cannot be used with Let's Encrypt.
+var privateTLDs = []string{
+	".local",
+	".internal",
+	".lan",
+	".home",
+	".localdomain",
+	".localhost",
+	".test",
+	".example",
+	".invalid",
+}
+
+// validateAutoTLSHostname checks that a hostname is suitable for Let's Encrypt.
+// Let's Encrypt requires a publicly resolvable FQDN — not an IP, not a private
+// name, and not a bare hostname without dots.
+func validateAutoTLSHostname(hostname string) error {
+	// Must not be an IP address
+	if net.ParseIP(hostname) != nil {
+		return errors.Newf("Let's Encrypt requires a domain name, not an IP address (%s)", hostname).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-autotls-hostname").
+			Context("hostname", hostname).
+			Build()
+	}
+
+	// Must not be localhost (check before dot check since "localhost" has no dots)
+	if strings.EqualFold(hostname, "localhost") {
+		return errors.Newf("Let's Encrypt cannot issue certificates for localhost").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-autotls-hostname").
+			Context("hostname", hostname).
+			Build()
+	}
+
+	// Must contain at least one dot (FQDN)
+	if !strings.Contains(hostname, ".") {
+		return errors.Newf("Let's Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname (%s)", hostname).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-autotls-hostname").
+			Context("hostname", hostname).
+			Build()
+	}
+
+	// Must not use a private/non-routable TLD
+	lower := strings.ToLower(hostname)
+	for _, suffix := range privateTLDs {
+		if strings.HasSuffix(lower, suffix) {
+			return errors.Newf("Let's Encrypt cannot issue certificates for private domain %q (TLD %s is not publicly resolvable)", hostname, suffix).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-autotls-hostname").
+				Context("hostname", hostname).
+				Context("tld", suffix).
+				Build()
+		}
 	}
 
 	return nil
