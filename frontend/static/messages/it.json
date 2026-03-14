@@ -672,7 +672,10 @@
       "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)",
       "mapZoom": "Zoom della mappa",
       "showPin": "Mostra segnaposto posizione",
-      "mapExpandable": "Consenti espansione della mappa"
+      "mapExpandable": "Consenti espansione della mappa",
+      "expandMap": "Espandi mappa",
+      "expandedMapLabel": "Mappa di posizione espansa",
+      "closeExpandedMap": "Chiudi mappa espansa"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",

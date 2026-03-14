@@ -672,7 +672,10 @@
       "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)",
       "mapZoom": "Powiększenie mapy",
       "showPin": "Pokaż znacznik lokalizacji",
-      "mapExpandable": "Zezwól na powiększanie mapy"
+      "mapExpandable": "Zezwól na powiększanie mapy",
+      "expandMap": "Powiększ mapę",
+      "expandedMapLabel": "Powiększona mapa lokalizacji",
+      "closeExpandedMap": "Zamknij powiększoną mapę"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",

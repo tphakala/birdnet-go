@@ -672,7 +672,10 @@
       "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
       "mapZoom": "Kartan zoomaus",
       "showPin": "Näytä sijaintimerkki",
-      "mapExpandable": "Salli kartan laajentaminen"
+      "mapExpandable": "Salli kartan laajentaminen",
+      "expandMap": "Laajenna kartta",
+      "expandedMapLabel": "Laajennettu sijaintikartta",
+      "closeExpandedMap": "Sulje laajennettu kartta"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",

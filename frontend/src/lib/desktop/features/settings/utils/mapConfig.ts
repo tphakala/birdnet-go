@@ -9,6 +9,8 @@ export const MAP_CONFIG = {
   // Zoom levels
   DEFAULT_ZOOM: 11, // Standard zoom for known coordinates (city-level view)
   WORLD_VIEW_ZOOM: 5, // Zoom level for 0,0 coordinates
+  MIN_ZOOM: 5, // Minimum allowed zoom level
+  MAX_ZOOM: 18, // Maximum allowed zoom level
 
   // Animation settings (disabled to prevent jump)
   ANIMATION_DURATION: 0, // No animation for position updates

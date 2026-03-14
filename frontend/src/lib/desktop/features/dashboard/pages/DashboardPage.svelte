@@ -72,6 +72,7 @@ Performance Optimizations:
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
   import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn, Maximize2 } from '@lucide/svelte';
+  import { MAP_CONFIG } from '$lib/desktop/features/settings/utils/mapConfig';
 
   const logger = getLogger('app');
 
@@ -1335,12 +1336,12 @@ Performance Optimizations:
                 <input
                   id="banner-map-zoom"
                   type="number"
-                  min="5"
-                  max="18"
+                  min={MAP_CONFIG.MIN_ZOOM}
+                  max={MAP_CONFIG.MAX_ZOOM}
                   value={bannerConfig.mapZoom ?? 11}
                   oninput={e => {
                     const val = parseInt((e.target as HTMLInputElement).value, 10);
-                    if (!isNaN(val) && val >= 5 && val <= 18) {
+                    if (!isNaN(val) && val >= MAP_CONFIG.MIN_ZOOM && val <= MAP_CONFIG.MAX_ZOOM) {
                       onUpdate({
                         ...element,
                         banner: { ...bannerConfig, mapZoom: val },

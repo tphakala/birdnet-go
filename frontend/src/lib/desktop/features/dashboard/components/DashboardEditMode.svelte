@@ -229,7 +229,7 @@
           onclick={e => e.stopPropagation()}
           onkeydown={e => e.stopPropagation()}
         >
-          {#each missingTypes as type}
+          {#each missingTypes as type (type)}
             <button
               onclick={() => addElement(type)}
               class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--color-base-200)]"

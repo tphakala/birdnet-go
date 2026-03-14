@@ -672,7 +672,10 @@
       "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)",
       "mapZoom": "Priblíženie mapy",
       "showPin": "Zobraziť značku polohy",
-      "mapExpandable": "Povoliť zväčšenie mapy"
+      "mapExpandable": "Povoliť zväčšenie mapy",
+      "expandMap": "Zväčšiť mapu",
+      "expandedMapLabel": "Zväčšená mapa polohy",
+      "closeExpandedMap": "Zavrieť zväčšenú mapu"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",

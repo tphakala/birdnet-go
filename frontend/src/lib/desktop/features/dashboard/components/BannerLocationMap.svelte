@@ -8,6 +8,7 @@
   import { onMount } from 'svelte';
   import { Maximize2, X } from '@lucide/svelte';
   import { MAP_CONFIG, createMapStyle } from '$lib/desktop/features/settings/utils/mapConfig';
+  import { t } from '$lib/i18n';
 
   interface Props {
     latitude: number;
@@ -27,7 +28,7 @@
     className = '',
   }: Props = $props();
 
-  let mapContainer: HTMLDivElement;
+  let mapContainer: HTMLDivElement | undefined = $state();
 
   let map: import('maplibre-gl').Map | undefined;
   let marker: import('maplibre-gl').Marker | undefined;
@@ -42,7 +43,7 @@
     let mounted = true;
 
     import('maplibre-gl').then(maplibre => {
-      if (!mounted) return;
+      if (!mounted || !mapContainer) return;
 
       maplibreModule = maplibre;
 
@@ -92,22 +93,23 @@
 
   // Initialize expanded map when overlay opens.
   $effect(() => {
+    const lng = longitude;
+    const lat = latitude;
+    const z = zoom;
+    const pin = showPin;
     if (!expanded || !expandedMapContainer || !maplibreModule) return;
 
     expandedMap = new maplibreModule.Map({
       container: expandedMapContainer,
       style: createMapStyle(),
-      center: [longitude, latitude],
-      zoom: zoom,
+      center: [lng, lat],
+      zoom: z,
       interactive: true,
-      attributionControl: {},
       scrollZoom: true,
     });
 
-    if (showPin) {
-      expandedMarker = new maplibreModule.Marker()
-        .setLngLat([longitude, latitude])
-        .addTo(expandedMap);
+    if (pin) {
+      expandedMarker = new maplibreModule.Marker().setLngLat([lng, lat]).addTo(expandedMap);
     }
 
     return () => {
@@ -135,7 +137,7 @@
     <button
       onclick={() => (expanded = true)}
       class="absolute right-2 top-2 rounded-md bg-[var(--color-base-100)]/70 p-1.5 text-[var(--color-base-content)]/70 backdrop-blur-sm transition-colors hover:bg-[var(--color-base-100)] hover:text-[var(--color-base-content)]"
-      aria-label="Expand map"
+      aria-label={t('dashboard.banner.expandMap')}
     >
       <Maximize2 class="size-4" />
     </button>
@@ -152,7 +154,7 @@
     }}
     role="dialog"
     aria-modal="true"
-    aria-label="Expanded location map"
+    aria-label={t('dashboard.banner.expandedMapLabel')}
     tabindex="-1"
   >
     <div class="relative h-[80vh] w-[80vw] overflow-hidden rounded-2xl shadow-2xl">
@@ -161,7 +163,7 @@
       <button
         onclick={() => (expanded = false)}
         class="absolute right-3 top-3 rounded-full bg-[var(--color-base-100)]/80 p-2 text-[var(--color-base-content)] shadow-md backdrop-blur-sm transition-colors hover:bg-[var(--color-base-100)]"
-        aria-label="Close expanded map"
+        aria-label={t('dashboard.banner.closeExpandedMap')}
       >
         <X class="size-5" />
       </button>
