@@ -108,6 +108,43 @@ export interface Weather {
   windGust?: number;
   humidity?: number;
   units?: 'metric' | 'imperial' | 'standard';
+  moonPhase?: number;
+  moonPhaseName?: string;
+  moonIllumination?: number;
+}
+
+export interface LatestWeatherResponse {
+  daily?: {
+    date: string;
+    sunrise: string;
+    sunset: string;
+    country?: string;
+    city_name?: string;
+  };
+  hourly?: {
+    time: string;
+    temperature: number;
+    feels_like: number;
+    temp_min?: number;
+    temp_max?: number;
+    pressure?: number;
+    humidity?: number;
+    visibility?: number;
+    wind_speed?: number;
+    wind_deg?: number;
+    wind_gust?: number;
+    clouds?: number;
+    weather_main?: string;
+    weather_desc?: string;
+    weather_icon?: string;
+  };
+  moon?: {
+    phase: number;
+    phaseName: string;
+    illumination: number;
+    iconName: string;
+  };
+  timestamp: string;
 }
 
 export interface TimeOfDayResponse {
