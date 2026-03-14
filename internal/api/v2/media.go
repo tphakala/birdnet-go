@@ -127,6 +127,15 @@ const audioEncodingMaxAge = 30 * time.Second
 // an audio file is still being encoded.
 const audioRetryAfterSeconds = "2"
 
+// audioWaitTimeout is the maximum time to wait server-side for an audio file
+// that is currently being encoded before returning 503 to the client.
+// This prevents unnecessary client round-trips when encoding finishes quickly.
+const audioWaitTimeout = 5 * time.Second
+
+// audioWaitPollInterval is how often to check if the audio file has appeared
+// during server-side waiting.
+const audioWaitPollInterval = 250 * time.Millisecond
+
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
 	c.logInfoIfEnabled("Initializing media routes")
@@ -310,6 +319,41 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 		http.StatusServiceUnavailable)
 }
 
+// waitForAudioFile polls for an audio file to appear on disk while encoding
+// is in progress. It returns true if the file became available within the
+// timeout, false if encoding is still ongoing or the temp file disappeared.
+// This reduces 503 responses by waiting server-side instead of requiring
+// the client to retry.
+func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool {
+	reqCtx := ctx.Request().Context()
+	deadline := time.After(audioWaitTimeout)
+	ticker := time.NewTicker(audioWaitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-reqCtx.Done():
+			// Client disconnected
+			return false
+		case <-deadline:
+			// Timeout reached — check one last time whether encoding is still active.
+			// If the temp file is gone but the final file never appeared, the export
+			// may have failed; returning false lets the caller fall through to 404.
+			return false
+		case <-ticker.C:
+			// Check if the final file now exists
+			if _, err := c.SFS.StatRel(relClipPath); err == nil {
+				return true
+			}
+			// If the temp file is gone, encoding either finished (and we missed it)
+			// or failed. Stop waiting.
+			if !c.isAudioBeingEncoded(relClipPath) {
+				return false
+			}
+		}
+	}
+}
+
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -350,6 +394,21 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			if c.isAudioBeingEncoded(normalizedFilename) {
+				// Wait server-side for the file to appear instead of immediately
+				// returning 503, reducing unnecessary client round-trips.
+				if c.waitForAudioFile(ctx, normalizedFilename) {
+					// File appeared — serve it now
+					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedFilename); retryErr != nil {
+						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
+					}
+					c.logInfoIfEnabled("Successfully served audio clip after waiting for encoding",
+						logger.String("filename", filename),
+						logger.String("path", ctx.Request().URL.Path),
+						logger.String("ip", ctx.RealIP()),
+					)
+					return nil
+				}
+				// Encoding still in progress after timeout — tell client to retry
 				return c.handleAudioNotReady(ctx)
 			}
 		}
@@ -436,6 +495,16 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			if c.isAudioBeingEncoded(normalizedClipPath) {
+				// Wait server-side for the file to appear instead of immediately
+				// returning 503, reducing unnecessary client round-trips.
+				if c.waitForAudioFile(ctx, normalizedClipPath) {
+					// File appeared — serve it now
+					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedClipPath); retryErr != nil {
+						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
+					}
+					return nil
+				}
+				// Encoding still in progress after timeout — tell client to retry
 				return c.handleAudioNotReady(ctx)
 			}
 		}
