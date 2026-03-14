@@ -255,7 +255,7 @@
   </div>
 
   <!-- Content -->
-  <div class="p-4">
+  <div class="detection-grid-container p-4">
     {#if error}
       <div class="alert alert-error">
         <XCircle class="size-6" />
@@ -273,7 +273,7 @@
         {/if}
 
         <!-- Detection Cards Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="detection-cards-grid gap-4">
           {#each data.slice(0, selectedLimit) as detection (detection.id)}
             <DetectionCard
               {detection}
@@ -472,5 +472,24 @@
 
   :global([data-theme='dark']) .limit-dropdown-check {
     color: rgb(125 211 252); /* sky-300 */
+  }
+
+  /* ========================================================================
+     Container Query for Responsive Grid
+     ======================================================================== */
+
+  .detection-grid-container {
+    container-type: inline-size;
+  }
+
+  .detection-cards-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  @container (min-width: 640px) {
+    .detection-cards-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
   }
 </style>
