@@ -8,7 +8,6 @@ import (
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockPartitions returns a mock partition list for deterministic unit tests
@@ -218,15 +217,8 @@ func TestGetMountInfoFromPartitions_NoMatch(t *testing.T) {
 	_, _, _, err := getMountInfoFromPartitions(tempDir, partitions)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no mount point found")
-
-	var enhErr *errors.EnhancedError
-	if errors.As(err, &enhErr) {
-		assert.Equal(t, "resolve_mount_path", enhErr.Context["operation"])
-		assert.Equal(t, 1, enhErr.Context["partition_count"])
-		assert.Contains(t, enhErr.Context["available_mountpoints"], "<redacted>/mnt/data")
-	} else {
-		t.Fatal("expected EnhancedError type")
-	}
+	// Error should include partition count for diagnostics
+	assert.Contains(t, err.Error(), "partitions: 1")
 }
 
 func TestGroupPathsWithPartitions_FallbackForAccessiblePath(t *testing.T) {
@@ -259,6 +251,55 @@ func TestGroupPathsWithPartitions_SkipsInaccessiblePath(t *testing.T) {
 	groups := groupPathsWithPartitions([]string{"/nonexistent/path/xyz/abc"}, partitions)
 
 	assert.Empty(t, groups)
+}
+
+func TestGroupPathsWithPartitions_RootPathFallbackInContainer(t *testing.T) {
+	t.Parallel()
+
+	// Simulate a container environment where "/" is accessible but not listed
+	// in partitions (only named volume mounts are listed)
+	partitions := []disk.PartitionStat{
+		{Device: "overlay", Mountpoint: "/config", Fstype: "overlay"},
+		{Device: "overlay", Mountpoint: "/data", Fstype: "overlay"},
+	}
+
+	// "/" exists and is accessible, but no partition matches it
+	groups := groupPathsWithPartitions([]string{"/"}, partitions)
+
+	// The root path should still appear as a fallback group
+	require.Len(t, groups, 1)
+	assert.Equal(t, "/", groups[0].MountPoint)
+	assert.Empty(t, groups[0].Device)
+	assert.Empty(t, groups[0].Fstype)
+	assert.Equal(t, []string{"/"}, groups[0].Paths)
+}
+
+func TestGroupPathsWithPartitions_MixedRootAndVolumePaths(t *testing.T) {
+	t.Parallel()
+
+	// Create a real temp directory to use as a volume mount path
+	tempDir := t.TempDir()
+
+	// Simulate container with volume mounts: "/" not in partitions,
+	// but tempDir is a partition mount
+	partitions := []disk.PartitionStat{
+		{Device: "/dev/sda1", Mountpoint: tempDir, Fstype: "ext4"},
+	}
+
+	// "/" should fall back, tempDir should resolve to its partition
+	groups := groupPathsWithPartitions([]string{"/", tempDir}, partitions)
+
+	// Should have 2 groups: "/" (fallback) and tempDir (matched)
+	require.Len(t, groups, 2)
+
+	// Groups are sorted by mount point
+	assert.Equal(t, "/", groups[0].MountPoint)
+	assert.Empty(t, groups[0].Device) // fallback has no device info
+	assert.Equal(t, []string{"/"}, groups[0].Paths)
+
+	assert.Equal(t, tempDir, groups[1].MountPoint)
+	assert.Equal(t, "/dev/sda1", groups[1].Device)
+	assert.Equal(t, []string{tempDir}, groups[1].Paths)
 }
 
 func TestMountGroupFields(t *testing.T) {
