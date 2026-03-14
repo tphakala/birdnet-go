@@ -2277,7 +2277,28 @@
           "title": "TLS/SSL zabezpečenie",
           "enable": "Povoliť TLS/SSL",
           "skipVerify": "Preskočiť overenie certifikátu",
-          "configNote": "<strong>Konfigurácia TLS:</strong><br />• Štandardné TLS: Nechajte certifikáty prázdne pre verejných brokerov<br />• Self-signed certifikáty: Poskytnite CA certifikát<br />• Mutual TLS (mTLS): Poskytnite všetky tri certifikáty"
+          "configNote": "<strong>Konfigurácia TLS:</strong><br />• Štandardné TLS: Nechajte certifikáty prázdne pre verejných brokerov<br />• Self-signed certifikáty: Poskytnite CA certifikát<br />• Mutual TLS (mTLS): Poskytnite všetky tri certifikáty",
+          "certificates": {
+            "title": "Certificate Management",
+            "description": "Upload certificates for secure MQTT broker connections",
+            "caLabel": "CA Certificate",
+            "caPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
+            "clientCertLabel": "Client Certificate",
+            "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "clientCertHelpText": "Client certificate for mutual TLS authentication",
+            "clientKeyLabel": "Client Private Key",
+            "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+            "clientKeyHelpText": "Private key matching the client certificate",
+            "uploadButton": "Upload Certificates",
+            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
+            "uploadError": "Failed to upload MQTT TLS certificates",
+            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
+            "deleteSuccess": "MQTT TLS certificates removed",
+            "deleteError": "Failed to remove MQTT TLS certificates",
+            "loadError": "Failed to load certificate information",
+            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+          }
         },
         "homeAssistant": {
           "title": "Automatické zisťovanie Home Assistant",
@@ -3759,6 +3780,22 @@
       "errors": {
         "loadFailed": "Nepodarilo sa načítať údaje o počasí"
       }
+    },
+    "tls": {
+      "certificateInstalled": "Certificate Installed",
+      "browseFile": "Browse",
+      "subject": "Subject",
+      "issuer": "Issuer",
+      "sans": "Subject Alternative Names",
+      "validUntil": "Valid Until",
+      "daysRemaining": "Days Remaining",
+      "fingerprint": "Fingerprint",
+      "expiryWarning": "This certificate expires soon. Consider renewing it.",
+      "downloadCertificate": "Download Certificate",
+      "regenerateButton": "Regenerate",
+      "removeCertificate": "Remove Certificate",
+      "fileReadError": "Failed to read file",
+      "loading": "Loading certificate information..."
     }
   },
   "connectivity": {
