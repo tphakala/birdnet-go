@@ -55,6 +55,9 @@ let pingTimer: ReturnType<typeof setInterval> | null = null;
 /** Whether the watchdog has been activated (after app init) */
 let activated = false;
 
+/** Whether the error timeout has already been armed for the current burst */
+let errorTimeoutArmed = false;
+
 /**
  * Check if the backend is online (non-reactive, for use in polling guards).
  */
@@ -70,6 +73,7 @@ export function isBackendOnline(): boolean {
  */
 export function markOnline(): void {
   connectionState.lastContact = Date.now();
+  errorTimeoutArmed = false;
   if (!connectionState.isOnline) {
     logger.info('Backend connectivity restored');
     connectionState.isOnline = true;
@@ -101,6 +105,7 @@ function resetWatchdog(timeoutMs: number): void {
   }
 
   watchdogTimer = setTimeout(() => {
+    watchdogTimer = null;
     logger.warn('SSE heartbeat watchdog expired', {
       timeoutMs,
       lastContact: connectionState.lastContact,
@@ -121,9 +126,15 @@ export function onSSEActivity(): void {
 /**
  * Called when an explicit SSE error/disconnect occurs.
  * Shortens the watchdog timeout for faster offline detection.
+ * Uses a boolean guard so the shortened timeout only fires once per
+ * disconnect burst, preventing repeated timer resets from delaying
+ * offline detection.
  */
 export function onSSEError(): void {
   if (!activated) return;
+  if (!connectionState.isOnline) return;
+  if (errorTimeoutArmed) return;
+  errorTimeoutArmed = true;
   resetWatchdog(ERROR_TIMEOUT_MS);
 }
 
@@ -194,6 +205,7 @@ export function activateWatchdog(): void {
  */
 export function deactivateWatchdog(): void {
   activated = false;
+  errorTimeoutArmed = false;
   if (watchdogTimer !== null) {
     clearTimeout(watchdogTimer);
     watchdogTimer = null;
