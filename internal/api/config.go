@@ -92,10 +92,26 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 	cfg.Port = settings.WebServer.Port
 	cfg.Host = "" // Bind to all interfaces (0.0.0.0)
 
-	// TLS settings
-	cfg.AutoTLS = settings.Security.AutoTLS    //nolint:staticcheck // Intentional: backward-compatible migration
-	cfg.TLSEnabled = settings.Security.AutoTLS //nolint:staticcheck // Intentional: backward-compatible migration
-	cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+	// TLS settings - map from TLSMode to server config
+	switch settings.Security.TLSMode {
+	case conf.TLSModeAutoTLS:
+		cfg.AutoTLS = true
+		cfg.TLSEnabled = true
+		cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+	case conf.TLSModeManual, conf.TLSModeSelfSigned:
+		tm := conf.GetTLSManager()
+		certPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerCert)
+		keyPath := tm.GetCertificatePath("webserver", conf.TLSCertTypeServerKey)
+		if tm.CertificateExists("webserver", conf.TLSCertTypeServerCert) &&
+			tm.CertificateExists("webserver", conf.TLSCertTypeServerKey) {
+			cfg.TLSEnabled = true
+			cfg.TLSCertFile = certPath
+			cfg.TLSKeyFile = keyPath
+			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+		}
+	default:
+		// TLSModeNone — plain HTTP
+	}
 
 	// Debug mode
 	cfg.Debug = settings.WebServer.Debug || settings.Debug
