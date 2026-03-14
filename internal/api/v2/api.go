@@ -478,6 +478,9 @@ func (c *Controller) initRoutes() {
 	// Health check endpoint - publicly accessible
 	c.Group.GET("/health", c.HealthCheck)
 
+	// Ping endpoint - ultra-lightweight connectivity check, publicly accessible
+	c.Group.GET("/ping", c.Ping)
+
 	// Initialize route groups with proper error handling and logging
 	routeInitializers := []struct {
 		name string

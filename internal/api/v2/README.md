@@ -55,9 +55,22 @@ routeInitializers := []struct {
 
 ### Core API (`api.go`)
 
-| Method | Route     | Handler       | Auth | Description          |
-| ------ | --------- | ------------- | ---- | -------------------- |
-| GET    | `/health` | `HealthCheck` | ❌   | System health status |
+| Method | Route     | Handler       | Auth | Description                    |
+| ------ | --------- | ------------- | ---- | ------------------------------ |
+| GET    | `/health` | `HealthCheck` | ❌   | System health status           |
+| GET    | `/ping`   | `Ping`        | ❌   | Lightweight connectivity check |
+
+#### GET /api/v2/ping
+
+Lightweight connectivity check. Returns a minimal response with no database queries, no system metrics, and no authentication required. Designed for frontend offline-recovery polling.
+
+**Response:**
+
+```json
+{
+  "status": "ok"
+}
+```
 
 ### Authentication (`auth.go`)
 
