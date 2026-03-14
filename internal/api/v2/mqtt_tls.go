@@ -132,19 +132,19 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 
 	tlsMgr := conf.GetTLSManager()
 
-	// Stage 1: Perform all I/O operations, collecting path updates.
-	// Settings are not modified until all operations succeed, ensuring atomicity.
+	// Stage 1: Perform all save operations first (these can fail and need rollback).
+	// Clear operations are deferred to after all saves succeed, since a deleted file
+	// cannot be restored on rollback.
 	type pathUpdate struct {
 		caCert, clientCert, clientKey string
 		clearCA, clearClient          bool
 	}
 	var update pathUpdate
 
-	// Process CA certificate
+	// Save new CA certificate (if provided and non-empty)
 	if req.CACertificate != nil {
 		ca := strings.TrimSpace(*req.CACertificate)
 		if ca == "" {
-			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
 			update.clearCA = true
 		} else {
 			path, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA, ca)
@@ -155,18 +155,15 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		}
 	}
 
-	// Process client certificate and key
+	// Save new client certificate and key (if provided and non-empty)
 	if req.ClientCertificate != nil {
 		cert := strings.TrimSpace(*req.ClientCertificate)
 		key := strings.TrimSpace(*req.ClientKey)
 		if cert == "" {
-			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
-			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
 			update.clearClient = true
 		} else {
 			certPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient, cert)
 			if err != nil {
-				// Roll back CA cert if it was saved in this request
 				if update.caCert != "" {
 					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
 				}
@@ -174,7 +171,6 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 			}
 			keyPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey, key)
 			if err != nil {
-				// Roll back client cert and CA cert if saved in this request
 				_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
 				if update.caCert != "" {
 					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
@@ -184,6 +180,15 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 			update.clientCert = certPath
 			update.clientKey = keyPath
 		}
+	}
+
+	// Stage 2: All saves succeeded — now perform clears (best-effort, cannot fail meaningfully).
+	if update.clearCA {
+		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+	}
+	if update.clearClient {
+		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
+		_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
 	}
 
 	// Stage 2: Apply all settings atomically after all I/O succeeded.
