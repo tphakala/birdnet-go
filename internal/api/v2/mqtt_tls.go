@@ -132,24 +132,26 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 
 	tlsMgr := conf.GetTLSManager()
 
+	// Stage 1: Perform all I/O operations, collecting path updates.
+	// Settings are not modified until all operations succeed, ensuring atomicity.
+	type pathUpdate struct {
+		caCert, clientCert, clientKey string
+		clearCA, clearClient          bool
+	}
+	var update pathUpdate
+
 	// Process CA certificate
 	if req.CACertificate != nil {
 		ca := strings.TrimSpace(*req.CACertificate)
 		if ca == "" {
-			// Clear CA certificate
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
-			c.settingsMutex.Lock()
-			c.Settings.Realtime.MQTT.TLS.CACert = ""
-			c.settingsMutex.Unlock()
+			update.clearCA = true
 		} else {
-			// Save new CA certificate
 			path, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA, ca)
 			if err != nil {
 				return c.HandleError(ctx, err, "Failed to save CA certificate", http.StatusBadRequest)
 			}
-			c.settingsMutex.Lock()
-			c.Settings.Realtime.MQTT.TLS.CACert = path
-			c.settingsMutex.Unlock()
+			update.caCert = path
 		}
 	}
 
@@ -158,32 +160,47 @@ func (c *Controller) UploadMQTTTLSCertificate(ctx echo.Context) error {
 		cert := strings.TrimSpace(*req.ClientCertificate)
 		key := strings.TrimSpace(*req.ClientKey)
 		if cert == "" {
-			// Clear client certificate and key
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey)
-			c.settingsMutex.Lock()
-			c.Settings.Realtime.MQTT.TLS.ClientCert = ""
-			c.Settings.Realtime.MQTT.TLS.ClientKey = ""
-			c.settingsMutex.Unlock()
+			update.clearClient = true
 		} else {
-			// Save new client certificate
 			certPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient, cert)
 			if err != nil {
+				// Roll back CA cert if it was saved in this request
+				if update.caCert != "" {
+					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+				}
 				return c.HandleError(ctx, err, "Failed to save client certificate", http.StatusBadRequest)
 			}
-			// Save new client key
 			keyPath, err := tlsMgr.SaveCertificate(mqttTLSServiceName, conf.TLSCertTypeKey, key)
 			if err != nil {
-				// Clean up the cert that was saved
+				// Roll back client cert and CA cert if saved in this request
 				_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeClient)
+				if update.caCert != "" {
+					_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
+				}
 				return c.HandleError(ctx, err, "Failed to save client key", http.StatusBadRequest)
 			}
-			c.settingsMutex.Lock()
-			c.Settings.Realtime.MQTT.TLS.ClientCert = certPath
-			c.Settings.Realtime.MQTT.TLS.ClientKey = keyPath
-			c.settingsMutex.Unlock()
+			update.clientCert = certPath
+			update.clientKey = keyPath
 		}
 	}
+
+	// Stage 2: Apply all settings atomically after all I/O succeeded.
+	c.settingsMutex.Lock()
+	if update.caCert != "" {
+		c.Settings.Realtime.MQTT.TLS.CACert = update.caCert
+	} else if update.clearCA {
+		c.Settings.Realtime.MQTT.TLS.CACert = ""
+	}
+	if update.clientCert != "" {
+		c.Settings.Realtime.MQTT.TLS.ClientCert = update.clientCert
+		c.Settings.Realtime.MQTT.TLS.ClientKey = update.clientKey
+	} else if update.clearClient {
+		c.Settings.Realtime.MQTT.TLS.ClientCert = ""
+		c.Settings.Realtime.MQTT.TLS.ClientKey = ""
+	}
+	c.settingsMutex.Unlock()
 
 	if !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {

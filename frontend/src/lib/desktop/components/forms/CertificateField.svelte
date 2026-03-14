@@ -38,6 +38,9 @@
       onchange(content);
     } catch {
       toastActions.error(t('components.tls.fileReadError'));
+    } finally {
+      // Reset input so re-selecting the same file triggers the change event
+      input.value = '';
     }
   }
 </script>
