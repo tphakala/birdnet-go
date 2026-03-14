@@ -3673,7 +3673,8 @@
         "title": "Contenu visuel",
         "description": "Configurez les images d'oiseaux et les paramètres d'affichage du spectrogramme"
       }
-    }
+    },
+    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
   },
   "auth": {
     "login": "Connexion",

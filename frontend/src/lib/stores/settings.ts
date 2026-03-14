@@ -749,6 +749,7 @@ export interface GlobalSettingsState {
   isSaving: boolean;
   activeSection: string;
   error: string | null;
+  restartRequired: boolean;
 }
 
 // API response types
@@ -986,6 +987,7 @@ const initialState: GlobalSettingsState = {
   isSaving: false,
   activeSection: 'main',
   error: null,
+  restartRequired: false,
 };
 
 export const settingsStore = writable<GlobalSettingsState>(initialState);
@@ -1206,11 +1208,24 @@ export const settingsActions = {
         }
       }
 
+      // Check if TLS/security settings changed that require a restart
+      const tlsFields: (keyof SecuritySettings)[] = ['tlsMode', 'tlsPort', 'redirectToHttps'];
+      const origSec = currentState.originalData.security;
+      const newSec = coercedFormData.security;
+      const tlsChanged =
+        origSec &&
+        newSec &&
+        tlsFields.some(
+          // eslint-disable-next-line security/detect-object-injection -- key from controlled array
+          f => origSec[f] !== newSec[f]
+        );
+
       // Update originalData to match the saved formData (no reload needed)
       settingsStore.update(state => ({
         ...state,
         originalData: JSON.parse(JSON.stringify(state.formData)),
         isSaving: false,
+        restartRequired: state.restartRequired || !!tlsChanged,
       }));
 
       // Show success toast

@@ -194,6 +194,7 @@ describe('AudioSettingsPage - Stream Configuration', () => {
       isLoading: false,
       isSaving: false,
       error: null,
+      restartRequired: false,
       activeSection: 'audio',
       originalData: {
         main: {

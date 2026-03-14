@@ -55,6 +55,7 @@ describe('Species Settings Store', () => {
       isSaving: false,
       activeSection: 'main',
       error: null,
+      restartRequired: false,
     });
   });
 

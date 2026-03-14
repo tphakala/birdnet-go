@@ -3470,7 +3470,8 @@
         "title": "Contenuti visivi",
         "description": "Configura le immagini degli uccelli e le impostazioni di visualizzazione dello spettrogramma"
       }
-    }
+    },
+    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
   },
   "auth": {
     "login": "Accedi",

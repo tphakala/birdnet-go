@@ -3504,7 +3504,8 @@
         "title": "Vizuálny obsah",
         "description": "Nakonfigurujte obrázky vtákov a nastavenia zobrazenia spektrogramu"
       }
-    }
+    },
+    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
   },
   "auth": {
     "login": "Prihlásenie",

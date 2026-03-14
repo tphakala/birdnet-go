@@ -3673,7 +3673,8 @@
         "title": "Conteúdo visual",
         "description": "Configure imagens de aves e configurações de exibição do espectrograma"
       }
-    }
+    },
+    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
   },
   "auth": {
     "login": "Entrar",

@@ -4,6 +4,7 @@
   import { safeGet } from '$lib/utils/security';
   import { t } from '$lib/i18n';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { AlertTriangle } from '@lucide/svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -58,6 +59,19 @@
 </svelte:head>
 
 <main class="col-span-12 container mx-auto">
+  <!-- Restart Required Banner -->
+  {#if store.restartRequired}
+    <div
+      class="mb-6 flex items-center gap-3 px-4 py-3 rounded-lg bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 text-sm"
+      role="alert"
+    >
+      <AlertTriangle class="w-5 h-5 text-[var(--color-warning)] shrink-0" />
+      <span class="text-[var(--color-base-content)]">
+        {t('settings.restartRequired')}
+      </span>
+    </div>
+  {/if}
+
   <!-- Global Error Display -->
   {#if store.error}
     <div class="mb-6">
