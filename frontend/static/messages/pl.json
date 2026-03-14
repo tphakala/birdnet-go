@@ -3922,6 +3922,16 @@
       "errors": {
         "generationFailedStatus": "Generowanie nie powiodło się ze statusem {status}",
         "spectrogramFailed": "Nie udało się wygenerować spektrogramu"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {
