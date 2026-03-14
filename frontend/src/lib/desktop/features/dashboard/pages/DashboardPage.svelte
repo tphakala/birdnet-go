@@ -64,7 +64,7 @@ Performance Optimizations:
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { dashboardLayout, settingsStore } from '$lib/stores/settings';
+  import { birdnetSettings, dashboardLayout, settingsStore } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
@@ -850,6 +850,10 @@ Performance Optimizations:
   // Derived state to check if we're viewing today's data
   const isViewingToday = $derived(selectedDate === getLocalDateString());
 
+  // Location availability for banner map toggle
+  let birdnet = $derived($birdnetSettings);
+  let hasLocation = $derived((birdnet?.latitude ?? 0) !== 0 || (birdnet?.longitude ?? 0) !== 0);
+
   // Queue daily summary updates with debouncing for rapid updates
   function queueDailySummaryUpdate(detection: Detection) {
     // Only allow SSE updates to daily summary when viewing today's data
@@ -1302,23 +1306,25 @@ Performance Optimizations:
             />
           {/if}
 
-          <!-- Map toggle -->
-          <button
-            onclick={() =>
-              onUpdate({
-                ...element,
-                banner: { ...bannerConfig, showLocationMap: !bannerConfig.showLocationMap },
-              })}
-            class={cn(
-              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
-              bannerConfig.showLocationMap
-                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
-                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
-            )}
-          >
-            <MapIcon class="size-4" />
-            {t('dashboard.banner.showLocationMap')}
-          </button>
+          <!-- Map toggle (only when location is configured) -->
+          {#if hasLocation}
+            <button
+              onclick={() =>
+                onUpdate({
+                  ...element,
+                  banner: { ...bannerConfig, showLocationMap: !bannerConfig.showLocationMap },
+                })}
+              class={cn(
+                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                bannerConfig.showLocationMap
+                  ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                  : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+              )}
+            >
+              <MapIcon class="size-4" />
+              {t('dashboard.banner.showLocationMap')}
+            </button>
+          {/if}
 
           <!-- Weather toggle -->
           <button
