@@ -210,6 +210,12 @@ func (c *Controller) initIntegrationsRoutes() {
 	mqttGroup.POST("/test", c.TestMQTTConnection)
 	mqttGroup.POST("/homeassistant/discovery", c.TriggerHomeAssistantDiscovery)
 
+	// MQTT TLS certificate management
+	mqttTLSGroup := mqttGroup.Group("/tls", c.authMiddleware)
+	mqttTLSGroup.GET("/certificate", c.GetMQTTTLSCertificate)
+	mqttTLSGroup.POST("/certificate", c.UploadMQTTTLSCertificate)
+	mqttTLSGroup.DELETE("/certificate", c.DeleteMQTTTLSCertificate)
+
 	// BirdWeather routes
 	bwGroup := integrationsGroup.Group("/birdweather")
 	bwGroup.GET("/status", c.GetBirdWeatherStatus)
