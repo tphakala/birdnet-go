@@ -1069,7 +1069,7 @@
                   </p>
 
                   {#if mqttCertLoading}
-                    <div class="flex items-center gap-2 py-3">
+                    <div class="flex items-center gap-2 py-3" role="status">
                       <div
                         class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
                       ></div>
