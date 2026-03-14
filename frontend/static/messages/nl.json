@@ -2440,7 +2440,28 @@
           "title": "TLS/SSL Beveiliging",
           "enable": "Schakel TLS/SSL in",
           "skipVerify": "Sla Certificaat Verificatie over",
-          "configNote": "<strong>TLS Configuratie:</strong><br />• Standaard TLS: Laat certificaten leeg voor publieke brokers<br />• Self-signed certificaten: Geef CA Certificaat<br />• Wederzijdse TLS (mTLS): Geef alle drie certificaten"
+          "configNote": "<strong>TLS Configuratie:</strong><br />• Standaard TLS: Laat certificaten leeg voor publieke brokers<br />• Self-signed certificaten: Geef CA Certificaat<br />• Wederzijdse TLS (mTLS): Geef alle drie certificaten",
+          "certificates": {
+            "title": "Certificate Management",
+            "description": "Upload certificates for secure MQTT broker connections",
+            "caLabel": "CA Certificate",
+            "caPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
+            "clientCertLabel": "Client Certificate",
+            "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "clientCertHelpText": "Client certificate for mutual TLS authentication",
+            "clientKeyLabel": "Client Private Key",
+            "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+            "clientKeyHelpText": "Private key matching the client certificate",
+            "uploadButton": "Upload Certificates",
+            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
+            "uploadError": "Failed to upload MQTT TLS certificates",
+            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
+            "deleteSuccess": "MQTT TLS certificates removed",
+            "deleteError": "Failed to remove MQTT TLS certificates",
+            "loadError": "Failed to load certificate information",
+            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+          }
         },
         "homeAssistant": {
           "title": "Home Assistant Auto-Discovery",
@@ -3928,6 +3949,22 @@
       "errors": {
         "loadFailed": "Weergegevens konden niet worden geladen"
       }
+    },
+    "tls": {
+      "certificateInstalled": "Certificate Installed",
+      "browseFile": "Browse",
+      "subject": "Subject",
+      "issuer": "Issuer",
+      "sans": "Subject Alternative Names",
+      "validUntil": "Valid Until",
+      "daysRemaining": "Days Remaining",
+      "fingerprint": "Fingerprint",
+      "expiryWarning": "This certificate expires soon. Consider renewing it.",
+      "downloadCertificate": "Download Certificate",
+      "regenerateButton": "Regenerate",
+      "removeCertificate": "Remove Certificate",
+      "fileReadError": "Failed to read file",
+      "loading": "Loading certificate information..."
     }
   },
   "connectivity": {

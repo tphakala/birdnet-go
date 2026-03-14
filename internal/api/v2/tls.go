@@ -76,7 +76,7 @@ func (c *Controller) GetTLSCertificate(ctx echo.Context) error {
 	}
 
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
-	info, err := parseCertificateInfo(certPath)
+	info, err := ParseCertificateInfo(certPath)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to parse TLS certificate", http.StatusInternalServerError)
 	}
@@ -145,7 +145,7 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
-	info, err := parseCertificateInfo(certPath)
+	info, err := ParseCertificateInfo(certPath)
 	if err != nil {
 		return c.HandleError(ctx, err, "Certificate saved but failed to parse info", http.StatusInternalServerError)
 	}
@@ -248,7 +248,7 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 
 	// Return certificate info
 	certPath := tlsMgr.GetCertificatePath(tlsServiceName, conf.TLSCertTypeServerCert)
-	info, err := parseCertificateInfo(certPath)
+	info, err := ParseCertificateInfo(certPath)
 	if err != nil {
 		return c.HandleError(ctx, err, "Certificate generated but failed to parse info", http.StatusInternalServerError)
 	}
@@ -274,8 +274,8 @@ func (c *Controller) DownloadTLSCertificate(ctx echo.Context) error {
 	return ctx.File(certPath)
 }
 
-// parseCertificateInfo reads a PEM certificate file and extracts its metadata.
-func parseCertificateInfo(certPath string) (*TLSCertificateInfo, error) {
+// ParseCertificateInfo reads a PEM certificate file and extracts its metadata.
+func ParseCertificateInfo(certPath string) (*TLSCertificateInfo, error) {
 	data, err := os.ReadFile(certPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read certificate file: %w", err)
