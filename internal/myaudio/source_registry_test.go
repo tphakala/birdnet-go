@@ -255,11 +255,10 @@ func TestGetOrCreateSourceConcurrentDisplayNameUpdate(t *testing.T) {
 	// Concurrently update display name from multiple goroutines
 	var wg sync.WaitGroup
 	for i := range 10 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
+		idx := i
+		wg.Go(func() {
 			registry.GetOrCreateSource(url, SourceTypeRTSP, fmt.Sprintf("Name-%d", idx))
-		}(i)
+		})
 	}
 	wg.Wait()
 
