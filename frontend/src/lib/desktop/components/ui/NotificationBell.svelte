@@ -119,13 +119,13 @@
   function getPriorityBadgeClass(priority: string): string {
     switch (priority) {
       case 'critical':
-        return 'badge-error';
+        return 'bg-[var(--color-error)] text-[var(--color-error-content)]';
       case 'high':
-        return 'badge-warning';
+        return 'bg-[var(--color-warning)] text-[var(--color-warning-content)]';
       case 'medium':
-        return 'badge-info';
+        return 'bg-[var(--color-info)] text-[var(--color-info-content)]';
       default:
-        return 'badge-ghost';
+        return 'bg-[var(--color-base-200)] text-[var(--color-base-content)]';
     }
   }
 
@@ -427,7 +427,7 @@
   <button
     bind:this={buttonRef}
     onclick={() => (dropdownOpen = !dropdownOpen)}
-    class="btn btn-ghost btn-sm p-1 relative"
+    class="inline-flex items-center justify-center rounded-lg p-1 relative text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
     aria-label={t('notifications.title')}
     aria-expanded={dropdownOpen}
     aria-haspopup="menu"
@@ -465,7 +465,7 @@
         {#if formattedNotifications.length > 0}
           <button
             onclick={markAllAsRead}
-            class="text-sm link link-primary"
+            class="text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-focus)] hover:underline transition-colors duration-150"
             aria-label={t('notifications.actions.markAllRead')}
           >
             {t('notifications.actions.markAllRead')}
@@ -556,9 +556,17 @@
                   {/if}
                   <div class="flex items-center gap-2 mt-2">
                     {#if notification.component}
-                      <span class="badge badge-sm badge-ghost">{notification.component}</span>
+                      <span
+                        class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium bg-[var(--color-base-200)] text-[var(--color-base-content)]"
+                        >{notification.component}</span
+                      >
                     {/if}
-                    <span class={cn('badge badge-sm', notification.priorityBadgeClass)}>
+                    <span
+                      class={cn(
+                        'inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-medium',
+                        notification.priorityBadgeClass
+                      )}
+                    >
                       {notification.priority}
                     </span>
                   </div>
@@ -571,7 +579,10 @@
 
       <!-- Footer -->
       <div class="p-4 border-t border-[var(--color-base-300)]">
-        <button onclick={navigateToNotifications} class="btn btn-sm btn-block btn-ghost">
+        <button
+          onclick={navigateToNotifications}
+          class="inline-flex w-full items-center justify-center rounded-lg px-3 py-1.5 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+        >
           {t('notifications.actions.viewAll')}
         </button>
       </div>

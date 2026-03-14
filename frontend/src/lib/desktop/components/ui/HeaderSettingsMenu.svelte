@@ -101,13 +101,13 @@
         <!-- Theme toggle -->
         <button
           onclick={handleThemeToggle}
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
           role="menuitem"
         >
           {#if $theme === 'dark'}
-            <Sun class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
+            <Sun class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           {:else}
-            <Moon class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
+            <Moon class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           {/if}
           <span>{t('navigation.theme')}</span>
         </button>
@@ -116,10 +116,10 @@
         {#if isAdmin}
           <button
             onclick={handleEditDashboard}
-            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
             role="menuitem"
           >
-            <Pencil class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
+            <Pencil class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.editDashboard')}</span>
           </button>
         {/if}
@@ -132,10 +132,10 @@
           href="https://github.com/tphakala/birdnet-go"
           target="_blank"
           rel="noopener noreferrer"
-          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
           role="menuitem"
         >
-          <Github class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
+          <Github class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           <span>{t('navigation.github')}</span>
         </a>
       </div>

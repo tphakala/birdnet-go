@@ -83,7 +83,7 @@
     {#if showSidebarToggle}
       <button
         onclick={handleSidebarToggle}
-        class="btn btn-ghost btn-sm p-0 sm:p-1 lg:hidden"
+        class="inline-flex items-center justify-center rounded-lg p-0 sm:p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10 lg:hidden"
         aria-label={t('navigation.toggleSidebar')}
       >
         <Menu class="size-6" />
