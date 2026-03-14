@@ -12,12 +12,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -1318,4 +1320,127 @@ func TestGetSpectrogramLogger(t *testing.T) {
 		logger.Warn("test warning")
 		logger.Error("test error")
 	}, "Logger methods should not panic")
+}
+
+// TestServeAudioClipWaitsForEncoding verifies that when an audio file is being
+// encoded (temp file exists), the server waits for the final file to appear
+// instead of immediately returning 503.
+func TestServeAudioClipWaitsForEncoding(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	audioFilename := "encoding-test.wav"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	tempFilePath := audioFilePath + myaudio.TempExt
+
+	// Create the temp file to simulate in-progress encoding
+	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
+	require.NoError(t, err)
+
+	// Simulate the file appearing after a short delay (encoding completes).
+	// Use an error channel to propagate failures from the background goroutine.
+	errChan := make(chan error, 1)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		// Create the final audio file
+		createErr := createTestAudioFile(t, audioFilePath)
+		if createErr != nil {
+			errChan <- createErr
+			return
+		}
+		// Remove the temp file to simulate FFmpeg completing
+		os.Remove(tempFilePath) //nolint:errcheck // best-effort cleanup in test
+		errChan <- nil
+	}()
+	t.Cleanup(func() {
+		if bgErr := <-errChan; bgErr != nil {
+			t.Errorf("Background goroutine failed: %v", bgErr)
+		}
+	})
+
+	// Make the request — should wait for the file and serve it
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/media/audio/:filename")
+	ctx.SetParamNames("filename")
+	ctx.SetParamValues(audioFilename)
+
+	handlerErr := controller.ServeAudioClip(ctx)
+
+	// Should succeed (200) instead of 503
+	if handlerErr != nil {
+		// If there's an error, it should NOT be 503
+		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
+			assert.NotEqual(t, http.StatusServiceUnavailable, httpErr.Code,
+				"Should not return 503 when file appears within timeout")
+		}
+	} else {
+		assert.Equal(t, http.StatusOK, rec.Code,
+			"Should serve the file successfully after waiting for encoding")
+	}
+}
+
+// TestServeAudioClipReturns503AfterTimeout verifies that the server returns 503
+// with Retry-After header when encoding doesn't complete within the timeout.
+func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	audioFilename := "slow-encoding.wav"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	tempFilePath := audioFilePath + myaudio.TempExt
+
+	// Create only the temp file — final file never appears
+	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
+	require.NoError(t, err)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/media/audio/:filename")
+	ctx.SetParamNames("filename")
+	ctx.SetParamValues(audioFilename)
+
+	handlerErr := controller.ServeAudioClip(ctx)
+
+	// Should return 503 with Retry-After header.
+	// HandleError may write the response directly (handlerErr == nil) or return an HTTPError.
+	if handlerErr != nil {
+		httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
+		require.True(t, ok, "Error should be an HTTPError")
+		assert.Equal(t, http.StatusServiceUnavailable, httpErr.Code,
+			"Should return 503 when encoding doesn't complete within timeout")
+	} else {
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code,
+			"Should return 503 when encoding doesn't complete within timeout")
+	}
+	assert.Equal(t, audioRetryAfterSeconds, rec.Header().Get("Retry-After"),
+		"Should include Retry-After header")
+}
+
+// TestServeAudioClipNoTempFileReturns404 verifies that a missing file without
+// a temp file returns 404 (not 503).
+func TestServeAudioClipNoTempFileReturns404(t *testing.T) {
+	e, controller, _ := setupMediaTestEnvironment(t)
+
+	audioFilename := "nonexistent.wav"
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetPath("/api/v2/media/audio/:filename")
+	ctx.SetParamNames("filename")
+	ctx.SetParamValues(audioFilename)
+
+	handlerErr := controller.ServeAudioClip(ctx)
+
+	// Should return 404, not 503
+	if handlerErr != nil {
+		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
+			assert.Equal(t, http.StatusNotFound, httpErr.Code,
+				"Should return 404 when no temp file exists")
+		}
+	} else {
+		assert.Equal(t, http.StatusNotFound, rec.Code,
+			"Should return 404 when no temp file exists")
+	}
 }

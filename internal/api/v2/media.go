@@ -127,6 +127,15 @@ const audioEncodingMaxAge = 30 * time.Second
 // an audio file is still being encoded.
 const audioRetryAfterSeconds = "2"
 
+// audioWaitTimeout is the maximum time to wait server-side for an audio file
+// that is currently being encoded before returning 503 to the client.
+// This prevents unnecessary client round-trips when encoding finishes quickly.
+const audioWaitTimeout = 5 * time.Second
+
+// audioWaitPollInterval is how often to check if the audio file has appeared
+// during server-side waiting.
+const audioWaitPollInterval = 250 * time.Millisecond
+
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
 	c.logInfoIfEnabled("Initializing media routes")
@@ -310,6 +319,45 @@ func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 		http.StatusServiceUnavailable)
 }
 
+// waitForAudioFile polls for an audio file to appear on disk while encoding
+// is in progress. It returns true if the file became available within the
+// timeout, false if encoding is still ongoing or the temp file disappeared.
+// This reduces 503 responses by waiting server-side instead of requiring
+// the client to retry.
+func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool {
+	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioWaitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(audioWaitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		// Check for the file before waiting. This avoids a race condition where
+		// the file appears after the last tick but before the timeout.
+		if _, err := c.SFS.StatRel(relClipPath); err == nil {
+			return true
+		}
+		// If the temp file is gone, encoding has finished or failed.
+		// Re-check for the final file to handle the TOCTOU race where encoding
+		// completed (atomic rename) between the StatRel and isAudioBeingEncoded calls.
+		if !c.isAudioBeingEncoded(relClipPath) {
+			_, err := c.SFS.StatRel(relClipPath)
+			return err == nil
+		}
+
+		// Wait for the next event.
+		select {
+		case <-waitCtx.Done():
+			// Timeout or client disconnect — final check in case file appeared
+			// between the last tick and the deadline.
+			_, err := c.SFS.StatRel(relClipPath)
+			return err == nil
+		case <-ticker.C:
+			// Loop to check again.
+		}
+	}
+}
+
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -350,7 +398,27 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			if c.isAudioBeingEncoded(normalizedFilename) {
-				return c.handleAudioNotReady(ctx)
+				// Wait server-side for the file to appear instead of immediately
+				// returning 503, reducing unnecessary client round-trips.
+				if c.waitForAudioFile(ctx, normalizedFilename) {
+					// File appeared — serve it now
+					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedFilename); retryErr != nil {
+						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
+					}
+					c.logInfoIfEnabled("Successfully served audio clip after waiting for encoding",
+						logger.String("filename", filename),
+						logger.String("path", ctx.Request().URL.Path),
+						logger.String("ip", ctx.RealIP()),
+					)
+					return nil
+				}
+				// Distinguish "still encoding" from "encoder exited/failed".
+				if c.isAudioBeingEncoded(normalizedFilename) {
+					return c.handleAudioNotReady(ctx)
+				}
+				// Temp file disappeared and final file is still missing —
+				// encoding failed, fall back to normal error translation.
+				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 			}
 		}
 		// Error logging is handled within translateSecureFSError
@@ -436,7 +504,27 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
 			if c.isAudioBeingEncoded(normalizedClipPath) {
-				return c.handleAudioNotReady(ctx)
+				// Wait server-side for the file to appear instead of immediately
+				// returning 503, reducing unnecessary client round-trips.
+				if c.waitForAudioFile(ctx, normalizedClipPath) {
+					// File appeared — serve it now
+					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedClipPath); retryErr != nil {
+						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
+					}
+					c.logInfoIfEnabled("Successfully served audio clip by ID after waiting for encoding",
+						logger.String("note_id", noteID),
+						logger.String("path", ctx.Request().URL.Path),
+						logger.String("ip", ctx.RealIP()),
+					)
+					return nil
+				}
+				// Distinguish "still encoding" from "encoder exited/failed".
+				if c.isAudioBeingEncoded(normalizedClipPath) {
+					return c.handleAudioNotReady(ctx)
+				}
+				// Temp file disappeared and final file is still missing —
+				// encoding failed, fall back to normal error translation.
+				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 			}
 		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
