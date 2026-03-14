@@ -83,7 +83,7 @@
   <button
     bind:this={buttonRef}
     onclick={toggleMenu}
-    class="btn btn-ghost btn-sm p-1"
+    class="inline-flex items-center justify-center rounded-lg p-1 text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
     aria-label={t('navigation.settingsMenu')}
     aria-expanded={isOpen}
   >
