@@ -739,7 +739,7 @@ func validateSecuritySettings(settings *Security) error {
 	case TLSModeManual:
 		// Warn if no server certificate is installed
 		tm := GetTLSManager()
-		if !tm.CertificateExists("server", TLSCertTypeServerCert) {
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
 			GetLogger().Warn("TLS mode is 'manual' but no server certificate is installed",
 				logger.String("hint", "Upload a server certificate via the settings page or API"))
 		}
@@ -747,7 +747,7 @@ func validateSecuritySettings(settings *Security) error {
 	case TLSModeSelfSigned:
 		// Warn if no server certificate is installed (will be generated on startup)
 		tm := GetTLSManager()
-		if !tm.CertificateExists("server", TLSCertTypeServerCert) {
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
 			GetLogger().Info("TLS mode is 'selfsigned' - a self-signed certificate will be generated on startup")
 		}
 

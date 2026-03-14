@@ -92,7 +92,7 @@ func TestTLSGetCertificate_WithCert(t *testing.T) {
 	var info TLSCertificateInfo
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
 	assert.True(t, info.Installed, "should report certificate installed")
-	assert.Equal(t, "BirdNET-Go", info.Subject)
+	assert.Equal(t, "CN=BirdNET-Go", info.Subject)
 	assert.Equal(t, "selfsigned", info.Mode)
 	assert.NotEmpty(t, info.NotBefore)
 	assert.NotEmpty(t, info.NotAfter)
@@ -126,7 +126,7 @@ func TestTLSUploadCertificate_ValidPEM(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
 	assert.True(t, info.Installed)
 	assert.Equal(t, "manual", info.Mode)
-	assert.Equal(t, "BirdNET-Go", info.Subject)
+	assert.Equal(t, "CN=BirdNET-Go", info.Subject)
 
 	// Verify settings were updated
 	controller.settingsMutex.RLock()
@@ -232,7 +232,7 @@ func TestTLSGenerateSelfSignedCertificate(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &info))
 	assert.True(t, info.Installed)
 	assert.Equal(t, "selfsigned", info.Mode)
-	assert.Equal(t, "BirdNET-Go", info.Subject)
+	assert.Equal(t, "CN=BirdNET-Go", info.Subject)
 	assert.NotEmpty(t, info.SANs)
 	assert.Positive(t, info.DaysUntilExpiry)
 

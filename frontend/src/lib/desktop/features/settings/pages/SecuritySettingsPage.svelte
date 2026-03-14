@@ -629,10 +629,10 @@
         </p>
 
         <!-- TLS Mode Selector -->
-        <div class="mb-4">
-          <label class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
+        <div class="mb-4" role="group" aria-label={t('settings.security.tls.modeLabel')}>
+          <span class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
             {t('settings.security.tls.modeLabel')}
-          </label>
+          </span>
           <div class="flex gap-2 flex-wrap">
             <button
               type="button"

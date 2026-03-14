@@ -115,12 +115,17 @@ func (c *Controller) UploadTLSCertificate(ctx echo.Context) error {
 
 	// Save private key
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerKey, req.PrivateKey); err != nil {
+		// Clean up the cert that was saved
+		_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
 		return c.HandleError(ctx, err, "Failed to save TLS private key", http.StatusInternalServerError)
 	}
 
 	// Save CA certificate if provided
 	if strings.TrimSpace(req.CACertificate) != "" {
 		if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeCA, req.CACertificate); err != nil {
+			// Clean up cert and key that were saved
+			_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
+			_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerKey)
 			return c.HandleError(ctx, err, "Failed to save CA certificate", http.StatusInternalServerError)
 		}
 	}
@@ -268,7 +273,16 @@ func parseCertificateInfo(certPath string) (*TLSCertificateInfo, error) {
 
 	// Compute SHA-256 fingerprint of the DER-encoded certificate
 	fingerprint := sha256.Sum256(cert.Raw)
-	fingerprintHex := fmt.Sprintf("%X", fingerprint[:])
+	// Build colon-separated hex fingerprint with SHA256: prefix
+	hexStr := fmt.Sprintf("%x", fingerprint[:])
+	var colonSep strings.Builder
+	colonSep.WriteString("SHA256:")
+	for i := 0; i < len(hexStr); i += 2 {
+		if i > 0 {
+			colonSep.WriteByte(':')
+		}
+		colonSep.WriteString(hexStr[i : i+2])
+	}
 
 	// Collect SANs: DNS names + IP addresses
 	sans := make([]string, 0, len(cert.DNSNames)+len(cert.IPAddresses))
@@ -281,14 +295,14 @@ func parseCertificateInfo(certPath string) (*TLSCertificateInfo, error) {
 
 	return &TLSCertificateInfo{
 		Installed:       true,
-		Subject:         cert.Subject.CommonName,
-		Issuer:          cert.Issuer.CommonName,
+		Subject:         cert.Subject.String(),
+		Issuer:          cert.Issuer.String(),
 		NotBefore:       cert.NotBefore.Format(time.RFC3339),
 		NotAfter:        cert.NotAfter.Format(time.RFC3339),
 		DaysUntilExpiry: daysUntilExpiry,
 		SANs:            sans,
 		SerialNumber:    cert.SerialNumber.String(),
-		Fingerprint:     fingerprintHex,
+		Fingerprint:     colonSep.String(),
 	}, nil
 }
 
