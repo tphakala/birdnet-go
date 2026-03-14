@@ -34,7 +34,7 @@ export interface QuietHoursStatus {
 }
 
 let status = $state<QuietHoursStatus | null>(null);
-let timer: ReturnType<typeof setInterval> | null = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 let refCount = 0;
 
 async function fetchStatus() {
@@ -53,11 +53,22 @@ async function fetchStatus() {
  * Uses reference counting so multiple consumers can call startPolling/stopPolling
  * independently — polling only stops when all consumers have stopped.
  */
+function scheduleNextPoll() {
+  timer = setTimeout(async () => {
+    timer = null;
+    await fetchStatus();
+    // Continue polling only if there are still active consumers
+    if (refCount > 0) {
+      scheduleNextPoll();
+    }
+  }, POLL_INTERVAL_MS);
+}
+
 function startPolling() {
   refCount++;
   if (refCount === 1 && typeof window !== 'undefined') {
     fetchStatus();
-    timer = setInterval(fetchStatus, POLL_INTERVAL_MS);
+    scheduleNextPoll();
   }
 }
 
@@ -65,7 +76,7 @@ function startPolling() {
 function stopPolling() {
   refCount = Math.max(0, refCount - 1);
   if (refCount === 0 && timer !== null) {
-    clearInterval(timer);
+    clearTimeout(timer);
     timer = null;
   }
 }
