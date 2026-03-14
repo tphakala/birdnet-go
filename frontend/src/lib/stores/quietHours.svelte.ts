@@ -20,6 +20,7 @@
  */
 import { api } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
+import { connectionState } from '$lib/stores/connectionState.svelte';
 
 const logger = loggers.ui;
 
@@ -37,6 +38,7 @@ let timer: ReturnType<typeof setInterval> | null = null;
 let refCount = 0;
 
 async function fetchStatus() {
+  if (!connectionState.isOnline) return;
   try {
     status = await api.get<QuietHoursStatus>('/api/v2/streams/quiet-hours/status');
   } catch {
