@@ -47,15 +47,16 @@
   let currentWidth = $derived(element.width ?? 'full');
 
   let settingsOpen = $state(false);
+  let dropdownRef = $state<HTMLElement | null>(null);
 
   function toggleWidth() {
     onUpdate({ ...element, width: currentWidth === 'full' ? 'half' : 'full' });
   }
 
   function handleSettingsClickOutside(event: MouseEvent) {
-    if (settingsOpen) {
+    if (settingsOpen && dropdownRef) {
       const target = event.target as HTMLElement;
-      if (!target.closest('.settings-dropdown-container')) {
+      if (!dropdownRef.contains(target)) {
         settingsOpen = false;
       }
     }
@@ -134,7 +135,7 @@
       <!-- Cogwheel settings button (only when settingsContent is provided) -->
       {#if settingsContent}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="settings-dropdown-container relative">
+        <div class="relative" bind:this={dropdownRef}>
           <button
             onclick={e => {
               e.stopPropagation();
@@ -145,6 +146,7 @@
               settingsOpen && 'bg-black/5 dark:bg-white/5'
             )}
             aria-label={t('dashboard.editMode.settings')}
+            aria-expanded={settingsOpen}
             title={t('dashboard.editMode.settings')}
           >
             <Settings class="size-4 text-[var(--color-base-content)]/60" />
