@@ -387,12 +387,12 @@ Performance Optimizations:
             onclick={() => navigate(navigationUrls.dashboard)}
             onmouseenter={e => isCollapsed && showTooltip(e, t('navigation.dashboard'))}
             onmouseleave={hideTooltip}
+            aria-label={t('navigation.dashboard')}
             class={cn(
               menuItemBase,
               menuItemCollapsed,
               routeCache.dashboard ? menuItemActive : menuItemDefault
             )}
-            role="menuitem"
             aria-current={routeCache.dashboard ? 'page' : undefined}
           >
             <LayoutDashboard class="size-5 shrink-0" />

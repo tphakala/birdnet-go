@@ -6,6 +6,7 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { resetDateToToday } from '$lib/utils/datePersistence';
   import { Settings, Sun, Moon, Pencil, Github } from '@lucide/svelte';
 
   interface Props {
@@ -44,6 +45,7 @@
 
   function handleEditDashboard() {
     isOpen = false;
+    resetDateToToday();
     dashboardEditMode.set(true);
     navigation.navigate('/ui/dashboard');
   }
@@ -65,9 +67,9 @@
     }
   }
 
-  // Register click-outside and keydown listeners
+  // Register click-outside and keydown listeners only when menu is open
   $effect(() => {
-    if (typeof globalThis.window !== 'undefined') {
+    if (isOpen && typeof globalThis.window !== 'undefined') {
       globalThis.document.addEventListener('click', handleClickOutside);
       globalThis.document.addEventListener('keydown', handleKeydown);
 
@@ -95,14 +97,13 @@
       bind:this={dropdownRef}
       class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
       style:z-index="1010"
-      role="menu"
+      aria-label={t('navigation.settingsMenu')}
     >
       <div class="p-1">
         <!-- Theme toggle -->
         <button
           onclick={handleThemeToggle}
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-          role="menuitem"
         >
           {#if $theme === 'dark'}
             <Sun class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
@@ -117,7 +118,6 @@
           <button
             onclick={handleEditDashboard}
             class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-            role="menuitem"
           >
             <Pencil class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.editDashboard')}</span>
@@ -125,7 +125,7 @@
         {/if}
 
         <!-- Divider -->
-        <div class="my-1 border-t border-[var(--color-base-content)]/10" role="separator"></div>
+        <div class="my-1 border-t border-[var(--color-base-content)]/10" aria-hidden="true"></div>
 
         <!-- GitHub link -->
         <a
@@ -133,7 +133,6 @@
           target="_blank"
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
-          role="menuitem"
         >
           <Github class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
           <span>{t('navigation.github')}</span>
