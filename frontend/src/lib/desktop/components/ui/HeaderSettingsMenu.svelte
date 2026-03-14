@@ -20,9 +20,6 @@
   let buttonRef = $state<HTMLButtonElement | null>(null);
   let dropdownRef = $state<HTMLDivElement | null>(null);
 
-  // Svelte 5 auto-subscription for theme store
-  let currentTheme = $derived($theme);
-
   // Admin check: show edit dashboard if security disabled or user has access
   let isAdmin = $derived(!securityEnabled || accessAllowed);
 
@@ -98,14 +95,16 @@
       bind:this={dropdownRef}
       class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
       style:z-index="1010"
+      role="menu"
     >
       <div class="p-1">
         <!-- Theme toggle -->
         <button
           onclick={handleThemeToggle}
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          role="menuitem"
         >
-          {#if currentTheme === 'dark'}
+          {#if $theme === 'dark'}
             <Sun class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
           {:else}
             <Moon class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
@@ -118,6 +117,7 @@
           <button
             onclick={handleEditDashboard}
             class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+            role="menuitem"
           >
             <Pencil class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.editDashboard')}</span>
@@ -125,7 +125,7 @@
         {/if}
 
         <!-- Divider -->
-        <div class="my-1 border-t border-[var(--color-base-content)]/10"></div>
+        <div class="my-1 border-t border-[var(--color-base-content)]/10" role="separator"></div>
 
         <!-- GitHub link -->
         <a
@@ -133,6 +133,7 @@
           target="_blank"
           rel="noopener noreferrer"
           class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          role="menuitem"
         >
           <Github class="size-5 shrink-0 text-[var(--color-base-content)]/70" />
           <span>{t('navigation.github')}</span>
