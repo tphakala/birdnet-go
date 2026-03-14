@@ -140,8 +140,8 @@ func TestValidateSecuritySettings_OAuth(t *testing.T) {
 	}
 }
 
-// TestValidateSecuritySettings_AutoTLS tests AutoTLS validation rules
-func TestValidateSecuritySettings_AutoTLS(t *testing.T) {
+// TestValidateSecuritySettings_TLSMode tests TLS mode validation rules
+func TestValidateSecuritySettings_TLSMode(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -151,50 +151,75 @@ func TestValidateSecuritySettings_AutoTLS(t *testing.T) {
 		errType  string
 	}{
 		{
-			name: "AutoTLS enabled without host - should fail",
+			name: "TLSMode autotls without host - should fail",
 			security: Security{
 				Host:            "",
-				AutoTLS:         true,
+				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: true,
 			errType: "security-autotls-host",
 		},
 		{
-			name: "AutoTLS enabled with valid host - should pass",
+			name: "TLSMode autotls with valid host - should pass",
 			security: Security{
 				Host:            "birdnet.example.com",
-				AutoTLS:         true,
+				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: false,
 		},
 		{
-			name: "AutoTLS disabled without host - should pass",
+			name: "TLSMode none without host - should pass",
 			security: Security{
 				Host:            "",
-				AutoTLS:         false,
+				TLSMode:         TLSModeNone,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: false,
 		},
 		{
-			name: "AutoTLS enabled with IP address host - should pass",
+			name: "TLSMode autotls with IP address host - should pass",
 			security: Security{
 				Host:            "192.168.1.100",
-				AutoTLS:         true,
+				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: false,
 		},
 		{
-			name: "AutoTLS enabled with subdomain - should pass",
+			name: "TLSMode autotls with subdomain - should pass",
 			security: Security{
 				Host:            "birdnet.home.arpa",
-				AutoTLS:         true,
+				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: false,
+		},
+		{
+			name: "TLSMode manual - should pass",
+			security: Security{
+				TLSMode:         TLSModeManual,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "TLSMode selfsigned - should pass",
+			security: Security{
+				TLSMode:         TLSModeSelfSigned,
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "TLSMode invalid value - should fail",
+			security: Security{
+				TLSMode:         TLSMode("bogus"),
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: true,
+			errType: "security-tlsmode-invalid",
 		},
 	}
 
@@ -394,10 +419,10 @@ func TestValidateSecuritySettings_EdgeCases(t *testing.T) {
 		wantErr  bool
 	}{
 		{
-			name: "AutoTLS and OAuth both enabled with same host - should pass",
+			name: "TLSMode autotls and OAuth both enabled with same host - should pass",
 			security: Security{
 				Host:    "birdnet.example.com",
-				AutoTLS: true,
+				TLSMode: TLSModeAutoTLS,
 				GoogleAuth: SocialProvider{
 					Enabled:      true,
 					ClientID:     "test-id",
@@ -425,7 +450,7 @@ func TestValidateSecuritySettings_EdgeCases(t *testing.T) {
 			name: "All features disabled - should pass",
 			security: Security{
 				Host:    "",
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 				GoogleAuth: SocialProvider{
 					Enabled: false,
 				},
@@ -443,7 +468,7 @@ func TestValidateSecuritySettings_EdgeCases(t *testing.T) {
 			name: "Host with whitespace - should pass (normalized by caller)",
 			security: Security{
 				Host:            "  birdnet.example.com  ",
-				AutoTLS:         true,
+				TLSMode:         TLSModeAutoTLS,
 				SessionDuration: 24 * time.Hour,
 			},
 			wantErr: false,
@@ -463,4 +488,46 @@ func TestValidateSecuritySettings_EdgeCases(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestMigrateTLSConfig_AutoTLSToTLSMode tests migration from AutoTLS=true to TLSMode
+func TestMigrateTLSConfig_AutoTLSToTLSMode(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	settings.Security.AutoTLS = true
+	settings.Security.TLSMode = ""
+
+	migrated := settings.MigrateTLSConfig()
+
+	assert.True(t, migrated, "migration should have occurred")
+	assert.Equal(t, TLSModeAutoTLS, settings.Security.TLSMode, "TLSMode should be set to autotls")
+}
+
+// TestMigrateTLSConfig_AlreadyMigrated tests that migration is skipped when TLSMode is already set
+func TestMigrateTLSConfig_AlreadyMigrated(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	settings.Security.AutoTLS = true
+	settings.Security.TLSMode = TLSModeManual
+
+	migrated := settings.MigrateTLSConfig()
+
+	assert.False(t, migrated, "migration should not have occurred")
+	assert.Equal(t, TLSModeManual, settings.Security.TLSMode, "TLSMode should remain manual")
+}
+
+// TestMigrateTLSConfig_NoAutoTLS tests that no migration occurs when AutoTLS is false
+func TestMigrateTLSConfig_NoAutoTLS(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	settings.Security.AutoTLS = false
+	settings.Security.TLSMode = ""
+
+	migrated := settings.MigrateTLSConfig()
+
+	assert.False(t, migrated, "migration should not have occurred")
+	assert.Equal(t, TLSModeNone, settings.Security.TLSMode, "TLSMode should remain empty")
 }

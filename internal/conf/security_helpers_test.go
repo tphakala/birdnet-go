@@ -52,7 +52,7 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: testURLHTTPS,
 				Host:    testHostIgnored,
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 			},
 			port: testPortCustom,
 			want: testURLHTTPS,
@@ -62,27 +62,27 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: testURLTrailingSlash,
 				Host:    "",
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 			},
 			port: testPortCustom,
 			want: testURLHTTPSNoPort,
 		},
 		{
-			name: "BaseURL empty, Host set with AutoTLS - should construct HTTPS URL",
+			name: "BaseURL empty, Host set with TLSMode autotls - should construct HTTPS URL",
 			security: Security{
 				BaseURL: "",
 				Host:    testHostExample,
-				AutoTLS: true,
+				TLSMode: TLSModeAutoTLS,
 			},
 			port: DefaultHTTPSPort,
 			want: testURLHTTPSNoPort,
 		},
 		{
-			name: "BaseURL empty, Host set without AutoTLS - should construct HTTP URL",
+			name: "BaseURL empty, Host set without TLS - should construct HTTP URL",
 			security: Security{
 				BaseURL: "",
 				Host:    testHostExample,
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 			},
 			port: testPortCustom,
 			want: testURLHTTPWithPort,
@@ -92,7 +92,7 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: "",
 				Host:    testHostExample,
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 			},
 			port: DefaultHTTPPort,
 			want: testURLHTTPNoPort,
@@ -102,7 +102,7 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: "",
 				Host:    testHostExample,
-				AutoTLS: true,
+				TLSMode: TLSModeAutoTLS,
 			},
 			port: DefaultHTTPSPort,
 			want: testURLHTTPSNoPort,
@@ -112,7 +112,7 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: "",
 				Host:    "",
-				AutoTLS: false,
+				TLSMode: TLSModeNone,
 			},
 			port: testPortCustom,
 			want: "",
@@ -122,10 +122,30 @@ func TestSecurity_GetBaseURL(t *testing.T) {
 			security: Security{
 				BaseURL: testURLHTTPLocalhost,
 				Host:    "",
-				AutoTLS: true, // AutoTLS ignored when BaseURL is set
+				TLSMode: TLSModeAutoTLS, // TLSMode ignored when BaseURL is set
 			},
 			port: DefaultHTTPSPort,
 			want: testURLHTTPLocalhost,
+		},
+		{
+			name: "BaseURL empty, Host set with TLSMode manual - should construct HTTPS URL",
+			security: Security{
+				BaseURL: "",
+				Host:    testHostExample,
+				TLSMode: TLSModeManual,
+			},
+			port: testPortCustom,
+			want: "https://birdnet.example.com:8080",
+		},
+		{
+			name: "BaseURL empty, Host set with TLSMode selfsigned - should construct HTTPS URL",
+			security: Security{
+				BaseURL: "",
+				Host:    testHostExample,
+				TLSMode: TLSModeSelfSigned,
+			},
+			port: testPortCustom,
+			want: "https://birdnet.example.com:8080",
 		},
 	}
 
@@ -340,7 +360,7 @@ func TestSecurity_GetBaseURL_ConcurrentAccess(t *testing.T) {
 	security := Security{
 		BaseURL: testURLHTTPS,
 		Host:    testHostExample,
-		AutoTLS: true,
+		TLSMode: TLSModeAutoTLS,
 	}
 
 	var wg sync.WaitGroup
