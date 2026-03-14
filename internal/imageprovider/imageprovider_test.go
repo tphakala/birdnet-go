@@ -13,7 +13,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -653,8 +652,6 @@ func TestBirdImageCacheNilStore(t *testing.T) {
 
 // TestBirdImageCacheRefresh tests the cache refresh functionality
 func TestBirdImageCacheRefresh(t *testing.T) {
-	// Note: This test cannot run in parallel because it modifies the provider
-	// after cache creation, which races with the background refresh goroutine
 	t.Log("Starting TestBirdImageCacheRefresh")
 	mockProvider := &mockImageProvider{}
 	mockStore := newMockStore()
@@ -677,16 +674,11 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	err = mockStore.SaveImageCache(oldEntry)
 	require.NoError(t, err, "Failed to save old cache entry")
 
-	// Enable debug mode for the cache
-	settings := conf.Setting()
-	settings.Realtime.Dashboard.Thumbnails.Debug = true
-
-	// Create cache with default settings
-	cache, err := imageprovider.CreateDefaultCache(metrics, mockStore)
-	require.NoError(t, err, "Failed to create default cache")
-
-	// Set our mock provider
-	cache.SetImageProvider(mockProvider)
+	// Use InitCache directly with the mock provider to avoid a race condition:
+	// CreateDefaultCache starts a background refresh goroutine immediately,
+	// and if SetImageProvider is called after, the refresh may already run
+	// with the default lazy provider instead of the mock.
+	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
 
 	// Wait for refresh routine to run
 	t.Log("Waiting for refresh routine to run...")
