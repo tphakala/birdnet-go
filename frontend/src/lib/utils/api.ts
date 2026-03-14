@@ -347,6 +347,9 @@ export async function fetchWithCSRF<T = unknown>(
 
     clearTimeout(timeoutId);
 
+    // Any HTTP response (even 4xx/5xx) proves the backend is reachable
+    markOnline();
+
     // If 403 on a state-changing request, the CSRF token may have expired.
     // Refresh the token and retry once.
     const method = (finalOptions.method ?? 'GET').toUpperCase();
@@ -364,8 +367,6 @@ export async function fetchWithCSRF<T = unknown>(
       }
     }
 
-    // Any HTTP response (even 4xx/5xx) proves the backend is reachable
-    markOnline();
     const result = await handleResponse<T>(response);
     logger.debug(`Response from ${url} received successfully`);
     return result;

@@ -9,7 +9,7 @@
   <div
     transition:slide={{ duration: 300 }}
     role="alert"
-    aria-live="polite"
+    aria-live="assertive"
     class="flex items-center gap-3 rounded-lg bg-[var(--color-warning)] px-4 py-3 text-sm font-medium text-[var(--color-warning-content)]"
   >
     <WifiOff class="h-5 w-5 shrink-0" />

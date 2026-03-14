@@ -90,7 +90,10 @@
 
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
-    if (!connectionState.isOnline) return;
+    if (!connectionState.isOnline) {
+      if (!overview) overviewLoading = false;
+      return;
+    }
     try {
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
