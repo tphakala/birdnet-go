@@ -54,8 +54,17 @@
     'video-embed',
   ];
 
+  // Maximum number of instances allowed per element type
+  const MAX_INSTANCES: Partial<Record<DashboardElementType, number>> = {
+    'video-embed': 6,
+  };
+
   let missingTypes = $derived(
-    ALL_ELEMENT_TYPES.filter(type => !editElements.some(el => el.type === type))
+    ALL_ELEMENT_TYPES.filter(type => {
+      const count = editElements.filter(el => el.type === type).length;
+      const max = MAX_INSTANCES[type] ?? 1;
+      return count < max;
+    })
   );
 
   // Initialize editElements when editMode becomes true
@@ -83,7 +92,7 @@
       type,
       enabled: true,
     };
-    editElements = [...editElements, newElement];
+    editElements = [newElement, ...editElements];
     addDropdownOpen = false;
   }
 
