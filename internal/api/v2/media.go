@@ -136,6 +136,13 @@ const audioWaitTimeout = 5 * time.Second
 // during server-side waiting.
 const audioWaitPollInterval = 250 * time.Millisecond
 
+// ClipExtractionRequest represents a request to extract an audio clip.
+type ClipExtractionRequest struct {
+	Start  float64 `json:"start"`
+	End    float64 `json:"end"`
+	Format string  `json:"format"`
+}
+
 // Initialize media routes
 func (c *Controller) initMediaRoutes() {
 	c.logInfoIfEnabled("Initializing media routes")
@@ -149,6 +156,13 @@ func (c *Controller) initMediaRoutes() {
 	c.Echo.GET("/api/v2/spectrogram/:id", c.ServeSpectrogramByID)
 	c.Echo.GET("/api/v2/spectrogram/:id/status", c.GetSpectrogramStatus)
 	c.Echo.POST("/api/v2/spectrogram/:id/generate", c.GenerateSpectrogramByID)
+
+	// Clip extraction (requires authentication)
+	if c.authMiddleware != nil {
+		c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.authMiddleware)
+	} else {
+		c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID)
+	}
 
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
@@ -531,6 +545,117 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	}
 
 	return nil
+}
+
+// ExtractAudioClipByID extracts a time range from an audio clip and returns the
+// re-encoded segment. Requires authentication.
+//
+// POST /api/v2/audio/:id/clip
+// Body: {"start": 1.5, "end": 4.2, "format": "mp3"}
+func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	// Parse and validate request body
+	var req ClipExtractionRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	if req.Start < 0 {
+		return c.HandleError(ctx, fmt.Errorf("start must be >= 0, got %f", req.Start),
+			"Start time must be non-negative", http.StatusBadRequest)
+	}
+	if req.End <= req.Start {
+		return c.HandleError(ctx, fmt.Errorf("end (%f) must be > start (%f)", req.End, req.Start),
+			"End time must be greater than start time", http.StatusBadRequest)
+	}
+	if !myaudio.IsSupportedClipFormat(req.Format) {
+		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
+			"Unsupported audio format", http.StatusBadRequest)
+	}
+
+	// Resolve clip path from datastore
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+	}
+
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+	}
+
+	// Normalize and validate path via SecureFS (same pattern as ServeAudioByID)
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+
+	// Resolve to absolute path within SecureFS base directory
+	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
+
+	// Check if file exists using SecureFS (handle encoding-in-progress same as ServeAudioByID)
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		if c.isAudioBeingEncoded(normalizedPath) {
+			return c.handleAudioNotReady(ctx)
+		}
+		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+
+	// Acquire semaphore (limit concurrent extractions)
+	select {
+	case clipExtractionSemaphore <- struct{}{}:
+		defer func() { <-clipExtractionSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("extraction queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	// Extract clip
+	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio)
+	if err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to extract audio clip", http.StatusInternalServerError)
+	}
+
+	// Set response headers
+	mimeType := clipMIMEType(req.Format)
+	ctx.Response().Header().Set("Content-Type", mimeType)
+
+	ext := req.Format
+	if ext == "alac" {
+		ext = "m4a"
+	}
+	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, ext)
+	ctx.Response().Header().Set("Content-Disposition",
+		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(filename)))
+
+	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
+}
+
+// clipMIMEType returns the MIME type for a clip extraction format.
+func clipMIMEType(format string) string {
+	switch format {
+	case "wav":
+		return MimeTypeWAV
+	case myaudio.FormatFLAC:
+		return MimeTypeFLAC
+	case myaudio.FormatMP3:
+		return MimeTypeMP3
+	case myaudio.FormatAAC, myaudio.FormatALAC:
+		return MimeTypeM4A
+	case myaudio.FormatOpus:
+		return MimeTypeOGG
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
@@ -1257,6 +1382,11 @@ const (
 	spectrogramVerifyRetries     = 3                // Number of verification retries after generation
 	spectrogramVerifyBaseDelay   = 50               // Base delay in milliseconds for verification retries
 )
+
+// maxConcurrentClipExtractions limits concurrent clip extractions to prevent CPU exhaustion.
+const maxConcurrentClipExtractions = 2
+
+var clipExtractionSemaphore = make(chan struct{}, maxConcurrentClipExtractions)
 
 var (
 	spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
