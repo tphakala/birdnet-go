@@ -166,8 +166,11 @@
   let mqttUploadCert = $state('');
   let mqttUploadKey = $state('');
 
+  // Derive a stable flag to prevent $effect reruns when unrelated settings change
+  let mqttTlsEnabled = $derived(settings.mqtt?.tls?.enabled ?? false);
+
   $effect(() => {
-    if (settings.mqtt?.tls?.enabled) {
+    if (mqttTlsEnabled) {
       loadMQTTCertInfo();
     } else {
       mqttCertInfo = null;

@@ -30,6 +30,7 @@
   }: Props = $props();
 
   async function handleFileSelect(event: Event) {
+    if (disabled) return;
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];
     if (!file) return;
@@ -56,14 +57,24 @@
       {value}
       class="flex-1 px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] font-mono resize-y min-h-[80px]"
       {placeholder}
+      {required}
       {disabled}
       oninput={e => onchange((e.target as HTMLTextAreaElement).value)}
     ></textarea>
     <label
-      class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] cursor-pointer hover:bg-[var(--color-base-300)] transition-all self-start"
+      class="px-3 py-2 rounded-lg text-xs font-medium bg-[var(--color-base-200)] border border-[var(--color-base-300)] transition-all self-start"
+      class:cursor-pointer={!disabled}
+      class:cursor-not-allowed={disabled}
+      class:opacity-50={disabled}
     >
       {t('components.tls.browseFile')}
-      <input type="file" accept={acceptFiles} class="hidden" onchange={handleFileSelect} />
+      <input
+        type="file"
+        accept={acceptFiles}
+        class="hidden"
+        onchange={handleFileSelect}
+        {disabled}
+      />
     </label>
   </div>
 </div>
