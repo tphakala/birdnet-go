@@ -311,7 +311,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 		if registry != nil {
 			for i := range settings.Realtime.RTSP.Streams {
 				stream := &settings.Realtime.RTSP.Streams[i]
-				if streamSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type)); streamSource != nil {
+				if streamSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name); streamSource != nil {
 					sources = append(sources, streamSource.ID)
 				} else {
 					GetLogger().Warn("Failed to get stream source ID from registry during reconfiguration",

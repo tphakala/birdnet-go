@@ -407,7 +407,7 @@ func (c *Controller) getAudioCardSource(registry *myaudio.AudioSourceRegistry) *
 func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]myaudio.AudioLevelData, isAuthenticated bool) {
 	for i := range c.Settings.Realtime.RTSP.Streams {
 		stream := &c.Settings.Realtime.RTSP.Streams[i]
-		source := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type))
+		source := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name)
 		if source == nil {
 			continue
 		}

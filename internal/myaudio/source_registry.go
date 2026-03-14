@@ -190,8 +190,9 @@ func (r *AudioSourceRegistry) GetSourceByConnection(connectionString string) (*A
 	return nil, false
 }
 
-// GetOrCreateSource ensures a source exists and returns it
-func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceType SourceType) *AudioSource {
+// GetOrCreateSource ensures a source exists and returns it.
+// An optional displayName can be provided to set or update the source's display name.
+func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceType SourceType, displayName ...string) *AudioSource {
 	// Auto-detect type if unknown or if detection yields a different type
 	actualType := sourceType
 	if sourceType == SourceTypeUnknown {
@@ -204,9 +205,14 @@ func (r *AudioSourceRegistry) GetOrCreateSource(connectionString string, sourceT
 		}
 	}
 
-	source, err := r.RegisterSource(connectionString, SourceConfig{
+	config := SourceConfig{
 		Type: actualType,
-	})
+	}
+	if len(displayName) > 0 {
+		config.DisplayName = displayName[0]
+	}
+
+	source, err := r.RegisterSource(connectionString, config)
 	if err != nil {
 		r.logger.Error("Failed to register source", logger.Error(err))
 		return nil
