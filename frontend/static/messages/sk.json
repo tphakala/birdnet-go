@@ -413,7 +413,7 @@
       },
       "buffer": {
         "overloadTitle": "Analýza zvuku preťažená",
-        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek, pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
+        "overloadMessage": "Váš systém zahadzuje {dropRate} % zvukových vzoriek zo zdroja '{sourceName}', pretože nestíha analýzu. Znížte hodnotu prekrytia BirdNET v nastaveniach detekcie alebo zvážte rýchlejší procesor."
       },
       "alert": {
         "firedTitle": "{rule_name}",

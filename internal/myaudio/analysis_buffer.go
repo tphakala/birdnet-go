@@ -166,10 +166,10 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 
 	// Update global variables safely
 	abMutex.Lock()
-	defer abMutex.Unlock()
 
 	// Check if buffer already exists
 	if _, exists := analysisBuffers[sourceID]; exists {
+		abMutex.Unlock()
 		ab.Reset() // Clean up the new buffer since we won't use it
 		enhancedErr := errors.Newf("analysis buffer already exists for source: %s", sourceID).
 			Component("myaudio").
@@ -199,8 +199,9 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	analysisBuffers[sourceID] = ab
 	prevData[sourceID] = nil
 	warningCounter[sourceID] = 0
+	abMutex.Unlock()
 
-	// Create overwrite tracker for this source
+	// Create overwrite tracker for this source (outside abMutex to avoid nested locks)
 	overwriteTrackersMu.Lock()
 	overwriteTrackers[sourceID] = &overwriteTracker{
 		windowStart: time.Now(),
@@ -253,11 +254,6 @@ func RemoveAnalysisBuffer(sourceID string) error {
 	delete(prevData, sourceID)
 	delete(warningCounter, sourceID)
 
-	// Remove overwrite tracker for this source
-	overwriteTrackersMu.Lock()
-	delete(overwriteTrackers, sourceID)
-	overwriteTrackersMu.Unlock()
-
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
 	if len(analysisBuffers) == 0 {
 		bufferPoolInitMu.Lock()
@@ -270,7 +266,12 @@ func RemoveAnalysisBuffer(sourceID string) error {
 		}
 		bufferPoolInitMu.Unlock()
 	}
-	abMutex.Unlock() // Release lock before calling registry
+	abMutex.Unlock() // Release lock before acquiring other locks
+
+	// Remove overwrite tracker for this source (outside abMutex to avoid nested locks)
+	overwriteTrackersMu.Lock()
+	delete(overwriteTrackers, sourceID)
+	overwriteTrackersMu.Unlock()
 
 	// Release reference to this source - registry will auto-remove if count reaches zero
 	registry := GetRegistry()
@@ -379,16 +380,17 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 		m.UpdateBufferSize("analysis", sourceID, currentLength)
 	}
 
-	// Detect if this write will overwrite old data (buffer has no free space)
-	willOverwrite := ab.Free() == 0
-
 	// Write data to the ring buffer.
 	// With overwrite mode enabled, writes always succeed by discarding oldest data
 	// when the buffer is full, so no retry logic is needed.
 	var n int
+	var willOverwrite bool
 	err := func() error {
 		abMutex.Lock()
 		defer abMutex.Unlock()
+
+		// Check inside the lock to avoid TOCTOU race with concurrent writes
+		willOverwrite = ab.Free() == 0
 
 		var writeErr error
 		n, writeErr = ab.Write(data)
@@ -713,10 +715,11 @@ func sendOverloadNotification(sourceID string, dropRate float64) {
 	}
 
 	title := fmt.Sprintf("Audio Analysis Overloaded — %s", displayName)
-	message := fmt.Sprintf("Dropping %.0f%% of audio samples. Reduce BirdNET overlap or upgrade CPU.", dropRate)
+	message := fmt.Sprintf("Dropping %.0f%% of audio samples for source '%s'. Reduce BirdNET overlap or upgrade CPU.", dropRate, displayName)
 
 	params := map[string]any{
-		"dropRate": fmt.Sprintf("%.0f", dropRate),
+		"dropRate":   fmt.Sprintf("%.0f", dropRate),
+		"sourceName": displayName,
 	}
 
 	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, title, message).
