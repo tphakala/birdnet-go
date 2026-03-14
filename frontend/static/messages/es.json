@@ -411,6 +411,10 @@
         "failedTitle": "Limpieza de base de datos antigua fallida",
         "failedMessage": "Error al eliminar la base de datos antigua. Revise los registros para más detalles."
       },
+      "buffer": {
+        "overloadTitle": "Análisis de audio sobrecargado",
+        "overloadMessage": "Su sistema está descartando el {dropRate} % de las muestras de audio de la fuente '{sourceName}' porque no puede seguir el ritmo del análisis. Reduzca el valor de superposición de BirdNET en los ajustes de detección o considere actualizar a una CPU más rápida."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valor actual: {value}% (umbral: {threshold}%)",

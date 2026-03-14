@@ -150,4 +150,8 @@ const (
 
 	// Terminal errors
 	MsgErrTerminalDisabled = "errors.terminal.disabled"
+
+	// Buffer overwrite notifications
+	MsgBufferOverloadTitle   = "notifications.content.buffer.overloadTitle"
+	MsgBufferOverloadMessage = "notifications.content.buffer.overloadMessage"
 )

@@ -12,13 +12,29 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
 const (
 	pollInterval             = time.Millisecond * 10
 	warningCapacityThreshold = 0.9 // 90% full
+
+	// Overwrite tracking constants for detecting sustained buffer overload.
+	overwriteWindowDuration = 5 * time.Minute // sliding window for rate calculation
+	overwriteRateThreshold  = 10              // percentage threshold to trigger notification
+	overwriteMinWrites      = 50              // minimum writes in window before checking rate
+	overwriteNotifyCooldown = 1 * time.Hour   // minimum time between notifications per source
 )
+
+// overwriteTracker tracks buffer overwrite events for a source over a sliding window.
+type overwriteTracker struct {
+	mu             sync.Mutex
+	totalWrites    int64     // total writes in current window
+	overwriteCount int64     // overwrites in current window
+	windowStart    time.Time // start of current tracking window
+	lastNotified   time.Time // last time a notification was sent
+}
 
 var (
 	overlapSize          int                               // overlapSize is the number of bytes to overlap between chunks
@@ -33,6 +49,9 @@ var (
 	analysisMetricsOnce  sync.Once               // Ensures metrics are only set once
 	readBufferPool       *BufferPool             // Global buffer pool for read operations
 	bufferPoolInitMu     sync.Mutex              // Protects buffer pool initialization
+
+	overwriteTrackers   = make(map[string]*overwriteTracker) // per-source overwrite trackers
+	overwriteTrackersMu sync.RWMutex                         // Mutex to protect overwriteTrackers map
 )
 
 // init initializes the warningCounter map
@@ -147,10 +166,10 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 
 	// Update global variables safely
 	abMutex.Lock()
-	defer abMutex.Unlock()
 
 	// Check if buffer already exists
 	if _, exists := analysisBuffers[sourceID]; exists {
+		abMutex.Unlock()
 		ab.Reset() // Clean up the new buffer since we won't use it
 		enhancedErr := errors.Newf("analysis buffer already exists for source: %s", sourceID).
 			Component("myaudio").
@@ -180,6 +199,15 @@ func AllocateAnalysisBuffer(capacity int, sourceID string) error {
 	analysisBuffers[sourceID] = ab
 	prevData[sourceID] = nil
 	warningCounter[sourceID] = 0
+
+	// Create overwrite tracker atomically with buffer registration.
+	// Lock ordering is always abMutex -> overwriteTrackersMu, so no deadlock risk.
+	overwriteTrackersMu.Lock()
+	overwriteTrackers[sourceID] = &overwriteTracker{
+		windowStart: time.Now(),
+	}
+	overwriteTrackersMu.Unlock()
+	abMutex.Unlock()
 
 	// Acquire reference to this source using the migrated ID
 	registry := GetRegistry()
@@ -226,6 +254,12 @@ func RemoveAnalysisBuffer(sourceID string) error {
 	delete(analysisBuffers, sourceID)
 	delete(prevData, sourceID)
 	delete(warningCounter, sourceID)
+
+	// Remove overwrite tracker atomically with buffer removal.
+	// Lock ordering is always abMutex -> overwriteTrackersMu, so no deadlock risk.
+	overwriteTrackersMu.Lock()
+	delete(overwriteTrackers, sourceID)
+	overwriteTrackersMu.Unlock()
 
 	// Clean up buffer pool if this was the last buffer (prevents memory leak)
 	if len(analysisBuffers) == 0 {
@@ -352,14 +386,23 @@ func WriteToAnalysisBuffer(sourceID string, data []byte) error {
 	// With overwrite mode enabled, writes always succeed by discarding oldest data
 	// when the buffer is full, so no retry logic is needed.
 	var n int
+	var willOverwrite bool
 	err := func() error {
 		abMutex.Lock()
 		defer abMutex.Unlock()
+
+		// Check inside the lock to avoid TOCTOU race with concurrent writes.
+		// Overwrite occurs when incoming data exceeds available free space,
+		// not only when the buffer is completely full.
+		willOverwrite = len(data) > ab.Free()
 
 		var writeErr error
 		n, writeErr = ab.Write(data)
 		return writeErr
 	}()
+
+	// Track overwrite events for sustained overload detection
+	trackOverwrite(sourceID, willOverwrite)
 
 	if err != nil {
 		// Unexpected error (overwrite mode should prevent ErrIsFull)
@@ -611,5 +654,86 @@ func AnalysisBufferMonitor(_ *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan
 				m.RecordAnalysisBufferPoll(sourceID, "insufficient_data")
 			}
 		}
+	}
+}
+
+// trackOverwrite records a write event and checks whether the overwrite rate
+// exceeds the threshold over the current sliding window. If the threshold is
+// exceeded and the cooldown period has elapsed, it fires a notification
+// asynchronously.
+func trackOverwrite(sourceID string, wasOverwrite bool) {
+	overwriteTrackersMu.RLock()
+	tracker, exists := overwriteTrackers[sourceID]
+	overwriteTrackersMu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
+
+	now := time.Now()
+
+	// Reset window if expired
+	if now.Sub(tracker.windowStart) > overwriteWindowDuration {
+		tracker.totalWrites = 0
+		tracker.overwriteCount = 0
+		tracker.windowStart = now
+	}
+
+	tracker.totalWrites++
+	if wasOverwrite {
+		tracker.overwriteCount++
+	}
+
+	// Check if threshold exceeded with sufficient sample size
+	if tracker.totalWrites >= overwriteMinWrites {
+		dropRate := float64(tracker.overwriteCount) / float64(tracker.totalWrites) * 100
+		if dropRate >= overwriteRateThreshold && now.Sub(tracker.lastNotified) >= overwriteNotifyCooldown {
+			tracker.lastNotified = now
+			// Send notification outside lock via goroutine
+			go sendOverloadNotification(sourceID, dropRate)
+		}
+	}
+}
+
+// sendOverloadNotification dispatches a warning notification indicating that
+// the system is unable to keep up with audio analysis for the given source.
+func sendOverloadNotification(sourceID string, dropRate float64) {
+	if !notification.IsInitialized() {
+		return
+	}
+
+	svc := notification.GetService()
+	if svc == nil {
+		return
+	}
+
+	// Get display name from registry
+	displayName := sourceID
+	if reg := GetRegistry(); reg != nil {
+		if src, exists := reg.GetSourceByID(sourceID); exists {
+			displayName = src.DisplayName
+		}
+	}
+
+	title := fmt.Sprintf("Audio Analysis Overloaded — %s", displayName)
+	message := fmt.Sprintf("Dropping %.0f%% of audio samples for source '%s'. Reduce BirdNET overlap or upgrade CPU.", dropRate, displayName)
+
+	params := map[string]any{
+		"dropRate":   fmt.Sprintf("%.0f", dropRate),
+		"sourceName": displayName,
+	}
+
+	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, title, message).
+		WithComponent("system").
+		WithTitleKey(notification.MsgBufferOverloadTitle, params).
+		WithMessageKey(notification.MsgBufferOverloadMessage, params)
+
+	if err := svc.CreateWithMetadata(notif); err != nil {
+		GetLogger().Warn("failed to create buffer overload notification",
+			logger.String("source_id", sourceID),
+			logger.Error(err))
 	}
 }

@@ -411,6 +411,10 @@
         "failedTitle": "Pulizia del vecchio database fallita",
         "failedMessage": "Impossibile rimuovere il vecchio database. Controlla i log per i dettagli."
       },
+      "buffer": {
+        "overloadTitle": "Analisi audio sovraccaricata",
+        "overloadMessage": "Il sistema sta scartando il {dropRate} % dei campioni audio della sorgente '{sourceName}' perché non riesce a tenere il passo con l'analisi. Riduci il valore di sovrapposizione BirdNET nelle impostazioni di rilevamento o considera l'aggiornamento a una CPU più veloce."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Valore attuale: {value}% (soglia: {threshold}%)",

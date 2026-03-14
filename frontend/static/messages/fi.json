@@ -411,6 +411,10 @@
         "failedTitle": "Vanhan tietokannan siivous epäonnistui",
         "failedMessage": "Vanhan tietokannan poisto epäonnistui. Tarkista lokit lisätietoja varten."
       },
+      "buffer": {
+        "overloadTitle": "Äänianalyysi ylikuormitettu",
+        "overloadMessage": "Järjestelmäsi hylkää {dropRate} % lähteen '{sourceName}' ääninäytteistä, koska se ei pysy analyysin tahdissa. Pienennä BirdNET-päällekkäisyysarvoa tunnistusasetuksista tai harkitse nopeamman suorittimen hankkimista."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nykyinen arvo: {value}% (raja-arvo: {threshold}%)",
