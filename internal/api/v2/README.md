@@ -146,6 +146,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)   |
 | GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint    |
 | GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status |
+| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range|
 
 ### Notifications (`notifications.go`)
 
