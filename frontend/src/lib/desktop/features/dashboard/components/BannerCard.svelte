@@ -6,11 +6,20 @@
   @component
 -->
 <script lang="ts">
-  import { Cloud } from '@lucide/svelte';
+  import { Cloud, RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
+  import type { LatestWeatherResponse } from '$lib/types/detection.types';
   import BannerLocationMap from './BannerLocationMap.svelte';
+  import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
   import { birdnetSettings } from '$lib/stores/settings';
+  import {
+    getBasmiliusIconName,
+    getBirdingConditionLevel,
+    getBirdingConditionColor,
+    getMoonPhaseI18nKey,
+    translateWeatherCondition,
+  } from '$lib/utils/weather';
 
   interface Props {
     config: BannerConfig;
@@ -33,6 +42,32 @@
       (config.showLocationMap && hasLocation) ||
       config.showWeather
   );
+
+  // Weather state
+  let weatherData = $state<LatestWeatherResponse | null>(null);
+  let weatherLoading = $state(false);
+  let weatherError = $state(false);
+
+  async function fetchWeather() {
+    if (!config.showWeather || editMode) return;
+    weatherLoading = true;
+    weatherError = false;
+    try {
+      const response = await fetch('/api/v2/weather/latest');
+      if (!response.ok) throw new Error('Failed to fetch weather');
+      weatherData = await response.json();
+    } catch {
+      weatherError = true;
+    } finally {
+      weatherLoading = false;
+    }
+  }
+
+  $effect(() => {
+    if (config.showWeather && !editMode) {
+      fetchWeather();
+    }
+  });
 
   function update(partial: Partial<BannerConfig>) {
     onUpdate?.({ ...config, ...partial });
@@ -138,12 +173,102 @@
             {/if}
 
             {#if config.showWeather}
-              <div
-                class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
-              >
-                <Cloud class="size-4" />
-                <span>{t('dashboard.editMode.weatherPlaceholder')}</span>
-              </div>
+              {#if weatherLoading}
+                <div
+                  class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+                >
+                  <RefreshCw class="size-4 animate-spin" />
+                  <span>{t('detections.weather.loading')}</span>
+                </div>
+              {:else if weatherError || !weatherData?.hourly}
+                <div
+                  class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+                >
+                  <span>{t('detections.weather.noDataAvailable')}</span>
+                </div>
+              {:else}
+                <div class="mt-4 flex flex-wrap items-start gap-6">
+                  <!-- Group 1: Weather Condition -->
+                  <div class="flex items-center gap-3">
+                    <WeatherSvgIcon
+                      icon={getBasmiliusIconName(
+                        weatherData.hourly.weather_icon ?? '',
+                        weatherData.hourly.weather_desc
+                      )}
+                      size={40}
+                      title={weatherData.hourly.weather_desc ?? ''}
+                    />
+                    <div>
+                      <div class="text-lg font-semibold text-[var(--color-base-content)]">
+                        {Math.round(weatherData.hourly.temperature ?? 0)}°
+                        <span class="text-sm font-normal text-[var(--color-base-content)]/60">
+                          / {t('detections.weather.labels.temperature')}
+                          {Math.round(weatherData.hourly.feels_like ?? 0)}°
+                        </span>
+                      </div>
+                      <div class="text-sm text-[var(--color-base-content)]/60">
+                        {translateWeatherCondition(
+                          weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Group 2: Wind & Birding Conditions -->
+                  {#if weatherData.hourly.wind_speed !== undefined}
+                    {@const windSpeed = weatherData.hourly.wind_speed}
+                    {@const birdingLevel = getBirdingConditionLevel(windSpeed)}
+                    <div class="flex items-center gap-3">
+                      <WeatherSvgIcon
+                        icon="wind"
+                        size={32}
+                        title={t('detections.weather.labels.wind')}
+                      />
+                      <div>
+                        <div class="text-sm font-medium text-[var(--color-base-content)]">
+                          {windSpeed.toFixed(1)} m/s
+                          {#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
+                            <span class="text-[var(--color-base-content)]/50">
+                              ({weatherData.hourly.wind_gust.toFixed(1)})
+                            </span>
+                          {/if}
+                        </div>
+                        <div class="text-xs {getBirdingConditionColor(birdingLevel)}">
+                          {t(`weather.birding.${birdingLevel}`)}
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <!-- Group 3: Moon Phase -->
+                  {#if weatherData.moon}
+                    <div class="flex items-center gap-3">
+                      <WeatherSvgIcon
+                        icon={weatherData.moon.iconName}
+                        size={32}
+                        title={weatherData.moon.phaseName}
+                      />
+                      <div>
+                        <div class="text-sm font-medium text-[var(--color-base-content)]">
+                          {t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+                        </div>
+                        <div class="text-xs text-[var(--color-base-content)]/50">
+                          {Math.round(weatherData.moon.illumination)}%
+                        </div>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <!-- Refresh button -->
+                  <button
+                    class="ml-auto self-center rounded-lg p-1.5 text-[var(--color-base-content)]/40 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]/70"
+                    onclick={fetchWeather}
+                    aria-label={t('detections.weather.loading')}
+                  >
+                    <RefreshCw class="size-4" />
+                  </button>
+                </div>
+              {/if}
             {/if}
           </div>
 
