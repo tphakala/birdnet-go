@@ -88,9 +88,14 @@ func groupPathsWithPartitions(paths []string, partitions []disk.PartitionStat) [
 			// If the path is accessible, use it directly as its own mount group so that
 			// disk.Usage() can still report usage stats.
 			if _, statErr := os.Stat(path); statErr == nil {
+				mountpoints := make([]string, 0, len(partitions))
+				for _, p := range partitions {
+					mountpoints = append(mountpoints, privacy.AnonymizeStacktracePath(p.Mountpoint))
+				}
 				GetLogger().Debug("Mount point detection failed, monitoring path directly",
 					logger.String("path", path),
 					logger.Int("partition_count", len(partitions)),
+					logger.String("available_mountpoints", strings.Join(mountpoints, ", ")),
 					logger.Error(err),
 				)
 				mountPoint = path
