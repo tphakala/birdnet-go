@@ -774,8 +774,8 @@
         <!-- Manual Certificate mode -->
         {#if settings.tlsMode === 'manual'}
           <div class="space-y-4">
-            {#if !certInfo?.installed}
-              <!-- Upload form -->
+            {#if certInfo !== null && !certInfo.installed}
+              <!-- Upload form (only when cert state is resolved and not installed) -->
               <div class="space-y-3">
                 <div>
                   <label for="upload-cert" class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block">
@@ -895,7 +895,7 @@
               }}
             />
 
-            {#if !certInfo?.installed}
+            {#if certInfo !== null && !certInfo.installed}
               <button
                 type="button"
                 class="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
@@ -913,26 +913,27 @@
           </div>
         {/if}
 
-        <!-- Certificate Info Card -->
-        {#if (settings.tlsMode === 'manual' || settings.tlsMode === 'selfsigned') && certInfo?.installed}
-          <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 mt-4">
-            <div class="flex items-center gap-2 mb-3">
-              <ShieldCheck class="w-4 h-4 text-[var(--color-success)]" />
-              <span class="text-sm font-medium">{t('settings.security.tls.certificateInstalled')}</span>
+        <!-- Certificate state display (loading, error, or info card) -->
+        {#if settings.tlsMode === 'manual' || settings.tlsMode === 'selfsigned'}
+          {#if certLoading}
+            <div class="flex items-center gap-2 py-3 mt-4">
+              <div class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"></div>
+              <span class="text-sm text-[var(--color-base-content)]/60">{t('settings.security.tls.loading')}</span>
             </div>
-
-            {#if certLoading}
-              <div class="flex items-center gap-2 py-2">
-                <div class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"></div>
-                <span class="text-sm text-[var(--color-base-content)]/60">{t('settings.security.tls.loading')}</span>
-              </div>
-            {:else if certError}
+          {:else if certError}
+            <div class="mt-4">
               <ErrorAlert type="error">
                 {#snippet children()}
                   <span>{certError}</span>
                 {/snippet}
               </ErrorAlert>
-            {:else}
+            </div>
+          {:else if certInfo?.installed}
+          <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] p-3 mt-4">
+            <div class="flex items-center gap-2 mb-3">
+              <ShieldCheck class="w-4 h-4 text-[var(--color-success)]" />
+              <span class="text-sm font-medium">{t('settings.security.tls.certificateInstalled')}</span>
+            </div>
               <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 {#if certInfo.subject}
                   <div>
@@ -1018,8 +1019,8 @@
                   {t('settings.security.tls.removeCertificate')}
                 </button>
               </div>
-            {/if}
           </div>
+          {/if}
         {/if}
 
         <!-- HTTPS Port (for manual/self-signed TLS) -->
