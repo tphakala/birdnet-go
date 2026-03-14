@@ -679,6 +679,9 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 	// and if SetImageProvider is called after, the refresh may already run
 	// with the default lazy provider instead of the mock.
 	cache := imageprovider.InitCache("wikimedia", mockProvider, metrics, mockStore)
+	t.Cleanup(func() {
+		assert.NoError(t, cache.Close(), "Failed to close cache")
+	})
 
 	// Wait for refresh routine to run
 	t.Log("Waiting for refresh routine to run...")
@@ -699,9 +702,6 @@ func TestBirdImageCacheRefresh(t *testing.T) {
 		"Expected URL to be different after refresh. Old: %s, New: %s",
 		oldEntry.URL, refreshed.URL)
 
-	// Clean up
-	closeErr := cache.Close()
-	assert.NoError(t, closeErr, "Failed to close cache")
 }
 
 // TestConcurrentInitialization tests that concurrent requests for the same species
