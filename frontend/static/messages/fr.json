@@ -702,7 +702,8 @@
       "editDashboard": "Modifier le tableau de bord",
       "widthFull": "Pleine largeur",
       "widthHalf": "Demi-largeur",
-      "fullWidthOnly": "Pleine largeur uniquement"
+      "fullWidthOnly": "Pleine largeur uniquement",
+      "settings": "Paramètres"
     },
     "elements": {
       "banner": "Bannière du tableau de bord",

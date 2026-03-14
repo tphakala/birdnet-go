@@ -1,11 +1,12 @@
 <!--
   BannerCard - Composable dashboard banner with toggleable sub-elements.
   Displays custom image, title, description, location map, and weather.
-  In edit mode, provides WYSIWYG inline editing with toggle switches.
+  In edit mode, provides WYSIWYG inline editing for title and description,
+  plus preview of enabled sub-elements. Toggle controls are in the cogwheel settings dropdown.
   @component
 -->
 <script lang="ts">
-  import { Cloud, Image, Map as MapIcon, CloudSun } from '@lucide/svelte';
+  import { Cloud } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import type { BannerConfig } from '$lib/stores/settings';
   import BannerLocationMap from './BannerLocationMap.svelte';
@@ -51,9 +52,9 @@
     class="flex h-full flex-col overflow-hidden rounded-2xl bg-[var(--color-base-100)] shadow-xs"
   >
     {#if editMode}
-      <!-- Edit mode: vertical stacked layout -->
+      <!-- Edit mode: WYSIWYG vertical stacked layout -->
       <div class="flex flex-1 flex-col gap-4 p-4">
-        <!-- Title -->
+        <!-- Title (inline WYSIWYG) -->
         <input
           type="text"
           value={config.title}
@@ -63,7 +64,7 @@
           oninput={e => update({ title: inputValue(e) })}
         />
 
-        <!-- Description -->
+        <!-- Description (inline WYSIWYG) -->
         <textarea
           value={config.description}
           placeholder={t('dashboard.banner.descriptionPlaceholder')}
@@ -72,78 +73,6 @@
           rows="2"
           oninput={e => update({ description: textareaValue(e) })}
         ></textarea>
-
-        <!-- Toggleable sub-elements -->
-        <div class="flex flex-wrap gap-2">
-          <!-- Image toggle -->
-          {#if config.showImage}
-            <div class="flex flex-col gap-2">
-              <button
-                onclick={() => update({ showImage: false })}
-                class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/20"
-              >
-                <Image class="size-3.5" />
-                {t('dashboard.banner.showImage')}
-              </button>
-              <input
-                type="text"
-                value={config.imagePath}
-                placeholder={t('dashboard.banner.imageUrlPlaceholder')}
-                aria-label={t('dashboard.banner.imageUrlPlaceholder')}
-                class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
-                oninput={e => update({ imagePath: inputValue(e) })}
-              />
-            </div>
-          {:else}
-            <button
-              onclick={() => update({ showImage: true })}
-              class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-base-300)] px-3 py-1.5 text-xs text-[var(--color-base-content)]/40 transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-base-content)]/60"
-            >
-              <Image class="size-3.5" />
-              {t('dashboard.banner.showImage')}
-            </button>
-          {/if}
-
-          <!-- Map toggle -->
-          {#if hasLocation}
-            {#if config.showLocationMap}
-              <button
-                onclick={() => update({ showLocationMap: false })}
-                class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/20"
-              >
-                <MapIcon class="size-3.5" />
-                {t('dashboard.banner.showLocationMap')}
-              </button>
-            {:else}
-              <button
-                onclick={() => update({ showLocationMap: true })}
-                class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-base-300)] px-3 py-1.5 text-xs text-[var(--color-base-content)]/40 transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-base-content)]/60"
-              >
-                <MapIcon class="size-3.5" />
-                {t('dashboard.banner.showLocationMap')}
-              </button>
-            {/if}
-          {/if}
-
-          <!-- Weather toggle -->
-          {#if config.showWeather}
-            <button
-              onclick={() => update({ showWeather: false })}
-              class="flex items-center gap-1.5 rounded-lg bg-[var(--color-primary)]/10 px-3 py-1.5 text-xs font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)]/20"
-            >
-              <CloudSun class="size-3.5" />
-              {t('dashboard.banner.showWeather')}
-            </button>
-          {:else}
-            <button
-              onclick={() => update({ showWeather: true })}
-              class="flex items-center gap-1.5 rounded-lg border border-dashed border-[var(--color-base-300)] px-3 py-1.5 text-xs text-[var(--color-base-content)]/40 transition-colors hover:border-[var(--color-primary)]/40 hover:text-[var(--color-base-content)]/60"
-            >
-              <CloudSun class="size-3.5" />
-              {t('dashboard.banner.showWeather')}
-            </button>
-          {/if}
-        </div>
 
         <!-- Preview of enabled sub-elements -->
         {#if config.showImage && config.imagePath}

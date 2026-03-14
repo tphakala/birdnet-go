@@ -22,6 +22,9 @@
 
   const logger = getLogger('dashboard');
 
+  // Element types that have cogwheel settings
+  const TYPES_WITH_SETTINGS: string[] = ['banner', 'daily-summary'];
+
   interface Props {
     layout: DashboardLayout;
     editMode: boolean;
@@ -30,9 +33,13 @@
     renderElement: Snippet<
       [element: DashboardElement, editMode: boolean, onUpdate: (_el: DashboardElement) => void]
     >;
+    renderSettings?: Snippet<
+      [element: DashboardElement, onUpdate: (_el: DashboardElement) => void]
+    >;
   }
 
-  let { layout, editMode, onLayoutChange, onEditModeChange, renderElement }: Props = $props();
+  let { layout, editMode, onLayoutChange, onEditModeChange, renderElement, renderSettings }: Props =
+    $props();
 
   let editElements = $state<(DashboardElement & { id: string })[]>([]);
   let isSaving = $state(false);
@@ -235,16 +242,33 @@
   >
     {#each editElements as element, index (element.id)}
       <div class={getEffectiveWidth(element) === 'half' ? 'col-span-1' : 'col-span-2'}>
-        <DashboardElementWrapper
-          {element}
-          {editMode}
-          onHide={() => hideElement(index)}
-          onUnhide={() => unhideElement(index)}
-          onDelete={() => deleteElement(index)}
-          onUpdate={updated => updateElement(index, updated)}
-        >
-          {@render renderElement(element, true, elementUpdater(index))}
-        </DashboardElementWrapper>
+        {#if renderSettings && TYPES_WITH_SETTINGS.includes(element.type)}
+          {#snippet localSettings()}
+            {@render renderSettings(element, elementUpdater(index))}
+          {/snippet}
+          <DashboardElementWrapper
+            {element}
+            {editMode}
+            onHide={() => hideElement(index)}
+            onUnhide={() => unhideElement(index)}
+            onDelete={() => deleteElement(index)}
+            onUpdate={updated => updateElement(index, updated)}
+            settingsContent={localSettings}
+          >
+            {@render renderElement(element, true, elementUpdater(index))}
+          </DashboardElementWrapper>
+        {:else}
+          <DashboardElementWrapper
+            {element}
+            {editMode}
+            onHide={() => hideElement(index)}
+            onUnhide={() => unhideElement(index)}
+            onDelete={() => deleteElement(index)}
+            onUpdate={updated => updateElement(index, updated)}
+          >
+            {@render renderElement(element, true, elementUpdater(index))}
+          </DashboardElementWrapper>
+        {/if}
       </div>
     {/each}
   </div>

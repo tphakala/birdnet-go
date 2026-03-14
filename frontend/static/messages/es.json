@@ -702,7 +702,8 @@
       "editDashboard": "Editar panel",
       "widthFull": "Ancho completo",
       "widthHalf": "Medio ancho",
-      "fullWidthOnly": "Solo ancho completo"
+      "fullWidthOnly": "Solo ancho completo",
+      "settings": "Configuración"
     },
     "elements": {
       "banner": "Banner del panel",

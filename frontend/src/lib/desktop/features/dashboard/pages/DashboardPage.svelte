@@ -59,6 +59,7 @@ Performance Optimizations:
     resetDateToToday,
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
+  import { cn } from '$lib/utils/cn.js';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -69,6 +70,8 @@ Performance Optimizations:
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
+  import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
+  import { Image, Map as MapIcon, CloudSun } from '@lucide/svelte';
 
   const logger = getLogger('app');
 
@@ -1255,6 +1258,94 @@ Performance Optimizations:
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
+    {#snippet renderSettings(element, onUpdate)}
+      {#if element.type === 'banner'}
+        {@const bannerConfig = element.banner ?? {
+          showImage: false,
+          imagePath: '',
+          title: '',
+          description: '',
+          showLocationMap: false,
+          showWeather: false,
+        }}
+        <div class="space-y-3">
+          <!-- Image toggle -->
+          <button
+            onclick={() =>
+              onUpdate({
+                ...element,
+                banner: { ...bannerConfig, showImage: !bannerConfig.showImage },
+              })}
+            class={cn(
+              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+              bannerConfig.showImage
+                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+            )}
+          >
+            <Image class="size-4" />
+            {t('dashboard.banner.showImage')}
+          </button>
+
+          {#if bannerConfig.showImage}
+            <input
+              type="text"
+              value={bannerConfig.imagePath}
+              placeholder={t('dashboard.banner.imageUrlPlaceholder')}
+              aria-label={t('dashboard.banner.imageUrlPlaceholder')}
+              class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+              oninput={e =>
+                onUpdate({
+                  ...element,
+                  banner: { ...bannerConfig, imagePath: (e.target as HTMLInputElement).value },
+                })}
+            />
+          {/if}
+
+          <!-- Map toggle -->
+          <button
+            onclick={() =>
+              onUpdate({
+                ...element,
+                banner: { ...bannerConfig, showLocationMap: !bannerConfig.showLocationMap },
+              })}
+            class={cn(
+              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+              bannerConfig.showLocationMap
+                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+            )}
+          >
+            <MapIcon class="size-4" />
+            {t('dashboard.banner.showLocationMap')}
+          </button>
+
+          <!-- Weather toggle -->
+          <button
+            onclick={() =>
+              onUpdate({
+                ...element,
+                banner: { ...bannerConfig, showWeather: !bannerConfig.showWeather },
+              })}
+            class={cn(
+              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+              bannerConfig.showWeather
+                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+            )}
+          >
+            <CloudSun class="size-4" />
+            {t('dashboard.banner.showWeather')}
+          </button>
+        </div>
+      {:else if element.type === 'daily-summary'}
+        <DailySummaryConfigForm
+          config={element.summary ?? { summaryLimit: 30 }}
+          onUpdate={config => onUpdate({ ...element, summary: config })}
+        />
+      {/if}
+    {/snippet}
+
     {#snippet renderElement(element, inEditMode, onElementUpdate)}
       {#if element.type === 'banner'}
         <BannerCard

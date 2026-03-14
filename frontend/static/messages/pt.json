@@ -702,7 +702,8 @@
       "editDashboard": "Editar painel",
       "widthFull": "Largura total",
       "widthHalf": "Meia largura",
-      "fullWidthOnly": "Apenas largura total"
+      "fullWidthOnly": "Apenas largura total",
+      "settings": "Configurações"
     },
     "elements": {
       "banner": "Banner do painel",

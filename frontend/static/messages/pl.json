@@ -702,7 +702,8 @@
       "editDashboard": "Edytuj pulpit",
       "widthFull": "Pełna szerokość",
       "widthHalf": "Połowa szerokości",
-      "fullWidthOnly": "Tylko pełna szerokość"
+      "fullWidthOnly": "Tylko pełna szerokość",
+      "settings": "Ustawienia"
     },
     "elements": {
       "banner": "Baner pulpitu",

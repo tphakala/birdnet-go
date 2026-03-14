@@ -702,7 +702,8 @@
       "editDashboard": "Upraviť panel",
       "widthFull": "Plná šírka",
       "widthHalf": "Polovičná šírka",
-      "fullWidthOnly": "Iba plná šírka"
+      "fullWidthOnly": "Iba plná šírka",
+      "settings": "Nastavenia"
     },
     "elements": {
       "banner": "Banner panela",

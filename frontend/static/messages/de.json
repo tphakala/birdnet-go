@@ -702,7 +702,8 @@
       "editDashboard": "Dashboard bearbeiten",
       "widthFull": "Volle Breite",
       "widthHalf": "Halbe Breite",
-      "fullWidthOnly": "Nur volle Breite"
+      "fullWidthOnly": "Nur volle Breite",
+      "settings": "Einstellungen"
     },
     "elements": {
       "banner": "Dashboard-Banner",

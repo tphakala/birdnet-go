@@ -702,7 +702,8 @@
       "editDashboard": "Muokkaa kojelautaa",
       "widthFull": "Täysi leveys",
       "widthHalf": "Puolikas leveys",
-      "fullWidthOnly": "Vain täysi leveys"
+      "fullWidthOnly": "Vain täysi leveys",
+      "settings": "Asetukset"
     },
     "elements": {
       "banner": "Dashboard Banner",

@@ -702,7 +702,8 @@
       "editDashboard": "Edit Dashboard",
       "widthFull": "Full width",
       "widthHalf": "Half width",
-      "fullWidthOnly": "Full width only"
+      "fullWidthOnly": "Full width only",
+      "settings": "Settings"
     },
     "elements": {
       "banner": "Dashboard Banner",
