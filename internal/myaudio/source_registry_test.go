@@ -254,18 +254,22 @@ func TestGetOrCreateSourceConcurrentDisplayNameUpdate(t *testing.T) {
 
 	// Concurrently update display name from multiple goroutines
 	var wg sync.WaitGroup
+	expectedNames := make([]string, 0, 10)
 	for i := range 10 {
-		idx := i
+		name := fmt.Sprintf("Name-%d", i)
+		expectedNames = append(expectedNames, name)
 		wg.Go(func() {
-			registry.GetOrCreateSource(url, SourceTypeRTSP, fmt.Sprintf("Name-%d", idx))
+			registry.GetOrCreateSource(url, SourceTypeRTSP, name)
 		})
 	}
 	wg.Wait()
 
-	// Final name should be one of the provided names (last writer wins under mutex)
+	// Final name should be one of the exact names written by goroutines
 	result, exists := registry.GetSourceByConnection(url)
 	require.True(t, exists)
-	assert.Contains(t, result.DisplayName, "Name-", "DisplayName should be one of the concurrent updates")
+	assert.Equal(t, source.ID, result.ID, "Concurrent updates should keep the original source entry")
+	assert.Contains(t, expectedNames, result.DisplayName, "DisplayName should be one of the concurrent updates")
+	assert.Len(t, registry.ListSources(), 1, "Concurrent updates should not create duplicate sources")
 }
 
 func TestSourceMetricsUpdate(t *testing.T) {
