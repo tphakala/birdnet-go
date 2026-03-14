@@ -45,6 +45,7 @@
   let canHalf = $derived(SUPPORTS_HALF.includes(element.type));
   let isFullWidthOnly = $derived(FULL_WIDTH_ONLY.includes(element.type));
   let currentWidth = $derived(element.width ?? 'full');
+  let settingsDropdownId = $derived(`settings-dropdown-${element.id ?? element.type}`);
 
   let settingsOpen = $state(false);
   let dropdownRef = $state<HTMLElement | null>(null);
@@ -150,7 +151,7 @@
             )}
             aria-label={t('dashboard.editMode.settings')}
             aria-expanded={settingsOpen}
-            aria-controls="settings-dropdown"
+            aria-controls={settingsDropdownId}
             title={t('dashboard.editMode.settings')}
           >
             <Settings class="size-4 text-[var(--color-base-content)]/60" />
@@ -159,7 +160,7 @@
           {#if settingsOpen}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
-              id="settings-dropdown"
+              id={settingsDropdownId}
               class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
               onmousedown={e => e.stopPropagation()}
             >

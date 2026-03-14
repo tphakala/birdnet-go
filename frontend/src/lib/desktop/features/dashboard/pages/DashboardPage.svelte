@@ -1340,7 +1340,7 @@ Performance Optimizations:
                   type="number"
                   min={MAP_CONFIG.MIN_ZOOM}
                   max={MAP_CONFIG.MAX_ZOOM}
-                  value={bannerConfig.mapZoom ?? 11}
+                  value={bannerConfig.mapZoom ?? MAP_CONFIG.DEFAULT_ZOOM}
                   oninput={e => {
                     const val = parseInt((e.target as HTMLInputElement).value, 10);
                     if (!isNaN(val) && val >= MAP_CONFIG.MIN_ZOOM && val <= MAP_CONFIG.MAX_ZOOM) {

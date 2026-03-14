@@ -42,8 +42,8 @@
   onMount(() => {
     let mounted = true;
 
-    Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')]).then(
-      ([maplibre]) => {
+    void Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')])
+      .then(([maplibre]) => {
         if (!mounted || !mapContainer) return;
 
         maplibreModule = maplibre;
@@ -60,8 +60,10 @@
         if (showPin) {
           marker = new maplibre.Marker().setLngLat([longitude, latitude]).addTo(map);
         }
-      }
-    );
+      })
+      .catch(() => {
+        // MapLibre failed to load — map will remain empty
+      });
 
     return () => {
       mounted = false;
