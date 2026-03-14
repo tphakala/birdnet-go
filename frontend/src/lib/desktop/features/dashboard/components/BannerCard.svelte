@@ -143,32 +143,36 @@
       <span>{t('detections.weather.noDataAvailable')}</span>
     </div>
   {:else}
-    <div class="mt-3 flex items-center gap-3 text-sm text-[var(--color-base-content)]">
-      <WeatherSvgIcon
-        icon={getBasmiliusIconName(
-          weatherData.hourly.weather_icon ?? '',
-          weatherData.hourly.weather_desc
-        )}
-        size={36}
-        title={weatherData.hourly.weather_desc ?? ''}
-      />
-      <span class="font-semibold"
-        >{Math.round(
-          convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-        )}{getTemperatureSymbol(temperatureUnit)}</span
-      >
-      {@render sep()}
+    <div
+      class="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-[var(--color-base-content)]"
+    >
+      <div class="flex items-center gap-1.5">
+        <WeatherSvgIcon
+          icon={getBasmiliusIconName(
+            weatherData.hourly.weather_icon ?? '',
+            weatherData.hourly.weather_desc
+          )}
+          size={28}
+          title={weatherData.hourly.weather_desc ?? ''}
+        />
+        <span class="font-semibold"
+          >{Math.round(
+            convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
+          )}{getTemperatureSymbol(temperatureUnit)}</span
+        >
+      </div>
       {#if weatherData.hourly.wind_speed !== undefined}
+        {@render sep()}
         <span
           >{convertWindSpeed(weatherData.hourly.wind_speed, temperatureUnit).toFixed(1)}
           {getWindSpeedUnit(temperatureUnit)}</span
         >
-        {@render sep()}
       {/if}
       {#if weatherData.moon}
+        {@render sep()}
         <WeatherSvgIcon
           icon={weatherData.moon.iconName}
-          size={20}
+          size={18}
           title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
         />
       {/if}
@@ -357,16 +361,16 @@
               </p>
             {/if}
 
-            <!-- Weather inline: visible only on wide cards -->
+            <!-- Weather inline: visible only on wide cards (≥1024px container) -->
             {#if config.showWeather}
-              <div class="hidden @2xl:block">
+              <div class="hidden @5xl:block">
                 {@render weatherFull()}
               </div>
             {/if}
           </div>
 
           {#if config.showLocationMap && hasLocation}
-            <div class="w-full shrink-0 md:w-64">
+            <div class="hidden w-full shrink-0 @xl:block md:w-64">
               <BannerLocationMap
                 {latitude}
                 {longitude}
@@ -379,9 +383,9 @@
           {/if}
         </div>
 
-        <!-- Weather below: visible only on narrow cards -->
+        <!-- Weather below: visible only on narrow/medium cards (<1024px container) -->
         {#if config.showWeather}
-          <div class="@2xl:hidden">
+          <div class="@5xl:hidden">
             {@render weatherCompact()}
           </div>
         {/if}
