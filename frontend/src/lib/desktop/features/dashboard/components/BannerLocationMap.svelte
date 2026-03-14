@@ -38,6 +38,8 @@
   let expandedMapContainer: HTMLDivElement | undefined = $state();
   let expandedMap: import('maplibre-gl').Map | undefined;
   let expandedMarker: import('maplibre-gl').Marker | undefined;
+  let closeButtonRef: HTMLButtonElement | undefined = $state();
+  let previouslyFocused: HTMLElement | null = $state(null);
 
   onMount(() => {
     let mounted = true;
@@ -130,6 +132,18 @@
     };
   });
 
+  // Focus management for expanded map dialog.
+  $effect(() => {
+    if (!expanded) return;
+    previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    queueMicrotask(() => closeButtonRef?.focus());
+    return () => {
+      previouslyFocused?.focus();
+      previouslyFocused = null;
+    };
+  });
+
   // Close on Escape key.
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -171,6 +185,7 @@
       <div bind:this={expandedMapContainer} class="h-full w-full"></div>
 
       <button
+        bind:this={closeButtonRef}
         onclick={() => (expanded = false)}
         class="absolute right-3 top-3 rounded-full bg-[var(--color-base-100)]/80 p-2 text-[var(--color-base-content)] shadow-md backdrop-blur-sm transition-colors hover:bg-[var(--color-base-100)]"
         aria-label={t('dashboard.banner.closeExpandedMap')}
