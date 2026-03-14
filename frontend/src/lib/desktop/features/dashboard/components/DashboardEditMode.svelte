@@ -22,6 +22,9 @@
 
   const logger = getLogger('dashboard');
 
+  // Element types that have cogwheel settings
+  const TYPES_WITH_SETTINGS: string[] = ['banner', 'daily-summary'];
+
   interface Props {
     layout: DashboardLayout;
     editMode: boolean;
@@ -30,9 +33,13 @@
     renderElement: Snippet<
       [element: DashboardElement, editMode: boolean, onUpdate: (_el: DashboardElement) => void]
     >;
+    renderSettings?: Snippet<
+      [element: DashboardElement, onUpdate: (_el: DashboardElement) => void]
+    >;
   }
 
-  let { layout, editMode, onLayoutChange, onEditModeChange, renderElement }: Props = $props();
+  let { layout, editMode, onLayoutChange, onEditModeChange, renderElement, renderSettings }: Props =
+    $props();
 
   let editElements = $state<(DashboardElement & { id: string })[]>([]);
   let isSaving = $state(false);
@@ -47,8 +54,17 @@
     'video-embed',
   ];
 
+  // Maximum number of instances allowed per element type
+  const MAX_INSTANCES: Partial<Record<DashboardElementType, number>> = {
+    'video-embed': 6,
+  };
+
   let missingTypes = $derived(
-    ALL_ELEMENT_TYPES.filter(type => !editElements.some(el => el.type === type))
+    ALL_ELEMENT_TYPES.filter(type => {
+      const count = editElements.filter(el => el.type === type).length;
+      const max = MAX_INSTANCES[type] ?? 1;
+      return count < max;
+    })
   );
 
   // Initialize editElements when editMode becomes true
@@ -76,7 +92,7 @@
       type,
       enabled: true,
     };
-    editElements = [...editElements, newElement];
+    editElements = [newElement, ...editElements];
     addDropdownOpen = false;
   }
 
@@ -213,7 +229,7 @@
           onclick={e => e.stopPropagation()}
           onkeydown={e => e.stopPropagation()}
         >
-          {#each missingTypes as type}
+          {#each missingTypes as type (type)}
             <button
               onclick={() => addElement(type)}
               class="flex w-full items-center gap-2 px-4 py-2 text-left text-sm transition-colors hover:bg-[var(--color-base-200)]"
@@ -235,16 +251,33 @@
   >
     {#each editElements as element, index (element.id)}
       <div class={getEffectiveWidth(element) === 'half' ? 'col-span-1' : 'col-span-2'}>
-        <DashboardElementWrapper
-          {element}
-          {editMode}
-          onHide={() => hideElement(index)}
-          onUnhide={() => unhideElement(index)}
-          onDelete={() => deleteElement(index)}
-          onUpdate={updated => updateElement(index, updated)}
-        >
-          {@render renderElement(element, true, elementUpdater(index))}
-        </DashboardElementWrapper>
+        {#if renderSettings && TYPES_WITH_SETTINGS.includes(element.type)}
+          {#snippet localSettings()}
+            {@render renderSettings(element, elementUpdater(index))}
+          {/snippet}
+          <DashboardElementWrapper
+            {element}
+            {editMode}
+            onHide={() => hideElement(index)}
+            onUnhide={() => unhideElement(index)}
+            onDelete={() => deleteElement(index)}
+            onUpdate={updated => updateElement(index, updated)}
+            settingsContent={localSettings}
+          >
+            {@render renderElement(element, true, elementUpdater(index))}
+          </DashboardElementWrapper>
+        {:else}
+          <DashboardElementWrapper
+            {element}
+            {editMode}
+            onHide={() => hideElement(index)}
+            onUnhide={() => unhideElement(index)}
+            onDelete={() => deleteElement(index)}
+            onUpdate={updated => updateElement(index, updated)}
+          >
+            {@render renderElement(element, true, elementUpdater(index))}
+          </DashboardElementWrapper>
+        {/if}
       </div>
     {/each}
   </div>

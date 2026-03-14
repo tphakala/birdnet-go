@@ -1,8 +1,7 @@
 <!--
   DashboardElementWrapper - Wraps dashboard elements in edit mode with controls.
-  Shows drag handle, element label, enable/disable toggle, and width toggle.
-  Cards with config handle their own inline editing via editMode prop.
-  Daily summary config is shown inline here since the card itself is complex.
+  Shows drag handle, element label, enable/disable toggle, width toggle, and cogwheel settings.
+  Settings content is passed in via the settingsContent snippet prop and rendered in a dropdown.
   In normal mode, renders children transparently with no visual overhead.
 
   @component
@@ -10,11 +9,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import type { DashboardElement } from '$lib/stores/settings';
-  import { GripVertical, EyeOff, Eye, Trash2, Columns2, Square } from '@lucide/svelte';
+  import { GripVertical, EyeOff, Eye, Trash2, Columns2, Square, Settings } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
-  import DailySummaryConfigForm from './DailySummaryConfigForm.svelte';
 
   // Element types that always require full width
   const FULL_WIDTH_ONLY: string[] = ['daily-summary'];
@@ -30,18 +28,48 @@
     onDelete: () => void;
     onUpdate: (_element: DashboardElement) => void;
     children: Snippet;
+    settingsContent?: Snippet;
   }
 
-  let { element, editMode, onHide, onUnhide, onDelete, onUpdate, children }: Props = $props();
+  let {
+    element,
+    editMode,
+    onHide,
+    onUnhide,
+    onDelete,
+    onUpdate,
+    children,
+    settingsContent,
+  }: Props = $props();
 
   let canHalf = $derived(SUPPORTS_HALF.includes(element.type));
   let isFullWidthOnly = $derived(FULL_WIDTH_ONLY.includes(element.type));
   let currentWidth = $derived(element.width ?? 'full');
+  let settingsDropdownId = $derived(`settings-dropdown-${element.id ?? element.type}`);
+
+  let settingsOpen = $state(false);
+  let dropdownRef = $state<HTMLElement | null>(null);
 
   function toggleWidth() {
     onUpdate({ ...element, width: currentWidth === 'full' ? 'half' : 'full' });
   }
+
+  function handleSettingsClickOutside(event: MouseEvent) {
+    if (settingsOpen && dropdownRef) {
+      const target = event.target as HTMLElement;
+      if (!dropdownRef.contains(target)) {
+        settingsOpen = false;
+      }
+    }
+  }
 </script>
+
+<svelte:window
+  onclick={handleSettingsClickOutside}
+  onkeydown={e => {
+    if (settingsOpen && e.key === 'Escape') settingsOpen = false;
+  }}
+/>
 
 {#if editMode}
   <div
@@ -49,7 +77,8 @@
       'relative rounded-xl border-2 border-dashed transition-all',
       element.enabled
         ? 'border-[var(--color-primary)]/40 bg-[var(--color-base-100)]'
-        : 'border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 opacity-60'
+        : 'border-[var(--color-base-300)] bg-[var(--color-base-200)]/50 opacity-60',
+      settingsOpen && 'z-50'
     )}
   >
     <!-- Edit mode toolbar -->
@@ -109,6 +138,38 @@
         {/if}
       </button>
 
+      <!-- Cogwheel settings button (only when settingsContent is provided) -->
+      {#if settingsContent}
+        <div class="relative" bind:this={dropdownRef}>
+          <button
+            onclick={() => {
+              settingsOpen = !settingsOpen;
+            }}
+            class={cn(
+              'rounded-md p-1.5 transition-colors hover:bg-black/5 dark:hover:bg-white/5',
+              settingsOpen && 'bg-black/5 dark:bg-white/5'
+            )}
+            aria-label={t('dashboard.editMode.settings')}
+            aria-expanded={settingsOpen}
+            aria-controls={settingsDropdownId}
+            title={t('dashboard.editMode.settings')}
+          >
+            <Settings class="size-4 text-[var(--color-base-content)]/60" />
+          </button>
+
+          {#if settingsOpen}
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div
+              id={settingsDropdownId}
+              class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
+              onmousedown={e => e.stopPropagation()}
+            >
+              {@render settingsContent()}
+            </div>
+          {/if}
+        </div>
+      {/if}
+
       <!-- Delete button -->
       <button
         onclick={onDelete}
@@ -118,16 +179,6 @@
         <Trash2 class="size-4 text-[var(--color-error)]/60" />
       </button>
     </div>
-
-    <!-- Daily summary inline config (other cards handle their own editing) -->
-    {#if element.type === 'daily-summary' && element.enabled}
-      <div class="border-b border-[var(--color-base-200)] bg-[var(--color-base-100)] px-4 py-3">
-        <DailySummaryConfigForm
-          config={element.summary ?? { summaryLimit: 30 }}
-          onUpdate={config => onUpdate({ ...element, summary: config })}
-        />
-      </div>
-    {/if}
 
     <!-- Element content -->
     <div class={cn('p-2', !element.enabled && 'pointer-events-none')}>

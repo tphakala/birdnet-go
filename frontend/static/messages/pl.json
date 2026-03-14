@@ -669,14 +669,20 @@
       "showLocationMap": "Pokaż mapę lokalizacji",
       "showLocationMapHelp": "Wyświetla małą mapę z szerokością/długością geograficzną z ustawień głównych",
       "showWeather": "Pokaż aktualną pogodę",
-      "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)"
+      "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)",
+      "mapZoom": "Powiększenie mapy",
+      "showPin": "Pokaż znacznik lokalizacji",
+      "mapExpandable": "Zezwól na powiększanie mapy",
+      "expandMap": "Powiększ mapę",
+      "expandedMapLabel": "Powiększona mapa lokalizacji",
+      "closeExpandedMap": "Zamknij powiększoną mapę"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Wklej dowolny URL YouTube (watch, embed lub krótki link). Zostanie przekonwertowany na osadzenie z większą prywatnością.",
       "titleLabel": "Tytuł (opcjonalnie)",
-      "titlePlaceholder": "Karmnik na żywo"
+      "titlePlaceholder": "Wprowadź tytuł wideo (opcjonalnie)"
     },
     "editMode": {
       "editing": "Edycja pulpitu",
@@ -702,7 +708,8 @@
       "editDashboard": "Edytuj pulpit",
       "widthFull": "Pełna szerokość",
       "widthHalf": "Połowa szerokości",
-      "fullWidthOnly": "Tylko pełna szerokość"
+      "fullWidthOnly": "Tylko pełna szerokość",
+      "settings": "Ustawienia"
     },
     "elements": {
       "banner": "Baner pulpitu",

@@ -669,14 +669,20 @@
       "showLocationMap": "Mostrar mapa de ubicación",
       "showLocationMapHelp": "Muestra un pequeño mapa usando la latitud/longitud de sus ajustes principales",
       "showWeather": "Mostrar clima actual",
-      "showWeatherHelp": "Muestra las condiciones climáticas actuales (requiere que la integración del clima esté habilitada)"
+      "showWeatherHelp": "Muestra las condiciones climáticas actuales (requiere que la integración del clima esté habilitada)",
+      "mapZoom": "Zoom del mapa",
+      "showPin": "Mostrar marcador de ubicación",
+      "mapExpandable": "Permitir expansión del mapa",
+      "expandMap": "Expandir mapa",
+      "expandedMapLabel": "Mapa de ubicación expandido",
+      "closeExpandedMap": "Cerrar mapa expandido"
     },
     "videoEmbed": {
       "youtubeUrl": "URL de YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Pegue cualquier URL de YouTube (watch, embed o enlace corto). Se convertirá en una incrustación con privacidad mejorada.",
       "titleLabel": "Título (opcional)",
-      "titlePlaceholder": "Comedero de aves en vivo"
+      "titlePlaceholder": "Ingrese el título del video (opcional)"
     },
     "editMode": {
       "editing": "Editando panel",
@@ -702,7 +708,8 @@
       "editDashboard": "Editar panel",
       "widthFull": "Ancho completo",
       "widthHalf": "Medio ancho",
-      "fullWidthOnly": "Solo ancho completo"
+      "fullWidthOnly": "Solo ancho completo",
+      "settings": "Configuración"
     },
     "elements": {
       "banner": "Banner del panel",

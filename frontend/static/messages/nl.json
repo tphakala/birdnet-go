@@ -669,14 +669,20 @@
       "showLocationMap": "Locatiekaart tonen",
       "showLocationMapHelp": "Toont een kleine kaart met de breedte-/lengtegraad uit uw hoofdinstellingen",
       "showWeather": "Huidig weer tonen",
-      "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)"
+      "showWeatherHelp": "Toont huidige weersomstandigheden (weerintegratie moet ingeschakeld zijn)",
+      "mapZoom": "Kaartzoom",
+      "showPin": "Locatiemarkering tonen",
+      "mapExpandable": "Kaart vergroten toestaan",
+      "expandMap": "Kaart vergroten",
+      "expandedMapLabel": "Vergrote locatiekaart",
+      "closeExpandedMap": "Vergrote kaart sluiten"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Plak een willekeurige YouTube-URL (watch, embed of korte link). Deze wordt omgezet naar een privacyvriendelijke inbedding.",
       "titleLabel": "Titel (optioneel)",
-      "titlePlaceholder": "Live vogelvoederplaats"
+      "titlePlaceholder": "Voer videotitel in (optioneel)"
     },
     "editMode": {
       "editing": "Dashboard bewerken",
@@ -702,7 +708,8 @@
       "editDashboard": "Dashboard bewerken",
       "widthFull": "Volledige breedte",
       "widthHalf": "Halve breedte",
-      "fullWidthOnly": "Alleen volledige breedte"
+      "fullWidthOnly": "Alleen volledige breedte",
+      "settings": "Instellingen"
     },
     "elements": {
       "banner": "Dashboard-banner",

@@ -669,14 +669,20 @@
       "showLocationMap": "Standortkarte anzeigen",
       "showLocationMapHelp": "Zeigt eine kleine Karte mit dem Breiten-/Längengrad aus Ihren Haupteinstellungen an",
       "showWeather": "Aktuelles Wetter anzeigen",
-      "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)"
+      "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)",
+      "mapZoom": "Kartenzoom",
+      "showPin": "Standortnadel anzeigen",
+      "mapExpandable": "Kartenvergrößerung erlauben",
+      "expandMap": "Karte vergrößern",
+      "expandedMapLabel": "Vergrößerte Standortkarte",
+      "closeExpandedMap": "Vergrößerte Karte schließen"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube-URL",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Fügen Sie eine beliebige YouTube-URL ein (Watch, Embed oder Kurzlink). Sie wird in eine datenschutzfreundliche Einbettung umgewandelt.",
       "titleLabel": "Titel (optional)",
-      "titlePlaceholder": "Live-Vogelfutterhaus"
+      "titlePlaceholder": "Videotitel eingeben (optional)"
     },
     "editMode": {
       "editing": "Dashboard bearbeiten",
@@ -702,7 +708,8 @@
       "editDashboard": "Dashboard bearbeiten",
       "widthFull": "Volle Breite",
       "widthHalf": "Halbe Breite",
-      "fullWidthOnly": "Nur volle Breite"
+      "fullWidthOnly": "Nur volle Breite",
+      "settings": "Einstellungen"
     },
     "elements": {
       "banner": "Dashboard-Banner",

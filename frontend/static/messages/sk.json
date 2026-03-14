@@ -669,14 +669,20 @@
       "showLocationMap": "Zobraziť mapu polohy",
       "showLocationMapHelp": "Zobrazí malú mapu pomocou zemepisnej šírky/dĺžky z vašich hlavných nastavení",
       "showWeather": "Zobraziť aktuálne počasie",
-      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)"
+      "showWeatherHelp": "Zobrazí aktuálne poveternostné podmienky (vyžaduje zapnutú integráciu počasia)",
+      "mapZoom": "Priblíženie mapy",
+      "showPin": "Zobraziť značku polohy",
+      "mapExpandable": "Povoliť zväčšenie mapy",
+      "expandMap": "Zväčšiť mapu",
+      "expandedMapLabel": "Zväčšená mapa polohy",
+      "closeExpandedMap": "Zavrieť zväčšenú mapu"
     },
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Vložte akúkoľvek YouTube URL (watch, embed alebo krátky odkaz). Bude prevedená na vloženie s vylepšeným súkromím.",
       "titleLabel": "Názov (voliteľný)",
-      "titlePlaceholder": "Živé kŕmidlo pre vtáky"
+      "titlePlaceholder": "Zadajte názov videa (voliteľné)"
     },
     "editMode": {
       "editing": "Úprava panelu",
@@ -702,7 +708,8 @@
       "editDashboard": "Upraviť panel",
       "widthFull": "Plná šírka",
       "widthHalf": "Polovičná šírka",
-      "fullWidthOnly": "Iba plná šírka"
+      "fullWidthOnly": "Iba plná šírka",
+      "settings": "Nastavenia"
     },
     "elements": {
       "banner": "Banner panela",

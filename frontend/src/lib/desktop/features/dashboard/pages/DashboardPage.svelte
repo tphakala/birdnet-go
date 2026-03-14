@@ -59,16 +59,20 @@ Performance Optimizations:
     resetDateToToday,
   } from '$lib/utils/datePersistence';
   import { getLogger } from '$lib/utils/logger';
+  import { cn } from '$lib/utils/cn.js';
   import { safeArrayAccess, isPlainObject } from '$lib/utils/security';
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import { dashboardLayout, settingsStore } from '$lib/stores/settings';
+  import { birdnetSettings, dashboardLayout, settingsStore } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
+  import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
+  import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn, Maximize2 } from '@lucide/svelte';
+  import { MAP_CONFIG } from '$lib/desktop/features/settings/utils/mapConfig';
 
   const logger = getLogger('app');
 
@@ -847,6 +851,10 @@ Performance Optimizations:
   // Derived state to check if we're viewing today's data
   const isViewingToday = $derived(selectedDate === getLocalDateString());
 
+  // Location availability for banner map toggle
+  let birdnet = $derived($birdnetSettings);
+  let hasLocation = $derived((birdnet?.latitude ?? 0) !== 0 || (birdnet?.longitude ?? 0) !== 0);
+
   // Queue daily summary updates with debouncing for rapid updates
   function queueDailySummaryUpdate(detection: Detection) {
     // Only allow SSE updates to daily summary when viewing today's data
@@ -1255,6 +1263,167 @@ Performance Optimizations:
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
+    {#snippet renderSettings(element, onUpdate)}
+      {#if element.type === 'banner'}
+        {@const bannerConfig = element.banner ?? {
+          showImage: false,
+          imagePath: '',
+          title: '',
+          description: '',
+          showLocationMap: false,
+          showWeather: false,
+        }}
+        <div class="space-y-3">
+          <!-- Image toggle -->
+          <button
+            onclick={() =>
+              onUpdate({
+                ...element,
+                banner: { ...bannerConfig, showImage: !bannerConfig.showImage },
+              })}
+            class={cn(
+              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+              bannerConfig.showImage
+                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+            )}
+            aria-pressed={bannerConfig.showImage}
+          >
+            <Image class="size-4" />
+            {t('dashboard.banner.showImage')}
+          </button>
+
+          {#if bannerConfig.showImage}
+            <input
+              type="text"
+              value={bannerConfig.imagePath}
+              placeholder={t('dashboard.banner.imageUrlPlaceholder')}
+              aria-label={t('dashboard.banner.imageUrlPlaceholder')}
+              class="w-full rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+              oninput={e =>
+                onUpdate({
+                  ...element,
+                  banner: { ...bannerConfig, imagePath: (e.target as HTMLInputElement).value },
+                })}
+            />
+          {/if}
+
+          <!-- Map toggle (only when location is configured) -->
+          {#if hasLocation}
+            <button
+              onclick={() =>
+                onUpdate({
+                  ...element,
+                  banner: { ...bannerConfig, showLocationMap: !bannerConfig.showLocationMap },
+                })}
+              class={cn(
+                'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                bannerConfig.showLocationMap
+                  ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                  : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+              )}
+              aria-pressed={bannerConfig.showLocationMap}
+            >
+              <MapIcon class="size-4" />
+              {t('dashboard.banner.showLocationMap')}
+            </button>
+
+            {#if bannerConfig.showLocationMap}
+              <!-- Map zoom level -->
+              <div class="flex items-center gap-2 rounded-lg px-3 py-2">
+                <ZoomIn class="size-4 shrink-0 text-[var(--color-base-content)]/60" />
+                <label for="banner-map-zoom" class="text-sm text-[var(--color-base-content)]/60"
+                  >{t('dashboard.banner.mapZoom')}</label
+                >
+                <input
+                  id="banner-map-zoom"
+                  type="number"
+                  min={MAP_CONFIG.MIN_ZOOM}
+                  max={MAP_CONFIG.MAX_ZOOM}
+                  value={bannerConfig.mapZoom ?? MAP_CONFIG.DEFAULT_ZOOM}
+                  oninput={e => {
+                    const val = parseInt((e.target as HTMLInputElement).value, 10);
+                    if (!isNaN(val) && val >= MAP_CONFIG.MIN_ZOOM && val <= MAP_CONFIG.MAX_ZOOM) {
+                      onUpdate({
+                        ...element,
+                        banner: { ...bannerConfig, mapZoom: val },
+                      });
+                    }
+                  }}
+                  class="ml-auto w-16 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2 py-1 text-xs text-[var(--color-base-content)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]/50"
+                />
+              </div>
+
+              <!-- Pin toggle -->
+              <button
+                onclick={() =>
+                  onUpdate({
+                    ...element,
+                    banner: { ...bannerConfig, showPin: !(bannerConfig.showPin ?? false) },
+                  })}
+                class={cn(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                  (bannerConfig.showPin ?? false)
+                    ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+                )}
+                aria-pressed={bannerConfig.showPin ?? false}
+              >
+                <MapPin class="size-4" />
+                {t('dashboard.banner.showPin')}
+              </button>
+
+              <!-- Expandable toggle -->
+              <button
+                onclick={() =>
+                  onUpdate({
+                    ...element,
+                    banner: {
+                      ...bannerConfig,
+                      mapExpandable: !(bannerConfig.mapExpandable ?? true),
+                    },
+                  })}
+                class={cn(
+                  'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+                  (bannerConfig.mapExpandable ?? true)
+                    ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                    : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+                )}
+                aria-pressed={bannerConfig.mapExpandable ?? true}
+              >
+                <Maximize2 class="size-4" />
+                {t('dashboard.banner.mapExpandable')}
+              </button>
+            {/if}
+          {/if}
+
+          <!-- Weather toggle -->
+          <button
+            onclick={() =>
+              onUpdate({
+                ...element,
+                banner: { ...bannerConfig, showWeather: !bannerConfig.showWeather },
+              })}
+            class={cn(
+              'flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors',
+              bannerConfig.showWeather
+                ? 'bg-[var(--color-primary)]/10 font-medium text-[var(--color-primary)]'
+                : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+            )}
+            aria-pressed={bannerConfig.showWeather}
+          >
+            <CloudSun class="size-4" />
+            {t('dashboard.banner.showWeather')}
+          </button>
+        </div>
+      {:else if element.type === 'daily-summary'}
+        <DailySummaryConfigForm
+          config={element.summary ?? { summaryLimit: 30 }}
+          onUpdate={config => onUpdate({ ...element, summary: config })}
+        />
+      {/if}
+    {/snippet}
+
     {#snippet renderElement(element, inEditMode, onElementUpdate)}
       {#if element.type === 'banner'}
         <BannerCard

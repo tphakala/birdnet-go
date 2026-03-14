@@ -669,14 +669,20 @@
       "showLocationMap": "Afficher la carte de localisation",
       "showLocationMapHelp": "Affiche une petite carte en utilisant la latitude/longitude de vos paramètres principaux",
       "showWeather": "Afficher la météo actuelle",
-      "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)"
+      "showWeatherHelp": "Affiche les conditions météorologiques actuelles (nécessite l'activation de l'intégration météo)",
+      "mapZoom": "Zoom de la carte",
+      "showPin": "Afficher le marqueur de position",
+      "mapExpandable": "Autoriser l'agrandissement de la carte",
+      "expandMap": "Agrandir la carte",
+      "expandedMapLabel": "Carte de localisation agrandie",
+      "closeExpandedMap": "Fermer la carte agrandie"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Collez n'importe quelle URL YouTube (watch, embed ou lien court). Elle sera convertie en intégration respectueuse de la vie privée.",
       "titleLabel": "Titre (optionnel)",
-      "titlePlaceholder": "Mangeoire à oiseaux en direct"
+      "titlePlaceholder": "Entrez le titre de la vidéo (facultatif)"
     },
     "editMode": {
       "editing": "Modification du tableau de bord",
@@ -702,7 +708,8 @@
       "editDashboard": "Modifier le tableau de bord",
       "widthFull": "Pleine largeur",
       "widthHalf": "Demi-largeur",
-      "fullWidthOnly": "Pleine largeur uniquement"
+      "fullWidthOnly": "Pleine largeur uniquement",
+      "settings": "Paramètres"
     },
     "elements": {
       "banner": "Bannière du tableau de bord",

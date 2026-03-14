@@ -669,14 +669,20 @@
       "showLocationMap": "Mostra mappa posizione",
       "showLocationMapHelp": "Mostra una piccola mappa usando la latitudine/longitudine dalle impostazioni principali",
       "showWeather": "Mostra meteo attuale",
-      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)"
+      "showWeatherHelp": "Mostra le condizioni meteo attuali (richiede l'attivazione dell'integrazione meteo)",
+      "mapZoom": "Zoom della mappa",
+      "showPin": "Mostra segnaposto posizione",
+      "mapExpandable": "Consenti espansione della mappa",
+      "expandMap": "Espandi mappa",
+      "expandedMapLabel": "Mappa di posizione espansa",
+      "closeExpandedMap": "Chiudi mappa espansa"
     },
     "videoEmbed": {
       "youtubeUrl": "URL YouTube",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
       "youtubeUrlHelp": "Incolla qualsiasi URL YouTube (watch, embed o link breve). Verrà convertito in un embed con privacy migliorata.",
       "titleLabel": "Titolo (opzionale)",
-      "titlePlaceholder": "Mangiatoia per uccelli in diretta"
+      "titlePlaceholder": "Inserisci il titolo del video (facoltativo)"
     },
     "editMode": {
       "editing": "Modifica dashboard",
@@ -702,7 +708,8 @@
       "editDashboard": "Modifica dashboard",
       "widthFull": "Larghezza intera",
       "widthHalf": "Mezza larghezza",
-      "fullWidthOnly": "Solo larghezza intera"
+      "fullWidthOnly": "Solo larghezza intera",
+      "settings": "Impostazioni"
     },
     "elements": {
       "banner": "Banner della dashboard",
