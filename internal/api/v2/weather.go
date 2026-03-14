@@ -87,7 +87,7 @@ func (c *Controller) initWeatherRoutes() {
 
 // buildDailyWeatherResponse creates a DailyWeatherResponse from a DailyEvents struct
 // This helper function reduces code duplication and simplifies maintenance
-func (c *Controller) buildDailyWeatherResponse(dailyEvents datastore.DailyEvents) DailyWeatherResponse {
+func (c *Controller) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) DailyWeatherResponse {
 	return DailyWeatherResponse{
 		Date:     dailyEvents.Date,
 		Sunrise:  time.Unix(dailyEvents.Sunrise, 0).UTC(),
@@ -128,7 +128,7 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 	}
 
 	// Convert to response format using the helper function
-	response := c.buildDailyWeatherResponse(dailyEvents)
+	response := c.buildDailyWeatherResponse(&dailyEvents)
 
 	c.logInfoIfEnabled("Retrieved daily weather data",
 		logger.String("date", date),
@@ -313,7 +313,7 @@ func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) Da
 		c.logWarnIfEnabled("Failed to get daily weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		dailyEvents = datastore.DailyEvents{Date: date}
 	}
-	return c.buildDailyWeatherResponse(dailyEvents)
+	return c.buildDailyWeatherResponse(&dailyEvents)
 }
 
 // fetchHourlyWeatherForDetection fetches hourly weather data with error handling
@@ -498,7 +498,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		)
 	} else {
 		// Add daily data to response if available using the helper function
-		dailyResponse := c.buildDailyWeatherResponse(dailyEvents)
+		dailyResponse := c.buildDailyWeatherResponse(&dailyEvents)
 		response.Daily = &dailyResponse
 	}
 
