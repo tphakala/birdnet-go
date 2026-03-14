@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -52,18 +53,12 @@ func getMountInfoFromPartitions(path string, partitions []disk.PartitionStat) (m
 	}
 
 	if bestLen == 0 {
-		// Collect available mountpoints for diagnostic context (anonymized for privacy)
-		mountpoints := make([]string, 0, len(partitions))
-		for _, p := range partitions {
-			mountpoints = append(mountpoints, privacy.AnonymizeStacktracePath(p.Mountpoint))
-		}
-		return "", "", "", errors.Newf("no mount point found for path: %s", privacy.AnonymizeStacktracePath(path)).
-			Component(componentMonitor).
-			Category(errors.CategorySystem).
-			Context("operation", "resolve_mount_path").
-			Context("partition_count", len(partitions)).
-			Context("available_mountpoints", strings.Join(mountpoints, ", ")).
-			Build()
+		// Return a plain error (not EnhancedError) to avoid auto-reporting to Sentry.
+		// This is an expected condition in containers where overlay filesystems may not
+		// list all mount points. The caller handles this gracefully by falling back to
+		// using the path directly when it is accessible.
+		return "", "", "", fmt.Errorf("no mount point found for path: %s (partitions: %d)",
+			privacy.AnonymizeStacktracePath(path), len(partitions))
 	}
 
 	return bestMatch.Mountpoint, bestMatch.Device, bestMatch.Fstype, nil
@@ -95,6 +90,7 @@ func groupPathsWithPartitions(paths []string, partitions []disk.PartitionStat) [
 			if _, statErr := os.Stat(path); statErr == nil {
 				GetLogger().Debug("Mount point detection failed, monitoring path directly",
 					logger.String("path", path),
+					logger.Int("partition_count", len(partitions)),
 					logger.Error(err),
 				)
 				mountPoint = path
