@@ -1179,9 +1179,10 @@ type Security struct {
 	// Uses Go duration format with day/month suffixes (e.g., "365d", "1y").
 	SelfSignedValidity string `yaml:"selfSignedValidity" json:"selfSignedValidity"`
 
-	RedirectToHTTPS   bool              `json:"redirectToHttps"`   // true to redirect to HTTPS
-	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"` // subnet bypass configuration
-	BasicAuth         BasicAuth         `json:"basicAuth"`         // password authentication configuration
+	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"` // port for HTTPS (default: 8443)
+	RedirectToHTTPS   bool              `json:"redirectToHttps"`        // true to redirect to HTTPS
+	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"`      // subnet bypass configuration
+	BasicAuth         BasicAuth         `json:"basicAuth"`              // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
 	// This is the preferred format for configuring OAuth providers.

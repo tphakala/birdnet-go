@@ -365,6 +365,7 @@ export interface SecuritySettings {
   host: string;
   autoTls: boolean;
   tlsMode: string; // "" | "autotls" | "manual" | "selfsigned"
+  tlsPort: string; // port for HTTPS (default: "8443")
   selfSignedValidity: string;
   redirectToHttps: boolean;
   basicAuth: {
@@ -927,6 +928,7 @@ function createEmptySettings(): SettingsFormData {
       host: '',
       autoTls: false,
       tlsMode: '',
+      tlsPort: '8443',
       selfSignedValidity: '365d',
       redirectToHttps: false,
       basicAuth: {

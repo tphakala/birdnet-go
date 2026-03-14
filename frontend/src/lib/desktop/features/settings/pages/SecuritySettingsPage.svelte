@@ -73,6 +73,7 @@
       host: '',
       autoTls: false,
       tlsMode: '',
+      tlsPort: '8443',
       selfSignedValidity: '365d',
       redirectToHttps: false,
       basicAuth: {
@@ -214,6 +215,13 @@
     });
   }
 
+  function updateTLSPort(port: string) {
+    settingsActions.updateSection('security', {
+      ...settings,
+      tlsPort: port,
+    });
+  }
+
   function updateRedirectToHttps(enabled: boolean) {
     settingsActions.updateSection('security', {
       ...settings,
@@ -234,6 +242,7 @@
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
         tlsMode: store.originalData.security?.tlsMode,
+        tlsPort: store.originalData.security?.tlsPort,
         selfSignedValidity: store.originalData.security?.selfSignedValidity,
         redirectToHttps: store.originalData.security?.redirectToHttps,
       },
@@ -242,6 +251,7 @@
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
         tlsMode: store.formData.security?.tlsMode,
+        tlsPort: store.formData.security?.tlsPort,
         selfSignedValidity: store.formData.security?.selfSignedValidity,
         redirectToHttps: store.formData.security?.redirectToHttps,
       }
@@ -585,6 +595,7 @@
         host: store.originalData.security?.host,
         autoTls: store.originalData.security?.autoTls,
         tlsMode: store.originalData.security?.tlsMode,
+        tlsPort: store.originalData.security?.tlsPort,
         selfSignedValidity: store.originalData.security?.selfSignedValidity,
         redirectToHttps: store.originalData.security?.redirectToHttps,
       }}
@@ -593,6 +604,7 @@
         host: store.formData.security?.host,
         autoTls: store.formData.security?.autoTls,
         tlsMode: store.formData.security?.tlsMode,
+        tlsPort: store.formData.security?.tlsPort,
         selfSignedValidity: store.formData.security?.selfSignedValidity,
         redirectToHttps: store.formData.security?.redirectToHttps,
       }}
@@ -943,6 +955,21 @@
                 </button>
               </div>
             {/if}
+          </div>
+        {/if}
+
+        <!-- HTTPS Port (for manual/self-signed TLS) -->
+        {#if settings.tlsMode === 'manual' || settings.tlsMode === 'selfsigned'}
+          <div class="mt-4">
+            <TextInput
+              id="tls-port"
+              value={settings.tlsPort || '8443'}
+              label={t('settings.security.tls.portLabel')}
+              helpText={t('settings.security.tls.portHelpText')}
+              placeholder="8443"
+              disabled={store.isLoading || store.isSaving}
+              onchange={updateTLSPort}
+            />
           </div>
         {/if}
 

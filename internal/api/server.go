@@ -72,6 +72,9 @@ type Server struct {
 	staticServer *StaticFileServer
 	spaHandler   *SPAHandler
 
+	// HTTP redirect server (when TLS is enabled with manual/self-signed certs)
+	httpRedirectServer *http.Server
+
 	// Lifecycle management
 	startTime time.Time
 }
@@ -377,7 +380,10 @@ func (s *Server) Start() {
 	case s.config.AutoTLS:
 		s.slogger.Info("HTTPS server starting with AutoTLS", logger.String("address", addr))
 	case s.config.TLSEnabled:
-		s.slogger.Info("HTTPS server starting", logger.String("address", addr))
+		s.slogger.Info("HTTPS server starting",
+			logger.String("https_address", s.config.TLSAddress()),
+			logger.String("http_address", addr),
+		)
 	default:
 		s.slogger.Info("HTTP server starting", logger.String("address", addr))
 	}
@@ -396,12 +402,22 @@ func (s *Server) startBlocking() error {
 		s.slogger.Info("Starting with AutoTLS (Let's Encrypt)")
 		err = s.echo.StartAutoTLS(addr)
 	case s.config.TLSEnabled:
-		// Manual TLS
+		// Manual/Self-signed TLS: HTTPS on TLSPort, HTTP stays on configured port
+		tlsAddr := s.config.TLSAddress()
 		s.slogger.Info("Starting with manual TLS",
+			logger.String("https_address", tlsAddr),
+			logger.String("http_address", addr),
 			logger.String("cert", s.config.TLSCertFile),
 			logger.String("key", s.config.TLSKeyFile),
 		)
-		err = s.echo.StartTLS(addr, s.config.TLSCertFile, s.config.TLSKeyFile)
+
+		// Start HTTP redirect server on the regular port if configured
+		if s.config.RedirectToHTTPS {
+			go s.startHTTPRedirectServer(addr, s.config.TLSPort)
+		}
+
+		// Start HTTPS server on TLS port (this blocks)
+		err = s.echo.StartTLS(tlsAddr, s.config.TLSCertFile, s.config.TLSKeyFile)
 	default:
 		// Plain HTTP
 		err = s.echo.Start(addr)
@@ -449,6 +465,13 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 		}
 	}
 
+	// Shutdown HTTP redirect server if running
+	if s.httpRedirectServer != nil {
+		if err := s.httpRedirectServer.Shutdown(ctx); err != nil && !errors.Is(err, net.ErrClosed) {
+			s.slogger.Warn("Error shutting down HTTP redirect server", logger.Error(err))
+		}
+	}
+
 	// Shutdown API controller (waits for its background goroutines)
 	if s.apiController != nil {
 		s.apiController.Shutdown()
@@ -473,6 +496,42 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// startHTTPRedirectServer starts a simple HTTP server that redirects all requests to HTTPS.
+func (s *Server) startHTTPRedirectServer(httpAddr, tlsPort string) {
+	if tlsPort == "" {
+		tlsPort = "8443"
+	}
+
+	s.slogger.Info("Starting HTTP->HTTPS redirect server",
+		logger.String("http_address", httpAddr),
+		logger.String("https_port", tlsPort),
+	)
+
+	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target := "https://" + r.Host
+		// Replace port if present in the Host header
+		if host, _, err := net.SplitHostPort(r.Host); err == nil {
+			target = "https://" + host
+			if tlsPort != "443" {
+				target += ":" + tlsPort
+			}
+		}
+		target += r.URL.RequestURI()
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+	})
+
+	s.httpRedirectServer = &http.Server{
+		Addr:         httpAddr,
+		Handler:      redirectHandler,
+		ReadTimeout:  s.config.ReadTimeout,
+		WriteTimeout: s.config.WriteTimeout,
+	}
+
+	if err := s.httpRedirectServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		s.slogger.Error("HTTP redirect server error", logger.Error(err))
+	}
 }
 
 // APIController returns the v2 API controller for SSE broadcasting and other features.

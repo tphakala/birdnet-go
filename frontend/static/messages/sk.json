@@ -2905,6 +2905,8 @@
         "modeAutoTLSDescription": "Automatic certificate via Let's Encrypt",
         "modeManualDescription": "Upload your own certificate and key",
         "modeSelfSignedDescription": "Generate a self-signed certificate",
+        "portLabel": "HTTPS Port",
+        "portHelpText": "Port for HTTPS connections (default: 8443)",
         "redirectToHttps": "Redirect HTTP to HTTPS",
         "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
         "validityLabel": "Certificate Validity",

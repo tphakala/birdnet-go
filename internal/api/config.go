@@ -40,6 +40,7 @@ type Config struct {
 	AutoTLS     bool   // Use Let's Encrypt automatic TLS
 	TLSCertFile string // Path to TLS certificate file (manual TLS)
 	TLSKeyFile  string // Path to TLS key file (manual TLS)
+	TLSPort     string // Port for HTTPS (when using manual/self-signed TLS)
 
 	// Security settings
 	RedirectToHTTPS bool     // Redirect HTTP to HTTPS
@@ -69,6 +70,7 @@ func DefaultConfig() *Config {
 		Port:            "8080",
 		TLSEnabled:      false,
 		AutoTLS:         false,
+		TLSPort:         "8443",
 		RedirectToHTTPS: false,
 		AllowedOrigins:  []string{"*"},
 		ReadTimeout:     DefaultReadTimeout,
@@ -108,6 +110,10 @@ func ConfigFromSettings(settings *conf.Settings) *Config {
 			cfg.TLSCertFile = certPath
 			cfg.TLSKeyFile = keyPath
 			cfg.RedirectToHTTPS = settings.Security.RedirectToHTTPS
+			cfg.TLSPort = settings.Security.TLSPort
+			if cfg.TLSPort == "" {
+				cfg.TLSPort = "8443"
+			}
 		}
 	default:
 		// TLSModeNone — plain HTTP
@@ -152,6 +158,18 @@ func (c *Config) Address() string {
 		return ":" + c.Port
 	}
 	return c.Host + ":" + c.Port
+}
+
+// TLSAddress returns the full address string for the HTTPS server to listen on.
+func (c *Config) TLSAddress() string {
+	port := c.TLSPort
+	if port == "" {
+		port = "8443"
+	}
+	if c.Host == "" {
+		return ":" + port
+	}
+	return c.Host + ":" + port
 }
 
 // String returns a human-readable representation of the config.
