@@ -161,13 +161,15 @@ function stopPingPolling(): void {
  * Uses a module-level AbortController so deactivateWatchdog() can cancel in-flight requests.
  */
 async function pingOnce(): Promise<void> {
-  activePingController = new AbortController();
-  const timeoutId = setTimeout(() => activePingController?.abort(), PING_TIMEOUT_MS);
+  activePingController?.abort();
+  const controller = new AbortController();
+  activePingController = controller;
+  const timeoutId = setTimeout(() => controller.abort(), PING_TIMEOUT_MS);
 
   try {
     const response = await fetch(buildAppUrl(PING_ENDPOINT), {
       method: 'GET',
-      signal: activePingController.signal,
+      signal: controller.signal,
       credentials: 'same-origin',
     });
 
@@ -178,7 +180,9 @@ async function pingOnce(): Promise<void> {
     // Ping failed — stay offline, will retry on next interval
   } finally {
     clearTimeout(timeoutId);
-    activePingController = null;
+    if (activePingController === controller) {
+      activePingController = null;
+    }
   }
 }
 
