@@ -1225,7 +1225,7 @@ export const settingsActions = {
         ...state,
         originalData: JSON.parse(JSON.stringify(state.formData)),
         isSaving: false,
-        restartRequired: state.restartRequired || !!tlsChanged,
+        restartRequired: state.restartRequired || Boolean(tlsChanged),
       }));
 
       // Show success toast

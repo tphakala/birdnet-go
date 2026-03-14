@@ -157,6 +157,14 @@
     return null;
   });
 
+  // TLS mode button class helper
+  function tlsModeButtonClass(mode: string): string {
+    const base = 'flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer';
+    return settings.tlsMode === mode
+      ? `${base} ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5`
+      : `${base} bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50`;
+  }
+
   function updateTLSMode(mode: string) {
     // Also update autoTls for backward compatibility
     settingsActions.updateSection('security', {
@@ -686,9 +694,7 @@
           <div class="flex gap-2 flex-wrap">
             <button
               type="button"
-              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === ''
-                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              class={tlsModeButtonClass('')}
               disabled={store.isLoading || store.isSaving}
               onclick={() => updateTLSMode('')}
             >
@@ -699,9 +705,7 @@
             </button>
             <button
               type="button"
-              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'autotls'
-                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              class={tlsModeButtonClass('autotls')}
               disabled={store.isLoading || store.isSaving}
               onclick={() => updateTLSMode('autotls')}
             >
@@ -712,9 +716,7 @@
             </button>
             <button
               type="button"
-              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'manual'
-                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              class={tlsModeButtonClass('manual')}
               disabled={store.isLoading || store.isSaving}
               onclick={() => updateTLSMode('manual')}
             >
@@ -725,9 +727,7 @@
             </button>
             <button
               type="button"
-              class="flex-1 min-w-[120px] px-3 py-2 rounded-lg text-sm font-medium border transition-all cursor-pointer {settings.tlsMode === 'selfsigned'
-                ? 'ring-2 ring-[var(--color-primary)]/20 border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-                : 'bg-[var(--color-base-200)] border-[var(--color-base-300)] opacity-50'}"
+              class={tlsModeButtonClass('selfsigned')}
               disabled={store.isLoading || store.isSaving}
               onclick={() => updateTLSMode('selfsigned')}
             >
