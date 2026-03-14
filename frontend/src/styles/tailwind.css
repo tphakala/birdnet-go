@@ -1,8 +1,8 @@
 /* Import custom styles from legacy custom.css that are used by Svelte UI */
 @import url('./custom.css') layer(base);
+@import url('./schemes.css');
 
 @import 'tailwindcss';
-@import url('./schemes.css');
 
 /* Custom text utilities */
 @utility text-muted {
