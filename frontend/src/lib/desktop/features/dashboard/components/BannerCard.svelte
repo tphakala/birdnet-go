@@ -163,16 +163,15 @@
         </div>
       </div>
     {:else}
-      <!-- Normal mode: vertical layout with content row + weather row -->
-      <div class="flex flex-1 flex-col p-6">
-        <!-- Row 1: Image + Text + Map -->
-        <div class="flex flex-1 flex-col gap-6 md:flex-row">
+      <!-- Normal mode: container-query responsive layout -->
+      <div class="banner-container flex flex-1 flex-col p-6">
+        <div class="flex flex-1 flex-col gap-6 @md:flex-row">
           {#if config.showImage && config.imagePath}
             <div class="shrink-0">
               <img
                 src={config.imagePath}
                 alt={config.title || t('dashboard.editMode.stationBanner')}
-                class="h-auto w-full rounded-xl object-cover md:w-48"
+                class="h-auto w-full rounded-xl object-cover @md:w-48"
               />
             </div>
           {/if}
@@ -189,10 +188,98 @@
                 {config.description}
               </p>
             {/if}
+
+            <!-- Weather inline: visible only on wide cards -->
+            {#if config.showWeather}
+              <div class="hidden @2xl:block">
+                {#if weatherLoading}
+                  <div
+                    class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+                  >
+                    <RefreshCw class="size-4 animate-spin" />
+                    <span>{t('detections.weather.loading')}</span>
+                  </div>
+                {:else if weatherError || !weatherData?.hourly}
+                  <div
+                    class="mt-3 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+                  >
+                    <span>{t('detections.weather.noDataAvailable')}</span>
+                  </div>
+                {:else}
+                  <div
+                    class="mt-3 flex items-center gap-4 text-sm text-[var(--color-base-content)]"
+                  >
+                    <div class="flex items-center gap-1.5">
+                      <WeatherSvgIcon
+                        icon={getBasmiliusIconName(
+                          weatherData.hourly.weather_icon ?? '',
+                          weatherData.hourly.weather_desc
+                        )}
+                        size={36}
+                        title={weatherData.hourly.weather_desc ?? ''}
+                      />
+                      <span
+                        ><span class="font-semibold"
+                          >{Math.round(
+                            convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
+                          )}{getTemperatureSymbol(temperatureUnit)}</span
+                        >
+                        <span class="text-[var(--color-base-content)]/60"
+                          >{translateWeatherCondition(
+                            weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
+                          )}</span
+                        ></span
+                      >
+                    </div>
+                    <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+                    {#if weatherData.hourly.wind_speed !== undefined}
+                      {@const windSpeed = weatherData.hourly.wind_speed}
+                      <div class="flex items-center gap-1.5">
+                        <WeatherSvgIcon
+                          icon="wind"
+                          size={28}
+                          title={t('detections.weather.labels.wind')}
+                        />
+                        <span
+                          >{convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
+                          {getWindSpeedUnit(
+                            temperatureUnit
+                          )}{#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
+                            <span class="text-[var(--color-base-content)]/50"
+                              >({convertWindSpeed(
+                                weatherData.hourly.wind_gust,
+                                temperatureUnit
+                              ).toFixed(1)})</span
+                            >{/if}</span
+                        >
+                      </div>
+                    {/if}
+                    <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+                    {#if weatherData.moon}
+                      <div class="flex items-center gap-1.5">
+                        <WeatherSvgIcon
+                          icon={weatherData.moon.iconName}
+                          size={24}
+                          title={t(
+                            `weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`
+                          )}
+                        />
+                        <span
+                          >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+                          <span class="text-[var(--color-base-content)]/50"
+                            >{Math.round(weatherData.moon.illumination)}%</span
+                          ></span
+                        >
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
 
           {#if config.showLocationMap && hasLocation}
-            <div class="w-full shrink-0 md:w-64">
+            <div class="w-full shrink-0 @md:w-64">
               <BannerLocationMap
                 {latitude}
                 {longitude}
@@ -205,94 +292,98 @@
           {/if}
         </div>
 
-        <!-- Row 2: Weather data -->
+        <!-- Weather below: visible only on narrow cards -->
         {#if config.showWeather}
-          {#if weatherLoading}
-            <div class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50">
-              <RefreshCw class="size-4 animate-spin" />
-              <span>{t('detections.weather.loading')}</span>
-            </div>
-          {:else if weatherError || !weatherData?.hourly}
-            <div class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50">
-              <span>{t('detections.weather.noDataAvailable')}</span>
-            </div>
-          {:else}
-            <div
-              class="mt-4 flex items-center gap-5 border-t border-[var(--color-base-content)]/5 pt-4"
-            >
-              <!-- Weather Condition -->
-              <div class="flex items-center gap-1.5">
-                <WeatherSvgIcon
-                  icon={getBasmiliusIconName(
-                    weatherData.hourly.weather_icon ?? '',
-                    weatherData.hourly.weather_desc
-                  )}
-                  size={36}
-                  title={weatherData.hourly.weather_desc ?? ''}
-                />
-                <span class="text-sm text-[var(--color-base-content)]">
-                  <span class="font-semibold"
-                    >{Math.round(
-                      convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
-                    )}{getTemperatureSymbol(temperatureUnit)}</span
-                  >
-                  <span class="text-[var(--color-base-content)]/60">
-                    {translateWeatherCondition(
-                      weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
-                    )}
-                  </span>
-                </span>
+          <div class="@2xl:hidden">
+            {#if weatherLoading}
+              <div
+                class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+              >
+                <RefreshCw class="size-4 animate-spin" />
+                <span>{t('detections.weather.loading')}</span>
               </div>
-
-              <!-- Separator -->
-              <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-
-              <!-- Wind -->
-              {#if weatherData.hourly.wind_speed !== undefined}
-                {@const windSpeed = weatherData.hourly.wind_speed}
+            {:else if weatherError || !weatherData?.hourly}
+              <div
+                class="mt-4 flex items-center gap-1.5 text-sm text-[var(--color-base-content)]/50"
+              >
+                <span>{t('detections.weather.noDataAvailable')}</span>
+              </div>
+            {:else}
+              <div
+                class="mt-4 flex items-center gap-4 border-t border-[var(--color-base-content)]/5 pt-4 text-sm text-[var(--color-base-content)]"
+              >
                 <div class="flex items-center gap-1.5">
                   <WeatherSvgIcon
-                    icon="wind"
-                    size={28}
-                    title={t('detections.weather.labels.wind')}
+                    icon={getBasmiliusIconName(
+                      weatherData.hourly.weather_icon ?? '',
+                      weatherData.hourly.weather_desc
+                    )}
+                    size={36}
+                    title={weatherData.hourly.weather_desc ?? ''}
                   />
-                  <span class="text-sm text-[var(--color-base-content)]">
-                    {convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
-                    {getWindSpeedUnit(temperatureUnit)}
-                    {#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
-                      <span class="text-[var(--color-base-content)]/50">
-                        ({convertWindSpeed(weatherData.hourly.wind_gust, temperatureUnit).toFixed(
-                          1
-                        )})
-                      </span>
-                    {/if}
-                  </span>
+                  <span
+                    ><span class="font-semibold"
+                      >{Math.round(
+                        convertTemperature(weatherData.hourly.temperature ?? 0, temperatureUnit)
+                      )}{getTemperatureSymbol(temperatureUnit)}</span
+                    >
+                    <span class="text-[var(--color-base-content)]/60"
+                      >{translateWeatherCondition(
+                        weatherData.hourly.weather_desc ?? weatherData.hourly.weather_main ?? ''
+                      )}</span
+                    ></span
+                  >
                 </div>
-              {/if}
-
-              <!-- Separator -->
-              <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
-
-              <!-- Moon Phase -->
-              {#if weatherData.moon}
-                <div class="flex items-center gap-1.5">
-                  <WeatherSvgIcon
-                    icon={weatherData.moon.iconName}
-                    size={24}
-                    title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
-                  />
-                  <span class="text-sm text-[var(--color-base-content)]">
-                    {t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
-                    <span class="text-[var(--color-base-content)]/50">
-                      {Math.round(weatherData.moon.illumination)}%
-                    </span>
-                  </span>
-                </div>
-              {/if}
-            </div>
-          {/if}
+                <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+                {#if weatherData.hourly.wind_speed !== undefined}
+                  {@const windSpeed = weatherData.hourly.wind_speed}
+                  <div class="flex items-center gap-1.5">
+                    <WeatherSvgIcon
+                      icon="wind"
+                      size={28}
+                      title={t('detections.weather.labels.wind')}
+                    />
+                    <span
+                      >{convertWindSpeed(windSpeed, temperatureUnit).toFixed(1)}
+                      {getWindSpeedUnit(
+                        temperatureUnit
+                      )}{#if weatherData.hourly.wind_gust && weatherData.hourly.wind_gust > windSpeed}
+                        <span class="text-[var(--color-base-content)]/50"
+                          >({convertWindSpeed(
+                            weatherData.hourly.wind_gust,
+                            temperatureUnit
+                          ).toFixed(1)})</span
+                        >{/if}</span
+                    >
+                  </div>
+                {/if}
+                <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+                {#if weatherData.moon}
+                  <div class="flex items-center gap-1.5">
+                    <WeatherSvgIcon
+                      icon={weatherData.moon.iconName}
+                      size={24}
+                      title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+                    />
+                    <span
+                      >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+                      <span class="text-[var(--color-base-content)]/50"
+                        >{Math.round(weatherData.moon.illumination)}%</span
+                      ></span
+                    >
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </div>
         {/if}
       </div>
     {/if}
   </div>
 {/if}
+
+<style>
+  .banner-container {
+    container-type: inline-size;
+  }
+</style>
