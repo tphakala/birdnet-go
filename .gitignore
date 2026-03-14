@@ -6,6 +6,7 @@ clips/
 models/
 plans/
 db/
+cache/
 spectrograms/
 .task/*
 .vscode/*
