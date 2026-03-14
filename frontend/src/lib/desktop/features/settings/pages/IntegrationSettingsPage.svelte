@@ -56,6 +56,10 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import CertificateField from '$lib/desktop/components/forms/CertificateField.svelte';
+  import CertificateInfoCard from '$lib/desktop/components/ui/CertificateInfoCard.svelte';
+  import { settingsAPI, type MQTTTLSCertificateInfo } from '$lib/utils/settingsApi';
+  import { Trash2, Upload } from '@lucide/svelte';
 
   const logger = loggers.settings;
 
@@ -151,6 +155,84 @@
 
   // Tab state
   let activeTab = $state('birdweather');
+
+  // MQTT TLS certificate state
+  let mqttCertInfo = $state<MQTTTLSCertificateInfo | null>(null);
+  let mqttCertLoading = $state(false);
+  let mqttCertError = $state<string | null>(null);
+  let mqttUploadLoading = $state(false);
+  let mqttDeleteLoading = $state(false);
+  let mqttUploadCA = $state('');
+  let mqttUploadCert = $state('');
+  let mqttUploadKey = $state('');
+
+  $effect(() => {
+    if (settings.mqtt?.tls?.enabled) {
+      loadMQTTCertInfo();
+    } else {
+      mqttCertInfo = null;
+      mqttCertError = null;
+    }
+  });
+
+  async function loadMQTTCertInfo() {
+    mqttCertLoading = true;
+    mqttCertError = null;
+    try {
+      mqttCertInfo = await settingsAPI.mqttTls.getCertificates();
+    } catch (err) {
+      mqttCertError =
+        err instanceof Error
+          ? err.message
+          : t('settings.integration.mqtt.tls.certificates.loadError');
+    } finally {
+      mqttCertLoading = false;
+    }
+  }
+
+  async function handleMQTTCertUpload() {
+    if (mqttUploadLoading) return;
+    mqttUploadLoading = true;
+    try {
+      mqttCertInfo = await settingsAPI.mqttTls.uploadCertificates({
+        caCertificate: mqttUploadCA || undefined,
+        clientCertificate: mqttUploadCert || undefined,
+        clientKey: mqttUploadKey || undefined,
+      });
+      toastActions.success(t('settings.integration.mqtt.tls.certificates.uploadSuccess'));
+      mqttUploadCA = '';
+      mqttUploadCert = '';
+      mqttUploadKey = '';
+    } catch (err) {
+      toastActions.error(
+        err instanceof Error
+          ? err.message
+          : t('settings.integration.mqtt.tls.certificates.uploadError')
+      );
+    } finally {
+      mqttUploadLoading = false;
+    }
+  }
+
+  async function handleMQTTCertDelete() {
+    if (mqttDeleteLoading) return;
+    const confirmed = window.confirm(t('settings.integration.mqtt.tls.certificates.deleteConfirm'));
+    if (!confirmed) return;
+    mqttDeleteLoading = true;
+    try {
+      await settingsAPI.mqttTls.deleteCertificates();
+      mqttCertInfo = null;
+      toastActions.success(t('settings.integration.mqtt.tls.certificates.deleteSuccess'));
+    } catch (err) {
+      toastActions.error(
+        err instanceof Error
+          ? err.message
+          : t('settings.integration.mqtt.tls.certificates.deleteError')
+      );
+    } finally {
+      mqttDeleteLoading = false;
+    }
+  }
 
   // Tab definitions
   let tabs = $derived<TabDefinition[]>([
@@ -974,13 +1056,116 @@
                   onchange={updateMQTTTLSSkipVerify}
                 />
 
-                <div
-                  class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
-                >
-                  <Info class="size-5 shrink-0" />
-                  <div>
-                    <span>{@html t('settings.integration.mqtt.tls.configNote')}</span>
-                  </div>
+                <!-- Certificate Management -->
+                <div class="border-t border-[var(--border-200)] pt-4 mt-2">
+                  <h3 class="text-sm font-medium mb-2">
+                    {t('settings.integration.mqtt.tls.certificates.title')}
+                  </h3>
+                  <p class="text-sm text-[var(--color-base-content)] opacity-70 mb-4">
+                    {t('settings.integration.mqtt.tls.certificates.description')}
+                  </p>
+
+                  {#if mqttCertLoading}
+                    <div class="flex items-center gap-2 py-3">
+                      <div
+                        class="animate-spin h-4 w-4 border-2 border-[var(--color-primary)] border-t-transparent rounded-full"
+                      ></div>
+                      <span class="text-sm text-[var(--color-base-content)]/60"
+                        >{t('components.tls.loading')}</span
+                      >
+                    </div>
+                  {:else if mqttCertError}
+                    <ErrorAlert type="error">
+                      {#snippet children()}<span>{mqttCertError}</span>{/snippet}
+                    </ErrorAlert>
+                  {:else if mqttCertInfo?.ca?.installed || mqttCertInfo?.client?.installed}
+                    <div class="space-y-3">
+                      {#if mqttCertInfo?.ca?.installed}
+                        <div>
+                          <span
+                            class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block"
+                          >
+                            {t('settings.integration.mqtt.tls.certificates.caLabel')}
+                          </span>
+                          <CertificateInfoCard certInfo={mqttCertInfo!.ca} />
+                        </div>
+                      {/if}
+                      {#if mqttCertInfo?.client?.installed}
+                        <div>
+                          <span
+                            class="text-xs font-medium text-[var(--color-base-content)]/60 mb-1 block"
+                          >
+                            {t('settings.integration.mqtt.tls.certificates.clientCertLabel')}
+                          </span>
+                          <CertificateInfoCard certInfo={mqttCertInfo!.client} />
+                        </div>
+                      {/if}
+
+                      <button
+                        type="button"
+                        class="inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-[var(--color-error)] hover:bg-[var(--color-error)]/10 cursor-pointer transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                        onclick={handleMQTTCertDelete}
+                        disabled={mqttDeleteLoading}
+                      >
+                        <Trash2 class="w-3 h-3" />
+                        {t('components.tls.removeCertificate')}
+                      </button>
+
+                      <SettingsNote>
+                        <p>{t('settings.integration.mqtt.tls.certificates.reconnectNote')}</p>
+                      </SettingsNote>
+                    </div>
+                  {:else}
+                    <div class="space-y-3">
+                      <CertificateField
+                        id="mqtt-ca-cert"
+                        label={t('settings.integration.mqtt.tls.certificates.caLabel')}
+                        value={mqttUploadCA}
+                        placeholder="-----BEGIN CERTIFICATE-----"
+                        acceptFiles=".pem,.crt,.cer"
+                        disabled={store.isLoading || store.isSaving || mqttUploadLoading}
+                        onchange={v => (mqttUploadCA = v)}
+                      />
+
+                      <CertificateField
+                        id="mqtt-client-cert"
+                        label={t('settings.integration.mqtt.tls.certificates.clientCertLabel')}
+                        value={mqttUploadCert}
+                        placeholder="-----BEGIN CERTIFICATE-----"
+                        acceptFiles=".pem,.crt,.cer"
+                        disabled={store.isLoading || store.isSaving || mqttUploadLoading}
+                        onchange={v => (mqttUploadCert = v)}
+                      />
+
+                      <CertificateField
+                        id="mqtt-client-key"
+                        label={t('settings.integration.mqtt.tls.certificates.clientKeyLabel')}
+                        value={mqttUploadKey}
+                        placeholder="-----BEGIN PRIVATE KEY-----"
+                        acceptFiles=".pem,.key"
+                        disabled={store.isLoading || store.isSaving || mqttUploadLoading}
+                        onchange={v => (mqttUploadKey = v)}
+                      />
+
+                      <button
+                        type="button"
+                        class="inline-flex items-center justify-center gap-2 px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer transition-all"
+                        disabled={(!mqttUploadCA && !mqttUploadCert) ||
+                          Boolean(mqttUploadCert) !== Boolean(mqttUploadKey) ||
+                          mqttUploadLoading}
+                        onclick={handleMQTTCertUpload}
+                      >
+                        {#if mqttUploadLoading}
+                          <div
+                            class="animate-spin h-3.5 w-3.5 border-2 border-current border-t-transparent rounded-full"
+                          ></div>
+                        {:else}
+                          <Upload class="w-3.5 h-3.5" />
+                        {/if}
+                        {t('settings.integration.mqtt.tls.certificates.uploadButton')}
+                      </button>
+                    </div>
+                  {/if}
                 </div>
               {/if}
             </div>
