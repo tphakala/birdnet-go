@@ -145,6 +145,7 @@
               settingsOpen && 'bg-black/5 dark:bg-white/5'
             )}
             aria-label={t('dashboard.editMode.settings')}
+            title={t('dashboard.editMode.settings')}
           >
             <Settings class="size-4 text-[var(--color-base-content)]/60" />
           </button>
@@ -155,7 +156,10 @@
               class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
               onmousedown={e => e.stopPropagation()}
               onclick={e => e.stopPropagation()}
-              onkeydown={e => e.stopPropagation()}
+              onkeydown={e => {
+                e.stopPropagation();
+                if (e.key === 'Escape') settingsOpen = false;
+              }}
             >
               {@render settingsContent()}
             </div>
