@@ -16,9 +16,11 @@ import (
 type TLSCertificateType string
 
 const (
-	TLSCertTypeCA     TLSCertificateType = "ca"
-	TLSCertTypeClient TLSCertificateType = "client"
-	TLSCertTypeKey    TLSCertificateType = "key"
+	TLSCertTypeCA         TLSCertificateType = "ca"
+	TLSCertTypeClient     TLSCertificateType = "client"
+	TLSCertTypeKey        TLSCertificateType = "key"
+	TLSCertTypeServerCert TLSCertificateType = "server_cert"
+	TLSCertTypeServerKey  TLSCertificateType = "server_key"
 )
 
 // TLSManager handles TLS certificate storage and retrieval
@@ -81,6 +83,10 @@ func (tm *TLSManager) getCertificateFilename(service string, certType TLSCertifi
 		extension = "client.crt"
 	case TLSCertTypeKey:
 		extension = "client.key"
+	case TLSCertTypeServerCert:
+		extension = "server.crt"
+	case TLSCertTypeServerKey:
+		extension = "server.key"
 	default:
 		extension = "unknown"
 	}
@@ -142,7 +148,7 @@ func (tm *TLSManager) SaveCertificate(service string, certType TLSCertificateTyp
 
 	// Set appropriate permissions based on certificate type
 	var perm os.FileMode
-	if certType == TLSCertTypeKey {
+	if certType == TLSCertTypeKey || certType == TLSCertTypeServerKey {
 		perm = 0o600 // Private key: read/write for owner only
 	} else {
 		perm = 0o644 // Certificates: read for all, write for owner
@@ -202,7 +208,7 @@ func (tm *TLSManager) RemoveAllCertificates(service string) error {
 	tm.mu.Lock()
 	defer tm.mu.Unlock()
 
-	certTypes := []TLSCertificateType{TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey}
+	certTypes := []TLSCertificateType{TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeKey, TLSCertTypeServerCert, TLSCertTypeServerKey}
 	for _, certType := range certTypes {
 		if err := tm.removeCertificateUnlocked(service, certType); err != nil {
 			return err
@@ -225,7 +231,7 @@ func validateCertificateContent(certType TLSCertificateType, content string) err
 	}
 
 	switch certType {
-	case TLSCertTypeCA, TLSCertTypeClient:
+	case TLSCertTypeCA, TLSCertTypeClient, TLSCertTypeServerCert:
 		// Validate certificate
 		if block.Type != "CERTIFICATE" {
 			return fmt.Errorf("expected CERTIFICATE block, got %s", block.Type)
@@ -235,7 +241,7 @@ func validateCertificateContent(certType TLSCertificateType, content string) err
 			return fmt.Errorf("invalid certificate: %w", err)
 		}
 
-	case TLSCertTypeKey:
+	case TLSCertTypeKey, TLSCertTypeServerKey:
 		// Validate private key
 		switch block.Type {
 		case "RSA PRIVATE KEY":
