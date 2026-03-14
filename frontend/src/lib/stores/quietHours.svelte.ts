@@ -67,8 +67,11 @@ function scheduleNextPoll() {
 function startPolling() {
   refCount++;
   if (refCount === 1 && typeof window !== 'undefined') {
-    fetchStatus();
-    scheduleNextPoll();
+    // Await initial fetch before scheduling next poll to prevent pile-up
+    (async () => {
+      await fetchStatus();
+      scheduleNextPoll();
+    })();
   }
 }
 

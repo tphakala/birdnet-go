@@ -171,8 +171,13 @@
     if (pollTimeout) return;
 
     // Poll immediately, then schedule next after completion
-    pollJobStatus();
-    scheduleNextPoll();
+    (async () => {
+      await pollJobStatus();
+      // Only schedule next if we still have an active job
+      if (backupJobId && backupStatus !== 'completed' && backupStatus !== 'failed') {
+        scheduleNextPoll();
+      }
+    })();
   }
 
   // Schedule the next poll after POLL_INTERVAL_MS
