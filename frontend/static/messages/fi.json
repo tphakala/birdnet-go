@@ -3376,7 +3376,6 @@
         "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
         "validityLabel": "Certificate Validity",
         "validityHelpText": "How long the certificate should be valid",
-        "validity90d": "90 days",
         "validity365d": "1 year",
         "validity730d": "2 years",
         "generateButton": "Generate Certificate",
@@ -3409,7 +3408,8 @@
         "removeCertificate": "Remove Certificate",
         "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
         "restartRequired": "TLS changes require a server restart to take effect.",
-        "noCertificate": "No certificate installed"
+        "noCertificate": "No certificate installed",
+        "validity1825d": "5 years"
       }
     },
     "database": {

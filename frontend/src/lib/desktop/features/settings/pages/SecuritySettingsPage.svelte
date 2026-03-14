@@ -74,7 +74,7 @@
       autoTls: false,
       tlsMode: '',
       tlsPort: '8443',
-      selfSignedValidity: '365d',
+      selfSignedValidity: '1825d',
       redirectToHttps: false,
       basicAuth: {
         enabled: false,
@@ -103,9 +103,9 @@
 
   // Self-signed validity options
   const validityOptions: SelectOption[] = [
-    { value: '90d', label: t('settings.security.tls.validity90d') },
     { value: '365d', label: t('settings.security.tls.validity365d') },
     { value: '730d', label: t('settings.security.tls.validity730d') },
+    { value: '1825d', label: t('settings.security.tls.validity1825d') },
   ];
 
   // Load certificate info on mount and when TLS mode changes
@@ -141,7 +141,7 @@
     generateLoading = true;
     try {
       certInfo = await settingsAPI.tls.generateSelfSigned({
-        validity: settings?.selfSignedValidity ?? '365d',
+        validity: settings?.selfSignedValidity ?? '1825d',
       });
       toastActions.success(t('settings.security.tls.generateSuccess'));
     } catch (err) {
@@ -828,7 +828,7 @@
           <div class="space-y-4">
             <SelectDropdown
               options={validityOptions}
-              value={settings.selfSignedValidity ?? '365d'}
+              value={settings.selfSignedValidity ?? '1825d'}
               label={t('settings.security.tls.validityLabel')}
               helpText={t('settings.security.tls.validityHelpText')}
               variant="select"

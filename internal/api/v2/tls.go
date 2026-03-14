@@ -21,7 +21,7 @@ import (
 
 // TLS validity constraints
 const (
-	defaultValidityDays = 365           // Default certificate validity in days
+	defaultValidityDays = 1825          // Default certificate validity in days (5 years)
 	minValidityHours    = 24            // Minimum validity: 1 day
 	maxValidityHours    = 24 * 365 * 10 // Maximum validity: 10 years
 	tlsServiceName      = "webserver"   // Service name for TLS certificate storage

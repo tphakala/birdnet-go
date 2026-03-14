@@ -342,7 +342,7 @@ func setDefaultConfig() {
 	viper.SetDefault("security.host", "")
 	viper.SetDefault("security.autotls", false)
 	viper.SetDefault("security.tlsmode", "")
-	viper.SetDefault("security.selfsignedvalidity", "365d")
+	viper.SetDefault("security.selfsignedvalidity", "1825d")
 	viper.SetDefault("security.tlsport", "8443")
 	viper.SetDefault("security.redirecttohttps", false)
 	viper.SetDefault("security.allowsubnetbypass.enabled", false)

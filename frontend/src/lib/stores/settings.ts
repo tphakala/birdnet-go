@@ -929,7 +929,7 @@ function createEmptySettings(): SettingsFormData {
       autoTls: false,
       tlsMode: '',
       tlsPort: '8443',
-      selfSignedValidity: '365d',
+      selfSignedValidity: '1825d',
       redirectToHttps: false,
       basicAuth: {
         enabled: false,
