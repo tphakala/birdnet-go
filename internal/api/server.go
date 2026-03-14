@@ -510,13 +510,14 @@ func (s *Server) startHTTPRedirectServer(httpAddr, tlsPort string) {
 	)
 
 	redirectHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		target := "https://" + r.Host
-		// Replace port if present in the Host header
-		if host, _, err := net.SplitHostPort(r.Host); err == nil {
-			target = "https://" + host
-			if tlsPort != "443" {
-				target += ":" + tlsPort
-			}
+		// Extract hostname, stripping any port from the Host header
+		host := r.Host
+		if h, _, err := net.SplitHostPort(r.Host); err == nil {
+			host = h
+		}
+		target := "https://" + host
+		if tlsPort != "443" {
+			target += ":" + tlsPort
 		}
 		target += r.URL.RequestURI()
 		http.Redirect(w, r, target, http.StatusMovedPermanently)

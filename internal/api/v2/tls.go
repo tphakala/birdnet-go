@@ -229,6 +229,8 @@ func (c *Controller) GenerateSelfSignedCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save generated certificate", http.StatusInternalServerError)
 	}
 	if _, err := tlsMgr.SaveCertificate(tlsServiceName, conf.TLSCertTypeServerKey, keyPEM); err != nil {
+		// Clean up the cert that was saved
+		_ = tlsMgr.RemoveCertificate(tlsServiceName, conf.TLSCertTypeServerCert)
 		return c.HandleError(ctx, err, "Failed to save generated private key", http.StatusInternalServerError)
 	}
 
