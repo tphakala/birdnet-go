@@ -719,53 +719,8 @@ func validateSecuritySettings(settings *Security) error {
 	}
 
 	// TLS mode validation
-	switch settings.TLSMode {
-	case TLSModeAutoTLS:
-		// Host is required for AutoTLS (can be extracted from BaseURL)
-		hostname := settings.GetHostnameForCertificates()
-		if hostname == "" {
-			return errors.Newf("security.host (or hostname in security.baseUrl) must be set when TLS mode is autotls").
-				Category(errors.CategoryValidation).
-				Context("validation_type", "security-autotls-host").
-				Build()
-		}
-
-		// Validate hostname is suitable for Let's Encrypt
-		if err := validateAutoTLSHostname(hostname); err != nil {
-			return err
-		}
-
-		// Warning about port requirements when running in container
-		if RunningInContainer() {
-			GetLogger().Warn("AutoTLS requires ports 80 and 443 to be exposed",
-				logger.String("ports", "80:80 (ACME HTTP-01), 443:443 (HTTPS)"),
-				logger.String("hint", "Consider using docker-compose.autotls.yml for proper AutoTLS configuration"))
-		}
-
-	case TLSModeManual:
-		// Warn if no server certificate is installed
-		tm := GetTLSManager()
-		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
-			GetLogger().Warn("TLS mode is 'manual' but no server certificate is installed",
-				logger.String("hint", "Upload a server certificate via the settings page or API"))
-		}
-
-	case TLSModeSelfSigned:
-		// Warn if no server certificate is installed (will be generated on startup)
-		tm := GetTLSManager()
-		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
-			GetLogger().Info("TLS mode is 'selfsigned' - a self-signed certificate will be generated on startup")
-		}
-
-	case TLSModeNone:
-		// No TLS validation needed
-
-	default:
-		return errors.Newf("security.tlsMode has invalid value %q (valid: autotls, manual, selfsigned, or empty)", settings.TLSMode).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "security-tlsmode-invalid").
-			Context("tls_mode", string(settings.TLSMode)).
-			Build()
+	if err := validateTLSMode(settings); err != nil {
+		return err
 	}
 
 	// Validate the subnet bypass setting against the allowed pattern
@@ -796,6 +751,52 @@ func validateSecuritySettings(settings *Security) error {
 		return err
 	}
 
+	return nil
+}
+
+// validateTLSMode validates TLS certificate management mode settings.
+func validateTLSMode(settings *Security) error {
+	switch settings.TLSMode {
+	case TLSModeAutoTLS:
+		hostname := settings.GetHostnameForCertificates()
+		if hostname == "" {
+			return errors.Newf("security.host (or hostname in security.baseUrl) must be set when TLS mode is autotls").
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-autotls-host").
+				Build()
+		}
+		if err := validateAutoTLSHostname(hostname); err != nil {
+			return err
+		}
+		if RunningInContainer() {
+			GetLogger().Warn("AutoTLS requires ports 80 and 443 to be exposed",
+				logger.String("ports", "80:80 (ACME HTTP-01), 443:443 (HTTPS)"),
+				logger.String("hint", "Consider using docker-compose.autotls.yml for proper AutoTLS configuration"))
+		}
+
+	case TLSModeManual:
+		tm := GetTLSManager()
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
+			GetLogger().Warn("TLS mode is 'manual' but no server certificate is installed",
+				logger.String("hint", "Upload a server certificate via the settings page or API"))
+		}
+
+	case TLSModeSelfSigned:
+		tm := GetTLSManager()
+		if !tm.CertificateExists("webserver", TLSCertTypeServerCert) {
+			GetLogger().Info("TLS mode is 'selfsigned' - a self-signed certificate will be generated on startup")
+		}
+
+	case TLSModeNone:
+		// No TLS validation needed
+
+	default:
+		return errors.Newf("security.tlsMode has invalid value %q (valid: autotls, manual, selfsigned, or empty)", settings.TLSMode).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-tlsmode-invalid").
+			Context("tls_mode", string(settings.TLSMode)).
+			Build()
+	}
 	return nil
 }
 
