@@ -224,7 +224,7 @@ Source: MIT
 
 ### github.com/markbates/goth
 
-License: https://github.com/tphakala/goth/blob/a4b17a573e8f/LICENSE.txt
+License: https://github.com/tphakala/goth/blob/08c3db6a364a/LICENSE.txt
 Source: MIT
 
 ### github.com/mattn/go-colorable
@@ -464,7 +464,7 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.48.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.49.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
@@ -489,12 +489,12 @@ Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.40.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.41.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.34.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.35.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
