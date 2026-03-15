@@ -171,6 +171,11 @@ export type TranslationKey =
   | 'common.review.errors.lockStatusFailed'
   | 'common.review.errors.verificationFailed'
   | 'common.errors.unknownError'
+  | 'common.toggle'
+  | 'common.image'
+  | 'common.actionsColumn'
+  | 'common.closeModal'
+  | 'common.hoursShort'
   | 'pageTitle.settings'
   | 'pageTitle.pageNotFound'
   | 'pageTitle.serverError'
@@ -180,6 +185,9 @@ export type TranslationKey =
   | 'pageTitle.detectionDetails'
   | 'pageTitle.settingsNotAvailable'
   | 'navigation.dashboard'
+  | 'navigation.settingsMenu'
+  | 'navigation.theme'
+  | 'navigation.github'
   | 'navigation.detections'
   | 'navigation.search'
   | 'navigation.analytics'
@@ -325,6 +333,7 @@ export type TranslationKey =
   | 'notifications.content.settings.webserverRestartRequired'
   | 'notifications.content.settings.reconfiguringSoundLevel'
   | 'notifications.content.settings.audioDeviceRestartRequired'
+  | 'notifications.content.settings.extendedCaptureRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'
   | 'notifications.content.settings.savedSuccessfully'
@@ -343,6 +352,8 @@ export type TranslationKey =
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
   | 'notifications.content.cleanup.failedMessage'
+  | 'notifications.content.buffer.overloadTitle'
+  | 'notifications.content.buffer.overloadMessage' // params: dropRate, sourceName
   | 'notifications.content.alert.firedTitle' // params: rule_name
   | 'notifications.content.alert.metricExceeded' // params: value, threshold
   | 'notifications.content.alert.detectionOccurred' // params: species_name, confidence
@@ -440,6 +451,11 @@ export type TranslationKey =
   | 'error.generic.loginToViewDetails'
   | 'error.generic.componentLoadError'
   | 'error.generic.failedToLoadComponent'
+  | 'dashboard.approved'
+  | 'dashboard.currentlyHearing.title'
+  | 'dashboard.currentlyHearing.subtitle'
+  | 'dashboard.currentlyHearing.empty'
+  | 'dashboard.rejected'
   | 'dashboard.dailySummary.title'
   | 'dashboard.dailySummary.subtitle'
   | 'dashboard.dailySummary.columns.species'
@@ -506,6 +522,61 @@ export type TranslationKey =
   | 'dashboard.errors.recentDetectionsFetch' // params: status
   | 'dashboard.errors.recentDetectionsLoad'
   | 'dashboard.errors.configFetch' // params: status
+  | 'dashboard.banner.title'
+  | 'dashboard.banner.titlePlaceholder'
+  | 'dashboard.banner.description'
+  | 'dashboard.banner.descriptionPlaceholder'
+  | 'dashboard.banner.subElements'
+  | 'dashboard.banner.showImage'
+  | 'dashboard.banner.imageUrl'
+  | 'dashboard.banner.imageUrlPlaceholder'
+  | 'dashboard.banner.imageUrlHelp'
+  | 'dashboard.banner.showLocationMap'
+  | 'dashboard.banner.showLocationMapHelp'
+  | 'dashboard.banner.showWeather'
+  | 'dashboard.banner.showWeatherHelp'
+  | 'dashboard.banner.timeFormat'
+  | 'dashboard.banner.mapZoom'
+  | 'dashboard.banner.showPin'
+  | 'dashboard.banner.mapExpandable'
+  | 'dashboard.banner.expandMap'
+  | 'dashboard.banner.expandedMapLabel'
+  | 'dashboard.banner.closeExpandedMap'
+  | 'dashboard.videoEmbed.youtubeUrl'
+  | 'dashboard.videoEmbed.youtubeUrlPlaceholder'
+  | 'dashboard.videoEmbed.youtubeUrlHelp'
+  | 'dashboard.videoEmbed.titleLabel'
+  | 'dashboard.videoEmbed.titlePlaceholder'
+  | 'dashboard.editMode.editing'
+  | 'dashboard.editMode.save'
+  | 'dashboard.editMode.saving'
+  | 'dashboard.editMode.cancel'
+  | 'dashboard.editMode.disabled'
+  | 'dashboard.editMode.noConfig'
+  | 'dashboard.editMode.currentlyHearingNote'
+  | 'dashboard.editMode.notAvailable'
+  | 'dashboard.editMode.configureElement'
+  | 'dashboard.editMode.closeModal'
+  | 'dashboard.editMode.configureTitle' // params: element
+  | 'dashboard.editMode.weatherPlaceholder'
+  | 'dashboard.editMode.stationBanner'
+  | 'dashboard.editMode.liveBirdFeed'
+  | 'dashboard.editMode.hideElement'
+  | 'dashboard.editMode.unhideElement'
+  | 'dashboard.editMode.deleteElement'
+  | 'dashboard.editMode.deleteConfirm'
+  | 'dashboard.editMode.addElement'
+  | 'dashboard.editMode.noElementsAvailable'
+  | 'dashboard.editMode.editDashboard'
+  | 'dashboard.editMode.widthFull'
+  | 'dashboard.editMode.widthHalf'
+  | 'dashboard.editMode.fullWidthOnly'
+  | 'dashboard.editMode.settings'
+  | 'dashboard.elements.banner'
+  | 'dashboard.elements.dailySummary'
+  | 'dashboard.elements.currentlyHearing'
+  | 'dashboard.elements.detectionsGrid'
+  | 'dashboard.elements.videoEmbed'
   | 'detections.title'
   | 'detections.titles.hourly' // params: hour, date
   | 'detections.titles.hourlyRange' // params: startHour, endHour, date
@@ -567,6 +638,7 @@ export type TranslationKey =
   | 'detections.weather.conditions.unknown'
   | 'detections.row.viewDetails' // params: species
   | 'detections.media.title'
+  | 'detections.media.clipHint'
   | 'detections.tabs.overview'
   | 'detections.tabs.taxonomy'
   | 'detections.tabs.history'
@@ -630,6 +702,8 @@ export type TranslationKey =
   | 'system.systemInfo.temperatureValue' // params: temp
   | 'system.systemInfo.temperatureUnavailable'
   | 'system.systemInfo.cpuCores'
+  | 'system.systemInfo.cpuDetails'
+  | 'system.systemInfo.environment'
   | 'system.diskUsage.title'
   | 'system.diskUsage.emptyMessage'
   | 'system.memoryUsage.title'
@@ -1164,6 +1238,13 @@ export type TranslationKey =
   | 'settings.main.sections.falsePositiveFilter.title'
   | 'settings.main.sections.falsePositiveFilter.description'
   | 'settings.main.sections.falsePositiveFilter.level.label'
+  | 'settings.main.sections.falsePositiveFilter.detectionCount' // params: count, description
+  | 'settings.main.sections.falsePositiveFilter.levels.off'
+  | 'settings.main.sections.falsePositiveFilter.levels.lenient'
+  | 'settings.main.sections.falsePositiveFilter.levels.moderate'
+  | 'settings.main.sections.falsePositiveFilter.levels.balanced'
+  | 'settings.main.sections.falsePositiveFilter.levels.strict'
+  | 'settings.main.sections.falsePositiveFilter.levels.maximum'
   | 'settings.main.sections.falsePositiveFilter.hardwareNote'
   | 'settings.main.sections.falsePositiveFilter.overlapAdjusted' // params: overlap
   | 'settings.main.sections.falsePositiveFilter.overlapReduced' // params: overlap
@@ -1672,6 +1753,25 @@ export type TranslationKey =
   | 'settings.integration.mqtt.tls.enable'
   | 'settings.integration.mqtt.tls.skipVerify'
   | 'settings.integration.mqtt.tls.configNote'
+  | 'settings.integration.mqtt.tls.certificates.title'
+  | 'settings.integration.mqtt.tls.certificates.description'
+  | 'settings.integration.mqtt.tls.certificates.caLabel'
+  | 'settings.integration.mqtt.tls.certificates.caPlaceholder'
+  | 'settings.integration.mqtt.tls.certificates.caHelpText'
+  | 'settings.integration.mqtt.tls.certificates.clientCertLabel'
+  | 'settings.integration.mqtt.tls.certificates.clientCertPlaceholder'
+  | 'settings.integration.mqtt.tls.certificates.clientCertHelpText'
+  | 'settings.integration.mqtt.tls.certificates.clientKeyLabel'
+  | 'settings.integration.mqtt.tls.certificates.clientKeyPlaceholder'
+  | 'settings.integration.mqtt.tls.certificates.clientKeyHelpText'
+  | 'settings.integration.mqtt.tls.certificates.uploadButton'
+  | 'settings.integration.mqtt.tls.certificates.uploadSuccess'
+  | 'settings.integration.mqtt.tls.certificates.uploadError'
+  | 'settings.integration.mqtt.tls.certificates.deleteConfirm'
+  | 'settings.integration.mqtt.tls.certificates.deleteSuccess'
+  | 'settings.integration.mqtt.tls.certificates.deleteError'
+  | 'settings.integration.mqtt.tls.certificates.loadError'
+  | 'settings.integration.mqtt.tls.certificates.reconnectNote'
   | 'settings.integration.mqtt.homeAssistant.title'
   | 'settings.integration.mqtt.homeAssistant.enable'
   | 'settings.integration.mqtt.homeAssistant.description'
@@ -1698,6 +1798,12 @@ export type TranslationKey =
   | 'settings.integration.observability.disabled'
   | 'settings.integration.observability.listenAddress.label'
   | 'settings.integration.observability.listenAddress.placeholder'
+  | 'settings.integration.observability.listenAddress.ipLabel'
+  | 'settings.integration.observability.listenAddress.portLabel'
+  | 'settings.integration.observability.listenAddress.allInterfaces'
+  | 'settings.integration.observability.listenAddress.loopback'
+  | 'settings.integration.observability.listenAddress.customAddress'
+  | 'settings.integration.observability.listenAddress.interfaceDown'
   | 'settings.integration.weather.title'
   | 'settings.integration.weather.description'
   | 'settings.integration.weather.provider.label'
@@ -1737,6 +1843,16 @@ export type TranslationKey =
   | 'settings.integration.weather.temperatureUnit.options.fahrenheit'
   | 'settings.integration.errors.connectionError'
   | 'settings.integration.errors.responseStreamFailed'
+  | 'settings.integration.ebird.title'
+  | 'settings.integration.ebird.description'
+  | 'settings.integration.ebird.enable'
+  | 'settings.integration.ebird.enabledRequired'
+  | 'settings.integration.ebird.apiKey.label'
+  | 'settings.integration.ebird.apiKey.helpText'
+  | 'settings.integration.ebird.locale.label'
+  | 'settings.integration.ebird.cacheTTL.label'
+  | 'settings.integration.ebird.cacheTTL.helpText'
+  | 'settings.integration.ebird.note'
   | 'settings.audio.loading'
   | 'settings.audio.tabs.soundCard'
   | 'settings.audio.tabs.streams'
@@ -2116,6 +2232,66 @@ export type TranslationKey =
   | 'settings.security.terminal.enableHelpText'
   | 'settings.security.terminal.securityWarning'
   | 'settings.security.terminal.confirmEnable'
+  | 'settings.security.tls.title'
+  | 'settings.security.tls.description'
+  | 'settings.security.tls.modeLabel'
+  | 'settings.security.tls.modeNone'
+  | 'settings.security.tls.modeLetsEncrypt'
+  | 'settings.security.tls.modeManual'
+  | 'settings.security.tls.modeSelfSigned'
+  | 'settings.security.tls.modeNoneDescription'
+  | 'settings.security.tls.modeAutoTLSDescription'
+  | 'settings.security.tls.modeManualDescription'
+  | 'settings.security.tls.modeSelfSignedDescription'
+  | 'settings.security.tls.portLabel'
+  | 'settings.security.tls.portHelpText'
+  | 'settings.security.tls.redirectToHttps'
+  | 'settings.security.tls.autoTLSRequirements'
+  | 'settings.security.tls.validityLabel'
+  | 'settings.security.tls.validityHelpText'
+  | 'settings.security.tls.validity365d'
+  | 'settings.security.tls.validity730d'
+  | 'settings.security.tls.generateButton'
+  | 'settings.security.tls.regenerateButton'
+  | 'settings.security.tls.generating'
+  | 'settings.security.tls.certificateLabel'
+  | 'settings.security.tls.privateKeyLabel'
+  | 'settings.security.tls.caCertificateLabel'
+  | 'settings.security.tls.uploadButton'
+  | 'settings.security.tls.uploading'
+  | 'settings.security.tls.browseFile'
+  | 'settings.security.tls.plaintextWarning'
+  | 'settings.security.tls.certificateInstalled'
+  | 'settings.security.tls.subject'
+  | 'settings.security.tls.issuer'
+  | 'settings.security.tls.validFrom'
+  | 'settings.security.tls.validUntil'
+  | 'settings.security.tls.daysRemaining'
+  | 'settings.security.tls.sans'
+  | 'settings.security.tls.fingerprint'
+  | 'settings.security.tls.expiryWarning'
+  | 'settings.security.tls.loading'
+  | 'settings.security.tls.loadError'
+  | 'settings.security.tls.generateSuccess'
+  | 'settings.security.tls.generateError'
+  | 'settings.security.tls.uploadSuccess'
+  | 'settings.security.tls.uploadError'
+  | 'settings.security.tls.deleteSuccess'
+  | 'settings.security.tls.deleteError'
+  | 'settings.security.tls.removeCertificate'
+  | 'settings.security.tls.deleteConfirm'
+  | 'settings.security.tls.restartRequired'
+  | 'settings.security.tls.noCertificate'
+  | 'settings.security.tls.validity1825d'
+  | 'settings.security.tls.autoTLSHostRequired'
+  | 'settings.security.tls.autoTLSNoIP'
+  | 'settings.security.tls.autoTLSNeedsFQDN'
+  | 'settings.security.tls.autoTLSNoLocalhost'
+  | 'settings.security.tls.autoTLSPrivateTLD' // params: tld
+  | 'settings.security.tls.downloadCertificate'
+  | 'settings.security.tls.downloadCertificateHelp'
+  | 'settings.security.tls.fileReadError'
+  | 'settings.species.pageLabel'
   | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
   | 'settings.species.configAdded' // params: species
@@ -2145,6 +2321,10 @@ export type TranslationKey =
   | 'settings.species.activeSpecies.locationNotConfigured.title'
   | 'settings.species.activeSpecies.locationNotConfigured.description'
   | 'settings.species.activeSpecies.locationNotConfigured.action'
+  | 'settings.species.activeSpecies.columns.commonName'
+  | 'settings.species.activeSpecies.columns.scientificName'
+  | 'settings.species.activeSpecies.columns.score'
+  | 'settings.species.activeSpecies.columns.status'
   | 'settings.species.alwaysInclude.title'
   | 'settings.species.alwaysInclude.tabLabel'
   | 'settings.species.alwaysInclude.description'
@@ -2204,6 +2384,8 @@ export type TranslationKey =
   | 'settings.species.actionsModal.command.helpText'
   | 'settings.species.actionsModal.parameters.label'
   | 'settings.species.actionsModal.parameters.helpText'
+  | 'settings.species.actionsModal.parameters.placeholder'
+  | 'settings.species.actionsModal.parameters.tooltip'
   | 'settings.species.actionsModal.parameters.availableTitle'
   | 'settings.species.actionsModal.parameters.buttons.commonName'
   | 'settings.species.actionsModal.parameters.buttons.scientificName'
@@ -2213,6 +2395,9 @@ export type TranslationKey =
   | 'settings.species.actionsModal.parameters.buttons.clearParameters'
   | 'settings.species.actionsModal.executeDefaults.label'
   | 'settings.species.actionsModal.executeDefaults.helpText'
+  | 'settings.species.add'
+  | 'settings.species.remove'
+  | 'settings.species.suggestions'
   | 'settings.species.addSpeciesToInclude'
   | 'settings.species.addSpeciesToIncludeLabel'
   | 'settings.species.addSpeciesToExclude'
@@ -2470,6 +2655,28 @@ export type TranslationKey =
   | 'settings.alerts.builtInRules.mqttPublishFailed.description'
   | 'settings.alerts.builtInRules.birdWeatherFailed.name'
   | 'settings.alerts.builtInRules.birdWeatherFailed.description'
+  | 'settings.appearance.colorScheme'
+  | 'settings.appearance.colorSchemeDescription'
+  | 'settings.appearance.schemeBlue'
+  | 'settings.appearance.schemeForest'
+  | 'settings.appearance.schemeAmber'
+  | 'settings.appearance.schemeViolet'
+  | 'settings.appearance.schemeRose'
+  | 'settings.appearance.schemeCustom'
+  | 'settings.appearance.customPrimary'
+  | 'settings.appearance.customAccent'
+  | 'settings.appearance.logoGradient'
+  | 'settings.appearance.logoGradientDescription'
+  | 'settings.userInterface.tabs.appearance'
+  | 'settings.userInterface.tabs.language'
+  | 'settings.userInterface.tabs.visualContent'
+  | 'settings.userInterface.appearance.title'
+  | 'settings.userInterface.appearance.description'
+  | 'settings.userInterface.language.title'
+  | 'settings.userInterface.language.description'
+  | 'settings.userInterface.visualContent.title'
+  | 'settings.userInterface.visualContent.description'
+  | 'settings.restartRequired'
   | 'auth.login'
   | 'auth.logout'
   | 'auth.openLoginModal'
@@ -2633,7 +2840,36 @@ export type TranslationKey =
   | 'components.datePicker.status.error'
   | 'components.audioPlayer.errors.generationFailedStatus' // params: status
   | 'components.audioPlayer.errors.spectrogramFailed'
+  | 'components.audioPlayer.clipExtraction.selectRange'
+  | 'components.audioPlayer.clipExtraction.playSelection'
+  | 'components.audioPlayer.clipExtraction.pauseSelection'
+  | 'components.audioPlayer.clipExtraction.reviewSelection'
+  | 'components.audioPlayer.clipExtraction.selectionStart'
+  | 'components.audioPlayer.clipExtraction.selectionEnd'
+  | 'components.audioPlayer.clipExtraction.lossless'
+  | 'components.audioPlayer.clipExtraction.lossy'
+  | 'components.audioPlayer.clipExtraction.extractClip'
+  | 'components.audioPlayer.clipExtraction.clearSelection'
+  | 'components.audioPlayer.clipExtraction.extracting'
+  | 'components.audioPlayer.clipExtraction.extractError'
+  | 'components.audioPlayer.clipExtraction.formatLabel'
+  | 'components.audioPlayer.clipExtraction.rangeLabel' // params: start, end
   | 'components.weatherInfo.errors.loadFailed'
+  | 'components.tls.certificateInstalled'
+  | 'components.tls.browseFile'
+  | 'components.tls.subject'
+  | 'components.tls.issuer'
+  | 'components.tls.sans'
+  | 'components.tls.validUntil'
+  | 'components.tls.daysRemaining'
+  | 'components.tls.fingerprint'
+  | 'components.tls.expiryWarning'
+  | 'components.tls.downloadCertificate'
+  | 'components.tls.regenerateButton'
+  | 'components.tls.removeCertificate'
+  | 'components.tls.fileReadError'
+  | 'components.tls.loading'
+  | 'connectivity.offline'
   | 'detection.actions.back'
   | 'detection.actions.review'
   | 'detection.actions.download'
@@ -2714,7 +2950,18 @@ export type TranslationKey =
   | 'errors.api.validationCheck'
   | 'errors.api.conflictData'
   | 'errors.api.requestTimeout'
-  | 'errors.api.networkError';
+  | 'errors.api.networkError'
+  | 'weather.moon.newMoon'
+  | 'weather.moon.waxingCrescent'
+  | 'weather.moon.firstQuarter'
+  | 'weather.moon.waxingGibbous'
+  | 'weather.moon.fullMoon'
+  | 'weather.moon.waningGibbous'
+  | 'weather.moon.lastQuarter'
+  | 'weather.moon.waningCrescent'
+  | 'weather.birding.excellent'
+  | 'weather.birding.moderate'
+  | 'weather.birding.poor';
 
 /**
  * Parameter types for translations that require parameters
@@ -2748,6 +2995,10 @@ export type TranslationParams = {
   };
   'notifications.content.error.categoryError': { category: string | number };
   'notifications.content.cleanup.completeMessage': { space: string | number };
+  'notifications.content.buffer.overloadMessage': {
+    dropRate: string | number;
+    sourceName: string | number;
+  };
   'notifications.content.alert.firedTitle': { rule_name: string | number };
   'notifications.content.alert.metricExceeded': {
     value: string | number;
@@ -2803,6 +3054,7 @@ export type TranslationParams = {
   'dashboard.errors.dailySummaryFetch': { status: string | number };
   'dashboard.errors.recentDetectionsFetch': { status: string | number };
   'dashboard.errors.configFetch': { status: string | number };
+  'dashboard.editMode.configureTitle': { element: string | number };
   'detections.titles.hourly': { hour: string | number; date: string | number };
   'detections.titles.hourlyRange': {
     startHour: string | number;
@@ -2870,6 +3122,10 @@ export type TranslationParams = {
   'analytics.advanced.speciesSelection': { count: string | number; max: string | number };
   'analytics.advanced.detections': { count: string | number };
   'settings.notFound.message': { section: string | number };
+  'settings.main.sections.falsePositiveFilter.detectionCount': {
+    count: string | number;
+    description: string | number;
+  };
   'settings.main.sections.falsePositiveFilter.overlapAdjusted': { overlap: string | number };
   'settings.main.sections.falsePositiveFilter.overlapReduced': { overlap: string | number };
   'settings.support.supportReport.userMessage.githubTip': { systemId: string | number };
@@ -2896,6 +3152,7 @@ export type TranslationParams = {
   'settings.audio.fileSettings.bitrateHelp': { min: string | number; max: string | number };
   'settings.security.oauth.providers.deleteConfirm': { provider: string | number };
   'settings.security.oauth.getCredentialsLabel': { provider: string | number };
+  'settings.security.tls.autoTLSPrivateTLD': { tld: string | number };
   'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };
@@ -2945,6 +3202,10 @@ export type TranslationParams = {
   'components.datePicker.aria.dayUnavailable': { day: string | number };
   'components.datePicker.aria.todayButton': { today: string | number };
   'components.audioPlayer.errors.generationFailedStatus': { status: string | number };
+  'components.audioPlayer.clipExtraction.rangeLabel': {
+    start: string | number;
+    end: string | number;
+  };
   'quietHours.indicator.tooltip': { count: string | number };
   'errors.detection.invalidDate': { paramName: string | number };
   'errors.backup.insufficientSpace': { needed: string | number; available: string | number };
