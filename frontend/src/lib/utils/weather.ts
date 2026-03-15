@@ -319,6 +319,8 @@ export function getBirdingConditionColor(level: BirdingConditionLevel): string {
       return 'text-amber-700';
     case 'poor':
       return 'text-red-600';
+    default:
+      return 'text-[var(--color-base-content)]';
   }
 }
 
