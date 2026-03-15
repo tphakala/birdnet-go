@@ -321,6 +321,10 @@
     if (!enableClipExtraction || duration <= 0) return;
     if (e.button !== 0) return;
 
+    // Ignore clicks on interactive elements (toolbar buttons, controls, etc.)
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, a, [role="menu"], [role="menuitem"]')) return;
+
     dragOriginX = e.clientX;
 
     // Check if clicking near an existing handle
@@ -390,6 +394,11 @@
 
   const handleSelectionTouchStart = (e: TouchEvent) => {
     if (!enableClipExtraction || duration <= 0 || !e.touches[0]) return;
+
+    // Ignore touches on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest('button, select, a, [role="menu"], [role="menuitem"]')) return;
+
     if (playerContainer) playerContainer.style.touchAction = 'none';
 
     const touch = e.touches[0];
@@ -1373,12 +1382,18 @@
   });
 </script>
 
+<!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   bind:this={playerContainer}
   class={cn('relative group overflow-hidden', className)}
+  class:cursor-crosshair={enableClipExtraction}
   style={responsive
     ? ''
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+  onmousedown={enableClipExtraction ? handleSelectionMouseDown : undefined}
+  ontouchstart={enableClipExtraction ? handleSelectionTouchStart : undefined}
+  ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
+  ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
   {#if spectrogramUrl}
     <!-- Screen reader announcement for loading state -->
@@ -1451,7 +1466,6 @@
         {/if}
       </div>
     {:else}
-      <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
       <img
         bind:this={spectrogramImage}
         id={`spectrogram-${detectionId}`}
@@ -1464,7 +1478,6 @@
           ? 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
           : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
-        class:cursor-crosshair={enableClipExtraction}
         class:select-none={enableClipExtraction}
         draggable={enableClipExtraction ? 'false' : undefined}
         style={responsive
@@ -1473,10 +1486,6 @@
         width={responsive ? 400 : undefined}
         onload={handleSpectrogramLoad}
         onerror={handleSpectrogramError}
-        onmousedown={enableClipExtraction ? handleSelectionMouseDown : undefined}
-        ontouchstart={enableClipExtraction ? handleSelectionTouchStart : undefined}
-        ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
-        ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
       />
     {/if}
   {/if}
@@ -1538,6 +1547,17 @@
         aria-valuemin={0}
         aria-valuemax={duration}
         aria-valuenow={Math.min(selectionStartSec, selectionEndSec)}
+        onmousedown={(e: MouseEvent) => {
+          if (e.button !== 0) return;
+          draggingHandle = 'start';
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        ontouchstart={(e: TouchEvent) => {
+          draggingHandle = 'start';
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'ArrowLeft' && selectionStartSec !== null) {
             selectionStartSec = Math.max(0, selectionStartSec - ARROW_KEY_STEP);
@@ -1566,6 +1586,17 @@
         aria-valuemin={0}
         aria-valuemax={duration}
         aria-valuenow={Math.max(selectionStartSec, selectionEndSec)}
+        onmousedown={(e: MouseEvent) => {
+          if (e.button !== 0) return;
+          draggingHandle = 'end';
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        ontouchstart={(e: TouchEvent) => {
+          draggingHandle = 'end';
+          e.preventDefault();
+          e.stopPropagation();
+        }}
         onkeydown={(e: KeyboardEvent) => {
           if (e.key === 'ArrowRight' && selectionEndSec !== null) {
             selectionEndSec = Math.min(duration, selectionEndSec + ARROW_KEY_STEP);
