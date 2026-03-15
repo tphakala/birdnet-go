@@ -64,7 +64,7 @@
   type TimeOfDayFilter = 'any' | 'day' | 'night' | 'sunrise' | 'sunset';
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
-  let clipExtractionEnabled = $derived(isAuthenticated());
+  let clipExtractionEnabled = $derived($isAuthenticated);
 
   // Component state
   let speciesSearchTerm = $state('');

@@ -27,7 +27,7 @@
 
   let { isOpen = false, detection = null, isExcluded = false, onClose, onSave }: Props = $props();
 
-  let clipExtractionEnabled = $derived(isAuthenticated());
+  let clipExtractionEnabled = $derived($isAuthenticated);
 
   let reviewStatus = $state<'correct' | 'false_positive'>('correct');
   let lockDetection = $state(false);

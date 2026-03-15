@@ -44,7 +44,7 @@
 
   const logger = loggers.ui;
 
-  let clipExtractionEnabled = $derived(isAuthenticated());
+  let clipExtractionEnabled = $derived($isAuthenticated);
 
   interface Props {
     detection: Detection;

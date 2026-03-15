@@ -1,63 +1,30 @@
 /**
  * Authentication utilities for feature detection
  *
- * Uses the existing authentication pattern from DesktopSidebar.svelte
- * Integrates with the established server-side props pattern
+ * Provides reactive derived stores for auth state that work correctly
+ * with Svelte 5's $derived and auto-subscription via $ prefix.
  */
 
-import { loggers } from '$lib/utils/logger';
 import { auth } from '$lib/stores/auth';
-import { get } from 'svelte/store';
-
-const logger = loggers.auth;
+import { derived } from 'svelte/store';
 
 /**
- * Check if user has permission to perform reviews
- * Based on existing authentication pattern in the app
+ * Reactive store: true when user has permission to perform reviews.
+ * Use as $hasReviewPermission in components.
  */
-export function hasReviewPermission(): boolean {
-  try {
-    const authState = get(auth);
-
-    // If security is disabled, allow all actions
-    if (!authState.security.enabled) {
-      logger.debug('Security disabled, allowing review permission');
-      return true;
-    }
-
-    // If security is enabled, user must have access
-    const hasAccess = authState.security.accessAllowed;
-    logger.debug('Review permission check:', {
-      securityEnabled: authState.security.enabled,
-      accessAllowed: hasAccess,
-    });
-
-    return hasAccess;
-  } catch (error) {
-    logger.error('Error checking review permission:', error);
-    return false; // Fail closed for security
-  }
-}
+export const hasReviewPermission = derived(auth, authState => {
+  if (!authState.security.enabled) return true;
+  return authState.security.accessAllowed;
+});
 
 /**
- * Check if user is authenticated
- * Uses the existing auth store pattern
+ * Reactive store: true when user is authenticated (or security is disabled).
+ * Use as $isAuthenticated in components.
  */
-export function isAuthenticated(): boolean {
-  try {
-    const authState = get(auth);
-
-    // If security is disabled, consider user as "authenticated" for UI purposes
-    if (!authState.security.enabled) {
-      return true;
-    }
-
-    return authState.security.accessAllowed;
-  } catch (error) {
-    logger.error('Error checking authentication:', error);
-    return false; // Fail closed for security
-  }
-}
+export const isAuthenticated = derived(auth, authState => {
+  if (!authState.security.enabled) return true;
+  return authState.security.accessAllowed;
+});
 
 /**
  * Initialize auth context for components that need review permissions

@@ -92,8 +92,8 @@
   let ReviewCard: ReviewCardComponent | null = $state(null);
 
   // Use the existing auth store pattern (same as DesktopSidebar)
-  let canReview = $derived(hasReviewPermission());
-  let clipExtractionEnabled = $derived(isAuthenticated());
+  let canReview = $derived($hasReviewPermission);
+  let clipExtractionEnabled = $derived($isAuthenticated);
   let detection = $state<Detection | null>(null);
   let speciesInfo = $state<SpeciesInfo | null>(null);
   let taxonomyInfo = $state<TaxonomyInfo | null>(null);
