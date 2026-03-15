@@ -141,6 +141,16 @@ func runStreamingIntegrationTest[T any](
 	// Feed streaming results to client
 	encoder := json.NewEncoder(ctx.Response())
 
+	// drainResultChan consumes any remaining values from resultChan in a
+	// background goroutine so the worker goroutine doesn't block forever
+	// trying to send after the consumer has stopped reading.
+	drainResultChan := func() {
+		go func() {
+			for range resultChan {
+			}
+		}()
+	}
+
 	// Stream results to client until done
 	for result := range resultChan {
 		writeMu.Lock()
@@ -152,6 +162,7 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Unlock()
 			safeDoneClose()
 			cancel()
+			drainResultChan()
 			return nil
 		}
 		ctx.Response().Flush()
@@ -163,6 +174,7 @@ func runStreamingIntegrationTest[T any](
 			c.Debug("HTTP client disconnected during %s test", integrationName)
 			safeDoneClose()
 			cancel()
+			drainResultChan()
 			return nil
 		default:
 			// Continue processing
