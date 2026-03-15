@@ -141,9 +141,9 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 
 	tempSecret, err := conf.GenerateRandomSecret()
 	if err != nil {
-		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable",
+		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable. Shutting down to prevent insecure operation.",
 			logger.Error(err))
-		return
+		os.Exit(1)
 	}
 	settings.Security.SessionSecret = tempSecret
 	GetLogger().Info("Generated temporary SessionSecret for this session")
