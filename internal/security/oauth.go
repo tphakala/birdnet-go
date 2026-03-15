@@ -26,6 +26,7 @@ import (
 	"github.com/markbates/goth/providers/kakao"
 	"github.com/markbates/goth/providers/line"
 	"github.com/markbates/goth/providers/microsoftonline"
+	"github.com/markbates/goth/providers/openidConnect"
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -410,6 +411,25 @@ func initializeProviders(settings *conf.Settings) {
 				providerConfig.ClientSecret,
 				redirectURI,
 			))
+
+		case ConfigOIDC:
+			if providerConfig.DiscoveryURL == "" {
+				providerLog.Warn("OIDC provider enabled but discoveryUrl not configured, skipping")
+				continue
+			}
+			providerLog.Info("Enabling OIDC Auth provider", logger.String("discovery_url", providerConfig.DiscoveryURL))
+			oidcProvider, err := openidConnect.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				providerConfig.DiscoveryURL,
+				"openid", "profile", "email",
+			)
+			if err != nil {
+				providerLog.Error("Failed to initialize OIDC provider", logger.Error(err))
+				continue
+			}
+			providers = append(providers, oidcProvider)
 
 		default:
 			providerLog.Warn("Unknown OAuth provider type, skipping")

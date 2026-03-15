@@ -776,6 +776,16 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		)
 	}
 
+	// Store ID token for RP-Initiated Logout (OIDC providers)
+	if user.IDToken != "" {
+		if err := gothic.StoreInSession("id_token", user.IDToken, req, c.Response()); err != nil {
+			s.slogger.Error("Failed to store ID token in session",
+				logger.Error(err),
+				logger.String("provider", provider),
+			)
+		}
+	}
+
 	s.slogger.Info("OAuth session established, redirecting to dashboard",
 		logger.String("provider", provider),
 		logger.String("user_id", userId),
@@ -787,13 +797,9 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 
 // isValidOAuthProvider checks if the provider name is valid.
 func (s *Server) isValidOAuthProvider(provider string) bool {
-	validProviders := []string{
-		security.ProviderGoogle,
-		security.ProviderGitHub,
-		security.ProviderMicrosoft,
-	}
-	for _, p := range validProviders {
-		if strings.EqualFold(provider, p) {
+	// Check against all configured provider goth names
+	for _, gothName := range security.ConfigToGothProvider {
+		if strings.EqualFold(provider, gothName) {
 			return true
 		}
 	}
@@ -801,47 +807,36 @@ func (s *Server) isValidOAuthProvider(provider string) bool {
 }
 
 // isAllowedOAuthUser checks if the OAuth user is in the allowed users list for the provider.
-func (s *Server) isAllowedOAuthUser(provider, userID, email string) bool {
+func (s *Server) isAllowedOAuthUser(gothProviderName, userID, email string) bool {
 	if s.settings == nil {
 		return false
 	}
 
-	var allowedUsers string
-	var enabled bool
-
-	switch strings.ToLower(provider) {
-	case security.ProviderGoogle:
-		enabled = s.settings.Security.GoogleAuth.Enabled
-		allowedUsers = s.settings.Security.GoogleAuth.UserId
-	case security.ProviderGitHub:
-		enabled = s.settings.Security.GithubAuth.Enabled
-		allowedUsers = s.settings.Security.GithubAuth.UserId
-	case security.ProviderMicrosoft:
-		enabled = s.settings.Security.MicrosoftAuth.Enabled
-		allowedUsers = s.settings.Security.MicrosoftAuth.UserId
-	default:
-		return false
-	}
-
-	if !enabled {
-		return false
-	}
-
-	// If no allowed users configured, deny access
-	if allowedUsers == "" {
-		return false
-	}
-
-	// Check if user ID or email matches any allowed user
-	for allowed := range strings.SplitSeq(allowedUsers, ",") {
-		trimmed := strings.TrimSpace(allowed)
-		if trimmed == "" {
+	// Find the matching provider config by goth name
+	for _, providerConfig := range s.settings.Security.OAuthProviders {
+		configGothName := security.GetGothProviderName(providerConfig.Provider)
+		if !strings.EqualFold(configGothName, gothProviderName) {
 			continue
 		}
-		// Case-insensitive comparison for both userID and email
-		if strings.EqualFold(trimmed, userID) || strings.EqualFold(trimmed, email) {
-			return true
+
+		if !providerConfig.Enabled {
+			return false
 		}
+
+		if providerConfig.UserID == "" {
+			return false
+		}
+
+		for allowed := range strings.SplitSeq(providerConfig.UserID, ",") {
+			trimmed := strings.TrimSpace(allowed)
+			if trimmed == "" {
+				continue
+			}
+			if strings.EqualFold(trimmed, userID) || strings.EqualFold(trimmed, email) {
+				return true
+			}
+		}
+		return false
 	}
 
 	return false

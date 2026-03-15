@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1044,4 +1045,49 @@ func TestCheckProviderAuth(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+func TestInitializeProviders_OIDCMissingDiscoveryURL(t *testing.T) {
+	t.Cleanup(func() { goth.ClearProviders() })
+
+	settings := conf.GetTestSettings()
+	settings.Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{
+			Provider:     "oidc",
+			Enabled:      true,
+			ClientID:     "test-client-id",
+			ClientSecret: "test-secret",
+			// DiscoveryURL intentionally omitted
+		},
+	}
+	settings.Security.Host = "https://example.com"
+
+	initializeProviders(settings)
+
+	// No OIDC provider should be registered
+	_, err := goth.GetProvider("openid-connect")
+	assert.Error(t, err)
+}
+
+func TestInitializeProviders_OIDCInvalidDiscoveryURL(t *testing.T) {
+	t.Cleanup(func() { goth.ClearProviders() })
+
+	settings := conf.GetTestSettings()
+	settings.Security.OAuthProviders = []conf.OAuthProviderConfig{
+		{
+			Provider:     "oidc",
+			Enabled:      true,
+			ClientID:     "test-client-id",
+			ClientSecret: "test-secret",
+			DiscoveryURL: "https://invalid.example.com/.well-known/openid-configuration",
+		},
+	}
+	settings.Security.Host = "https://example.com"
+
+	// Should not panic even with unreachable discovery URL
+	initializeProviders(settings)
+
+	// Provider initialization should have failed gracefully
+	_, err := goth.GetProvider("openid-connect")
+	assert.Error(t, err)
 }
