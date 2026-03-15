@@ -627,8 +627,9 @@
 
       const blob = await response.blob();
 
-      let ext = extractionFormat;
-      if (ext === 'alac') ext = 'm4a';
+      // Map format to container file extension (must match backend clipFileExtension)
+      const extMap: Record<string, string> = { alac: 'm4a', aac: 'm4a', opus: 'ogg' };
+      const ext = extMap[extractionFormat] ?? extractionFormat;
       // Sanitize label for filesystem safety (remove reserved chars, normalize whitespace)
       const safeLabel = clipLabel
         ? clipLabel.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '_')
