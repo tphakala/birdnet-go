@@ -1042,8 +1042,8 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 		// Build spectrogram path
 		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
 
-		// Check if spectrogram already exists
-		if _, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil {
+		// Check if spectrogram already exists and is non-empty
+		if statInfo, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil && statInfo.Size() > 0 {
 			// Spectrogram exists, serve it with cache headers
 			c.logDebugIfEnabled("Serving existing spectrogram in user-requested mode",
 				logger.String("note_id", noteID),
@@ -1412,8 +1412,8 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Not in queue, check if spectrogram already exists on disk
-	// Check if file exists
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+	// Check if file exists and is non-empty
+	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"data": map[string]any{
 				"status":        spectrogramStatusExists,
@@ -1506,8 +1506,8 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
 	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
-	// Check if file already exists on disk
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+	// Check if file already exists on disk and is non-empty
+	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
 		// Already exists, return immediately with generated status
 		queryParams := url.Values{}
 		sizeParam := params.sizeStr
@@ -2043,23 +2043,38 @@ func (c *Controller) checkSpectrogramExists(relSpectrogramPath, spectrogramKey s
 
 	// Try direct filesystem check first (more reliable)
 	if statInfo, err := os.Stat(absSpectrogramPath); err == nil {
-		getSpectrogramLogger().Debug("Fast path HIT via direct check: spectrogram already exists",
-			logger.String("spectrogram_key", spectrogramKey),
-			logger.String("abs_path", absSpectrogramPath),
-			logger.Int64("file_size", statInfo.Size()),
-			logger.Any("mod_time", statInfo.ModTime()),
-			logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
-		return true, nil
+		if statInfo.Size() == 0 {
+			// Remove 0-byte spectrogram left by a failed/interrupted generation
+			getSpectrogramLogger().Warn("Removing 0-byte spectrogram file",
+				logger.String("spectrogram_key", spectrogramKey),
+				logger.String("abs_path", absSpectrogramPath))
+			_ = os.Remove(absSpectrogramPath)
+		} else {
+			getSpectrogramLogger().Debug("Fast path HIT via direct check: spectrogram already exists",
+				logger.String("spectrogram_key", spectrogramKey),
+				logger.String("abs_path", absSpectrogramPath),
+				logger.Int64("file_size", statInfo.Size()),
+				logger.Any("mod_time", statInfo.ModTime()),
+				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
+			return true, nil
+		}
 	}
 
 	// Fallback to SecureFS check (for consistency with security model)
 	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-		getSpectrogramLogger().Debug("Fast path HIT via SecureFS: spectrogram already exists",
-			logger.String("spectrogram_key", spectrogramKey),
-			logger.Int64("file_size", statInfo.Size()),
-			logger.Any("mod_time", statInfo.ModTime()),
-			logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
-		return true, nil
+		if statInfo.Size() == 0 {
+			// Remove 0-byte spectrogram left by a failed/interrupted generation
+			getSpectrogramLogger().Warn("Removing 0-byte spectrogram file (SecureFS)",
+				logger.String("spectrogram_key", spectrogramKey))
+			_ = os.Remove(absSpectrogramPath)
+		} else {
+			getSpectrogramLogger().Debug("Fast path HIT via SecureFS: spectrogram already exists",
+				logger.String("spectrogram_key", spectrogramKey),
+				logger.Int64("file_size", statInfo.Size()),
+				logger.Any("mod_time", statInfo.ModTime()),
+				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
+			return true, nil
+		}
 	} else if !os.IsNotExist(err) {
 		getSpectrogramLogger().Debug("Fast path: unexpected error checking existing spectrogram",
 			logger.String("spectrogram_key", spectrogramKey),
@@ -2231,19 +2246,31 @@ func (c *Controller) performSpectrogramGeneration(ctx context.Context, relSpectr
 		logger.String("spectrogram_key", spectrogramKey))
 
 	// Try direct filesystem check first (more reliable)
-	if _, err := os.Stat(absSpectrogramPath); err == nil {
-		getSpectrogramLogger().Debug("Spectrogram already exists via direct check (race condition avoided)",
-			logger.String("abs_spectrogram_path", absSpectrogramPath),
-			logger.String("spectrogram_key", spectrogramKey))
-		return spectrogramStatusExists, nil
+	if statInfo, err := os.Stat(absSpectrogramPath); err == nil {
+		if statInfo.Size() > 0 {
+			getSpectrogramLogger().Debug("Spectrogram already exists via direct check (race condition avoided)",
+				logger.String("abs_spectrogram_path", absSpectrogramPath),
+				logger.String("spectrogram_key", spectrogramKey))
+			return spectrogramStatusExists, nil
+		}
+		// 0-byte file: remove and regenerate
+		getSpectrogramLogger().Warn("Removing 0-byte spectrogram before regeneration",
+			logger.String("abs_spectrogram_path", absSpectrogramPath))
+		_ = os.Remove(absSpectrogramPath)
 	}
 
 	// Fallback to SecureFS check
-	if _, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
-		getSpectrogramLogger().Debug("Spectrogram already exists via SecureFS (race condition avoided)",
-			logger.String("spectrogram_path", relSpectrogramPath),
-			logger.String("spectrogram_key", spectrogramKey))
-		return spectrogramStatusExists, nil
+	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil {
+		if statInfo.Size() > 0 {
+			getSpectrogramLogger().Debug("Spectrogram already exists via SecureFS (race condition avoided)",
+				logger.String("spectrogram_path", relSpectrogramPath),
+				logger.String("spectrogram_key", spectrogramKey))
+			return spectrogramStatusExists, nil
+		}
+		// 0-byte file: remove and regenerate
+		getSpectrogramLogger().Warn("Removing 0-byte spectrogram before regeneration (SecureFS)",
+			logger.String("spectrogram_path", relSpectrogramPath))
+		_ = os.Remove(absSpectrogramPath)
 	} else if !os.IsNotExist(err) {
 		getSpectrogramLogger().Debug("Error checking existing spectrogram in singleflight",
 			logger.String("spectrogram_path", relSpectrogramPath),
@@ -2291,7 +2318,14 @@ func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
 	var statErr error
 	for i := range spectrogramVerifyRetries {
 		// Try direct filesystem check first (more reliable for newly created files)
-		if _, err := os.Stat(absPath); err == nil {
+		if statInfo, err := os.Stat(absPath); err == nil {
+			if statInfo.Size() == 0 {
+				getSpectrogramLogger().Warn("Generated spectrogram is 0 bytes, removing",
+					logger.String("abs_spectrogram_path", absPath), logger.Int("attempt", i+1))
+				_ = os.Remove(absPath)
+				statErr = fmt.Errorf("generated spectrogram is 0 bytes")
+				break
+			}
 			getSpectrogramLogger().Debug("Spectrogram verified via direct filesystem check",
 				logger.String("abs_spectrogram_path", absPath), logger.Int("attempt", i+1))
 			return nil
@@ -2301,7 +2335,16 @@ func (c *Controller) verifySpectrogramFile(absPath, relPath string) error {
 		}
 
 		// Try SecureFS check (may work better after delay)
-		if _, statErr = c.SFS.StatRel(relPath); statErr == nil {
+		var statInfo os.FileInfo
+		statInfo, statErr = c.SFS.StatRel(relPath)
+		if statErr == nil {
+			if statInfo.Size() == 0 {
+				getSpectrogramLogger().Warn("Generated spectrogram is 0 bytes (SecureFS), removing",
+					logger.String("rel_spectrogram_path", relPath), logger.Int("attempt", i+1))
+				_ = os.Remove(absPath)
+				statErr = fmt.Errorf("generated spectrogram is 0 bytes")
+				break
+			}
 			getSpectrogramLogger().Debug("Spectrogram verified via SecureFS",
 				logger.String("rel_spectrogram_path", relPath), logger.Int("attempt", i+1))
 			return nil
