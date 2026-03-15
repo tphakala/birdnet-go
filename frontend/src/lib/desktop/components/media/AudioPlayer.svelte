@@ -215,6 +215,9 @@
   let isDragSelecting = $state(false);
   let draggingHandle = $state<'start' | 'end' | null>(null);
   let dragOriginX = $state(0);
+  let isScrubbing = $state(false);
+  let scrubStartTime = $state(0); // time at drag origin when scrubbing
+  let scrubSelectionDuration = $state(0); // locked selection width during scrub
 
   // Clip extraction state
   let extractionFormat = $state('wav');
@@ -317,6 +320,14 @@
     }
   };
 
+  // Check if a time position falls inside the current selection
+  const isInsideSelection = (timeSec: number): boolean => {
+    if (selectionStartSec === null || selectionEndSec === null) return false;
+    const lo = Math.min(selectionStartSec, selectionEndSec);
+    const hi = Math.max(selectionStartSec, selectionEndSec);
+    return timeSec >= lo && timeSec <= hi;
+  };
+
   const handleSelectionMouseDown = (e: MouseEvent) => {
     if (!enableClipExtraction || duration <= 0) return;
     if (e.button !== 0) return;
@@ -335,8 +346,19 @@
       return;
     }
 
-    // Start new selection
+    // Check if clicking inside existing selection — start scrubbing
     const clickTime = xToTime(e.clientX);
+    if (isInsideSelection(clickTime)) {
+      isScrubbing = true;
+      scrubStartTime = clickTime;
+      scrubSelectionDuration =
+        Math.max(selectionStartSec!, selectionEndSec!) -
+        Math.min(selectionStartSec!, selectionEndSec!);
+      e.preventDefault();
+      return;
+    }
+
+    // Start new selection
     isDragSelecting = true;
     selectionStartSec = clickTime;
     selectionEndSec = clickTime;
@@ -357,6 +379,20 @@
       return;
     }
 
+    if (isScrubbing) {
+      const currentTime = xToTime(e.clientX);
+      const delta = currentTime - scrubStartTime;
+      const lo = Math.min(selectionStartSec!, selectionEndSec!);
+      let newStart = lo + delta;
+      // Clamp to [0, duration - selectionWidth]
+      newStart = Math.max(0, Math.min(newStart, duration - scrubSelectionDuration));
+      selectionStartSec = newStart;
+      selectionEndSec = newStart + scrubSelectionDuration;
+      scrubStartTime = currentTime;
+      e.preventDefault();
+      return;
+    }
+
     if (isDragSelecting) {
       selectionEndSec = xToTime(e.clientX);
       e.preventDefault();
@@ -368,6 +404,11 @@
 
     if (draggingHandle) {
       draggingHandle = null;
+      return;
+    }
+
+    if (isScrubbing) {
+      isScrubbing = false;
       return;
     }
 
@@ -389,6 +430,7 @@
     selectionEndSec = null;
     isDragSelecting = false;
     draggingHandle = null;
+    isScrubbing = false;
     extractionError = null;
   };
 
@@ -412,8 +454,19 @@
       return;
     }
 
-    // Start new selection
+    // Check if touching inside existing selection — start scrubbing
     const clickTime = xToTime(touch.clientX);
+    if (isInsideSelection(clickTime)) {
+      isScrubbing = true;
+      scrubStartTime = clickTime;
+      scrubSelectionDuration =
+        Math.max(selectionStartSec!, selectionEndSec!) -
+        Math.min(selectionStartSec!, selectionEndSec!);
+      e.preventDefault();
+      return;
+    }
+
+    // Start new selection
     isDragSelecting = true;
     selectionStartSec = clickTime;
     selectionEndSec = clickTime;
@@ -435,6 +488,19 @@
       return;
     }
 
+    if (isScrubbing) {
+      const currentTime = xToTime(touch.clientX);
+      const delta = currentTime - scrubStartTime;
+      const lo = Math.min(selectionStartSec!, selectionEndSec!);
+      let newStart = lo + delta;
+      newStart = Math.max(0, Math.min(newStart, duration - scrubSelectionDuration));
+      selectionStartSec = newStart;
+      selectionEndSec = newStart + scrubSelectionDuration;
+      scrubStartTime = currentTime;
+      e.preventDefault();
+      return;
+    }
+
     if (isDragSelecting) {
       selectionEndSec = xToTime(touch.clientX);
       e.preventDefault();
@@ -447,6 +513,11 @@
 
     if (draggingHandle) {
       draggingHandle = null;
+      return;
+    }
+
+    if (isScrubbing) {
+      isScrubbing = false;
       return;
     }
 
@@ -1100,6 +1171,7 @@
         selectionEndSec = null;
         isDragSelecting = false;
         draggingHandle = null;
+        isScrubbing = false;
         extractionError = null;
       }
     }
@@ -1294,7 +1366,7 @@
 
       // Prevent native browser selection during drag operations
       addTrackedEventListener(document as unknown as HTMLElement, 'selectstart', ((e: Event) => {
-        if (isDragSelecting || draggingHandle) {
+        if (isDragSelecting || draggingHandle || isScrubbing) {
           e.preventDefault();
         }
       }) as EventListener);
@@ -1526,7 +1598,8 @@
 
     <!-- Selection highlight -->
     <div
-      class="absolute top-0 bottom-0 bg-primary/20 pointer-events-none"
+      class="absolute top-0 bottom-0 bg-primary/20 cursor-grab"
+      class:cursor-grabbing={isScrubbing}
       style:left="{startPct}%"
       style:width="{endPct - startPct}%"
       role="region"
