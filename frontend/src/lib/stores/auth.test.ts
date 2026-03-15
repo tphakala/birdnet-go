@@ -95,6 +95,7 @@ describe('Auth Store', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
+        json: () => Promise.resolve({ success: true }),
       });
 
       await auth.logout();
@@ -116,6 +117,7 @@ describe('Auth Store', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
+        json: () => Promise.resolve({ success: true }),
       });
 
       await auth.logout();
@@ -130,11 +132,28 @@ describe('Auth Store', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
+        json: () => Promise.resolve({ success: true }),
       });
 
       await auth.logout();
 
       expect(window.location.href).toBe('/ui/');
+    });
+
+    it('should redirect to provider logout URL when providerLogoutUrl is returned', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            success: true,
+            providerLogoutUrl: 'https://idp.example.com/logout?id_token_hint=abc',
+          }),
+      });
+
+      await auth.logout();
+
+      expect(window.location.href).toBe('https://idp.example.com/logout?id_token_hint=abc');
     });
 
     it('should throw error on failed logout', async () => {
