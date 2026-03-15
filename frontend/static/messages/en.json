@@ -3028,8 +3028,8 @@
         "passwordHelpText": "Limit access to settings with a password."
       },
       "oauth": {
-        "title": "OAuth2 Social Authentication",
-        "description": "Single sign-on to log in with your existing account",
+        "title": "External Authentication",
+        "description": "Sign in with an external identity provider or OIDC",
         "form": {
           "editTitle": "Edit OAuth Provider",
           "addTitle": "Add OAuth Provider",
@@ -3111,6 +3111,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "The Client Secret obtained from Kakao Developers Console when setting up Kakao Login.",
           "userIdLabel": "User ID"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3761,6 +3780,7 @@
     "continueWithMicrosoft": "Continue with Microsoft",
     "continueWithLine": "Continue with LINE",
     "continueWithKakao": "Continue with Kakao",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Login failed. Please check your password and try again.",
       "passwordRequired": "Password is required.",

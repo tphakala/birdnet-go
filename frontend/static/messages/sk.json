@@ -2829,8 +2829,8 @@
         "passwordHelpText": "Obmedziť prístup k nastaveniam pomocou hesla."
       },
       "oauth": {
-        "title": "Sociálna autentifikácia OAuth2",
-        "description": "Jednotné prihlásenie (SSO) na prihlásenie pomocou vášho existujúceho účtu",
+        "title": "Externá autentifikácia",
+        "description": "Prihlásenie pomocou externého poskytovateľa identity alebo OIDC",
         "form": {
           "editTitle": "Upraviť poskytovateľa OAuth",
           "addTitle": "Pridať poskytovateľa OAuth",
@@ -2912,6 +2912,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "Client Secret získaný z Kakao Developers Console pri nastavovaní Kakao Login.",
           "userIdLabel": "ID používateľa"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3568,6 +3587,7 @@
     "continueWithMicrosoft": "Pokračovať cez Microsoft",
     "continueWithLine": "Pokračovať cez LINE",
     "continueWithKakao": "Pokračovať cez Kakao",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Prihlásenie zlyhalo. Skontrolujte svoje heslo a skúste to znova.",
       "passwordRequired": "Heslo je povinné.",

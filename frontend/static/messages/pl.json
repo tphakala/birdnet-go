@@ -2998,8 +2998,8 @@
         "disabled": "Uwierzytelnianie hasłem jest wyłączone"
       },
       "oauth": {
-        "title": "Uwierzytelnianie Społecznościowe OAuth2",
-        "description": "Pojedyncze logowanie za pomocą istniejącego konta",
+        "title": "Uwierzytelnianie zewnętrzne",
+        "description": "Logowanie za pomocą zewnętrznego dostawcy tożsamości lub OIDC",
         "form": {
           "editTitle": "Edytuj dostawcę OAuth",
           "addTitle": "Dodaj dostawcę OAuth",
@@ -3081,6 +3081,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "Client Secret uzyskany z Kakao Developers Console podczas konfigurowania Kakao Login.",
           "userIdLabel": "Identyfikator użytkownika"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3737,6 +3756,7 @@
     "continueWithMicrosoft": "Kontynuuj przez Microsoft",
     "continueWithLine": "Kontynuuj przez LINE",
     "continueWithKakao": "Kontynuuj przez Kakao",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Logowanie nie powiodło się. Sprawdź swoje hasło i spróbuj ponownie.",
       "passwordRequired": "Hasło jest wymagane.",
