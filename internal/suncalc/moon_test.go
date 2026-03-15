@@ -14,7 +14,7 @@ func TestGetMoonPhase_NewMoon(t *testing.T) {
 	result := GetMoonPhase(date)
 
 	assert.Equal(t, PhaseNewMoon, result.PhaseName)
-	assert.Equal(t, "moon-new", result.IconName)
+	assert.Equal(t, IconNameNewMoon, result.IconName)
 	assert.InDelta(t, 0, result.Illumination, 15) // Low illumination for new moon
 }
 
@@ -24,20 +24,14 @@ func TestGetMoonPhase_FullMoon(t *testing.T) {
 	result := GetMoonPhase(date)
 
 	assert.Equal(t, PhaseFullMoon, result.PhaseName)
-	assert.Equal(t, "moon-full", result.IconName)
+	assert.Equal(t, IconNameFullMoon, result.IconName)
 	assert.InDelta(t, 100, result.Illumination, 15) // High illumination for full moon
 }
 
 func TestGetMoonPhase_AllPhasesHaveValidIconNames(t *testing.T) {
-	validIcons := map[string]bool{
-		"moon-new":             true,
-		"moon-waxing-crescent": true,
-		"moon-first-quarter":   true,
-		"moon-waxing-gibbous":  true,
-		"moon-full":            true,
-		"moon-waning-gibbous":  true,
-		"moon-last-quarter":    true,
-		"moon-waning-crescent": true,
+	validIcons := make(map[string]bool, len(phases))
+	for _, p := range phases {
+		validIcons[p.iconName] = true
 	}
 
 	// Test across 28 consecutive days to cover all phases
