@@ -792,9 +792,19 @@ func validateSecuritySettings(settings *Security) error {
 	}
 
 	// Validate OIDC provider configuration
+	if err := validateOIDCProviders(settings.OAuthProviders); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateOIDCProviders validates OIDC-specific provider configuration:
+// at most one OIDC entry, valid issuer URL when enabled, HTTPS warning.
+func validateOIDCProviders(providers []OAuthProviderConfig) error {
 	oidcCount := 0
-	for i := range settings.OAuthProviders {
-		provider := &settings.OAuthProviders[i]
+	for i := range providers {
+		provider := &providers[i]
 		if provider.Provider != "oidc" {
 			continue
 		}
@@ -815,7 +825,7 @@ func validateSecuritySettings(settings *Security) error {
 				Build()
 		}
 		parsed, err := url.Parse(provider.IssuerURL)
-		if err != nil || parsed.Host == "" {
+		if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") { //nolint:goconst // "http" here is a URL scheme, not StreamTypeHTTP
 			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid URL", provider.IssuerURL).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-invalid").
@@ -827,7 +837,6 @@ func validateSecuritySettings(settings *Security) error {
 				logger.String("issuer_url", provider.IssuerURL))
 		}
 	}
-
 	return nil
 }
 

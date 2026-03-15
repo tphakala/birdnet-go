@@ -487,37 +487,9 @@ func initializeProviders(settings *conf.Settings) {
 			))
 
 		case ConfigOIDC:
-			providerLog.Info("Enabling OIDC provider")
-			scopes := providerConfig.Scopes
-			if len(scopes) == 0 {
-				scopes = []string{"openid", "profile", "email"}
+			if p := initializeOIDCProvider(providerConfig, redirectURI, providerLog); p != nil {
+				providers = append(providers, p)
 			}
-			// Ensure "openid" scope is always present (OIDC spec requirement)
-			if !slices.Contains(scopes, "openid") {
-				scopes = append([]string{"openid"}, scopes...)
-			}
-			// Build the OIDC discovery document URL per RFC 8414:
-			// the discovery document is at {issuer}/.well-known/openid-configuration
-			discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
-			oidcProvider, err := openidConnect.New(
-				providerConfig.ClientID,
-				providerConfig.ClientSecret,
-				redirectURI,
-				discoveryURL,
-				scopes...,
-			)
-			if err != nil {
-				providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
-					logger.Error(err),
-					logger.String("issuer_url", providerConfig.IssuerURL))
-				// Cancel any previous retry and start a new one
-				cancelOIDCRetry()
-				ctx, cancel := context.WithCancel(context.Background())
-				setOIDCRetryCancel(cancel)
-				startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
-				continue
-			}
-			providers = append(providers, oidcProvider)
 
 		default:
 			providerLog.Warn("Unknown OAuth provider type, skipping")
@@ -530,6 +502,43 @@ func initializeProviders(settings *conf.Settings) {
 	} else {
 		secLog.Warn("No Goth providers enabled or configured")
 	}
+}
+
+// initializeOIDCProvider creates and returns an OIDC provider using goth's openidConnect.
+// Returns nil if initialization fails (discovery unreachable), in which case a background
+// retry goroutine is started automatically.
+func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectURI string, providerLog SecurityLogger) goth.Provider {
+	providerLog.Info("Enabling OIDC provider")
+	scopes := providerConfig.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"openid", "profile", "email"}
+	}
+	// Ensure "openid" scope is always present (OIDC spec requirement)
+	if !slices.Contains(scopes, "openid") {
+		scopes = append([]string{"openid"}, scopes...)
+	}
+	// Build the OIDC discovery document URL per RFC 8414:
+	// the discovery document is at {issuer}/.well-known/openid-configuration
+	discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
+	oidcProvider, err := openidConnect.New(
+		providerConfig.ClientID,
+		providerConfig.ClientSecret,
+		redirectURI,
+		discoveryURL,
+		scopes...,
+	)
+	if err != nil {
+		providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
+			logger.Error(err),
+			logger.String("issuer_url", providerConfig.IssuerURL))
+		// Cancel any previous retry and start a new one
+		cancelOIDCRetry()
+		ctx, cancel := context.WithCancel(context.Background())
+		setOIDCRetryCancel(cancel)
+		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
+		return nil
+	}
+	return oidcProvider
 }
 
 // createSessionKey creates a key of the proper length for AES encryption from a seed string

@@ -1104,6 +1104,7 @@ func TestInitializeProviders_OIDC_Success(t *testing.T) {
 func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
 	goth.ClearProviders()
 	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(cancelOIDCRetry)
 
 	settings := &conf.Settings{
 		Security: conf.Security{
