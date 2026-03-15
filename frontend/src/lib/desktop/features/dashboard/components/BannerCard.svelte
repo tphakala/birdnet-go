@@ -12,7 +12,7 @@
   import type { LatestWeatherResponse } from '$lib/types/detection.types';
   import BannerLocationMap from './BannerLocationMap.svelte';
   import WeatherSvgIcon from '$lib/desktop/components/ui/WeatherSvgIcon.svelte';
-  import { birdnetSettings } from '$lib/stores/settings';
+  import { birdnetSettings, dashboardSettings } from '$lib/stores/settings';
   import {
     getBasmiliusIconName,
     getMoonPhaseI18nKey,
@@ -53,23 +53,21 @@
   let weatherData = $state<LatestWeatherResponse | null>(null);
   let weatherLoading = $state(false);
   let weatherError = $state(false);
-  let temperatureUnit = $state<TemperatureUnit>('metric');
+
+  // Map user's temperature preference to TemperatureUnit format
+  // Settings store uses 'celsius'/'fahrenheit', but formatters use 'metric'/'imperial'
+  let temperatureUnit: TemperatureUnit = $derived(
+    $dashboardSettings?.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric'
+  );
 
   async function fetchWeather(signal?: AbortSignal) {
     if (!config.showWeather || editMode) return;
     weatherLoading = true;
     weatherError = false;
     try {
-      const [weatherResp, configResp] = await Promise.all([
-        fetch(buildAppUrl('/api/v2/weather/latest'), { signal }),
-        fetch(buildAppUrl('/api/v2/settings/dashboard'), { signal }),
-      ]);
+      const weatherResp = await fetch(buildAppUrl('/api/v2/weather/latest'), { signal });
       if (!weatherResp.ok) throw new Error('Failed to fetch weather');
       weatherData = await weatherResp.json();
-      if (configResp.ok) {
-        const dashConfig = await configResp.json();
-        temperatureUnit = dashConfig.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric';
-      }
     } catch (e: unknown) {
       if (e instanceof Error && e.name === 'AbortError') return;
       weatherError = true;
