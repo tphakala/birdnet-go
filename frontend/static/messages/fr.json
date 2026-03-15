@@ -3902,7 +3902,8 @@
       "highPassFilter": "Contrôle du filtre passe-haut : {freq} Hz",
       "seekProgress": "Progression de la lecture audio : {current} / {total} secondes",
       "playbackSpeed": "Vitesse de lecture",
-      "speed": "Vitesse"
+      "speed": "Vitesse",
+      "loop": "Toggle loop"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
@@ -4007,6 +4008,7 @@
         "normalize": "Normalize audio",
         "normalizeTooltip": "EBU R128 Normalization",
         "export": "Export",
+        "exportOriginal": "Original",
         "processingActive": "Processing active"
       }
     },

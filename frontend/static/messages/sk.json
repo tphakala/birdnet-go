@@ -3733,7 +3733,8 @@
       "highPassFilter": "Ovládanie hornopriepustného filtra: {freq} Hz",
       "seekProgress": "Posun v nahrávke: {current} / {total} sekúnd",
       "playbackSpeed": "Rýchlosť prehrávania",
-      "speed": "Rýchlosť"
+      "speed": "Rýchlosť",
+      "loop": "Toggle loop"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",
@@ -3838,6 +3839,7 @@
         "normalize": "Normalize audio",
         "normalizeTooltip": "EBU R128 Normalization",
         "export": "Export",
+        "exportOriginal": "Originál",
         "processingActive": "Processing active"
       }
     },

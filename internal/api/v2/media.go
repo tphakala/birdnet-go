@@ -173,6 +173,9 @@ func (c *Controller) initMediaRoutes() {
 	// Audio processing / preview (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.authMiddleware)
 
+	// Processed spectrogram preview (requires authentication)
+	c.Echo.POST("/api/v2/spectrogram/:id/process", c.ProcessedSpectrogramByID, c.authMiddleware)
+
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
 
@@ -787,6 +790,127 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	}
 
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, buf.Bytes())
+}
+
+// ProcessedSpectrogramByID generates a spectrogram from processed (denoised/normalized) audio.
+// It processes the audio first, writes to a temp file, generates a spectrogram from it,
+// and returns the PNG image. The result is ephemeral (not cached to disk).
+//
+// POST /api/v2/spectrogram/:id/process
+// Body: {"normalize": true, "denoise": "medium", "gain_db": 0}
+// Query: same as GET /api/v2/spectrogram/:id (size, raw)
+func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	var req ProcessAudioRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	// If no processing requested, redirect to the normal spectrogram endpoint
+	if !req.Normalize && req.Denoise == "" && req.GainDB == 0 {
+		return c.ServeSpectrogramByID(ctx)
+	}
+
+	// Validate inputs
+	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	if !myaudio.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
+
+	// Resolve clip path
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+	}
+
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
+
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+
+	// Acquire processing semaphore
+	select {
+	case c.processingSemaphore <- struct{}{}:
+		defer func() { <-c.processingSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	// Create temp directory inside SecureFS root for processed files
+	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
+	}
+
+	// Process audio directly to a temp file (not pipe) so WAV header is correct.
+	// ProcessAudioFile uses pipe:1 which produces broken WAV headers (size=INT32_MAX).
+	filters := myaudio.AudioFilters{
+		Normalize: req.Normalize,
+		Denoise:   req.Denoise,
+		GainDB:    req.GainDB,
+	}
+	tmpFile, err := os.CreateTemp(tmpDir, "processed-*.wav")
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+	}
+	tmpPath := tmpFile.Name()
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	if err := myaudio.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
+		c.Settings.Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
+	}
+
+	// Generate spectrogram from processed audio into another temp file
+	tmpSpectrogramFile, err := os.CreateTemp(tmpDir, "spectrogram-*.png")
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp spectrogram file", http.StatusInternalServerError)
+	}
+	tmpSpectrogramPath := tmpSpectrogramFile.Name()
+	_ = tmpSpectrogramFile.Close()
+	defer func() { _ = os.Remove(tmpSpectrogramPath) }()
+
+	params := parseSpectrogramParameters(ctx)
+	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw); err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil
+		}
+		return c.HandleError(ctx, err, "Failed to generate spectrogram", http.StatusInternalServerError)
+	}
+
+	// Read the generated spectrogram and return it
+	pngData, err := os.ReadFile(tmpSpectrogramPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to read spectrogram", http.StatusInternalServerError)
+	}
+
+	// No cache — processed spectrograms are ephemeral previews
+	ctx.Response().Header().Set("Cache-Control", "no-store")
+	return ctx.Blob(http.StatusOK, "image/png", pngData)
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
