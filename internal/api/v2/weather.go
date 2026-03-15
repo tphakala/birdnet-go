@@ -495,7 +495,7 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	}{
 		Daily:  nil, // Will be populated if available
 		Hourly: c.buildHourlyWeatherResponse(latestWeather),
-		Time:   time.Now().Format(time.RFC3339),
+		Time:   latestWeather.Time.Format(time.RFC3339),
 	}
 
 	// Try to get daily weather data for this date

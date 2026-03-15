@@ -61,7 +61,7 @@
     weatherError = false;
     try {
       const [weatherResp, configResp] = await Promise.all([
-        fetch('/api/v2/weather/latest', { signal }),
+        fetch(buildAppUrl('/api/v2/weather/latest'), { signal }),
         fetch(buildAppUrl('/api/v2/settings/dashboard'), { signal }),
       ]);
       if (!weatherResp.ok) throw new Error('Failed to fetch weather');
