@@ -494,3 +494,108 @@ func BenchmarkFFmpegStream_ProcessCleanup(b *testing.B) {
 		stream.cleanupProcess()
 	}
 }
+
+func TestBuildProcessingFilterChain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no filters returns empty string", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("denoise only", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "medium"})
+		assert.Equal(t, "afftdn=nr=12:nf=-40", result)
+	})
+
+	t.Run("gain only", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: 6.0})
+		assert.Equal(t, "volume=+6.0dB", result)
+	})
+
+	t.Run("negative gain", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: -3.5})
+		assert.Equal(t, "volume=-3.5dB", result)
+	})
+
+	t.Run("denoise and gain combined", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "heavy", GainDB: 12.0})
+		assert.Equal(t, "afftdn=nr=20:nf=-50,volume=+12.0dB", result)
+	})
+
+	t.Run("all three filters", func(t *testing.T) {
+		t.Parallel()
+		stats := &LoudnessStats{
+			InputI:      "-25.3",
+			InputTP:     "-0.5",
+			InputLRA:    "6.2",
+			InputThresh: "-34.5",
+		}
+		result := BuildProcessingFilterChain(AudioFilters{
+			Denoise:       "light",
+			Normalize:     true,
+			LoudnessStats: stats,
+			GainDB:        3.0,
+		})
+		assert.Contains(t, result, "afftdn=nr=6:nf=-30")
+		assert.Contains(t, result, "loudnorm=")
+		assert.Contains(t, result, "measured_I=-25.3")
+		assert.Contains(t, result, "volume=+3.0dB")
+	})
+
+	t.Run("normalize without stats produces analysis-mode filter", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Normalize: true})
+		assert.Contains(t, result, "loudnorm=")
+		assert.Contains(t, result, "print_format=json")
+		assert.NotContains(t, result, "measured_I")
+	})
+
+	t.Run("invalid denoise preset ignored", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "extreme"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("zero gain ignored", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: 0.0})
+		assert.Empty(t, result)
+	})
+}
+
+func TestIsValidDenoisePreset(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty is valid", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsValidDenoisePreset(""))
+	})
+
+	t.Run("known presets valid", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsValidDenoisePreset("light"))
+		assert.True(t, IsValidDenoisePreset("medium"))
+		assert.True(t, IsValidDenoisePreset("heavy"))
+	})
+
+	t.Run("unknown preset invalid", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, IsValidDenoisePreset("extreme"))
+		assert.False(t, IsValidDenoisePreset("MEDIUM"))
+	})
+}
+
+func TestAudioFiltersHasFilters(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, AudioFilters{}.HasFilters())
+	assert.True(t, AudioFilters{Denoise: "light"}.HasFilters())
+	assert.True(t, AudioFilters{Normalize: true}.HasFilters())
+	assert.True(t, AudioFilters{GainDB: 1.0}.HasFilters())
+}
