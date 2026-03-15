@@ -11,6 +11,7 @@ const (
 	ConfigMicrosoft = "microsoft"
 	ConfigLine      = "line"
 	ConfigKakao     = "kakao"
+	ConfigOIDC      = "oidc"
 
 	// Goth provider names (used for session keys and goth registration)
 	// These match the goth library provider names
@@ -19,6 +20,7 @@ const (
 	ProviderMicrosoft = "microsoftonline" // Different from config!
 	ProviderLine      = "line"            // Same as config
 	ProviderKakao     = "kakao"           // Same as config
+	ProviderOIDC      = "openid-connect"  // Matches goth's default name for openidConnect provider
 
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
@@ -60,6 +62,7 @@ var ConfigToGothProvider = map[string]string{
 	ConfigMicrosoft: ProviderMicrosoft,
 	ConfigLine:      ProviderLine,
 	ConfigKakao:     ProviderKakao,
+	ConfigOIDC:      ProviderOIDC,
 }
 
 // GetGothProviderName converts a config provider ID to the goth provider name.

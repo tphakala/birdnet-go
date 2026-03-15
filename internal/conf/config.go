@@ -1124,12 +1124,13 @@ type AllowSubnetBypass struct {
 // OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
 // This replaces the individual GoogleAuth, GithubAuth, MicrosoftAuth fields.
 type OAuthProviderConfig struct {
-	Provider     string `yaml:"provider" json:"provider"`                 // Provider ID: "google", "github", "microsoft"
-	Enabled      bool   `yaml:"enabled" json:"enabled"`                   // true to enable this provider
-	ClientID     string `yaml:"clientId" json:"clientId"`                 // OAuth2 client ID
-	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`         // OAuth2 client secret
-	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"` // OAuth2 redirect URI (optional, auto-generated if empty)
-	UserID       string `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
+	Provider     string `yaml:"provider" json:"provider"`                   // Provider ID: "google", "github", "microsoft"
+	Enabled      bool   `yaml:"enabled" json:"enabled"`                     // true to enable this provider
+	ClientID     string `yaml:"clientId" json:"clientId"`                   // OAuth2 client ID
+	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`           // OAuth2 client secret
+	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"`   // OAuth2 redirect URI (optional, auto-generated if empty)
+	UserID       string `yaml:"userId,omitempty" json:"userId"`             // Allowed user ID/email for this provider
+	DiscoveryURL string `yaml:"discoveryUrl,omitempty" json:"discoveryUrl"` // OIDC discovery URL (required for "oidc" provider)
 }
 
 // TLSMode represents the TLS certificate management mode.
