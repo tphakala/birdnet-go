@@ -1651,7 +1651,7 @@
               class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[7rem] z-30"
               role="menu"
             >
-              {#each [{ value: 'wav', label: 'WAV', desc: 'Lossless' }, { value: 'flac', label: 'FLAC', desc: 'Lossless' }, { value: 'mp3', label: 'MP3', desc: 'Lossy' }, { value: 'opus', label: 'Opus', desc: 'Lossy' }, { value: 'aac', label: 'AAC', desc: 'Lossy' }, { value: 'alac', label: 'ALAC', desc: 'Lossless' }] as fmt (fmt.value)}
+              {#each [{ value: 'wav', label: 'WAV', desc: 'Lossless' }, { value: 'flac', label: 'FLAC', desc: 'Lossless' }, { value: 'alac', label: 'ALAC', desc: 'Lossless' }, { value: 'mp3', label: 'MP3', desc: 'Lossy' }, { value: 'opus', label: 'Opus', desc: 'Lossy' }, { value: 'aac', label: 'AAC', desc: 'Lossy' }] as fmt (fmt.value)}
                 <button
                   class="w-full px-3 py-1.5 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
                   onclick={() => selectFormatAndExtract(fmt.value)}
