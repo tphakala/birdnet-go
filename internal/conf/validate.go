@@ -1211,11 +1211,9 @@ func validateAudioSettings(settings *AudioSettings) error {
 func validateDashboardSettings(settings *Dashboard) error {
 	// Validate deprecated root SummaryLimit (only when non-zero, i.e. not yet migrated)
 	if settings.SummaryLimit != 0 && (settings.SummaryLimit < 10 || settings.SummaryLimit > 1000) {
-		return errors.Newf("Dashboard SummaryLimit must be between 10 and 1000").
-			Category(errors.CategoryValidation).
-			Context("validation_type", "dashboard-summary-limit").
-			Context("summary_limit", settings.SummaryLimit).
-			Build()
+		GetLogger().Warn("Dashboard SummaryLimit out of range (10-1000), resetting to 10",
+			logger.Int("invalid_value", settings.SummaryLimit))
+		settings.SummaryLimit = 10
 	}
 
 	// Validate layout element configs
@@ -1242,13 +1240,12 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 
 		if el.Summary != nil && el.Summary.SummaryLimit != 0 && (el.Summary.SummaryLimit < 10 || el.Summary.SummaryLimit > 1000) {
-			return errors.Newf("Dashboard layout element %d SummaryLimit must be between 10 and 1000", i).
-				Category(errors.CategoryValidation).
-				Context("validation_type", "dashboard-layout-summary-limit").
-				Context("element_index", i).
-				Context("element_type", el.Type).
-				Context("summary_limit", el.Summary.SummaryLimit).
-				Build()
+			GetLogger().Warn("Dashboard layout element SummaryLimit out of range (10-1000), resetting to 10",
+				logger.Int("element_index", i),
+				logger.String("element_type", el.Type),
+				logger.Int("invalid_value", el.Summary.SummaryLimit))
+			el.Summary.SummaryLimit = 10
+			settings.Layout.Elements[i] = el
 		}
 	}
 
