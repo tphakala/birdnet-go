@@ -1392,9 +1392,17 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		logger.String("diagnostic_info", "beginning_wikipedia_image_fetch_operation"))
 
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(ctx, reqID, scientificName, limiter)
+	if errors.Is(err, ErrImageNotFound) {
+		// If thumbnail not found, try taxonomy synonym before giving up
+		if synonym, hasSynonym := GetTaxonomySynonym(scientificName); hasSynonym {
+			log.Debug("Retrying Wikipedia fetch with taxonomy synonym",
+				logger.String("original_name", scientificName),
+				logger.String("synonym", synonym))
+			thumbnailURL, thumbnailSourceFile, err = l.queryThumbnail(ctx, reqID, synonym, limiter)
+		}
+	}
 	if err != nil {
-		// Error already logged in queryThumbnail
-		return BirdImage{}, err // Pass through the user-friendly error from queryThumbnail
+		return BirdImage{}, err
 	}
 	log.Debug("Thumbnail retrieved successfully",
 		logger.String("thumbnail_url", thumbnailURL),
