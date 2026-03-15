@@ -40,11 +40,12 @@ type MoonData struct {
 	IconName     string  // Basmilius weather-icons icon name
 }
 
-// phaseInfo maps a phase range to its name and icon.
+// phaseInfo maps a phase range to its name, icon, and emoji.
 type phaseInfo struct {
 	maxPhase  float64
 	phaseName string
 	iconName  string
+	emoji     string
 }
 
 // phases defines the 8 standard lunar phases with their upper bounds.
@@ -59,28 +60,26 @@ type phaseInfo struct {
 // Full moon occurs near 14. The 8 sub-phases are evenly spaced at 3.5-day intervals,
 // but New Moon straddles the cycle boundary: [26.25, 28) ∪ [0, 1.75).
 var phases = []phaseInfo{
-	{1.75, PhaseNewMoon, IconNameNewMoon},
-	{5.25, PhaseWaxingCrescent, IconNameWaxingCrescent},
-	{8.75, PhaseFirstQuarter, IconNameFirstQuarter},
-	{12.25, PhaseWaxingGibbous, IconNameWaxingGibbous},
-	{15.75, PhaseFullMoon, IconNameFullMoon},
-	{19.25, PhaseWaningGibbous, IconNameWaningGibbous},
-	{22.75, PhaseLastQuarter, IconNameLastQuarter},
-	{26.25, PhaseWaningCrescent, IconNameWaningCrescent},
+	{1.75, PhaseNewMoon, IconNameNewMoon, "🌑"},
+	{5.25, PhaseWaxingCrescent, IconNameWaxingCrescent, "🌒"},
+	{8.75, PhaseFirstQuarter, IconNameFirstQuarter, "🌓"},
+	{12.25, PhaseWaxingGibbous, IconNameWaxingGibbous, "🌔"},
+	{15.75, PhaseFullMoon, IconNameFullMoon, "🌕"},
+	{19.25, PhaseWaningGibbous, IconNameWaningGibbous, "🌖"},
+	{22.75, PhaseLastQuarter, IconNameLastQuarter, "🌗"},
+	{26.25, PhaseWaningCrescent, IconNameWaningCrescent, "🌘"},
 	// Values >= 26.25 wrap back to New Moon (cycle boundary)
 }
 
 // moonPhaseEmojis maps phase names to their emoji representation.
-var moonPhaseEmojis = map[string]string{
-	PhaseNewMoon:        "🌑",
-	PhaseWaxingCrescent: "🌒",
-	PhaseFirstQuarter:   "🌓",
-	PhaseWaxingGibbous:  "🌔",
-	PhaseFullMoon:       "🌕",
-	PhaseWaningGibbous:  "🌖",
-	PhaseLastQuarter:    "🌗",
-	PhaseWaningCrescent: "🌘",
-}
+// Built from the phases slice to maintain a single source of truth.
+var moonPhaseEmojis = func() map[string]string {
+	m := make(map[string]string, len(phases))
+	for _, p := range phases {
+		m[p.phaseName] = p.emoji
+	}
+	return m
+}()
 
 // GetMoonPhase calculates the moon phase for the given date.
 // The calculation is location-independent — only the date matters.
