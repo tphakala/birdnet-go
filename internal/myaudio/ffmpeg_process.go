@@ -72,12 +72,14 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 	// 2. Normalize (loudnorm)
 	if f.Normalize {
 		if f.LoudnessStats != nil && f.LoudnessStats.isValid() {
-			// Pass 2: apply with measured values
+			// Pass 2: apply with measured values using linear normalization
+			// linear=true preserves dynamic range (no compression), offset from pass 1
 			filters = append(filters, fmt.Sprintf(
-				"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s",
+				"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s:linear=true:offset=%s",
 				loudnormTargetI, loudnormTargetLRA, loudnormTargetTP,
 				f.LoudnessStats.InputI, f.LoudnessStats.InputLRA,
 				f.LoudnessStats.InputTP, f.LoudnessStats.InputThresh,
+				f.LoudnessStats.TargetOffset,
 			))
 		} else {
 			// Pass 1: analysis mode
@@ -103,15 +105,13 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 // isValid returns true if the measured loudness stats contain valid numeric values.
 // This prevents injection of malformed values into FFmpeg filter chains.
 func (s *LoudnessStats) isValid() bool {
-	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh} {
+	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
 		if _, err := strconv.ParseFloat(v, 64); err != nil {
 			return false
 		}
 	}
 	return true
 }
-
-const loudnessAnalysisTimeout = 30 * time.Second
 
 // SeekRange defines an optional time range for FFmpeg input seeking.
 type SeekRange struct {
@@ -134,9 +134,7 @@ func AnalyzeFileLoudness(ctx context.Context, filePath, ffmpegPath string, filte
 	))
 	filterChain := strings.Join(analysisParts, ",")
 
-	ctx, cancel := context.WithTimeout(ctx, loudnessAnalysisTimeout)
-	defer cancel()
-
+	// No inner timeout — inherits deadline from parent context (ProcessAudioFile or ExtractAudioClip)
 	args := []string{
 		"-hide_banner",
 	}

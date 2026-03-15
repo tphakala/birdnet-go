@@ -1262,7 +1262,15 @@
       if (audioElement.src !== absoluteUrl) {
         debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
         audioElement.src = audioUrl;
-        // Clean up processing state from previous audio
+        // Cancel in-flight processing and clean up state from previous audio
+        if (processDebounceTimer) {
+          clearTimeout(processDebounceTimer);
+          processDebounceTimer = null;
+        }
+        if (processAbortController) {
+          processAbortController.abort();
+          processAbortController = null;
+        }
         if (processedAudioUrl) {
           URL.revokeObjectURL(processedAudioUrl);
           processedAudioUrl = null;

@@ -776,9 +776,14 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
 	}
 
-	// Cache the result
+	// Cache the result (non-fatal on failure)
 	if c.processingCache != nil {
-		_ = c.processingCache.put(cacheKey, buf.Bytes())
+		if err := c.processingCache.put(cacheKey, buf.Bytes()); err != nil {
+			c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to cache processed audio",
+				logger.String("cache_key", cacheKey),
+				logger.Error(err),
+			)
+		}
 	}
 
 	return ctx.Blob(http.StatusOK, MimeTypeWAV, buf.Bytes())

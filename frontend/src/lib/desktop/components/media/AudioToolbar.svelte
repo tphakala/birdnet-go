@@ -214,9 +214,9 @@
         <ChevronDown size={12} />
       </button>
       {#if showExportMenu && hasSelection}
-        <div class="export-menu" role="menu">
+        <div class="export-menu">
           {#each exportFormats as fmt (fmt.id)}
-            <button class="export-option" role="menuitem" onclick={() => handleExport(fmt.id)}>
+            <button class="export-option" onclick={() => handleExport(fmt.id)}>
               {fmt.label}
             </button>
           {/each}

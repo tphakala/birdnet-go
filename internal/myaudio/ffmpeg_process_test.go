@@ -535,10 +535,11 @@ func TestBuildProcessingFilterChain(t *testing.T) {
 	t.Run("all three filters", func(t *testing.T) {
 		t.Parallel()
 		stats := &LoudnessStats{
-			InputI:      "-25.3",
-			InputTP:     "-0.5",
-			InputLRA:    "6.2",
-			InputThresh: "-34.5",
+			InputI:       "-25.3",
+			InputTP:      "-0.5",
+			InputLRA:     "6.2",
+			InputThresh:  "-34.5",
+			TargetOffset: "-0.2",
 		}
 		result := BuildProcessingFilterChain(AudioFilters{
 			Denoise:       "light",
@@ -549,6 +550,8 @@ func TestBuildProcessingFilterChain(t *testing.T) {
 		assert.Contains(t, result, "afftdn=nr=6:nf=-30")
 		assert.Contains(t, result, "loudnorm=")
 		assert.Contains(t, result, "measured_I=-25.3")
+		assert.Contains(t, result, "linear=true")
+		assert.Contains(t, result, "offset=-0.2")
 		assert.Contains(t, result, "volume=+3.0dB")
 	})
 
