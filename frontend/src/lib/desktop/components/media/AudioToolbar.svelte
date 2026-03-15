@@ -69,6 +69,13 @@
 
   let showExportMenu = $state(false);
 
+  // Close export menu when selection is cleared
+  $effect(() => {
+    if (!hasSelection) {
+      showExportMenu = false;
+    }
+  });
+
   const exportFormats = [
     { id: 'wav', label: 'WAV' },
     { id: 'flac', label: 'FLAC' },
@@ -201,7 +208,7 @@
         class:error={extractionError !== null}
         disabled={!hasSelection || isExtracting}
         onclick={() => (showExportMenu = !showExportMenu)}
-        aria-label={extractionError ?? t('components.audioPlayer.processing.export')}
+        aria-label={t('components.audioPlayer.processing.export')}
         title={extractionError ?? ''}
         aria-expanded={showExportMenu}
         aria-haspopup="true"
@@ -214,6 +221,9 @@
         <span>{t('components.audioPlayer.processing.export')}</span>
         <ChevronDown size={12} />
       </button>
+      {#if extractionError}
+        <span class="export-error" role="alert" aria-live="assertive">{extractionError}</span>
+      {/if}
       {#if showExportMenu && hasSelection}
         <div class="export-menu">
           {#each exportFormats as fmt (fmt.id)}
@@ -365,5 +375,14 @@
 
   .export-option:hover {
     background: var(--color-base-200);
+  }
+
+  .export-error {
+    font-size: 0.6875rem;
+    color: var(--color-error, #ef4444);
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

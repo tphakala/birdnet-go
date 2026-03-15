@@ -707,6 +707,9 @@
 
       const blob = await response.blob();
 
+      // Discard result if a newer request superseded this one
+      if (processAbortController !== controller) return;
+
       // Revoke previous object URL to prevent memory leak
       if (processedAudioUrl) {
         URL.revokeObjectURL(processedAudioUrl);
@@ -723,6 +726,9 @@
       if (err instanceof Error && err.name === 'AbortError') {
         return; // Superseded by newer request, don't touch state
       }
+      // Discard error handling if a newer request superseded this one
+      if (processAbortController !== controller) return;
+
       logger.error('Audio processing failed', err as Error);
       // Revert to original audio and reset processing state
       processingDenoise = '';
