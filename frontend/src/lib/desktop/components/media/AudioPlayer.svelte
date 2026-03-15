@@ -863,9 +863,7 @@
       if (err instanceof Error && err.name === 'AbortError') return;
       logger.warn('Failed to update processed spectrogram', err as Error);
     } finally {
-      if (!signal.aborted) {
-        isSpectrogramProcessing = false;
-      }
+      isSpectrogramProcessing = false;
     }
   }
 
