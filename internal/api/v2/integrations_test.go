@@ -130,6 +130,7 @@ func TestInitIntegrationsRoutesRegistration(t *testing.T) {
 		"POST /api/v2/integrations/mqtt/test",
 		"GET /api/v2/integrations/birdweather/status",
 		"POST /api/v2/integrations/birdweather/test",
+		"POST /api/v2/integrations/ebird/test",
 	})
 }
 
@@ -412,6 +413,83 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 	}
 
 	runIntegrationConnectionHandlerTest(t, (*Controller).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
+}
+
+// TestTestEBirdConnection tests the TestEBirdConnection handler
+func TestTestEBirdConnection(t *testing.T) {
+	testCases := []struct {
+		name           string
+		requestBody    string
+		expectedStatus int
+		expectError    bool
+		validateResult func(*testing.T, string)
+	}{
+		{
+			name:           "eBird Not Enabled",
+			requestBody:    `{"enabled":false,"apiKey":"test-key","locale":"en"}`,
+			expectedStatus: http.StatusOK,
+			validateResult: func(t *testing.T, body string) {
+				t.Helper()
+				assert.Contains(t, body, `"success":false`)
+				assert.Contains(t, body, "not enabled")
+			},
+		},
+		{
+			name:           "API Key Not Configured",
+			requestBody:    `{"enabled":true,"apiKey":"","locale":"en"}`,
+			expectedStatus: http.StatusBadRequest,
+			validateResult: func(t *testing.T, body string) {
+				t.Helper()
+				assert.Contains(t, body, `"success":false`)
+				assert.Contains(t, body, "API key is required")
+			},
+		},
+		{
+			name:           "Invalid Request Body",
+			requestBody:    `{invalid json`,
+			expectedStatus: http.StatusBadRequest,
+			expectError:    true,
+			validateResult: func(t *testing.T, body string) {
+				t.Helper()
+				assert.Contains(t, body, "error")
+			},
+		},
+		{
+			name:           "Valid Request Enters Streaming",
+			requestBody:    `{"enabled":true,"apiKey":"test-key-123","locale":"en"}`,
+			expectedStatus: http.StatusOK,
+			validateResult: func(t *testing.T, body string) {
+				t.Helper()
+				assert.NotEmpty(t, body, "Response body should not be empty")
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, controller := setupTestEnvironment(t)
+
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
+				strings.NewReader(tc.requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			err := controller.TestEBirdConnection(c)
+
+			if tc.expectError {
+				if err != nil {
+					return
+				}
+			} else {
+				require.NoError(t, err)
+			}
+
+			assert.Equal(t, tc.expectedStatus, rec.Code)
+
+			tc.validateResult(t, strings.TrimSpace(rec.Body.String()))
+		})
+	}
 }
 
 // TestWriteJSONResponse tests the writeJSONResponse helper function

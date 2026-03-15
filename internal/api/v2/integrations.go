@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -237,8 +239,9 @@ func (c *Controller) initIntegrationsRoutes() {
 	weatherGroup := integrationsGroup.Group("/weather")
 	weatherGroup.POST("/test", c.TestWeatherConnection)
 
-	// Other integration routes could be added here:
-	// - External media storage
+	// eBird routes
+	ebirdGroup := integrationsGroup.Group("/ebird")
+	ebirdGroup.POST("/test", c.TestEBirdConnection)
 
 	c.logInfoIfEnabled("Integrations routes initialized successfully")
 }
@@ -489,6 +492,13 @@ type BirdWeatherTestRequest struct {
 	Threshold        float64 `json:"threshold"`
 	LocationAccuracy float64 `json:"locationAccuracy"`
 	Debug            bool    `json:"debug"`
+}
+
+// EBirdTestRequest represents a request to test eBird API connectivity
+type EBirdTestRequest struct {
+	Enabled bool   `json:"enabled"`
+	APIKey  string `json:"apiKey"`
+	Locale  string `json:"locale"`
 }
 
 // WeatherTestRequest represents a request to test weather provider connectivity
@@ -806,4 +816,165 @@ func formatClientError(prefix string, err error, settings *conf.Settings) string
 func (c *Controller) writeJSONResponse(ctx echo.Context, data any) error {
 	encoder := json.NewEncoder(ctx.Response())
 	return encoder.Encode(data)
+}
+
+// TestEBirdConnection handles POST /api/v2/integrations/ebird/test
+func (c *Controller) TestEBirdConnection(ctx echo.Context) error {
+	var request EBirdTestRequest
+	if err := ctx.Bind(&request); err != nil {
+		return c.HandleError(ctx, err, "Invalid eBird test request", http.StatusBadRequest)
+	}
+
+	if !request.Enabled {
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"success": false,
+			"message": "eBird integration is not enabled",
+			"state":   "failed",
+		})
+	}
+
+	if request.APIKey == "" {
+		return ctx.JSON(http.StatusBadRequest, map[string]any{
+			"success": false,
+			"message": "eBird API key is required",
+			"state":   "failed",
+		})
+	}
+
+	ctx.Response().Header().Set("Content-Type", "application/x-ndjson")
+	ctx.Response().Header().Set("Cache-Control", "no-cache")
+	ctx.Response().Header().Set("Connection", "keep-alive")
+	ctx.Response().WriteHeader(http.StatusOK)
+
+	testCtx, cancel := context.WithTimeout(ctx.Request().Context(), integrationMediumTimeout*time.Second)
+	defer cancel()
+
+	encoder := json.NewEncoder(ctx.Response())
+
+	sendStage := func(stage WeatherTestStage) error {
+		if err := encoder.Encode(stage); err != nil {
+			return err
+		}
+		ctx.Response().Flush()
+		return nil
+	}
+
+	locale := request.Locale
+	if locale == "" {
+		locale = "en"
+	}
+
+	stages := []struct {
+		id    string
+		title string
+		test  func() (string, error)
+	}{
+		{"connectivity", "API Connectivity", func() (string, error) {
+			return c.testEBirdConnectivity(testCtx)
+		}},
+		{"authentication", "Authentication", func() (string, error) {
+			return c.testEBirdAuthentication(testCtx, request.APIKey, locale)
+		}},
+	}
+
+	for _, stage := range stages {
+		if err := sendStage(WeatherTestStage{
+			ID:     stage.id,
+			Title:  stage.title,
+			Status: "in_progress",
+		}); err != nil {
+			return nil
+		}
+
+		message, err := stage.test()
+		if err != nil {
+			return sendStage(WeatherTestStage{
+				ID:      stage.id,
+				Title:   stage.title,
+				Status:  "error",
+				Message: message,
+				Error:   err.Error(),
+			})
+		}
+
+		if err := sendStage(WeatherTestStage{
+			ID:      stage.id,
+			Title:   stage.title,
+			Status:  "completed",
+			Message: message,
+		}); err != nil {
+			return nil
+		}
+
+		time.Sleep(integrationStageDelay * time.Millisecond)
+	}
+
+	return nil
+}
+
+// testEBirdConnectivity tests basic connectivity to the eBird API
+func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) {
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+	req, err := http.NewRequestWithContext(ctx, "HEAD", "https://api.ebird.org/v2/ref/taxonomy/ebird", http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", "BirdNET-Go eBird Test")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to eBird API: %w", err)
+	}
+	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
+	// Any response (even 403) means the API is reachable, but 5xx indicates server issues
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return "", fmt.Errorf("eBird API returned server error (status %d)", resp.StatusCode)
+	}
+
+	return "Successfully connected to eBird API", nil
+}
+
+// testEBirdAuthentication tests authentication with the eBird API using a small taxonomy request
+func (c *Controller) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
+	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
+
+	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to create authentication request: %w", err)
+	}
+
+	req.Header.Set("X-eBirdApiToken", apiKey)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "BirdNET-Go eBird Test")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to authenticate with eBird API: %w", err)
+	}
+	defer func() {
+		// Drain body to allow connection reuse before closing
+		_, _ = io.Copy(io.Discard, resp.Body)
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
+		}
+	}()
+
+	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+		return "", fmt.Errorf("invalid API key - please check your eBird API key")
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected response from eBird API (status %d)", resp.StatusCode)
+	}
+
+	return fmt.Sprintf("Successfully authenticated with eBird API (locale: %s)", locale), nil
 }

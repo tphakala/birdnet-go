@@ -2621,7 +2621,16 @@
           "label": "Czas trwania pamięci podręcznej (godziny)",
           "helpText": "Jak długo przechowywać dane taksonomiczne z eBird w pamięci podręcznej. Taksonomia zmienia się rzadko, więc dłuższy czas cache zmniejsza liczbę wywołań API."
         },
-        "note": "eBird dostarcza dane taksonomiczne wykorzystywane do klasyfikacji gatunków i analiz. Klucz API jest bezpłatny i dostępny w Cornell Lab of Ornithology."
+        "note": "eBird dostarcza dane taksonomiczne wykorzystywane do klasyfikacji gatunków i analiz. Klucz API jest bezpłatny i dostępny w Cornell Lab of Ornithology.",
+        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "test": {
+          "button": "Test eBird Connection",
+          "loading": "Testing...",
+          "enabledRequired": "Enable eBird integration first",
+          "apiKeyRequired": "API key is required",
+          "inProgress": "Test in progress...",
+          "description": "Test eBird API connectivity and authentication"
+        }
       }
     },
     "audio": {
