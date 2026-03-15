@@ -1690,7 +1690,7 @@ func createDefaultConfig() error {
 			return errors.New(err).
 				Component("conf").
 				Category(errors.CategoryConfiguration).
-				Context("operation", "create_default_config").
+				Context("operation", "generate_session_secret").
 				Build()
 		}
 		viper.Set("security.sessionsecret", sessionSecret)
