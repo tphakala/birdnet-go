@@ -246,6 +246,10 @@
   const GAIN_MAX_DB = 24;
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
+
+  // Frequency scale overlay constants (sox resamples to 24kHz, Nyquist = 12kHz)
+  const FREQ_NYQUIST_KHZ = 12;
+  const FREQ_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
@@ -810,6 +814,10 @@
       if (processedAudioUrl) {
         URL.revokeObjectURL(processedAudioUrl);
         processedAudioUrl = null;
+      }
+      if (processedSpectrogramUrl) {
+        URL.revokeObjectURL(processedSpectrogramUrl);
+        processedSpectrogramUrl = null;
       }
       if (audioElement) {
         const pos = audioElement.currentTime;
@@ -1881,9 +1889,15 @@
 
   <!-- Frequency scale overlay (linear 0-12kHz, sox resamples to 24kHz) -->
   {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
-    {#each [12, 10, 8, 6, 5, 4, 3, 2, 1] as freq (freq)}
-      <span class="freq-label" style:bottom="{(freq / 12) * 100}%" aria-hidden="true">{freq}k</span>
-      <div class="freq-line" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"></div>
+    {#each FREQ_TICKS_KHZ as freq (freq)}
+      <span class="freq-label" style:bottom="{(freq / FREQ_NYQUIST_KHZ) * 100}%" aria-hidden="true"
+        >{freq}k</span
+      >
+      <div
+        class="freq-line"
+        style:bottom="{(freq / FREQ_NYQUIST_KHZ) * 100}%"
+        aria-hidden="true"
+      ></div>
     {/each}
   {/if}
 
