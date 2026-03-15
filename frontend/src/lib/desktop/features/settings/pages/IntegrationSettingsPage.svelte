@@ -478,7 +478,10 @@
     try {
       // Get current form values (unsaved changes) instead of saved settings
       const currentBirdweather = store.formData?.realtime?.birdweather || settings.birdweather!;
-      logger.debug('BirdWeather test config:', currentBirdweather);
+      logger.debug('BirdWeather test config:', {
+        ...currentBirdweather,
+        id: currentBirdweather.id ? '***' : '',
+      });
 
       // Prepare test payload
       const testPayload = {
@@ -499,7 +502,10 @@
         headers.set('X-CSRF-Token', token);
       }
 
-      logger.debug('Sending BirdWeather test request with payload:', testPayload);
+      logger.debug('Sending BirdWeather test request with payload:', {
+        ...testPayload,
+        id: testPayload.id ? '***' : '',
+      });
 
       const response = await fetch(buildAppUrl('/api/v2/integrations/birdweather/test'), {
         method: 'POST',
@@ -688,7 +694,11 @@
     try {
       // Get current form values (unsaved changes) instead of saved settings
       const currentMqtt = store.formData?.realtime?.mqtt || settings.mqtt!;
-      logger.debug('MQTT test config:', currentMqtt);
+      logger.debug('MQTT test config:', {
+        ...currentMqtt,
+        password: currentMqtt.password ? '***' : '',
+        username: currentMqtt.username ? '***' : '',
+      });
 
       // Prepare test payload matching the MQTT handler's TestConfig structure
       const testPayload = {
@@ -716,7 +726,11 @@
         headers.set('X-CSRF-Token', token);
       }
 
-      logger.debug('Sending MQTT test request with payload:', testPayload);
+      logger.debug('Sending MQTT test request with payload:', {
+        ...testPayload,
+        password: testPayload.password ? '***' : '',
+        username: testPayload.username ? '***' : '',
+      });
 
       const response = await fetch(buildAppUrl('/api/v2/integrations/mqtt/test'), {
         method: 'POST',
