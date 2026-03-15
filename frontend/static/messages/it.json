@@ -2418,7 +2418,16 @@
           "label": "Durata della cache (ore)",
           "helpText": "Per quanto tempo memorizzare nella cache i dati tassonomici di eBird. La tassonomia cambia raramente, quindi durate più lunghe riducono le chiamate API."
         },
-        "note": "eBird fornisce dati tassonomici utilizzati per la classificazione delle specie e le analisi. La chiave API è gratuita e disponibile presso il Cornell Lab of Ornithology."
+        "note": "eBird fornisce dati tassonomici utilizzati per la classificazione delle specie e le analisi. La chiave API è gratuita e disponibile presso il Cornell Lab of Ornithology.",
+        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "test": {
+          "button": "Test eBird Connection",
+          "loading": "Testing...",
+          "enabledRequired": "Enable eBird integration first",
+          "apiKeyRequired": "API key is required",
+          "inProgress": "Test in progress...",
+          "description": "Test eBird API connectivity and authentication"
+        }
       }
     },
     "audio": {

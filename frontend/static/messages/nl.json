@@ -2615,7 +2615,16 @@
           "label": "Cacheduur (uren)",
           "helpText": "Hoe lang taxonomiegegevens van eBird in de cache worden bewaard. Taxonomie verandert zelden, dus langere cachetijden verminderen API-aanroepen."
         },
-        "note": "eBird levert taxonomische gegevens voor soortclassificatie en inzichten. De API-sleutel is gratis verkrijgbaar bij het Cornell Lab of Ornithology."
+        "note": "eBird levert taxonomische gegevens voor soortclassificatie en inzichten. De API-sleutel is gratis verkrijgbaar bij het Cornell Lab of Ornithology.",
+        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "test": {
+          "button": "Test eBird Connection",
+          "loading": "Testing...",
+          "enabledRequired": "Enable eBird integration first",
+          "apiKeyRequired": "API key is required",
+          "inProgress": "Test in progress...",
+          "description": "Test eBird API connectivity and authentication"
+        }
       }
     },
     "audio": {

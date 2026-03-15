@@ -2957,7 +2957,16 @@
           "label": "Välimuistin kesto (tuntia)",
           "helpText": "Kuinka kauan eBirdin taksonomiatietoja säilytetään välimuistissa. Taksonomia muuttuu harvoin, joten pidempi välimuistiaika vähentää API-kutsuja."
         },
-        "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta."
+        "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta.",
+        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "test": {
+          "button": "Test eBird Connection",
+          "loading": "Testing...",
+          "enabledRequired": "Enable eBird integration first",
+          "apiKeyRequired": "API key is required",
+          "inProgress": "Test in progress...",
+          "description": "Test eBird API connectivity and authentication"
+        }
       }
     },
     "species": {
