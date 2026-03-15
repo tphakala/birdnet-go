@@ -522,17 +522,18 @@
         throw new Error(t('settings.integration.errors.responseStreamFailed'));
       }
 
+      let remaining = '';
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Parse each chunk as JSON
-        const chunk = decoder.decode(value);
-        logger.debug('Raw BirdWeather chunk received:', chunk);
+        // Append chunk to any leftover partial data from previous iteration
+        remaining += decoder.decode(value, { stream: true });
+        logger.debug('Raw BirdWeather chunk received:', remaining);
 
         // Split by both newlines and by '}{'  pattern to handle concatenated JSON objects
         const jsonObjects = [];
-        let remaining = chunk;
 
         while (remaining.trim()) {
           try {
@@ -739,17 +740,18 @@
         throw new Error(t('settings.integration.errors.responseStreamFailed'));
       }
 
+      let remaining = '';
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        // Parse each line as JSON
-        const chunk = decoder.decode(value);
-        logger.debug('Raw MQTT chunk received:', chunk);
+        // Append chunk to any leftover partial data from previous iteration
+        remaining += decoder.decode(value, { stream: true });
+        logger.debug('Raw MQTT chunk received:', remaining);
 
         // Split by both newlines and by '}{'  pattern to handle concatenated JSON objects
         const jsonObjects = [];
-        let remaining = chunk;
 
         while (remaining.trim()) {
           try {
