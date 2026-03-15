@@ -152,6 +152,11 @@ func runStreamingIntegrationTest[T any](
 			writeMu.Unlock()
 			safeDoneClose()
 			cancel()
+			// Drain resultChan so the worker goroutine doesn't block forever
+			go func() {
+				for range resultChan {
+				}
+			}()
 			return nil
 		}
 		ctx.Response().Flush()
@@ -163,6 +168,11 @@ func runStreamingIntegrationTest[T any](
 			c.Debug("HTTP client disconnected during %s test", integrationName)
 			safeDoneClose()
 			cancel()
+			// Drain resultChan so the worker goroutine doesn't block forever
+			go func() {
+				for range resultChan {
+				}
+			}()
 			return nil
 		default:
 			// Continue processing
