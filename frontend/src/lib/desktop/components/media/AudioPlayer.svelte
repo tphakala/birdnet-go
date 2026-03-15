@@ -295,6 +295,16 @@
   const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
   const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
 
+  // Supported clip extraction formats (lossless first, then lossy)
+  const CLIP_FORMATS = [
+    { value: 'wav', label: 'WAV', lossless: true },
+    { value: 'flac', label: 'FLAC', lossless: true },
+    { value: 'alac', label: 'ALAC', lossless: true },
+    { value: 'mp3', label: 'MP3', lossless: false },
+    { value: 'opus', label: 'Opus', lossless: false },
+    { value: 'aac', label: 'AAC', lossless: false },
+  ] as const;
+
   // Check if a pointer X position is near a selection handle, returning which handle
   const detectHandleGrab = (clientX: number, thresholdPx: number): 'start' | 'end' | null => {
     if (selectionStartSec === null || selectionEndSec === null) return null;
@@ -1770,7 +1780,7 @@
             <div
               class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[8.5rem] z-30"
             >
-              {#each [{ value: 'wav', label: 'WAV', lossless: true }, { value: 'flac', label: 'FLAC', lossless: true }, { value: 'alac', label: 'ALAC', lossless: true }, { value: 'mp3', label: 'MP3', lossless: false }, { value: 'opus', label: 'Opus', lossless: false }, { value: 'aac', label: 'AAC', lossless: false }] as fmt (fmt.value)}
+              {#each CLIP_FORMATS as fmt (fmt.value)}
                 <button
                   class="w-full px-3.5 py-2 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
                   onclick={() => selectFormatAndExtract(fmt.value)}
