@@ -9,6 +9,7 @@ import (
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1044,4 +1045,175 @@ func TestCheckProviderAuth(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+// mockOIDCDiscovery creates an httptest server that serves a minimal OIDC discovery document.
+func mockOIDCDiscovery(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			baseURL := "http://" + r.Host
+			_, _ = w.Write([]byte(`{
+				"issuer": "` + baseURL + `",
+				"authorization_endpoint": "` + baseURL + `/authorize",
+				"token_endpoint": "` + baseURL + `/token",
+				"userinfo_endpoint": "` + baseURL + `/userinfo",
+				"jwks_uri": "` + baseURL + `/jwks"
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestInitializeProviders_OIDC_Success(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider should be registered with goth")
+}
+
+func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    "http://unreachable.invalid:1",
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	// Should not panic — just log error and skip
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "OIDC provider should not be registered when discovery fails")
+}
+
+func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider with default scopes should be registered")
+}
+
+func TestInitializeProviders_OIDC_CustomScopesWithoutOpenID(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+					Scopes:       []string{"profile", "email", "groups"},
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider should be registered even when openid scope was missing from config")
+}
+
+func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      false,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    "https://idp.example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "Disabled OIDC provider should not be registered")
 }

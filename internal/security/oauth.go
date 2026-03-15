@@ -424,11 +424,14 @@ func initializeProviders(settings *conf.Settings) {
 			if !slices.Contains(scopes, "openid") {
 				scopes = append([]string{"openid"}, scopes...)
 			}
+			// Build the OIDC discovery document URL per RFC 8414:
+			// the discovery document is at {issuer}/.well-known/openid-configuration
+			discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
 			oidcProvider, err := openidConnect.New(
 				providerConfig.ClientID,
 				providerConfig.ClientSecret,
 				redirectURI,
-				providerConfig.IssuerURL,
+				discoveryURL,
 				scopes...,
 			)
 			if err != nil {
