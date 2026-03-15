@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"strings"
 	"sync"
 	"time"
@@ -937,7 +938,7 @@ func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) 
 func (c *Controller) testEBirdAuthentication(ctx context.Context, apiKey, locale string) (string, error) {
 	client := &http.Client{Timeout: integrationShortTimeout * time.Second}
 
-	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", locale)
+	url := fmt.Sprintf("https://api.ebird.org/v2/ref/taxonomy/ebird?fmt=json&cat=species&maxResults=1&locale=%s", neturl.QueryEscape(locale))
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, http.NoBody)
 	if err != nil {
