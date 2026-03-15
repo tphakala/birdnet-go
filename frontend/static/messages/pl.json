@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Wyświetla małą mapę z szerokością/długością geograficzną z ustawień głównych",
       "showWeather": "Pokaż aktualną pogodę",
       "showWeatherHelp": "Wyświetla aktualne warunki pogodowe (wymaga włączenia integracji pogodowej)",
+      "timeFormat": "Format czasu",
       "mapZoom": "Powiększenie mapy",
       "showPin": "Pokaż znacznik lokalizacji",
       "mapExpandable": "Zezwól na powiększanie mapy",
@@ -4105,6 +4106,23 @@
       "conflictData": "Ta akcja jest w konflikcie z istniejącymi danymi.",
       "requestTimeout": "Przekroczono limit czasu żądania.",
       "networkError": "Wystąpił błąd sieci. Sprawdź połączenie."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nów",
+      "waxingCrescent": "Sierp rosnący",
+      "firstQuarter": "Pierwsza kwadra",
+      "waxingGibbous": "Księżyc rosnący",
+      "fullMoon": "Pełnia",
+      "waningGibbous": "Księżyc malejący",
+      "lastQuarter": "Ostatnia kwadra",
+      "waningCrescent": "Sierp malejący"
+    },
+    "birding": {
+      "excellent": "Cisza — doskonałe warunki do słuchania ptaków",
+      "moderate": "Umiarkowany wiatr — niektóre głosy ptaków mogą być trudne do usłyszenia",
+      "poor": "Silny wiatr — głosy ptaków prawie niesłyszalne"
     }
   }
 }

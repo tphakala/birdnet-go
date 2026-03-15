@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
       "showWeather": "Show current weather",
       "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
+      "timeFormat": "Time format",
       "mapZoom": "Map zoom",
       "showPin": "Show location pin",
       "mapExpandable": "Allow map expansion",
@@ -4105,6 +4106,23 @@
       "conflictData": "This action conflicts with existing data.",
       "requestTimeout": "Request timeout.",
       "networkError": "Network error occurred. Please check your connection."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "New Moon",
+      "waxingCrescent": "Waxing Crescent",
+      "firstQuarter": "First Quarter",
+      "waxingGibbous": "Waxing Gibbous",
+      "fullMoon": "Full Moon",
+      "waningGibbous": "Waning Gibbous",
+      "lastQuarter": "Last Quarter",
+      "waningCrescent": "Waning Crescent"
+    },
+    "birding": {
+      "excellent": "Calm — excellent for hearing bird calls",
+      "moderate": "Moderate wind — some bird calls may be harder to hear",
+      "poor": "High wind — bird calls unlikely to be heard"
     }
   }
 }

@@ -71,7 +71,15 @@ Performance Optimizations:
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
-  import { Image, Map as MapIcon, CloudSun, MapPin, ZoomIn, Maximize2 } from '@lucide/svelte';
+  import {
+    Image,
+    Map as MapIcon,
+    CloudSun,
+    MapPin,
+    ZoomIn,
+    Maximize2,
+    Clock,
+  } from '@lucide/svelte';
   import { MAP_CONFIG } from '$lib/desktop/features/settings/utils/mapConfig';
 
   const logger = getLogger('app');
@@ -1415,6 +1423,26 @@ Performance Optimizations:
             <CloudSun class="size-4" />
             {t('dashboard.banner.showWeather')}
           </button>
+
+          {#if bannerConfig.showWeather}
+            <!-- Time format toggle (12h/24h) -->
+            <button
+              onclick={() =>
+                onUpdate({
+                  ...element,
+                  banner: {
+                    ...bannerConfig,
+                    timeFormat: bannerConfig.timeFormat === '12h' ? '24h' : '12h',
+                  },
+                })}
+              class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--color-base-content)]/60 transition-colors hover:bg-[var(--color-base-200)]"
+            >
+              <Clock class="size-4" />
+              {t('dashboard.banner.timeFormat')}: {bannerConfig.timeFormat === '12h'
+                ? '12h'
+                : '24h'}
+            </button>
+          {/if}
         </div>
       {:else if element.type === 'daily-summary'}
         <DailySummaryConfigForm

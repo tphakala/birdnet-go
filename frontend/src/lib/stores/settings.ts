@@ -545,6 +545,7 @@ export interface BannerConfig {
   mapZoom?: number;
   showPin?: boolean;
   mapExpandable?: boolean;
+  timeFormat?: '12h' | '24h';
 }
 
 // Video embed element configuration

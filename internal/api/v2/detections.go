@@ -178,14 +178,17 @@ type DetectionResponse struct {
 
 // WeatherInfo represents weather data for a detection
 type WeatherInfo struct {
-	WeatherIcon string  `json:"weatherIcon"`
-	WeatherMain string  `json:"weatherMain,omitempty"`
-	Description string  `json:"description,omitempty"`
-	Temperature float64 `json:"temperature,omitempty"`
-	WindSpeed   float64 `json:"windSpeed,omitempty"`
-	WindGust    float64 `json:"windGust,omitempty"`
-	Humidity    int     `json:"humidity,omitempty"`
-	Units       string  `json:"units,omitempty"`
+	WeatherIcon      string  `json:"weatherIcon"`
+	WeatherMain      string  `json:"weatherMain,omitempty"`
+	Description      string  `json:"description,omitempty"`
+	Temperature      float64 `json:"temperature,omitempty"`
+	WindSpeed        float64 `json:"windSpeed,omitempty"`
+	WindGust         float64 `json:"windGust,omitempty"`
+	Humidity         int     `json:"humidity,omitempty"`
+	Units            string  `json:"units,omitempty"`
+	MoonPhase        float64 `json:"moonPhase,omitempty"`
+	MoonPhaseName    string  `json:"moonPhaseName,omitempty"`
+	MoonIllumination float64 `json:"moonIllumination,omitempty"`
 }
 
 // DetectionRequest represents the query parameters for listing detections
@@ -694,7 +697,7 @@ func (c *Controller) getWeatherForDetectionTime(detectionTime time.Time, date st
 		return nil
 	}
 
-	return &WeatherInfo{
+	info := &WeatherInfo{
 		WeatherIcon: closestWeather.WeatherIcon,
 		WeatherMain: closestWeather.WeatherMain,
 		Description: closestWeather.WeatherDesc,
@@ -704,6 +707,14 @@ func (c *Controller) getWeatherForDetectionTime(detectionTime time.Time, date st
 		Humidity:    closestWeather.Humidity,
 		Units:       c.getWeatherUnits(),
 	}
+
+	// Add moon phase for the detection date
+	moonData := suncalc.GetMoonPhase(detectionTime)
+	info.MoonPhase = moonData.Phase
+	info.MoonPhaseName = moonData.PhaseName
+	info.MoonIllumination = moonData.Illumination
+
+	return info
 }
 
 // ensureWeatherCached fetches weather data for a date if not already cached

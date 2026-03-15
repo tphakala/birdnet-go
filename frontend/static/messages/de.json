@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Zeigt eine kleine Karte mit dem Breiten-/Längengrad aus Ihren Haupteinstellungen an",
       "showWeather": "Aktuelles Wetter anzeigen",
       "showWeatherHelp": "Zeigt aktuelle Wetterbedingungen an (Wetterintegration muss aktiviert sein)",
+      "timeFormat": "Zeitformat",
       "mapZoom": "Kartenzoom",
       "showPin": "Standortnadel anzeigen",
       "mapExpandable": "Kartenvergrößerung erlauben",
@@ -4105,6 +4106,23 @@
       "conflictData": "Diese Aktion steht im Konflikt mit vorhandenen Daten.",
       "requestTimeout": "Zeitüberschreitung der Anfrage.",
       "networkError": "Netzwerkfehler aufgetreten. Bitte überprüfen Sie Ihre Verbindung."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Neumond",
+      "waxingCrescent": "Zunehmende Sichel",
+      "firstQuarter": "Erstes Viertel",
+      "waxingGibbous": "Zunehmender Mond",
+      "fullMoon": "Vollmond",
+      "waningGibbous": "Abnehmender Mond",
+      "lastQuarter": "Letztes Viertel",
+      "waningCrescent": "Abnehmende Sichel"
+    },
+    "birding": {
+      "excellent": "Windstill — ideal zum Hören von Vogelrufen",
+      "moderate": "Mäßiger Wind — einige Vogelrufe schwerer hörbar",
+      "poor": "Starker Wind — Vogelrufe kaum hörbar"
     }
   }
 }

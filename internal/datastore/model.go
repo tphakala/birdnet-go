@@ -91,12 +91,14 @@ type NoteLock struct {
 
 // DailyEvents represents the daily weather data that doesn't change throughout the day
 type DailyEvents struct {
-	ID       uint   `gorm:"primaryKey"`
-	Date     string `gorm:"index:idx_dailyweather_date"`
-	Sunrise  int64
-	Sunset   int64
-	Country  string
-	CityName string
+	ID               uint   `gorm:"primaryKey"`
+	Date             string `gorm:"index:idx_dailyweather_date"`
+	Sunrise          int64
+	Sunset           int64
+	Country          string
+	CityName         string
+	MoonPhase        float64
+	MoonIllumination float64
 }
 
 // HourlyWeather represents the hourly weather data that changes throughout the day

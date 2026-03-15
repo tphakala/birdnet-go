@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // getLogger returns the weather service logger.
@@ -125,6 +126,11 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		Country:  data.Location.Country,
 		CityName: data.Location.City,
 	}
+
+	// Compute moon phase for this date (location-independent, pure math)
+	moonData := suncalc.GetMoonPhase(data.Time)
+	dailyEvents.MoonPhase = moonData.Phase
+	dailyEvents.MoonIllumination = moonData.Illumination
 
 	// Save daily events data. If this fails (e.g., SQLITE_BUSY), log the error
 	// but continue — the upsert will succeed on the next hourly poll, and we

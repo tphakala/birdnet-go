@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Exibe um pequeno mapa usando a latitude/longitude das suas configurações principais",
       "showWeather": "Mostrar clima atual",
       "showWeatherHelp": "Exibe as condições climáticas atuais (requer que a integração climática esteja habilitada)",
+      "timeFormat": "Formato de hora",
       "mapZoom": "Zoom do mapa",
       "showPin": "Mostrar marcador de localização",
       "mapExpandable": "Permitir expansão do mapa",
@@ -4105,6 +4106,23 @@
       "conflictData": "Esta ação entra em conflito com dados existentes.",
       "requestTimeout": "Tempo limite da solicitação esgotado.",
       "networkError": "Erro de rede. Verifique a sua ligação."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Lua Nova",
+      "waxingCrescent": "Lua Crescente",
+      "firstQuarter": "Quarto Crescente",
+      "waxingGibbous": "Gibosa Crescente",
+      "fullMoon": "Lua Cheia",
+      "waningGibbous": "Gibosa Minguante",
+      "lastQuarter": "Quarto Minguante",
+      "waningCrescent": "Lua Minguante"
+    },
+    "birding": {
+      "excellent": "Calmo — excelente para ouvir cantos de aves",
+      "moderate": "Vento moderado — alguns cantos podem ser difíceis de ouvir",
+      "poor": "Vento forte — cantos de aves dificilmente audíveis"
     }
   }
 }

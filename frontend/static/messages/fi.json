@@ -670,6 +670,7 @@
       "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
       "showWeather": "Show current weather",
       "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
+      "timeFormat": "Aikamuoto",
       "mapZoom": "Kartan zoomaus",
       "showPin": "Näytä sijaintimerkki",
       "mapExpandable": "Salli kartan laajentaminen",
@@ -4105,6 +4106,23 @@
       "conflictData": "Tämä toiminto on ristiriidassa olemassa olevien tietojen kanssa.",
       "requestTimeout": "Pyyntö aikakatkaistiin.",
       "networkError": "Verkkovirhe. Tarkista yhteytesi."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Uusikuu",
+      "waxingCrescent": "Kasvava sirppi",
+      "firstQuarter": "Ensimmäinen neljännes",
+      "waxingGibbous": "Kasvava kupera",
+      "fullMoon": "Täysikuu",
+      "waningGibbous": "Vähenevä kupera",
+      "lastQuarter": "Viimeinen neljännes",
+      "waningCrescent": "Vähenevä sirppi"
+    },
+    "birding": {
+      "excellent": "Tyyntä — erinomaiset olosuhteet lintuhavainnoille",
+      "moderate": "Kohtalaista tuulta — osa linnunäänistä voi jäädä kuulematta",
+      "poor": "Kovaa tuulta — linnunäänet tuskin kuultavissa"
     }
   }
 }

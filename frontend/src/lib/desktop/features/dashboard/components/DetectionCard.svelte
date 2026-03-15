@@ -19,6 +19,7 @@
   import type { Detection } from '$lib/types/detection.types';
   import ConfidenceBadge from './ConfidenceBadge.svelte';
   import WeatherBadge from './WeatherBadge.svelte';
+  import MoonBadge from './MoonBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
   import CardActionMenu from './CardActionMenu.svelte';
@@ -230,6 +231,9 @@
           units={detection.weather.units}
           timeOfDay={detection.timeOfDay}
         />
+      {/if}
+      {#if detection.weather?.moonPhaseName && detection.timeOfDay === 'night'}
+        <MoonBadge moonPhaseName={detection.weather.moonPhaseName} />
       {/if}
     </div>
 

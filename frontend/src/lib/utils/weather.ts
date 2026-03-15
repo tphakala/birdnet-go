@@ -260,3 +260,108 @@ export function getEffectiveWeatherCode(
 
   return '';
 }
+
+/**
+ * Maps standardized weather codes to Basmilius icon names.
+ * Used by WeatherSvgIcon component in the banner card.
+ */
+export const WEATHER_CODE_TO_BASMILIUS: Record<string, { day: string; night: string }> = {
+  '01': { day: 'clear-day', night: 'clear-night' },
+  '02': { day: 'partly-cloudy-day', night: 'partly-cloudy-night' },
+  '03': { day: 'partly-cloudy-day', night: 'partly-cloudy-night' },
+  '04': { day: 'overcast-day', night: 'overcast-night' },
+  '09': { day: 'partly-cloudy-day-rain', night: 'partly-cloudy-night-rain' },
+  '10': { day: 'rain', night: 'rain' },
+  '11': { day: 'thunderstorms-day-rain', night: 'thunderstorms-night-rain' },
+  '12': { day: 'sleet', night: 'sleet' },
+  '13': { day: 'snow', night: 'snow' },
+  '50': { day: 'fog-day', night: 'fog-night' },
+};
+
+/**
+ * Returns the Basmilius icon name for a given weather code and time of day.
+ */
+export function getBasmiliusIconName(
+  weatherIcon: string,
+  description?: string,
+  timeOfDay?: string
+): string {
+  const code = getEffectiveWeatherCode(weatherIcon, description);
+  const isNight = timeOfDay === 'night' || weatherIcon.endsWith('n');
+  const mapping = safeGet(WEATHER_CODE_TO_BASMILIUS, code);
+  if (!mapping) return 'not-available';
+  return isNight ? mapping.night : mapping.day;
+}
+
+/**
+ * Birding condition level based on wind speed.
+ */
+export type BirdingConditionLevel = 'excellent' | 'moderate' | 'poor';
+
+/**
+ * Returns birding condition level based on wind speed (m/s).
+ * Uses existing WIND_SPEED_THRESHOLDS.
+ */
+export function getBirdingConditionLevel(windSpeed: number): BirdingConditionLevel {
+  if (windSpeed < WIND_SPEED_THRESHOLDS.LIGHT) return 'excellent';
+  if (windSpeed < WIND_SPEED_THRESHOLDS.MODERATE) return 'moderate';
+  return 'poor';
+}
+
+/**
+ * Returns the CSS color class for a birding condition level.
+ */
+export function getBirdingConditionColor(level: BirdingConditionLevel): string {
+  switch (level) {
+    case 'excellent':
+      return 'text-green-600';
+    case 'moderate':
+      return 'text-amber-700';
+    case 'poor':
+      return 'text-red-600';
+    default:
+      return 'text-[var(--color-base-content)]';
+  }
+}
+
+/**
+ * Moon phase emoji mapping for detection card badges.
+ */
+export const MOON_PHASE_EMOJIS: Record<string, string> = {
+  'New Moon': '🌑',
+  'Waxing Crescent': '🌒',
+  'First Quarter': '🌓',
+  'Waxing Gibbous': '🌔',
+  'Full Moon': '🌕',
+  'Waning Gibbous': '🌖',
+  'Last Quarter': '🌗',
+  'Waning Crescent': '🌘',
+};
+
+/**
+ * Returns the emoji for a given moon phase name.
+ */
+export function getMoonPhaseEmoji(phaseName: string): string {
+  return safeGet(MOON_PHASE_EMOJIS, phaseName) ?? '🌑';
+}
+
+/**
+ * Maps moon phase names from API to i18n keys.
+ */
+const MOON_PHASE_I18N_KEYS: Record<string, string> = {
+  'New Moon': 'newMoon',
+  'Waxing Crescent': 'waxingCrescent',
+  'First Quarter': 'firstQuarter',
+  'Waxing Gibbous': 'waxingGibbous',
+  'Full Moon': 'fullMoon',
+  'Waning Gibbous': 'waningGibbous',
+  'Last Quarter': 'lastQuarter',
+  'Waning Crescent': 'waningCrescent',
+};
+
+/**
+ * Returns the i18n key suffix for a given moon phase name.
+ */
+export function getMoonPhaseI18nKey(phaseName: string): string {
+  return safeGet(MOON_PHASE_I18N_KEYS, phaseName) ?? 'newMoon';
+}

@@ -57,6 +57,14 @@ type DetectionWeatherResponse struct {
 	TimeOfDay string                `json:"time_of_day"`
 }
 
+// MoonResponse holds moon phase data for API responses.
+type MoonResponse struct {
+	Phase        float64 `json:"phase"`        // 0–27.99, raw phase value
+	PhaseName    string  `json:"phase_name"`   // e.g. "Full Moon"
+	Illumination float64 `json:"illumination"` // 0–100 percentage
+	IconName     string  `json:"icon_name"`    // Basmilius icon name e.g. "moon-full"
+}
+
 // initWeatherRoutes registers all weather-related API endpoints
 func (c *Controller) initWeatherRoutes() {
 	// Create weather API group
@@ -83,11 +91,14 @@ func (c *Controller) initWeatherRoutes() {
 
 	// Sun times endpoint using SunCalc
 	weatherGroup.GET("/sun/:date", c.GetSunTimes)
+
+	// Moon phase endpoint
+	weatherGroup.GET("/moon/:date", c.GetMoonPhase)
 }
 
 // buildDailyWeatherResponse creates a DailyWeatherResponse from a DailyEvents struct
 // This helper function reduces code duplication and simplifies maintenance
-func (c *Controller) buildDailyWeatherResponse(dailyEvents datastore.DailyEvents) DailyWeatherResponse {
+func (c *Controller) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) DailyWeatherResponse {
 	return DailyWeatherResponse{
 		Date:     dailyEvents.Date,
 		Sunrise:  time.Unix(dailyEvents.Sunrise, 0).UTC(),
@@ -128,7 +139,7 @@ func (c *Controller) GetDailyWeather(ctx echo.Context) error {
 	}
 
 	// Convert to response format using the helper function
-	response := c.buildDailyWeatherResponse(dailyEvents)
+	response := c.buildDailyWeatherResponse(&dailyEvents)
 
 	c.logInfoIfEnabled("Retrieved daily weather data",
 		logger.String("date", date),
@@ -313,7 +324,7 @@ func (c *Controller) fetchDailyWeatherForDetection(date, id, ip, path string) Da
 		c.logWarnIfEnabled("Failed to get daily weather data for detection", logger.String("detection_id", id), logger.String("date", date), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
 		dailyEvents = datastore.DailyEvents{Date: date}
 	}
-	return c.buildDailyWeatherResponse(dailyEvents)
+	return c.buildDailyWeatherResponse(&dailyEvents)
 }
 
 // fetchHourlyWeatherForDetection fetches hourly weather data with error handling
@@ -479,11 +490,12 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 	response := struct {
 		Daily  *DailyWeatherResponse `json:"daily"`
 		Hourly HourlyWeatherResponse `json:"hourly"`
+		Moon   *MoonResponse         `json:"moon,omitempty"`
 		Time   string                `json:"timestamp"`
 	}{
 		Daily:  nil, // Will be populated if available
 		Hourly: c.buildHourlyWeatherResponse(latestWeather),
-		Time:   time.Now().Format(time.RFC3339),
+		Time:   latestWeather.Time.Format(time.RFC3339),
 	}
 
 	// Try to get daily weather data for this date
@@ -498,8 +510,17 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		)
 	} else {
 		// Add daily data to response if available using the helper function
-		dailyResponse := c.buildDailyWeatherResponse(dailyEvents)
+		dailyResponse := c.buildDailyWeatherResponse(&dailyEvents)
 		response.Daily = &dailyResponse
+	}
+
+	// Compute moon phase from the weather snapshot timestamp for consistency
+	moonData := suncalc.GetMoonPhase(latestWeather.Time)
+	response.Moon = &MoonResponse{
+		Phase:        moonData.Phase,
+		PhaseName:    moonData.PhaseName,
+		Illumination: moonData.Illumination,
+		IconName:     moonData.IconName,
 	}
 
 	c.logInfoIfEnabled("Retrieved latest weather data",
@@ -536,6 +557,26 @@ func (c *Controller) calculateTimeOfDay(detectionTime time.Time, sunEvents *sunc
 	default:
 		return timePeriodNight
 	}
+}
+
+// GetMoonPhase handles GET /api/v2/weather/moon/:date
+// Returns the moon phase for a given date.
+func (c *Controller) GetMoonPhase(ctx echo.Context) error {
+	date := ctx.Param("date")
+
+	parsedDate, err := time.Parse(time.DateOnly, date)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid date format, expected YYYY-MM-DD", http.StatusBadRequest)
+	}
+
+	moonData := suncalc.GetMoonPhase(parsedDate)
+
+	return ctx.JSON(http.StatusOK, MoonResponse{
+		Phase:        moonData.Phase,
+		PhaseName:    moonData.PhaseName,
+		Illumination: moonData.Illumination,
+		IconName:     moonData.IconName,
+	})
 }
 
 // SunTimesResponse represents the API response for sun times

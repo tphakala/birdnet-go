@@ -125,6 +125,7 @@
     "vitest-browser-svelte": "^2.0.2"
   },
   "dependencies": {
+    "@bybas/weather-icons": "^2.0.0",
     "@lucide/svelte": "^0.577.0",
     "@types/d3": "^7.4.3",
     "@xterm/addon-fit": "^0.11.0",
