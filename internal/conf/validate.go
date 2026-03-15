@@ -5,6 +5,7 @@ package conf
 import (
 	"fmt"
 	"net"
+	"net/url"
 	"os/exec"
 	"regexp"
 	"slices"
@@ -788,6 +789,43 @@ func validateSecuritySettings(settings *Security) error {
 			Category(errors.CategoryValidation).
 			Context("validation_type", "security-session-duration").
 			Build()
+	}
+
+	// Validate OIDC provider configuration
+	oidcCount := 0
+	for i := range settings.OAuthProviders {
+		provider := &settings.OAuthProviders[i]
+		if provider.Provider != "oidc" {
+			continue
+		}
+		oidcCount++
+		if oidcCount > 1 {
+			return errors.Newf("only one OIDC provider (provider: \"oidc\") is allowed in security.oauthProviders, found duplicate entry").
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-oidc-duplicate").
+				Build()
+		}
+		if !provider.Enabled {
+			continue
+		}
+		if provider.IssuerURL == "" {
+			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is \"oidc\" and enabled").
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-oidc-issuer-missing").
+				Build()
+		}
+		parsed, err := url.Parse(provider.IssuerURL)
+		if err != nil || parsed.Host == "" {
+			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid URL", provider.IssuerURL).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-oidc-issuer-invalid").
+				Context("issuer_url", provider.IssuerURL).
+				Build()
+		}
+		if parsed.Scheme == "http" {
+			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS — acceptable for local development only",
+				logger.String("issuer_url", provider.IssuerURL))
+		}
 	}
 
 	return nil
