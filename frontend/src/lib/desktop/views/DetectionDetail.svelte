@@ -1336,8 +1336,6 @@
   .detail-audio-container :global(img) {
     width: 100%;
     height: auto;
-    max-height: 500px;
-    object-fit: contain;
     display: block;
   }
 </style>

@@ -1830,7 +1830,9 @@
         decoding="async"
         fetchpriority="low"
         class={responsive
-          ? 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
+          ? enableClipExtraction
+            ? 'w-full h-auto'
+            : 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
           : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
         class:select-none={enableClipExtraction}
@@ -2141,11 +2143,12 @@
 
   .freq-label {
     position: absolute;
-    left: 3px;
+    left: 4px;
     transform: translateY(50%);
-    font-size: 0.625rem;
+    font-size: 0.6875rem;
     font-weight: 600;
-    color: rgb(255 255 255 / 0.7);
+    color: rgb(255 255 255 / 0.75);
+    background: none;
     text-shadow:
       0 0 3px rgb(0 0 0 / 1),
       0 0 6px rgb(0 0 0 / 0.8),
