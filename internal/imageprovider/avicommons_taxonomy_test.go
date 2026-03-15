@@ -40,6 +40,11 @@ func TestAvicommonsTaxonomy2022Alignment(t *testing.T) {
 			commonName:     "Daurian Jackdaw",
 			description:    "Daurian Jackdaw was moved from Corvus to Coloeus in newer taxonomy",
 		},
+		{
+			scientificName: "Accipiter cooperii",
+			commonName:     "Cooper's Hawk",
+			description:    "Cooper's Hawk uses BirdNET name; synonym lookup handles Astur cooperii",
+		},
 	}
 
 	// Create the Avicommons provider using the embedded data

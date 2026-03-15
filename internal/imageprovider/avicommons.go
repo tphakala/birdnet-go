@@ -166,6 +166,19 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	entry, found := p.sciNameMap[normalizedSciName]
 
 	if !found {
+		// Try taxonomy synonym if primary name not found
+		if synonym, hasSynonym := GetTaxonomySynonym(scientificName); hasSynonym {
+			normalizedSynonym := strings.ToLower(synonym)
+			entry, found = p.sciNameMap[normalizedSynonym]
+			if found {
+				log.Debug("Image found using taxonomy synonym",
+					logger.String("original_name", scientificName),
+					logger.String("synonym", synonym))
+			}
+		}
+	}
+
+	if !found {
 		log.Debug("Image not found in Avicommons data",
 			logger.String("normalized_name", normalizedSciName))
 		return BirdImage{}, imageNotFoundFor(scientificName, aviCommonsProviderName, "avicommons_lookup")
