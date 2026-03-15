@@ -1282,6 +1282,13 @@
           showFormatMenu = false;
         }
       }) as EventListener);
+
+      // Prevent native browser selection during drag operations
+      addTrackedEventListener(document as unknown as HTMLElement, 'selectstart', ((e: Event) => {
+        if (isDragSelecting || draggingHandle) {
+          e.preventDefault();
+        }
+      }) as EventListener);
     }
 
     // Cleanup function (Svelte 5 pattern)
@@ -1458,6 +1465,8 @@
           : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
         class:opacity-0={spectrogramLoader.loading}
         class:cursor-crosshair={enableClipExtraction}
+        class:select-none={enableClipExtraction}
+        draggable={enableClipExtraction ? 'false' : undefined}
         style={responsive
           ? ''
           : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
