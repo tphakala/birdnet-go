@@ -340,7 +340,8 @@ func initializeProviders(settings *conf.Settings) {
 	baseURL := computeBaseURL(settings)
 
 	// Iterate over the OAuthProviders array
-	for _, providerConfig := range settings.Security.OAuthProviders {
+	for i := range settings.Security.OAuthProviders {
+		providerConfig := &settings.Security.OAuthProviders[i]
 		providerLog := secLog.With(logger.String("provider", providerConfig.Provider))
 
 		if !providerConfig.Enabled || providerConfig.ClientID == "" || providerConfig.ClientSecret == "" {
