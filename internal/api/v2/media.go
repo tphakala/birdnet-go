@@ -568,6 +568,10 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("end (%f) must be > start (%f)", req.End, req.Start),
 			"End time must be greater than start time", http.StatusBadRequest)
 	}
+	if req.End-req.Start > myaudio.MaxClipDurationSec {
+		return c.HandleError(ctx, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", req.End-req.Start, myaudio.MaxClipDurationSec),
+			"Clip duration too long", http.StatusBadRequest)
+	}
 	if !myaudio.IsSupportedClipFormat(req.Format) {
 		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
 			"Unsupported audio format", http.StatusBadRequest)

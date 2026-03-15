@@ -334,7 +334,8 @@
 
     // Ignore clicks on interactive elements (toolbar buttons, controls, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="menu"], [role="menuitem"]')) return;
+    if (target.closest('button, select, a, [role="button"], [role="menu"], [role="menuitem"]'))
+      return;
 
     dragOriginX = e.clientX;
 
@@ -348,12 +349,11 @@
 
     // Check if clicking inside existing selection — start scrubbing
     const clickTime = xToTime(e.clientX);
-    if (isInsideSelection(clickTime)) {
+    if (isInsideSelection(clickTime) && selectionStartSec !== null && selectionEndSec !== null) {
       isScrubbing = true;
       scrubStartTime = clickTime;
       scrubSelectionDuration =
-        Math.max(selectionStartSec!, selectionEndSec!) -
-        Math.min(selectionStartSec!, selectionEndSec!);
+        Math.max(selectionStartSec, selectionEndSec) - Math.min(selectionStartSec, selectionEndSec);
       e.preventDefault();
       return;
     }
@@ -365,30 +365,45 @@
     e.preventDefault();
   };
 
+  // Shared logic for updating handle position during drag (clamped to [0, duration])
+  const updateHandleDrag = (clientX: number) => {
+    const newTime = xToTime(clientX);
+    if (draggingHandle === 'start' && selectionEndSec !== null) {
+      selectionStartSec = Math.max(0, Math.min(newTime, selectionEndSec - MIN_SELECTION_DURATION));
+    } else if (draggingHandle === 'end' && selectionStartSec !== null) {
+      selectionEndSec = Math.min(
+        duration,
+        Math.max(newTime, selectionStartSec + MIN_SELECTION_DURATION)
+      );
+    }
+  };
+
+  // Shared logic for moving entire selection during scrub
+  const updateScrubPosition = (clientX: number) => {
+    if (selectionStartSec === null || selectionEndSec === null) return;
+    const currentTime = xToTime(clientX);
+    const delta = currentTime - scrubStartTime;
+    const lo = Math.min(selectionStartSec, selectionEndSec);
+    let newStart = lo + delta;
+    // Clamp to [0, duration - selectionWidth]
+    const clampedStart = Math.max(0, Math.min(newStart, duration - scrubSelectionDuration));
+    selectionStartSec = clampedStart;
+    selectionEndSec = clampedStart + scrubSelectionDuration;
+    // Only advance scrubStartTime by the amount actually moved (prevents jump on re-entry)
+    scrubStartTime += clampedStart - lo;
+  };
+
   const handleSelectionMouseMove = (e: MouseEvent) => {
     if (!enableClipExtraction) return;
 
     if (draggingHandle) {
-      const newTime = xToTime(e.clientX);
-      if (draggingHandle === 'start' && selectionEndSec !== null) {
-        selectionStartSec = Math.min(newTime, selectionEndSec - MIN_SELECTION_DURATION);
-      } else if (draggingHandle === 'end' && selectionStartSec !== null) {
-        selectionEndSec = Math.max(newTime, selectionStartSec + MIN_SELECTION_DURATION);
-      }
+      updateHandleDrag(e.clientX);
       e.preventDefault();
       return;
     }
 
     if (isScrubbing) {
-      const currentTime = xToTime(e.clientX);
-      const delta = currentTime - scrubStartTime;
-      const lo = Math.min(selectionStartSec!, selectionEndSec!);
-      let newStart = lo + delta;
-      // Clamp to [0, duration - selectionWidth]
-      newStart = Math.max(0, Math.min(newStart, duration - scrubSelectionDuration));
-      selectionStartSec = newStart;
-      selectionEndSec = newStart + scrubSelectionDuration;
-      scrubStartTime = currentTime;
+      updateScrubPosition(e.clientX);
       e.preventDefault();
       return;
     }
@@ -439,7 +454,8 @@
 
     // Ignore touches on interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="menu"], [role="menuitem"]')) return;
+    if (target.closest('button, select, a, [role="button"], [role="menu"], [role="menuitem"]'))
+      return;
 
     if (playerContainer) playerContainer.style.touchAction = 'none';
 
@@ -456,12 +472,11 @@
 
     // Check if touching inside existing selection — start scrubbing
     const clickTime = xToTime(touch.clientX);
-    if (isInsideSelection(clickTime)) {
+    if (isInsideSelection(clickTime) && selectionStartSec !== null && selectionEndSec !== null) {
       isScrubbing = true;
       scrubStartTime = clickTime;
       scrubSelectionDuration =
-        Math.max(selectionStartSec!, selectionEndSec!) -
-        Math.min(selectionStartSec!, selectionEndSec!);
+        Math.max(selectionStartSec, selectionEndSec) - Math.min(selectionStartSec, selectionEndSec);
       e.preventDefault();
       return;
     }
@@ -478,25 +493,13 @@
     const touch = e.touches[0];
 
     if (draggingHandle) {
-      const newTime = xToTime(touch.clientX);
-      if (draggingHandle === 'start' && selectionEndSec !== null) {
-        selectionStartSec = Math.min(newTime, selectionEndSec - MIN_SELECTION_DURATION);
-      } else if (draggingHandle === 'end' && selectionStartSec !== null) {
-        selectionEndSec = Math.max(newTime, selectionStartSec + MIN_SELECTION_DURATION);
-      }
+      updateHandleDrag(touch.clientX);
       e.preventDefault();
       return;
     }
 
     if (isScrubbing) {
-      const currentTime = xToTime(touch.clientX);
-      const delta = currentTime - scrubStartTime;
-      const lo = Math.min(selectionStartSec!, selectionEndSec!);
-      let newStart = lo + delta;
-      newStart = Math.max(0, Math.min(newStart, duration - scrubSelectionDuration));
-      selectionStartSec = newStart;
-      selectionEndSec = newStart + scrubSelectionDuration;
-      scrubStartTime = currentTime;
+      updateScrubPosition(touch.clientX);
       e.preventDefault();
       return;
     }
@@ -628,7 +631,8 @@
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      // Defer revocation to allow browser download dialog to complete
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (err) {
       extractionError =
         err instanceof Error
@@ -1616,7 +1620,7 @@
         style:left="{startPct}%"
         role="slider"
         tabindex="0"
-        aria-label="Selection start"
+        aria-label={t('components.audioPlayer.clipExtraction.selectionStart')}
         aria-valuemin={0}
         aria-valuemax={duration}
         aria-valuenow={Math.min(selectionStartSec, selectionEndSec)}
@@ -1655,7 +1659,7 @@
         style:left="{endPct}%"
         role="slider"
         tabindex="0"
-        aria-label="Selection end"
+        aria-label={t('components.audioPlayer.clipExtraction.selectionEnd')}
         aria-valuemin={0}
         aria-valuemax={duration}
         aria-valuenow={Math.max(selectionStartSec, selectionEndSec)}
@@ -1768,14 +1772,18 @@
               class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[8.5rem] z-30"
               role="menu"
             >
-              {#each [{ value: 'wav', label: 'WAV', desc: 'Lossless' }, { value: 'flac', label: 'FLAC', desc: 'Lossless' }, { value: 'alac', label: 'ALAC', desc: 'Lossless' }, { value: 'mp3', label: 'MP3', desc: 'Lossy' }, { value: 'opus', label: 'Opus', desc: 'Lossy' }, { value: 'aac', label: 'AAC', desc: 'Lossy' }] as fmt (fmt.value)}
+              {#each [{ value: 'wav', label: 'WAV', lossless: true }, { value: 'flac', label: 'FLAC', lossless: true }, { value: 'alac', label: 'ALAC', lossless: true }, { value: 'mp3', label: 'MP3', lossless: false }, { value: 'opus', label: 'Opus', lossless: false }, { value: 'aac', label: 'AAC', lossless: false }] as fmt (fmt.value)}
                 <button
                   class="w-full px-3.5 py-2 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
                   onclick={() => selectFormatAndExtract(fmt.value)}
                   role="menuitem"
                 >
                   <span class="font-medium">{fmt.label}</span>
-                  <span class="text-[var(--color-base-content)]/50 text-xs">{fmt.desc}</span>
+                  <span class="text-[var(--color-base-content)]/50 text-xs"
+                    >{fmt.lossless
+                      ? t('components.audioPlayer.clipExtraction.lossless')
+                      : t('components.audioPlayer.clipExtraction.lossy')}</span
+                  >
                 </button>
               {/each}
             </div>

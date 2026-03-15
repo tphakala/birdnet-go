@@ -15,6 +15,10 @@ import (
 // clipExtractionTimeout is the maximum time allowed for a clip extraction.
 const clipExtractionTimeout = 30 * time.Second
 
+// MaxClipDurationSec is the maximum allowed clip duration in seconds.
+// Prevents memory exhaustion from very long extraction requests.
+const MaxClipDurationSec = 300 // 5 minutes
+
 // clipDefaultBitrates defines the default bitrates for lossy clip extraction formats.
 // These are independent of the audio export bitrate setting — clips are short previews
 // so lower bitrates keep file sizes small while preserving sufficient quality.
@@ -48,6 +52,9 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 	}
 	if end <= start {
 		return nil, fmt.Errorf("end time (%f) must be greater than start time (%f)", end, start)
+	}
+	if end-start > MaxClipDurationSec {
+		return nil, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", end-start, MaxClipDurationSec)
 	}
 	if !supportedClipFormats[format] {
 		return nil, fmt.Errorf("unsupported clip format: %q", format)
