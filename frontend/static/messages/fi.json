@@ -3902,7 +3902,8 @@
       "highPassFilter": "Ylipäästösuodattimen hallinta: {freq} Hz",
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
       "playbackSpeed": "Toistonopeus",
-      "speed": "Nopeus"
+      "speed": "Nopeus",
+      "loop": "Toggle loop"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",

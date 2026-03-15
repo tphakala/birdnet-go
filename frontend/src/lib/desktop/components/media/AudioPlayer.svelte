@@ -1855,7 +1855,7 @@
       <div
         class="loading loading-spinner loading-sm text-white"
         role="status"
-        aria-label="Updating spectrogram"
+        aria-label={t('components.audio.spectrogramGeneratingAria')}
       ></div>
     </div>
   {/if}

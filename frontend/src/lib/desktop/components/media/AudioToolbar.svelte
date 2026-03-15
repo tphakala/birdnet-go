@@ -93,13 +93,18 @@
   let showDenoiseMenu = $state(false);
 
   const denoiseOptions = [
-    { id: '', label: 'Off' },
-    { id: 'light', label: 'Light' },
-    { id: 'medium', label: 'Medium' },
-    { id: 'heavy', label: 'Heavy' },
+    { id: '', labelKey: 'components.audioPlayer.processing.denoiseOff' },
+    { id: 'light', labelKey: 'components.audioPlayer.processing.denoiseLight' },
+    { id: 'medium', labelKey: 'components.audioPlayer.processing.denoiseMedium' },
+    { id: 'heavy', labelKey: 'components.audioPlayer.processing.denoiseHeavy' },
   ];
 
-  let denoiseLabel = $derived(denoiseOptions.find(o => o.id === denoise)?.label ?? 'Off');
+  let denoiseLabel = $derived(
+    t(
+      denoiseOptions.find(o => o.id === denoise)?.labelKey ??
+        'components.audioPlayer.processing.denoiseOff'
+    )
+  );
 
   // Close export menu when selection is cleared
   $effect(() => {
@@ -189,7 +194,12 @@
     >
       <SkipBack size={14} />
     </button>
-    <button class="toolbar-btn" class:active={loop} onclick={onLoopToggle} aria-label="Toggle loop">
+    <button
+      class="toolbar-btn"
+      class:active={loop}
+      onclick={onLoopToggle}
+      aria-label={t('media.audio.loop')}
+    >
       <Repeat size={14} />
     </button>
     <span class="playback-time"
@@ -239,7 +249,7 @@
 
   <!-- Processing controls -->
   <div class="toolbar-group processing-controls">
-    <label class="toolbar-control" title="Adjust audio gain (-12 to +24 dB)">
+    <label class="toolbar-control" title={t('components.audioPlayer.processing.gain')}>
       <Volume2 size={14} />
       <input
         type="range"
@@ -254,7 +264,7 @@
       <span class="control-value">{gainDb > 0 ? '+' : ''}{gainDb}dB</span>
     </label>
 
-    <div class="denoise-dropdown" title="Noise reduction strength">
+    <div class="denoise-dropdown" title={t('components.audioPlayer.processing.denoise')}>
       <button
         class="toolbar-btn"
         class:active={denoise !== ''}
@@ -279,7 +289,7 @@
                 showDenoiseMenu = false;
               }}
             >
-              {opt.label}
+              {t(opt.labelKey)}
             </button>
           {/each}
         </div>
@@ -292,7 +302,7 @@
       onclick={onNormalizeToggle}
       disabled={isProcessing}
       aria-label={t('components.audioPlayer.processing.normalize')}
-      title="Normalize audio loudness (EBU R128)"
+      title={t('components.audioPlayer.processing.normalizeTooltip')}
     >
       {#if isProcessing && normalize}
         <Loader2 size={14} class="animate-spin" />
@@ -311,7 +321,7 @@
         disabled={isExtracting}
         onclick={() => (showExportMenu = !showExportMenu)}
         aria-label={t('components.audioPlayer.processing.export')}
-        title={extractionError ?? (hasSelection ? 'Export selected range' : 'Download full audio')}
+        title={extractionError ?? ''}
         aria-expanded={showExportMenu}
         aria-haspopup="true"
       >
@@ -328,11 +338,7 @@
       {/if}
       {#if showExportMenu}
         <div class="export-menu">
-          {#if !hasSelection && denoise === '' && !normalize}
-            <button class="export-option" onclick={() => handleExport('original')}>
-              Original
-            </button>
-          {/if}
+          <button class="export-option" onclick={() => handleExport('original')}> Original </button>
           {#each exportFormats as fmt (fmt.id)}
             <button class="export-option" onclick={() => handleExport(fmt.id)}>
               {fmt.label}

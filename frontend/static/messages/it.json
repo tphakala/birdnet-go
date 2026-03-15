@@ -3699,7 +3699,8 @@
       "highPassFilter": "Controllo filtro passa-alto: {freq} Hz",
       "seekProgress": "Avanzamento audio: {current} / {total} secondi",
       "playbackSpeed": "Velocità riproduzione",
-      "speed": "Velocità"
+      "speed": "Velocità",
+      "loop": "Toggle loop"
     },
     "spectrogram": {
       "notGenerated": "Spettrogramma non ancora generato",
