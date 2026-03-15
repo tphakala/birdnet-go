@@ -15,6 +15,9 @@ on:
       - 'go.sum'
       - '.golangci.yml'
 
+permissions:
+  contents: read
+
 jobs:
   golangci:
     uses: ./.github/workflows/golangci-lint.yml
