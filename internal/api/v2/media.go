@@ -629,11 +629,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	mimeType := clipMIMEType(req.Format)
 	ctx.Response().Header().Set("Content-Type", mimeType)
 
-	ext := req.Format
-	if ext == "alac" {
-		ext = "m4a"
-	}
-	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, ext)
+	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, clipFileExtension(req.Format))
 	ctx.Response().Header().Set("Content-Disposition",
 		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
 
@@ -655,6 +651,18 @@ func clipMIMEType(format string) string {
 		return MimeTypeOGG
 	default:
 		return "application/octet-stream"
+	}
+}
+
+// clipFileExtension returns the file extension for a clip extraction format.
+func clipFileExtension(format string) string {
+	switch format {
+	case myaudio.FormatAAC, myaudio.FormatALAC:
+		return "m4a"
+	case myaudio.FormatOpus:
+		return "ogg"
+	default:
+		return format // wav, flac, mp3 use format name as extension
 	}
 }
 

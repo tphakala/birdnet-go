@@ -440,11 +440,13 @@
   };
 
   const clearSelection = () => {
+    stopSelection(); // Cancel any ongoing selection preview playback
     selectionStartSec = null;
     selectionEndSec = null;
     isDragSelecting = false;
     draggingHandle = null;
     isScrubbing = false;
+    showFormatMenu = false;
     extractionError = null;
   };
 
