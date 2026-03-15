@@ -24,6 +24,10 @@ on:
       # Only run on push to main branch
       - main
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   # Lint is handled by golangci-test.yml workflow - no need to duplicate here
   build-and-push-docker-image:
