@@ -1574,7 +1574,7 @@
       <!-- Selection toolbar -->
       {@const toolbarLeftPct = (startPct + endPct) / 2}
       <div
-        class="absolute z-20 flex items-center gap-1 px-2 py-1 rounded-full bg-[var(--color-base-300)]/90 backdrop-blur-sm shadow-md text-xs"
+        class="absolute z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--color-base-300)]/90 backdrop-blur-sm shadow-md text-sm"
         style:top="4px"
         style:left="{toolbarLeftPct}%"
         style:transform="translateX(-50%)"
@@ -1588,46 +1588,46 @@
         </span>
 
         <!-- Divider -->
-        <div class="w-px h-4 bg-[var(--color-base-content)]/20"></div>
+        <div class="w-px h-5 bg-[var(--color-base-content)]/20"></div>
 
         <!-- Review (jump to start) button -->
         <button
-          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+          class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
           onclick={reviewSelection}
           aria-label={t('components.audioPlayer.clipExtraction.reviewSelection')}
           title={t('components.audioPlayer.clipExtraction.reviewSelection')}
         >
-          <SkipBack class="size-3.5" />
+          <SkipBack class="size-4" />
         </button>
 
         <!-- Play/Pause selection button -->
         {#if isPlayingSelection}
           <button
-            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
             onclick={stopSelection}
             aria-label={t('components.audioPlayer.clipExtraction.pauseSelection')}
             title={t('components.audioPlayer.clipExtraction.pauseSelection')}
           >
-            <Pause class="size-3.5" />
+            <Pause class="size-4" />
           </button>
         {:else}
           <button
-            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
             onclick={playSelection}
             aria-label={t('components.audioPlayer.clipExtraction.playSelection')}
             title={t('components.audioPlayer.clipExtraction.playSelection')}
           >
-            <Play class="size-3.5" />
+            <Play class="size-4" />
           </button>
         {/if}
 
         <!-- Divider -->
-        <div class="w-px h-4 bg-[var(--color-base-content)]/20"></div>
+        <div class="w-px h-5 bg-[var(--color-base-content)]/20"></div>
 
         <!-- Download with format picker -->
         <div class="relative" bind:this={formatMenuRef}>
           <button
-            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] flex items-center gap-0.5"
+            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] flex items-center gap-0.5"
             onclick={toggleFormatMenu}
             disabled={isExtracting}
             aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
@@ -1637,28 +1637,28 @@
           >
             {#if isExtracting}
               <div
-                class="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"
+                class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"
               ></div>
             {:else}
-              <Download class="size-3.5" />
-              <ChevronDown class="size-2.5" />
+              <Download class="size-4" />
+              <ChevronDown class="size-3" />
             {/if}
           </button>
 
           <!-- Format dropdown menu -->
           {#if showFormatMenu}
             <div
-              class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[7rem] z-30"
+              class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[8.5rem] z-30"
               role="menu"
             >
               {#each [{ value: 'wav', label: 'WAV', desc: 'Lossless' }, { value: 'flac', label: 'FLAC', desc: 'Lossless' }, { value: 'alac', label: 'ALAC', desc: 'Lossless' }, { value: 'mp3', label: 'MP3', desc: 'Lossy' }, { value: 'opus', label: 'Opus', desc: 'Lossy' }, { value: 'aac', label: 'AAC', desc: 'Lossy' }] as fmt (fmt.value)}
                 <button
-                  class="w-full px-3 py-1.5 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
+                  class="w-full px-3.5 py-2 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
                   onclick={() => selectFormatAndExtract(fmt.value)}
                   role="menuitem"
                 >
                   <span class="font-medium">{fmt.label}</span>
-                  <span class="text-[var(--color-base-content)]/50 text-[10px]">{fmt.desc}</span>
+                  <span class="text-[var(--color-base-content)]/50 text-xs">{fmt.desc}</span>
                 </button>
               {/each}
             </div>
@@ -1667,12 +1667,12 @@
 
         <!-- Clear selection button -->
         <button
-          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+          class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
           onclick={clearSelection}
           aria-label={t('components.audioPlayer.clipExtraction.clearSelection')}
           title={t('components.audioPlayer.clipExtraction.clearSelection')}
         >
-          <XCircle class="size-3.5" />
+          <XCircle class="size-4" />
         </button>
 
         <!-- Extraction error -->
