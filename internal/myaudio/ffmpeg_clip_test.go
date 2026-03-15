@@ -36,46 +36,46 @@ func TestExtractAudioClip(t *testing.T) {
 
 	t.Run("extract WAV segment", func(t *testing.T) {
 		t.Parallel()
-		buf, err := ExtractAudioClip(t.Context(), testFile, 0.5, 2.0, "wav", settings)
+		buf, err := ExtractAudioClip(t.Context(), testFile, 0.5, 2.0, "wav", settings, nil)
 		require.NoError(t, err)
 		assert.Positive(t, buf.Len(), "output buffer should not be empty")
 	})
 
 	t.Run("extract MP3 segment", func(t *testing.T) {
 		t.Parallel()
-		buf, err := ExtractAudioClip(t.Context(), testFile, 0.0, 1.5, FormatMP3, settings)
+		buf, err := ExtractAudioClip(t.Context(), testFile, 0.0, 1.5, FormatMP3, settings, nil)
 		require.NoError(t, err)
 		assert.Positive(t, buf.Len(), "output buffer should not be empty")
 	})
 
 	t.Run("extract FLAC segment", func(t *testing.T) {
 		t.Parallel()
-		buf, err := ExtractAudioClip(t.Context(), testFile, 1.0, 2.5, FormatFLAC, settings)
+		buf, err := ExtractAudioClip(t.Context(), testFile, 1.0, 2.5, FormatFLAC, settings, nil)
 		require.NoError(t, err)
 		assert.Positive(t, buf.Len(), "output buffer should not be empty")
 	})
 
 	t.Run("invalid start > end", func(t *testing.T) {
 		t.Parallel()
-		_, err := ExtractAudioClip(t.Context(), testFile, 2.0, 1.0, "wav", settings)
+		_, err := ExtractAudioClip(t.Context(), testFile, 2.0, 1.0, "wav", settings, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("negative start", func(t *testing.T) {
 		t.Parallel()
-		_, err := ExtractAudioClip(t.Context(), testFile, -1.0, 1.0, "wav", settings)
+		_, err := ExtractAudioClip(t.Context(), testFile, -1.0, 1.0, "wav", settings, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("nonexistent input file", func(t *testing.T) {
 		t.Parallel()
-		_, err := ExtractAudioClip(t.Context(), "/nonexistent/file.wav", 0.0, 1.0, "wav", settings)
+		_, err := ExtractAudioClip(t.Context(), "/nonexistent/file.wav", 0.0, 1.0, "wav", settings, nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("unsupported format", func(t *testing.T) {
 		t.Parallel()
-		_, err := ExtractAudioClip(t.Context(), testFile, 0.0, 1.0, "ogg_vorbis_invalid", settings)
+		_, err := ExtractAudioClip(t.Context(), testFile, 0.0, 1.0, "ogg_vorbis_invalid", settings, nil)
 		assert.Error(t, err)
 	})
 
@@ -83,7 +83,7 @@ func TestExtractAudioClip(t *testing.T) {
 		t.Parallel()
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
-		_, err := ExtractAudioClip(ctx, testFile, 0.0, 1.0, "wav", settings)
+		_, err := ExtractAudioClip(ctx, testFile, 0.0, 1.0, "wav", settings, nil)
 		assert.Error(t, err)
 	})
 }
@@ -133,6 +133,58 @@ func writeLE32(buf []byte, offset int, val uint32) {
 	buf[offset+1] = byte(val >> 8)
 	buf[offset+2] = byte(val >> 16)
 	buf[offset+3] = byte(val >> 24)
+}
+
+func TestExtractAudioClipWithFilters(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpeg()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+
+	// Silence file for non-normalize tests
+	testFile := filepath.Join(testDir, "test.wav")
+	createTestWAVFile48k(t, testFile, 3)
+
+	// Tone file for normalize tests (loudnorm requires non-silent audio)
+	toneFile := filepath.Join(testDir, "tone.wav")
+	createTestWAVFileWithTone(t, toneFile, 3, 440.0)
+
+	settings := &conf.AudioSettings{FfmpegPath: ffmpegPath}
+
+	t.Run("clip with gain filter", func(t *testing.T) {
+		t.Parallel()
+		filters := AudioFilters{GainDB: 6.0}
+		buf, err := ExtractAudioClip(t.Context(), testFile, 0.5, 2.0, "wav", settings, &filters)
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("clip with denoise filter", func(t *testing.T) {
+		t.Parallel()
+		filters := AudioFilters{Denoise: "medium"}
+		buf, err := ExtractAudioClip(t.Context(), testFile, 0.5, 2.0, FormatMP3, settings, &filters)
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("clip with normalize", func(t *testing.T) {
+		t.Parallel()
+		filters := AudioFilters{Normalize: true}
+		buf, err := ExtractAudioClip(t.Context(), toneFile, 0.5, 2.0, FormatFLAC, settings, &filters)
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("clip with nil filters is same as no filters", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ExtractAudioClip(t.Context(), testFile, 0.5, 2.0, "wav", settings, nil)
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
 }
 
 // findFFmpeg locates the FFmpeg binary for testing.

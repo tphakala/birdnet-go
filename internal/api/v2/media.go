@@ -617,7 +617,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	}
 
 	// Extract clip
-	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio)
+	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio, nil)
 	if err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
