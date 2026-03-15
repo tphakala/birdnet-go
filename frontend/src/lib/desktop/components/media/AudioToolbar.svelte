@@ -96,8 +96,9 @@
   }
 
   function handleClickOutside(event: MouseEvent) {
-    const target = event.target as HTMLElement;
-    if (showExportMenu && !target.closest('.export-dropdown')) {
+    if (!showExportMenu) return;
+    const target = event.target as Node | null;
+    if (target && 'closest' in target && !(target as HTMLElement).closest('.export-dropdown')) {
       showExportMenu = false;
     }
   }

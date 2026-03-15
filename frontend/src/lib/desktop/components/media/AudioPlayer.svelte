@@ -302,6 +302,7 @@
   const TOUCH_HANDLE_THRESHOLD = 24; // Pixels — larger snap zone for touch
   const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
   const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
+  const PROCESS_DEBOUNCE_MS = 300; // Debounce delay for server-side processing requests
 
   // Check if a pointer X position is near a selection handle, returning which handle
   const detectHandleGrab = (clientX: number, thresholdPx: number): 'start' | 'end' | null => {
@@ -659,7 +660,7 @@
     if (processDebounceTimer) clearTimeout(processDebounceTimer);
     processDebounceTimer = setTimeout(() => {
       processAudio();
-    }, 300);
+    }, PROCESS_DEBOUNCE_MS);
   }
 
   async function processAudio() {
