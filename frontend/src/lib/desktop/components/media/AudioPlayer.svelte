@@ -1412,6 +1412,9 @@
 
       previousSpectrogramBaseUrl = spectrogramBaseUrl;
 
+      // Mark as loading so the img element stays hidden until the image is ready
+      spectrogramLoader.setLoading(true);
+
       // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
       spectrogramCacheKey = 0;
@@ -1798,13 +1801,33 @@
       </div>
     {/if}
 
+    <!-- Always render the img so the browser cache works across state transitions -->
+    <img
+      bind:this={spectrogramImage}
+      id={`spectrogram-${detectionId}`}
+      src={spectrogramUrl}
+      alt="Audio spectrogram"
+      decoding="async"
+      class={responsive
+        ? enableClipExtraction
+          ? 'w-full h-auto'
+          : 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
+        : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
+      class:invisible={spectrogramLoader.loading || spectrogramLoader.error}
+      class:select-none={enableClipExtraction}
+      draggable={enableClipExtraction ? 'false' : undefined}
+      style={responsive
+        ? ''
+        : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+      width={responsive ? 400 : undefined}
+      onload={handleSpectrogramLoad}
+      onerror={handleSpectrogramError}
+    />
+
     {#if spectrogramLoader.error}
-      <!-- Error placeholder for failed spectrogram -->
+      <!-- Error overlay for failed spectrogram -->
       <div
-        class="flex items-center justify-center bg-[var(--color-base-200)] rounded-md border border-[var(--color-base-300)]"
-        style={responsive
-          ? 'height: 80px;'
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
+        class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)] rounded-md border border-[var(--color-base-300)]"
       >
         <div class="text-center p-2">
           <XCircle
@@ -1817,7 +1840,7 @@
         </div>
       </div>
     {:else if spectrogramStatus?.status === 'queued' || spectrogramStatus?.status === 'generating'}
-      <!-- Show generation status -->
+      <!-- Generation status overlay -->
       <div
         class="absolute inset-0 flex flex-col items-center justify-center bg-[var(--color-base-200)]/90 rounded-md border border-[var(--color-base-300)] p-2"
       >
@@ -1847,30 +1870,6 @@
           </div>
         {/if}
       </div>
-    {:else}
-      <img
-        bind:this={spectrogramImage}
-        id={`spectrogram-${detectionId}`}
-        src={spectrogramUrl}
-        alt="Audio spectrogram"
-        loading="lazy"
-        decoding="async"
-        fetchpriority="low"
-        class={responsive
-          ? enableClipExtraction
-            ? 'w-full h-auto'
-            : 'w-full h-auto object-contain rounded-md border border-[var(--color-base-300)]'
-          : 'w-full h-full object-fill rounded-md border border-[var(--color-base-300)]'}
-        class:opacity-0={spectrogramLoader.loading}
-        class:select-none={enableClipExtraction}
-        draggable={enableClipExtraction ? 'false' : undefined}
-        style={responsive
-          ? ''
-          : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
-        width={responsive ? 400 : undefined}
-        onload={handleSpectrogramLoad}
-        onerror={handleSpectrogramError}
-      />
     {/if}
   {/if}
 
