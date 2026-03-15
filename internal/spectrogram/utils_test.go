@@ -160,50 +160,76 @@ func TestBuildSpectrogramPath(t *testing.T) {
 	tests := []struct {
 		name     string
 		clipPath string
+		style    string
 		want     string
 		wantErr  bool
 	}{
 		{
-			name:     "wav file",
+			name:     "wav file with default style",
 			clipPath: "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav",
+			style:    "default",
 			want:     "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.png",
-			wantErr:  false,
+		},
+		{
+			name:     "wav file with empty style",
+			clipPath: "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav",
+			style:    "",
+			want:     "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.png",
+		},
+		{
+			name:     "wav file with scientific_dark style",
+			clipPath: "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav",
+			style:    "scientific_dark",
+			want:     "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00-scientific_dark.png",
+		},
+		{
+			name:     "wav file with high_contrast_dark style",
+			clipPath: "clips/test.wav",
+			style:    "high_contrast_dark",
+			want:     "clips/test-high_contrast_dark.png",
+		},
+		{
+			name:     "wav file with scientific style",
+			clipPath: "clips/test.wav",
+			style:    "scientific",
+			want:     "clips/test-scientific.png",
 		},
 		{
 			name:     "flac file",
 			clipPath: "clips/test.flac",
+			style:    "default",
 			want:     "clips/test.png",
-			wantErr:  false,
 		},
 		{
 			name:     "mp3 file",
 			clipPath: "/absolute/path/to/audio.mp3",
+			style:    "",
 			want:     "/absolute/path/to/audio.png",
-			wantErr:  false,
 		},
 		{
 			name:     "no extension",
 			clipPath: "clips/noextension",
+			style:    "default",
 			want:     "",
 			wantErr:  true,
 		},
 		{
 			name:     "multiple dots",
 			clipPath: "clips/file.with.dots.wav",
+			style:    "default",
 			want:     "clips/file.with.dots.png",
-			wantErr:  false,
 		},
 		{
 			name:     "hidden file",
 			clipPath: "clips/.hidden.wav",
+			style:    "default",
 			want:     "clips/.hidden.png",
-			wantErr:  false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := BuildSpectrogramPath(tt.clipPath)
+			got, err := BuildSpectrogramPath(tt.clipPath, tt.style)
 			if tt.wantErr {
 				require.Error(t, err)
 			} else {

@@ -183,7 +183,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	// - If created by on-demand generation: processJob() will skip it (redundant work avoided)
 	// - If created by another pre-render worker: processJob() will skip it (idempotent)
 	// - Impact: Job logged as "skipped" instead of caught here (no functional issue)
-	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath, pr.settings.Realtime.Dashboard.Spectrogram.Style)
 	if err != nil {
 		pr.logger.Error("Invalid clip path, rejecting job",
 			logger.Any("note_id", job.NoteID),
@@ -384,7 +384,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		logger.Int("pcm_bytes", len(job.PCMData)))
 
 	// Build spectrogram path from clip path
-	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath)
+	spectrogramPath, err := BuildSpectrogramPath(job.ClipPath, pr.settings.Realtime.Dashboard.Spectrogram.Style)
 	if err != nil {
 		pr.logger.Error("Failed to build spectrogram path",
 			logger.Int("worker_id", workerID),

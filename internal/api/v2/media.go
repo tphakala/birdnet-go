@@ -793,7 +793,7 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 
 	if err == nil {
 		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, c.Settings.Realtime.Dashboard.Spectrogram.Style)
 
 		// Check if spectrogram already exists
 		if _, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil {
@@ -1142,7 +1142,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Build spectrogram path and key
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, c.Settings.Realtime.Dashboard.Spectrogram.Style)
 	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
 	// Check queue status first (more volatile state)
@@ -1256,7 +1256,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Build spectrogram paths and key (path is validated at this point)
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, c.Settings.Realtime.Dashboard.Spectrogram.Style)
 	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
 	// Check if file already exists on disk
@@ -1464,18 +1464,26 @@ func getSpectrogramLogger() logger.Logger {
 
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
 // It returns the base filename, audio directory, spectrogram filename, and full relative spectrogram path.
-func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
+// The style parameter is included in the filename when it differs from "default" to ensure
+// spectrograms generated with different styles are cached separately (fixes #1937).
+func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style string) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
 	// Get the base filename and directory relative to the secure root
 	relBaseFilename = strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir = filepath.Dir(relAudioPath)
 
+	// Build style suffix for non-default styles
+	styleSuffix := ""
+	if style != "" && style != conf.SpectrogramStyleDefault {
+		styleSuffix = "-" + style
+	}
+
 	// Generate spectrogram filename compatible with old HTMX API format
 	if raw {
-		// Raw spectrograms use format: filename_1026px.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
+		// Raw spectrograms use format: filename_1026px.png or filename_1026px-scientific_dark.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx%s.png", relBaseFilename, width, styleSuffix)
 	} else {
-		// Spectrograms with legends use suffix: filename_1026px-legend.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
+		// Spectrograms with legends use suffix: filename_1026px-legend.png or filename_1026px-legend-scientific_dark.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend%s.png", relBaseFilename, width, styleSuffix)
 	}
 
 	// Since we're constructing the spectrogram path from an already-validated audio path
@@ -2142,7 +2150,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	}
 
 	// Step 2: Calculate spectrogram paths early (needed for fast path check)
-	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw)
+	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, c.Settings.Realtime.Dashboard.Spectrogram.Style)
 
 	getSpectrogramLogger().Debug("Spectrogram path constructed",
 		logger.String("audio_path", audioPath),

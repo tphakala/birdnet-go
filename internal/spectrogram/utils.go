@@ -98,13 +98,14 @@ func GetValidSizes() []string {
 }
 
 // BuildSpectrogramPath constructs the spectrogram file path from the audio clip path.
-// It replaces the audio file extension with .png.
+// It replaces the audio file extension with .png, including a style suffix when the
+// style differs from "default" to ensure different styles are cached separately (fixes #1937).
 //
-// Example:
+// Examples:
 //
-//	"clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.wav"
-//	-> "clips/2024-01-15/Bird_species/Bird_species.2024-01-15T10:00:00.png"
-func BuildSpectrogramPath(clipPath string) (string, error) {
+//	"file.wav" with style="" or style="default" -> "file.png"
+//	"file.wav" with style="scientific_dark"     -> "file-scientific_dark.png"
+func BuildSpectrogramPath(clipPath, style string) (string, error) {
 	ext := filepath.Ext(clipPath)
 	if ext == "" {
 		return "", errors.Newf("clip path has no extension").
@@ -115,7 +116,15 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 			Build()
 	}
 
-	spectrogramPath := strings.TrimSuffix(clipPath, ext) + ".png"
+	baseName := strings.TrimSuffix(clipPath, ext)
+
+	// Include style in filename for non-default styles
+	styleSuffix := ""
+	if style != "" && style != "default" {
+		styleSuffix = "-" + style
+	}
+
+	spectrogramPath := baseName + styleSuffix + ".png"
 	return spectrogramPath, nil
 }
 
