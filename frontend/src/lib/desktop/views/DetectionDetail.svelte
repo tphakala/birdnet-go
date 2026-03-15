@@ -748,7 +748,14 @@
     <!-- Media Section -->
     <section class="surface-card" aria-labelledby="media-heading">
       <div class="p-5 md:p-6">
-        <h2 id="media-heading" class="section-heading mb-1">{t('detections.media.title')}</h2>
+        <h2
+          id="media-heading"
+          class="section-heading"
+          class:mb-1={clipExtractionEnabled}
+          class:mb-4={!clipExtractionEnabled}
+        >
+          {t('detections.media.title')}
+        </h2>
         {#if clipExtractionEnabled}
           <p class="text-sm text-[var(--color-base-content)]/60 mb-4">
             {t('detections.media.clipHint')}
