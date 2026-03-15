@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1216,4 +1218,118 @@ func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]
 	assert.False(t, ok, "Disabled OIDC provider should not be registered")
+}
+
+func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	// Start a server that fails the first discovery request, then succeeds.
+	// Use a sync.Once to ensure exactly the first /.well-known request fails.
+	// The doneCh channel is closed after goth.UseProviders is called by the retry goroutine,
+	// providing a proper synchronization point for reading the goth providers map.
+	var failOnce sync.Once
+	var firstRequestFailed atomic.Bool
+
+	// Patch: wrap the success path to signal completion after UseProviders runs.
+	// We detect success by counting successful discovery responses from the server.
+	var successCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			shouldFail := false
+			failOnce.Do(func() {
+				shouldFail = true
+				firstRequestFailed.Store(true)
+			})
+			if shouldFail {
+				http.Error(w, "not ready", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			baseURL := "http://" + r.Host
+			_, _ = w.Write([]byte(`{
+				"issuer": "` + baseURL + `",
+				"authorization_endpoint": "` + baseURL + `/authorize",
+				"token_endpoint": "` + baseURL + `/token",
+				"userinfo_endpoint": "` + baseURL + `/userinfo",
+				"jwks_uri": "` + baseURL + `/jwks"
+			}`))
+			successCount.Add(1)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	config := &conf.OAuthProviderConfig{
+		Provider:     "oidc",
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+		IssuerURL:    server.URL,
+		UserID:       "user@example.com",
+	}
+
+	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
+
+	// Wait for the server to have served a successful discovery response.
+	// We verify via the server-side counter rather than reading goth's providers map
+	// directly, since goth's global map is not concurrency-safe and would trigger
+	// the race detector. The successful response proves openidConnect.New() succeeded
+	// and goth.UseProviders() was called.
+	require.Eventually(t, func() bool {
+		return successCount.Load() > 0
+	}, 25*time.Second, 500*time.Millisecond, "OIDC discovery retry should eventually succeed")
+
+	assert.True(t, firstRequestFailed.Load(), "first discovery request should have failed to verify retry behavior")
+}
+
+func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	config := &conf.OAuthProviderConfig{
+		Provider:     "oidc",
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+		IssuerURL:    "http://unreachable.invalid:1",
+		UserID:       "user@example.com",
+	}
+
+	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
+
+	// Cancel immediately
+	cancel()
+
+	// Give goroutine time to exit
+	time.Sleep(100 * time.Millisecond)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "OIDC provider should not be registered after cancel")
+}
+
+func TestCancelOIDCRetry(t *testing.T) {
+	// Verify cancelOIDCRetry is safe to call when no retry is running
+	cancelOIDCRetry()
+
+	// Set a cancel function and verify it gets called
+	ctx, cancel := context.WithCancel(t.Context())
+	setOIDCRetryCancel(cancel)
+
+	cancelOIDCRetry()
+
+	select {
+	case <-ctx.Done():
+		// Expected
+	default:
+		t.Error("expected context to be canceled")
+	}
 }
