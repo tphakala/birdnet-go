@@ -1858,6 +1858,16 @@
     </div>
   {/if}
 
+  <!-- Frequency scale overlay (linear 0-12kHz, sox resamples to 24kHz) -->
+  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
+    {#each [12, 10, 8, 6, 5, 4, 3, 2, 1] as freq}
+      <span class="freq-label" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"
+        >{freq >= 1 ? `${freq}k` : `${freq * 1000}`}</span
+      >
+      <div class="freq-line" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"></div>
+    {/each}
+  {/if}
+
   <!-- Audio element is created dynamically in onMount for iOS Safari compatibility -->
 
   <!-- Audio settings button (top-right) -->
@@ -2127,5 +2137,36 @@
     font-weight: 500;
     z-index: 5;
     opacity: 0.85;
+  }
+
+  .freq-label {
+    position: absolute;
+    left: 3px;
+    transform: translateY(50%);
+    font-size: 0.625rem;
+    font-weight: 600;
+    color: rgb(255 255 255 / 0.7);
+    text-shadow:
+      0 0 3px rgb(0 0 0 / 1),
+      0 0 6px rgb(0 0 0 / 0.8),
+      1px 1px 2px rgb(0 0 0 / 0.9);
+    line-height: 1;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .freq-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: rgb(255 255 255 / 0);
+    pointer-events: none;
+    z-index: 3;
+    transition: background 0.2s ease;
+  }
+
+  :global(.group:hover) .freq-line {
+    background: rgb(255 255 255 / 0.12);
   }
 </style>
