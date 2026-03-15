@@ -45,15 +45,13 @@ type AuthRequest struct {
 
 // AuthResponse represents the login response structure
 type AuthResponse struct {
-	Success     bool      `json:"success"`
-	Message     string    `json:"message"`
-	Username    string    `json:"username,omitempty"`
-	Timestamp   time.Time `json:"timestamp"`
-	RedirectURL string    `json:"redirectUrl,omitempty"` // For OAuth callback redirect
-	ErrorKey    string    `json:"error_key,omitempty"`   // i18n translation key for error messages
-	// In a real token-based auth system, we would return tokens here
-	// Token     string    `json:"token,omitempty"`
-	// ExpiresAt time.Time `json:"expires_at,omitempty"`
+	Success           bool      `json:"success"`
+	Message           string    `json:"message"`
+	Username          string    `json:"username,omitempty"`
+	Timestamp         time.Time `json:"timestamp"`
+	RedirectURL       string    `json:"redirectUrl,omitempty"`       // For OAuth callback redirect
+	ErrorKey          string    `json:"error_key,omitempty"`         // i18n translation key for error messages
+	ProviderLogoutURL string    `json:"providerLogoutUrl,omitempty"` // OIDC end-session URL for RP-Initiated Logout
 }
 
 // AuthStatus represents the current authentication status
@@ -279,6 +277,10 @@ func (c *Controller) Logout(ctx echo.Context) error {
 		})
 	}
 
+	// IMPORTANT: Get provider logout URL BEFORE clearing the session.
+	// Logout() destroys the session data needed to build the end-session URL.
+	providerLogoutURL := authService.GetProviderLogoutURL(ctx, "")
+
 	// Try to perform logout via auth service
 	if err := authService.Logout(ctx); err != nil {
 		c.logErrorIfEnabled("Logout failed",
@@ -292,12 +294,14 @@ func (c *Controller) Logout(ctx echo.Context) error {
 	c.logInfoIfEnabled("User logged out",
 		logger.String("ip", ctx.RealIP()),
 		logger.String("path", ctx.Request().URL.Path),
+		logger.Bool("has_provider_logout", providerLogoutURL != ""),
 	)
 
 	return ctx.JSON(http.StatusOK, AuthResponse{
-		Success:   true,
-		Message:   "Logged out successfully",
-		Timestamp: time.Now(),
+		Success:           true,
+		Message:           "Logged out successfully",
+		Timestamp:         time.Now(),
+		ProviderLogoutURL: providerLogoutURL,
 	})
 }
 

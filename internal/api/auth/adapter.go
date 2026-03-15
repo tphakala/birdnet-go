@@ -5,10 +5,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"net/url"
 	"reflect"
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -258,6 +260,7 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 	// Clear generic session values
 	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
 	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("id_token", "", c.Request(), c.Response())     //nolint:errcheck // Error checking not critical during logout
 
 	// Clear all provider-specific session keys dynamically
 	for _, gothName := range security.ConfigToGothProvider {
@@ -266,6 +269,60 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 
 	// Log out from gothic session
 	return gothic.Logout(c.Response().Writer, c.Request())
+}
+
+// GetProviderLogoutURL returns the provider's end-session URL for RP-Initiated Logout.
+// Returns empty string if the active provider doesn't support it.
+func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirectURI string) string {
+	log := a.log()
+
+	// Check each configured OAuth provider for an active session
+	for configProvider, gothProviderName := range security.ConfigToGothProvider {
+		provider := a.OAuth2Server.Settings.GetOAuthProvider(configProvider)
+		if provider == nil || !provider.Enabled {
+			continue
+		}
+
+		// Check if user has a session with this provider
+		sessionUser, err := gothic.GetFromSession(gothProviderName, c.Request())
+		if err != nil || sessionUser == "" {
+			continue
+		}
+
+		// Found active provider session — check if it supports logout
+		gothProvider, err := goth.GetProvider(gothProviderName)
+		if err != nil {
+			log.Debug("Could not get goth provider", logger.String("provider", gothProviderName), logger.Error(err))
+			continue
+		}
+
+		logoutProvider, ok := gothProvider.(goth.LogoutProvider)
+		if !ok {
+			log.Debug("Provider does not support RP-Initiated Logout", logger.String("provider", gothProviderName))
+			continue
+		}
+
+		// Get ID token from session for the hint
+		idToken, _ := gothic.GetFromSession("id_token", c.Request())
+
+		logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
+		if err != nil {
+			log.Warn("Failed to build end-session URL", logger.String("provider", gothProviderName), logger.Error(err))
+			continue
+		}
+
+		// Validate the URL is HTTPS with a valid host
+		parsed, parseErr := url.Parse(logoutURL)
+		if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			log.Warn("Rejected invalid provider logout URL", logger.String("provider", gothProviderName))
+			continue
+		}
+
+		log.Info("Built RP-Initiated Logout URL", logger.String("provider", gothProviderName))
+		return parsed.String()
+	}
+
+	return ""
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token.

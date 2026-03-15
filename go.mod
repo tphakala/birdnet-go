@@ -1,6 +1,6 @@
 module github.com/tphakala/birdnet-go
 
-go 1.26
+go 1.26.1
 
 require (
 	github.com/UserExistsError/conpty v0.1.4
@@ -37,9 +37,9 @@ require (
 	github.com/tphakala/go-tflite v0.2.1
 	github.com/tphakala/simd v1.0.22
 	go.uber.org/goleak v1.3.0
-	golang.org/x/crypto v0.48.0
+	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.51.0
-	golang.org/x/text v0.34.0
+	golang.org/x/text v0.35.0
 	google.golang.org/api v0.270.0
 	gopkg.in/yaml.v3 v3.0.1
 	gorm.io/driver/mysql v1.6.0
@@ -105,7 +105,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/term v0.40.0 // indirect
+	golang.org/x/term v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260226221140-a57be14db171 // indirect
 	google.golang.org/grpc v1.79.2 // indirect
 )
@@ -154,4 +154,4 @@ require (
 	google.golang.org/protobuf v1.36.11 // indirect
 )
 
-replace github.com/markbates/goth => github.com/tphakala/goth v0.0.0-20251225195455-a4b17a573e8f
+replace github.com/markbates/goth => github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a

@@ -80,4 +80,8 @@ type Service interface {
 	// IsAuthenticated checks if a request is authenticated via any supported method.
 	// Returns true if auth is bypassed (not required) or if token/session auth succeeds.
 	IsAuthenticated(c echo.Context) bool
+
+	// GetProviderLogoutURL returns the provider's end-session URL for RP-Initiated Logout.
+	// Returns empty string if the provider doesn't support it or no OIDC session exists.
+	GetProviderLogoutURL(c echo.Context, postLogoutRedirectURI string) string
 }

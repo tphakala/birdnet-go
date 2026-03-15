@@ -124,8 +124,36 @@ function createAuthStore() {
             },
           });
 
-          // Redirect to the Svelte UI root
-          window.location.href = buildAppUrl('/ui/');
+          // Check if provider returned an end-session URL for RP-Initiated Logout
+          let providerLogoutUrl: string | null = null;
+          try {
+            const data: unknown = await response.json();
+            if (
+              typeof data === 'object' &&
+              data !== null &&
+              'providerLogoutUrl' in data &&
+              typeof (data as Record<string, unknown>).providerLogoutUrl === 'string'
+            ) {
+              const candidate = (data as Record<string, unknown>).providerLogoutUrl as string;
+              // Validate URL is HTTPS before redirecting
+              try {
+                const parsed = new URL(candidate);
+                if (parsed.protocol === 'https:' && parsed.host.length > 0) {
+                  providerLogoutUrl = candidate;
+                }
+              } catch {
+                // Invalid URL, fall through to default redirect
+              }
+            }
+          } catch {
+            // JSON parse failed, fall through to default redirect
+          }
+
+          if (providerLogoutUrl) {
+            window.location.href = providerLogoutUrl;
+          } else {
+            window.location.href = buildAppUrl('/ui/');
+          }
         } else {
           const errorMsg = `Logout failed: ${response.statusText}`;
           logger.error('Logout failed', {
