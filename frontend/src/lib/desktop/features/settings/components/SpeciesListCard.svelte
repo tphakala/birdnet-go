@@ -27,6 +27,7 @@
   import type { IconProps } from '@lucide/svelte';
   import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
 
   interface Props {
     title: string;
@@ -230,7 +231,7 @@
 
   <!-- Species List -->
   {#if species.length > 0}
-    <div class="overflow-y-auto max-h-[28rem]">
+    <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr class="border-b border-[var(--border-100)]">
@@ -331,7 +332,7 @@
           {t('settings.species.activeSpecies.noResults')}
         </div>
       {/if}
-    </div>
+    </ResizableContainer>
   {:else}
     <div class="text-sm text-muted italic py-8 text-center">
       {emptyMessage}

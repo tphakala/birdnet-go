@@ -45,6 +45,7 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import DynamicThresholdTab from '$lib/desktop/features/settings/components/DynamicThresholdTab.svelte';
   import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
+  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -1450,7 +1451,7 @@
 
       <!-- Configuration List -->
       {#if Object.keys(settings.config).length > 0}
-        <div class="overflow-x-auto">
+        <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-[var(--border-100)]">
@@ -1539,7 +1540,7 @@
               {/each}
             </tbody>
           </table>
-        </div>
+        </ResizableContainer>
       {/if}
 
       <!-- Empty State -->

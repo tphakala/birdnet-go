@@ -190,6 +190,7 @@
       "unknownError": "Unbekannter Fehler aufgetreten"
     },
     "toggle": "Umschalten",
+    "resizeHandle": "Ziehen zum Ändern der Größe",
     "image": "Bild",
     "actionsColumn": "Aktionen",
     "closeModal": "Dialog schließen",

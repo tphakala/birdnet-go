@@ -190,6 +190,7 @@
       "unknownError": "Tuntematon virhe"
     },
     "toggle": "Vaihda",
+    "resizeHandle": "Vedä muuttaaksesi kokoa",
     "image": "Kuva",
     "actionsColumn": "Toiminnot",
     "closeModal": "Sulje valintaikkuna",
