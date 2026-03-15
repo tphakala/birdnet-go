@@ -1392,7 +1392,7 @@ func (l *wikiMediaProvider) fetchWithLimiter(ctx context.Context, scientificName
 		logger.String("diagnostic_info", "beginning_wikipedia_image_fetch_operation"))
 
 	thumbnailURL, thumbnailSourceFile, err := l.queryThumbnail(ctx, reqID, scientificName, limiter)
-	if err != nil && errors.Is(err, ErrImageNotFound) {
+	if errors.Is(err, ErrImageNotFound) {
 		// If thumbnail not found, try taxonomy synonym before giving up
 		if synonym, hasSynonym := GetTaxonomySynonym(scientificName); hasSynonym {
 			log.Debug("Retrying Wikipedia fetch with taxonomy synonym",
