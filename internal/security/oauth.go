@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ import (
 	"github.com/markbates/goth/providers/kakao"
 	"github.com/markbates/goth/providers/line"
 	"github.com/markbates/goth/providers/microsoftonline"
+	"github.com/markbates/goth/providers/openidConnect"
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -327,7 +329,7 @@ func computeBaseURL(settings *conf.Settings) string {
 	return ""
 }
 
-// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft).
+// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft, LINE, Kakao, OIDC).
 // It uses the new OAuthProviders array which is populated either from new config
 // or from migration of legacy provider fields.
 func initializeProviders(settings *conf.Settings) {
@@ -411,6 +413,31 @@ func initializeProviders(settings *conf.Settings) {
 				providerConfig.ClientSecret,
 				redirectURI,
 			))
+
+		case ConfigOIDC:
+			providerLog.Info("Enabling OIDC provider")
+			scopes := providerConfig.Scopes
+			if len(scopes) == 0 {
+				scopes = []string{"openid", "profile", "email"}
+			}
+			// Ensure "openid" scope is always present (OIDC spec requirement)
+			if !slices.Contains(scopes, "openid") {
+				scopes = append([]string{"openid"}, scopes...)
+			}
+			oidcProvider, err := openidConnect.New(
+				providerConfig.ClientID,
+				providerConfig.ClientSecret,
+				redirectURI,
+				providerConfig.IssuerURL,
+				scopes...,
+			)
+			if err != nil {
+				providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
+					logger.Error(err),
+					logger.String("issuer_url", providerConfig.IssuerURL))
+				continue
+			}
+			providers = append(providers, oidcProvider)
 
 		default:
 			providerLog.Warn("Unknown OAuth provider type, skipping")
