@@ -56,11 +56,9 @@
 
   // Map user's temperature preference to TemperatureUnit format
   // Settings store uses 'celsius'/'fahrenheit', but formatters use 'metric'/'imperial'
-  let temperatureUnit = $derived.by((): TemperatureUnit => {
-    const setting = $dashboardSettings?.temperatureUnit;
-    if (setting === 'fahrenheit') return 'imperial';
-    return 'metric';
-  });
+  let temperatureUnit: TemperatureUnit = $derived(
+    $dashboardSettings?.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric'
+  );
 
   async function fetchWeather(signal?: AbortSignal) {
     if (!config.showWeather || editMode) return;
