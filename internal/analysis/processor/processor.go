@@ -981,8 +981,9 @@ func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
 func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string) float32 {
-	// Check if species has a custom threshold using both common and scientific name lookup
-	if config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName); exists {
+	// Check if species has a custom threshold using both common and scientific name lookup.
+	// Species with threshold: 0 (actions-only config) fall through to global threshold.
+	if config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName); exists && config.Threshold > 0 {
 		if p.Settings.Debug {
 			GetLogger().Debug("using custom confidence threshold",
 				logger.String("commonName", commonName),
