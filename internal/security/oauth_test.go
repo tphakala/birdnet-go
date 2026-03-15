@@ -1265,7 +1265,7 @@ func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 
-	config := &conf.OAuthProviderConfig{
+	config := conf.OAuthProviderConfig{
 		Provider:     "oidc",
 		Enabled:      true,
 		ClientID:     "test-client",
@@ -1294,7 +1294,7 @@ func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(t.Context())
 
-	config := &conf.OAuthProviderConfig{
+	config := conf.OAuthProviderConfig{
 		Provider:     "oidc",
 		Enabled:      true,
 		ClientID:     "test-client",
