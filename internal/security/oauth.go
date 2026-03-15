@@ -139,7 +139,12 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 		logger.Bool("debug_mode", settings.WebServer.Debug),
 		logger.String("recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart"))
 
-	tempSecret := conf.GenerateRandomSecret()
+	tempSecret, err := conf.GenerateRandomSecret()
+	if err != nil {
+		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable",
+			logger.Error(err))
+		return
+	}
 	settings.Security.SessionSecret = tempSecret
 	GetLogger().Info("Generated temporary SessionSecret for this session")
 

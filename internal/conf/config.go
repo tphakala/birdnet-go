@@ -1540,9 +1540,9 @@ func Load() (*Settings, error) {
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
-		sessionSecret := GenerateRandomSecret()
-		if sessionSecret == "" {
-			return nil, errors.Newf("failed to generate session secret").
+		sessionSecret, err := GenerateRandomSecret()
+		if err != nil {
+			return nil, errors.New(err).
 				Component("conf").
 				Category(errors.CategoryConfiguration).
 				Context("operation", "generate_session_secret").
@@ -1672,14 +1672,22 @@ func createDefaultConfig() error {
 
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
-		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
+		clientSecret, err := GenerateRandomSecret()
+		if err != nil {
+			return errors.New(err).
+				Component("conf").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "generate_client_secret").
+				Build()
+		}
+		viper.Set("security.basicauth.clientsecret", clientSecret)
 	}
 	// If the session secret is not set, generate a random one
 	// This ensures backward compatibility for existing deployments
 	if viper.GetString("security.sessionsecret") == "" {
-		sessionSecret := GenerateRandomSecret()
-		if sessionSecret == "" {
-			return errors.Newf("failed to generate session secret for default config").
+		sessionSecret, err := GenerateRandomSecret()
+		if err != nil {
+			return errors.New(err).
 				Component("conf").
 				Category(errors.CategoryConfiguration).
 				Context("operation", "create_default_config").
@@ -2227,19 +2235,14 @@ func SaveYAMLConfig(configPath string, settings *Settings) error {
 
 // GenerateRandomSecret generates a URL-safe base64 encoded random string
 // suitable for use as a client secret. The output is 43 characters long,
-// providing 256 bits of entropy.
-func GenerateRandomSecret() string {
+// providing 256 bits of entropy. Returns an error if the system's
+// cryptographic random number generator fails.
+func GenerateRandomSecret() (string, error) {
 	bytes := make([]byte, 32)
 	if _, err := rand.Read(bytes); err != nil {
-		// Log the error and return a safe fallback or empty string
-		enhancedErr := errors.New(err).
-			Category(errors.CategorySystem).
-			Context("operation", "generate-random-secret").
-			Build()
-		GetLogger().Error("Failed to generate random secret", logger.Error(enhancedErr))
-		return ""
+		return "", fmt.Errorf("failed to generate random secret: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(bytes)
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 // GetWeatherProvider returns the configured provider and its settings as any.
