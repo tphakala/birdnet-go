@@ -15,6 +15,15 @@ import (
 // clipExtractionTimeout is the maximum time allowed for a clip extraction.
 const clipExtractionTimeout = 30 * time.Second
 
+// clipDefaultBitrates defines the default bitrates for lossy clip extraction formats.
+// These are independent of the audio export bitrate setting — clips are short previews
+// so lower bitrates keep file sizes small while preserving sufficient quality.
+var clipDefaultBitrates = map[string]string{
+	FormatMP3:  "128k",
+	FormatOpus: "64k",
+	FormatAAC:  "96k",
+}
+
 // supportedClipFormats lists the formats supported by ExtractAudioClip.
 var supportedClipFormats = map[string]bool{
 	"wav":      true,
@@ -53,7 +62,7 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 	duration := end - start
 
 	// Build FFmpeg arguments
-	args := buildClipFFmpegArgs(inputPath, start, duration, format, settings)
+	args := buildClipFFmpegArgs(inputPath, start, duration, format)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(ctx, clipExtractionTimeout)
@@ -85,7 +94,7 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 // Uses -ss before -i for fast input seeking and -t for duration (not -to, which
 // has inconsistent behavior across FFmpeg versions when combined with input seeking).
 // Always re-encodes to ensure frame-accurate cuts (no -c copy).
-func buildClipFFmpegArgs(inputPath string, start, duration float64, format string, settings *conf.AudioSettings) []string {
+func buildClipFFmpegArgs(inputPath string, start, duration float64, format string) []string {
 	// WAV is not in the standard export format constants since it's a raw container,
 	// so we handle it explicitly here rather than modifying the shared helpers.
 	var outputEncoder, outputFormat string
@@ -106,11 +115,10 @@ func buildClipFFmpegArgs(inputPath string, start, duration float64, format strin
 		"-c:a", outputEncoder,
 	}
 
-	// Add bitrate for lossy formats (not needed for lossless like FLAC/ALAC/WAV)
-	switch format {
-	case FormatMP3, FormatOpus, FormatAAC:
-		outputBitrate := getMaxBitrate(format, settings.Export.Bitrate)
-		args = append(args, "-b:a", outputBitrate)
+	// Add bitrate for lossy formats using clip-specific defaults
+	// (independent of the audio export bitrate setting)
+	if bitrate, ok := clipDefaultBitrates[format]; ok {
+		args = append(args, "-b:a", bitrate)
 	}
 
 	args = append(args,
