@@ -136,6 +136,11 @@ func createWalkFunc(state *walkState) filepath.WalkFunc {
 			return handleWalkError(err, path, state.debug)
 		}
 
+		// Skip hidden directories (dot-prefixed) like .processing-cache
+		if info.IsDir() && info.Name() != "." && strings.HasPrefix(info.Name(), ".") {
+			return filepath.SkipDir
+		}
+
 		if !info.IsDir() {
 			processFile(path, info, state)
 		}

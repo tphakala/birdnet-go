@@ -100,6 +100,10 @@ type Controller struct {
 	insightsRepo  repository.InsightsRepository
 	commonNameMap map[string]string // scientific name → common name, cached at init
 
+	// Audio processing fields
+	processingCache     *processingCache
+	processingSemaphore chan struct{}
+
 	// Legacy cleanup state tracker
 	cleanupStatus *CleanupStatus
 
@@ -327,6 +331,25 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
 	}
+
+	// Initialize audio processing cache and concurrency limiter
+	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")
+	c.processingCache = newProcessingCache(cacheDir, processingCacheMaxFiles)
+	c.processingSemaphore = make(chan struct{}, 2)
+
+	// Start cache cleanup goroutine
+	c.wg.Go(func() {
+		ticker := time.NewTicker(processingCacheTickerInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				c.processingCache.cleanExpired()
+			}
+		}
+	})
 
 	// Initialize structured logger for API requests
 	c.apiLogger = logger.Global().Module("api")

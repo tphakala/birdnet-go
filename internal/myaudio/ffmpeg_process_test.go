@@ -1,10 +1,14 @@
 package myaudio
 
 import (
+	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -493,4 +497,271 @@ func BenchmarkFFmpegStream_ProcessCleanup(b *testing.B) {
 
 		stream.cleanupProcess()
 	}
+}
+
+func TestBuildProcessingFilterChain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no filters returns empty string", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{})
+		assert.Empty(t, result)
+	})
+
+	t.Run("denoise only", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "medium"})
+		assert.Equal(t, "afftdn=nr=12:nf=-40", result)
+	})
+
+	t.Run("gain only", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: 6.0})
+		assert.Equal(t, "volume=+6.0dB", result)
+	})
+
+	t.Run("negative gain", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: -3.5})
+		assert.Equal(t, "volume=-3.5dB", result)
+	})
+
+	t.Run("denoise and gain combined", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "heavy", GainDB: 12.0})
+		assert.Equal(t, "afftdn=nr=20:nf=-50,volume=+12.0dB", result)
+	})
+
+	t.Run("all three filters", func(t *testing.T) {
+		t.Parallel()
+		stats := &LoudnessStats{
+			InputI:       "-25.3",
+			InputTP:      "-0.5",
+			InputLRA:     "6.2",
+			InputThresh:  "-34.5",
+			TargetOffset: "-0.2",
+		}
+		result := BuildProcessingFilterChain(AudioFilters{
+			Denoise:       "light",
+			Normalize:     true,
+			LoudnessStats: stats,
+			GainDB:        3.0,
+		})
+		assert.Contains(t, result, "afftdn=nr=6:nf=-30")
+		assert.Contains(t, result, "loudnorm=")
+		assert.Contains(t, result, "measured_I=-25.3")
+		assert.Contains(t, result, "linear=true")
+		assert.Contains(t, result, "offset=-0.2")
+		assert.Contains(t, result, "volume=+3.0dB")
+	})
+
+	t.Run("normalize without stats produces analysis-mode filter", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Normalize: true})
+		assert.Contains(t, result, "loudnorm=")
+		assert.Contains(t, result, "print_format=json")
+		assert.NotContains(t, result, "measured_I")
+	})
+
+	t.Run("invalid denoise preset ignored", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{Denoise: "extreme"})
+		assert.Empty(t, result)
+	})
+
+	t.Run("zero gain ignored", func(t *testing.T) {
+		t.Parallel()
+		result := BuildProcessingFilterChain(AudioFilters{GainDB: 0.0})
+		assert.Empty(t, result)
+	})
+}
+
+func TestIsValidDenoisePreset(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty is valid", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsValidDenoisePreset(""))
+	})
+
+	t.Run("known presets valid", func(t *testing.T) {
+		t.Parallel()
+		assert.True(t, IsValidDenoisePreset("light"))
+		assert.True(t, IsValidDenoisePreset("medium"))
+		assert.True(t, IsValidDenoisePreset("heavy"))
+	})
+
+	t.Run("unknown preset invalid", func(t *testing.T) {
+		t.Parallel()
+		assert.False(t, IsValidDenoisePreset("extreme"))
+		assert.False(t, IsValidDenoisePreset("MEDIUM"))
+	})
+}
+
+func TestAudioFiltersHasFilters(t *testing.T) {
+	t.Parallel()
+
+	assert.False(t, AudioFilters{}.HasFilters())
+	assert.True(t, AudioFilters{Denoise: "light"}.HasFilters())
+	assert.True(t, AudioFilters{Normalize: true}.HasFilters())
+	assert.True(t, AudioFilters{GainDB: 1.0}.HasFilters())
+}
+
+func TestAnalyzeFileLoudness(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpeg()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+	testFile := filepath.Join(testDir, "test.wav")
+	createTestWAVFile48k(t, testFile, 2)
+
+	t.Run("analyze silence", func(t *testing.T) {
+		t.Parallel()
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{}, nil)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+		assert.NotEmpty(t, stats.InputTP)
+		assert.NotEmpty(t, stats.InputLRA)
+		assert.NotEmpty(t, stats.InputThresh)
+	})
+
+	t.Run("analyze with denoise prepended", func(t *testing.T) {
+		t.Parallel()
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{Denoise: "light"}, nil)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+	})
+
+	t.Run("analyze with seek range", func(t *testing.T) {
+		t.Parallel()
+		seekRange := &SeekRange{Start: 0.0, Duration: 1.0}
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{}, seekRange)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+	})
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		t.Parallel()
+		_, err := AnalyzeFileLoudness(t.Context(), "/nonexistent.wav", ffmpegPath, AudioFilters{}, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := AnalyzeFileLoudness(ctx, testFile, ffmpegPath, AudioFilters{}, nil)
+		assert.Error(t, err)
+	})
+}
+
+// createTestWAVFileWithTone creates a WAV file with a sine wave tone at the given frequency.
+// Unlike createTestWAVFile48k which generates silence, this produces audible content
+// needed for loudnorm analysis (silence yields -inf loudness which FFmpeg rejects).
+func createTestWAVFileWithTone(t *testing.T, path string, durationSec int, freqHz float64) {
+	t.Helper()
+
+	const sampleRate = 48000
+	const numChannels = 1
+	const bitsPerSample = 16
+
+	numSamples := sampleRate * durationSec * numChannels
+	dataSize := numSamples * (bitsPerSample / 8)
+
+	buf := make([]byte, 44+dataSize)
+
+	// WAV header
+	copy(buf[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(36+dataSize))
+	copy(buf[8:12], "WAVE")
+	copy(buf[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(buf[16:20], 16)
+	binary.LittleEndian.PutUint16(buf[20:22], 1) // PCM
+	binary.LittleEndian.PutUint16(buf[22:24], uint16(numChannels))
+	binary.LittleEndian.PutUint32(buf[24:28], uint32(sampleRate))
+	binary.LittleEndian.PutUint32(buf[28:32], uint32(sampleRate*numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[32:34], uint16(numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[34:36], uint16(bitsPerSample))
+	copy(buf[36:40], "data")
+	binary.LittleEndian.PutUint32(buf[40:44], uint32(dataSize))
+
+	// Generate sine wave samples (amplitude ~50% to avoid clipping)
+	const amplitude = 16000.0
+	for i := range numSamples {
+		sample := amplitude * math.Sin(2.0*math.Pi*freqHz*float64(i)/float64(sampleRate))
+		binary.LittleEndian.PutUint16(buf[44+i*2:46+i*2], uint16(int16(sample)))
+	}
+
+	require.NoError(t, os.WriteFile(path, buf, 0o600))
+}
+
+func TestProcessAudioFile(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpeg()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+
+	// Silence file for non-normalize tests
+	silenceFile := filepath.Join(testDir, "silence.wav")
+	createTestWAVFile48k(t, silenceFile, 2)
+
+	// Tone file for normalize tests (loudnorm requires non-silent audio)
+	toneFile := filepath.Join(testDir, "tone.wav")
+	createTestWAVFileWithTone(t, toneFile, 2, 440.0)
+
+	t.Run("gain only", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{GainDB: 6.0})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("denoise only", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{Denoise: "light"})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("normalize with two-pass", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), toneFile, ffmpegPath, AudioFilters{Normalize: true})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("all filters combined", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), toneFile, ffmpegPath, AudioFilters{
+			Denoise:   "medium",
+			Normalize: true,
+			GainDB:    3.0,
+		})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("no filters returns unprocessed WAV", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		t.Parallel()
+		_, err := ProcessAudioFile(t.Context(), "/nonexistent.wav", ffmpegPath, AudioFilters{GainDB: 6.0})
+		assert.Error(t, err)
+	})
 }

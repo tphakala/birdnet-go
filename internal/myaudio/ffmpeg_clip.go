@@ -58,7 +58,7 @@ func IsSupportedClipFormat(format string) bool {
 
 // ExtractAudioClip extracts a time range from an audio file and re-encodes it
 // to the specified format. The result is returned as an in-memory buffer.
-func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64, format string, settings *conf.AudioSettings) (*bytes.Buffer, error) {
+func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64, format string, settings *conf.AudioSettings, filters *AudioFilters) (*bytes.Buffer, error) {
 	if settings == nil {
 		return nil, fmt.Errorf("audio settings cannot be nil")
 	}
@@ -86,22 +86,34 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 	duration := end - start
 
 	// Create context with adaptive timeout (2x duration, clamped to bounds)
+	// Placed before analysis so both loudness analysis and extraction are governed
 	timeout := max(time.Duration(duration*2)*time.Second, clipExtractionMinTimeout)
 	timeout = min(timeout, clipExtractionMaxTimeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// MP4-based formats (AAC, ALAC) require seekable output — use a temp file
-	if requiresSeekableOutput[format] {
-		return extractClipViaTempFile(ctx, settings.FfmpegPath, inputPath, start, duration, format)
+	// Handle normalize two-pass if filters include normalization
+	if filters != nil && filters.Normalize && filters.LoudnessStats == nil {
+		seekRange := &SeekRange{Start: start, Duration: duration}
+		stats, err := AnalyzeFileLoudness(ctx, inputPath, settings.FfmpegPath,
+			AudioFilters{Denoise: filters.Denoise, Normalize: true}, seekRange)
+		if err != nil {
+			return nil, fmt.Errorf("loudness analysis for clip failed: %w", err)
+		}
+		filters.LoudnessStats = stats
 	}
 
-	return extractClipViaPipe(ctx, settings.FfmpegPath, inputPath, start, duration, format)
+	// MP4-based formats (AAC, ALAC) require seekable output — use a temp file
+	if requiresSeekableOutput[format] {
+		return extractClipViaTempFile(ctx, settings.FfmpegPath, inputPath, start, duration, format, filters)
+	}
+
+	return extractClipViaPipe(ctx, settings.FfmpegPath, inputPath, start, duration, format, filters)
 }
 
 // extractClipViaPipe runs FFmpeg with output piped to stdout.
-func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string) (*bytes.Buffer, error) {
-	args := buildClipFFmpegArgs(inputPath, start, duration, format, "pipe:1")
+func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string, filters *AudioFilters) (*bytes.Buffer, error) {
+	args := buildClipFFmpegArgs(inputPath, start, duration, format, "pipe:1", filters)
 
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath is from validated settings, args built internally
 
@@ -126,7 +138,7 @@ func extractClipViaPipe(ctx context.Context, ffmpegPath, inputPath string, start
 
 // extractClipViaTempFile writes FFmpeg output to a temporary file, then reads
 // it into memory. Required for MP4-based muxers that need seekable output.
-func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string) (*bytes.Buffer, error) {
+func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, start, duration float64, format string, filters *AudioFilters) (*bytes.Buffer, error) {
 	ext := GetFileExtension(format)
 	tmpFile, err := os.CreateTemp("", "birdnet-clip-*."+ext)
 	if err != nil {
@@ -136,7 +148,7 @@ func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, s
 	_ = tmpFile.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	args := buildClipFFmpegArgs(inputPath, start, duration, format, tmpPath)
+	args := buildClipFFmpegArgs(inputPath, start, duration, format, tmpPath, filters)
 
 	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath is from validated settings, args built internally
 
@@ -167,7 +179,7 @@ func extractClipViaTempFile(ctx context.Context, ffmpegPath, inputPath string, s
 // has inconsistent behavior across FFmpeg versions when combined with input seeking).
 // Always re-encodes to ensure frame-accurate cuts (no -c copy).
 // The outputTarget is either "pipe:1" for stdout or a file path.
-func buildClipFFmpegArgs(inputPath string, start, duration float64, format, outputTarget string) []string {
+func buildClipFFmpegArgs(inputPath string, start, duration float64, format, outputTarget string, filters *AudioFilters) []string {
 	// WAV is not in the standard export format constants since it's a raw container,
 	// so we handle it explicitly here rather than modifying the shared helpers.
 	var outputEncoder, outputFormat string
@@ -192,6 +204,14 @@ func buildClipFFmpegArgs(inputPath string, start, duration float64, format, outp
 	// (independent of the audio export bitrate setting)
 	if bitrate, ok := clipDefaultBitrates[format]; ok {
 		args = append(args, "-b:a", bitrate)
+	}
+
+	// Add processing filters if provided
+	if filters != nil {
+		filterChain := BuildProcessingFilterChain(*filters)
+		if filterChain != "" {
+			args = append(args, "-af", filterChain)
+		}
 	}
 
 	args = append(args,

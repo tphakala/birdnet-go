@@ -30,8 +30,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { Play, Pause, Download, XCircle, SkipBack, ChevronDown } from '@lucide/svelte';
+  import { Play, Pause, Download, XCircle } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
+  import AudioToolbar from './AudioToolbar.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { useDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
@@ -225,8 +226,15 @@
   let extractionError = $state<string | null>(null);
   let isPlayingSelection = $state(false);
   let selectionPlaybackTimeout: ReturnType<typeof setTimeout> | undefined;
-  let showFormatMenu = $state(false);
-  let formatMenuRef: HTMLDivElement | undefined = $state();
+
+  // Processing state
+  let processingDenoise = $state('');
+  let processingNormalize = $state(false);
+  let isProcessing = $state(false);
+  let processedAudioUrl = $state<string | null>(null);
+  let processingActive = $derived(processingDenoise !== '' || processingNormalize);
+  let processAbortController: AbortController | null = null;
+  let processDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Constants
   const GAIN_MAX_DB = 24;
@@ -294,16 +302,7 @@
   const TOUCH_HANDLE_THRESHOLD = 24; // Pixels — larger snap zone for touch
   const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
   const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
-
-  // Supported clip extraction formats (lossless first, then lossy)
-  const CLIP_FORMATS = [
-    { value: 'wav', label: 'WAV', lossless: true },
-    { value: 'flac', label: 'FLAC', lossless: true },
-    { value: 'alac', label: 'ALAC', lossless: true },
-    { value: 'mp3', label: 'MP3', lossless: false },
-    { value: 'opus', label: 'Opus', lossless: false },
-    { value: 'aac', label: 'AAC', lossless: false },
-  ] as const;
+  const PROCESS_DEBOUNCE_MS = 300; // Debounce delay for server-side processing requests
 
   // Check if a pointer X position is near a selection handle, returning which handle
   const detectHandleGrab = (clientX: number, thresholdPx: number): 'start' | 'end' | null => {
@@ -456,7 +455,6 @@
     isDragSelecting = false;
     draggingHandle = null;
     isScrubbing = false;
-    showFormatMenu = false;
     extractionError = null;
   };
 
@@ -585,16 +583,6 @@
     audioElement.currentTime = Math.min(selectionStartSec, selectionEndSec);
   };
 
-  const toggleFormatMenu = () => {
-    showFormatMenu = !showFormatMenu;
-  };
-
-  const selectFormatAndExtract = (format: string) => {
-    extractionFormat = format;
-    showFormatMenu = false;
-    extractClip();
-  };
-
   const extractClip = async () => {
     if (selectionStartSec === null || selectionEndSec === null || isExtracting) return;
 
@@ -610,7 +598,14 @@
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ start, end, format: extractionFormat }),
+          body: JSON.stringify({
+            start,
+            end,
+            format: extractionFormat,
+            normalize: processingNormalize,
+            denoise: processingDenoise,
+            gain_db: gainValue,
+          }),
         }
       );
 
@@ -658,6 +653,120 @@
       isExtracting = false;
     }
   };
+
+  // --- Audio processing (denoise / normalize preview) ---
+
+  function triggerProcessing() {
+    if (processDebounceTimer) clearTimeout(processDebounceTimer);
+    processDebounceTimer = setTimeout(() => {
+      processAudio();
+    }, PROCESS_DEBOUNCE_MS);
+  }
+
+  async function processAudio() {
+    // Abort any in-flight processing request
+    if (processAbortController) {
+      processAbortController.abort();
+    }
+
+    if (!processingDenoise && !processingNormalize) {
+      // No server-side processing needed — revert to original audio
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+        processedAudioUrl = null;
+      }
+      if (audioElement) {
+        const pos = audioElement.currentTime;
+        audioElement.src = audioUrl;
+        audioElement.currentTime = pos;
+      }
+      return;
+    }
+
+    isProcessing = true;
+    const controller = new AbortController();
+    processAbortController = controller;
+
+    try {
+      const response = await fetch(
+        buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}/process`),
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
+          body: JSON.stringify({
+            normalize: processingNormalize,
+            denoise: processingDenoise,
+            gain_db: 0, // gain applied client-side via Web Audio API
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Processing failed: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+
+      // Discard result if a newer request superseded this one
+      if (processAbortController !== controller) return;
+
+      // Revoke previous object URL to prevent memory leak
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+      }
+
+      processedAudioUrl = URL.createObjectURL(blob);
+
+      if (audioElement) {
+        const pos = audioElement.currentTime;
+        audioElement.src = processedAudioUrl;
+        audioElement.currentTime = pos;
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return; // Superseded by newer request, don't touch state
+      }
+      // Discard error handling if a newer request superseded this one
+      if (processAbortController !== controller) return;
+
+      logger.error('Audio processing failed', err as Error);
+      // Revert to original audio and reset processing state
+      processingDenoise = '';
+      processingNormalize = false;
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+        processedAudioUrl = null;
+      }
+      if (audioElement) {
+        const pos = audioElement.currentTime;
+        audioElement.src = audioUrl;
+        audioElement.currentTime = pos;
+      }
+    } finally {
+      // Only clear state if this is still the active request (avoid stale finally)
+      if (processAbortController === controller) {
+        isProcessing = false;
+        processAbortController = null;
+      }
+    }
+  }
+
+  function handleDenoiseChange(preset: string) {
+    processingDenoise = preset;
+    triggerProcessing();
+  }
+
+  function handleNormalizeToggle() {
+    processingNormalize = !processingNormalize;
+    triggerProcessing();
+  }
+
+  function handleToolbarExport(format: string) {
+    if (selectionStartSec === null || selectionEndSec === null) return;
+    extractionFormat = format;
+    extractClip();
+  }
 
   const clearPlayEndTimeout = () => {
     if (playEndTimeout) {
@@ -1174,6 +1283,22 @@
       if (audioElement.src !== absoluteUrl) {
         debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
         audioElement.src = audioUrl;
+        // Cancel in-flight processing and clean up state from previous audio
+        if (processDebounceTimer) {
+          clearTimeout(processDebounceTimer);
+          processDebounceTimer = null;
+        }
+        if (processAbortController) {
+          processAbortController.abort();
+          processAbortController = null;
+        }
+        if (processedAudioUrl) {
+          URL.revokeObjectURL(processedAudioUrl);
+          processedAudioUrl = null;
+        }
+        processingDenoise = '';
+        processingNormalize = false;
+        isProcessing = false;
         // Reset playback state for new audio
         isPlaying = false;
         currentTime = 0;
@@ -1363,18 +1488,9 @@
         e: KeyboardEvent
       ) => {
         if (e.key === 'Escape') {
-          if (showFormatMenu) {
-            showFormatMenu = false;
-          } else if (selectionStartSec !== null || selectionEndSec !== null) {
+          if (selectionStartSec !== null || selectionEndSec !== null) {
             clearSelection();
           }
-        }
-      }) as EventListener);
-
-      // Close format menu on click outside
-      addTrackedEventListener(document as unknown as HTMLElement, 'mousedown', ((e: MouseEvent) => {
-        if (showFormatMenu && formatMenuRef && !formatMenuRef.contains(e.target as Node)) {
-          showFormatMenu = false;
         }
       }) as EventListener);
 
@@ -1444,6 +1560,21 @@
       // Release reference to shared audio context (doesn't close it - it's reused)
       releaseAudioContext();
       audioContext = null;
+    };
+  });
+
+  // Cleanup processing resources on component destroy
+  $effect(() => {
+    return () => {
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+      }
+      if (processDebounceTimer) {
+        clearTimeout(processDebounceTimer);
+      }
+      if (processAbortController) {
+        processAbortController.abort();
+      }
     };
   });
 
@@ -1701,119 +1832,14 @@
       >
         <div class="w-0.5 h-full bg-primary"></div>
       </div>
-
-      <!-- Selection toolbar -->
-      {@const toolbarLeftPct = (startPct + endPct) / 2}
-      <div
-        class="absolute z-20 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[var(--color-base-300)]/90 backdrop-blur-sm shadow-md text-sm"
-        style:top="4px"
-        style:left="{toolbarLeftPct}%"
-        style:transform="translateX(-50%)"
-      >
-        <!-- Time range display -->
-        <span class="text-[var(--color-base-content)] whitespace-nowrap font-medium">
-          {Math.min(selectionStartSec, selectionEndSec).toFixed(1)}s &ndash; {Math.max(
-            selectionStartSec,
-            selectionEndSec
-          ).toFixed(1)}s
-        </span>
-
-        <!-- Divider -->
-        <div class="w-px h-5 bg-[var(--color-base-content)]/20"></div>
-
-        <!-- Review (jump to start) button -->
-        <button
-          class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-          onclick={reviewSelection}
-          aria-label={t('components.audioPlayer.clipExtraction.reviewSelection')}
-          title={t('components.audioPlayer.clipExtraction.reviewSelection')}
-        >
-          <SkipBack class="size-4" />
-        </button>
-
-        <!-- Play/Pause selection button -->
-        {#if isPlayingSelection}
-          <button
-            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-            onclick={stopSelection}
-            aria-label={t('components.audioPlayer.clipExtraction.pauseSelection')}
-            title={t('components.audioPlayer.clipExtraction.pauseSelection')}
-          >
-            <Pause class="size-4" />
-          </button>
-        {:else}
-          <button
-            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-            onclick={playSelection}
-            aria-label={t('components.audioPlayer.clipExtraction.playSelection')}
-            title={t('components.audioPlayer.clipExtraction.playSelection')}
-          >
-            <Play class="size-4" />
-          </button>
-        {/if}
-
-        <!-- Divider -->
-        <div class="w-px h-5 bg-[var(--color-base-content)]/20"></div>
-
-        <!-- Download with format picker -->
-        <div class="relative" bind:this={formatMenuRef}>
-          <button
-            class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] flex items-center gap-0.5"
-            onclick={toggleFormatMenu}
-            disabled={isExtracting}
-            aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
-            title={t('components.audioPlayer.clipExtraction.extractClip')}
-            aria-expanded={showFormatMenu}
-            aria-haspopup="true"
-          >
-            {#if isExtracting}
-              <div
-                class="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"
-              ></div>
-            {:else}
-              <Download class="size-4" />
-              <ChevronDown class="size-3" />
-            {/if}
-          </button>
-
-          <!-- Format dropdown menu -->
-          {#if showFormatMenu}
-            <div
-              class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[8.5rem] z-30"
-            >
-              {#each CLIP_FORMATS as fmt (fmt.value)}
-                <button
-                  class="w-full px-3.5 py-2 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
-                  onclick={() => selectFormatAndExtract(fmt.value)}
-                >
-                  <span class="font-medium">{fmt.label}</span>
-                  <span class="text-[var(--color-base-content)]/50 text-xs"
-                    >{fmt.lossless
-                      ? t('components.audioPlayer.clipExtraction.lossless')
-                      : t('components.audioPlayer.clipExtraction.lossy')}</span
-                  >
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-        <!-- Clear selection button -->
-        <button
-          class="p-1.5 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-          onclick={clearSelection}
-          aria-label={t('components.audioPlayer.clipExtraction.clearSelection')}
-          title={t('components.audioPlayer.clipExtraction.clearSelection')}
-        >
-          <XCircle class="size-4" />
-        </button>
-
-        <!-- Extraction error -->
-        {#if extractionError}
-          <span class="text-[var(--color-error)] ml-1">{extractionError}</span>
-        {/if}
-      </div>
     {/if}
+  {/if}
+
+  <!-- Processing active badge -->
+  {#if processingActive}
+    <div class="processing-badge" role="status" aria-live="polite">
+      {t('components.audioPlayer.processing.processingActive')}
+    </div>
   {/if}
 
   <!-- Bottom overlay controls -->
@@ -1898,3 +1924,46 @@
     </div>
   {/if}
 </div>
+
+{#if enableClipExtraction}
+  <AudioToolbar
+    selectionStart={selectionStartSec !== null && selectionEndSec !== null
+      ? Math.min(selectionStartSec, selectionEndSec)
+      : null}
+    selectionEnd={selectionStartSec !== null && selectionEndSec !== null
+      ? Math.max(selectionStartSec, selectionEndSec)
+      : null}
+    hasSelection={selectionStartSec !== null && selectionEndSec !== null}
+    gainDb={gainValue}
+    denoise={processingDenoise}
+    normalize={processingNormalize}
+    {isProcessing}
+    {isPlayingSelection}
+    {isExtracting}
+    {extractionError}
+    onPlaySelection={playSelection}
+    onStopSelection={stopSelection}
+    onSkipToSelection={reviewSelection}
+    onClearSelection={clearSelection}
+    onGainChange={updateGain}
+    onDenoiseChange={handleDenoiseChange}
+    onNormalizeToggle={handleNormalizeToggle}
+    onExport={handleToolbarExport}
+  />
+{/if}
+
+<style>
+  .processing-badge {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background: var(--color-primary);
+    color: var(--color-primary-content, #fff);
+    border-radius: var(--radius-selector);
+    font-size: 0.6875rem;
+    font-weight: 500;
+    z-index: 5;
+    opacity: 0.85;
+  }
+</style>

@@ -138,9 +138,19 @@ const audioWaitPollInterval = 250 * time.Millisecond
 
 // ClipExtractionRequest represents a request to extract an audio clip.
 type ClipExtractionRequest struct {
-	Start  float64 `json:"start"`
-	End    float64 `json:"end"`
-	Format string  `json:"format"`
+	Start     float64 `json:"start"`
+	End       float64 `json:"end"`
+	Format    string  `json:"format"`
+	Normalize bool    `json:"normalize"`
+	Denoise   string  `json:"denoise"`
+	GainDB    float64 `json:"gain_db"`
+}
+
+// ProcessAudioRequest defines the request body for POST /api/v2/audio/:id/process.
+type ProcessAudioRequest struct {
+	Normalize bool    `json:"normalize"`
+	Denoise   string  `json:"denoise"`
+	GainDB    float64 `json:"gain_db"`
 }
 
 // Initialize media routes
@@ -159,6 +169,9 @@ func (c *Controller) initMediaRoutes() {
 
 	// Clip extraction (requires authentication)
 	c.Echo.POST("/api/v2/audio/:id/clip", c.ExtractAudioClipByID, c.authMiddleware)
+
+	// Audio processing / preview (requires authentication)
+	c.Echo.POST("/api/v2/audio/:id/process", c.ProcessAudioByID, c.authMiddleware)
 
 	// Convenient combined endpoint (redirects to ID-based internally)
 	c.Group.GET("/media/audio", c.ServeAudioByQueryID)
@@ -576,6 +589,14 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
 			"Unsupported audio format", http.StatusBadRequest)
 	}
+	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	if !myaudio.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
 
 	// Resolve clip path from datastore
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
@@ -616,8 +637,18 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
+	// Build filters from request (nil when no processing requested)
+	var filters *myaudio.AudioFilters
+	if req.Normalize || req.Denoise != "" || req.GainDB != 0 {
+		filters = &myaudio.AudioFilters{
+			Normalize: req.Normalize,
+			Denoise:   req.Denoise,
+			GainDB:    req.GainDB,
+		}
+	}
+
 	// Extract clip
-	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio)
+	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio, filters)
 	if err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
@@ -664,6 +695,98 @@ func clipFileExtension(format string) string {
 	default:
 		return format // wav, flac, mp3 use format name as extension
 	}
+}
+
+// ProcessAudioByID applies audio processing filters to a detection's audio clip
+// and returns the processed audio as WAV for browser preview.
+//
+// POST /api/v2/audio/:id/process
+// Body: {"normalize": true, "denoise": "medium", "gain_db": 6.0}
+func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
+	noteID := ctx.Param("id")
+	if noteID == "" {
+		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	var req ProcessAudioRequest
+	if err := ctx.Bind(&req); err != nil {
+		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
+	}
+
+	// Validate denoise preset and gain range
+	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
+			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	if !myaudio.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
+
+	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
+	clipPath, err := c.DS.GetNoteClipPath(noteID)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
+		}
+		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
+	}
+	if clipPath == "" {
+		return c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available", http.StatusNotFound)
+	}
+
+	normalizedPath, err := c.normalizeAndValidatePathWithLogger(clipPath, c.apiLogger)
+	if err != nil {
+		return c.HandleError(ctx, err, "Invalid clip path", http.StatusBadRequest)
+	}
+	absolutePath := filepath.Join(c.SFS.BaseDir(), normalizedPath)
+
+	if _, statErr := c.SFS.StatRel(normalizedPath); statErr != nil {
+		return c.HandleError(ctx, statErr, "Audio clip not found", http.StatusNotFound)
+	}
+
+	// Check cache
+	filters := myaudio.AudioFilters{
+		Normalize: req.Normalize,
+		Denoise:   req.Denoise,
+		GainDB:    req.GainDB,
+	}
+	cacheKey := processingCacheKey(noteID, req.Normalize, req.Denoise, req.GainDB)
+	if c.processingCache != nil {
+		if cached := c.processingCache.get(cacheKey); cached != nil {
+			return ctx.Blob(http.StatusOK, MimeTypeWAV, cached)
+		}
+	}
+
+	// Acquire semaphore (non-blocking, returns 503 if full)
+	select {
+	case c.processingSemaphore <- struct{}{}:
+		defer func() { <-c.processingSemaphore }()
+	default:
+		return c.HandleError(ctx, fmt.Errorf("processing queue full"),
+			"Server busy, try again later", http.StatusServiceUnavailable)
+	}
+
+	buf, err := myaudio.ProcessAudioFile(ctx.Request().Context(), absolutePath,
+		c.Settings.Realtime.Audio.FfmpegPath, filters)
+	if err != nil {
+		if ctx.Request().Context().Err() != nil {
+			return nil // Client disconnected
+		}
+		return c.HandleError(ctx, err, "Failed to process audio", http.StatusInternalServerError)
+	}
+
+	// Cache the result (non-fatal on failure)
+	if c.processingCache != nil {
+		if err := c.processingCache.put(cacheKey, buf.Bytes()); err != nil {
+			c.logAPIRequest(ctx, logger.LogLevelWarn, "Failed to cache processed audio",
+				logger.String("cache_key", cacheKey),
+				logger.Error(err),
+			)
+		}
+	}
+
+	return ctx.Blob(http.StatusOK, MimeTypeWAV, buf.Bytes())
 }
 
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
