@@ -1876,7 +1876,7 @@
 
   <!-- Frequency scale overlay (linear 0-12kHz, sox resamples to 24kHz) -->
   {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
-    {#each [12, 10, 8, 6, 5, 4, 3, 2, 1] as freq}
+    {#each [12, 10, 8, 6, 5, 4, 3, 2, 1] as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"
         >{freq >= 1 ? `${freq}k` : `${freq * 1000}`}</span
       >
