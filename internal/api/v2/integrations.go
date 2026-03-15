@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	neturl "net/url"
 	"strings"
@@ -954,6 +955,8 @@ func (c *Controller) testEBirdAuthentication(ctx context.Context, apiKey, locale
 		return "", fmt.Errorf("failed to authenticate with eBird API: %w", err)
 	}
 	defer func() {
+		// Drain body to allow connection reuse before closing
+		_, _ = io.Copy(io.Discard, resp.Body)
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
 		}
