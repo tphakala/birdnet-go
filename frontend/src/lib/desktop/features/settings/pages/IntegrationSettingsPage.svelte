@@ -163,9 +163,11 @@
   let testStates = $state<{
     birdweather: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
     mqtt: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
+    ebird: { stages: Stage[]; isRunning: boolean; showSuccessNote: boolean };
   }>({
     birdweather: { stages: [], isRunning: false, showSuccessNote: false },
     mqtt: { stages: [], isRunning: false, showSuccessNote: false },
+    ebird: { stages: [], isRunning: false, showSuccessNote: false },
   });
 
   // FFmpeg availability check
@@ -914,6 +916,140 @@
       }, 30000);
     }
   }
+
+  async function testEBird() {
+    logger.debug('Starting eBird test...');
+    testStates.ebird.isRunning = true;
+    testStates.ebird.stages = [];
+
+    try {
+      const currentEbird = store.formData?.realtime?.ebird || settings.ebird!;
+
+      const testPayload = {
+        enabled: currentEbird.enabled || false,
+        apiKey: currentEbird.apiKey || '',
+        locale: currentEbird.locale || 'en',
+      };
+
+      const headers = new Headers({
+        'Content-Type': 'application/json',
+      });
+
+      const token = getCsrfToken();
+      if (token) {
+        headers.set('X-CSRF-Token', token);
+      }
+
+      logger.debug(
+        'Sending eBird test request with payload:',
+        redactForLogging(testPayload, ['apiKey'])
+      );
+
+      const response = await fetch(buildAppUrl('/api/v2/integrations/ebird/test'), {
+        method: 'POST',
+        headers,
+        credentials: 'same-origin',
+        body: JSON.stringify(testPayload),
+      });
+
+      logger.debug('eBird test response status:', response.status, response.statusText);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error(t('settings.integration.errors.responseStreamFailed'));
+      }
+
+      let remaining = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        remaining += decoder.decode(value, { stream: true });
+        logger.debug('Raw eBird chunk received:', remaining);
+
+        const lines = remaining.split('\n');
+        remaining = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+
+          try {
+            const stageResult = JSON.parse(trimmed);
+            logger.debug('eBird test result received:', stageResult);
+
+            if (!stageResult.id) continue;
+
+            const stage: Stage = {
+              id: stageResult.id,
+              title: stageResult.title || 'Test Stage',
+              status: stageResult.status || 'pending',
+              message: stageResult.message || '',
+              error: stageResult.error || '',
+            };
+
+            const existingIndex = testStates.ebird.stages.findIndex(s => s.id === stage.id);
+            if (existingIndex === -1) {
+              testStates.ebird.stages.push(stage);
+            } else {
+              const existingStage = safeArrayAccess(testStates.ebird.stages, existingIndex);
+              if (
+                existingStage &&
+                existingIndex >= 0 &&
+                existingIndex < testStates.ebird.stages.length
+              ) {
+                testStates.ebird.stages.splice(existingIndex, 1, { ...existingStage, ...stage });
+              }
+            }
+          } catch (parseError) {
+            logger.error('Failed to parse eBird test result:', parseError, trimmed);
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('eBird test failed:', error);
+
+      if (testStates.ebird.stages.length === 0) {
+        testStates.ebird.stages.push({
+          id: 'error',
+          title: t('settings.integration.errors.connectionError'),
+          status: 'error',
+          error: error instanceof Error ? error.message : t('common.errors.unknownError'),
+        });
+      } else {
+        const lastIndex = testStates.ebird.stages.length - 1;
+        const lastStage = safeArrayAccess(testStates.ebird.stages, lastIndex);
+        if (lastStage && lastStage.status === 'in_progress') {
+          testStates.ebird.stages.splice(lastIndex, 1, {
+            ...lastStage,
+            status: 'error' as const,
+            error: error instanceof Error ? error.message : t('common.errors.unknownError'),
+          });
+        }
+      }
+    } finally {
+      testStates.ebird.isRunning = false;
+      logger.debug('eBird test finished, stages:', testStates.ebird.stages);
+
+      const allStagesCompleted =
+        testStates.ebird.stages.length > 0 &&
+        testStates.ebird.stages.every(stage => stage.status === 'completed');
+      testStates.ebird.showSuccessNote = allStagesCompleted && ebirdHasChanges;
+
+      setTimeout(() => {
+        logger.debug('Clearing eBird test results after timeout');
+        testStates.ebird.stages = [];
+        testStates.ebird.showSuccessNote = false;
+      }, 30000);
+    }
+  }
 </script>
 
 {#snippet birdweatherTabContent()}
@@ -1451,6 +1587,16 @@
               : t('settings.integration.ebird.enabledRequired')}
           </span>
           <div class="transition-opacity duration-200" class:opacity-50={!settings.ebird?.enabled}>
+            <!-- API Key Info Banner -->
+            <div
+              class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
+            >
+              <Info class="size-5 shrink-0 mt-0.5" />
+              <div>
+                <span>{@html t('settings.integration.ebird.apiKeyInfo')}</span>
+              </div>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PasswordField
                 label={t('settings.integration.ebird.apiKey.label')}
@@ -1483,6 +1629,45 @@
                 helpText={t('settings.integration.ebird.cacheTTL.helpText')}
                 disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
               />
+            </div>
+
+            <!-- Test Connection -->
+            <div class="space-y-4 mt-4">
+              <div class="flex items-center gap-3">
+                <SettingsButton
+                  onclick={testEBird}
+                  loading={testStates.ebird.isRunning}
+                  loadingText={t('settings.integration.ebird.test.loading')}
+                  disabled={!(
+                    store.formData?.realtime?.ebird?.enabled ?? settings.ebird?.enabled
+                  ) ||
+                    !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird?.apiKey) ||
+                    testStates.ebird.isRunning}
+                >
+                  {t('settings.integration.ebird.test.button')}
+                </SettingsButton>
+                <span class="text-sm text-[var(--color-base-content)] opacity-70">
+                  {#if !(store.formData?.realtime?.ebird?.enabled ?? settings.ebird?.enabled)}
+                    {t('settings.integration.ebird.test.enabledRequired')}
+                  {:else if !(store.formData?.realtime?.ebird?.apiKey ?? settings.ebird?.apiKey)}
+                    {t('settings.integration.ebird.test.apiKeyRequired')}
+                  {:else if testStates.ebird.isRunning}
+                    {t('settings.integration.ebird.test.inProgress')}
+                  {:else}
+                    {t('settings.integration.ebird.test.description')}
+                  {/if}
+                </span>
+              </div>
+
+              {#if testStates.ebird.stages.length > 0}
+                <MultiStageOperation
+                  stages={testStates.ebird.stages}
+                  variant="compact"
+                  showProgress={false}
+                />
+              {/if}
+
+              <TestSuccessNote show={testStates.ebird.showSuccessNote} />
             </div>
 
             <SettingsNote>
