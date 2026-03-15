@@ -2848,7 +2848,7 @@
           "deleteConfirm": "Naozaj chcete odstrániť poskytovateľa OAuth {provider}?"
         },
         "noProviders": "Žiadni nakonfigurovaní poskytovatelia OAuth",
-        "noProvidersDescription": "Pridajte poskytovateľa na povolenie sociálneho prihlásenia pomocou účtov Google, GitHub, Microsoft, LINE alebo Kakao.",
+        "noProvidersDescription": "Pridajte poskytovateľa na povolenie prihlásenia cez Google, GitHub, Microsoft, LINE, Kakao alebo vlastného poskytovateľa OIDC.",
         "enableProviderLabel": "Povoliť tohto poskytovateľa",
         "getCredentialsLabel": "Získajte svoje prihlasovacie údaje od {provider}",
         "redirectUriTitle": "Redirect URI:",
@@ -2924,7 +2924,7 @@
           "clientSecretHelpText": "The client secret from your OIDC identity provider",
           "userIdLabel": "Allowed User (email or sub claim)",
           "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Issuer URL is required for OIDC providers",
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",

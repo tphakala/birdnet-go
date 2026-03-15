@@ -1078,7 +1078,7 @@
                     disabled={store.isLoading || store.isSaving}
                     onchange={(value) => (providerFormData.issuerUrl = value)}
                   />
-                  {#if oidcValidationError && providerFormData.issuerUrl}
+                  {#if oidcValidationError}
                     <p class="text-xs text-[var(--color-error)] -mt-2">{oidcValidationError}</p>
                   {/if}
                 {/if}

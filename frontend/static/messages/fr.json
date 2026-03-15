@@ -3011,7 +3011,7 @@
           "deleteConfirm": "Êtes-vous sûr de vouloir supprimer le fournisseur OAuth {provider} ?"
         },
         "noProviders": "Aucun fournisseur OAuth configuré",
-        "noProvidersDescription": "Ajoutez un fournisseur pour activer la connexion sociale avec les comptes Google, GitHub ou Microsoft.",
+        "noProvidersDescription": "Ajoutez un fournisseur pour activer la connexion avec Google, GitHub, Microsoft, LINE, Kakao ou un fournisseur OIDC personnalisé.",
         "enableProviderLabel": "Activer ce fournisseur",
         "getCredentialsLabel": "Obtenez vos identifiants depuis {provider}",
         "redirectUriTitle": "URI de redirection :",
@@ -3087,7 +3087,7 @@
           "clientSecretHelpText": "The client secret from your OIDC identity provider",
           "userIdLabel": "Allowed User (email or sub claim)",
           "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Issuer URL is required for OIDC providers",
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",

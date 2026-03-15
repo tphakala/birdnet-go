@@ -3047,7 +3047,7 @@
           "deleteConfirm": "Are you sure you want to delete the {provider} OAuth provider?"
         },
         "noProviders": "No OAuth providers configured",
-        "noProvidersDescription": "Add a provider to enable social login with Google, GitHub, Microsoft, LINE, or Kakao accounts.",
+        "noProvidersDescription": "Add a provider to enable login with Google, GitHub, Microsoft, LINE, Kakao, or a custom OIDC provider.",
         "enableProviderLabel": "Enable this provider",
         "getCredentialsLabel": "Get your credentials from {provider}",
         "redirectUriTitle": "Redirect URI:",
@@ -3123,7 +3123,7 @@
           "clientSecretHelpText": "The client secret from your OIDC identity provider",
           "userIdLabel": "Allowed User (email or sub claim)",
           "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Issuer URL is required for OIDC providers",
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",

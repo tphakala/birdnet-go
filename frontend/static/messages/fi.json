@@ -3313,7 +3313,7 @@
           "deleteConfirm": "Haluatko varmasti poistaa {provider} OAuth-tarjoajan?"
         },
         "noProviders": "OAuth-tarjoajia ei ole määritetty",
-        "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön sosiaalisen kirjautumisen Google-, GitHub- tai Microsoft-tilillä.",
+        "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön kirjautumisen Google-, GitHub-, Microsoft-, LINE-, Kakao- tai OIDC-tunnistautumisella.",
         "enableProviderLabel": "Ota tämä tarjoaja käyttöön",
         "getCredentialsLabel": "Hae tunnuksesi palvelusta {provider}",
         "redirectUriTitle": "Uudelleenohjaus-URI:",
@@ -3389,7 +3389,7 @@
           "clientSecretHelpText": "The client secret from your OIDC identity provider",
           "userIdLabel": "Allowed User (email or sub claim)",
           "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The OpenID Connect discovery URL of your identity provider (e.g., https://auth.example.com)",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Issuer URL is required for OIDC providers",
           "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
