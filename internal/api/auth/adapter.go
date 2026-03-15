@@ -314,10 +314,7 @@ func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirec
 		// Validate the URL is HTTPS with a valid host
 		parsed, parseErr := url.Parse(logoutURL)
 		if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			log.Warn("Rejected invalid provider logout URL",
-				logger.String("provider", gothProviderName),
-				logger.String("logout_url", logoutURL),
-			)
+			log.Warn("Rejected invalid provider logout URL", logger.String("provider", gothProviderName))
 			continue
 		}
 
