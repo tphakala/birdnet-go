@@ -3801,6 +3801,21 @@
         "extractError": "Failed to extract clip",
         "formatLabel": "Format",
         "rangeLabel": "{start}s – {end}s"
+      },
+      "processing": {
+        "playSelection": "Play selection",
+        "skipToStart": "Skip to selection start",
+        "clearSelection": "Clear selection",
+        "gain": "Gain (dB)",
+        "denoise": "Denoise",
+        "denoiseOff": "Off",
+        "denoiseLight": "Light",
+        "denoiseMedium": "Medium",
+        "denoiseHeavy": "Heavy",
+        "normalize": "Normalize audio",
+        "normalizeTooltip": "EBU R128 Normalization",
+        "export": "Export",
+        "processingActive": "Processing active"
       }
     },
     "weatherInfo": {
