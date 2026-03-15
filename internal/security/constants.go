@@ -52,6 +52,12 @@ const (
 
 	// Path validation limits
 	MaxSafePathLength = 512
+
+	// OIDC discovery retry settings
+	OIDCRetryInitialBackoff = 5 * time.Second
+	OIDCRetryMaxBackoff     = 60 * time.Second
+	OIDCRetryMaxDuration    = 5 * time.Minute
+	OIDCRetryBackoffFactor  = 2
 )
 
 // ConfigToGothProvider maps config provider IDs to goth provider names.

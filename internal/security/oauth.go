@@ -35,6 +35,78 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+var oidcRetryCancelMu sync.Mutex
+var oidcRetryCancelFunc context.CancelFunc
+
+// cancelOIDCRetry cancels any running OIDC discovery retry goroutine.
+func cancelOIDCRetry() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	if oidcRetryCancelFunc != nil {
+		oidcRetryCancelFunc()
+		oidcRetryCancelFunc = nil
+	}
+}
+
+// setOIDCRetryCancel stores the cancel function for the current OIDC retry goroutine.
+func setOIDCRetryCancel(cancel context.CancelFunc) {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	oidcRetryCancelFunc = cancel
+}
+
+// startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
+// The goroutine is canceled when the context is canceled (e.g., on config reload or shutdown).
+func startOIDCRetry(ctx context.Context, providerConfig *conf.OAuthProviderConfig, redirectURI string, scopes []string) {
+	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
+	secLog.Info("Starting background OIDC discovery retry",
+		logger.String("issuer_url", providerConfig.IssuerURL),
+		logger.Duration("max_duration", OIDCRetryMaxDuration))
+
+	backoff := OIDCRetryInitialBackoff
+	deadline := time.Now().Add(OIDCRetryMaxDuration)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				secLog.Info("OIDC discovery retry canceled")
+				return
+			case <-time.After(backoff):
+				if time.Now().After(deadline) {
+					secLog.Error("OIDC discovery retry exhausted — provider not available. Save settings to retry.",
+						logger.String("issuer_url", providerConfig.IssuerURL))
+					return
+				}
+
+				secLog.Info("Retrying OIDC discovery",
+					logger.String("issuer_url", providerConfig.IssuerURL),
+					logger.Duration("backoff", backoff))
+
+				discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
+				oidcProvider, err := openidConnect.New(
+					providerConfig.ClientID,
+					providerConfig.ClientSecret,
+					redirectURI,
+					discoveryURL,
+					scopes...,
+				)
+				if err != nil {
+					secLog.Warn("OIDC discovery retry failed",
+						logger.Error(err),
+						logger.Duration("next_backoff", min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)))
+					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
+					continue
+				}
+
+				goth.UseProviders(oidcProvider)
+				secLog.Info("OIDC provider registered after background retry")
+				return
+			}
+		}
+	}()
+}
+
 type AuthCode struct {
 	Code      string
 	ExpiresAt time.Time
@@ -438,6 +510,11 @@ func initializeProviders(settings *conf.Settings) {
 				providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
 					logger.Error(err),
 					logger.String("issuer_url", providerConfig.IssuerURL))
+				// Cancel any previous retry and start a new one
+				cancelOIDCRetry()
+				ctx, cancel := context.WithCancel(context.Background())
+				setOIDCRetryCancel(cancel)
+				startOIDCRetry(ctx, providerConfig, redirectURI, scopes)
 				continue
 			}
 			providers = append(providers, oidcProvider)
@@ -473,6 +550,7 @@ func SetTestConfigPath(path string) {
 
 func (s *OAuth2Server) UpdateProviders() {
 	GetLogger().Info("Updating Goth providers based on potentially changed settings")
+	cancelOIDCRetry()
 	InitializeGoth(s.Settings)
 }
 
