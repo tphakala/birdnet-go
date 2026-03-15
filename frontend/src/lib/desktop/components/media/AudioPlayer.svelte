@@ -287,8 +287,8 @@
 
   // Selection interaction constants
   const MIN_DRAG_DISTANCE = 5; // Pixels — distinguishes click from drag
-  const MOUSE_HANDLE_THRESHOLD = 8; // Pixels — snap zone for mouse handle grab
-  const TOUCH_HANDLE_THRESHOLD = 16; // Pixels — larger snap zone for touch
+  const MOUSE_HANDLE_THRESHOLD = 16; // Pixels — snap zone for mouse handle grab
+  const TOUCH_HANDLE_THRESHOLD = 24; // Pixels — larger snap zone for touch
   const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
   const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
 
@@ -1527,10 +1527,10 @@
       })}
     ></div>
 
-    <!-- Start handle -->
+    <!-- Start handle: visible 2px line with wider 16px invisible hit zone -->
     {#if !isDragSelecting}
       <div
-        class="absolute top-0 bottom-0 w-1.5 bg-primary cursor-col-resize z-10 -translate-x-1/2"
+        class="absolute top-0 bottom-0 w-4 cursor-col-resize z-10 -translate-x-1/2 flex justify-center"
         style:left="{startPct}%"
         role="slider"
         tabindex="0"
@@ -1552,11 +1552,13 @@
             );
           }
         }}
-      ></div>
+      >
+        <div class="w-0.5 h-full bg-primary"></div>
+      </div>
 
-      <!-- End handle -->
+      <!-- End handle: visible 2px line with wider 16px invisible hit zone -->
       <div
-        class="absolute top-0 bottom-0 w-1.5 bg-primary cursor-col-resize z-10 -translate-x-1/2"
+        class="absolute top-0 bottom-0 w-4 cursor-col-resize z-10 -translate-x-1/2 flex justify-center"
         style:left="{endPct}%"
         role="slider"
         tabindex="0"
@@ -1578,7 +1580,9 @@
             );
           }
         }}
-      ></div>
+      >
+        <div class="w-0.5 h-full bg-primary"></div>
+      </div>
 
       <!-- Selection toolbar -->
       {@const toolbarLeftPct = (startPct + endPct) / 2}
