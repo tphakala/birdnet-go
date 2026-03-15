@@ -826,14 +826,14 @@ func validateOIDCProviders(providers []OAuthProviderConfig) error {
 				Build()
 		}
 		parsed, err := url.Parse(provider.IssuerURL)
-		if err != nil || parsed.Host == "" || (parsed.Scheme != "https" && parsed.Scheme != "http") { //nolint:goconst // "http" here is a URL scheme, not StreamTypeHTTP
+		if err != nil || parsed.Host == "" || (parsed.Scheme != SchemeHTTPS && parsed.Scheme != SchemeHTTP) {
 			return errors.Newf("security.oauthProviders: issuerUrl %q is not a valid URL", provider.IssuerURL).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "security-oidc-issuer-invalid").
 				Context("issuer_url", provider.IssuerURL).
 				Build()
 		}
-		if parsed.Scheme == "http" {
+		if parsed.Scheme == SchemeHTTP {
 			GetLogger().Warn("OIDC issuerUrl uses HTTP instead of HTTPS — acceptable for local development only",
 				logger.String("issuer_url", provider.IssuerURL))
 		}
