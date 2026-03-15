@@ -23,15 +23,15 @@
 
   let { detection, className = '' }: Props = $props();
 
-  // Use the server timestamp (RFC3339 with timezone) for accurate relative time,
-  // falling back to date+time strings if timestamp is not available.
+  // Use the server timestamp (RFC3339 with timezone) for accurate relative time.
+  // Without a timezone-aware timestamp, relative time cannot be computed correctly
+  // across different timezones, so we return null to skip the display.
   const detectionDateTime = $derived.by(() => {
     if (detection.timestamp) {
       const parsed = new Date(detection.timestamp);
       if (!isNaN(parsed.getTime())) return parsed;
     }
-    const parsed = new Date(`${detection.date}T${detection.time}`);
-    return isNaN(parsed.getTime()) ? new Date() : parsed;
+    return null;
   });
   const relativeTime = $derived(formatRelativeTime(detectionDateTime));
 
