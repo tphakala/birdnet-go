@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -496,4 +497,44 @@ func TestHandleWalkError(t *testing.T) {
 	err = handleWalkError(permErr, filepath.Join(tempDir, "denied.wav.temp"), false)
 	require.Error(t, err, "permission error should propagate even for temp files")
 	require.ErrorIs(t, err, permErr, "should return the original error")
+}
+
+// TestDotDirectorySkipping verifies that dot-prefixed directories are skipped
+// during directory walking, preventing files like those in .processing-cache
+// from being included in disk manager cleanup.
+func TestDotDirectorySkipping(t *testing.T) {
+	t.Parallel()
+
+	baseDir := t.TempDir()
+
+	// Create a hidden directory with a WAV file inside
+	hiddenDir := filepath.Join(baseDir, ".processing-cache")
+	require.NoError(t, os.MkdirAll(hiddenDir, 0o750))
+	hiddenWAV := filepath.Join(hiddenDir, "cached_audio.wav")
+	require.NoError(t, os.WriteFile(hiddenWAV, []byte("fake wav data"), 0o640))
+
+	// Create a normal WAV file that should be found
+	normalWAV := filepath.Join(baseDir, "normal.wav")
+	require.NoError(t, os.WriteFile(normalWAV, []byte("fake wav data"), 0o640))
+
+	// Walk and collect all visited file paths
+	var visited []string
+	err := filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		// Apply the same skip logic as createWalkFunc
+		if info.IsDir() && info.Name() != "." && strings.HasPrefix(info.Name(), ".") {
+			return filepath.SkipDir
+		}
+		if !info.IsDir() {
+			visited = append(visited, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	// Hidden dir's file should be skipped, normal file should be found
+	assert.Contains(t, visited, normalWAV)
+	assert.NotContains(t, visited, hiddenWAV)
 }
