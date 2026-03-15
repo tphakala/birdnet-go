@@ -2,8 +2,10 @@ package myaudio
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -653,6 +655,110 @@ func TestAnalyzeFileLoudness(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		_, err := AnalyzeFileLoudness(ctx, testFile, ffmpegPath, AudioFilters{}, nil)
+		assert.Error(t, err)
+	})
+}
+
+// createTestWAVFileWithTone creates a WAV file with a sine wave tone at the given frequency.
+// Unlike createTestWAVFile48k which generates silence, this produces audible content
+// needed for loudnorm analysis (silence yields -inf loudness which FFmpeg rejects).
+func createTestWAVFileWithTone(t *testing.T, path string, durationSec int, freqHz float64) {
+	t.Helper()
+
+	const sampleRate = 48000
+	const numChannels = 1
+	const bitsPerSample = 16
+
+	numSamples := sampleRate * durationSec * numChannels
+	dataSize := numSamples * (bitsPerSample / 8)
+
+	buf := make([]byte, 44+dataSize)
+
+	// WAV header
+	copy(buf[0:4], "RIFF")
+	binary.LittleEndian.PutUint32(buf[4:8], uint32(36+dataSize))
+	copy(buf[8:12], "WAVE")
+	copy(buf[12:16], "fmt ")
+	binary.LittleEndian.PutUint32(buf[16:20], 16)
+	binary.LittleEndian.PutUint16(buf[20:22], 1) // PCM
+	binary.LittleEndian.PutUint16(buf[22:24], uint16(numChannels))
+	binary.LittleEndian.PutUint32(buf[24:28], uint32(sampleRate))
+	binary.LittleEndian.PutUint32(buf[28:32], uint32(sampleRate*numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[32:34], uint16(numChannels*bitsPerSample/8))
+	binary.LittleEndian.PutUint16(buf[34:36], uint16(bitsPerSample))
+	copy(buf[36:40], "data")
+	binary.LittleEndian.PutUint32(buf[40:44], uint32(dataSize))
+
+	// Generate sine wave samples (amplitude ~50% to avoid clipping)
+	const amplitude = 16000.0
+	for i := range numSamples {
+		sample := amplitude * math.Sin(2.0*math.Pi*freqHz*float64(i)/float64(sampleRate))
+		binary.LittleEndian.PutUint16(buf[44+i*2:46+i*2], uint16(int16(sample)))
+	}
+
+	require.NoError(t, os.WriteFile(path, buf, 0o600))
+}
+
+func TestProcessAudioFile(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpeg()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+
+	// Silence file for non-normalize tests
+	silenceFile := filepath.Join(testDir, "silence.wav")
+	createTestWAVFile48k(t, silenceFile, 2)
+
+	// Tone file for normalize tests (loudnorm requires non-silent audio)
+	toneFile := filepath.Join(testDir, "tone.wav")
+	createTestWAVFileWithTone(t, toneFile, 2, 440.0)
+
+	t.Run("gain only", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{GainDB: 6.0})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("denoise only", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{Denoise: "light"})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("normalize with two-pass", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), toneFile, ffmpegPath, AudioFilters{Normalize: true})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("all filters combined", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), toneFile, ffmpegPath, AudioFilters{
+			Denoise:   "medium",
+			Normalize: true,
+			GainDB:    3.0,
+		})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("no filters returns unprocessed WAV", func(t *testing.T) {
+		t.Parallel()
+		buf, err := ProcessAudioFile(t.Context(), silenceFile, ffmpegPath, AudioFilters{})
+		require.NoError(t, err)
+		assert.Positive(t, buf.Len())
+	})
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		t.Parallel()
+		_, err := ProcessAudioFile(t.Context(), "/nonexistent.wav", ffmpegPath, AudioFilters{GainDB: 6.0})
 		assert.Error(t, err)
 	})
 }

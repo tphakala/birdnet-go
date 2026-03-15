@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"math"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -171,4 +172,68 @@ func parseLoudnessJSON(stderr string) (*LoudnessStats, error) {
 	}
 
 	return &stats, nil
+}
+
+// processingTimeout is the maximum time allowed for the entire processing operation
+// (includes both analysis and rendering passes for normalize).
+const processingTimeout = 60 * time.Second
+
+// MaxProcessDurationSec is the maximum allowed audio file duration for the process endpoint.
+const MaxProcessDurationSec = 120
+
+// ProcessAudioFile applies audio filters to an entire file and returns WAV output.
+// For normalize: runs two-pass loudnorm (analysis then application).
+// For denoise/gain without normalize: single-pass.
+func ProcessAudioFile(ctx context.Context, filePath, ffmpegPath string, filters AudioFilters) (*bytes.Buffer, error) {
+	if err := ValidateFFmpegPath(ffmpegPath); err != nil {
+		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, processingTimeout)
+	defer cancel()
+
+	// Two-pass if normalize is requested
+	if filters.Normalize {
+		stats, err := AnalyzeFileLoudness(ctx, filePath, ffmpegPath, filters, nil)
+		if err != nil {
+			return nil, fmt.Errorf("loudness analysis failed: %w", err)
+		}
+		filters.LoudnessStats = stats
+	}
+
+	// Build the final filter chain
+	filterChain := BuildProcessingFilterChain(filters)
+
+	// Build FFmpeg args: input → filters → WAV output to stdout
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-i", filePath,
+	}
+	if filterChain != "" {
+		args = append(args, "-af", filterChain)
+	}
+	args = append(args,
+		"-c:a", "pcm_s16le",
+		"-f", "wav",
+		"pipe:1",
+	)
+
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: validated path
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("audio processing timed out: %w", ctx.Err())
+		}
+		return nil, fmt.Errorf("audio processing failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	if stdout.Len() == 0 {
+		return nil, fmt.Errorf("FFmpeg produced empty output for %s", filepath.Base(filePath))
+	}
+
+	return &stdout, nil
 }
