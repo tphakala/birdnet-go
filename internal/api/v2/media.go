@@ -869,7 +869,12 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
 	}
-	tmpPath := filepath.Join(tmpDir, fmt.Sprintf("processed-%s-%d.wav", noteID, time.Now().UnixNano()))
+	tmpFile, err := os.CreateTemp(tmpDir, "processed-*.wav")
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
+	}
+	tmpPath := tmpFile.Name()
+	_ = tmpFile.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
 
 	if err := myaudio.ProcessAudioToFile(ctx.Request().Context(), absolutePath,

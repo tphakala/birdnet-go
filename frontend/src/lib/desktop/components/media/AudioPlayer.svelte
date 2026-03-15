@@ -881,10 +881,11 @@
 
   function handleToolbarExport(format: string) {
     if (format === 'original') {
-      // Download original file directly
+      // Download original file directly — empty download attribute lets the
+      // browser use the server's Content-Disposition filename
       const a = document.createElement('a');
       a.href = audioUrl;
-      a.download = clipLabel || `audio_${detectionId}`;
+      a.download = '';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -893,7 +894,8 @@
 
     extractionFormat = format;
     if (selectionStartSec === null || selectionEndSec === null) {
-      // No selection — export full file
+      // No selection — export full file (guard against unloaded metadata)
+      if (duration <= 0) return;
       extractClip(0, duration);
     } else {
       extractClip();
@@ -993,9 +995,15 @@
   };
 
   const handleProgressClick = (event: MouseEvent) => {
-    if (!audioElement || !progressBar) return;
+    if (!audioElement || duration <= 0) return;
 
-    const rect = progressBar.getBoundingClientRect();
+    // Use the toolbar's own progress bar if the event target is inside one,
+    // otherwise fall back to playerContainer (always rendered).
+    const targetEl = (event.target as HTMLElement)?.closest('.progress-bar') as HTMLElement | null;
+    const refEl = targetEl ?? progressBar ?? playerContainer;
+    if (!refEl) return;
+
+    const rect = refEl.getBoundingClientRect();
     const clickX = event.clientX - rect.left;
     const clickPercent = clickX / rect.width;
     const newTime = clickPercent * duration;
@@ -1511,8 +1519,11 @@
       });
 
       addTrackedEventListener(audioElement, 'ended', () => {
+        // When playing a selection, scheduleSelectionEnd handles looping — ignore ended event
+        if (isPlayingSelection) return;
+
         if (loopEnabled && audioElement) {
-          // Loop: restart from beginning (or selection start if selected)
+          // Loop full audio: restart from beginning
           audioElement.currentTime = 0;
           audioElement.play().catch(() => {});
           return;
@@ -1706,6 +1717,9 @@
     return () => {
       if (processedAudioUrl) {
         URL.revokeObjectURL(processedAudioUrl);
+      }
+      if (processedSpectrogramUrl) {
+        URL.revokeObjectURL(processedSpectrogramUrl);
       }
       if (processDebounceTimer) {
         clearTimeout(processDebounceTimer);

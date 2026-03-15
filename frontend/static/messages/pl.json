@@ -4008,6 +4008,7 @@
         "normalize": "Normalize audio",
         "normalizeTooltip": "EBU R128 Normalization",
         "export": "Export",
+        "exportOriginal": "Oryginalny",
         "processingActive": "Processing active"
       }
     },

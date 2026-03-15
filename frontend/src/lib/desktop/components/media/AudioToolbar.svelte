@@ -152,6 +152,11 @@
 
   // Unified play handler: plays selection when selected, full audio otherwise
   function handlePlay() {
+    // If full audio is already playing, always allow pausing it
+    if (isPlaying && !isPlayingSelection) {
+      onPlayPause();
+      return;
+    }
     if (hasSelection) {
       if (isPlayingSelection) {
         onStopSelection();
@@ -164,7 +169,7 @@
   }
 
   // Unified playing state
-  let isCurrentlyPlaying = $derived(hasSelection ? isPlayingSelection : isPlaying);
+  let isCurrentlyPlaying = $derived(isPlayingSelection || isPlaying);
 </script>
 
 <svelte:document onclick={handleClickOutside} />
@@ -338,7 +343,9 @@
       {/if}
       {#if showExportMenu}
         <div class="export-menu">
-          <button class="export-option" onclick={() => handleExport('original')}> Original </button>
+          <button class="export-option" onclick={() => handleExport('original')}>
+            {t('components.audioPlayer.processing.exportOriginal')}
+          </button>
           {#each exportFormats as fmt (fmt.id)}
             <button class="export-option" onclick={() => handleExport(fmt.id)}>
               {fmt.label}
