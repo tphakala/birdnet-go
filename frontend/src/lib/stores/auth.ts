@@ -124,8 +124,15 @@ function createAuthStore() {
             },
           });
 
-          // Redirect to the Svelte UI root
-          window.location.href = buildAppUrl('/ui/');
+          // Check if provider returned an end-session URL for RP-Initiated Logout
+          const data = await response.json();
+          if (data.providerLogoutUrl) {
+            // Redirect to OIDC provider's logout endpoint
+            window.location.href = data.providerLogoutUrl;
+          } else {
+            // Default redirect to the Svelte UI root
+            window.location.href = buildAppUrl('/ui/');
+          }
         } else {
           const errorMsg = `Logout failed: ${response.statusText}`;
           logger.error('Logout failed', {
