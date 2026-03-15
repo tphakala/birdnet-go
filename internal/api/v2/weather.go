@@ -514,8 +514,8 @@ func (c *Controller) GetLatestWeather(ctx echo.Context) error {
 		response.Daily = &dailyResponse
 	}
 
-	// Compute moon phase live (pure math, no I/O)
-	moonData := suncalc.GetMoonPhase(time.Now())
+	// Compute moon phase from the weather snapshot timestamp for consistency
+	moonData := suncalc.GetMoonPhase(latestWeather.Time)
 	response.Moon = &MoonResponse{
 		Phase:        moonData.Phase,
 		PhaseName:    moonData.PhaseName,

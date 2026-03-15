@@ -78,11 +78,18 @@
     }
   }
 
+  // Refresh weather every 10 minutes
+  const WEATHER_REFRESH_MS = 10 * 60_000;
+
   $effect(() => {
     if (config.showWeather && !editMode) {
       const controller = new AbortController();
       fetchWeather(controller.signal);
-      return () => controller.abort();
+      const id = setInterval(() => fetchWeather(controller.signal), WEATHER_REFRESH_MS);
+      return () => {
+        controller.abort();
+        clearInterval(id);
+      };
     }
   });
 
