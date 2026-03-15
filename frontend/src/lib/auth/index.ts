@@ -13,3 +13,4 @@ export {
 export { default as GoogleIcon } from './icons/GoogleIcon.svelte';
 export { default as GithubIcon } from './icons/GithubIcon.svelte';
 export { default as MicrosoftIcon } from './icons/MicrosoftIcon.svelte';
+export { default as OidcIcon } from './icons/OidcIcon.svelte';

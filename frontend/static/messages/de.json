@@ -3297,8 +3297,8 @@
         "disabled": "Passwort-Authentifizierung ist deaktiviert"
       },
       "oauth": {
-        "title": "OAuth2 Social-Authentifizierung",
-        "description": "Single Sign-On zur Anmeldung mit Ihrem bestehenden Konto",
+        "title": "Externe Authentifizierung",
+        "description": "Anmeldung mit einem externen Identitätsanbieter oder OIDC",
         "form": {
           "editTitle": "OAuth-Anbieter bearbeiten",
           "addTitle": "OAuth-Anbieter hinzufügen",
@@ -3316,7 +3316,7 @@
           "deleteConfirm": "Möchten Sie den {provider}-OAuth-Anbieter wirklich löschen?"
         },
         "noProviders": "Keine OAuth-Anbieter konfiguriert",
-        "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um die soziale Anmeldung mit Google-, GitHub- oder Microsoft-Konten zu aktivieren.",
+        "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um die Anmeldung mit Google, GitHub, Microsoft, LINE, Kakao oder einem benutzerdefinierten OIDC-Anbieter zu ermöglichen.",
         "enableProviderLabel": "Diesen Anbieter aktivieren",
         "getCredentialsLabel": "Holen Sie sich Ihre Anmeldedaten von {provider}",
         "redirectUriTitle": "Umleitungs-URI:",
@@ -3380,6 +3380,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "Das Client Secret aus der Kakao Developers Console bei der Einrichtung von Kakao Login.",
           "userIdLabel": "Benutzer-ID"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3740,6 +3759,7 @@
     "continueWithMicrosoft": "Weiter mit Microsoft",
     "continueWithLine": "Weiter mit LINE",
     "continueWithKakao": "Weiter mit Kakao",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihr Passwort und versuchen Sie es erneut.",
       "passwordRequired": "Passwort ist erforderlich.",

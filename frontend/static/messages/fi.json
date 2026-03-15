@@ -3297,8 +3297,8 @@
         "disabled": "Salasana-autentikointi on poistettu käytöstä"
       },
       "oauth": {
-        "title": "OAuth2-sosiaalinen tunnistautuminen",
-        "description": "Kertakirjautuminen olemassa olevalla tililläsi",
+        "title": "Ulkoinen tunnistautuminen",
+        "description": "Kirjaudu ulkoisella identiteetintarjoajalla tai OIDC:llä",
         "form": {
           "editTitle": "Muokkaa OAuth-tarjoajaa",
           "addTitle": "Lisää OAuth-tarjoaja",
@@ -3316,7 +3316,7 @@
           "deleteConfirm": "Haluatko varmasti poistaa {provider} OAuth-tarjoajan?"
         },
         "noProviders": "OAuth-tarjoajia ei ole määritetty",
-        "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön sosiaalisen kirjautumisen Google-, GitHub- tai Microsoft-tilillä.",
+        "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön kirjautumisen Google-, GitHub-, Microsoft-, LINE-, Kakao- tai OIDC-tunnistautumisella.",
         "enableProviderLabel": "Ota tämä tarjoaja käyttöön",
         "getCredentialsLabel": "Hae tunnuksesi palvelusta {provider}",
         "redirectUriTitle": "Uudelleenohjaus-URI:",
@@ -3380,6 +3380,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "Kakao Developers Consolesta saatu Client Secret Kakao Login -määrityksen yhteydessä.",
           "userIdLabel": "Käyttäjätunnus"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3740,6 +3759,7 @@
     "continueWithMicrosoft": "Jatka Microsoftilla",
     "continueWithLine": "Jatka LINE:llä",
     "continueWithKakao": "Jatka Kakaolla",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Kirjautuminen epäonnistui. Tarkista salasanasi ja yritä uudelleen.",
       "passwordRequired": "Salasana vaaditaan.",

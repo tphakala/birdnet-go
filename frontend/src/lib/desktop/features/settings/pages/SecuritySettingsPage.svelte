@@ -52,7 +52,7 @@
   import type { Component } from 'svelte';
 
   // Provider type for OAuth providers
-  type OAuthProviderType = 'google' | 'github' | 'microsoft' | 'line' | 'kakao';
+  type OAuthProviderType = 'google' | 'github' | 'microsoft' | 'line' | 'kakao' | 'oidc';
 
   // OAuth provider option for dropdown
   interface OAuthProviderOption extends SelectOption {
@@ -66,6 +66,7 @@
     { value: 'microsoft', label: 'Microsoft', providerId: 'microsoft' },
     { value: 'line', label: 'LINE', providerId: 'line' },
     { value: 'kakao', label: 'Kakao', providerId: 'kakao' },
+    { value: 'oidc', label: 'OIDC', providerId: 'oidc' },
   ];
 
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
@@ -319,11 +320,15 @@
     clientSecret: string;
     userId: string;
     enabled: boolean;
+    issuerUrl: string;
+    scopesText: string;
   }>({
     clientId: '',
     clientSecret: '',
     userId: '',
     enabled: true,
+    issuerUrl: '',
+    scopesText: '',
   });
 
   // Available providers (filter out already configured ones)
@@ -450,6 +455,8 @@
       clientSecret: '',
       userId: '',
       enabled: true,
+      issuerUrl: '',
+      scopesText: '',
     };
     showProviderForm = true;
   }
@@ -466,6 +473,8 @@
       clientSecret: provider.clientSecret,
       userId: provider.userId ?? '',
       enabled: provider.enabled,
+      issuerUrl: provider.issuerUrl ?? '',
+      scopesText: provider.scopes?.join(', ') ?? '',
     };
     showProviderForm = true;
   }
@@ -474,6 +483,22 @@
     showProviderForm = false;
     editingProviderIndex = null;
   }
+
+  // OIDC-specific validation
+  let isOidcValid = $derived.by(() => {
+    if (selectedProvider !== 'oidc') return true;
+    const url = providerFormData.issuerUrl.trim();
+    if (!url) return false;
+    return /^https?:\/\/[^/\s]+/.test(url);
+  });
+
+  let oidcValidationError = $derived.by(() => {
+    if (selectedProvider !== 'oidc') return '';
+    const url = providerFormData.issuerUrl.trim();
+    if (!url) return t('settings.security.oauth.oidc.issuerUrlRequired');
+    if (!/^https?:\/\/[^/\s]+/.test(url)) return t('settings.security.oauth.oidc.issuerUrlInvalid');
+    return '';
+  });
 
   function saveProvider() {
     // Build the provider config
@@ -485,6 +510,14 @@
       userId: providerFormData.userId || undefined,
       // Set redirectUri only if we have explicit base URL configuration
       redirectUri: hasExplicitBaseUrl ? getConfigRedirectURI(selectedProvider) : undefined,
+      // OIDC-specific fields
+      ...(selectedProvider === 'oidc' && {
+        issuerUrl: providerFormData.issuerUrl.trim(),
+        scopes: (() => {
+          const parsed = providerFormData.scopesText.split(',').map(s => s.trim()).filter(Boolean);
+          return parsed.length > 0 ? parsed : undefined;
+        })(),
+      }),
     };
 
     // Update the providers array
@@ -1020,16 +1053,35 @@
                     <p class="font-medium mb-1">{t('settings.security.oauth.redirectUriTitle')}</p>
                     <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getRedirectURI(selectedProvider)}</code>
                   </div>
-                  <a
-                    href={getCredentialsUrl(selectedProvider)}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
-                  >
-                    {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
-                    <ExternalLink class="size-4" />
-                  </a>
+                  {#if getCredentialsUrl(selectedProvider)}
+                    <a
+                      href={getCredentialsUrl(selectedProvider)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="text-sm text-[var(--color-primary)] hover:opacity-80 inline-flex items-center gap-1 mt-2"
+                    >
+                      {t('settings.security.oauth.getCredentialsLabel', { provider: getProviderDisplayName(selectedProvider) })}
+                      <ExternalLink class="size-4" />
+                    </a>
+                  {/if}
                 </div>
+
+                <!-- OIDC: Issuer URL (before credentials — identifies the IdP) -->
+                {#if selectedProvider === 'oidc'}
+                  <TextInput
+                    id="oidc-issuer-url"
+                    type="url"
+                    value={providerFormData.issuerUrl}
+                    label={t('settings.security.oauth.oidc.issuerUrlLabel')}
+                    placeholder={t('settings.security.oauth.oidc.issuerUrlPlaceholder')}
+                    helpText={t('settings.security.oauth.oidc.issuerUrlHelpText')}
+                    disabled={store.isLoading || store.isSaving}
+                    onchange={(value) => (providerFormData.issuerUrl = value)}
+                  />
+                  {#if oidcValidationError}
+                    <p class="text-xs text-[var(--color-error)] -mt-2">{oidcValidationError}</p>
+                  {/if}
+                {/if}
 
                 <!-- Credentials Fields -->
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1053,6 +1105,19 @@
                     allowReveal={true}
                   />
                 </div>
+
+                <!-- OIDC: Scopes (after credentials — secondary config) -->
+                {#if selectedProvider === 'oidc'}
+                  <TextInput
+                    id="oidc-scopes"
+                    value={providerFormData.scopesText}
+                    label={t('settings.security.oauth.oidc.scopesLabel')}
+                    placeholder={t('settings.security.oauth.oidc.scopesPlaceholder')}
+                    helpText={t('settings.security.oauth.oidc.scopesHelpText')}
+                    disabled={store.isLoading || store.isSaving}
+                    onchange={(value) => (providerFormData.scopesText = value)}
+                  />
+                {/if}
 
                 <TextInput
                   id="oauth-user-id"
@@ -1083,7 +1148,7 @@
                   <button
                     onclick={saveProvider}
                     class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret}
+                    disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret || !isOidcValid}
                   >
                     {t('settings.security.oauth.form.saveButton')}
                   </button>
@@ -1131,6 +1196,11 @@
                         <IconComponent class="size-5 shrink-0" />
                         <div class="min-w-0">
                           <div class="font-medium truncate">{getProviderDisplayName(providerType)}</div>
+                          {#if provider.issuerUrl}
+                            <div class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
+                              {provider.issuerUrl}
+                            </div>
+                          {/if}
                           {#if provider.userId}
                             <div class="text-xs text-[var(--color-base-content)] opacity-60 truncate">
                               {provider.userId}

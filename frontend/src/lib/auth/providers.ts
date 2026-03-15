@@ -12,6 +12,7 @@ import GithubIcon from './icons/GithubIcon.svelte';
 import MicrosoftIcon from './icons/MicrosoftIcon.svelte';
 import LineIcon from './icons/LineIcon.svelte';
 import KakaoIcon from './icons/KakaoIcon.svelte';
+import OidcIcon from './icons/OidcIcon.svelte';
 
 /**
  * OAuth provider definition with all metadata needed for
@@ -159,6 +160,26 @@ export const AUTH_PROVIDERS: Record<string, AuthProvider> = {
       clientSecretLabelKey: 'settings.security.oauth.kakao.clientSecretLabel',
       clientSecretHelpTextKey: 'settings.security.oauth.kakao.clientSecretHelpText',
       userIdLabelKey: 'settings.security.oauth.kakao.userIdLabel',
+    },
+  },
+  oidc: {
+    id: 'oidc',
+    name: 'OIDC',
+    icon: OidcIcon,
+    loginButtonKey: 'auth.continueWithOidc',
+    authEndpoint: '/auth/openid-connect',
+    settings: {
+      titleKey: 'settings.security.oauth.oidc.title',
+      enableLabelKey: 'settings.security.oauth.oidc.enableLabel',
+      redirectUriTitleKey: 'settings.security.oauth.oidc.redirectUriTitle',
+      getCredentialsLabelKey: 'settings.security.oauth.oidc.getCredentialsLabel',
+      credentialsUrl: '',
+      callbackPath: '/auth/openid-connect/callback',
+      clientIdLabelKey: 'settings.security.oauth.oidc.clientIdLabel',
+      clientIdHelpTextKey: 'settings.security.oauth.oidc.clientIdHelpText',
+      clientSecretLabelKey: 'settings.security.oauth.oidc.clientSecretLabel',
+      clientSecretHelpTextKey: 'settings.security.oauth.oidc.clientSecretHelpText',
+      userIdLabelKey: 'settings.security.oauth.oidc.userIdLabel',
     },
   },
 };

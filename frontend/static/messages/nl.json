@@ -2995,8 +2995,8 @@
         "disabled": "Password authentication is disabled"
       },
       "oauth": {
-        "title": "OAuth2 Sociale Authenticatie",
-        "description": "Eenmalige aanmelding om in te loggen met uw bestaande account",
+        "title": "Externe authenticatie",
+        "description": "Inloggen met een externe identiteitsprovider of OIDC",
         "form": {
           "editTitle": "OAuth-provider bewerken",
           "addTitle": "OAuth-provider toevoegen",
@@ -3014,7 +3014,7 @@
           "deleteConfirm": "Weet u zeker dat u de {provider} OAuth-provider wilt verwijderen?"
         },
         "noProviders": "Geen OAuth-providers geconfigureerd",
-        "noProvidersDescription": "Voeg een provider toe om sociale aanmelding met Google-, GitHub- of Microsoft-accounts in te schakelen.",
+        "noProvidersDescription": "Voeg een provider toe om inloggen met Google, GitHub, Microsoft, LINE, Kakao of een aangepaste OIDC-provider mogelijk te maken.",
         "enableProviderLabel": "Deze provider inschakelen",
         "getCredentialsLabel": "Verkrijg uw inloggegevens van {provider}",
         "redirectUriTitle": "Redirect URI:",
@@ -3078,6 +3078,25 @@
           "clientSecretLabel": "Client Secret",
           "clientSecretHelpText": "Het Client Secret verkregen uit Kakao Developers Console bij het instellen van Kakao Login.",
           "userIdLabel": "Gebruikers-ID"
+        },
+        "oidc": {
+          "title": "OIDC Provider",
+          "enableLabel": "Enable OIDC authentication",
+          "redirectUriTitle": "Redirect URI",
+          "getCredentialsLabel": "Configure in your Identity Provider",
+          "clientIdLabel": "Client ID",
+          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientSecretLabel": "Client Secret",
+          "clientSecretHelpText": "The client secret from your OIDC identity provider",
+          "userIdLabel": "Allowed User (email or sub claim)",
+          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
+          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "scopesLabel": "Scopes",
+          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
@@ -3740,6 +3759,7 @@
     "continueWithMicrosoft": "Doorgaan met Microsoft",
     "continueWithLine": "Doorgaan met LINE",
     "continueWithKakao": "Doorgaan met Kakao",
+    "continueWithOidc": "Continue with OIDC",
     "errors": {
       "loginFailed": "Aanmelding mislukt. Controleer je wachtwoord en probeer het opnieuw.",
       "passwordRequired": "Wachtwoord is verplicht.",
