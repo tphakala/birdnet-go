@@ -9,6 +9,7 @@ export interface Detection {
   id: number;
   date: string;
   time: string;
+  timestamp?: string; // ISO8601/RFC3339 with timezone from server
   source: string;
   beginTime: string;
   endTime: string;

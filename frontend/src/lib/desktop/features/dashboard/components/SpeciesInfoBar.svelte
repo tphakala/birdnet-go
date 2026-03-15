@@ -23,13 +23,16 @@
 
   let { detection, className = '' }: Props = $props();
 
-  // Get detection datetime for relative time
-  function getDetectionDateTime(date: string, time: string): Date {
-    const parsed = new Date(`${date}T${time}`);
+  // Use the server timestamp (RFC3339 with timezone) for accurate relative time,
+  // falling back to date+time strings if timestamp is not available.
+  const detectionDateTime = $derived.by(() => {
+    if (detection.timestamp) {
+      const parsed = new Date(detection.timestamp);
+      if (!isNaN(parsed.getTime())) return parsed;
+    }
+    const parsed = new Date(`${detection.date}T${detection.time}`);
     return isNaN(parsed.getTime()) ? new Date() : parsed;
-  }
-
-  const detectionDateTime = $derived(getDetectionDateTime(detection.date, detection.time));
+  });
   const relativeTime = $derived(formatRelativeTime(detectionDateTime));
 
   // Check verification status (API returns verified directly on detection)

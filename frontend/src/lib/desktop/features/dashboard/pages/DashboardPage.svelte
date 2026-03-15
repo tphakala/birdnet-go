@@ -101,6 +101,7 @@ Performance Optimizations:
     Confidence: number;
     Date: string; // YYYY-MM-DD
     Time: string; // HH:MM:SS
+    timestamp?: string; // ISO8601/RFC3339 with timezone
     SpeciesCode: string;
     Verified?: Detection['verified'];
     Locked?: boolean;
@@ -680,6 +681,7 @@ Performance Optimizations:
         confidence: detectionData.Confidence,
         date: detectionData.Date,
         time: detectionData.Time,
+        timestamp: detectionData.timestamp,
         speciesCode: detectionData.SpeciesCode,
         verified: detectionData.Verified ?? 'unverified',
         locked: detectionData.Locked ?? false,
