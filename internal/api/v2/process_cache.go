@@ -68,7 +68,7 @@ func (c *processingCache) get(key string) []byte {
 	return data
 }
 
-// put writes data to cache, evicting oldest files if over limit.
+// put writes data to cache atomically (temp file + rename), evicting oldest files if over limit.
 func (c *processingCache) put(key string, data []byte) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -76,7 +76,30 @@ func (c *processingCache) put(key string, data []byte) error {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
 	c.evictIfNeeded()
-	return os.WriteFile(filepath.Join(c.dir, key), data, 0o640) //nolint:gosec // G306: cache files need read access
+
+	// Write to temp file first, then rename for atomicity
+	tmpFile, err := os.CreateTemp(c.dir, ".tmp-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp cache file: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := tmpFile.Write(data); err != nil {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to write cache data: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to close cache temp file: %w", err)
+	}
+
+	finalPath := filepath.Join(c.dir, key)
+	if err := os.Rename(tmpPath, finalPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("failed to rename cache file: %w", err)
+	}
+	return nil
 }
 
 // evictIfNeeded removes oldest files if cache exceeds maxFiles.

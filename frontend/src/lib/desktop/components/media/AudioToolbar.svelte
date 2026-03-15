@@ -201,7 +201,8 @@
         class:error={extractionError !== null}
         disabled={!hasSelection || isExtracting}
         onclick={() => (showExportMenu = !showExportMenu)}
-        aria-label={t('components.audioPlayer.processing.export')}
+        aria-label={extractionError ?? t('components.audioPlayer.processing.export')}
+        title={extractionError ?? ''}
         aria-expanded={showExportMenu}
         aria-haspopup="true"
       >

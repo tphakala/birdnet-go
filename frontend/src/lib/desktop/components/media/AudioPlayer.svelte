@@ -683,7 +683,8 @@
     }
 
     isProcessing = true;
-    processAbortController = new AbortController();
+    const controller = new AbortController();
+    processAbortController = controller;
 
     try {
       const response = await fetch(
@@ -691,7 +692,7 @@
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          signal: processAbortController.signal,
+          signal: controller.signal,
           body: JSON.stringify({
             normalize: processingNormalize,
             denoise: processingDenoise,
@@ -720,14 +721,27 @@
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        return; // Superseded by newer request
+        return; // Superseded by newer request, don't touch state
       }
       logger.error('Audio processing failed', err as Error);
+      // Revert to original audio and reset processing state
       processingDenoise = '';
       processingNormalize = false;
+      if (processedAudioUrl) {
+        URL.revokeObjectURL(processedAudioUrl);
+        processedAudioUrl = null;
+      }
+      if (audioElement) {
+        const pos = audioElement.currentTime;
+        audioElement.src = audioUrl;
+        audioElement.currentTime = pos;
+      }
     } finally {
-      isProcessing = false;
-      processAbortController = null;
+      // Only clear state if this is still the active request (avoid stale finally)
+      if (processAbortController === controller) {
+        isProcessing = false;
+        processAbortController = null;
+      }
     }
   }
 
@@ -1816,7 +1830,7 @@
 
   <!-- Processing active badge -->
   {#if processingActive}
-    <div class="processing-badge">
+    <div class="processing-badge" role="status" aria-live="polite">
       {t('components.audioPlayer.processing.processingActive')}
     </div>
   {/if}

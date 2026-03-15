@@ -106,7 +106,8 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 // This prevents injection of malformed values into FFmpeg filter chains.
 func (s *LoudnessStats) isValid() bool {
 	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh, s.TargetOffset} {
-		if _, err := strconv.ParseFloat(v, 64); err != nil {
+		f, err := strconv.ParseFloat(v, 64)
+		if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
 			return false
 		}
 	}
@@ -162,7 +163,7 @@ func AnalyzeFileLoudness(ctx context.Context, filePath, ffmpegPath string, filte
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("loudness analysis timed out: %w", ctx.Err())
+			return nil, fmt.Errorf("loudness analysis cancelled: %w", ctx.Err())
 		}
 		return nil, fmt.Errorf("loudness analysis failed: %w, stderr: %s", err, stderr.String())
 	}
@@ -244,7 +245,7 @@ func ProcessAudioFile(ctx context.Context, filePath, ffmpegPath string, filters 
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("audio processing timed out: %w", ctx.Err())
+			return nil, fmt.Errorf("audio processing cancelled: %w", ctx.Err())
 		}
 		return nil, fmt.Errorf("audio processing failed: %w, stderr: %s", err, stderr.String())
 	}
