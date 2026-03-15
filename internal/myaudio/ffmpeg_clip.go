@@ -45,10 +45,13 @@ var supportedClipFormats = map[string]bool{
 
 // requiresSeekableOutput lists formats whose muxers cannot write to a pipe.
 // MP4-based containers (AAC → mp4, ALAC → ipod) need seekable output to
-// write the moov atom, so we route them through a temporary file.
+// write the moov atom. FLAC needs seekable output to finalize the STREAMINFO
+// header (total sample count, min/max frame sizes, MD5 checksum). Without it,
+// these fields are zeroed and players may reject or misinterpret the file.
 var requiresSeekableOutput = map[string]bool{
 	FormatAAC:  true,
 	FormatALAC: true,
+	FormatFLAC: true,
 }
 
 // IsSupportedClipFormat returns true if the format is supported for clip extraction.
