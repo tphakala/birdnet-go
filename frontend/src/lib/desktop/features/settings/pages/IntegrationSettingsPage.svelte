@@ -1013,6 +1013,42 @@
           }
         }
       }
+
+      // Flush decoder and process any final non-newline-terminated line
+      remaining += decoder.decode();
+      const finalLine = remaining.trim();
+      if (finalLine) {
+        try {
+          const stageResult = JSON.parse(finalLine);
+          logger.debug('eBird test final result received:', stageResult);
+
+          if (stageResult.id) {
+            const stage: Stage = {
+              id: stageResult.id,
+              title: stageResult.title || 'Test Stage',
+              status: stageResult.status || 'pending',
+              message: stageResult.message || '',
+              error: stageResult.error || '',
+            };
+
+            const existingIndex = testStates.ebird.stages.findIndex(s => s.id === stage.id);
+            if (existingIndex === -1) {
+              testStates.ebird.stages.push(stage);
+            } else {
+              const existingStage = safeArrayAccess(testStates.ebird.stages, existingIndex);
+              if (
+                existingStage &&
+                existingIndex >= 0 &&
+                existingIndex < testStates.ebird.stages.length
+              ) {
+                testStates.ebird.stages.splice(existingIndex, 1, { ...existingStage, ...stage });
+              }
+            }
+          }
+        } catch (parseError) {
+          logger.error('Failed to parse eBird test final result:', parseError, finalLine);
+        }
+      }
     } catch (error) {
       logger.error('eBird test failed:', error);
 
@@ -1026,7 +1062,7 @@
       } else {
         const lastIndex = testStates.ebird.stages.length - 1;
         const lastStage = safeArrayAccess(testStates.ebird.stages, lastIndex);
-        if (lastStage && lastStage.status === 'in_progress') {
+        if (lastStage && lastStage.status !== 'completed' && lastStage.status !== 'error') {
           testStates.ebird.stages.splice(lastIndex, 1, {
             ...lastStage,
             status: 'error' as const,
