@@ -1,10 +1,12 @@
 package myaudio
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -598,4 +600,59 @@ func TestAudioFiltersHasFilters(t *testing.T) {
 	assert.True(t, AudioFilters{Denoise: "light"}.HasFilters())
 	assert.True(t, AudioFilters{Normalize: true}.HasFilters())
 	assert.True(t, AudioFilters{GainDB: 1.0}.HasFilters())
+}
+
+func TestAnalyzeFileLoudness(t *testing.T) {
+	t.Parallel()
+
+	ffmpegPath, err := findFFmpeg()
+	if err != nil {
+		t.Skip("FFmpeg not available:", err)
+	}
+
+	testDir := t.TempDir()
+	testFile := filepath.Join(testDir, "test.wav")
+	createTestWAVFile48k(t, testFile, 2)
+
+	t.Run("analyze silence", func(t *testing.T) {
+		t.Parallel()
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{}, nil)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+		assert.NotEmpty(t, stats.InputTP)
+		assert.NotEmpty(t, stats.InputLRA)
+		assert.NotEmpty(t, stats.InputThresh)
+	})
+
+	t.Run("analyze with denoise prepended", func(t *testing.T) {
+		t.Parallel()
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{Denoise: "light"}, nil)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+	})
+
+	t.Run("analyze with seek range", func(t *testing.T) {
+		t.Parallel()
+		seekRange := &SeekRange{Start: 0.0, Duration: 1.0}
+		stats, err := AnalyzeFileLoudness(t.Context(), testFile, ffmpegPath, AudioFilters{}, seekRange)
+		require.NoError(t, err)
+		require.NotNil(t, stats)
+		assert.NotEmpty(t, stats.InputI)
+	})
+
+	t.Run("nonexistent file", func(t *testing.T) {
+		t.Parallel()
+		_, err := AnalyzeFileLoudness(t.Context(), "/nonexistent.wav", ffmpegPath, AudioFilters{}, nil)
+		assert.Error(t, err)
+	})
+
+	t.Run("context cancellation", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		_, err := AnalyzeFileLoudness(ctx, testFile, ffmpegPath, AudioFilters{}, nil)
+		assert.Error(t, err)
+	})
 }

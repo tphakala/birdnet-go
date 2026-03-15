@@ -1,9 +1,15 @@
 package myaudio
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"math"
+	"os/exec"
+	"regexp"
 	"strings"
+	"time"
 )
 
 // AudioFilters defines optional processing filters for clip extraction and preview.
@@ -82,4 +88,87 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 	}
 
 	return strings.Join(filters, ",")
+}
+
+const loudnessAnalysisTimeout = 30 * time.Second
+
+// SeekRange defines an optional time range for FFmpeg input seeking.
+type SeekRange struct {
+	Start    float64 // seconds
+	Duration float64 // seconds
+}
+
+// AnalyzeFileLoudness runs FFmpeg loudnorm analysis pass on a file and returns measured stats.
+// If seekRange is non-nil, analysis is limited to the specified time range.
+// Any pre-filters (like denoise) from AudioFilters are prepended to the analysis chain.
+func AnalyzeFileLoudness(ctx context.Context, filePath, ffmpegPath string, filters AudioFilters, seekRange *SeekRange) (*LoudnessStats, error) {
+	// Build the analysis filter chain: [denoise,] loudnorm with print_format=json
+	analysisParts := make([]string, 0, 2)
+	if params, ok := denoisePresets[filters.Denoise]; ok {
+		analysisParts = append(analysisParts, fmt.Sprintf("afftdn=nr=%d:nf=%d", params[0], params[1]))
+	}
+	analysisParts = append(analysisParts, fmt.Sprintf(
+		"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:print_format=json",
+		loudnormTargetI, loudnormTargetLRA, loudnormTargetTP,
+	))
+	filterChain := strings.Join(analysisParts, ",")
+
+	ctx, cancel := context.WithTimeout(ctx, loudnessAnalysisTimeout)
+	defer cancel()
+
+	args := []string{
+		"-hide_banner",
+	}
+
+	// Add seek range before input if specified
+	if seekRange != nil {
+		args = append(args, "-ss", fmt.Sprintf("%.6f", seekRange.Start))
+	}
+
+	args = append(args, "-i", filePath)
+
+	if seekRange != nil {
+		args = append(args, "-t", fmt.Sprintf("%.6f", seekRange.Duration))
+	}
+
+	args = append(args,
+		"-af", filterChain,
+		"-f", "null",
+		"-",
+	)
+
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: ffmpegPath validated by caller
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("loudness analysis timed out: %w", ctx.Err())
+		}
+		return nil, fmt.Errorf("loudness analysis failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	return parseLoudnessJSON(stderr.String())
+}
+
+// loudnessJSONPattern matches the JSON block output by loudnorm's print_format=json.
+var loudnessJSONPattern = regexp.MustCompile(`(?s)\{[^}]*"input_i"\s*:[^}]*\}`)
+
+// parseLoudnessJSON extracts LoudnessStats from FFmpeg stderr output.
+func parseLoudnessJSON(stderr string) (*LoudnessStats, error) {
+	match := loudnessJSONPattern.FindString(stderr)
+	if match == "" {
+		return nil, fmt.Errorf("no loudnorm JSON found in FFmpeg output")
+	}
+
+	var stats LoudnessStats
+	if err := json.Unmarshal([]byte(match), &stats); err != nil {
+		return nil, fmt.Errorf("failed to parse loudnorm JSON: %w", err)
+	}
+
+	if stats.InputI == "" {
+		return nil, fmt.Errorf("loudnorm analysis returned empty input_i")
+	}
+
+	return &stats, nil
 }
