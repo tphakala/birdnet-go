@@ -1653,6 +1653,15 @@
           "level": {
             "label": "Filter Level"
           },
+          "detectionCount": "{count} confirmations required. {description}",
+          "levels": {
+            "off": "No filtering - accepts first detection immediately",
+            "lenient": "For low-quality audio (RTSP cameras, webcam mics)",
+            "moderate": "Balanced for typical hobby setups",
+            "balanced": "Original pre-Sept 2025 behavior",
+            "strict": "RPi 4+ needed. For high-quality microphones",
+            "maximum": "RPi 4+ needed. For professional-grade microphones"
+          },
           "hardwareNote": "Strict and Maximum levels require higher overlap settings and more CPU resources. RPi 4 or better hardware is required for these levels.",
           "overlapAdjusted": "Overlap setting automatically adjusted to {overlap}s to meet filter requirements",
           "overlapReduced": "Overlap setting reduced to {overlap}s to match filter level"

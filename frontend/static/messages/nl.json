@@ -1611,6 +1611,15 @@
           "level": {
             "label": "Filterniveau"
           },
+          "detectionCount": "{count} bevestigingen vereist. {description}",
+          "levels": {
+            "off": "Geen filtering - accepteert eerste detectie onmiddellijk",
+            "lenient": "Voor audio van lage kwaliteit (RTSP-camera's, webcammicrofoons)",
+            "moderate": "Gebalanceerd voor typische hobbyopstellingen",
+            "balanced": "Origineel gedrag van voor september 2025",
+            "strict": "RPi 4+ vereist. Voor hoogwaardige microfoons",
+            "maximum": "RPi 4+ vereist. Voor professionele microfoons"
+          },
           "hardwareNote": "De niveaus \"Strikt\" en \"Maximum\" vereisen hogere overlap-instellingen en meer CPU-bronnen. RPi 4 of betere hardware is vereist voor deze niveaus.",
           "overlapAdjusted": "Overlap-instelling automatisch aangepast naar {overlap}s om aan de filtervereisten te voldoen",
           "overlapReduced": "Overlap-instelling verlaagd naar {overlap}s om overeen te komen met het filterniveau"
