@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -42,6 +43,14 @@ func IsValidDenoisePreset(preset string) bool {
 	return ok
 }
 
+// MaxGainDB is the maximum allowed gain adjustment in dB.
+const MaxGainDB = 60.0
+
+// IsValidGainDB returns true if the gain value is within the allowed range and not NaN/Inf.
+func IsValidGainDB(gainDB float64) bool {
+	return !math.IsNaN(gainDB) && !math.IsInf(gainDB, 0) && gainDB >= -MaxGainDB && gainDB <= MaxGainDB
+}
+
 // Loudnorm default targets (EBU R128).
 const (
 	loudnormTargetI   = -23.0
@@ -62,7 +71,7 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 
 	// 2. Normalize (loudnorm)
 	if f.Normalize {
-		if f.LoudnessStats != nil {
+		if f.LoudnessStats != nil && f.LoudnessStats.isValid() {
 			// Pass 2: apply with measured values
 			filters = append(filters, fmt.Sprintf(
 				"loudnorm=I=%.1f:LRA=%.1f:TP=%.1f:measured_I=%s:measured_LRA=%s:measured_TP=%s:measured_thresh=%s",
@@ -89,6 +98,17 @@ func BuildProcessingFilterChain(f AudioFilters) string {
 	}
 
 	return strings.Join(filters, ",")
+}
+
+// isValid returns true if the measured loudness stats contain valid numeric values.
+// This prevents injection of malformed values into FFmpeg filter chains.
+func (s *LoudnessStats) isValid() bool {
+	for _, v := range []string{s.InputI, s.InputTP, s.InputLRA, s.InputThresh} {
+		if _, err := strconv.ParseFloat(v, 64); err != nil {
+			return false
+		}
+	}
+	return true
 }
 
 const loudnessAnalysisTimeout = 30 * time.Second

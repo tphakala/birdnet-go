@@ -593,6 +593,10 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
+	if !myaudio.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
+	}
 
 	// Resolve clip path from datastore
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
@@ -709,10 +713,14 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid request body", http.StatusBadRequest)
 	}
 
-	// Validate denoise preset
+	// Validate denoise preset and gain range
 	if !myaudio.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
+	}
+	if !myaudio.IsValidGainDB(req.GainDB) {
+		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
+			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
 	}
 
 	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)

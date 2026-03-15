@@ -31,6 +31,10 @@
     isProcessing: boolean;
     isPlayingSelection: boolean;
 
+    // Export state
+    isExtracting: boolean;
+    extractionError: string | null;
+
     // Callbacks
     onPlaySelection: () => void;
     onStopSelection: () => void;
@@ -51,6 +55,8 @@
     normalize = false,
     isProcessing = false,
     isPlayingSelection = false,
+    isExtracting = false,
+    extractionError = null,
     onPlaySelection,
     onStopSelection,
     onSkipToSelection,
@@ -192,13 +198,18 @@
     <div class="export-dropdown">
       <button
         class="toolbar-btn export-btn"
-        disabled={!hasSelection}
+        class:error={extractionError !== null}
+        disabled={!hasSelection || isExtracting}
         onclick={() => (showExportMenu = !showExportMenu)}
         aria-label={t('components.audioPlayer.processing.export')}
         aria-expanded={showExportMenu}
         aria-haspopup="true"
       >
-        <Download size={14} />
+        {#if isExtracting}
+          <Loader2 size={14} class="animate-spin" />
+        {:else}
+          <Download size={14} />
+        {/if}
         <span>{t('components.audioPlayer.processing.export')}</span>
         <ChevronDown size={12} />
       </button>
@@ -277,6 +288,11 @@
     background: var(--color-primary);
     color: var(--color-primary-content, #fff);
     border-color: var(--color-primary);
+  }
+
+  .toolbar-btn.error {
+    border-color: var(--color-error, #ef4444);
+    color: var(--color-error, #ef4444);
   }
 
   .toolbar-control {

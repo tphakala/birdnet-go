@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +19,7 @@ const (
 
 // processingCache manages temporary processed audio files.
 type processingCache struct {
+	mu       sync.Mutex
 	dir      string
 	maxFiles int
 }
@@ -28,6 +31,9 @@ func newProcessingCache(dir string, maxFiles int) *processingCache {
 
 // processingCacheKey builds a deterministic filename for cache lookup.
 func processingCacheKey(detectionID string, normalize bool, denoise string, gainDB float64) string {
+	// Sanitize detection ID to prevent path traversal in cache filenames
+	safeID := strings.NewReplacer("/", "_", "\\", "_", "..", "_").Replace(detectionID)
+
 	// Canonicalize -0.0 to 0.0
 	if gainDB == 0 {
 		gainDB = math.Copysign(0, 1) // force positive zero
@@ -39,11 +45,13 @@ func processingCacheKey(detectionID string, normalize bool, denoise string, gain
 	if denoise == "" {
 		denoise = "off"
 	}
-	return fmt.Sprintf("%s_%s_%s_%.1f.wav", detectionID, norm, denoise, gainDB)
+	return fmt.Sprintf("%s_%s_%s_%.1f.wav", safeID, norm, denoise, gainDB)
 }
 
 // get returns cached file data or nil if not found / expired.
 func (c *processingCache) get(key string) []byte {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	path := filepath.Join(c.dir, key)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -62,6 +70,8 @@ func (c *processingCache) get(key string) []byte {
 
 // put writes data to cache, evicting oldest files if over limit.
 func (c *processingCache) put(key string, data []byte) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	if err := os.MkdirAll(c.dir, 0o750); err != nil {
 		return fmt.Errorf("failed to create cache dir: %w", err)
 	}
@@ -108,6 +118,8 @@ func (c *processingCache) evictIfNeeded() {
 
 // cleanExpired removes all files older than TTL.
 func (c *processingCache) cleanExpired() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
 	entries, err := os.ReadDir(c.dir)
 	if err != nil {
 		return

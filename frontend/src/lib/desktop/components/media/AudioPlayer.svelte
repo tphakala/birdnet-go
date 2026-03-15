@@ -223,7 +223,6 @@
   // Clip extraction state
   let extractionFormat = $state('wav');
   let isExtracting = $state(false);
-  // eslint-disable-next-line no-unused-vars -- error state used by extractClip, display TBD
   let extractionError = $state<string | null>(null);
   let isPlayingSelection = $state(false);
   let selectionPlaybackTimeout: ReturnType<typeof setTimeout> | undefined;
@@ -1263,6 +1262,14 @@
       if (audioElement.src !== absoluteUrl) {
         debugLog('audioUrl changed, updating src', { from: audioElement.src, to: audioUrl });
         audioElement.src = audioUrl;
+        // Clean up processing state from previous audio
+        if (processedAudioUrl) {
+          URL.revokeObjectURL(processedAudioUrl);
+          processedAudioUrl = null;
+        }
+        processingDenoise = '';
+        processingNormalize = false;
+        isProcessing = false;
         // Reset playback state for new audio
         isPlaying = false;
         currentTime = 0;
@@ -1903,6 +1910,8 @@
     normalize={processingNormalize}
     {isProcessing}
     {isPlayingSelection}
+    {isExtracting}
+    {extractionError}
     onPlaySelection={playSelection}
     onStopSelection={stopSelection}
     onSkipToSelection={reviewSelection}
