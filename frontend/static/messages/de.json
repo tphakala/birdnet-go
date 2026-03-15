@@ -800,7 +800,8 @@
       }
     },
     "media": {
-      "title": "Aufnahme & Spektrogramm"
+      "title": "Aufnahme & Spektrogramm",
+      "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen"
     },
     "tabs": {
       "overview": "Übersicht",
@@ -3944,6 +3945,22 @@
       "errors": {
         "generationFailedStatus": "Erzeugung fehlgeschlagen mit Status {status}",
         "spectrogramFailed": "Spektrogramm konnte nicht erzeugt werden"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Wiedergabe anhalten",
+        "reviewSelection": "Zum Anfang der Auswahl springen",
+        "selectionStart": "Auswahl-Startgriff",
+        "selectionEnd": "Auswahl-Endgriff",
+        "lossless": "Verlustfrei",
+        "lossy": "Verlustbehaftet",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

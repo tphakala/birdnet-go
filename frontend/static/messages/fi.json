@@ -812,7 +812,8 @@
       "viewDetails": "Näytä {species} tiedot"
     },
     "media": {
-      "title": "Tallenne ja spektrogrammi"
+      "title": "Tallenne ja spektrogrammi",
+      "clipHint": "Valitse leike napsauttamalla ja vetämällä spektrogrammia"
     },
     "tabs": {
       "overview": "Yleiskatsaus",
@@ -3944,6 +3945,22 @@
       "errors": {
         "generationFailedStatus": "Luonti epäonnistui tilakoodilla {status}",
         "spectrogramFailed": "Spektrogrammin luonti epäonnistui"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Keskeytä toisto",
+        "reviewSelection": "Siirry valinnan alkuun",
+        "selectionStart": "Valinnan alkukahva",
+        "selectionEnd": "Valinnan loppukahva",
+        "lossless": "Häviötön",
+        "lossy": "Häviöllinen",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

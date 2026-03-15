@@ -803,7 +803,8 @@
       "viewDetails": "Zobraziť podrobnosti pre {species}"
     },
     "media": {
-      "title": "Nahrávka a spektrogram"
+      "title": "Nahrávka a spektrogram",
+      "clipHint": "Kliknite a potiahnite na spektrograme na výber rozsahu pre export"
     },
     "tabs": {
       "overview": "Prehľad",
@@ -3775,6 +3776,22 @@
       "errors": {
         "generationFailedStatus": "Generovanie zlyhalo so stavom {status}",
         "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Pozastaviť prehrávanie",
+        "reviewSelection": "Prejsť na začiatok výberu",
+        "selectionStart": "Rukoväť začiatku výberu",
+        "selectionEnd": "Rukoväť konca výberu",
+        "lossless": "Bezstratový",
+        "lossy": "Stratový",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

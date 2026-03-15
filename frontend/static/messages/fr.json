@@ -803,7 +803,8 @@
       "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
     },
     "media": {
-      "title": "Enregistrement et spectrogramme"
+      "title": "Enregistrement et spectrogramme",
+      "clipHint": "Cliquez et faites glisser sur le spectrogramme pour sélectionner une plage à exporter"
     },
     "tabs": {
       "overview": "Vue d'ensemble",
@@ -3944,6 +3945,22 @@
       "errors": {
         "generationFailedStatus": "Échec de la génération avec le statut {status}",
         "spectrogramFailed": "Échec de la génération du spectrogramme"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Mettre en pause",
+        "reviewSelection": "Aller au début de la sélection",
+        "selectionStart": "Poignée de début de sélection",
+        "selectionEnd": "Poignée de fin de sélection",
+        "lossless": "Sans perte",
+        "lossy": "Avec perte",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

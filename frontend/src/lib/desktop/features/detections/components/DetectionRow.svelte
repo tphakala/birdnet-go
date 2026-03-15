@@ -40,8 +40,11 @@
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { isAuthenticated } from '$lib/utils/auth';
 
   const logger = loggers.ui;
+
+  let clipExtractionEnabled = $derived(isAuthenticated());
 
   interface Props {
     detection: Detection;
@@ -353,6 +356,8 @@
       spectrogramRaw={true}
       responsive={true}
       className="w-full"
+      enableClipExtraction={clipExtractionEnabled}
+      clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
     />
   </div>
 </td>

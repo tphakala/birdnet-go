@@ -139,16 +139,17 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Media (`media.go`)
 
-| Method | Route                                | Handler                  | Auth | Description                       |
-| ------ | ------------------------------------ | ------------------------ | ---- | --------------------------------- |
-| GET    | `/media/audio/:filename`             | `ServeAudioClip`         | ❌   | Serve audio file                  |
-| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`       | ❌   | Serve spectrogram image           |
-| GET    | `/media/audio`                       | `ServeAudioByQueryID`    | ❌   | Serve audio by detection ID       |
-| GET    | `/media/species-image`               | `GetSpeciesImage`        | ❌   | Get species thumbnail image       |
-| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution     |
-| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)   |
-| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint    |
-| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status |
+| Method | Route                                | Handler                  | Auth | Description                        |
+| ------ | ------------------------------------ | ------------------------ | ---- | ---------------------------------- |
+| GET    | `/media/audio/:filename`             | `ServeAudioClip`         | ❌   | Serve audio file                   |
+| GET    | `/media/spectrogram/:filename`       | `ServeSpectrogram`       | ❌   | Serve spectrogram image            |
+| GET    | `/media/audio`                       | `ServeAudioByQueryID`    | ❌   | Serve audio by detection ID        |
+| GET    | `/media/species-image`               | `GetSpeciesImage`        | ❌   | Get species thumbnail image        |
+| GET    | `/media/species-image/info`          | `GetSpeciesImageInfo`    | ❌   | Get species image attribution      |
+| GET    | `/media/image/:scientific_name`      | `ServeSpeciesImageProxy` | ❌   | Serve cached bird image (proxy)    |
+| GET    | `/media/bird-image/:scientific_name` | `ServeSpeciesImageProxy` | ❌   | Alias for image proxy endpoint     |
+| GET    | `/spectrogram/:id/status`            | `GetSpectrogramStatus`   | ❌   | Get spectrogram generation status  |
+| POST   | `/audio/:id/clip`                    | `ExtractAudioClipByID`   | ✅   | Extract audio clip from time range |
 
 ### Notifications (`notifications.go`)
 
@@ -447,13 +448,13 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### TLS Certificate Management (`tls.go`)
 
-| Method | Route                          | Handler                          | Auth | Description                                |
-| ------ | ------------------------------ | -------------------------------- | ---- | ------------------------------------------ |
-| GET    | `/tls/certificate`             | `GetTLSCertificate`              | ✅   | Get installed certificate info             |
-| POST   | `/tls/certificate`             | `UploadTLSCertificate`           | ✅   | Upload cert+key pair (manual TLS)          |
-| DELETE | `/tls/certificate`             | `DeleteTLSCertificate`           | ✅   | Remove certificates, reset to none         |
-| POST   | `/tls/certificate/generate`    | `GenerateSelfSignedCertificate`  | ✅   | Generate self-signed certificate           |
-| GET    | `/tls/certificate/download`    | `DownloadTLSCertificate`         | ✅   | Download installed certificate as PEM file |
+| Method | Route                       | Handler                         | Auth | Description                                |
+| ------ | --------------------------- | ------------------------------- | ---- | ------------------------------------------ |
+| GET    | `/tls/certificate`          | `GetTLSCertificate`             | ✅   | Get installed certificate info             |
+| POST   | `/tls/certificate`          | `UploadTLSCertificate`          | ✅   | Upload cert+key pair (manual TLS)          |
+| DELETE | `/tls/certificate`          | `DeleteTLSCertificate`          | ✅   | Remove certificates, reset to none         |
+| POST   | `/tls/certificate/generate` | `GenerateSelfSignedCertificate` | ✅   | Generate self-signed certificate           |
+| GET    | `/tls/certificate/download` | `DownloadTLSCertificate`        | ✅   | Download installed certificate as PEM file |
 
 **GET /api/v2/tls/certificate** — Returns `{"installed": false}` when no certificate is installed, or full certificate metadata (subject, issuer, SANs, expiry, fingerprint) when one is present.
 

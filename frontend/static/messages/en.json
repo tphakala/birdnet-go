@@ -808,7 +808,8 @@
       "viewDetails": "View details for {species}"
     },
     "media": {
-      "title": "Recording & Spectrogram"
+      "title": "Recording & Spectrogram",
+      "clipHint": "Click and drag on the spectrogram to select a range for clip export"
     },
     "tabs": {
       "overview": "Overview",
@@ -3968,6 +3969,22 @@
       "errors": {
         "generationFailedStatus": "Generation failed with status {status}",
         "spectrogramFailed": "Failed to generate spectrogram"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Pause playback",
+        "reviewSelection": "Jump to start of selection",
+        "selectionStart": "Selection start handle",
+        "selectionEnd": "Selection end handle",
+        "lossless": "Lossless",
+        "lossy": "Lossy",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

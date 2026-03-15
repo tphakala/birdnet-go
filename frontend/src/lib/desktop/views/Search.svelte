@@ -22,6 +22,7 @@
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { isAuthenticated } from '$lib/utils/auth';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -62,6 +63,8 @@
   type LockedStatus = 'any' | 'locked' | 'unlocked';
   type TimeOfDayFilter = 'any' | 'day' | 'night' | 'sunrise' | 'sunset';
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
+
+  let clipExtractionEnabled = $derived(isAuthenticated());
 
   // Component state
   let speciesSearchTerm = $state('');
@@ -903,6 +906,8 @@
                               height={200}
                               showDownload={true}
                               showSpectrogram={true}
+                              enableClipExtraction={clipExtractionEnabled}
+                              clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
                             />
                           </div>
                         </div>

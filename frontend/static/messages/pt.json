@@ -812,7 +812,8 @@
       "viewDetails": "Ver detalhes para {species}"
     },
     "media": {
-      "title": "Gravação e espectrograma"
+      "title": "Gravação e espectrograma",
+      "clipHint": "Clique e arraste no espectrograma para selecionar um intervalo para exportação"
     },
     "tabs": {
       "overview": "Visão geral",
@@ -3944,6 +3945,22 @@
       "errors": {
         "generationFailedStatus": "Falha na geração com status {status}",
         "spectrogramFailed": "Falha ao gerar o espectrograma"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Pausar reprodução",
+        "reviewSelection": "Ir para o início da seleção",
+        "selectionStart": "Alça de início da seleção",
+        "selectionEnd": "Alça de fim da seleção",
+        "lossless": "Sem perdas",
+        "lossy": "Com perdas",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {

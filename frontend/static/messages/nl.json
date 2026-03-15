@@ -803,7 +803,8 @@
       "viewDetails": "Bekijk details voor {species}"
     },
     "media": {
-      "title": "Geluid opname & Spectrogram"
+      "title": "Geluid opname & Spectrogram",
+      "clipHint": "Klik en sleep op het spectrogram om een bereik te selecteren voor export"
     },
     "tabs": {
       "overview": "Overzicht",
@@ -3944,6 +3945,22 @@
       "errors": {
         "generationFailedStatus": "Generatie mislukt met status {status}",
         "spectrogramFailed": "Spectrogram kon niet worden gegenereerd"
+      },
+      "clipExtraction": {
+        "selectRange": "Click and drag to select a range",
+        "playSelection": "Play selected range",
+        "pauseSelection": "Afspelen pauzeren",
+        "reviewSelection": "Spring naar begin van selectie",
+        "selectionStart": "Selectie startgreep",
+        "selectionEnd": "Selectie eindgreep",
+        "lossless": "Lossless",
+        "lossy": "Lossy",
+        "extractClip": "Download selected clip",
+        "clearSelection": "Clear selection",
+        "extracting": "Extracting clip...",
+        "extractError": "Failed to extract clip",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
       }
     },
     "weatherInfo": {
