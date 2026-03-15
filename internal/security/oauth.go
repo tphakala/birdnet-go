@@ -635,7 +635,10 @@ func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log Sec
 	}
 
 	log.Debug("Found provider session key", logger.String("provider", cfg.providerName))
-	if isValidUserId(cfg.allowedUserIds, userId) {
+	// Check both the session userId (typically email) and the provider-specific session user
+	// (typically the provider's UserID/sub claim). This handles cases where the admin configured
+	// the allowed user list using either format.
+	if isValidUserId(cfg.allowedUserIds, userId) || isValidUserId(cfg.allowedUserIds, sessionUser) {
 		log.Info("User authenticated: valid session found for allowed user ID", logger.String("provider", cfg.providerName))
 		return true
 	}
