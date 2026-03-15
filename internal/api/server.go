@@ -776,10 +776,18 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		)
 	}
 
-	// Store ID token for RP-Initiated Logout (OIDC providers)
+	// Store or clear ID token for RP-Initiated Logout (OIDC providers)
 	if user.IDToken != "" {
 		if err := gothic.StoreInSession("id_token", user.IDToken, req, c.Response()); err != nil {
 			s.slogger.Error("Failed to store ID token in session",
+				logger.Error(err),
+				logger.String("provider", provider),
+			)
+		}
+	} else {
+		// Clear stale ID token to prevent reuse across auth flows
+		if err := gothic.StoreInSession("id_token", "", req, c.Response()); err != nil {
+			s.slogger.Error("Failed to clear ID token in session",
 				logger.Error(err),
 				logger.String("provider", provider),
 			)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"net/url"
 	"reflect"
 	"strings"
 
@@ -298,7 +299,7 @@ func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirec
 		logoutProvider, ok := gothProvider.(goth.LogoutProvider)
 		if !ok {
 			log.Debug("Provider does not support RP-Initiated Logout", logger.String("provider", gothProviderName))
-			return ""
+			continue
 		}
 
 		// Get ID token from session for the hint
@@ -307,11 +308,21 @@ func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirec
 		logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
 		if err != nil {
 			log.Warn("Failed to build end-session URL", logger.String("provider", gothProviderName), logger.Error(err))
-			return ""
+			continue
+		}
+
+		// Validate the URL is HTTPS with a valid host
+		parsed, parseErr := url.Parse(logoutURL)
+		if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
+			log.Warn("Rejected invalid provider logout URL",
+				logger.String("provider", gothProviderName),
+				logger.String("logout_url", logoutURL),
+			)
+			continue
 		}
 
 		log.Info("Built RP-Initiated Logout URL", logger.String("provider", gothProviderName))
-		return logoutURL
+		return parsed.String()
 	}
 
 	return ""
