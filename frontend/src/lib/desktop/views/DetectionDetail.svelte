@@ -1324,43 +1324,20 @@
 
   /* ----- Audio Container ----- */
   .detail-audio-container {
-    position: relative;
     width: 100%;
     max-width: 1200px;
     margin: 0 auto;
-    min-height: var(--spectrogram-min-height, 60px);
-    aspect-ratio: var(--spectrogram-aspect-ratio, 2 / 1);
-    background: linear-gradient(to bottom, rgb(128 128 128 / 0.04), rgb(128 128 128 / 0.01));
-    border-radius: var(--radius-field);
-    overflow: hidden;
   }
 
   .detail-audio-container :global(.group) {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
-  }
-
-  .detail-audio-container > :global(div > .group) {
-    width: 100%;
-    height: 100%;
-    position: absolute;
-    top: 0;
-    left: 0;
+    position: relative;
   }
 
   .detail-audio-container :global(img) {
-    object-fit: contain;
-    height: 100%;
     width: 100%;
-  }
-
-  .detail-audio-container :global(.group img),
-  .detail-audio-container :global(div img) {
+    height: auto;
+    max-height: 500px;
     object-fit: contain;
-    height: 100%;
-    width: 100%;
+    display: block;
   }
 </style>

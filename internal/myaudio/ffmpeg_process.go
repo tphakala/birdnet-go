@@ -256,3 +256,55 @@ func ProcessAudioFile(ctx context.Context, filePath, ffmpegPath string, filters 
 
 	return &stdout, nil
 }
+
+// ProcessAudioToFile applies audio filters and writes WAV output directly to a file.
+// Unlike ProcessAudioFile (which pipes to stdout producing broken WAV headers),
+// this writes to a seekable file so ffmpeg can fix the header sizes.
+func ProcessAudioToFile(ctx context.Context, filePath, ffmpegPath string, filters AudioFilters, outputPath string) error {
+	if err := ValidateFFmpegPath(ffmpegPath); err != nil {
+		return fmt.Errorf("invalid FFmpeg path: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, processingTimeout)
+	defer cancel()
+
+	// Two-pass if normalize is requested
+	if filters.Normalize {
+		stats, err := AnalyzeFileLoudness(ctx, filePath, ffmpegPath, filters, nil)
+		if err != nil {
+			return fmt.Errorf("loudness analysis failed: %w", err)
+		}
+		filters.LoudnessStats = stats
+	}
+
+	// Build the final filter chain
+	filterChain := BuildProcessingFilterChain(filters)
+
+	// Build FFmpeg args: input → filters → WAV output to file
+	args := []string{
+		"-hide_banner",
+		"-loglevel", "error",
+		"-y", // overwrite output file
+		"-i", filePath,
+	}
+	if filterChain != "" {
+		args = append(args, "-af", filterChain)
+	}
+	args = append(args,
+		"-c:a", "pcm_s16le",
+		outputPath,
+	)
+
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: validated path
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		if ctx.Err() != nil {
+			return fmt.Errorf("audio processing cancelled: %w", ctx.Err())
+		}
+		return fmt.Errorf("audio processing failed: %w, stderr: %s", err, stderr.String())
+	}
+
+	return nil
+}
