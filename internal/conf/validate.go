@@ -747,7 +747,7 @@ func validateSecuritySettings(settings *Security) error {
 	}
 
 	// Validate OIDC provider configuration
-	if err := validateOIDCProviders(settings.OAuthProviders); err != nil {
+	if err := validateOIDCProviders(settings); err != nil {
 		return err
 	}
 
@@ -801,11 +801,11 @@ func validateTLSMode(settings *Security) error {
 }
 
 // validateOIDCProviders validates OIDC-specific provider configuration:
-// at most one OIDC entry, valid issuer URL when enabled, HTTPS warning.
-func validateOIDCProviders(providers []OAuthProviderConfig) error {
+// at most one OIDC entry, valid issuer URL when enabled, callback URL source required, HTTPS warning.
+func validateOIDCProviders(settings *Security) error {
 	oidcCount := 0
-	for i := range providers {
-		provider := &providers[i]
+	for i := range settings.OAuthProviders {
+		provider := &settings.OAuthProviders[i]
 		if provider.Provider != "oidc" {
 			continue
 		}
@@ -818,6 +818,14 @@ func validateOIDCProviders(providers []OAuthProviderConfig) error {
 		}
 		if !provider.Enabled {
 			continue
+		}
+		// Require a callback URL source — without host/baseUrl/redirectUri, the OAuth flow will fail
+		if provider.RedirectURI == "" && settings.Host == "" && settings.BaseURL == "" {
+			return errors.Newf("security.host or security.baseUrl must be set, or redirectUri must be configured, when OIDC provider is enabled").
+				Category(errors.CategoryValidation).
+				Context("validation_type", "security-oidc-redirect-missing").
+				Context("issuer_url", provider.IssuerURL).
+				Build()
 		}
 		if provider.IssuerURL == "" {
 			return errors.Newf("security.oauthProviders: issuerUrl is required when provider is \"oidc\" and enabled").

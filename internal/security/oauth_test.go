@@ -1304,16 +1304,19 @@ func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
 		UserID:       "user@example.com",
 	}
 
-	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
+	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
 
 	// Cancel immediately — goroutine is waiting in time.After(5s) and will
 	// see ctx.Done() on the next select iteration without ever attempting discovery
 	cancel()
 
-	// Wait for goroutine to observe cancellation and exit.
-	// The goroutine exits on ctx.Done() without calling goth.UseProviders,
-	// so after it exits the providers map is safe to read without races.
-	time.Sleep(200 * time.Millisecond)
+	// Wait deterministically for the goroutine to exit
+	select {
+	case <-done:
+		// Goroutine exited — safe to read goth's map without races
+	case <-time.After(5 * time.Second):
+		t.Fatal("OIDC retry goroutine did not exit after context cancellation")
+	}
 
 	providers := goth.GetProviders()
 	_, ok := providers[ProviderOIDC]

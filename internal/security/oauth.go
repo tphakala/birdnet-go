@@ -57,7 +57,8 @@ func setOIDCRetryCancel(cancel context.CancelFunc) {
 
 // startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
 // The goroutine is canceled when the context is canceled (e.g., on config reload or shutdown).
-func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
+// Returns a channel that is closed when the goroutine exits (for testing synchronization).
+func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
 	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
 	secLog.Info("Starting background OIDC discovery retry",
 		logger.String("issuer_url", providerConfig.IssuerURL),
@@ -65,8 +66,10 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 
 	backoff := OIDCRetryInitialBackoff
 	deadline := time.Now().Add(OIDCRetryMaxDuration)
+	done := make(chan struct{})
 
 	go func() {
+		defer close(done)
 		for {
 			select {
 			case <-ctx.Done():
@@ -105,6 +108,8 @@ func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig
 			}
 		}
 	}()
+
+	return done
 }
 
 type AuthCode struct {

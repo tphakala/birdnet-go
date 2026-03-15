@@ -102,6 +102,40 @@ func TestValidateSecuritySettings_OIDC(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "OIDC enabled without host or redirectUri - should fail",
+			modify: func(s *Security) {
+				s.Host = ""
+				s.BaseURL = ""
+				s.OAuthProviders = []OAuthProviderConfig{
+					{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "https://idp.example.com", UserID: "user@example.com"},
+				}
+			},
+			wantErr: true,
+			errMsg:  "redirectUri",
+		},
+		{
+			name: "OIDC enabled with explicit redirectUri but no host - should pass",
+			modify: func(s *Security) {
+				s.Host = ""
+				s.BaseURL = ""
+				s.OAuthProviders = []OAuthProviderConfig{
+					{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "https://idp.example.com", RedirectURI: "https://myapp.example.com/auth/openid-connect/callback", UserID: "user@example.com"},
+				}
+			},
+			wantErr: false,
+		},
+		{
+			name: "OIDC enabled with baseUrl but no host - should pass",
+			modify: func(s *Security) {
+				s.Host = ""
+				s.BaseURL = "https://myapp.example.com"
+				s.OAuthProviders = []OAuthProviderConfig{
+					{Provider: "oidc", Enabled: true, ClientID: "id", ClientSecret: "secret", IssuerURL: "https://idp.example.com", UserID: "user@example.com"},
+				}
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
