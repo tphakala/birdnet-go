@@ -129,7 +129,9 @@
   }
 </script>
 
-{#snippet sep()}<div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>{/snippet}
+{#snippet sep()}
+  <div class="h-4 w-px bg-[var(--color-base-content)]/15"></div>
+{/snippet}
 
 <!-- Compact weather: single line for narrow/half-width cards -->
 {#snippet weatherCompact()}
@@ -274,9 +276,7 @@
 {/snippet}
 
 {#if hasAnyContent}
-  <div
-    class="flex h-full flex-col overflow-hidden rounded-2xl bg-[var(--color-base-100)] shadow-xs"
-  >
+  <div class="flex h-full flex-col overflow-clip rounded-2xl bg-[var(--color-base-100)] shadow-xs">
     {#if editMode}
       <!-- Edit mode: horizontal layout matching normal mode (WYSIWYG) -->
       <div class="flex flex-1 p-4">
@@ -372,7 +372,7 @@
           </div>
 
           {#if config.showLocationMap && hasLocation}
-            <div class="hidden w-full shrink-0 @2xl:block @2xl:w-64">
+            <div class="w-full shrink-0 @2xl:w-64">
               <BannerLocationMap
                 {latitude}
                 {longitude}
