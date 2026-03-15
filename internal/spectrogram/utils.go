@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -120,7 +121,7 @@ func BuildSpectrogramPath(clipPath, style string) (string, error) {
 
 	// Include style in filename for non-default styles
 	styleSuffix := ""
-	if style != "" && style != "default" {
+	if style != "" && style != conf.SpectrogramStyleDefault {
 		styleSuffix = "-" + style
 	}
 
