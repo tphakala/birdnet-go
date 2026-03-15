@@ -63,6 +63,24 @@
 
   const logger = loggers.settings;
 
+  /** Redaction placeholder for sensitive fields in debug logs. */
+  const REDACTED = '***';
+
+  /**
+   * Creates a copy of an object with specified fields redacted for safe logging.
+   * Fields that are present and truthy are replaced with REDACTED; empty/falsy
+   * fields are replaced with an empty string to indicate "not set".
+   */
+  function redactForLogging(obj: object, fields: string[]): Record<string, unknown> {
+    const redacted = Object.assign({}, obj) as Record<string, unknown>;
+    for (const field of fields) {
+      if (field in redacted) {
+        redacted[field] = redacted[field] ? REDACTED : '';
+      }
+    }
+    return redacted;
+  }
+
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
     $integrationSettings || {
@@ -478,10 +496,11 @@
     try {
       // Get current form values (unsaved changes) instead of saved settings
       const currentBirdweather = store.formData?.realtime?.birdweather || settings.birdweather!;
-      logger.debug('BirdWeather test config:', {
-        ...currentBirdweather,
-        id: currentBirdweather.id ? '***' : '',
-      });
+      // Exclude latitude/longitude (PII) and redact station ID before logging
+      logger.debug(
+        'BirdWeather test config:',
+        redactForLogging(currentBirdweather, ['id', 'latitude', 'longitude'])
+      );
 
       // Prepare test payload
       const testPayload = {
@@ -502,10 +521,10 @@
         headers.set('X-CSRF-Token', token);
       }
 
-      logger.debug('Sending BirdWeather test request with payload:', {
-        ...testPayload,
-        id: testPayload.id ? '***' : '',
-      });
+      logger.debug(
+        'Sending BirdWeather test request with payload:',
+        redactForLogging(testPayload, ['id'])
+      );
 
       const response = await fetch(buildAppUrl('/api/v2/integrations/birdweather/test'), {
         method: 'POST',
@@ -694,11 +713,7 @@
     try {
       // Get current form values (unsaved changes) instead of saved settings
       const currentMqtt = store.formData?.realtime?.mqtt || settings.mqtt!;
-      logger.debug('MQTT test config:', {
-        ...currentMqtt,
-        password: currentMqtt.password ? '***' : '',
-        username: currentMqtt.username ? '***' : '',
-      });
+      logger.debug('MQTT test config:', redactForLogging(currentMqtt, ['password', 'username']));
 
       // Prepare test payload matching the MQTT handler's TestConfig structure
       const testPayload = {
@@ -726,11 +741,10 @@
         headers.set('X-CSRF-Token', token);
       }
 
-      logger.debug('Sending MQTT test request with payload:', {
-        ...testPayload,
-        password: testPayload.password ? '***' : '',
-        username: testPayload.username ? '***' : '',
-      });
+      logger.debug(
+        'Sending MQTT test request with payload:',
+        redactForLogging(testPayload, ['password', 'username'])
+      );
 
       const response = await fetch(buildAppUrl('/api/v2/integrations/mqtt/test'), {
         method: 'POST',
