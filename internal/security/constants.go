@@ -11,6 +11,7 @@ const (
 	ConfigMicrosoft = "microsoft"
 	ConfigLine      = "line"
 	ConfigKakao     = "kakao"
+	ConfigOIDC      = "oidc"
 
 	// Goth provider names (used for session keys and goth registration)
 	// These match the goth library provider names
@@ -19,6 +20,7 @@ const (
 	ProviderMicrosoft = "microsoftonline" // Different from config!
 	ProviderLine      = "line"            // Same as config
 	ProviderKakao     = "kakao"           // Same as config
+	ProviderOIDC      = "openid-connect"  // Different from config!
 
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
@@ -46,10 +48,16 @@ const (
 	IPv4TotalAddressBits = 32
 
 	// Provider capacity hint
-	InitialProviderCapacity = 5
+	InitialProviderCapacity = 6
 
 	// Path validation limits
 	MaxSafePathLength = 512
+
+	// OIDC discovery retry settings
+	OIDCRetryInitialBackoff = 5 * time.Second
+	OIDCRetryMaxBackoff     = 60 * time.Second
+	OIDCRetryMaxDuration    = 5 * time.Minute
+	OIDCRetryBackoffFactor  = 2
 )
 
 // ConfigToGothProvider maps config provider IDs to goth provider names.
@@ -60,6 +68,7 @@ var ConfigToGothProvider = map[string]string{
 	ConfigMicrosoft: ProviderMicrosoft,
 	ConfigLine:      ProviderLine,
 	ConfigKakao:     ProviderKakao,
+	ConfigOIDC:      ProviderOIDC,
 }
 
 // GetGothProviderName converts a config provider ID to the goth provider name.

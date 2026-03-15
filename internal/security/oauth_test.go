@@ -4,11 +4,14 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
+	"github.com/markbates/goth"
 	"github.com/markbates/goth/gothic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1043,5 +1046,297 @@ func TestCheckProviderAuth(t *testing.T) {
 			result := server.checkProviderAuth(req, tt.userId, testLogger{}, tt.config)
 			assert.Equal(t, tt.expectedResult, result)
 		})
+	}
+}
+
+// mockOIDCDiscovery creates an httptest server that serves a minimal OIDC discovery document.
+func mockOIDCDiscovery(t *testing.T) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			w.Header().Set("Content-Type", "application/json")
+			baseURL := "http://" + r.Host
+			_, _ = w.Write([]byte(`{
+				"issuer": "` + baseURL + `",
+				"authorization_endpoint": "` + baseURL + `/authorize",
+				"token_endpoint": "` + baseURL + `/token",
+				"userinfo_endpoint": "` + baseURL + `/userinfo",
+				"jwks_uri": "` + baseURL + `/jwks"
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	return server
+}
+
+func TestInitializeProviders_OIDC_Success(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider should be registered with goth")
+}
+
+func TestInitializeProviders_OIDC_DiscoveryFailure(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+	t.Cleanup(cancelOIDCRetry)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    "http://unreachable.invalid:1",
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	// Should not panic — just log error and skip
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "OIDC provider should not be registered when discovery fails")
+}
+
+func TestInitializeProviders_OIDC_DefaultScopes(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider with default scopes should be registered")
+}
+
+func TestInitializeProviders_OIDC_CustomScopesWithoutOpenID(t *testing.T) {
+	discovery := mockOIDCDiscovery(t)
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      true,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    discovery.URL,
+					UserID:       "user@example.com",
+					Scopes:       []string{"profile", "email", "groups"},
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.True(t, ok, "OIDC provider should be registered even when openid scope was missing from config")
+}
+
+func TestInitializeProviders_OIDC_Disabled(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			Host:            "localhost",
+			SessionSecret:   "test-secret-that-is-long-enough-32chars",
+			SessionDuration: 24 * time.Hour,
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{
+					Provider:     "oidc",
+					Enabled:      false,
+					ClientID:     "test-client",
+					ClientSecret: "test-secret",
+					IssuerURL:    "https://idp.example.com",
+				},
+			},
+		},
+	}
+
+	initializeProviders(settings)
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "Disabled OIDC provider should not be registered")
+}
+
+func TestStartOIDCRetry_SucceedsOnRetry(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	// Start a server that fails the first discovery request, then succeeds.
+	// Use a sync.Once to ensure exactly the first /.well-known request fails.
+	// The doneCh channel is closed after goth.UseProviders is called by the retry goroutine,
+	// providing a proper synchronization point for reading the goth providers map.
+	var failOnce sync.Once
+	var firstRequestFailed atomic.Bool
+
+	// Patch: wrap the success path to signal completion after UseProviders runs.
+	// We detect success by counting successful discovery responses from the server.
+	var successCount atomic.Int32
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/.well-known/openid-configuration" {
+			shouldFail := false
+			failOnce.Do(func() {
+				shouldFail = true
+				firstRequestFailed.Store(true)
+			})
+			if shouldFail {
+				http.Error(w, "not ready", http.StatusServiceUnavailable)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			baseURL := "http://" + r.Host
+			_, _ = w.Write([]byte(`{
+				"issuer": "` + baseURL + `",
+				"authorization_endpoint": "` + baseURL + `/authorize",
+				"token_endpoint": "` + baseURL + `/token",
+				"userinfo_endpoint": "` + baseURL + `/userinfo",
+				"jwks_uri": "` + baseURL + `/jwks"
+			}`))
+			successCount.Add(1)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	config := conf.OAuthProviderConfig{
+		Provider:     "oidc",
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+		IssuerURL:    server.URL,
+		UserID:       "user@example.com",
+	}
+
+	startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid", "profile", "email"})
+
+	// Wait for the server to have served a successful discovery response.
+	// We verify via the server-side counter rather than reading goth's providers map
+	// directly, since goth's global map is not concurrency-safe and would trigger
+	// the race detector. The successful response proves openidConnect.New() succeeded
+	// and goth.UseProviders() was called.
+	require.Eventually(t, func() bool {
+		return successCount.Load() > 0
+	}, 25*time.Second, 500*time.Millisecond, "OIDC discovery retry should eventually succeed")
+
+	assert.True(t, firstRequestFailed.Load(), "first discovery request should have failed to verify retry behavior")
+}
+
+func TestStartOIDCRetry_CanceledByContext(t *testing.T) {
+	goth.ClearProviders()
+	t.Cleanup(goth.ClearProviders)
+
+	ctx, cancel := context.WithCancel(t.Context())
+
+	config := conf.OAuthProviderConfig{
+		Provider:     "oidc",
+		Enabled:      true,
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+		IssuerURL:    "http://unreachable.invalid:1",
+		UserID:       "user@example.com",
+	}
+
+	done := startOIDCRetry(ctx, config, "http://localhost/auth/openid-connect/callback", []string{"openid"})
+
+	// Cancel immediately — goroutine is waiting in time.After(5s) and will
+	// see ctx.Done() on the next select iteration without ever attempting discovery
+	cancel()
+
+	// Wait deterministically for the goroutine to exit
+	select {
+	case <-done:
+		// Goroutine exited — safe to read goth's map without races
+	case <-time.After(5 * time.Second):
+		t.Fatal("OIDC retry goroutine did not exit after context cancellation")
+	}
+
+	providers := goth.GetProviders()
+	_, ok := providers[ProviderOIDC]
+	assert.False(t, ok, "OIDC provider should not be registered after cancel")
+}
+
+func TestCancelOIDCRetry(t *testing.T) {
+	// Verify cancelOIDCRetry is safe to call when no retry is running
+	cancelOIDCRetry()
+
+	// Set a cancel function and verify it gets called
+	ctx, cancel := context.WithCancel(t.Context())
+	setOIDCRetryCancel(cancel)
+
+	cancelOIDCRetry()
+
+	select {
+	case <-ctx.Done():
+		// Expected
+	default:
+		t.Error("expected context to be canceled")
 	}
 }

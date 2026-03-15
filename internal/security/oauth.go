@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,12 +27,90 @@ import (
 	"github.com/markbates/goth/providers/kakao"
 	"github.com/markbates/goth/providers/line"
 	"github.com/markbates/goth/providers/microsoftonline"
+	"github.com/markbates/goth/providers/openidConnect"
 	"golang.org/x/oauth2"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+var oidcRetryCancelMu sync.Mutex
+var oidcRetryCancelFunc context.CancelFunc
+
+// cancelOIDCRetry cancels any running OIDC discovery retry goroutine.
+func cancelOIDCRetry() {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	if oidcRetryCancelFunc != nil {
+		oidcRetryCancelFunc()
+		oidcRetryCancelFunc = nil
+	}
+}
+
+// setOIDCRetryCancel stores the cancel function for the current OIDC retry goroutine.
+func setOIDCRetryCancel(cancel context.CancelFunc) {
+	oidcRetryCancelMu.Lock()
+	defer oidcRetryCancelMu.Unlock()
+	oidcRetryCancelFunc = cancel
+}
+
+// startOIDCRetry starts a background goroutine that retries OIDC discovery with exponential backoff.
+// The goroutine is canceled when the context is canceled (e.g., on config reload or shutdown).
+// Returns a channel that is closed when the goroutine exits (for testing synchronization).
+func startOIDCRetry(ctx context.Context, providerConfig conf.OAuthProviderConfig, redirectURI string, scopes []string) <-chan struct{} { //nolint:gocritic // hugeParam: intentional value copy to avoid goroutine holding pointer to shared settings slice
+	secLog := GetLogger().With(logger.String("provider", ConfigOIDC))
+	secLog.Info("Starting background OIDC discovery retry",
+		logger.String("issuer_url", providerConfig.IssuerURL),
+		logger.Duration("max_duration", OIDCRetryMaxDuration))
+
+	backoff := OIDCRetryInitialBackoff
+	deadline := time.Now().Add(OIDCRetryMaxDuration)
+	done := make(chan struct{})
+
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-ctx.Done():
+				secLog.Info("OIDC discovery retry canceled")
+				return
+			case <-time.After(backoff):
+				if time.Now().After(deadline) {
+					secLog.Error("OIDC discovery retry exhausted — provider not available. Save settings to retry.",
+						logger.String("issuer_url", providerConfig.IssuerURL))
+					return
+				}
+
+				secLog.Info("Retrying OIDC discovery",
+					logger.String("issuer_url", providerConfig.IssuerURL),
+					logger.Duration("backoff", backoff))
+
+				discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
+				oidcProvider, err := openidConnect.New(
+					providerConfig.ClientID,
+					providerConfig.ClientSecret,
+					redirectURI,
+					discoveryURL,
+					scopes...,
+				)
+				if err != nil {
+					secLog.Warn("OIDC discovery retry failed",
+						logger.Error(err),
+						logger.Duration("next_backoff", min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)))
+					backoff = min(backoff*OIDCRetryBackoffFactor, OIDCRetryMaxBackoff)
+					continue
+				}
+
+				goth.UseProviders(oidcProvider)
+				secLog.Info("OIDC provider registered after background retry")
+				return
+			}
+		}
+	}()
+
+	return done
+}
 
 type AuthCode struct {
 	Code      string
@@ -327,7 +406,7 @@ func computeBaseURL(settings *conf.Settings) string {
 	return ""
 }
 
-// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft).
+// initializeProviders sets up the OAuth providers (Google, GitHub, Microsoft, LINE, Kakao, OIDC).
 // It uses the new OAuthProviders array which is populated either from new config
 // or from migration of legacy provider fields.
 func initializeProviders(settings *conf.Settings) {
@@ -340,7 +419,8 @@ func initializeProviders(settings *conf.Settings) {
 	baseURL := computeBaseURL(settings)
 
 	// Iterate over the OAuthProviders array
-	for _, providerConfig := range settings.Security.OAuthProviders {
+	for i := range settings.Security.OAuthProviders {
+		providerConfig := &settings.Security.OAuthProviders[i]
 		providerLog := secLog.With(logger.String("provider", providerConfig.Provider))
 
 		if !providerConfig.Enabled || providerConfig.ClientID == "" || providerConfig.ClientSecret == "" {
@@ -411,6 +491,11 @@ func initializeProviders(settings *conf.Settings) {
 				redirectURI,
 			))
 
+		case ConfigOIDC:
+			if p := initializeOIDCProvider(providerConfig, redirectURI, providerLog); p != nil {
+				providers = append(providers, p)
+			}
+
 		default:
 			providerLog.Warn("Unknown OAuth provider type, skipping")
 		}
@@ -422,6 +507,43 @@ func initializeProviders(settings *conf.Settings) {
 	} else {
 		secLog.Warn("No Goth providers enabled or configured")
 	}
+}
+
+// initializeOIDCProvider creates and returns an OIDC provider using goth's openidConnect.
+// Returns nil if initialization fails (discovery unreachable), in which case a background
+// retry goroutine is started automatically.
+func initializeOIDCProvider(providerConfig *conf.OAuthProviderConfig, redirectURI string, providerLog SecurityLogger) goth.Provider {
+	providerLog.Info("Enabling OIDC provider")
+	scopes := providerConfig.Scopes
+	if len(scopes) == 0 {
+		scopes = []string{"openid", "profile", "email"}
+	}
+	// Ensure "openid" scope is always present (OIDC spec requirement)
+	if !slices.Contains(scopes, "openid") {
+		scopes = append([]string{"openid"}, scopes...)
+	}
+	// Build the OIDC discovery document URL per RFC 8414:
+	// the discovery document is at {issuer}/.well-known/openid-configuration
+	discoveryURL := strings.TrimSuffix(providerConfig.IssuerURL, "/") + "/.well-known/openid-configuration"
+	oidcProvider, err := openidConnect.New(
+		providerConfig.ClientID,
+		providerConfig.ClientSecret,
+		redirectURI,
+		discoveryURL,
+		scopes...,
+	)
+	if err != nil {
+		providerLog.Error("Failed to initialize OIDC provider (is the issuer URL reachable?)",
+			logger.Error(err),
+			logger.String("issuer_url", providerConfig.IssuerURL))
+		// Cancel any previous retry and start a new one
+		cancelOIDCRetry()
+		ctx, cancel := context.WithCancel(context.Background())
+		setOIDCRetryCancel(cancel)
+		startOIDCRetry(ctx, *providerConfig, redirectURI, scopes)
+		return nil
+	}
+	return oidcProvider
 }
 
 // createSessionKey creates a key of the proper length for AES encryption from a seed string
@@ -442,6 +564,7 @@ func SetTestConfigPath(path string) {
 
 func (s *OAuth2Server) UpdateProviders() {
 	GetLogger().Info("Updating Goth providers based on potentially changed settings")
+	cancelOIDCRetry()
 	InitializeGoth(s.Settings)
 }
 
@@ -526,7 +649,10 @@ func (s *OAuth2Server) checkProviderAuth(r *http.Request, userId string, log Sec
 	}
 
 	log.Debug("Found provider session key", logger.String("provider", cfg.providerName))
-	if isValidUserId(cfg.allowedUserIds, userId) {
+	// Check both the session userId (typically email) and the provider-specific session user
+	// (typically the provider's UserID/sub claim). This handles cases where the admin configured
+	// the allowed user list using either format.
+	if isValidUserId(cfg.allowedUserIds, userId) || isValidUserId(cfg.allowedUserIds, sessionUser) {
 		log.Info("User authenticated: valid session found for allowed user ID", logger.String("provider", cfg.providerName))
 		return true
 	}

@@ -1124,12 +1124,14 @@ type AllowSubnetBypass struct {
 // OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
 // This replaces the individual GoogleAuth, GithubAuth, MicrosoftAuth fields.
 type OAuthProviderConfig struct {
-	Provider     string `yaml:"provider" json:"provider"`                 // Provider ID: "google", "github", "microsoft"
-	Enabled      bool   `yaml:"enabled" json:"enabled"`                   // true to enable this provider
-	ClientID     string `yaml:"clientId" json:"clientId"`                 // OAuth2 client ID
-	ClientSecret string `yaml:"clientSecret" json:"clientSecret"`         // OAuth2 client secret
-	RedirectURI  string `yaml:"redirectUri,omitempty" json:"redirectUri"` // OAuth2 redirect URI (optional, auto-generated if empty)
-	UserID       string `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
+	Provider     string   `yaml:"provider" json:"provider"`                 // Provider ID: "google", "github", "microsoft"
+	Enabled      bool     `yaml:"enabled" json:"enabled"`                   // true to enable this provider
+	ClientID     string   `yaml:"clientId" json:"clientId"`                 // OAuth2 client ID
+	ClientSecret string   `yaml:"clientSecret" json:"clientSecret"`         // OAuth2 client secret
+	RedirectURI  string   `yaml:"redirectUri,omitempty" json:"redirectUri"` // OAuth2 redirect URI (optional, auto-generated if empty)
+	UserID       string   `yaml:"userId,omitempty" json:"userId"`           // Allowed user ID/email for this provider
+	IssuerURL    string   `yaml:"issuerUrl,omitempty" json:"issuerUrl"`     // OIDC issuer/discovery URL (required when provider is "oidc")
+	Scopes       []string `yaml:"scopes,omitempty" json:"scopes,omitempty"` // Custom OAuth scopes (OIDC default: openid, profile, email)
 }
 
 // TLSMode represents the TLS certificate management mode.
@@ -1931,7 +1933,8 @@ func (s *Settings) IsOAuthProviderEnabled(providerID string) bool {
 // GetEnabledOAuthProviders returns a list of provider IDs that are enabled.
 func (s *Settings) GetEnabledOAuthProviders() []string {
 	var enabled []string
-	for _, p := range s.Security.OAuthProviders {
+	for i := range s.Security.OAuthProviders {
+		p := &s.Security.OAuthProviders[i]
 		if p.Enabled && p.ClientID != "" && p.ClientSecret != "" {
 			enabled = append(enabled, p.Provider)
 		}
