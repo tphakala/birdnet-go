@@ -85,6 +85,13 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 	// Calculate duration
 	duration := end - start
 
+	// Create context with adaptive timeout (2x duration, clamped to bounds)
+	// Placed before analysis so both loudness analysis and extraction are governed
+	timeout := max(time.Duration(duration*2)*time.Second, clipExtractionMinTimeout)
+	timeout = min(timeout, clipExtractionMaxTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	// Handle normalize two-pass if filters include normalization
 	if filters != nil && filters.Normalize && filters.LoudnessStats == nil {
 		seekRange := &SeekRange{Start: start, Duration: duration}
@@ -95,12 +102,6 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 		}
 		filters.LoudnessStats = stats
 	}
-
-	// Create context with adaptive timeout (2x duration, clamped to bounds)
-	timeout := max(time.Duration(duration*2)*time.Second, clipExtractionMinTimeout)
-	timeout = min(timeout, clipExtractionMaxTimeout)
-	ctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
 
 	// MP4-based formats (AAC, ALAC) require seekable output — use a temp file
 	if requiresSeekableOutput[format] {
