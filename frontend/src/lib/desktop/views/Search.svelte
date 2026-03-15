@@ -907,6 +907,7 @@
                               showDownload={true}
                               showSpectrogram={true}
                               enableClipExtraction={clipExtractionEnabled}
+                              clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
                             />
                           </div>
                         </div>

@@ -30,7 +30,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
-  import { Play, Pause, Download, XCircle } from '@lucide/svelte';
+  import { Play, Pause, Download, XCircle, SkipBack, ChevronDown } from '@lucide/svelte';
   import AudioSettingsButton from '$lib/desktop/features/dashboard/components/AudioSettingsButton.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -94,6 +94,8 @@
     debug?: boolean;
     /** Enable clip extraction with range selection on spectrogram */
     enableClipExtraction?: boolean;
+    /** Label for clip filenames (e.g. "Eurasian Blue Tit_2026-03-14_14-30-25") */
+    clipLabel?: string;
   }
 
   let {
@@ -111,6 +113,7 @@
     onPlayEnd,
     debug = false,
     enableClipExtraction = false,
+    clipLabel = '',
   }: Props = $props();
 
   // Audio and UI elements
@@ -219,6 +222,8 @@
   let extractionError = $state<string | null>(null);
   let isPlayingSelection = $state(false);
   let selectionPlaybackTimeout: ReturnType<typeof setTimeout> | undefined;
+  let showFormatMenu = $state(false);
+  let formatMenuRef: HTMLDivElement | undefined = $state();
 
   // Constants
   const GAIN_MAX_DB = 24;
@@ -471,6 +476,32 @@
       });
   };
 
+  const stopSelection = () => {
+    if (!audioElement) return;
+    if (selectionPlaybackTimeout) {
+      clearTimeout(selectionPlaybackTimeout);
+      selectionPlaybackTimeout = undefined;
+    }
+    audioElement.pause();
+    isPlayingSelection = false;
+  };
+
+  const reviewSelection = () => {
+    if (!audioElement || selectionStartSec === null || selectionEndSec === null) return;
+    stopSelection();
+    audioElement.currentTime = Math.min(selectionStartSec, selectionEndSec);
+  };
+
+  const toggleFormatMenu = () => {
+    showFormatMenu = !showFormatMenu;
+  };
+
+  const selectFormatAndExtract = (format: string) => {
+    extractionFormat = format;
+    showFormatMenu = false;
+    extractClip();
+  };
+
   const extractClip = async () => {
     if (selectionStartSec === null || selectionEndSec === null || isExtracting) return;
 
@@ -505,7 +536,10 @@
 
       let ext = extractionFormat;
       if (ext === 'alac') ext = 'm4a';
-      const filename = `clip_${start.toFixed(1)}-${end.toFixed(1)}.${ext}`;
+      const label = clipLabel
+        ? `${clipLabel}_${start.toFixed(1)}-${end.toFixed(1)}s`
+        : `clip_${start.toFixed(1)}-${end.toFixed(1)}`;
+      const filename = `${label}.${ext}`;
 
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1233,8 +1267,19 @@
       addTrackedEventListener(document as unknown as HTMLElement, 'keydown', ((
         e: KeyboardEvent
       ) => {
-        if (e.key === 'Escape' && (selectionStartSec !== null || selectionEndSec !== null)) {
-          clearSelection();
+        if (e.key === 'Escape') {
+          if (showFormatMenu) {
+            showFormatMenu = false;
+          } else if (selectionStartSec !== null || selectionEndSec !== null) {
+            clearSelection();
+          }
+        }
+      }) as EventListener);
+
+      // Close format menu on click outside
+      addTrackedEventListener(document as unknown as HTMLElement, 'mousedown', ((e: MouseEvent) => {
+        if (showFormatMenu && formatMenuRef && !formatMenuRef.contains(e.target as Node)) {
+          showFormatMenu = false;
         }
       }) as EventListener);
     }
@@ -1542,46 +1587,83 @@
           ).toFixed(1)}s
         </span>
 
-        <!-- Format picker -->
-        <select
-          class="select select-xs bg-[var(--color-base-200)] text-[var(--color-base-content)] border-[var(--color-base-300)] rounded"
-          bind:value={extractionFormat}
-          aria-label={t('components.audioPlayer.clipExtraction.formatLabel')}
-        >
-          <option value="wav">WAV</option>
-          <option value="mp3">MP3</option>
-          <option value="flac">FLAC</option>
-          <option value="opus">Opus</option>
-          <option value="aac">AAC</option>
-          <option value="alac">ALAC</option>
-        </select>
+        <!-- Divider -->
+        <div class="w-px h-4 bg-[var(--color-base-content)]/20"></div>
 
-        <!-- Play selection button -->
+        <!-- Review (jump to start) button -->
         <button
           class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-          onclick={playSelection}
-          aria-label={t('components.audioPlayer.clipExtraction.playSelection')}
-          title={t('components.audioPlayer.clipExtraction.playSelection')}
+          onclick={reviewSelection}
+          aria-label={t('components.audioPlayer.clipExtraction.reviewSelection')}
+          title={t('components.audioPlayer.clipExtraction.reviewSelection')}
         >
-          <Play class="size-3.5" />
+          <SkipBack class="size-3.5" />
         </button>
 
-        <!-- Extract/download button -->
-        <button
-          class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
-          onclick={extractClip}
-          disabled={isExtracting}
-          aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
-          title={t('components.audioPlayer.clipExtraction.extractClip')}
-        >
-          {#if isExtracting}
+        <!-- Play/Pause selection button -->
+        {#if isPlayingSelection}
+          <button
+            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+            onclick={stopSelection}
+            aria-label={t('components.audioPlayer.clipExtraction.pauseSelection')}
+            title={t('components.audioPlayer.clipExtraction.pauseSelection')}
+          >
+            <Pause class="size-3.5" />
+          </button>
+        {:else}
+          <button
+            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)]"
+            onclick={playSelection}
+            aria-label={t('components.audioPlayer.clipExtraction.playSelection')}
+            title={t('components.audioPlayer.clipExtraction.playSelection')}
+          >
+            <Play class="size-3.5" />
+          </button>
+        {/if}
+
+        <!-- Divider -->
+        <div class="w-px h-4 bg-[var(--color-base-content)]/20"></div>
+
+        <!-- Download with format picker -->
+        <div class="relative" bind:this={formatMenuRef}>
+          <button
+            class="p-1 rounded-full hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] flex items-center gap-0.5"
+            onclick={toggleFormatMenu}
+            disabled={isExtracting}
+            aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
+            title={t('components.audioPlayer.clipExtraction.extractClip')}
+            aria-expanded={showFormatMenu}
+            aria-haspopup="menu"
+          >
+            {#if isExtracting}
+              <div
+                class="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"
+              ></div>
+            {:else}
+              <Download class="size-3.5" />
+              <ChevronDown class="size-2.5" />
+            {/if}
+          </button>
+
+          <!-- Format dropdown menu -->
+          {#if showFormatMenu}
             <div
-              class="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin"
-            ></div>
-          {:else}
-            <Download class="size-3.5" />
+              class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[7rem] z-30"
+              role="menu"
+            >
+              {#each [{ value: 'wav', label: 'WAV', desc: 'Lossless' }, { value: 'flac', label: 'FLAC', desc: 'Lossless' }, { value: 'mp3', label: 'MP3', desc: 'Lossy' }, { value: 'opus', label: 'Opus', desc: 'Lossy' }, { value: 'aac', label: 'AAC', desc: 'Lossy' }, { value: 'alac', label: 'ALAC', desc: 'Lossless' }] as fmt (fmt.value)}
+                <button
+                  class="w-full px-3 py-1.5 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
+                  onclick={() => selectFormatAndExtract(fmt.value)}
+                  role="menuitem"
+                >
+                  <span class="font-medium">{fmt.label}</span>
+                  <span class="text-[var(--color-base-content)]/50 text-[10px]">{fmt.desc}</span>
+                </button>
+              {/each}
+            </div>
           {/if}
-        </button>
+        </div>
 
         <!-- Clear selection button -->
         <button

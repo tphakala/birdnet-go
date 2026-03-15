@@ -3926,6 +3926,8 @@
       "clipExtraction": {
         "selectRange": "Click and drag to select a range",
         "playSelection": "Play selected range",
+        "pauseSelection": "Pausar reproducción",
+        "reviewSelection": "Ir al inicio de la selección",
         "extractClip": "Download selected clip",
         "clearSelection": "Clear selection",
         "extracting": "Extracting clip...",

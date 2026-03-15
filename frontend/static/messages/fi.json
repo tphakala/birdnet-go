@@ -3926,6 +3926,8 @@
       "clipExtraction": {
         "selectRange": "Click and drag to select a range",
         "playSelection": "Play selected range",
+        "pauseSelection": "Keskeytä toisto",
+        "reviewSelection": "Siirry valinnan alkuun",
         "extractClip": "Download selected clip",
         "clearSelection": "Clear selection",
         "extracting": "Extracting clip...",

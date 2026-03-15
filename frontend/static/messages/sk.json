@@ -3757,6 +3757,8 @@
       "clipExtraction": {
         "selectRange": "Click and drag to select a range",
         "playSelection": "Play selected range",
+        "pauseSelection": "Pozastaviť prehrávanie",
+        "reviewSelection": "Prejsť na začiatok výberu",
         "extractClip": "Download selected clip",
         "clearSelection": "Clear selection",
         "extracting": "Extracting clip...",

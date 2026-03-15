@@ -211,6 +211,7 @@
               responsive={true}
               className="w-full mx-auto"
               enableClipExtraction={clipExtractionEnabled}
+              clipLabel={`${detection.commonName}_${detection.date}_${detection.time.replace(/:/g, '-')}`}
             />
           </div>
         </div>
