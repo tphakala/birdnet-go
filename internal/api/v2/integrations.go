@@ -927,10 +927,16 @@ func (c *Controller) testEBirdConnectivity(ctx context.Context) (string, error) 
 		return "", fmt.Errorf("failed to connect to eBird API: %w", err)
 	}
 	defer func() {
+		_, _ = io.Copy(io.Discard, resp.Body)
 		if closeErr := resp.Body.Close(); closeErr != nil {
 			GetLogger().Warn("Failed to close response body", logger.Error(closeErr))
 		}
 	}()
+
+	// Any response (even 403) means the API is reachable, but 5xx indicates server issues
+	if resp.StatusCode >= http.StatusInternalServerError {
+		return "", fmt.Errorf("eBird API returned server error (status %d)", resp.StatusCode)
+	}
 
 	return "Successfully connected to eBird API", nil
 }
