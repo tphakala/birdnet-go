@@ -8,6 +8,18 @@ import (
 	"github.com/sj14/astral/pkg/astral"
 )
 
+// Moon phase name constants for the 8 standard lunar phases.
+const (
+	PhaseNewMoon        = "New Moon"
+	PhaseWaxingCrescent = "Waxing Crescent"
+	PhaseFirstQuarter   = "First Quarter"
+	PhaseWaxingGibbous  = "Waxing Gibbous"
+	PhaseFullMoon       = "Full Moon"
+	PhaseWaningGibbous  = "Waning Gibbous"
+	PhaseLastQuarter    = "Last Quarter"
+	PhaseWaningCrescent = "Waning Crescent"
+)
+
 // MoonData holds computed moon phase information for a given date.
 type MoonData struct {
 	Phase        float64 // 0–27.99 raw phase value from astral library
@@ -35,27 +47,27 @@ type phaseInfo struct {
 // Full moon occurs near 14. The 8 sub-phases are evenly spaced at 3.5-day intervals,
 // but New Moon straddles the cycle boundary: [26.25, 28) ∪ [0, 1.75).
 var phases = []phaseInfo{
-	{1.75, "New Moon", "moon-new"},
-	{5.25, "Waxing Crescent", "moon-waxing-crescent"},
-	{8.75, "First Quarter", "moon-first-quarter"},
-	{12.25, "Waxing Gibbous", "moon-waxing-gibbous"},
-	{15.75, "Full Moon", "moon-full"},
-	{19.25, "Waning Gibbous", "moon-waning-gibbous"},
-	{22.75, "Last Quarter", "moon-last-quarter"},
-	{26.25, "Waning Crescent", "moon-waning-crescent"},
+	{1.75, PhaseNewMoon, "moon-new"},
+	{5.25, PhaseWaxingCrescent, "moon-waxing-crescent"},
+	{8.75, PhaseFirstQuarter, "moon-first-quarter"},
+	{12.25, PhaseWaxingGibbous, "moon-waxing-gibbous"},
+	{15.75, PhaseFullMoon, "moon-full"},
+	{19.25, PhaseWaningGibbous, "moon-waning-gibbous"},
+	{22.75, PhaseLastQuarter, "moon-last-quarter"},
+	{26.25, PhaseWaningCrescent, "moon-waning-crescent"},
 	// Values >= 26.25 wrap back to New Moon (cycle boundary)
 }
 
 // moonPhaseEmojis maps phase names to their emoji representation.
 var moonPhaseEmojis = map[string]string{
-	"New Moon":        "🌑",
-	"Waxing Crescent": "🌒",
-	"First Quarter":   "🌓",
-	"Waxing Gibbous":  "🌔",
-	"Full Moon":       "🌕",
-	"Waning Gibbous":  "🌖",
-	"Last Quarter":    "🌗",
-	"Waning Crescent": "🌘",
+	PhaseNewMoon:        "🌑",
+	PhaseWaxingCrescent: "🌒",
+	PhaseFirstQuarter:   "🌓",
+	PhaseWaxingGibbous:  "🌔",
+	PhaseFullMoon:       "🌕",
+	PhaseWaningGibbous:  "🌖",
+	PhaseLastQuarter:    "🌗",
+	PhaseWaningCrescent: "🌘",
 }
 
 // GetMoonPhase calculates the moon phase for the given date.
