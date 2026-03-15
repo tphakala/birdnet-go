@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -136,7 +137,12 @@ func writeLE32(buf []byte, offset int, val uint32) {
 
 // findFFmpeg locates the FFmpeg binary for testing.
 func findFFmpeg() (string, error) {
-	// Check common paths
+	// Try PATH first
+	if p, err := exec.LookPath("ffmpeg"); err == nil {
+		return p, nil
+	}
+
+	// Fall back to common paths
 	paths := []string{"/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg"}
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {

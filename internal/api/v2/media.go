@@ -635,7 +635,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	}
 	filename := fmt.Sprintf("clip_%.1f-%.1f.%s", req.Start, req.End, ext)
 	ctx.Response().Header().Set("Content-Disposition",
-		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.PathEscape(filename)))
+		fmt.Sprintf("attachment; filename*=UTF-8''%s", url.QueryEscape(filename)))
 
 	return ctx.Blob(http.StatusOK, mimeType, buf.Bytes())
 }

@@ -12,8 +12,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// clipExtractionTimeout is the maximum time allowed for a clip extraction.
-const clipExtractionTimeout = 30 * time.Second
+// Clip extraction timeout bounds. The actual timeout scales with requested
+// duration (2x) but is clamped to these limits.
+const (
+	clipExtractionMinTimeout = 30 * time.Second
+	clipExtractionMaxTimeout = 10 * time.Minute
+)
 
 // MaxClipDurationSec is the maximum allowed clip duration in seconds.
 // Prevents memory exhaustion from very long extraction requests.
@@ -46,6 +50,10 @@ func IsSupportedClipFormat(format string) bool {
 // ExtractAudioClip extracts a time range from an audio file and re-encodes it
 // to the specified format. The result is returned as an in-memory buffer.
 func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64, format string, settings *conf.AudioSettings) (*bytes.Buffer, error) {
+	if settings == nil {
+		return nil, fmt.Errorf("audio settings cannot be nil")
+	}
+
 	// Validate parameters
 	if start < 0 {
 		return nil, fmt.Errorf("start time must be non-negative, got %f", start)
@@ -71,8 +79,10 @@ func ExtractAudioClip(ctx context.Context, inputPath string, start, end float64,
 	// Build FFmpeg arguments
 	args := buildClipFFmpegArgs(inputPath, start, duration, format)
 
-	// Create context with timeout
-	ctx, cancel := context.WithTimeout(ctx, clipExtractionTimeout)
+	// Create context with adaptive timeout (2x duration, clamped to bounds)
+	timeout := max(time.Duration(duration*2)*time.Second, clipExtractionMinTimeout)
+	timeout = min(timeout, clipExtractionMaxTimeout)
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	// Execute FFmpeg

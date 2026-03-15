@@ -334,8 +334,7 @@
 
     // Ignore clicks on interactive elements (toolbar buttons, controls, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"], [role="menu"], [role="menuitem"]'))
-      return;
+    if (target.closest('button, select, a, [role="button"]')) return;
 
     dragOriginX = e.clientX;
 
@@ -454,8 +453,7 @@
 
     // Ignore touches on interactive elements
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"], [role="menu"], [role="menuitem"]'))
-      return;
+    if (target.closest('button, select, a, [role="button"]')) return;
 
     if (playerContainer) playerContainer.style.touchAction = 'none';
 
@@ -619,8 +617,12 @@
 
       let ext = extractionFormat;
       if (ext === 'alac') ext = 'm4a';
-      const label = clipLabel
-        ? `${clipLabel}_${start.toFixed(1)}-${end.toFixed(1)}s`
+      // Sanitize label for filesystem safety (remove reserved chars, normalize whitespace)
+      const safeLabel = clipLabel
+        ? clipLabel.replace(/[<>:"/\\|?*]/g, '-').replace(/\s+/g, '_')
+        : '';
+      const label = safeLabel
+        ? `${safeLabel}_${start.toFixed(1)}-${end.toFixed(1)}s`
         : `clip_${start.toFixed(1)}-${end.toFixed(1)}`;
       const filename = `${label}.${ext}`;
 
@@ -1171,12 +1173,7 @@
           audioRetryTimer = undefined;
         }
         // Reset clip selection for new audio
-        selectionStartSec = null;
-        selectionEndSec = null;
-        isDragSelecting = false;
-        draggingHandle = null;
-        isScrubbing = false;
-        extractionError = null;
+        clearSelection();
       }
     }
   });
@@ -1754,7 +1751,7 @@
             aria-label={t('components.audioPlayer.clipExtraction.extractClip')}
             title={t('components.audioPlayer.clipExtraction.extractClip')}
             aria-expanded={showFormatMenu}
-            aria-haspopup="menu"
+            aria-haspopup="true"
           >
             {#if isExtracting}
               <div
@@ -1770,13 +1767,11 @@
           {#if showFormatMenu}
             <div
               class="absolute top-full left-1/2 -translate-x-1/2 mt-1 py-1 rounded-lg bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg min-w-[8.5rem] z-30"
-              role="menu"
             >
               {#each [{ value: 'wav', label: 'WAV', lossless: true }, { value: 'flac', label: 'FLAC', lossless: true }, { value: 'alac', label: 'ALAC', lossless: true }, { value: 'mp3', label: 'MP3', lossless: false }, { value: 'opus', label: 'Opus', lossless: false }, { value: 'aac', label: 'AAC', lossless: false }] as fmt (fmt.value)}
                 <button
                   class="w-full px-3.5 py-2 text-left flex items-center justify-between gap-3 hover:bg-[var(--color-base-200)] text-[var(--color-base-content)] transition-colors"
                   onclick={() => selectFormatAndExtract(fmt.value)}
-                  role="menuitem"
                 >
                   <span class="font-medium">{fmt.label}</span>
                   <span class="text-[var(--color-base-content)]/50 text-xs"
