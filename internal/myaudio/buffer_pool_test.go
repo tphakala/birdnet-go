@@ -167,15 +167,17 @@ func TestBufferPoolSizeValidation(t *testing.T) {
 	stats = pool.GetStats()
 	assert.Equal(t, uint64(2), stats.Discarded)
 
-	// Test putting correct size buffer
+	// Test putting correct size buffer (not discarded)
 	correctBuf := make([]byte, bufferSize)
+	discardedBefore := pool.GetStats().Discarded
 	pool.Put(correctBuf)
+	assert.Equal(t, discardedBefore, pool.GetStats().Discarded, "correct-size buffer should not be discarded")
 
-	// Verify it gets reused
+	// Verify Get returns a correctly-sized buffer regardless of pool state
+	// Note: sync.Pool may GC the pooled buffer, so we can't assert on Hits
 	reusedBuf := pool.Get()
 	assert.NotNil(t, reusedBuf)
-	stats = pool.GetStats()
-	assert.GreaterOrEqual(t, stats.Hits, uint64(1))
+	assert.Len(t, reusedBuf, bufferSize, "returned buffer should have the correct size")
 }
 
 func TestBufferPoolConcurrency(t *testing.T) {

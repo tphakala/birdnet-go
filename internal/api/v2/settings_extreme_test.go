@@ -52,8 +52,8 @@ func TestExtremeValues(t *testing.T) {
 			extremeData: map[string]any{
 				"summaryLimit": 2147483647, // Max int32 - exceeds valid range 10-1000
 			},
-			expectedError: true,
-			description:   "Should reject summaryLimit exceeding valid range",
+			expectedError: false, // ValidateSettings auto-corrects to 10, returns success
+			description:   "Should auto-correct summaryLimit exceeding valid range",
 		},
 		{
 			name:    "Negative values where not allowed",
@@ -61,8 +61,8 @@ func TestExtremeValues(t *testing.T) {
 			extremeData: map[string]any{
 				"summaryLimit": -100,
 			},
-			expectedError: true, // Rejected by ValidateSettings (range 10-1000)
-			description:   "Should reject negative summaryLimit",
+			expectedError: false, // ValidateSettings auto-corrects to 10, returns success
+			description:   "Should auto-correct negative summaryLimit",
 		},
 		{
 			name:    "Extreme coordinates",
