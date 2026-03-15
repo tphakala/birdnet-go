@@ -180,9 +180,9 @@
       {#if weatherData.moon}
         {@render sep()}
         <WeatherSvgIcon
-          icon={weatherData.moon.iconName}
+          icon={weatherData.moon.icon_name}
           size={18}
-          title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+          title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
         />
       {/if}
     </div>
@@ -266,12 +266,12 @@
       {#if weatherData.moon}
         <div class="flex items-center gap-1.5">
           <WeatherSvgIcon
-            icon={weatherData.moon.iconName}
+            icon={weatherData.moon.icon_name}
             size={24}
-            title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+            title={t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
           />
           <span
-            >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phaseName)}`)}
+            >{t(`weather.moon.${getMoonPhaseI18nKey(weatherData.moon.phase_name)}`)}
             <span class="text-[var(--color-base-content)]/50"
               >{Math.round(weatherData.moon.illumination)}%</span
             ></span

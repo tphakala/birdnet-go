@@ -60,9 +60,9 @@ type DetectionWeatherResponse struct {
 // MoonResponse holds moon phase data for API responses.
 type MoonResponse struct {
 	Phase        float64 `json:"phase"`        // 0–27.99, raw phase value
-	PhaseName    string  `json:"phaseName"`    // e.g. "Full Moon"
+	PhaseName    string  `json:"phase_name"`   // e.g. "Full Moon"
 	Illumination float64 `json:"illumination"` // 0–100 percentage
-	IconName     string  `json:"iconName"`     // Basmilius icon name e.g. "moon-full"
+	IconName     string  `json:"icon_name"`    // Basmilius icon name e.g. "moon-full"
 }
 
 // initWeatherRoutes registers all weather-related API endpoints

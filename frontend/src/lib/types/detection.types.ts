@@ -140,9 +140,9 @@ export interface LatestWeatherResponse {
   };
   moon?: {
     phase: number;
-    phaseName: string;
+    phase_name: string;
     illumination: number;
-    iconName: string;
+    icon_name: string;
   };
   timestamp: string;
 }
