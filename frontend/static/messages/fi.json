@@ -1611,6 +1611,15 @@
           "level": {
             "label": "Suodatustaso"
           },
+          "detectionCount": "{count} vahvistusta vaaditaan. {description}",
+          "levels": {
+            "off": "Ei suodatusta - hyväksyy ensimmäisen havainnon välittömästi",
+            "lenient": "Heikkolaatuiselle äänelle (RTSP-kamerat, web-kameramikrofonit)",
+            "moderate": "Tasapainoinen tyypillisille harrastusasetuksille",
+            "balanced": "Alkuperäinen toiminta ennen syyskuuta 2025",
+            "strict": "RPi 4+ vaaditaan. Laadukkaille mikrofoneille",
+            "maximum": "RPi 4+ vaaditaan. Ammattitason mikrofoneille"
+          },
           "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
           "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
           "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa"

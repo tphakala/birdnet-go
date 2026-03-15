@@ -153,6 +153,7 @@ type DetectionResponse struct {
 	ID                 uint              `json:"id"`
 	Date               string            `json:"date"`
 	Time               string            `json:"time"`
+	Timestamp          string            `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
 	Source             string            `json:"source"`
 	BeginTime          string            `json:"beginTime"`
 	EndTime            string            `json:"endTime"`
@@ -607,6 +608,12 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
 		Locked:         note.Locked,
+	}
+
+	// Build RFC3339 timestamp from Date+Time in the server's local timezone
+	// so the frontend can compute correct relative times across timezones.
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, time.Now().Location()); err == nil {
+		detection.Timestamp = t.Format(time.RFC3339)
 	}
 
 	c.applySpeciesTrackingMetadata(&detection, note.ScientificName)
