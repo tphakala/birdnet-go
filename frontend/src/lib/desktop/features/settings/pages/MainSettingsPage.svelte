@@ -1021,52 +1021,90 @@
   // Tolerance for floating-point comparison (overlap values have 1 decimal precision)
   const OVERLAP_COMPARISON_TOLERANCE = 0.001;
 
-  // Minimum overlap values must match backend: internal/analysis/processor/false_positive_filter.go
+  // Minimum overlap and threshold values must match backend:
+  // internal/analysis/processor/false_positive_filter.go
   const falsePositiveFilterLevels = [
     {
       value: 0,
       name: 'Off',
-      description: 'No filtering - accepts first detection immediately',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.off',
       minOverlap: 0.0,
+      threshold: 0.0,
     },
     {
       value: 1,
       name: 'Lenient',
-      description: '~2 confirmations required. For low-quality audio (RTSP cameras, webcam mics)',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.lenient',
       minOverlap: 2.0,
+      threshold: 0.2,
     },
     {
       value: 2,
       name: 'Moderate',
-      description: '~3 confirmations required. Balanced for typical hobby setups',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.moderate',
       minOverlap: 2.2,
+      threshold: 0.3,
     },
     {
       value: 3,
       name: 'Balanced',
-      description: '~5 confirmations required. Original pre-Sept 2025 behavior',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.balanced',
       minOverlap: 2.4,
+      threshold: 0.5,
     },
     {
       value: 4,
       name: 'Strict',
-      description: '~12 confirmations required. RPi 4+ needed. For high-quality microphones',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.strict',
       minOverlap: 2.7,
+      threshold: 0.6,
     },
     {
       value: 5,
       name: 'Maximum',
-      description: '~21 confirmations required. RPi 4+ needed. For professional-grade microphones',
+      descriptionKey: 'settings.main.sections.falsePositiveFilter.levels.maximum',
       minOverlap: 2.8,
+      threshold: 0.7,
     },
   ];
+
+  // Constants matching backend: internal/analysis/processor/processor.go
+  const CHUNK_DURATION_SECONDS = 3.0;
+  const REFERENCE_WINDOW_SECONDS = 6.0;
+  const MIN_SEGMENT_LENGTH = 0.1;
+  const FLOAT_EPSILON = 1e-9;
+
+  // Calculates minimum required detections based on overlap and filter level.
+  // Must match backend: internal/analysis/processor/processor.go calculateMinDetectionsFromSettings()
+  function calculateMinDetections(level: number, overlap: number): number {
+    if (level === 0) return 1;
+
+    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
+    if (!levelData) return 1;
+
+    const segmentLength = Math.max(MIN_SEGMENT_LENGTH, CHUNK_DURATION_SECONDS - overlap);
+    const maxDetectionsIn6s = REFERENCE_WINDOW_SECONDS / segmentLength;
+    const required = maxDetectionsIn6s * levelData.threshold - FLOAT_EPSILON;
+    return Math.max(1, Math.ceil(required));
+  }
 
   function getFalsePositiveFilterLevelName(level: number): string {
     return safeArrayAccess(falsePositiveFilterLevels, level)?.name ?? 'Unknown';
   }
 
-  function getFalsePositiveFilterDescription(level: number): string {
-    return safeArrayAccess(falsePositiveFilterLevels, level)?.description ?? '';
+  function getFalsePositiveFilterDescription(level: number, overlap: number): string {
+    const levelData = safeArrayAccess(falsePositiveFilterLevels, level);
+    if (!levelData) return '';
+
+    const minDet = calculateMinDetections(level, overlap);
+    const baseDescription = t(levelData.descriptionKey);
+
+    if (level === 0) return baseDescription;
+
+    return t('settings.main.sections.falsePositiveFilter.detectionCount', {
+      count: minDet.toString(),
+      description: baseDescription,
+    });
   }
 
   function getMinimumOverlapForLevel(level: number): number {
@@ -1582,7 +1620,10 @@
           />
           <div class="mt-1">
             <span class="text-xs text-[var(--color-base-content)] opacity-60">
-              {getFalsePositiveFilterDescription(settings.falsePositiveFilter.level)}
+              {getFalsePositiveFilterDescription(
+                settings.falsePositiveFilter.level,
+                settings.birdnet.overlap
+              )}
             </span>
           </div>
         </div>

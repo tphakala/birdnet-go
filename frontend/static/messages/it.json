@@ -1420,6 +1420,15 @@
           "level": {
             "label": "Livello Filtro"
           },
+          "detectionCount": "{count} conferme richieste. {description}",
+          "levels": {
+            "off": "Nessun filtraggio - accetta il primo rilevamento immediatamente",
+            "lenient": "Per audio di bassa qualità (telecamere RTSP, microfoni webcam)",
+            "moderate": "Equilibrato per configurazioni hobby tipiche",
+            "balanced": "Comportamento originale pre-settembre 2025",
+            "strict": "RPi 4+ necessario. Per microfoni di alta qualità",
+            "maximum": "RPi 4+ necessario. Per microfoni di grado professionale"
+          },
           "hardwareNote": "I livelli Rigoroso e Massimo richiedono impostazioni di sovrapposizione più alte e più risorse CPU. Hardware RPi 4 o migliore è richiesto per questi livelli.",
           "overlapAdjusted": "Impostazione sovrapposizione regolata automaticamente a {overlap}s per soddisfare i requisiti del filtro",
           "overlapReduced": "Impostazione sovrapposizione ridotta a {overlap}s per corrispondere al livello del filtro"

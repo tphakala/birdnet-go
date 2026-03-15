@@ -1454,6 +1454,15 @@
           "level": {
             "label": "Úroveň filtra"
           },
+          "detectionCount": "Vyžadovaných {count} potvrdení. {description}",
+          "levels": {
+            "off": "Bez filtrovania - okamžite prijme prvú detekciu",
+            "lenient": "Pre nízku kvalitu zvuku (RTSP kamery, mikrofóny webkamier)",
+            "moderate": "Vyvážené pre typické hobby konfigurácie",
+            "balanced": "Pôvodné správanie pred septembrom 2025",
+            "strict": "Vyžaduje sa RPi 4+. Pre vysokokvalitné mikrofóny",
+            "maximum": "Vyžaduje sa RPi 4+. Pre mikrofóny profesionálnej triedy"
+          },
           "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
           "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra"
