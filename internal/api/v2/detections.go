@@ -612,8 +612,10 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 
 	// Build RFC3339 timestamp from Date+Time in the server's local timezone
 	// so the frontend can compute correct relative times across timezones.
-	if t, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, time.Now().Location()); err == nil {
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, time.Local); err == nil {
 		detection.Timestamp = t.Format(time.RFC3339)
+	} else {
+		c.Debug("Failed to parse detection timestamp from date=%q time=%q: %v", note.Date, note.Time, err)
 	}
 
 	c.applySpeciesTrackingMetadata(&detection, note.ScientificName)

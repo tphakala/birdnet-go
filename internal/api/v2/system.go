@@ -480,7 +480,7 @@ func (c *Controller) getSystemModelWithLogging(ip, path string) string {
 
 // getTimeZoneString returns formatted timezone string
 func getTimeZoneString() string {
-	loc := time.Now().Location()
+	loc := time.Local
 	timeZoneStr := loc.String()
 
 	if timeZoneStr != "Local" && timeZoneStr != "" {

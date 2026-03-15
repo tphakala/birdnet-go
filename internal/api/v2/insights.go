@@ -501,7 +501,7 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 		daysObserved    int
 	}
 	speciesMap := make(map[uint]*speciesData)
-	loc := time.Now().Location()
+	loc := time.Local
 
 	for _, entry := range rawEntries {
 		sd, ok := speciesMap[entry.LabelID]
