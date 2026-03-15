@@ -710,7 +710,10 @@
       "widthFull": "Pełna szerokość",
       "widthHalf": "Połowa szerokości",
       "fullWidthOnly": "Tylko pełna szerokość",
-      "settings": "Ustawienia"
+      "settings": "Ustawienia",
+      "resetDashboard": "Resetuj pulpit",
+      "resetConfirm": "Zresetować pulpit do domyślnego układu? Wszystkie dostosowania zostaną usunięte.",
+      "resetting": "Resetowanie..."
     },
     "elements": {
       "banner": "Baner pulpitu",

@@ -710,7 +710,10 @@
       "widthFull": "Plná šírka",
       "widthHalf": "Polovičná šírka",
       "fullWidthOnly": "Iba plná šírka",
-      "settings": "Nastavenia"
+      "settings": "Nastavenia",
+      "resetDashboard": "Obnoviť panel",
+      "resetConfirm": "Obnoviť panel na predvolené rozloženie? Všetky úpravy budú odstránené.",
+      "resetting": "Obnovuje sa..."
     },
     "elements": {
       "banner": "Banner panela",

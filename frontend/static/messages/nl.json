@@ -710,7 +710,10 @@
       "widthFull": "Volledige breedte",
       "widthHalf": "Halve breedte",
       "fullWidthOnly": "Alleen volledige breedte",
-      "settings": "Instellingen"
+      "settings": "Instellingen",
+      "resetDashboard": "Dashboard resetten",
+      "resetConfirm": "Dashboard naar de standaardindeling resetten? Alle aanpassingen worden verwijderd.",
+      "resetting": "Resetten..."
     },
     "elements": {
       "banner": "Dashboard-banner",

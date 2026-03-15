@@ -3,11 +3,18 @@
   import { theme } from '$lib/stores/theme';
   import { scheme } from '$lib/stores/scheme';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
+  import { settingsStore } from '$lib/stores/settings';
+  import type { Dashboard, DashboardLayout } from '$lib/stores/settings';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { api } from '$lib/utils/api';
+  import { getLogger } from '$lib/utils/logger';
   import { resetDateToToday } from '$lib/utils/datePersistence';
-  import { Settings, Sun, Moon, Pencil, Github } from '@lucide/svelte';
+  import { Settings, Sun, Moon, Pencil, RotateCcw, Github } from '@lucide/svelte';
+  import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
+
+  const logger = getLogger('dashboard');
 
   interface Props {
     securityEnabled?: boolean;
@@ -18,6 +25,7 @@
   let { securityEnabled = false, accessAllowed = true, className = '' }: Props = $props();
 
   let isOpen = $state(false);
+  let showResetConfirm = $state(false);
   let buttonRef = $state<HTMLButtonElement | null>(null);
   let dropdownRef = $state<HTMLDivElement | null>(null);
 
@@ -47,6 +55,68 @@
     isOpen = false;
     resetDateToToday();
     dashboardEditMode.set(true);
+    navigation.navigate('/ui/dashboard');
+  }
+
+  const DEFAULT_LAYOUT: DashboardLayout = {
+    elements: [
+      {
+        id: 'daily-summary-0',
+        type: 'daily-summary',
+        enabled: true,
+        summary: { summaryLimit: 30 },
+      },
+      { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+      { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
+    ],
+  };
+
+  function handleResetDashboard() {
+    isOpen = false;
+    showResetConfirm = true;
+  }
+
+  async function confirmResetDashboard() {
+    try {
+      await api.patch('/api/v2/settings/dashboard', { layout: DEFAULT_LAYOUT });
+    } catch (error) {
+      logger.error('Failed to reset dashboard layout:', error);
+      showResetConfirm = false;
+      return;
+    }
+
+    const defaultDashboard: Dashboard = {
+      thumbnails: { summary: true, recent: true, imageProvider: '', fallbackPolicy: '' },
+      summaryLimit: 30,
+    };
+
+    settingsStore.update(state => ({
+      ...state,
+      formData: {
+        ...state.formData,
+        realtime: {
+          ...state.formData.realtime,
+          dashboard: {
+            ...defaultDashboard,
+            ...state.formData.realtime?.dashboard,
+            layout: DEFAULT_LAYOUT,
+          },
+        },
+      },
+      originalData: {
+        ...state.originalData,
+        realtime: {
+          ...state.originalData.realtime,
+          dashboard: {
+            ...defaultDashboard,
+            ...state.originalData.realtime?.dashboard,
+            layout: DEFAULT_LAYOUT,
+          },
+        },
+      },
+    }));
+
+    showResetConfirm = false;
     navigation.navigate('/ui/dashboard');
   }
 
@@ -125,6 +195,15 @@
             <Pencil class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
             <span>{t('dashboard.editMode.editDashboard')}</span>
           </button>
+
+          <!-- Reset Dashboard -->
+          <button
+            onclick={handleResetDashboard}
+            class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-normal text-[var(--color-base-content)] transition-colors duration-150 hover:bg-[var(--color-base-content)]/10"
+          >
+            <RotateCcw class="size-4 shrink-0 text-[var(--color-base-content)]/70" />
+            <span>{t('dashboard.editMode.resetDashboard')}</span>
+          </button>
         {/if}
 
         <!-- Divider -->
@@ -144,3 +223,15 @@
     </div>
   {/if}
 </div>
+
+<ConfirmModal
+  isOpen={showResetConfirm}
+  title={t('dashboard.editMode.resetDashboard')}
+  message={t('dashboard.editMode.resetConfirm')}
+  confirmLabel={t('dashboard.editMode.resetDashboard')}
+  confirmVariant="warning"
+  onClose={() => {
+    showResetConfirm = false;
+  }}
+  onConfirm={confirmResetDashboard}
+/>

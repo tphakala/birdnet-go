@@ -710,7 +710,10 @@
       "widthFull": "Ancho completo",
       "widthHalf": "Medio ancho",
       "fullWidthOnly": "Solo ancho completo",
-      "settings": "Configuración"
+      "settings": "Configuración",
+      "resetDashboard": "Restablecer panel",
+      "resetConfirm": "¿Restablecer el panel a su diseño predeterminado? Se eliminarán todas las personalizaciones.",
+      "resetting": "Restableciendo..."
     },
     "elements": {
       "banner": "Banner del panel",

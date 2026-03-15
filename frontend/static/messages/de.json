@@ -710,7 +710,10 @@
       "widthFull": "Volle Breite",
       "widthHalf": "Halbe Breite",
       "fullWidthOnly": "Nur volle Breite",
-      "settings": "Einstellungen"
+      "settings": "Einstellungen",
+      "resetDashboard": "Dashboard zurücksetzen",
+      "resetConfirm": "Dashboard auf das Standardlayout zurücksetzen? Alle Anpassungen gehen verloren.",
+      "resetting": "Wird zurückgesetzt..."
     },
     "elements": {
       "banner": "Dashboard-Banner",

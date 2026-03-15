@@ -710,7 +710,10 @@
       "widthFull": "Full width",
       "widthHalf": "Half width",
       "fullWidthOnly": "Full width only",
-      "settings": "Settings"
+      "settings": "Settings",
+      "resetDashboard": "Reset Dashboard",
+      "resetConfirm": "Reset the dashboard to its default layout? This will remove any customizations.",
+      "resetting": "Resetting..."
     },
     "elements": {
       "banner": "Dashboard Banner",

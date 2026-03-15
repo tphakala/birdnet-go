@@ -710,7 +710,10 @@
       "widthFull": "Pleine largeur",
       "widthHalf": "Demi-largeur",
       "fullWidthOnly": "Pleine largeur uniquement",
-      "settings": "Paramètres"
+      "settings": "Paramètres",
+      "resetDashboard": "Réinitialiser le tableau de bord",
+      "resetConfirm": "Réinitialiser le tableau de bord à sa disposition par défaut ? Toutes les personnalisations seront supprimées.",
+      "resetting": "Réinitialisation..."
     },
     "elements": {
       "banner": "Bannière du tableau de bord",

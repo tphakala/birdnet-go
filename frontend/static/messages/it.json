@@ -710,7 +710,10 @@
       "widthFull": "Larghezza intera",
       "widthHalf": "Mezza larghezza",
       "fullWidthOnly": "Solo larghezza intera",
-      "settings": "Impostazioni"
+      "settings": "Impostazioni",
+      "resetDashboard": "Reimposta dashboard",
+      "resetConfirm": "Reimpostare la dashboard al layout predefinito? Tutte le personalizzazioni verranno rimosse.",
+      "resetting": "Reimpostazione..."
     },
     "elements": {
       "banner": "Banner della dashboard",

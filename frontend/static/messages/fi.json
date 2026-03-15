@@ -710,7 +710,10 @@
       "widthFull": "Täysi leveys",
       "widthHalf": "Puolikas leveys",
       "fullWidthOnly": "Vain täysi leveys",
-      "settings": "Asetukset"
+      "settings": "Asetukset",
+      "resetDashboard": "Palauta kojelauta",
+      "resetConfirm": "Palautetaanko kojelauta oletusasetteluun? Kaikki mukautukset poistetaan.",
+      "resetting": "Palautetaan..."
     },
     "elements": {
       "banner": "Dashboard Banner",

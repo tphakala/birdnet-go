@@ -710,7 +710,10 @@
       "widthFull": "Largura total",
       "widthHalf": "Meia largura",
       "fullWidthOnly": "Apenas largura total",
-      "settings": "Configurações"
+      "settings": "Configurações",
+      "resetDashboard": "Redefinir painel",
+      "resetConfirm": "Redefinir o painel para o layout padrão? Todas as personalizações serão removidas.",
+      "resetting": "Redefinindo..."
     },
     "elements": {
       "banner": "Banner do painel",
