@@ -802,7 +802,8 @@
       "viewDetails": "Vedi dettagli per {species}"
     },
     "media": {
-      "title": "Registrazione e Spettrogramma"
+      "title": "Registrazione e Spettrogramma",
+      "clipHint": "Clicca e trascina sullo spettrogramma per selezionare un intervallo da esportare"
     },
     "tabs": {
       "overview": "Panoramica",

@@ -799,7 +799,8 @@
       }
     },
     "media": {
-      "title": "Aufnahme & Spektrogramm"
+      "title": "Aufnahme & Spektrogramm",
+      "clipHint": "Klicken und ziehen Sie auf dem Spektrogramm, um einen Bereich für den Clip-Export auszuwählen"
     },
     "tabs": {
       "overview": "Übersicht",

@@ -802,7 +802,8 @@
       "viewDetails": "Bekijk details voor {species}"
     },
     "media": {
-      "title": "Geluid opname & Spectrogram"
+      "title": "Geluid opname & Spectrogram",
+      "clipHint": "Klik en sleep op het spectrogram om een bereik te selecteren voor export"
     },
     "tabs": {
       "overview": "Overzicht",

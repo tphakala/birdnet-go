@@ -802,7 +802,8 @@
       "caption": "Liste des détections d'oiseaux avec date, espèce, confiance et informations de statut"
     },
     "media": {
-      "title": "Enregistrement et spectrogramme"
+      "title": "Enregistrement et spectrogramme",
+      "clipHint": "Cliquez et faites glisser sur le spectrogramme pour sélectionner une plage à exporter"
     },
     "tabs": {
       "overview": "Vue d'ensemble",

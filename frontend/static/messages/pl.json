@@ -802,7 +802,8 @@
       "viewDetails": "Wyświetl szczegóły dla {species}"
     },
     "media": {
-      "title": "Nagranie i Spektrogram"
+      "title": "Nagranie i Spektrogram",
+      "clipHint": "Kliknij i przeciągnij na spektrogramie, aby wybrać zakres do eksportu"
     },
     "tabs": {
       "overview": "Przegląd",

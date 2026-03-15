@@ -802,7 +802,8 @@
       "viewDetails": "Zobraziť podrobnosti pre {species}"
     },
     "media": {
-      "title": "Nahrávka a spektrogram"
+      "title": "Nahrávka a spektrogram",
+      "clipHint": "Kliknite a potiahnite na spektrograme na výber rozsahu pre export"
     },
     "tabs": {
       "overview": "Prehľad",

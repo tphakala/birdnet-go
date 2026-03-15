@@ -807,7 +807,8 @@
       "viewDetails": "View details for {species}"
     },
     "media": {
-      "title": "Recording & Spectrogram"
+      "title": "Recording & Spectrogram",
+      "clipHint": "Click and drag on the spectrogram to select a range for clip export"
     },
     "tabs": {
       "overview": "Overview",

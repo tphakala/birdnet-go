@@ -811,7 +811,8 @@
       "viewDetails": "Näytä {species} tiedot"
     },
     "media": {
-      "title": "Tallenne ja spektrogrammi"
+      "title": "Tallenne ja spektrogrammi",
+      "clipHint": "Valitse leike napsauttamalla ja vetämällä spektrogrammia"
     },
     "tabs": {
       "overview": "Yleiskatsaus",

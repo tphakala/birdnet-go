@@ -811,7 +811,8 @@
       "viewDetails": "Ver detalhes para {species}"
     },
     "media": {
-      "title": "Gravação e espectrograma"
+      "title": "Gravação e espectrograma",
+      "clipHint": "Clique e arraste no espectrograma para selecionar um intervalo para exportação"
     },
     "tabs": {
       "overview": "Visão geral",
