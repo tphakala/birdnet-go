@@ -67,21 +67,21 @@
   color: var(--color-success);
 
   --lighter-color: color-mix(in srgb, var(--color-success) 8%, white);
-  --darker-color: color-mix(in srgb, var(--color-success) 20%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-success) 20%, var(--color-base-100));
 }
 
 .confidence-medium {
   color: var(--color-warning);
 
   --lighter-color: color-mix(in srgb, var(--color-warning) 8%, white);
-  --darker-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-base-100));
 }
 
 .confidence-low {
   color: var(--color-error);
 
   --lighter-color: color-mix(in srgb, var(--color-error) 8%, white);
-  --darker-color: color-mix(in srgb, var(--color-error) 20%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-error) 20%, var(--color-base-100));
 }
 
 .confidence-circle-text {
@@ -115,21 +115,21 @@
   color: color-mix(in srgb, var(--color-success) 80%, white);
 
   --lighter-color: color-mix(in srgb, var(--color-success) 15%, black);
-  --darker-color: color-mix(in srgb, var(--color-success) 30%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-success) 20%, var(--color-base-100));
 }
 
 [data-theme='dark'] .confidence-medium {
   color: color-mix(in srgb, var(--color-warning) 80%, white);
 
   --lighter-color: color-mix(in srgb, var(--color-warning) 15%, black);
-  --darker-color: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-warning) 20%, var(--color-base-100));
 }
 
 [data-theme='dark'] .confidence-low {
   color: color-mix(in srgb, var(--color-error) 80%, white);
 
   --lighter-color: color-mix(in srgb, var(--color-error) 15%, black);
-  --darker-color: color-mix(in srgb, var(--color-error) 30%, transparent);
+  --darker-color: color-mix(in srgb, var(--color-error) 20%, var(--color-base-100));
 }
 
 /* ========================================================================

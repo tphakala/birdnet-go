@@ -1280,6 +1280,11 @@
     border-bottom: 1px solid var(--border-100);
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tab-nav::-webkit-scrollbar {
+    display: none;
   }
 
   .tab-button {
