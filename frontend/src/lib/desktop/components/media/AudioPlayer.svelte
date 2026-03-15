@@ -1412,6 +1412,11 @@
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling when URL changes
       clearStatusPollTimer();
+      // Revoke stale processed spectrogram from previous detection
+      if (processedSpectrogramUrl) {
+        URL.revokeObjectURL(processedSpectrogramUrl);
+        processedSpectrogramUrl = null;
+      }
     }
   });
 
@@ -1525,7 +1530,9 @@
         if (loopEnabled && audioElement) {
           // Loop full audio: restart from beginning
           audioElement.currentTime = 0;
-          audioElement.play().catch(() => {});
+          audioElement.play().catch((err: unknown) => {
+            logger.warn('Loop playback failed', err as Error);
+          });
           return;
         }
         isPlaying = false;
@@ -1766,7 +1773,7 @@
 >
   {#if spectrogramUrl}
     <!-- Screen reader announcement for loading state -->
-    <div class="sr-only" role="status" aria-live="polite">
+    <div class="sr-only" role="status">
       {spectrogramLoader.loading
         ? t('components.audio.spectrogramLoading')
         : t('components.audio.spectrogramLoaded')}
@@ -1877,9 +1884,7 @@
   <!-- Frequency scale overlay (linear 0-12kHz, sox resamples to 24kHz) -->
   {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
     {#each [12, 10, 8, 6, 5, 4, 3, 2, 1] as freq (freq)}
-      <span class="freq-label" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"
-        >{freq >= 1 ? `${freq}k` : `${freq * 1000}`}</span
-      >
+      <span class="freq-label" style:bottom="{(freq / 12) * 100}%" aria-hidden="true">{freq}k</span>
       <div class="freq-line" style:bottom="{(freq / 12) * 100}%" aria-hidden="true"></div>
     {/each}
   {/if}
@@ -2014,7 +2019,7 @@
 
   <!-- Processing active badge (only shown when toolbar is not used) -->
   {#if processingActive && !enableClipExtraction}
-    <div class="processing-badge" role="status" aria-live="polite">
+    <div class="processing-badge" role="status">
       {t('components.audioPlayer.processing.processingActive')}
     </div>
   {/if}
