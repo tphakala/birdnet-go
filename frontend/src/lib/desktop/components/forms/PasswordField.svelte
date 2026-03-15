@@ -139,7 +139,7 @@
       {required}
       {disabled}
       {autocomplete}
-      onchange={e => handleChange(e.currentTarget.value)}
+      oninput={e => handleChange(e.currentTarget.value)}
       class={cn('input input-sm w-full pr-10', error ? 'input-error' : '')}
     />
 

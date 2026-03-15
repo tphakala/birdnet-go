@@ -190,6 +190,7 @@
       "unknownError": "Vyskytla sa neznáma chyba"
     },
     "toggle": "Prepnúť",
+    "resizeHandle": "Potiahnutím zmeníte veľkosť",
     "image": "Obrázok",
     "actionsColumn": "Akcie",
     "closeModal": "Zatvoriť dialóg",

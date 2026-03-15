@@ -1004,6 +1004,9 @@ export const hasUnsavedChanges = derived(
   $store => JSON.stringify($store.formData) !== JSON.stringify($store.originalData)
 );
 
+// Validation errors store - pages can add errors to prevent saving
+export const settingsValidationErrors = writable<string[]>([]);
+
 export const currentSection = derived(settingsStore, $store => $store.activeSection);
 
 export const isLoading = derived(settingsStore, $store => $store.isLoading);

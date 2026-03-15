@@ -190,6 +190,7 @@
       "unknownError": "Erreur inconnue"
     },
     "toggle": "Basculer",
+    "resizeHandle": "Glisser pour redimensionner",
     "image": "Image",
     "actionsColumn": "Actions",
     "closeModal": "Fermer la boîte de dialogue",

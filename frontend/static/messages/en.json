@@ -190,6 +190,7 @@
       "unknownError": "Unknown error occurred"
     },
     "toggle": "Toggle",
+    "resizeHandle": "Drag to resize",
     "image": "Image",
     "actionsColumn": "Actions",
     "closeModal": "Close dialog",

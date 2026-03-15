@@ -39,13 +39,14 @@
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import { t } from '$lib/i18n';
-  import SelectField from '$lib/desktop/components/forms/SelectField.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import { Bird, Radio, Activity, Binoculars } from '@lucide/svelte';
   import {
     integrationSettings,
     realtimeSettings,
     settingsActions,
     settingsStore,
+    settingsValidationErrors,
     type MQTTSettings,
     type SettingsFormData,
   } from '$lib/stores/settings';
@@ -158,6 +159,22 @@
       (store.formData as SettingsFormData)?.realtime?.ebird
     )
   );
+
+  // Validate eBird: enabled requires API key
+  $effect(() => {
+    const ebirdEnabled = settings.ebird?.enabled ?? false;
+    const ebirdApiKey = settings.ebird?.apiKey?.trim() ?? '';
+    const errors: string[] = [];
+    if (ebirdEnabled && !ebirdApiKey) {
+      errors.push('ebird-api-key-required');
+    }
+    settingsValidationErrors.set(errors);
+
+    return () => {
+      // Clear validation errors when leaving this page
+      settingsValidationErrors.set([]);
+    };
+  });
 
   // Test states for multi-stage operations
   let testStates = $state<{
@@ -1624,14 +1641,11 @@
           </span>
           <div class="transition-opacity duration-200" class:opacity-50={!settings.ebird?.enabled}>
             <!-- API Key Info Banner -->
-            <div
-              class="flex items-start gap-3 p-4 rounded-lg mb-4 bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]"
-            >
-              <Info class="size-5 shrink-0 mt-0.5" />
-              <div>
-                <span>{@html t('settings.integration.ebird.apiKeyInfo')}</span>
-              </div>
-            </div>
+            <ErrorAlert type="info" className="mb-4">
+              {#snippet children()}
+                {@html t('settings.integration.ebird.apiKeyInfo')}
+              {/snippet}
+            </ErrorAlert>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
               <PasswordField
@@ -1644,12 +1658,12 @@
                 allowReveal={true}
               />
 
-              <SelectField
+              <SelectDropdown
                 value={settings.ebird!.locale}
                 options={ebirdLocaleOptions}
                 label={t('settings.integration.ebird.locale.label')}
                 disabled={!settings.ebird?.enabled || store.isLoading || store.isSaving}
-                onchange={updateEBirdLocale}
+                onChange={value => updateEBirdLocale(value as string)}
               />
             </div>
 

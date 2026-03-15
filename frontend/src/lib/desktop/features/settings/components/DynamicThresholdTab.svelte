@@ -34,6 +34,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import SettingsNote from './SettingsNote.svelte';
+  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
 
   const logger = loggers.settings;
 
@@ -374,7 +375,7 @@
         <p class="text-xs mt-1">{t('settings.species.dynamicThreshold.empty.description')}</p>
       </div>
     {:else}
-      <div class="overflow-y-auto max-h-[28rem]">
+      <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
         <table class="w-full text-sm">
           <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
             <tr class="border-b border-[var(--border-100)]">
@@ -666,7 +667,7 @@
             {/each}
           </tbody>
         </table>
-      </div>
+      </ResizableContainer>
     {/if}
   </div>
 

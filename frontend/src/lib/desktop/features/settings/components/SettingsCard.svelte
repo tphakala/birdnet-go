@@ -58,7 +58,9 @@
   }: Props = $props();
 
   // Memoized class names for performance
-  let cardClasses = $derived(cn('card bg-[var(--color-base-100)] shadow-2xs', className));
+  let cardClasses = $derived(
+    cn('card bg-[var(--color-base-100)] shadow-2xs overflow-visible', className)
+  );
   let headerClasses = $derived(cn('px-6 py-4'));
   let bodyClasses = $derived(padding ? 'px-6 pb-7' : '');
 </script>

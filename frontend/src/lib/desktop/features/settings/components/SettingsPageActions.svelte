@@ -16,7 +16,12 @@
   @component
 -->
 <script lang="ts">
-  import { settingsStore, settingsActions, hasUnsavedChanges } from '$lib/stores/settings.js';
+  import {
+    settingsStore,
+    settingsActions,
+    hasUnsavedChanges,
+    settingsValidationErrors,
+  } from '$lib/stores/settings.js';
   import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { RefreshCw, Save } from '@lucide/svelte';
   import { t } from '$lib/i18n';
@@ -26,10 +31,12 @@
 
   let store = $derived($settingsStore);
   let unsavedChanges = $derived($hasUnsavedChanges);
+  let validationErrors = $derived($settingsValidationErrors);
+  let canSave = $derived(unsavedChanges && validationErrors.length === 0);
 
   async function handleSave() {
     // Guard against calls when button should be disabled
-    if (!unsavedChanges || store.isSaving) {
+    if (!canSave || store.isSaving) {
       return;
     }
 
@@ -78,7 +85,7 @@
       type="button"
       class="btn btn-primary btn-sm gap-2"
       onclick={handleSave}
-      disabled={!unsavedChanges || store.isSaving}
+      disabled={!canSave || store.isSaving}
       aria-busy={store.isSaving}
       aria-label={store.isSaving
         ? t('settings.actions.savingAriaLabel')

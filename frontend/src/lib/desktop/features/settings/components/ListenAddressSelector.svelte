@@ -177,19 +177,21 @@
 
 <div class="grid grid-cols-1 gap-6 md:grid-cols-2">
   <!-- IP Address Dropdown -->
-  <div class="relative" data-listen-dropdown>
-    <span class="mb-1 block text-xs font-medium text-[var(--color-base-content)]/60">
-      {t('settings.integration.observability.listenAddress.ipLabel')}
-    </span>
+  <div class="form-control min-w-0 relative" data-listen-dropdown>
+    <div class="label">
+      <span class="label-text">
+        {t('settings.integration.observability.listenAddress.ipLabel')}
+      </span>
+    </div>
     <button
       type="button"
       {disabled}
       aria-haspopup="listbox"
       aria-expanded={dropOpen}
       aria-label={t('settings.integration.observability.listenAddress.ipLabel')}
-      class="flex w-full cursor-pointer items-center gap-2 rounded-lg border bg-[var(--color-base-200)] px-3 py-2 text-left text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50 {dropOpen
+      class="input input-sm w-full flex cursor-pointer items-center gap-2 bg-[var(--color-base-200)] text-left transition-all disabled:cursor-not-allowed disabled:opacity-50 {dropOpen
         ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20'
-        : 'border-[var(--color-base-300)]'}"
+        : ''}"
       onclick={() => {
         if (!disabled) dropOpen = !dropOpen;
       }}

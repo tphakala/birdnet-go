@@ -30,6 +30,7 @@
   import StatusPill from '$lib/desktop/components/ui/StatusPill.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
+  import TextInput from './TextInput.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
@@ -302,11 +303,9 @@
   }
 
   // Handle URL input with auto-detection
-  function handleUrlInput(event: Event) {
-    const target = event.target as HTMLInputElement;
-    newUrl = target.value;
-    if (newUrl.includes('://')) {
-      newStreamType = detectStreamType(newUrl);
+  function handleUrlInput(value: string) {
+    if (value.includes('://')) {
+      newStreamType = detectStreamType(value);
     }
   }
 
@@ -454,23 +453,6 @@
     }
   }
 
-  // Handle keydown in add form
-  function handleAddKeydown(event: KeyboardEvent) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      addStream();
-    } else if (event.key === 'Escape') {
-      event.preventDefault();
-      showAddForm = false;
-      newName = '';
-      newUrl = '';
-      newTransport = 'tcp';
-      newStreamType = 'rtsp';
-      newQuietHours = { ...defaultQuietHoursConfig };
-      clearErrors();
-    }
-  }
-
   onMount(() => {
     loadHealthStatus();
     quietHoursStore.startPolling();
@@ -584,69 +566,47 @@
     <!-- Add Stream Section -->
     {#if showAddForm}
       <div
-        class="rounded-lg border-2 border-dashed border-[var(--color-primary)]/30 bg-[color-mix(in_srgb,var(--color-primary)_5%,transparent)] p-4"
+        class="rounded-lg overflow-hidden bg-[var(--color-base-200)] border border-[var(--color-primary)]"
       >
-        <div class="space-y-4">
-          <!-- Name Input -->
-          <div>
-            <label class="block py-1" for="new-stream-name">
-              <span class="text-sm font-medium text-[var(--color-base-content)]">
-                {t('settings.audio.streams.nameLabel')}
-              </span>
-            </label>
-            <input
-              id="new-stream-name"
-              type="text"
-              bind:value={newName}
-              onkeydown={handleAddKeydown}
-              class={cn(
-                'w-full h-9 px-3 text-sm rounded-lg border bg-[var(--color-base-100)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors',
-                nameError ? 'border-[var(--color-error)]' : 'border-[var(--border-200)]'
-              )}
-              placeholder={t('settings.audio.streams.namePlaceholder')}
-              {disabled}
-            />
-            {#if nameError}
-              <span class="text-xs text-[var(--color-error)] mt-1">{nameError}</span>
-            {:else}
-              <span class="text-xs text-[var(--color-base-content)]/60 mt-1">
-                {t('settings.audio.streams.nameHelp')}
-              </span>
-            {/if}
-          </div>
+        <div class="p-6">
+          <h3 class="text-base font-semibold">
+            {t('settings.audio.streams.addStream')}
+          </h3>
 
-          <!-- URL Input -->
-          <div>
-            <label class="block py-1" for="new-stream-url">
-              <span class="text-sm font-medium text-[var(--color-base-content)]">
-                {t('settings.audio.streams.urlLabel')}
-              </span>
-            </label>
-            <input
-              id="new-stream-url"
-              type="text"
-              value={newUrl}
-              oninput={handleUrlInput}
-              onkeydown={handleAddKeydown}
-              class={cn(
-                'w-full h-9 px-3 text-sm font-mono rounded-lg border bg-[var(--color-base-100)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors',
-                urlError ? 'border-[var(--color-error)]' : 'border-[var(--border-200)]'
-              )}
-              placeholder="rtsp://user:password@192.168.1.100:554/stream"
-              {disabled}
-            />
-            {#if urlError}
-              <span class="text-xs text-[var(--color-error)] mt-1">{urlError}</span>
-            {:else}
-              <span class="text-xs text-[var(--color-base-content)]/60 mt-1">
-                {t('settings.audio.streams.urlHelp')}
-              </span>
-            {/if}
-          </div>
-
-          <!-- Type and Transport Row -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="space-y-4 mt-4">
+            <!-- Stream Name -->
             <div>
+              <TextInput
+                id="new-stream-name"
+                bind:value={newName}
+                label={t('settings.audio.streams.nameLabel')}
+                placeholder={t('settings.audio.streams.namePlaceholder')}
+                helpText={nameError ? undefined : t('settings.audio.streams.nameHelp')}
+                {disabled}
+              />
+              {#if nameError}
+                <p class="text-xs text-[var(--color-error)] -mt-2">{nameError}</p>
+              {/if}
+            </div>
+
+            <!-- Stream URL -->
+            <div>
+              <TextInput
+                id="new-stream-url"
+                bind:value={newUrl}
+                label={t('settings.audio.streams.urlLabel')}
+                placeholder="rtsp://user:password@192.168.1.100:554/stream"
+                helpText={urlError ? undefined : t('settings.audio.streams.urlHelp')}
+                oninput={handleUrlInput}
+                {disabled}
+              />
+              {#if urlError}
+                <p class="text-xs text-[var(--color-error)] -mt-2">{urlError}</p>
+              {/if}
+            </div>
+
+            <!-- Stream Type and Protocol -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SelectDropdown
                 value={newStreamType}
                 label={t('settings.audio.streams.typeLabel')}
@@ -656,10 +616,8 @@
                 groupBy={false}
                 menuSize="sm"
               />
-            </div>
 
-            {#if showTransportInAdd}
-              <div>
+              {#if showTransportInAdd}
                 <SelectDropdown
                   value={newTransport}
                   label={t('settings.audio.streams.transportLabel')}
@@ -669,42 +627,42 @@
                   groupBy={false}
                   menuSize="sm"
                 />
-              </div>
-            {/if}
-          </div>
+              {/if}
+            </div>
 
-          <!-- Quiet Hours -->
-          <QuietHoursEditor
-            config={newQuietHours}
-            onChange={qh => (newQuietHours = qh)}
-            {disabled}
-            idPrefix="new-stream-qh"
-          />
+            <!-- Quiet Hours -->
+            <QuietHoursEditor
+              config={newQuietHours}
+              onChange={qh => (newQuietHours = qh)}
+              {disabled}
+              idPrefix="new-stream-qh"
+            />
 
-          <!-- Action Buttons -->
-          <div class="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              class="inline-flex items-center justify-center h-8 px-3 text-sm rounded-lg bg-transparent hover:bg-[var(--color-base-content)]/10 text-[var(--color-base-content)] transition-colors"
-              onclick={() => {
-                showAddForm = false;
-                newName = '';
-                newUrl = '';
-                newQuietHours = { ...defaultQuietHoursConfig };
-                clearErrors();
-              }}
-            >
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm rounded-lg bg-[var(--color-primary)] hover:bg-[var(--color-primary)]/80 text-[var(--color-primary-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={addStream}
-              disabled={!newName.trim() || !newUrl.trim() || disabled}
-            >
-              <Plus class="size-4" />
-              {t('settings.audio.streams.addStream')}
-            </button>
+            <!-- Action Buttons -->
+            <div class="flex gap-2 justify-end pt-2">
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-transparent text-[var(--color-base-content)] hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
+                onclick={() => {
+                  showAddForm = false;
+                  newName = '';
+                  newUrl = '';
+                  newQuietHours = { ...defaultQuietHoursConfig };
+                  clearErrors();
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+                onclick={addStream}
+                disabled={!newName.trim() || !newUrl.trim() || disabled}
+              >
+                <Plus class="size-4" />
+                {t('settings.audio.streams.addStream')}
+              </button>
+            </div>
           </div>
         </div>
       </div>

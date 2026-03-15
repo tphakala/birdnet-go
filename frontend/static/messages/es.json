@@ -200,6 +200,7 @@
       "unknownError": "Error desconocido"
     },
     "toggle": "Alternar",
+    "resizeHandle": "Arrastrar para redimensionar",
     "image": "Imagen",
     "actionsColumn": "Acciones",
     "closeModal": "Cerrar diálogo",

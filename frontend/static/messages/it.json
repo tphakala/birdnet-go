@@ -190,6 +190,7 @@
       "unknownError": "Errore sconosciuto"
     },
     "toggle": "Attiva/Disattiva",
+    "resizeHandle": "Trascina per ridimensionare",
     "image": "Immagine",
     "actionsColumn": "Azioni",
     "closeModal": "Chiudi finestra",

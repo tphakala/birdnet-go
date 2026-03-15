@@ -18,16 +18,8 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
-  import {
-    ChevronUp,
-    ChevronDown,
-    ChevronsUpDown,
-    Search,
-    Maximize2,
-    Minimize2,
-    Download,
-    Bird,
-  } from '@lucide/svelte';
+  import { ChevronUp, ChevronDown, ChevronsUpDown, Search, Download, Bird } from '@lucide/svelte';
+  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
 
   interface ActiveSpeciesItem {
     commonName: string;
@@ -51,7 +43,6 @@
     species,
     loading = false,
     searchable = true,
-    expandable = true,
     onDownloadCsv,
     title,
     description,
@@ -62,7 +53,6 @@
   let sortColumn = $state<SortColumn>('score');
   let sortDirection = $state<'asc' | 'desc'>('desc');
   let searchQuery = $state('');
-  let isExpanded = $state(false);
 
   let filteredSpecies = $derived.by(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -154,27 +144,6 @@
         </div>
       {/if}
 
-      {#if expandable}
-        <button
-          type="button"
-          class="p-1.5 rounded-md transition-colors cursor-pointer hover:bg-black/[0.05] dark:hover:bg-white/[0.05]"
-          onclick={() => (isExpanded = !isExpanded)}
-          title={isExpanded
-            ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
-            : t('settings.species.activeSpecies.expand') || 'Expand list'}
-          aria-label={isExpanded
-            ? t('settings.species.activeSpecies.collapse') || 'Collapse list'
-            : t('settings.species.activeSpecies.expand') || 'Expand list'}
-          aria-expanded={isExpanded}
-        >
-          {#if isExpanded}
-            <Minimize2 class="w-3.5 h-3.5 text-muted" />
-          {:else}
-            <Maximize2 class="w-3.5 h-3.5 text-muted" />
-          {/if}
-        </button>
-      {/if}
-
       {#if onDownloadCsv}
         <button
           type="button"
@@ -199,11 +168,7 @@
       ></div>
     </div>
   {:else if sortedSpecies.length > 0}
-    <div
-      class="overflow-x-auto overflow-y-auto"
-      class:max-h-[32rem]={!isExpanded}
-      class:max-h-[80vh]={isExpanded}
-    >
+    <ResizableContainer defaultHeight={512} minHeight={200} maxHeight={800}>
       <table class="w-full text-sm">
         <thead class="sticky top-0 bg-[var(--surface-100)] z-10">
           <tr class="border-b border-[var(--border-100)]">
@@ -288,7 +253,7 @@
           {/each}
         </tbody>
       </table>
-    </div>
+    </ResizableContainer>
   {:else if searchQuery}
     <div class="text-center py-8 text-muted">
       <p class="text-sm">{t('settings.species.activeSpecies.noResults')}</p>
