@@ -1577,7 +1577,7 @@ Corvus brachyrhynchos_amerikanvaris
 Corvus capensis_afrikanmustavaris
 Corvus corax_korppi
 Corvus cornix_varis
-Corvus corone_varis
+Corvus corone_nokivaris
 Corvus coronoides_australiankorppi
 Corvus cryptoleucus_aavikkokorppi
 Corvus dauuricus_idännaakka
