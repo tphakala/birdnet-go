@@ -54,6 +54,7 @@
   // Configuration derived from centralized appState
   let securityEnabled = $derived(appState.security.enabled);
   let accessAllowed = $derived(appState.security.accessAllowed);
+  let publicLiveAudio = $derived(appState.security.publicAccess.liveAudio);
   let version = $derived(appState.version);
   let authConfig = $derived(appState.security.authConfig);
 
@@ -495,6 +496,7 @@
     currentPath={navigation.currentPath}
     {securityEnabled}
     {accessAllowed}
+    {publicLiveAudio}
     {version}
     {authConfig}
     onNavigate={navigate}
