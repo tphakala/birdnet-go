@@ -608,7 +608,8 @@ func (s *OAuth2Server) checkBasicAuthToken(r *http.Request, log SecurityLogger) 
 }
 
 // checkSocialAuthSessions checks for valid OAuth authentication sessions.
-// It iterates over all configured OAuth providers to find a valid session.
+// It first tries a direct lookup using the stored auth_provider session key,
+// then falls back to iterating all configured providers for backward compatibility.
 func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogger) bool {
 	userId, err := gothic.GetFromSession("userId", r)
 	if err != nil {
@@ -617,7 +618,45 @@ func (s *OAuth2Server) checkSocialAuthSessions(r *http.Request, log SecurityLogg
 		log.Debug("Found userId in session, checking provider sessions")
 	}
 
-	// Iterate over all configured providers to check for a valid session
+	// Try direct lookup via stored auth_provider session key first
+	if s.checkSocialAuthDirect(r, userId, log) {
+		return true
+	}
+
+	// Fall back to iterating all providers for backward compatibility
+	// (existing sessions may not have the auth_provider key)
+	return s.checkSocialAuthFallback(r, userId, log)
+}
+
+// checkSocialAuthDirect checks for a valid session using the stored auth_provider key.
+// Returns false if the key is missing or the provider session is invalid.
+func (s *OAuth2Server) checkSocialAuthDirect(r *http.Request, userId string, log SecurityLogger) bool {
+	activeProvider, err := gothic.GetFromSession(SessionKeyAuthProvider, r)
+	if err != nil || activeProvider == "" {
+		log.Debug("No auth_provider key in session, will try fallback iteration")
+		return false
+	}
+
+	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
+
+	// Look up the config provider for this goth provider name
+	configProvider := gothToConfigProvider(activeProvider)
+	provider := s.Settings.GetOAuthProvider(configProvider)
+	if provider == nil || !provider.Enabled {
+		log.Debug("Active auth provider not enabled or not found in config", logger.String("provider", activeProvider))
+		return false
+	}
+
+	return s.checkProviderAuth(r, userId, log, providerAuthConfig{
+		providerName:   activeProvider,
+		enabled:        provider.Enabled,
+		allowedUserIds: provider.UserID,
+	})
+}
+
+// checkSocialAuthFallback iterates over all configured providers to find a valid session.
+// This handles sessions created before the auth_provider key was introduced.
+func (s *OAuth2Server) checkSocialAuthFallback(r *http.Request, userId string, log SecurityLogger) bool {
 	for configProvider, gothProvider := range ConfigToGothProvider {
 		provider := s.Settings.GetOAuthProvider(configProvider)
 		if provider == nil || !provider.Enabled {

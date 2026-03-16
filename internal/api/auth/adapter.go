@@ -258,9 +258,10 @@ func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, er
 // Logout invalidates the current session/token
 func (a *SecurityAdapter) Logout(c echo.Context) error {
 	// Clear generic session values
-	gothic.StoreInSession("userId", "", c.Request(), c.Response())       //nolint:errcheck // Error checking not critical during logout
-	gothic.StoreInSession("access_token", "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
-	gothic.StoreInSession("id_token", "", c.Request(), c.Response())     //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("userId", "", c.Request(), c.Response())                        //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("access_token", "", c.Request(), c.Response())                  //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession("id_token", "", c.Request(), c.Response())                      //nolint:errcheck // Error checking not critical during logout
+	gothic.StoreInSession(security.SessionKeyAuthProvider, "", c.Request(), c.Response()) //nolint:errcheck // Error checking not critical during logout
 
 	// Clear all provider-specific session keys dynamically
 	for _, gothName := range security.ConfigToGothProvider {
@@ -276,7 +277,32 @@ func (a *SecurityAdapter) Logout(c echo.Context) error {
 func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirectURI string) string {
 	log := a.log()
 
-	// Check each configured OAuth provider for an active session
+	// Try direct lookup via stored auth_provider session key first
+	if logoutURL := a.getProviderLogoutURLDirect(c, postLogoutRedirectURI, log); logoutURL != "" {
+		return logoutURL
+	}
+
+	// Fall back to iterating all providers for backward compatibility
+	// (existing sessions may not have the auth_provider key)
+	return a.getProviderLogoutURLFallback(c, postLogoutRedirectURI, log)
+}
+
+// getProviderLogoutURLDirect attempts to build the logout URL using the stored auth_provider session key.
+// Returns empty string if the key is missing or the provider doesn't support logout.
+func (a *SecurityAdapter) getProviderLogoutURLDirect(c echo.Context, postLogoutRedirectURI string, log logger.Logger) string {
+	activeProvider, err := gothic.GetFromSession(security.SessionKeyAuthProvider, c.Request())
+	if err != nil || activeProvider == "" {
+		log.Debug("No auth_provider key in session, will try fallback iteration")
+		return ""
+	}
+
+	log.Debug("Found active auth provider in session", logger.String("provider", activeProvider))
+	return a.buildProviderLogoutURL(c, activeProvider, postLogoutRedirectURI, log)
+}
+
+// getProviderLogoutURLFallback iterates all configured providers to find the active session.
+// This handles sessions created before the auth_provider key was introduced.
+func (a *SecurityAdapter) getProviderLogoutURLFallback(c echo.Context, postLogoutRedirectURI string, log logger.Logger) string {
 	for configProvider, gothProviderName := range security.ConfigToGothProvider {
 		provider := a.OAuth2Server.Settings.GetOAuthProvider(configProvider)
 		if provider == nil || !provider.Enabled {
@@ -289,40 +315,46 @@ func (a *SecurityAdapter) GetProviderLogoutURL(c echo.Context, postLogoutRedirec
 			continue
 		}
 
-		// Found active provider session — check if it supports logout
-		gothProvider, err := goth.GetProvider(gothProviderName)
-		if err != nil {
-			log.Debug("Could not get goth provider", logger.String("provider", gothProviderName), logger.Error(err))
-			continue
+		if logoutURL := a.buildProviderLogoutURL(c, gothProviderName, postLogoutRedirectURI, log); logoutURL != "" {
+			return logoutURL
 		}
+	}
+	return ""
+}
 
-		logoutProvider, ok := gothProvider.(goth.LogoutProvider)
-		if !ok {
-			log.Debug("Provider does not support RP-Initiated Logout", logger.String("provider", gothProviderName))
-			continue
-		}
-
-		// Get ID token from session for the hint
-		idToken, _ := gothic.GetFromSession("id_token", c.Request())
-
-		logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
-		if err != nil {
-			log.Warn("Failed to build end-session URL", logger.String("provider", gothProviderName), logger.Error(err))
-			continue
-		}
-
-		// Validate the URL is HTTPS with a valid host
-		parsed, parseErr := url.Parse(logoutURL)
-		if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
-			log.Warn("Rejected invalid provider logout URL", logger.String("provider", gothProviderName))
-			continue
-		}
-
-		log.Info("Built RP-Initiated Logout URL", logger.String("provider", gothProviderName))
-		return parsed.String()
+// buildProviderLogoutURL builds the end-session URL for a specific goth provider.
+// Returns empty string if the provider doesn't support RP-Initiated Logout or URL validation fails.
+func (a *SecurityAdapter) buildProviderLogoutURL(c echo.Context, gothProviderName, postLogoutRedirectURI string, log logger.Logger) string {
+	gothProvider, err := goth.GetProvider(gothProviderName)
+	if err != nil {
+		log.Debug("Could not get goth provider", logger.String("provider", gothProviderName), logger.Error(err))
+		return ""
 	}
 
-	return ""
+	logoutProvider, ok := gothProvider.(goth.LogoutProvider)
+	if !ok {
+		log.Debug("Provider does not support RP-Initiated Logout", logger.String("provider", gothProviderName))
+		return ""
+	}
+
+	// Get ID token from session for the hint
+	idToken, _ := gothic.GetFromSession("id_token", c.Request())
+
+	logoutURL, err := logoutProvider.EndSessionURL(idToken, postLogoutRedirectURI, "")
+	if err != nil {
+		log.Warn("Failed to build end-session URL", logger.String("provider", gothProviderName), logger.Error(err))
+		return ""
+	}
+
+	// Validate the URL is HTTPS with a valid host
+	parsed, parseErr := url.Parse(logoutURL)
+	if parseErr != nil || parsed.Scheme != "https" || parsed.Host == "" {
+		log.Warn("Rejected invalid provider logout URL", logger.String("provider", gothProviderName))
+		return ""
+	}
+
+	log.Info("Built RP-Initiated Logout URL", logger.String("provider", gothProviderName))
+	return parsed.String()
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token.

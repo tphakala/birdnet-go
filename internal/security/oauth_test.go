@@ -994,6 +994,217 @@ func TestCheckSocialAuthSessions(t *testing.T) {
 	}
 }
 
+// storeMultipleInSession stores multiple key-value pairs in the same Gothic session.
+// Each StoreInSession call requires the request cookie to be updated before the next call
+// so all values end up in the same session. Returns the final request with all cookies set.
+func storeMultipleInSession(t *testing.T, req *http.Request, pairs ...string) *http.Request {
+	t.Helper()
+	if len(pairs)%2 != 0 {
+		t.Fatal("storeMultipleInSession requires an even number of arguments (key-value pairs)")
+	}
+	for i := 0; i < len(pairs); i += 2 {
+		rec := httptest.NewRecorder()
+		_ = gothic.StoreInSession(pairs[i], pairs[i+1], req, rec)
+		req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
+	}
+	return req
+}
+
+// TestCheckSocialAuthDirect tests the direct auth_provider session key lookup path.
+func TestCheckSocialAuthDirect(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      []conf.OAuthProviderConfig
+		setupSession   func(*testing.T, *http.Request) *http.Request
+		expectedResult bool
+	}{
+		{
+			name: "no auth_provider key in session returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
+			expectedResult: false,
+		},
+		{
+			name: "auth_provider points to valid enabled provider with matching session",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				return storeMultipleInSession(t, req,
+					SessionKeyAuthProvider, ProviderGoogle,
+					"userId", "user@example.com",
+					ProviderGoogle, "12345",
+				)
+			},
+			expectedResult: true,
+		},
+		{
+			name: "auth_provider points to disabled provider returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: false, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				return storeMultipleInSession(t, req,
+					SessionKeyAuthProvider, ProviderGoogle,
+					"userId", "user@example.com",
+					ProviderGoogle, "12345",
+				)
+			},
+			expectedResult: false,
+		},
+		{
+			name: "auth_provider points to unconfigured provider returns false",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGitHub, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				// Session says google, but only github is configured
+				return storeMultipleInSession(t, req,
+					SessionKeyAuthProvider, ProviderGoogle,
+					"userId", "user@example.com",
+					ProviderGoogle, "12345",
+				)
+			},
+			expectedResult: false,
+		},
+		{
+			name: "auth_provider key with microsoft provider (different config name)",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigMicrosoft, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				return storeMultipleInSession(t, req,
+					SessionKeyAuthProvider, ProviderMicrosoft,
+					"userId", "user@example.com",
+					ProviderMicrosoft, "12345",
+				)
+			},
+			expectedResult: true,
+		},
+		{
+			name: "auth_provider key with OIDC provider (different config name)",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigOIDC, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				return storeMultipleInSession(t, req,
+					SessionKeyAuthProvider, ProviderOIDC,
+					"userId", "user@example.com",
+					ProviderOIDC, "12345",
+				)
+			},
+			expectedResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
+
+			server := &OAuth2Server{
+				Settings: &conf.Settings{
+					Security: conf.Security{
+						OAuthProviders: tt.providers,
+					},
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req = tt.setupSession(t, req)
+
+			userId, _ := gothic.GetFromSession("userId", req)
+			result := server.checkSocialAuthDirect(req, userId, testLogger{})
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestCheckSocialAuthFallback tests the fallback path that iterates all providers.
+func TestCheckSocialAuthFallback(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      []conf.OAuthProviderConfig
+		setupSession   func(*testing.T, *http.Request) *http.Request
+		expectedResult bool
+	}{
+		{
+			name:           "no providers returns false",
+			providers:      nil,
+			setupSession:   func(_ *testing.T, req *http.Request) *http.Request { return req },
+			expectedResult: false,
+		},
+		{
+			name: "provider session without auth_provider key still works via fallback",
+			providers: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+			},
+			setupSession: func(t *testing.T, req *http.Request) *http.Request {
+				t.Helper()
+				// No auth_provider key - simulating old session format
+				return storeMultipleInSession(t, req,
+					"userId", "user@example.com",
+					ProviderGoogle, "12345",
+				)
+			},
+			expectedResult: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
+
+			server := &OAuth2Server{
+				Settings: &conf.Settings{
+					Security: conf.Security{
+						OAuthProviders: tt.providers,
+					},
+				},
+			}
+
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req = tt.setupSession(t, req)
+
+			userId, _ := gothic.GetFromSession("userId", req)
+			result := server.checkSocialAuthFallback(req, userId, testLogger{})
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestCheckSocialAuthSessionsWithAuthProviderKey tests the full checkSocialAuthSessions
+// path with the auth_provider key set (new sessions).
+func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
+	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
+
+	server := &OAuth2Server{
+		Settings: &conf.Settings{
+			Security: conf.Security{
+				OAuthProviders: []conf.OAuthProviderConfig{
+					{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
+				},
+			},
+		},
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	req = storeMultipleInSession(t, req,
+		SessionKeyAuthProvider, ProviderGoogle,
+		"userId", "user@example.com",
+		ProviderGoogle, "12345",
+	)
+
+	result := server.checkSocialAuthSessions(req, testLogger{})
+	assert.True(t, result, "checkSocialAuthSessions should succeed with auth_provider key in session")
+}
+
 // TestCheckProviderAuth tests the generic provider auth validation function
 func TestCheckProviderAuth(t *testing.T) {
 	tests := []struct {

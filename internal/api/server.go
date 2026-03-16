@@ -776,6 +776,14 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 		)
 	}
 
+	// Store active provider name for direct lookup (avoids iterating all providers)
+	if err := gothic.StoreInSession(security.SessionKeyAuthProvider, provider, req, c.Response()); err != nil {
+		s.slogger.Error("Failed to store active auth provider in session",
+			logger.Error(err),
+			logger.String("provider", provider),
+		)
+	}
+
 	// Store or clear ID token for RP-Initiated Logout (OIDC providers)
 	if user.IDToken != "" {
 		if err := gothic.StoreInSession("id_token", user.IDToken, req, c.Response()); err != nil {

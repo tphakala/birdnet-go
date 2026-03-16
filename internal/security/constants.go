@@ -22,6 +22,10 @@ const (
 	ProviderKakao     = "kakao"           // Same as config
 	ProviderOIDC      = "openid-connect"  // Different from config!
 
+	// SessionKeyAuthProvider is the session key used to store the active OAuth provider name.
+	// This avoids iterating all providers when looking up the active session.
+	SessionKeyAuthProvider = "auth_provider"
+
 	// Session and cookie settings
 	DefaultSessionMaxAgeDays    = 7
 	DefaultSessionMaxAgeSeconds = 86400 * DefaultSessionMaxAgeDays // 7 days in seconds
@@ -71,6 +75,17 @@ var ConfigToGothProvider = map[string]string{
 	ConfigOIDC:      ProviderOIDC,
 }
 
+// GothToConfigProvider maps goth provider names back to config provider IDs.
+// This is the reverse of ConfigToGothProvider and is used when looking up
+// provider config from a stored goth provider name.
+var GothToConfigProvider = func() map[string]string {
+	m := make(map[string]string, len(ConfigToGothProvider))
+	for config, goth := range ConfigToGothProvider {
+		m[goth] = config
+	}
+	return m
+}()
+
 // GetGothProviderName converts a config provider ID to the goth provider name.
 // Falls back to the config ID if no mapping exists.
 func GetGothProviderName(configProvider string) string {
@@ -78,4 +93,13 @@ func GetGothProviderName(configProvider string) string {
 		return gothName
 	}
 	return configProvider
+}
+
+// gothToConfigProvider converts a goth provider name to a config provider ID.
+// Falls back to the goth name if no mapping exists (most providers use the same name).
+func gothToConfigProvider(gothProvider string) string {
+	if configName, ok := GothToConfigProvider[gothProvider]; ok {
+		return configName
+	}
+	return gothProvider
 }
