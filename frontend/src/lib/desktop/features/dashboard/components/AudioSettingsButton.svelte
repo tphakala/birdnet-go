@@ -25,6 +25,7 @@
     onGainChange: (_value: number) => void;
     onFilterChange: (_value: number) => void;
     onSpeedChange: (_value: number) => void;
+    defaultGainValue?: number;
     disabled?: boolean;
     onMenuOpen?: () => void;
     onMenuClose?: () => void;
@@ -37,6 +38,7 @@
     onGainChange,
     onFilterChange,
     onSpeedChange,
+    defaultGainValue = 0,
     disabled = false,
     onMenuOpen,
     onMenuClose,
@@ -62,7 +64,9 @@
 
   // Check if settings have been modified from defaults
   const hasModifiedSettings = $derived(
-    gainValue !== 0 || filterFreq > FILTER_HP_MIN_FREQ || playbackSpeed !== DEFAULT_PLAYBACK_SPEED
+    gainValue !== defaultGainValue ||
+      filterFreq > FILTER_HP_MIN_FREQ ||
+      playbackSpeed !== DEFAULT_PLAYBACK_SPEED
   );
 
   function updateMenuPosition() {
@@ -128,7 +132,7 @@
   }
 
   function handleReset() {
-    onGainChange(0);
+    onGainChange(defaultGainValue);
     onFilterChange(FILTER_HP_MIN_FREQ);
     onSpeedChange(DEFAULT_PLAYBACK_SPEED);
   }

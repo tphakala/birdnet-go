@@ -57,6 +57,8 @@
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { get } from 'svelte/store';
+  import { dashboardSettings } from '$lib/stores/settings';
 
   const logger = loggers.audio;
 
@@ -206,7 +208,10 @@
   }> = [];
 
   // Control state
-  let gainValue = $state(0); // dB
+  // Read persistent default from settings store (one-time, not reactive —
+  // changing the setting while a player is mounted should not cause gain to jump)
+  const defaultGainDb = get(dashboardSettings)?.defaultAudioGain ?? 0;
+  let gainValue = $state(defaultGainDb); // dB
   let filterFreq = $state(20); // Hz
   let playbackSpeed = $state(1.0); // Playback rate multiplier
   let showControls = $state(true); // Will be set based on width
@@ -1913,6 +1918,7 @@
         {gainValue}
         {filterFreq}
         {playbackSpeed}
+        defaultGainValue={defaultGainDb}
         onGainChange={updateGain}
         onFilterChange={updateFilter}
         onSpeedChange={handleSpeedChange}

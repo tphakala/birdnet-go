@@ -30,11 +30,12 @@
   import ColorSchemePicker from '$lib/desktop/features/settings/components/ColorSchemePicker.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
+  import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
   import { t, getLocale } from '$lib/i18n';
   import { LOCALES } from '$lib/i18n/config';
-  import { Palette, Globe, Image } from '@lucide/svelte';
+  import { Palette, Globe, Image, Volume2 } from '@lucide/svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { toastActions } from '$lib/stores/toast';
 
@@ -206,6 +207,17 @@
     )
   );
 
+  let audioPlaybackHasChanges = $derived(
+    hasSettingsChanged(
+      {
+        defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
+      },
+      {
+        defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
+      }
+    )
+  );
+
   // --- Update handlers ---
   function updateDashboardSetting(key: string, value: string | number | boolean) {
     settingsActions.updateSection('realtime', {
@@ -259,6 +271,13 @@
       icon: Image,
       hasChanges: visualContentHasChanges,
       content: visualContentTabContent,
+    },
+    {
+      id: 'audioPlayback',
+      label: t('settings.userInterface.tabs.audioPlayback'),
+      icon: Volume2,
+      hasChanges: audioPlaybackHasChanges,
+      content: audioPlaybackTabContent,
     },
   ]);
 </script>
@@ -352,6 +371,35 @@
             onChange={value => updateDashboardSetting('temperatureUnit', value as string)}
           />
         </div>
+      </div>
+    </SettingsSection>
+  </div>
+{/snippet}
+
+{#snippet audioPlaybackTabContent()}
+  <div class="space-y-6">
+    <SettingsSection
+      title={t('settings.userInterface.audioPlayback.title')}
+      description={t('settings.userInterface.audioPlayback.description')}
+      originalData={{
+        defaultAudioGain: store.originalData.realtime?.dashboard?.defaultAudioGain,
+      }}
+      currentData={{
+        defaultAudioGain: store.formData.realtime?.dashboard?.defaultAudioGain,
+      }}
+    >
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6">
+        <InlineSlider
+          label={t('settings.userInterface.audioPlayback.defaultGain')}
+          helpText={t('settings.userInterface.audioPlayback.defaultGainHelpText')}
+          value={settings.dashboard.defaultAudioGain ?? 0}
+          onUpdate={value => updateDashboardSetting('defaultAudioGain', value)}
+          min={0}
+          max={24}
+          step={1}
+          unit={t('settings.userInterface.audioPlayback.defaultGainUnit')}
+          disabled={store.isLoading || store.isSaving}
+        />
       </div>
     </SettingsSection>
   </div>
