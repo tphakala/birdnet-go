@@ -114,7 +114,7 @@ func broadcastAudioData(sourceID string, data []byte) {
 				}
 			}
 			log := GetLogger()
-			log.Warn("no broadcast callback registered for source",
+			log.Warn("no broadcast callback registered for source, audio data is being discarded",
 				logger.String("source", displayName),
 				logger.Int("data_length", len(data)))
 			lastMissingCallbackLogTime.Store(time.Now().UnixNano())
@@ -344,10 +344,34 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 			return
 		}
 
-		// Validate audio device
-		if err := ValidateAudioDevice(settings); err != nil {
-			log.Warn("audio device validation failed",
-				logger.Error(err))
+		// Validate audio device with retries.
+		// USB audio devices may not be immediately available after boot,
+		// so retry a few times with a delay to allow device enumeration.
+		const (
+			maxRetries = 4
+			retryDelay = 5 * time.Second
+		)
+
+		var validationErr error
+		for attempt := range maxRetries {
+			validationErr = ValidateAudioDevice(settings)
+			if validationErr == nil {
+				break
+			}
+			if attempt < maxRetries-1 {
+				log.Warn("audio device not available, retrying",
+					logger.Error(validationErr),
+					logger.Int("attempt", attempt+1),
+					logger.Int("max_retries", maxRetries),
+					logger.String("retry_delay", retryDelay.String()))
+				time.Sleep(retryDelay)
+			}
+		}
+		if validationErr != nil {
+			log.Error("audio device validation failed after retries, no audio will be captured",
+				logger.Error(validationErr),
+				logger.Int("retries", maxRetries),
+				logger.String("source", settings.Realtime.Audio.Source))
 			return
 		}
 
@@ -448,7 +472,6 @@ func TestCaptureDevice(ctx *malgo.AllocatedContext, info *malgo.DeviceInfo) bool
 
 // ValidateAudioDevice checks if the configured audio source is available and working.
 // Returns an error if the device is not available or not working.
-// This function also updates the settings if the device is not valid.
 func ValidateAudioDevice(settings *conf.Settings) error {
 	if settings.Realtime.Audio.Source == "" {
 		return nil
@@ -467,7 +490,6 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 	// Initialize malgo context
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
 	if err != nil {
-		settings.Realtime.Audio.Source = ""
 		return fmt.Errorf("failed to initialize audio context: %w", err)
 	}
 	defer malgoCtx.Uninit() //nolint:errcheck // We handle errors in the caller
@@ -475,18 +497,16 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 	// Get list of capture devices
 	infos, err := malgoCtx.Devices(malgo.Capture)
 	if err != nil {
-		settings.Realtime.Audio.Source = ""
 		return fmt.Errorf("failed to get capture devices: %w", err)
 	}
 
 	// Filter to get only hardware devices to check if any are available
 	hardwareDevices := getHardwareDevices(infos)
 	if len(hardwareDevices) == 0 {
-		settings.Realtime.Audio.Source = ""
 		return fmt.Errorf("no hardware audio capture devices found")
 	}
 
-	// Try to find and test the configured device, in this we also accept alsa speudo devices
+	// Try to find and test the configured device, in this we also accept alsa pseudo devices
 	for i := range infos {
 		decodedID, err := hexToASCII(infos[i].ID.String())
 		if err != nil {
@@ -497,12 +517,24 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 			if TestCaptureDevice(malgoCtx, &infos[i]) {
 				return nil
 			}
-			settings.Realtime.Audio.Source = ""
 			return fmt.Errorf("configured audio device '%s' failed hardware test", settings.Realtime.Audio.Source)
 		}
 	}
 
-	//settings.Realtime.Audio.Source = ""
+	// Log available devices to aid debugging when the configured device is not found
+	log := GetLogger()
+	availableDevices := make([]string, 0, len(infos))
+	for i := range infos {
+		decodedID, err := hexToASCII(infos[i].ID.String())
+		if err != nil {
+			continue
+		}
+		availableDevices = append(availableDevices, fmt.Sprintf("%s (%s)", infos[i].Name(), decodedID))
+	}
+	log.Debug("configured audio device not found in available devices",
+		logger.String("configured_source", settings.Realtime.Audio.Source),
+		logger.String("available_devices", strings.Join(availableDevices, ", ")))
+
 	return fmt.Errorf("configured audio device '%s' not found", settings.Realtime.Audio.Source)
 }
 

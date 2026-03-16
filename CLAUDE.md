@@ -17,6 +17,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - Working on frontend? Read `frontend/CLAUDE.md` first
 - Working on API v2? Read `internal/api/v2/CLAUDE.md` first
 - Writing tests? Read `TESTING.md` first - all tests MUST use testify
+- Working with Sentry issues or support dumps? Load the `sentry` skill first
 
 ## Universal Rules
 
