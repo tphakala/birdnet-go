@@ -136,6 +136,11 @@ const audioWaitTimeout = 5 * time.Second
 // during server-side waiting.
 const audioWaitPollInterval = 250 * time.Millisecond
 
+// audioGracePeriod is the maximum time to wait for an audio file to appear
+// when no temp file is visible. This covers the race window where FFmpeg
+// hasn't created the temp file yet or has already atomically renamed it.
+const audioGracePeriod = 1 * time.Second
+
 // ClipExtractionRequest represents a request to extract an audio clip.
 type ClipExtractionRequest struct {
 	Start     float64 `json:"start"`
@@ -384,6 +389,71 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool
 	}
 }
 
+// waitForAudioFileGrace performs a brief poll for an audio file to appear
+// when no temp file is visible. This handles the race condition where the
+// detection DB record is committed but FFmpeg hasn't created the temp file
+// yet, or has already atomically renamed it to the final path.
+// Returns true if the file appeared within the grace period.
+func (c *Controller) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bool {
+	graceCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioGracePeriod)
+	defer cancel()
+
+	ticker := time.NewTicker(audioWaitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-graceCtx.Done():
+			// Final check before giving up
+			_, err := c.SFS.StatRel(relClipPath)
+			return err == nil
+		case <-ticker.C:
+			if _, err := c.SFS.StatRel(relClipPath); err == nil {
+				return true
+			}
+		}
+	}
+}
+
+// handleAudio404WithWait handles a 404 error for an audio file that may still be
+// encoding. It checks for an active temp file and waits for encoding to complete,
+// then falls back to a brief grace period for the race window where FFmpeg hasn't
+// created the temp file yet or already renamed it. Returns nil if the file was
+// successfully served, or the original/translated error otherwise.
+func (c *Controller) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, logFields ...logger.Field) error {
+	if c.isAudioBeingEncoded(relClipPath) {
+		// Wait server-side for the file to appear instead of immediately
+		// returning 503, reducing unnecessary client round-trips.
+		if c.waitForAudioFile(ctx, relClipPath) {
+			// File appeared — serve it now
+			if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
+				return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
+			}
+			c.logInfoIfEnabled("Successfully served audio clip after waiting for encoding", logFields...)
+			return nil
+		}
+		// Distinguish "still encoding" from "encoder exited/failed".
+		if c.isAudioBeingEncoded(relClipPath) {
+			return c.handleAudioNotReady(ctx)
+		}
+		// Temp file disappeared and final file is still missing —
+		// encoding failed, fall back to normal error translation.
+		return c.translateSecureFSError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
+	}
+
+	// No temp file visible — brief grace wait for the race window where
+	// FFmpeg hasn't created the temp file yet or already renamed it.
+	if c.waitForAudioFileGrace(ctx, relClipPath) {
+		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
+			return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after grace wait")
+		}
+		c.logInfoIfEnabled("Successfully served audio clip after grace wait", logFields...)
+		return nil
+	}
+
+	return c.translateSecureFSError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
+}
+
 // ServeAudioClip serves an audio clip file by filename using SecureFS
 func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 	filename := ctx.Param("filename")
@@ -423,29 +493,11 @@ func (c *Controller) ServeAudioClip(ctx echo.Context) error {
 		// frontend may request the file before it exists on disk.
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			if c.isAudioBeingEncoded(normalizedFilename) {
-				// Wait server-side for the file to appear instead of immediately
-				// returning 503, reducing unnecessary client round-trips.
-				if c.waitForAudioFile(ctx, normalizedFilename) {
-					// File appeared — serve it now
-					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedFilename); retryErr != nil {
-						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
-					}
-					c.logInfoIfEnabled("Successfully served audio clip after waiting for encoding",
-						logger.String("filename", filename),
-						logger.String("path", ctx.Request().URL.Path),
-						logger.String("ip", ctx.RealIP()),
-					)
-					return nil
-				}
-				// Distinguish "still encoding" from "encoder exited/failed".
-				if c.isAudioBeingEncoded(normalizedFilename) {
-					return c.handleAudioNotReady(ctx)
-				}
-				// Temp file disappeared and final file is still missing —
-				// encoding failed, fall back to normal error translation.
-				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
-			}
+			return c.handleAudio404WithWait(ctx, normalizedFilename, err,
+				logger.String("filename", filename),
+				logger.String("path", ctx.Request().URL.Path),
+				logger.String("ip", ctx.RealIP()),
+			)
 		}
 		// Error logging is handled within translateSecureFSError
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
@@ -529,29 +581,11 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		// frontend may request the file before it exists on disk.
 		var httpErr *echo.HTTPError
 		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
-			if c.isAudioBeingEncoded(normalizedClipPath) {
-				// Wait server-side for the file to appear instead of immediately
-				// returning 503, reducing unnecessary client round-trips.
-				if c.waitForAudioFile(ctx, normalizedClipPath) {
-					// File appeared — serve it now
-					if retryErr := c.SFS.ServeRelativeFile(ctx, normalizedClipPath); retryErr != nil {
-						return c.translateSecureFSError(ctx, retryErr, "Failed to serve audio clip after encoding completed")
-					}
-					c.logInfoIfEnabled("Successfully served audio clip by ID after waiting for encoding",
-						logger.String("note_id", noteID),
-						logger.String("path", ctx.Request().URL.Path),
-						logger.String("ip", ctx.RealIP()),
-					)
-					return nil
-				}
-				// Distinguish "still encoding" from "encoder exited/failed".
-				if c.isAudioBeingEncoded(normalizedClipPath) {
-					return c.handleAudioNotReady(ctx)
-				}
-				// Temp file disappeared and final file is still missing —
-				// encoding failed, fall back to normal error translation.
-				return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
-			}
+			return c.handleAudio404WithWait(ctx, normalizedClipPath, err,
+				logger.String("note_id", noteID),
+				logger.String("path", ctx.Request().URL.Path),
+				logger.String("ip", ctx.RealIP()),
+			)
 		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
