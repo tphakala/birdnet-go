@@ -432,8 +432,9 @@ func TestInitDaylightFilterEmptySpeciesList(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{
 			BirdNET: conf.BirdNETConfig{
-				Latitude:  60.1699,
-				Longitude: 24.9384,
+				Latitude:           60.1699,
+				Longitude:          24.9384,
+				LocationConfigured: true,
 			},
 			Realtime: conf.RealtimeSettings{
 				DaylightFilter: conf.DaylightFilterSettings{
@@ -490,8 +491,9 @@ func TestInitDaylightFilterReInitialization(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{
 			BirdNET: conf.BirdNETConfig{
-				Latitude:  helsinkiLatitude,
-				Longitude: helsinkiLongitude,
+				Latitude:           helsinkiLatitude,
+				Longitude:          helsinkiLongitude,
+				LocationConfigured: true,
 			},
 			Realtime: conf.RealtimeSettings{
 				DaylightFilter: conf.DaylightFilterSettings{
