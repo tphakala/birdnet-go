@@ -1533,10 +1533,10 @@
     "title": "Asetukset - BirdNET-Go",
     "loading": "Ladataan asetuksia...",
     "sections": {
-      "node": "Pääasetukset",
+      "node": "Yleiset",
       "userinterface": "Käyttöliittymä",
-      "audio": "Ääniasetukset",
-      "filters": "Tunnistussuodattimet",
+      "audio": "Ääni",
+      "filters": "Suodattimet",
       "integration": "Integraatiot",
       "notifications": "Ilmoitukset",
       "security": "Turvallisuus",

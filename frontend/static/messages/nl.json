@@ -1533,14 +1533,14 @@
     "title": "BirdNET-Go instellingen",
     "loading": "Instellingen inlezen ...",
     "sections": {
-      "node": "Basis instellingen",
-      "userinterface": "Gebruikers beleving",
-      "audio": "Geluid instellingen",
-      "filters": "Herkennings filters",
-      "integration": "Externe koppelingen",
-      "security": "Beveiligings instellingen",
-      "species": "Soorten filters",
-      "notifications": "Meldings instellingen",
+      "node": "Algemeen",
+      "userinterface": "Interface",
+      "audio": "Audio",
+      "filters": "Filters",
+      "integration": "Integraties",
+      "security": "Beveiliging",
+      "species": "Soorten",
+      "notifications": "Meldingen",
       "support": "Ondersteuning"
     },
     "notFound": {
