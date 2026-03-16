@@ -218,6 +218,9 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       audioContextAvailable = true;
 
       if (audioElement) {
+        // Note: intentionally omits includeCompressor (AudioPlayer uses it for
+        // clipping protection at high gain). Compact players don't expose gain
+        // controls, so the compressor is unnecessary overhead.
         audioNodes = createAudioNodeChain(audioContext, audioElement, {
           gainDb: gainValue,
           highPassFreq: filterFreq,
@@ -263,6 +266,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         await audioElement.play();
       } catch (err) {
         logger.error('Playback failed', err as Error);
+        error = t('media.audio.playError');
       }
     } else {
       audioElement.pause();

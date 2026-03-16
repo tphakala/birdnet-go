@@ -42,9 +42,13 @@
   // Initial values are intentionally captured here; audioUrl reactivity is
   // handled below via $effect calling audio.setAudioUrl(). The composable
   // stores detectionId only for logging and callbacks are stable references.
+  // svelte-ignore state_referenced_locally
   const initialAudioUrl = audioUrl;
+  // svelte-ignore state_referenced_locally
   const initialDetectionId = detectionId;
+  // svelte-ignore state_referenced_locally
   const initialOnPlayStart = onPlayStart;
+  // svelte-ignore state_referenced_locally
   const initialOnPlayEnd = onPlayEnd;
   const audio = useAudioPlayback({
     audioUrl: initialAudioUrl,
@@ -82,6 +86,7 @@
 
   // Track previous detection ID to detect changes and reset spectrogram state.
   // Uses a non-reactive variable since we only compare inside the $effect.
+  // svelte-ignore state_referenced_locally
   let previousDetectionId = detectionId;
   $effect(() => {
     // Read detectionId (reactive prop) to create the dependency
