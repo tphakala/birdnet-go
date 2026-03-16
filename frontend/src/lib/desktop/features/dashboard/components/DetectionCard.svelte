@@ -27,9 +27,11 @@
   import { cn } from '$lib/utils/cn';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
+  import { get } from 'svelte/store';
+  import { dashboardSettings } from '$lib/stores/settings';
 
   // Configuration constants
-  const DEFAULT_AUDIO_GAIN = 0;
+  const DEFAULT_AUDIO_GAIN = get(dashboardSettings)?.defaultAudioGain ?? 0;
   const DEFAULT_AUDIO_FILTER_FREQ = 20;
   const DEFAULT_DOWNLOAD_NAME = 'detection';
   const AUDIO_FILE_EXTENSION = '.wav';
@@ -258,6 +260,7 @@
       gainValue={audioGainValue}
       filterFreq={audioFilterFreq}
       playbackSpeed={audioPlaybackSpeed}
+      defaultGainValue={DEFAULT_AUDIO_GAIN}
       onGainChange={handleGainChange}
       onFilterChange={handleFilterChange}
       onSpeedChange={handleSpeedChange}
