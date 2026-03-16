@@ -2917,6 +2917,16 @@
         "description": "Consenti accesso a impostazioni senza autenticazione",
         "disabled": "Bypass sottorete disabilitato"
       },
+      "exceptions": {
+        "title": "Exceptions"
+      },
+      "publicAccess": {
+        "title": "Public Access",
+        "description": "Allow specific features to be accessible without authentication.",
+        "liveAudioLabel": "Allow public live audio playback",
+        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
+        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.esempio.com:5500",
         "host": "Per esempio, localhost:8080 o esempio.dominio.com",

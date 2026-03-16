@@ -3403,6 +3403,16 @@
         "description": "Permitir acesso sem autenticação de redes confiáveis",
         "disabled": "Bypass de sub-rede está desativado"
       },
+      "exceptions": {
+        "title": "Exceptions"
+      },
+      "publicAccess": {
+        "title": "Public Access",
+        "description": "Allow specific features to be accessible without authentication.",
+        "liveAudioLabel": "Allow public live audio playback",
+        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
+        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+      },
       "baseUrlLabel": "URL Base",
       "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
       "baseUrlValidation": "Por favor, insira uma URL válida começando com http:// ou https:// e incluindo um nome de host",

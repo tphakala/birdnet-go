@@ -3114,6 +3114,16 @@
         "description": "Sta toegang tot instellingen toe zonder authenticatie",
         "disabled": "Subnet bypass is disabled"
       },
+      "exceptions": {
+        "title": "Exceptions"
+      },
+      "publicAccess": {
+        "title": "Public Access",
+        "description": "Allow specific features to be accessible without authentication.",
+        "liveAudioLabel": "Allow public live audio playback",
+        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
+        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Bijvoorbeeld, localhost:8080 of example.domain.com",

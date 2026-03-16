@@ -3416,6 +3416,16 @@
         "description": "Permitir acceso a la configuración sin autenticación",
         "disabled": "El bypass de subred está deshabilitado"
       },
+      "exceptions": {
+        "title": "Exceptions"
+      },
+      "publicAccess": {
+        "title": "Public Access",
+        "description": "Allow specific features to be accessible without authentication.",
+        "liveAudioLabel": "Allow public live audio playback",
+        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
+        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+      },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
         "host": "Por ejemplo, localhost:8080 o example.domain.com",
