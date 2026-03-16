@@ -509,6 +509,7 @@ export interface Dashboard {
   customColors?: { primary: string; accent: string }; // Custom scheme hex colors
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
+  defaultAudioGain?: number; // Default playback gain in dB (0-24)
 }
 
 // Dashboard layout configuration
@@ -927,6 +928,7 @@ function createEmptySettings(): SettingsFormData {
             { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
           ],
         },
+        defaultAudioGain: 0,
       },
     },
     webServer: {},

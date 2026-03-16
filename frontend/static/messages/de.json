@@ -3733,7 +3733,8 @@
       "tabs": {
         "appearance": "Erscheinungsbild",
         "language": "Sprache & Region",
-        "visualContent": "Visuelle Inhalte"
+        "visualContent": "Visuelle Inhalte",
+        "audioPlayback": "Audio Playback"
       },
       "appearance": {
         "title": "Erscheinungsbild",
@@ -3746,6 +3747,13 @@
       "visualContent": {
         "title": "Visuelle Inhalte",
         "description": "Konfigurieren Sie Vogelbilder und Spektrogramm-Anzeigeeinstellungen"
+      },
+      "audioPlayback": {
+        "title": "Audio Playback",
+        "description": "Default settings for playing bird recordings.",
+        "defaultGain": "Default Volume Boost",
+        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "defaultGainUnit": "dB"
       }
     },
     "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
