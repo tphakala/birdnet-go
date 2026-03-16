@@ -2435,7 +2435,9 @@
       },
       "errors": {
         "connectionError": "Chyba pripojenia",
-        "responseStreamFailed": "Nepodarilo sa prečítať prúd odpovede"
+        "responseStreamFailed": "Nepodarilo sa prečítať prúd odpovede",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",

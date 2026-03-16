@@ -2940,7 +2940,9 @@
       },
       "errors": {
         "connectionError": "Error de conexión",
-        "responseStreamFailed": "Error al leer el flujo de respuesta"
+        "responseStreamFailed": "Error al leer el flujo de respuesta",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",

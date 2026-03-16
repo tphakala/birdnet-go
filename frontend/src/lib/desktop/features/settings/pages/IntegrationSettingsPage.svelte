@@ -625,7 +625,7 @@
                 logger.debug('Handling initial error response:', stageResult);
                 testStates.birdweather.stages.push({
                   id: 'initial-error',
-                  title: 'Configuration Check',
+                  title: t('settings.integration.errors.configurationCheck'),
                   status: 'error',
                   message: stageResult.message,
                   error: stageResult.message,
@@ -651,7 +651,7 @@
 
             const stage = {
               id: stageId,
-              title: stageResult.stage || 'Test Stage',
+              title: stageResult.stage || t('settings.integration.errors.testStageFallback'),
               status,
               message: stageResult.message || '',
               error: stageResult.error || '',
@@ -860,7 +860,7 @@
 
             const stage = {
               id: stageId,
-              title: stageResult.stage || 'Test Stage',
+              title: stageResult.stage || t('settings.integration.errors.testStageFallback'),
               status,
               message: stageResult.message || '',
               error: stageResult.error || '',
@@ -1009,7 +1009,7 @@
 
             const stage: Stage = {
               id: stageResult.id,
-              title: stageResult.title || 'Test Stage',
+              title: stageResult.title || t('settings.integration.errors.testStageFallback'),
               status: stageResult.status || 'pending',
               message: stageResult.message || '',
               error: stageResult.error || '',
@@ -1045,7 +1045,7 @@
           if (stageResult.id) {
             const stage: Stage = {
               id: stageResult.id,
-              title: stageResult.title || 'Test Stage',
+              title: stageResult.title || t('settings.integration.errors.testStageFallback'),
               status: stageResult.status || 'pending',
               message: stageResult.message || '',
               error: stageResult.error || '',

@@ -2634,7 +2634,9 @@
       },
       "errors": {
         "connectionError": "Connection Error",
-        "responseStreamFailed": "Failed to read response stream"
+        "responseStreamFailed": "Failed to read response stream",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",

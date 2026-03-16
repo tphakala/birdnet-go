@@ -2401,7 +2401,9 @@
       },
       "errors": {
         "connectionError": "Errore di connessione",
-        "responseStreamFailed": "Lettura del flusso di risposta non riuscita"
+        "responseStreamFailed": "Lettura del flusso di risposta non riuscita",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",

@@ -2940,7 +2940,9 @@
       },
       "errors": {
         "connectionError": "Yhteysvirhe",
-        "responseStreamFailed": "Vastausvirran lukeminen epäonnistui"
+        "responseStreamFailed": "Vastausvirran lukeminen epäonnistui",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",

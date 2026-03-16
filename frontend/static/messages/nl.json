@@ -2598,7 +2598,9 @@
       },
       "errors": {
         "connectionError": "Verbindingsfout",
-        "responseStreamFailed": "Antwoordstroom kon niet worden gelezen"
+        "responseStreamFailed": "Antwoordstroom kon niet worden gelezen",
+        "configurationCheck": "Configuration Check",
+        "testStageFallback": "Test Stage"
       },
       "ebird": {
         "title": "eBird",
