@@ -1692,7 +1692,9 @@
             <button
               type="button"
               class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg border border-[var(--color-base-content)]/30 bg-transparent hover:bg-black/5 dark:hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount || rangeFilterState.loading}
+              disabled={!rangeFilterState.speciesCount ||
+                rangeFilterState.loading ||
+                !settings.birdnet.locationConfigured}
               onclick={() => {
                 rangeFilterState.showModal = true;
                 loadRangeFilterSpecies();
@@ -1703,7 +1705,9 @@
             <button
               type="button"
               class="inline-flex items-center justify-center gap-2 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              disabled={!rangeFilterState.speciesCount || rangeFilterState.downloading}
+              disabled={!rangeFilterState.speciesCount ||
+                rangeFilterState.downloading ||
+                !settings.birdnet.locationConfigured}
               onclick={downloadSpeciesCSV}
               aria-label={t('common.aria.downloadCsv')}
             >
