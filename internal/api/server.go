@@ -15,6 +15,7 @@ import (
 	"github.com/labstack/echo/v4"
 	echomw "github.com/labstack/echo/v4/middleware"
 	"github.com/markbates/goth/gothic"
+	"github.com/tphakala/birdnet-go/frontend"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
@@ -185,6 +186,10 @@ func New(settings *conf.Settings, opts ...ServerOption) (*Server, error) {
 	for _, opt := range opts {
 		opt(s)
 	}
+
+	// Populate valid UI locales from the embedded frontend message files.
+	// This must happen before any settings validation that checks locale values.
+	conf.SetValidUILocales(conf.DiscoverUILocales(frontend.DistFS))
 
 	// Initialize structured logger
 	s.slogger = GetLogger() // Uses Module("api")

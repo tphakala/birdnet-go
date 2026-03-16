@@ -1251,8 +1251,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 
 	// Validate UI locale if provided
 	if settings.Locale != "" {
-		validLocales := []string{"en", "de", "fr", "es", "fi", "pt"}
-		isValid := slices.Contains(validLocales, settings.Locale)
+		isValid := slices.Contains(ValidUILocales(), settings.Locale)
 		if !isValid {
 			// Log warning but don't fail - fallback to default
 			GetLogger().Warn("Invalid UI locale, will use default", logger.String("invalid_locale", settings.Locale), logger.String("fallback", "en"))

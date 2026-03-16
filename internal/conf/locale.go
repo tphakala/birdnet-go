@@ -4,11 +4,14 @@ package conf
 
 import (
 	"fmt"
+	"io/fs"
 	"maps"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // DefaultFallbackLocale is the default locale used when the requested locale is not supported
@@ -124,6 +127,76 @@ var LocaleCodes = map[string]string{
 	"tr":    "Turkish",
 	"uk":    "Ukrainian",
 	"vi-vn": "Vietnamese", // Vietnamese (Vietnam)
+}
+
+// defaultUILocales is the fallback list of valid UI locales, matching the frontend message files.
+// This is used when DiscoverUILocales has not been called or fails.
+var defaultUILocales = []string{"de", "en", "es", "fi", "fr", "it", "nl", "pl", "pt", "sk"}
+
+// validUILocales holds the currently active set of valid UI locale codes.
+// It is initialized to defaultUILocales and can be overridden by SetValidUILocales.
+var validUILocales = defaultUILocales
+
+// validUILocalesMu protects concurrent access to validUILocales.
+var validUILocalesMu sync.RWMutex
+
+// ValidUILocales returns the current list of valid UI locale codes.
+func ValidUILocales() []string {
+	validUILocalesMu.RLock()
+	defer validUILocalesMu.RUnlock()
+	return slices.Clone(validUILocales)
+}
+
+// SetValidUILocales overrides the valid UI locale list.
+// This should be called during server initialization after the embedded frontend FS is available.
+func SetValidUILocales(locales []string) {
+	validUILocalesMu.Lock()
+	defer validUILocalesMu.Unlock()
+	validUILocales = slices.Clone(locales)
+}
+
+// DiscoverUILocales reads the messages/ directory from the given filesystem
+// and returns locale codes extracted from {locale}.json filenames.
+// If reading fails, it returns the default locale list.
+// The result always includes "en" even if no en.json file exists.
+func DiscoverUILocales(fsys fs.FS) []string {
+	const messagesDir = "messages"
+
+	entries, err := fs.ReadDir(fsys, messagesDir)
+	if err != nil {
+		GetLogger().Warn("Failed to discover UI locales from embedded FS, using defaults",
+			logger.String("error", err.Error()))
+		return slices.Clone(defaultUILocales)
+	}
+
+	locales := make([]string, 0, len(entries))
+	hasEN := false
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		locale := strings.TrimSuffix(name, ".json")
+		if locale == "" {
+			continue
+		}
+		locales = append(locales, locale)
+		if locale == "en" {
+			hasEN = true
+		}
+	}
+
+	// Ensure "en" is always present as the fallback UI locale
+	if !hasEN {
+		locales = append(locales, "en")
+	}
+
+	slices.Sort(locales)
+	return locales
 }
 
 // GetLabelFilename returns the appropriate label filename for the given model version and locale code
