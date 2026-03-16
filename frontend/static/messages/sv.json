@@ -1,0 +1,4224 @@
+{
+  "common": {
+    "loading": "Laddar...",
+    "error": "Fel",
+    "unknown": "Okänd",
+    "retry": "Försök igen",
+    "retrying": "Försöker igen",
+    "save": "Spara",
+    "cancel": "Avbryt",
+    "confirm": "Bekräfta",
+    "reset": "Återställ",
+    "refresh": "Uppdatera",
+    "delete": "Radera",
+    "edit": "Redigera",
+    "search": "Sök",
+    "filter": "Filter",
+    "sort": "Sortera",
+    "settings": "Inställningar",
+    "close": "Stäng",
+    "back": "Tillbaka",
+    "next": "Nästa",
+    "previous": "Föregående",
+    "yes": "Ja",
+    "no": "Nej",
+    "ok": "OK",
+    "apply": "Tillämpa",
+    "clear": "Rensa",
+    "done": "Klar",
+    "goToDashboard": "Gå till instrumentpanelen",
+    "reportIssue": "Rapportera problem",
+    "loginToViewDetails": "Logga in för att visa detaljer",
+    "pageNotFound": "Sidan hittades inte",
+    "internalServerError": "Internt serverfel",
+    "actions": {
+      "download": "Ladda ner",
+      "review": "Granska",
+      "play": "Spela upp",
+      "view": "Visa"
+    },
+    "buttons": {
+      "save": "Spara ändringar",
+      "reset": "Återställ",
+      "delete": "Radera",
+      "cancel": "Avbryt",
+      "apply": "Tillämpa",
+      "confirm": "Bekräfta",
+      "edit": "Redigera",
+      "close": "Stäng",
+      "back": "Tillbaka",
+      "next": "Nästa",
+      "previous": "Föregående",
+      "yes": "Ja",
+      "no": "Nej",
+      "ok": "OK",
+      "clear": "Rensa",
+      "edit-config": "Redigera konfiguration",
+      "add-action": "Lägg till åtgärd",
+      "learnMore": "Läs mer",
+      "create": "Skapa"
+    },
+    "ui": {
+      "loading": "Laddar...",
+      "noData": "Ingen data tillgänglig",
+      "empty": "Inga objekt hittades",
+      "error": "Ett fel uppstod",
+      "retry": "Försök igen",
+      "dismiss": "Avfärda",
+      "showMore": "Visa mer",
+      "showLess": "Visa mindre",
+      "selectAll": "Markera alla",
+      "selectNone": "Avmarkera alla",
+      "required": "Obligatoriskt",
+      "optional": "Valfritt",
+      "noAudioSources": "Inga ljudkällor tillgängliga",
+      "noNotifications": "Inga aviseringar",
+      "silent": "(tyst)",
+      "loadingSettings": "Laddar inställningar...",
+      "settingsNotFound": "Inställningar hittades inte",
+      "sectionNotFound": "Den begärda inställningssektionen \"{section}\" kunde inte hittas.",
+      "loadingMap": "Laddar karta...",
+      "mapZoomHelp": "Håll Ctrl (eller Cmd på Mac) + scrolla för att zooma. Klicka för att ange plats.",
+      "mapSetLocationHelp": "Klicka på kartan eller dra markören för att ange plats",
+      "imageNotAvailable": "Bilden är inte tillgänglig",
+      "search": "Sök..."
+    },
+    "status": {
+      "success": "Lyckades",
+      "error": "Fel",
+      "warning": "Varning",
+      "info": "Information",
+      "pending": "Väntande",
+      "processing": "Bearbetar",
+      "completed": "Slutförd",
+      "failed": "Misslyckades"
+    },
+    "validation": {
+      "required": "Detta fält är obligatoriskt",
+      "invalid": "Ogiltigt värde",
+      "minLength": "Måste vara minst {min} tecken",
+      "maxLength": "Får vara högst {max} tecken",
+      "minValue": "Måste vara minst {min}",
+      "maxValue": "Får vara högst {max}",
+      "email": "Ogiltig e-postadress",
+      "url": "Ogiltig URL",
+      "pattern": "Ogiltigt format"
+    },
+    "aria": {
+      "closeModal": "Stäng dialogruta",
+      "dismissAlert": "Avfärda varning",
+      "closeNotification": "Stäng avisering",
+      "toggleDropdown": "Växla rullgardinsmeny",
+      "sortAscending": "Sortera stigande",
+      "selectLanguage": "Välj språk",
+      "sortDescending": "Sortera fallande",
+      "expandSection": "Expandera sektion",
+      "collapseSection": "Fäll ihop sektion",
+      "playAudio": "Spela upp ljud",
+      "pauseAudio": "Pausa ljud",
+      "loading": "Laddar innehåll",
+      "saveChanges": "Spara ändringar",
+      "cancelEdit": "Avbryt redigering",
+      "editSpecies": "Redigera art",
+      "removeSpecies": "Ta bort art",
+      "dismissError": "Avfärda felmeddelande",
+      "datePickerCalendar": "Datumväljarkalender",
+      "selectDate": "Välj datum",
+      "previousMonth": "Föregående månad",
+      "nextMonth": "Nästa månad",
+      "selectToday": "Välj idag",
+      "dateSelected": "Datum valt: {date}",
+      "calendarNavigation": "Använd piltangenterna för att navigera i kalendern, Enter för att välja, Escape för att stänga",
+      "downloadCsv": "Ladda ner artlistan som CSV",
+      "visitEbirdLink": "Öppna eBird.org i en ny flik",
+      "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
+      "resizeHandle": "Dra för att ändra storlek"
+    },
+    "labels": {
+      "confidence": "Konfidens",
+      "github": "GitHub"
+    },
+    "values": {
+      "yes": "Ja",
+      "no": "Nej",
+      "unknown": "Okänd"
+    },
+    "modal": {
+      "confirmAction": "Bekräfta åtgärd",
+      "confirmMessage": "Är du säker på att du vill utföra denna åtgärd?"
+    },
+    "review": {
+      "modalTitle": "Granska detektion: {species}",
+      "status": {
+        "verifiedCorrect": "Verifierad korrekt",
+        "falsePositive": "Falskt positiv",
+        "notReviewed": "Ej granskad",
+        "locked": "Låst"
+      },
+      "form": {
+        "correctDetection": "Korrekt detektion",
+        "falsePositiveLabel": "Falskt positiv",
+        "reviewDetectionTitle": "Granska detektion",
+        "lockDetection": "Lås denna detektion efter sparning",
+        "lockDetectionHelp": "Att låsa denna detektion förhindrar att den raderas vid regelbunden rensning.",
+        "unlockDetection": "Lås upp denna detektion efter sparning",
+        "unlockDetectionHelp": "Att låsa upp tillåter att denna detektion raderas vid regelbunden rensning.",
+        "ignoreSpecies": "Ignorera denna art",
+        "ignoreSpeciesHelp": "Att ignorera denna art förhindrar framtida detektioner av denna art. Detta tar inte bort befintliga detektioner.",
+        "detectionLocked": "Denna detektion är för närvarande låst.",
+        "comment": "Kommentar",
+        "addComment": "Lägg till kommentar",
+        "hideComment": "Dölj kommentar",
+        "commentPlaceholder": "Lägg till en kommentar om denna detektion...",
+        "commentCount": "({chars} tecken)",
+        "chars": "tecken",
+        "commentsLabel": "Kommentarer",
+        "currentStatusTitle": "Nuvarande status",
+        "detectionStatusTitle": "Detektionsstatus",
+        "lockLabel": "Låsstatus",
+        "reviewLabel": "Granskningsstatus",
+        "saveReview": "Spara granskning"
+      },
+      "errors": {
+        "saveFailed": "Kunde inte spara granskningen. Försök igen.",
+        "noAudio": "Ingen ljudinspelning tillgänglig för denna detektion.",
+        "commentFailed": "Kunde inte spara kommentaren. Försök igen.",
+        "lockStatusFailed": "Kunde inte uppdatera låsstatus. Försök igen.",
+        "verificationFailed": "Kunde inte uppdatera verifieringsstatus. Försök igen."
+      }
+    },
+    "errors": {
+      "unknownError": "Ett okänt fel uppstod"
+    },
+    "toggle": "Växla",
+    "image": "Bild",
+    "actionsColumn": "Åtgärder",
+    "closeModal": "Stäng dialogruta",
+    "hoursShort": "h"
+  },
+  "pageTitle": {
+    "settings": "Inställningar - BirdNET-Go",
+    "pageNotFound": "404 - Sidan hittades inte",
+    "serverError": "500 - Internt serverfel",
+    "componentError": "Komponentladdningsfel",
+    "speciesAnalytics": "Artanalys",
+    "advancedAnalytics": "Avancerad analys",
+    "detectionDetails": "Detektionsdetaljer",
+    "settingsNotAvailable": "Inställningar ej tillgängliga"
+  },
+  "navigation": {
+    "dashboard": "Instrumentpanel",
+    "settingsMenu": "Inställningsmeny",
+    "theme": "Tema",
+    "github": "GitHub",
+    "detections": "Detektioner",
+    "search": "Sök",
+    "analytics": "Analys",
+    "notifications": "Aviseringar",
+    "system": "System",
+    "settings": "Inställningar",
+    "about": "Om",
+    "toggleSidebar": "Växla sidopanelmeny",
+    "mainNavigation": "Huvudnavigering",
+    "closeSidebar": "Stäng sidopanel",
+    "collapseSidebar": "Fäll ihop sidopanel",
+    "expandSidebar": "Expandera sidopanel",
+    "analyticsSubmenu": "Undermeny för analys",
+    "settingsSubmenu": "Undermeny för inställningar",
+    "systemSubmenu": "Undermeny för system",
+    "systemTerminal": "Terminal"
+  },
+  "about": {
+    "title": "BirdNET-Go",
+    "subtitle": "Ett modernt gränssnitt för realtidsdetektering och klassificering av fågelljud",
+    "logoAlt": "BirdNET-Go-logotyp",
+    "overview": "Översikt",
+    "overviewText": "BirdNET-Go är en Go-baserad implementation för realtidsdetektering och klassificering av fågelljud, byggd på grunden av BirdNET-projektet. Denna applikation tillhandahåller ett användarvänligt gränssnitt för kontinuerlig övervakning och analys av fågelljud.",
+    "birdnetProject": "BirdNET-projektet",
+    "birdnetDescription": "BirdNET-Go hade inte varit möjligt utan det banbrytande arbetet inom BirdNET-projektet. Den artificiella intelligensmodell som driver BirdNET-Go:s detektionskapacitet är resultatet av BirdNET-projektets innovativa forskning och utveckling.",
+    "developedBy": "Utvecklat av",
+    "developersText": "K. Lisa Yang Center for Conservation Bioacoustics vid Cornell Lab of Ornithology i samarbete med Chemnitz University of Technology:",
+    "visitBirdnetAnalyzer": "Besök BirdNET-Analyzer-projektet",
+    "visitBirdnetAnalyzerAriaLabel": "Besök BirdNET-Analyzers GitHub-förråd",
+    "contributors": "Bidragsgivare",
+    "contributorsText": "BirdNET-Go har vuxit och förbättrats tack vare samarbetet av många individer. Deras bidrag, från kodförbättringar till funktionsförslag, har varit ovärderliga för att göra detta projekt bättre.",
+    "mainDeveloper": "Huvudutvecklare",
+    "githubContributors": "GitHub-bidragsgivare",
+    "contributorsNote": "Särskilt tack till dessa bidragsgivare för deras värdefulla arbete med att förbättra BirdNET-Go:",
+    "communityAcknowledgment": "Erkännande av communityn",
+    "communityText": "Vi vill också rikta vår tacksamhet till alla användare som har bidragit genom:",
+    "bugReports": "Felrapporter och ärendehantering",
+    "featureSuggestions": "Funktionsförslag och återkoppling",
+    "testing": "Testning och validering",
+    "documentation": "Dokumentationsförbättringar",
+    "additionalCredits": "Ytterligare erkännanden",
+    "birdnetPiProject": "BirdNET-Pi-projektet",
+    "birdnetPiDescription": "Särskilt tack till Patrick McGuire för hans inspirerande arbete med BirdNET-Pi, som har påverkat utvecklingen av BirdNET-Go. BirdNET-Pi demonstrerar potentialen för fågelljudsdetektering på inbyggda enheter och har satt en hög standard för communitydriven utveckling.",
+    "visitBirdnetPi": "Besök BirdNET-Pi-projektet",
+    "labelTranslations": "BirdNET-etikettöversättningar",
+    "labelTranslationsBy": "Tillhandahålls av Patrick Levin för BirdNET-Pi-projektet av Patrick McGuire",
+    "patrickLevinGithub": "Patrick Levins GitHub",
+    "versionInformation": "Versionsinformation",
+    "currentVersion": "Nuvarande version",
+    "buildDate": "Byggdatum",
+    "developmentBuild": "Utvecklingsversion",
+    "unknown": "Okänd",
+    "licenseInformation": "Licensinformation",
+    "licenseText": "Både BirdNET AI-modellen och BirdNET-Go är licensierade under",
+    "ccLicense": "Creative Commons Erkännande-IckeKommersiell-DelaLika 4.0 Internationell Licens",
+    "licenseDescription": "Denna licens tillåter andra att remixa, anpassa och bygga vidare på detta verk icke-kommersiellt, så länge lämplig erkännande ges och nya skapelser licensieras under identiska villkor.",
+    "dependencyLicenses": "Beroendelicenser",
+    "taxonomyDataTitle": "Taxonomidata",
+    "taxonomyDataIntro": "BirdNET-Go inkluderar inbäddad fågeltaxonomidata härledd från eBird/Clements Checklist, som ger snabba lokala uppslag av släkte och familj.",
+    "source": "Källa",
+    "ebirdApiV2": "eBird API v2",
+    "copyright": "Upphovsrätt",
+    "coverage": "Täckning",
+    "taxonomyCoverage": "2 374 släkten, 254 familjer, 11 145 arter",
+    "visitEbird": "Besök eBird.org",
+    "ebirdOrg": "eBird.org",
+    "learnEbirdTaxonomy": "Läs om eBird Taxonomy",
+    "avicommonsTitle": "Fågelminiatyrer",
+    "avicommonsDescription": "BirdNET-Go använder utvalda fågelbilder från Avicommons, ett bibliotek med handplockade, beskurna och orienterade fågelfoton licensierade under Creative Commons-licenser.",
+    "githubStarPrompt": "Om du tycker att BirdNET-Go är värdefullt, överväg gärna att stjärnmärka projektet på GitHub. Stjärnor hjälper andra att upptäcka detta projekt och stödjer dess fortsatta utveckling.",
+    "viewOnGithub": "Visa projektet på GitHub",
+    "visitGithubAriaLabel": "Besök BirdNET-Go:s GitHub-förråd",
+    "visitAvicommonsGithub": "Besök Avicommons GitHub-förråd"
+  },
+  "notifications": {
+    "title": "Aviseringar",
+    "subtitle": "Visa och hantera alla systemaviseringar",
+    "filters": {
+      "label": "Filter",
+      "allStatus": "Alla statusar",
+      "unread": "Olästa",
+      "read": "Lästa",
+      "acknowledged": "Bekräftade",
+      "allTypes": "Alla typer",
+      "errors": "Fel",
+      "warnings": "Varningar",
+      "info": "Info",
+      "system": "System",
+      "detections": "Detektioner",
+      "allPriorities": "Alla prioriteringar",
+      "critical": "Kritisk",
+      "high": "Hög",
+      "medium": "Medel",
+      "low": "Låg"
+    },
+    "actions": {
+      "markAllRead": "Markera alla som lästa",
+      "refresh": "Uppdatera aviseringar",
+      "markAsRead": "Markera som läst",
+      "acknowledge": "Bekräfta",
+      "delete": "Radera",
+      "confirmDelete": "Bekräfta radering",
+      "deleteConfirmation": "Är du säker på att du vill radera denna avisering?",
+      "viewAll": "Visa alla aviseringar"
+    },
+    "aria": {
+      "filterByStatus": "Filtrera efter status",
+      "filterByType": "Filtrera efter typ",
+      "filterByPriority": "Filtrera efter prioritet"
+    },
+    "empty": {
+      "title": "Inga aviseringar hittades",
+      "subtitle": "Justera dina filter eller kom tillbaka senare"
+    },
+    "errors": {
+      "loadFailed": "Kunde inte ladda aviseringar. Försök igen.",
+      "deleteFailed": "Kunde inte radera avisering. Försök igen.",
+      "networkError": "Nätverksfel uppstod. Försök igen.",
+      "markReadFailed": "Kunde inte markera avisering som läst. Försök igen."
+    },
+    "timeAgo": {
+      "justNow": "Just nu",
+      "minutesAgo": "{minutes}m sedan",
+      "hoursAgo": "{hours}h sedan",
+      "daysAgo": "{days}d sedan"
+    },
+    "viewMode": {
+      "label": "Visningsläge",
+      "grouped": "Grupperad vy",
+      "flat": "Platt vy"
+    },
+    "groups": {
+      "markAllRead": "Markera alla som lästa",
+      "dismissAll": "Avfärda alla",
+      "unread": "{count} olästa",
+      "confirmBulkDelete": "Radera flera aviseringar",
+      "bulkDeleteConfirmation": "Är du säker på att du vill radera {count} aviseringar?"
+    },
+    "content": {
+      "startup": {
+        "title": "BirdNET-Go startad",
+        "message": "Applikationen startades framgångsrikt (v{version})"
+      },
+      "shutdown": {
+        "title": "BirdNET-Go stängs av",
+        "message": "Applikationen stängs av kontrollerat"
+      },
+      "detection": {
+        "title": "Detekterad: {species}",
+        "message": "Konfidens: {confidence}%"
+      },
+      "integration": {
+        "failedTitle": "{integration}-integrationen misslyckades",
+        "failedMessage": "Kunde inte ansluta till {integration}. Kontrollera konfiguration och loggar."
+      },
+      "resource": {
+        "highUsage": "Hög {resource}-användning",
+        "criticalUsage": "Kritisk {resource}-användning",
+        "recovered": "{resource}-användning återställd",
+        "currentUsage": "För närvarande på {current}{unit} (tröskel: {threshold}{unit})"
+      },
+      "error": {
+        "criticalSystem": "Kritiskt systemfel",
+        "application": "Applikationsfel",
+        "imageProvider": "Bildleverantörsmeddelande",
+        "categoryError": "{category}-fel"
+      },
+      "settings": {
+        "reloadingBirdnet": "Tillämpar nya analysinställningar...",
+        "rebuildingRangeFilter": "Bygger om artområdesfilter...",
+        "updatingIntervals": "Uppdaterar detektionsintervall...",
+        "reconfiguringMqtt": "Uppdaterar MQTT-anslutning...",
+        "reconfiguringBirdweather": "Uppdaterar BirdWeather-integration...",
+        "reconfiguringStreams": "Uppdaterar ljudströmmar...",
+        "reconfiguringTelemetry": "Uppdaterar telemetriinställningar...",
+        "reconfiguringSpeciesTracking": "Uppdaterar artspårning...",
+        "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
+        "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
+        "audioDeviceRestartRequired": "Ljudenhet ändrad. Omstart krävs.",
+        "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
+        "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",
+        "equalizerUpdated": "Ljudequalizerinställningar uppdaterade",
+        "savedSuccessfully": "Inställningarna sparades",
+        "saveFailed": "Kunde inte spara inställningar"
+      },
+      "migration": {
+        "startedTitle": "Databasmigrering påbörjad",
+        "startedMessage": "Migreringen har påbörjats. Detta kan ta en stund beroende på antalet detektioner.",
+        "pausedTitle": "Databasmigrering pausad",
+        "pausedMessage": "Databasmigreringen har pausats. Du kan återuppta den när som helst från databasinställningarna.",
+        "cancelledTitle": "Databasmigrering avbruten",
+        "cancelledMessage": "Databasmigreringen har avbrutits. Du kan starta en ny migrering när som helst från databasinställningarna.",
+        "completedTitle": "Databasmigrering slutförd",
+        "completedMessage": "Migreringen slutförd. Starta om BirdNET-Go för att byta till den nya databasen.",
+        "errorTitle": "Databasmigreringsfel",
+        "errorMessage": "Migreringen pausad på grund av fel. Kontrollera loggar och försök återuppta."
+      },
+      "cleanup": {
+        "completeTitle": "Rensning av gammal databas slutförd",
+        "completeMessage": "{space} diskutrymme frigjort.",
+        "failedTitle": "Rensning av gammal databas misslyckades",
+        "failedMessage": "Kunde inte ta bort gammal databas. Kontrollera loggar för detaljer."
+      },
+      "buffer": {
+        "overloadTitle": "Ljudanalys överbelastad",
+        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa '{sourceName}' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
+      },
+      "alert": {
+        "firedTitle": "{rule_name}",
+        "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
+        "detectionOccurred": "{species_name} detekterad med {confidence}% konfidens",
+        "errorOccurred": "{error}",
+        "disconnected": "{source_name} frånkopplad",
+        "error": {
+          "authError": "Autentisering misslyckades — kontrollera din API-nyckel eller dina inloggningsuppgifter",
+          "rateLimited": "Hastighetsbegränsad — förfrågningar kommer att saktas ned automatiskt",
+          "gatewayTimeout": "Tjänsten kan vara hårt belastad",
+          "serverError": "Tjänsten är tillfälligt otillgänglig",
+          "connectionRefused": "Tjänsten är onåbar — kontrollera adressen och att den körs",
+          "dnsError": "Kunde inte slå upp värdnamn — kontrollera adressen",
+          "tlsError": "TLS/certifikatfel — kontrollera dina säkerhetsinställningar",
+          "timeout": "Anslutningen tog för lång tid — tjänsten kan vara långsam eller onåbar",
+          "connectionInterrupted": "Anslutningen avbröts — nytt försök sker automatiskt",
+          "diskFull": "Disken är full — frigör utrymme",
+          "permissionDenied": "Åtkomst nekad — kontrollera fil- eller tjänstbehörigheter"
+        }
+      }
+    },
+    "loading": "Laddar aviseringar..."
+  },
+  "search": {
+    "title": "Sökfilter",
+    "results": "Sökresultat",
+    "resultsCountZero": "Inga resultat",
+    "resultsCountOne": "1 resultat",
+    "resultsCountOther": "{count} resultat",
+    "noSearchPerformed": "Ingen sökning utförd ännu",
+    "noSearchPerformedHint": "Använd sökfiltren ovan för att hitta fågeldetektioner",
+    "loadingResults": "Laddar resultat...",
+    "noResultsFound": "Inga resultat hittades",
+    "noResultsHint": "Prova att justera dina sökfilter",
+    "fields": {
+      "species": "Art",
+      "speciesPlaceholder": "Ange artnamn",
+      "speciesHelp": "Ange helt eller delvis artnamn (ej skiftlägeskänsligt)",
+      "dateRange": "Datumintervall",
+      "dateRangeHelp": "Filtrera detektioner efter datumintervall (lämna tomt för alla datum)",
+      "from": "Från",
+      "to": "Till",
+      "confidenceRange": "Konfidensintervall (%)",
+      "confidenceMin": "Lägsta konfidensprocent",
+      "confidenceMax": "Högsta konfidensprocent",
+      "verifiedStatus": "Verifieringsstatus",
+      "lockedStatus": "Låsstatus",
+      "timeOfDay": "Tid på dygnet"
+    },
+    "advancedFilters": "Avancerade filter",
+    "showAdvancedFilters": "Visa avancerade filter",
+    "hideAdvancedFilters": "Dölj avancerade filter",
+    "verifiedOptions": {
+      "any": "Alla statusar",
+      "verified": "Endast verifierade",
+      "unverified": "Endast overifierade"
+    },
+    "lockedOptions": {
+      "any": "Alla statusar",
+      "locked": "Endast låsta",
+      "unlocked": "Endast olåsta"
+    },
+    "timeOfDayOptions": {
+      "any": "Alla tider",
+      "day": "Endast dag",
+      "night": "Endast natt",
+      "sunrise": "Soluppgång +/- 30min",
+      "sunset": "Solnedgång +/- 30min"
+    },
+    "sortOptions": {
+      "dateDesc": "Datum (nyast först)",
+      "dateAsc": "Datum (äldst först)",
+      "speciesAsc": "Art (A-Ö)",
+      "confidenceDesc": "Konfidens (hög-låg)"
+    },
+    "tableHeaders": {
+      "dateTime": "Datum och tid",
+      "timeOfDay": "Tid på dygnet",
+      "species": "Art",
+      "confidence": "Konfidens",
+      "status": "Status",
+      "actions": "Åtgärder"
+    },
+    "statusBadges": {
+      "verified": "Verifierad",
+      "false": "Falsk",
+      "unverified": "Overifierad",
+      "locked": "Låst",
+      "unlocked": "Olåst"
+    },
+    "detailsPanel": {
+      "audioPlayer": "Ljudspelare",
+      "expandDetails": "Expandera detaljer för {species}",
+      "collapseDetails": "Fäll ihop detaljer för {species}",
+      "playAudio": "Spela upp ljud för {species}",
+      "viewDetails": "Visa detaljer för {species}",
+      "unknownSpecies": "Okänd art",
+      "clickToCollapse": "Klicka för att fälla ihop"
+    },
+    "errors": {
+      "searchFailed": "Sökningen misslyckades: {error}",
+      "minMaxConfidence": "Lägsta konfidens kan inte vara större än högsta konfidens."
+    },
+    "pagination": {
+      "page": "Sida {current} av {total}",
+      "goToPrevious": "Gå till föregående sida",
+      "goToNext": "Gå till nästa sida"
+    }
+  },
+  "error": {
+    "404": {
+      "code": "404",
+      "title": "Sidan hittades inte",
+      "goToDashboard": "Gå till instrumentpanelen"
+    },
+    "500": {
+      "code": "500",
+      "title": "Internt serverfel",
+      "defaultMessage": "Ett internt serverfel inträffade.",
+      "goToDashboard": "Gå till instrumentpanelen"
+    },
+    "server": {
+      "title": "Serveranslutningsfel",
+      "description": "Kan inte ansluta till servern. Kontrollera din anslutning och försök igen."
+    },
+    "generic": {
+      "errorDetails": "Felinformation",
+      "stackTrace": "Stackspårning",
+      "goToDashboard": "Gå till instrumentpanelen",
+      "reportIssue": "Rapportera problem",
+      "loginToViewDetails": "Logga in för att visa detaljer",
+      "componentLoadError": "Fel vid laddning av komponent",
+      "failedToLoadComponent": "Kunde inte ladda den begärda komponenten"
+    }
+  },
+  "dashboard": {
+    "approved": "Godkänd",
+    "currentlyHearing": {
+      "title": "Hörs just nu",
+      "subtitle": "Arter som identifieras i realtid",
+      "empty": "Allt är tyst — inga fåglar detekterade just nu"
+    },
+    "rejected": "Avvisad",
+    "dailySummary": {
+      "title": "Daglig aktivitet",
+      "subtitle": "Artdetekteringar per timme",
+      "columns": {
+        "species": "Art",
+        "detections": "Detekteringar"
+      },
+      "daylight": {
+        "label": "Dagsljus",
+        "sunrise": "Soluppgång kl. {time}",
+        "sunset": "Solnedgång kl. {time}"
+      },
+      "weather": {
+        "label": "Väder"
+      },
+      "legend": {
+        "less": "Mindre",
+        "more": "Mer"
+      },
+      "navigation": {
+        "previousDay": "Föregående dag",
+        "nextDay": "Nästa dag",
+        "today": "Idag"
+      },
+      "tooltips": {
+        "viewHourly": "Visa alla detekteringar för {hour}:00",
+        "viewBiHourly": "Visa alla detekteringar för {startHour}:00-{endHour}:00",
+        "viewSixHourly": "Visa alla detekteringar för {startHour}:00-{endHour}:00",
+        "hourlyDetections": "{count} detekteringar kl. {hour}:00 - Klicka för att visa",
+        "biHourlyDetections": "{count} detekteringar från {startHour}:00-{endHour}:00 - Klicka för att visa",
+        "sixHourlyDetections": "{count} detekteringar från {startHour}:00-{endHour}:00 - Klicka för att visa"
+      },
+      "loading": {
+        "preparing": "Förbereder data...",
+        "fetching": "Hämtar detekteringar...",
+        "error": "Kunde inte ladda data",
+        "complete": "Data har laddats"
+      },
+      "noSpecies": "Inga arter detekterade detta datum"
+    },
+    "recentDetections": {
+      "title": "Senaste detekteringar",
+      "subtitle": "Senast identifierade arter",
+      "controls": {
+        "show": "Visa:",
+        "refresh": "Uppdatera detekteringar",
+        "refreshPaused": "Uppdatering pausad medan interaktion pågår"
+      },
+      "headers": {
+        "dateTime": "Datum och tid",
+        "time": "Tid",
+        "commonName": "Svenskt namn",
+        "species": "Art",
+        "weather": "Väder",
+        "confidence": "Konfidens",
+        "thumbnail": "Miniatyrbild",
+        "status": "Status",
+        "recording": "Inspelning",
+        "actions": "Åtgärder"
+      },
+      "status": {
+        "verified": "Verifierad",
+        "false": "Falsk",
+        "unverified": "Overifierad",
+        "locked": "Låst"
+      },
+      "modals": {
+        "showSpecies": "Visa art {species}",
+        "ignoreSpecies": "Ignorera art {species}",
+        "showSpeciesConfirm": "Är du säker på att du vill visa framtida detekteringar av {species}?",
+        "ignoreSpeciesConfirm": "Är du säker på att du vill ignorera framtida detekteringar av {species}? Detta påverkar bara nya detekteringar - befintliga detekteringar finns kvar i databasen.",
+        "unlockDetection": "Lås upp detektering",
+        "lockDetection": "Lås detektering",
+        "unlockDetectionConfirm": "Är du säker på att du vill låsa upp denna detektering av {species}? Den kommer då att kunna tas bort vid vanlig rensning.",
+        "lockDetectionConfirm": "Är du säker på att du vill låsa denna detektering av {species}? Den kommer då att skyddas från borttagning vid vanlig rensning.",
+        "deleteDetection": "Ta bort detektering av {species}",
+        "deleteDetectionConfirm": "Är du säker på att du vill ta bort detekteringen av {species}? Denna åtgärd kan inte ångras."
+      },
+      "actions": {
+        "menuLabel": "Åtgärder för {species}",
+        "review": "Granska detektering",
+        "showSpecies": "Visa art",
+        "ignoreSpecies": "Ignorera art",
+        "lockDetection": "Lås detektering",
+        "unlockDetection": "Lås upp detektering",
+        "deleteDetection": "Ta bort detektering"
+      },
+      "noDetections": "Inga senaste detekteringar"
+    },
+    "errors": {
+      "dailySummaryFetch": "Kunde inte hämta daglig sammanfattning: {status}",
+      "dailySummaryLoad": "Kunde inte ladda daglig sammanfattning",
+      "recentDetectionsFetch": "Kunde inte hämta senaste detekteringar: {status}",
+      "recentDetectionsLoad": "Kunde inte ladda senaste detekteringar",
+      "configFetch": "Kunde inte hämta instrumentpanelens konfiguration: {status}"
+    },
+    "banner": {
+      "title": "Titel",
+      "titlePlaceholder": "Min fågelstation",
+      "description": "Beskrivning",
+      "descriptionPlaceholder": "En kort beskrivning av din fågelövervakningsstation...",
+      "subElements": "Delelement",
+      "showImage": "Visa anpassad bild",
+      "imageUrl": "Bild-URL eller sökväg",
+      "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
+      "imageUrlHelp": "Ange en URL till en bild. Bilduppladdning kommer att finnas tillgänglig i en framtida uppdatering.",
+      "showLocationMap": "Visa platskarta",
+      "showLocationMapHelp": "Visar en liten karta med latitud/longitud från dina huvudinställningar",
+      "showWeather": "Visa aktuellt väder",
+      "showWeatherHelp": "Visar aktuella väderförhållanden (kräver att väderintegrationen är aktiverad)",
+      "timeFormat": "Tidsformat",
+      "mapZoom": "Kartzoom",
+      "showPin": "Visa platsnål",
+      "mapExpandable": "Tillåt kartexpansion",
+      "expandMap": "Expandera karta",
+      "expandedMapLabel": "Expanderad platskarta",
+      "closeExpandedMap": "Stäng expanderad karta"
+    },
+    "videoEmbed": {
+      "youtubeUrl": "YouTube-URL",
+      "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
+      "youtubeUrlHelp": "Klistra in valfri YouTube-URL (watch, embed eller kortlänk). Den konverteras till en integritetsförbättrad inbäddning.",
+      "titleLabel": "Titel (valfritt)",
+      "titlePlaceholder": "Ange videotitel (valfritt)"
+    },
+    "editMode": {
+      "editing": "Redigerar instrumentpanelen",
+      "save": "Spara",
+      "saving": "Sparar...",
+      "cancel": "Avbryt",
+      "disabled": "dold",
+      "noConfig": "Inga ytterligare konfigurationsalternativ tillgängliga ännu.",
+      "currentlyHearingNote": "Detta element visar fåglar som detekteras just nu när dagens datum visas. Ingen ytterligare konfiguration behövs.",
+      "notAvailable": "Konfiguration för denna elementtyp är inte tillgänglig ännu.",
+      "configureElement": "Konfigurera element",
+      "closeModal": "Stäng",
+      "configureTitle": "Konfigurera {element}",
+      "weatherPlaceholder": "Väderförhållanden visas här när de är tillgängliga",
+      "stationBanner": "Stationsbanner",
+      "liveBirdFeed": "Direktsändning av fåglar",
+      "hideElement": "Dölj element",
+      "unhideElement": "Visa element",
+      "deleteElement": "Ta bort element",
+      "deleteConfirm": "Ta bort detta element? Dess konfiguration går förlorad.",
+      "addElement": "Lägg till element",
+      "noElementsAvailable": "Alla elementtyper finns redan på instrumentpanelen.",
+      "editDashboard": "Redigera instrumentpanelen",
+      "widthFull": "Full bredd",
+      "widthHalf": "Halv bredd",
+      "fullWidthOnly": "Endast full bredd",
+      "settings": "Inställningar",
+      "resetDashboard": "Återställ instrumentpanelen",
+      "resetConfirm": "Återställa instrumentpanelen till standardlayouten? Detta tar bort eventuella anpassningar.",
+      "resetting": "Återställer..."
+    },
+    "elements": {
+      "banner": "Instrumentpanelens banner",
+      "dailySummary": "Daglig sammanfattning",
+      "currentlyHearing": "Hörs just nu",
+      "detectionsGrid": "Senaste detekteringar",
+      "videoEmbed": "Videoinbäddning"
+    }
+  },
+  "detections": {
+    "title": "Detekteringar",
+    "titles": {
+      "hourly": "Timresultat för {hour}:00 den {date}",
+      "hourlyRange": "Timresultat från {startHour}:00 till {endHour}:00 den {date}",
+      "species": "Resultat för {species} den {date}",
+      "search": "Sökresultat för \"{query}\"",
+      "allDetections": "Alla detekteringar för {date}"
+    },
+    "headers": {
+      "dateTime": "Datum och tid",
+      "weather": "Väder",
+      "species": "Art",
+      "confidence": "Konfidens",
+      "thumbnail": "Miniatyrbild",
+      "status": "Status",
+      "recording": "Inspelning",
+      "actions": "Åtgärder"
+    },
+    "viewToggle": {
+      "label": "Visningsläge",
+      "table": "Tabellvy",
+      "cards": "Kortvy"
+    },
+    "status": {
+      "locked": "Låst"
+    },
+    "timeOfDay": {
+      "day": "Dag",
+      "night": "Natt",
+      "sunrise": "Soluppgång",
+      "sunset": "Solnedgång",
+      "any": "Alla",
+      "unknown": "Okänd"
+    },
+    "table": {
+      "caption": "Lista över fågeldetekteringar med datum, art, konfidens och statusinformation"
+    },
+    "empty": {
+      "title": "Inga detekteringar hittades",
+      "description": "Prova att justera dina filter eller sökkriterier"
+    },
+    "pagination": {
+      "showing": "Visar {from} till {to} av {total} resultat"
+    },
+    "weather": {
+      "title": "Väderinformation",
+      "noData": "Inga väderdata",
+      "noDataAvailable": "Inga väderdata tillgängliga",
+      "loading": "Laddar väderinformation...",
+      "labels": {
+        "temperature": "Temperatur",
+        "weather": "Väder",
+        "wind": "Vind",
+        "humidity": "Luftfuktighet",
+        "pressure": "Lufttryck",
+        "cloudCover": "Molntäcke"
+      },
+      "units": {
+        "temperature": "°C",
+        "temperatureFahrenheit": "°F",
+        "windSpeed": "m/s",
+        "windSpeedImperial": "mph",
+        "humidity": "%",
+        "pressure": "hPa"
+      },
+      "conditions": {
+        "clearsky_day": "Klar himmel",
+        "clearsky_night": "Klar himmel",
+        "fair_day": "Vackert väder",
+        "fair_night": "Vackert väder",
+        "partlycloudy_day": "Delvis molnigt",
+        "partlycloudy_night": "Delvis molnigt",
+        "cloudy": "Molnigt",
+        "rainshowers_day": "Regnskurar",
+        "rainshowers_night": "Regnskurar",
+        "rain": "Regn",
+        "thunder": "Åskväder",
+        "sleet": "Snöblandat regn",
+        "snow": "Snö",
+        "fog": "Dimma",
+        "unknown": "Okänt"
+      }
+    },
+    "row": {
+      "viewDetails": "Visa detaljer för {species}"
+    },
+    "media": {
+      "title": "Inspelning och spektrogram",
+      "clipHint": "Klicka och dra på spektrogrammet för att välja ett intervall för klippexport"
+    },
+    "tabs": {
+      "overview": "Översikt",
+      "taxonomy": "Taxonomi",
+      "history": "Historik",
+      "notes": "Anteckningar"
+    },
+    "environmental": {
+      "title": "Miljöförhållanden"
+    },
+    "metadata": {
+      "title": "Detekteringsmetadata",
+      "source": "Källa",
+      "duration": "Varaktighet",
+      "status": "Status",
+      "locked": "Låst"
+    },
+    "history": {
+      "title": "Detekteringshistorik",
+      "comingSoon": "Historikspårning kommer snart..."
+    },
+    "notes": {
+      "title": "Anteckningar och kommentarer",
+      "noComments": "Inga kommentarer eller anteckningar för denna detektering."
+    },
+    "aria": {
+      "loading": "Laddar detekteringsinformation...",
+      "loaded": "Detekteringsinformation laddad för {species}",
+      "error": "Fel vid laddning av detektering: {error}"
+    },
+    "errors": {
+      "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
+      "noPermission": "Du har inte behörighet att visa denna detektering.",
+      "loginRequired": "Logga in för att visa denna detektering.",
+      "serverError": "Serverfel. Försök igen senare eller kontakta supporten om problemet kvarstår.",
+      "loadFailed": "Kunde inte ladda detektering (Fel {status}). Prova att uppdatera sidan.",
+      "noIdProvided": "Inget detekterings-ID angavs.",
+      "fetchFailed": "Kunde inte hämta detekteringar"
+    }
+  },
+  "species": {
+    "rarity": {
+      "title": "Arternas sällsynthet",
+      "score": "Poäng",
+      "basedOnLocation": "Baserat på plats: {latitude}, {longitude}",
+      "statuses": {
+        "very_common": "Mycket vanlig",
+        "common": "Vanlig",
+        "uncommon": "Ovanlig",
+        "rare": "Sällsynt",
+        "very_rare": "Mycket sällsynt",
+        "unknown": "Okänd"
+      }
+    },
+    "taxonomy": {
+      "hierarchy": "Taxonomisk klassificering",
+      "subspecies": "Underart",
+      "noData": "Inga taxonomidata tillgängliga.",
+      "labels": {
+        "kingdom": "Rike",
+        "phylum": "Stam",
+        "class": "Klass",
+        "order": "Ordning",
+        "family": "Familj",
+        "genus": "Släkte",
+        "species": "Art"
+      }
+    },
+    "tracking": {
+      "title": "Artspårning",
+      "newSpecies": "Ny art",
+      "newThisYear": "Första i år",
+      "newThisSeason": "Första denna säsong",
+      "daysSinceFirst": "Dagar sedan först sedd"
+    }
+  },
+  "system": {
+    "title": "Systemöversikt",
+    "refreshData": "Uppdatera data",
+    "aria": {
+      "refreshData": "Uppdatera systemdata",
+      "dashboard": "Systemöversikt med prestandamått och information"
+    },
+    "systemInfo": {
+      "title": "Systeminformation",
+      "os": "Operativsystem",
+      "hostname": "Värdnamn",
+      "uptime": "Drifttid",
+      "cpus": "Processorer",
+      "model": "Systemmodell",
+      "timezone": "Tidszon",
+      "temperature": "CPU-temperatur",
+      "temperatureValue": "{temp}°C",
+      "temperatureUnavailable": "Temperaturdata ej tillgänglig",
+      "cpuCores": "CPU-kärnor",
+      "cpuDetails": "CPU",
+      "environment": "Miljö"
+    },
+    "diskUsage": {
+      "title": "Diskanvändning",
+      "emptyMessage": "Ingen diskinformation tillgänglig"
+    },
+    "memoryUsage": {
+      "title": "Minnesanvändning",
+      "ramUsage": "RAM-användning",
+      "labels": {
+        "free": "Ledigt",
+        "available": "Tillgängligt",
+        "buffCache": "Buff/Cache"
+      }
+    },
+    "progress": {
+      "labels": {
+        "overallProgress": "Totalt förlopp",
+        "progress": "Förlopp"
+      }
+    },
+    "processInfo": {
+      "title": "Processinformation",
+      "loading": "Laddar processinformation...",
+      "noProcesses": "Ingen processinformation tillgänglig",
+      "headers": {
+        "pid": "PID",
+        "name": "Namn",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Minne",
+        "uptime": "Drifttid",
+        "process": "Process"
+      },
+      "showAll": "Visa alla processer",
+      "showBirdnetOnly": "Visa endast BirdNET",
+      "table": {
+        "process": "Process",
+        "status": "Status",
+        "cpu": "CPU",
+        "memory": "Minne",
+        "uptime": "Drifttid",
+        "showAllProcesses": "Visa alla processer"
+      }
+    },
+    "errors": {
+      "systemInfo": "Kunde inte ladda systeminformation: {error}",
+      "diskUsage": "Kunde inte ladda diskanvändning: {error}",
+      "memoryUsage": "Kunde inte ladda minnesanvändning: {error}",
+      "temperature": "Kunde inte ladda temperatur: {error}",
+      "processes": "Kunde inte ladda processinformation: {error}"
+    },
+    "sections": {
+      "overview": "Översikt",
+      "database": "Databas",
+      "terminal": "Terminal"
+    },
+    "database": {
+      "title": "Databashantering",
+      "description": "Hantera databasschemamigrering",
+      "legacy": {
+        "title": "Äldre databas",
+        "fetchFailed": "Kunde inte hämta status för äldre databas",
+        "cleanup": {
+          "title": "Rensning av äldre databas",
+          "description": "Denna databas är nu offline och används inte längre. All din data har migrerats till den förbättrade databasen.",
+          "recommendation": "Det rekommenderas att ta bort denna databas för att frigöra diskutrymme.",
+          "location": "Plats",
+          "size": "Storlek",
+          "records": "Poster",
+          "detections": "detektioner",
+          "lastModified": "Senast ändrad",
+          "warning": "Varning: Denna åtgärd kan inte ångras",
+          "backupReminder": "Se till att du har en säkerhetskopia innan du tar bort den äldre databasen.",
+          "deleteButton": "Ta bort äldre databas",
+          "inProgress": "Tar bort...",
+          "success": "{size} diskutrymme har frigjorts",
+          "failed": "Rensning misslyckades",
+          "notAvailable": "Rensning ej tillgänglig",
+          "confirmTitle": "Ta bort äldre databas?",
+          "confirmMessage": "Du är på väg att permanent ta bort den äldre databasen ({size}). Denna åtgärd kan inte ångras.",
+          "confirmCheckbox": "Jag förstår att detta permanent tar bort den äldre databasen",
+          "cancelButton": "Avbryt",
+          "deleteConfirmButton": "Ta bort permanent"
+        }
+      },
+      "v2": {
+        "title": "Förbättrad databas"
+      },
+      "stats": {
+        "connected": "Ansluten",
+        "disconnected": "Frånkopplad",
+        "type": "Typ",
+        "location": "Plats",
+        "size": "Storlek",
+        "detections": "Detektioner",
+        "fetchFailed": "Kunde inte hämta databasstatistik"
+      },
+      "dashboard": {
+        "title": "Databasöversikt",
+        "fetchFailed": "Kunde inte hämta databasöversikt",
+        "loading": "Laddar...",
+        "metrics": {
+          "readLatency": "Läsfördröjning",
+          "writeLatency": "Skrivfördröjning",
+          "queriesPerSec": "Frågor/sek",
+          "database": "Databas",
+          "avg": "snitt",
+          "max": "max",
+          "lastHour": "{count} senaste timmen",
+          "slowQueries": "{count} långsamma"
+        },
+        "details": {
+          "title": "Databasdetaljer",
+          "engine": "Motor",
+          "journal": "Journal",
+          "pageSize": "Sidstorlek",
+          "cacheHit": "Cacheträff",
+          "integrity": "Integritet",
+          "lastVacuum": "Senaste VACUUM"
+        },
+        "locksWal": {
+          "title": "Lås & WAL",
+          "lockWaits": "Låsväntan",
+          "lockTimeouts": "Låstidsgränser",
+          "avgWait": "Snitt väntan",
+          "busyTimeouts": "Upptagen-tidsgränser",
+          "walSize": "WAL-storlek",
+          "checkpoints": "Kontrollpunkter",
+          "freelistPages": "Frilistsidor",
+          "cacheSize": "Cachestorlek"
+        },
+        "connectionPool": {
+          "title": "Anslutningspool",
+          "poolUsage": "Poolanvändning",
+          "active": "aktiva",
+          "idle": "vilande",
+          "waiting": "väntande",
+          "totalCreated": "Totalt skapade",
+          "connErrors": "Anslutningsfel",
+          "threads": "Trådar",
+          "running": "körande",
+          "cached": "cachade"
+        },
+        "innodb": {
+          "title": "InnoDB & Lås",
+          "bufferPoolHitRate": "Buffertpoolens träffkvot",
+          "bufferPoolSize": "Buffertpoolens storlek",
+          "lockWaits": "Låsväntan",
+          "deadlocks": "Dödlägen",
+          "avgLockWait": "Snitt låsväntan",
+          "tableLocksWaited": "Tabelllås väntade",
+          "tableLocksImmediate": "Tabelllås omedelbara"
+        },
+        "detectionRate": {
+          "title": "Detektionsfrekvens (24h)",
+          "chartLabel": "Detektionsfrekvens över 24 timmar",
+          "detectionsTooltip": "{count} detektioner",
+          "perHour": "/tim",
+          "min": "min",
+          "avg": "snitt",
+          "max": "max",
+          "lastBackup": "Senaste säkerhetskopia",
+          "backupSize": "Storlek på säkerhetskopia",
+          "createBackup": "Skapa säkerhetskopia",
+          "mysqlHost": "Värd",
+          "mysqlBackupNote": "MySQL-säkerhetskopior bör hanteras via mysqldump eller dina MySQL-administrationsverktyg."
+        },
+        "tables": {
+          "title": "Tabeller",
+          "total": "Totalt",
+          "table": "Tabell",
+          "engine": "Motor",
+          "rows": "Rader",
+          "size": "Storlek",
+          "usage": "Användning"
+        }
+      },
+      "backup": {
+        "download": "Ladda ner säkerhetskopia",
+        "downloading": "Laddar ner...",
+        "starting": "Startar säkerhetskopiering...",
+        "creating": "Skapar säkerhetskopia...",
+        "cancel": "Avbryt",
+        "retry": "Försök igen",
+        "mysqlNote": "MySQL-säkerhetskopiering kräver externa verktyg (mysqldump)",
+        "history": {
+          "title": "Säkerhetskopieringshistorik",
+          "creating": "Skapar...",
+          "createBackup": "Skapa säkerhetskopia",
+          "noBackups": "Inga säkerhetskopior ännu",
+          "download": "Ladda ner",
+          "failed": "Misslyckades",
+          "columns": {
+            "date": "Datum",
+            "database": "Databas",
+            "size": "Storlek",
+            "status": "Status",
+            "actions": "Åtgärder"
+          },
+          "status": {
+            "pending": "Väntar",
+            "in_progress": "Pågår",
+            "completed": "Slutförd",
+            "failed": "Misslyckades"
+          }
+        }
+      },
+      "notInitialized": "Ej initierad",
+      "migration": {
+        "title": "Databasmigrering",
+        "description": "Migrera från äldre schema till normaliserat v2-schema",
+        "requiredNote": "Databasmigrering krävs för kommande BirdNET-Go-funktioner som bygger på det nya normaliserade databasschemat. Nya funktioner blir inte tillgängliga förrän migreringen är klar.",
+        "completedTitle": "Migrering slutförd",
+        "completedNote": "Din databas har framgångsrikt migrerats till det nya schemat. Starta om BirdNET-Go för att byta till den nya databasen. Obs: Den nya databasen är mindre eftersom den lagrar data mer effektivt - detta är förväntat och all din data är bevarad.",
+        "starting": "Startar migrering...",
+        "status": {
+          "idle": "Redo att starta",
+          "initializing": "Initierar",
+          "dual_write": "Dubbelskrivning aktiv",
+          "migrating": "Migrerar primär",
+          "migrating_predictions": "Migrerar sekundär",
+          "paused": "Pausad",
+          "validating": "Validerar",
+          "cutover": "Övergång pågår",
+          "completed": "Migrering slutförd",
+          "failed": "Validering misslyckades"
+        },
+        "progress": {
+          "title": "Migreringsförlopp",
+          "records": "poster",
+          "paused": "Migrering pausad",
+          "percent": "{percent}%",
+          "rate": "{rate} poster/sek",
+          "rateValue": "{rate} post/s",
+          "remaining": "Uppskattat kvarvarande: {time}",
+          "eta": "Uppskattad återstående tid",
+          "dirtyIds": "{count} poster väntar på omsynkronisering",
+          "completedTitle": "Migrering slutförd",
+          "completedBody": "Alla {count} poster har framgångsrikt migrerats till V2-databasen. Applikationen kommer att använda V2 som primär databas efter omstart.",
+          "restartTitle": "Omstart krävs",
+          "restartBody": "Starta om applikationen för att byta till V2-databasen. Rensning av äldre databas blir tillgänglig efter omstart.",
+          "fallbackError": "Antal poster stämmer inte mellan äldre och V2-databaser. Vissa poster kan ha migrerats felaktigt.",
+          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Dubbelskrivningsläge säkerställer noll dataförlust under migreringen.",
+          "sourceLegacy": "Källa (Äldre)",
+          "targetV2": "Mål (V2)",
+          "recordsLabel": "Poster",
+          "sizeLabel": "Storlek",
+          "prerequisitesNotMet": "Förutsättningar ej uppfyllda - åtgärda kritiska problem nedan",
+          "validatingTitle": "Validerar data",
+          "validatingBody": "Jämför {count} äldre poster mot V2-databasen...",
+          "dirtyRecordsCatchup": "{count} ändrade poster - försöker inhämtningsavstämning",
+          "cutoverTitle": "Slutför övergång",
+          "cutoverBody": "Avslutar övergången till V2-databasen...",
+          "migratingPhase": "Migrerar {phase}",
+          "progressLabel": "Förlopp",
+          "ofRecords": "/ {count} poster",
+          "percentComplete": "{percent}% slutfört",
+          "recordsPerSec": "{rate} poster/sek",
+          "calculating": "Beräknar...",
+          "dirtyWriteFailed": "{count} poster kunde inte skrivas - kommer att avstämmas under validering"
+        },
+        "details": {
+          "title": "Databasdetaljer",
+          "detections": "{count} detektioner",
+          "lastBackup": "Senaste säkerhetskopia: {date}",
+          "noBackups": "Inga säkerhetskopior",
+          "integrity": "Integritet: {status}"
+        },
+        "strip": {
+          "legacy": "Äldre",
+          "v2Target": "V2 (Mål)",
+          "active": "Aktiv",
+          "migration": "Migrering",
+          "complete": "Slutförd",
+          "recordsMigrated": "{count} poster migrerade",
+          "readyToMigrate": "Redo att migrera",
+          "recordsInLegacy": "{count} poster i äldre databas",
+          "comparingRecords": "Jämför antal poster...",
+          "validationFailed": "Validering misslyckades",
+          "rate": "Hastighet",
+          "recPerSec": "{rate} post/s",
+          "dayAvg": "~{count} / dag snitt",
+          "dayHistory": "30 dagars historik"
+        },
+        "phase": {
+          "indicator": "Fas {current} av {total}: ",
+          "detections": "Migrerar primära detektioner",
+          "predictions": "Migrerar sekundära detektioner",
+          "reviews": "Migrerar granskningar",
+          "comments": "Migrerar kommentarer",
+          "locks": "Migrerar lås"
+        },
+        "notes": {
+          "in_progress": "Du kan fortsätta använda systemet normalt medan migreringen körs i bakgrunden.",
+          "dual_write": "Migrering pågår. Din data är säker - alla nya detektioner sparas i båda databaserna.",
+          "migrating": "Kopierar dina befintliga detektioner till den nya databasen.",
+          "validating": "Verifierar att alla poster kopierades korrekt. Nästan klart!",
+          "cutover": "Byter till den nya databasen. Det tar bara ett ögonblick.",
+          "paused": "Migreringen är pausad. Din data är säker. Återuppta när du är redo att fortsätta."
+        },
+        "actions": {
+          "start": "Starta migrering",
+          "pause": "Pausa",
+          "resume": "Återuppta",
+          "cancel": "Avbryt",
+          "rollback": "Återställ",
+          "retryValidation": "Försök validering igen"
+        },
+        "confirmDialog": {
+          "title": "Starta databasmigrering",
+          "message": "Migreringen kommer att kopiera din detektionsdata från den nuvarande databasen till en ny normaliserad databas. Din ursprungliga databas förblir oförändrad. Det rekommenderas dock att skapa en säkerhetskopia ifall oväntade problem uppstår.",
+          "checkbox": "Jag bekräftar att jag har säkerhetskopierat min databas eller förstår riskerna med att fortsätta utan säkerhetskopia.",
+          "note": "Du kan ladda ner en säkerhetskopia med knappen \"Ladda ner säkerhetskopia\" ovan."
+        },
+        "confirmCancel": {
+          "title": "Avbryt migrering?",
+          "message": "Detta stoppar migreringen och återgår till viloläge. Du kan säkert starta om migreringen senare - poster kommer inte att dupliceras.",
+          "confirm": "Ja, avbryt",
+          "dismiss": "Nej, fortsätt köra"
+        },
+        "confirmRollback": {
+          "title": "Återställ migrering?",
+          "message": "Detta återgår till den äldre databasen. Nya detektioner som registrerats sedan migreringen bevaras i den förbättrade databasen men blir inte synliga förrän migreringen körs igen.",
+          "confirm": "Ja, återställ",
+          "dismiss": "Nej, behåll förbättrad"
+        },
+        "errors": {
+          "startFailed": "Kunde inte starta migrering",
+          "pauseFailed": "Kunde inte pausa migrering",
+          "resumeFailed": "Kunde inte återuppta migrering",
+          "cancelFailed": "Kunde inte avbryta migrering",
+          "rollbackFailed": "Kunde inte återställa migrering",
+          "retryValidationFailed": "Kunde inte försöka validering igen",
+          "fetchFailed": "Kunde inte hämta migreringsstatus"
+        },
+        "worker": {
+          "running": "Arbetare körs",
+          "paused": "Arbetare pausad",
+          "stopped": "Arbetare stoppad"
+        },
+        "prerequisites": {
+          "title": "Kontroller före migrering",
+          "rerunChecks": "Kör kontroller igen",
+          "critical": "Kritisk",
+          "allPassed": "Alla kontroller godkända - redo att migrera",
+          "criticalIssues": "{count} kritiskt problem måste åtgärdas",
+          "warningsCount": "{count} varning(ar)",
+          "running": "Kör kontroller före migrering...",
+          "checkingStep": "Steg {current} av {total}",
+          "passedCount": "{passed}/{total} godkända",
+          "criticalCount": "{count} kritiska",
+          "warningCount": "{count} varning(ar)",
+          "rerun": "Kör igen",
+          "showDetails": "Visa detaljer",
+          "hideDetails": "Dölj detaljer",
+          "status": {
+            "passed": "Godkänd",
+            "failed": "Misslyckad",
+            "error": "Fel",
+            "warning": "Varning",
+            "skipped": "Överhoppad"
+          },
+          "errors": {
+            "fetchFailed": "Kunde inte hämta förutsättningar"
+          },
+          "checks": {
+            "state_idle": {
+              "name": "Migreringstillstånd"
+            },
+            "disk_space": {
+              "name": "Diskutrymme"
+            },
+            "legacy_accessible": {
+              "name": "Databasanslutning"
+            },
+            "sqlite_integrity": {
+              "name": "Databasintegritet"
+            },
+            "mysql_table_health": {
+              "name": "Tabellhälsa"
+            },
+            "write_permission": {
+              "name": "Skrivbehörighet"
+            },
+            "mysql_permissions": {
+              "name": "MySQL-behörigheter"
+            },
+            "record_count": {
+              "name": "Antal poster"
+            },
+            "existing_v2_data": {
+              "name": "Befintlig migreringsdata"
+            },
+            "no_active_locks": {
+              "name": "Aktiva lås"
+            },
+            "memory_available": {
+              "name": "Tillgängligt minne"
+            },
+            "mysql_max_packet": {
+              "name": "MySQL maxpaket"
+            },
+            "mysql_timeout": {
+              "name": "MySQL-tidsgräns"
+            }
+          }
+        }
+      }
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Minne",
+      "temperature": "Temperatur",
+      "system": "System",
+      "cores": "kärnor",
+      "samples": "mätningar",
+      "available": "tillg.",
+      "min": "Min",
+      "max": "Max",
+      "limit": "Gräns",
+      "tempUnavailable": "Ej tillgänglig",
+      "online": "Online",
+      "uptime": "Drifttid",
+      "host": "Värd",
+      "model": "Modell",
+      "inference": "Inferens",
+      "avgTime": "Snitt",
+      "noInference": "Ingen data ännu",
+      "statusOk": "OK",
+      "statusWarning": "Varning",
+      "statusCritical": "Kritisk"
+    },
+    "storage": {
+      "title": "Lagring",
+      "used": "använt",
+      "free": "ledigt",
+      "ram": "RAM"
+    }
+  },
+  "terminal": {
+    "title": "Terminal",
+    "disabled": "Terminalen är inaktiverad",
+    "disabledDescription": "Webbläsarterminalen är inaktiverad. Aktivera den under Inställningar → Säkerhet för att använda denna funktion.",
+    "connected": "Ansluten",
+    "disconnected": "Frånkopplad",
+    "connecting": "Ansluter...",
+    "connectionError": "Anslutning misslyckades",
+    "connectionClosed": "Anslutning stängd",
+    "securityWarning": "Varning: Denna terminal ger direkt skalåtkomst till värdsystemet. Aktivera den bara på betrodda nätverk.",
+    "copySelection": "Kopiera markering",
+    "expand": "Expandera",
+    "collapse": "Minimera",
+    "fullscreen": "Helskärm",
+    "exitFullscreen": "Avsluta helskärm",
+    "colorTheme": "Färgtema",
+    "themeDark": "Mörkt",
+    "themeLight": "Ljust",
+    "themeHighContrast": "Hög kontrast",
+    "detach": "Öppna i nytt fönster",
+    "detached": "Terminalen är frikopplad",
+    "detachedDescription": "Terminalen körs i ett separat fönster. Stäng det fönstret för att återställa den här.",
+    "reattach": "Återanslut"
+  },
+  "analytics": {
+    "title": "Översikt",
+    "loadingError": "Kunde inte ladda vissa analysdata. Försök igen senare.",
+    "stats": {
+      "totalDetections": "Totala detektioner",
+      "uniqueSpecies": "Unika arter",
+      "avgConfidence": "Snittkonfidens",
+      "mostCommon": "Vanligast",
+      "none": "Ingen",
+      "detections": "detektioner",
+      "totalSpecies": "Totala arter",
+      "overallAverage": "Totalt genomsnitt"
+    },
+    "periods": {
+      "today": "Idag",
+      "lastWeek": "Senaste 7 dagarna",
+      "lastMonth": "Senaste 30 dagarna",
+      "last90Days": "Senaste 90 dagarna",
+      "lastYear": "Senaste 12 månaderna",
+      "customRange": "Anpassat intervall",
+      "allTime": "Hela tiden"
+    },
+    "filters": {
+      "title": "Filtrera data",
+      "timePeriod": "Tidsperiod",
+      "from": "Från",
+      "to": "Till",
+      "sortBy": "Sortera efter",
+      "searchSpecies": "Sök arter",
+      "searchPlaceholder": "Sök efter namn...",
+      "reset": "Återställ",
+      "applyFilters": "Tillämpa filter",
+      "exportCsv": "Exportera CSV",
+      "species": "arter",
+      "filtered": "(filtrerat)"
+    },
+    "timePeriodOptions": {
+      "allTime": "Hela tiden",
+      "today": "Idag",
+      "lastWeek": "Senaste 7 dagarna",
+      "lastMonth": "Senaste 30 dagarna",
+      "last90Days": "Senaste 90 dagarna",
+      "lastYear": "Senaste 12 månaderna",
+      "customRange": "Anpassat intervall"
+    },
+    "sortOptions": {
+      "mostDetections": "Flest detektioner",
+      "fewestDetections": "Färst detektioner",
+      "nameAZ": "Namn (A-Ö)",
+      "nameZA": "Namn (Ö-A)",
+      "recentlyFirstSeen": "Nyligen först sedd",
+      "earliestFirstSeen": "Tidigast först sedd",
+      "recentlyLastSeen": "Nyligen senast sedd",
+      "highestConfidence": "Högst konfidens"
+    },
+    "charts": {
+      "top10Species": "Topp 10 arter",
+      "detectionsByTimeOfDay": "Detektioner efter tid på dygnet",
+      "detectionTrends": "Detektionstrender",
+      "newSpeciesDetected": "Nya arter detekterade",
+      "noNewSpecies": "Inga nya arter detekterade under denna period.",
+      "noDataAvailable": "Ingen data tillgänglig",
+      "numberOfDetections": "Antal detektioner",
+      "detections": "Detektioner",
+      "timePeriod": "Tidsperiod",
+      "dailyDetections": "Dagliga detektioner",
+      "date": "Datum",
+      "firstHeardOn": "Först hörd den",
+      "firstHeardDate": "Datum först hörd",
+      "firstHeard": "Först hörd"
+    },
+    "recentDetections": {
+      "title": "Senaste detektioner",
+      "headers": {
+        "dateTime": "Datum & tid",
+        "species": "Art",
+        "confidence": "Konfidens",
+        "timeOfDay": "Tid på dygnet"
+      },
+      "noRecentDetections": "Inga senaste detektioner hittades",
+      "unknownSpecies": "Okänd",
+      "unknown": "Okänd"
+    },
+    "species": {
+      "title": "Arter",
+      "subtitle": "Komplett lista över alla fågelarter som har detekterats",
+      "speciesList": "Artlista",
+      "switchToGrid": "Byt till rutnätsvy",
+      "switchToList": "Byt till listvy",
+      "noSpeciesFound": "Inga arter hittades som matchar dina filter.",
+      "headers": {
+        "species": "Art",
+        "detections": "Detektioner",
+        "avgConfidence": "Snittkonfidens",
+        "maxConfidence": "Maxkonfidens",
+        "firstDetected": "Först detekterad",
+        "lastDetected": "Senast detekterad"
+      },
+      "card": {
+        "detections": "Detektioner:",
+        "confidence": "Konfidens:",
+        "first": "Först:"
+      }
+    },
+    "advanced": {
+      "title": "Avancerad analys",
+      "chartControls": "Diagramkontroller",
+      "dateRange": "Datumintervall",
+      "chartOptions": "Diagramalternativ",
+      "speciesSelection": "Artval ({count}/{max})",
+      "speciesSelectionHint": "Sök eller klicka på etiketter nedan",
+      "speciesPlaceholder": "Sök och välj arter för analys...",
+      "noSpeciesFound": "Inga arter hittades för valt datumintervall",
+      "detections": "{count} detektioner",
+      "dateRangeOptions": {
+        "week": "Senaste veckan",
+        "month": "Senaste månaden",
+        "quarter": "Senaste kvartalet",
+        "year": "Senaste året",
+        "custom": "Anpassat intervall"
+      },
+      "options": {
+        "relativeTrends": "Relativa trender",
+        "zoomPan": "Zooma & panorera",
+        "brushSelection": "Penselmarkering"
+      },
+      "charts": {
+        "timeOfDay": {
+          "title": "Detektionsmönster efter tid på dygnet",
+          "description": "Visar genomsnittligt antal detektioner under dygnet för valda arter",
+          "noData": "Ingen data för tid på dygnet tillgänglig",
+          "noDataHint": "Välj arter och ett datumintervall för att visa mönster",
+          "axisTime": "Tid på dygnet",
+          "axisCount": "Antal detektioner"
+        },
+        "dailyTrend": {
+          "title": "Artdetektionstrender",
+          "description": "Visar detektionstrender över tid för valda arter",
+          "noData": "Ingen trenddata tillgänglig",
+          "noDataHint": "Välj arter och ett datumintervall för att visa trender",
+          "axisDate": "Datum",
+          "axisCount": "Antal detektioner",
+          "axisPercentage": "Andel av totala detektioner"
+        },
+        "diversity": {
+          "title": "Artdiversitet över tid",
+          "description": "Visar antalet unika arter detekterade per dag bland alla detektioner",
+          "noData": "Ingen diversitetsdata tillgänglig",
+          "noDataHint": "Välj ett datumintervall för att visa artdiversitetstrender",
+          "axisDate": "Datum",
+          "axisUniqueSpecies": "Unika arter"
+        },
+        "tooltips": {
+          "date": "Datum",
+          "percentage": "Andel",
+          "detections": "Detektioner",
+          "time": "Tid",
+          "species": "Art"
+        }
+      },
+      "categories": {
+        "birds": "Fåglar"
+      },
+      "filters": {
+        "startDate": "Startdatum",
+        "endDate": "Slutdatum"
+      },
+      "aria": {
+        "startDate": "Startdatum",
+        "endDate": "Slutdatum",
+        "loadingAnalytics": "Laddar analysdata",
+        "loadingTrends": "Laddar trenddata",
+        "loadingDiversity": "Laddar diversitetsdata"
+      }
+    },
+    "errors": {
+      "loadFailed": "Kunde inte ladda analysdata. Försök igen."
+    }
+  },
+  "settings": {
+    "title": "Inställningar - BirdNET-Go",
+    "loading": "Laddar inställningar...",
+    "sections": {
+      "node": "Allmänt",
+      "userinterface": "Gränssnitt",
+      "audio": "Ljud",
+      "filters": "Filter",
+      "integration": "Integrationer",
+      "security": "Säkerhet",
+      "species": "Arter",
+      "notifications": "Aviseringar",
+      "support": "Support"
+    },
+    "notFound": {
+      "title": "Inställningar hittades inte",
+      "message": "Den begärda inställningssektionen \"{section}\" kunde inte hittas."
+    },
+    "actions": {
+      "save": "Spara ändringar",
+      "saving": "Sparar...",
+      "reset": "Återställ",
+      "resetAriaLabel": "Återställ alla ändringar",
+      "saveAriaLabel": "Spara ändringar",
+      "savingAriaLabel": "Sparar ändringar...",
+      "unsavedChanges": "Osparade ändringar",
+      "toolbar": "Inställningsåtgärder"
+    },
+    "errors": {
+      "loadFailed": "Kunde inte ladda inställningar",
+      "saveFailed": "Kunde inte spara inställningar",
+      "databaseStatsFailed": "Kunde inte ladda databasstatistik",
+      "csvDownloadFailed": "Kunde inte ladda ner CSV"
+    },
+    "card": {
+      "changed": "ändrad",
+      "changedAriaLabel": "Inställningar ändrade"
+    },
+    "tabs": {
+      "navigation": "Navigeringsflikar för inställningar",
+      "hasChanges": "Denna flik har osparade ändringar",
+      "setAsDefault": "Ange som standard",
+      "defaultIndicator": "Standardingångskälla"
+    },
+    "main": {
+      "tabs": {
+        "general": "Allmänt",
+        "detection": "Detektion",
+        "location": "Plats",
+        "database": "Databas"
+      },
+      "sections": {
+        "main": {
+          "title": "Huvudinställningar",
+          "description": "Konfigurera huvudsakliga applikationsinställningar"
+        },
+        "birdnet": {
+          "title": "BirdNET-inställningar",
+          "description": "Konfigurera BirdNET AI-modellspecifika inställningar"
+        },
+        "ui": {
+          "title": "Inställningar för användargränssnitt",
+          "description": "Anpassa användargränssnittet"
+        },
+        "customClassifier": {
+          "title": "Anpassad BirdNET-klassificerare",
+          "description": "Konfigurera anpassad BirdNET-modell och etikettfiler för specialiserad detektion",
+          "modelPath": {
+            "label": "Modellsökväg (Kräver omstart för att verkställas)",
+            "placeholder": "Sökväg till modellfil",
+            "helpText": "Sökväg till extern BirdNET-modellfil. Ange absolut eller relativ sökväg till birdnet-go-binären. Lämna tomt för att använda den inbyggda standardmodellen."
+          },
+          "labelPath": {
+            "label": "Etikettsökväg (Kräver omstart för att verkställas)",
+            "placeholder": "Sökväg till etikettfil",
+            "helpText": "Sökväg till extern modelletikettfil, .zip- eller .txt-fil. Ange absolut eller relativ sökväg till birdnet-go-binären. Lämna tomt för att använda de inbyggda standardetiketterna."
+          }
+        },
+        "dynamicThreshold": {
+          "title": "Dynamiskt tröskelvärde",
+          "description": "Justera detektionskänsligheten automatiskt baserat på tidigare observationer",
+          "enable": {
+            "label": "Aktivera dynamiskt tröskelvärde (BirdNET-Go-specifik funktion)",
+            "helpText": "Aktiverar funktionen för dynamiskt konfidenströskelvärde för mer adaptiv fågellätedetektering."
+          },
+          "trigger": {
+            "label": "Utlösningströskelvärde",
+            "helpText": "Konfidensnivån vid vilken det dynamiska tröskelvärdet aktiveras. Om ett fågelläte detekteras med konfidens över detta värde sänks tröskelvärdet för positiva matchningar av den arten för efterföljande läten."
+          },
+          "minimum": {
+            "label": "Minsta dynamiskt tröskelvärde",
+            "helpText": "Det lägsta värdet som det dynamiska tröskelvärdet kan sänkas till. Detta säkerställer att tröskelvärdet inte sjunker under en oönskad nivå."
+          },
+          "expireTime": {
+            "label": "Förfallotid för dynamiskt tröskelvärde (timmar)",
+            "helpText": "Antal timmar som justeringarna av det dynamiska tröskelvärdet förblir giltiga. Efter denna period återställs det dynamiska tröskelvärdet."
+          }
+        },
+        "falsePositiveFilter": {
+          "title": "Falskpositivfilter",
+          "description": "Minska felaktiga detektioner genom att kräva flera bekräftelser över överlappande ljudsegment",
+          "level": {
+            "label": "Filternivå"
+          },
+          "detectionCount": "{count} bekräftelser krävs. {description}",
+          "levels": {
+            "off": "Ingen filtrering – accepterar första detektionen omedelbart",
+            "lenient": "För ljud med låg kvalitet (RTSP-kameror, webbkameramikrofoner)",
+            "moderate": "Balanserad för typiska hobbyuppställningar",
+            "balanced": "Ursprungligt beteende före september 2025",
+            "strict": "RPi 4+ krävs. För högkvalitativa mikrofoner",
+            "maximum": "RPi 4+ krävs. För professionella mikrofoner"
+          },
+          "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
+          "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
+          "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån"
+        },
+        "rangeFilter": {
+          "title": "Områdesfilter",
+          "description": "Begränsa detektion till arter som är sannolika i ditt geografiska område",
+          "stationLocation": {
+            "label": "Stationsplats",
+            "helpText": "Stationsplats, används för väderdata och för att begränsa fågelarter till de som är sannolika i regionen."
+          },
+          "latitude": {
+            "label": "Latitud",
+            "helpText": "Stationens latitud, används för väderdata och artområdesfiltrering."
+          },
+          "longitude": {
+            "label": "Longitud",
+            "helpText": "Stationens longitud, används för väderdata och artområdesfiltrering."
+          },
+          "model": {
+            "label": "Områdesfiltermodell",
+            "helpText": "BirdNET områdesfiltermodellversion: senaste eller äldre."
+          },
+          "threshold": {
+            "label": "Tröskelvärde",
+            "helpText": "Styr vilka arter som inkluderas baserat på deras förekomstsannolikhet för din plats och tid på året. Standardvärdet (0.01) rekommenderas för de flesta användare. Högre värden (0.05-0.3) inkluderar färre arter med högre förekomstsannolikhet. Mycket höga värden (0.5+) inkluderar bara de vanligaste arterna."
+          },
+          "speciesCount": {
+            "label": "Aktuellt artantal",
+            "helpText": "Antal arter som ingår i områdesfiltret. Uppdateras automatiskt när tröskelvärde, latitud eller longitud ändras.",
+            "loading": "Laddar...",
+            "viewSpecies": "Visa arter"
+          },
+          "downloadTitle": "Ladda ner artlista som CSV",
+          "csvDownloaded": "Artlista nedladdad",
+          "csvDownloadFailed": "Kunde inte ladda ner artlista. Försök igen.",
+          "modal": {
+            "title": "Arter i områdesfiltret",
+            "speciesCount": "Artantal:",
+            "threshold": "Tröskelvärde:",
+            "latitude": "Latitud:",
+            "longitude": "Longitud:",
+            "loadingSpecies": "Laddar arter...",
+            "noSpeciesFound": "Inga arter hittades med aktuella inställningar",
+            "close": "Stäng"
+          }
+        },
+        "database": {
+          "title": "Databasinställningar",
+          "description": "Inställningar för detektionsdatabasen",
+          "type": {
+            "label": "Välj databastyp",
+            "helpText": "Välj vilken databastyp som ska användas för att lagra detektioner."
+          },
+          "sqlite": {
+            "title": "SQLite-konfiguration",
+            "description": "Konfigurera plats för SQLite-databasfilen",
+            "note": "SQLite är den rekommenderade databastypen för de flesta användare.",
+            "path": {
+              "label": "SQLite-databassökväg",
+              "placeholder": "Ange SQLite-databassökväg",
+              "helpText": "Sökväg till SQLite-databasfilen relativt till applikationskatalogen"
+            }
+          },
+          "mysql": {
+            "title": "MySQL-konfiguration",
+            "description": "Konfigurera anslutningsinställningar för MySQL-databasserver",
+            "host": {
+              "label": "MySQL-värd",
+              "placeholder": "Ange MySQL-värd",
+              "helpText": "MySQL-databasvärd (IP eller värdnamn)"
+            },
+            "port": {
+              "label": "MySQL-port",
+              "helpText": "MySQL-databasport (standard 3306/TCP)"
+            },
+            "username": {
+              "label": "MySQL-användarnamn",
+              "placeholder": "Ange MySQL-användarnamn",
+              "helpText": "MySQL-databasanvändarnamn"
+            },
+            "password": {
+              "label": "MySQL-lösenord",
+              "placeholder": "Ange MySQL-lösenord",
+              "helpText": "MySQL-databaslösenord"
+            },
+            "database": {
+              "label": "MySQL-databas",
+              "placeholder": "Ange MySQL-databasnamn",
+              "helpText": "MySQL-databasnamn"
+            }
+          },
+          "stats": {
+            "title": "Databasstatistik",
+            "description": "Körningsinformation om din databas",
+            "loading": "Laddar databasstatistik...",
+            "retry": "Försök igen",
+            "refresh": "Uppdatera",
+            "noData": "Ingen databasstatistik tillgänglig.",
+            "type": "Typ",
+            "status": "Status",
+            "size": "Storlek",
+            "totalDetections": "Totalt antal detektioner",
+            "location": "Plats",
+            "connected": "Ansluten",
+            "disconnected": "Frånkopplad"
+          },
+          "errors": {
+            "backupStartFailed": "Kunde inte starta säkerhetskopiering",
+            "backupStatusFailed": "Kunde inte hämta status för säkerhetskopiering",
+            "backupFailed": "Säkerhetskopieringen misslyckades",
+            "backupDownloadFailed": "Kunde inte ladda ner säkerhetskopia"
+          }
+        },
+        "interface": {
+          "title": "Gränssnitt",
+          "description": "Konfigurera språk, visningsinställningar och instrumentpanelsbegränsningar"
+        },
+        "visualContent": {
+          "title": "Visuellt innehåll",
+          "description": "Konfigurera visningsalternativ för fågelbilder och spektrogram"
+        },
+        "userInterface": {
+          "title": "Inställningar för användargränssnitt",
+          "description": "Anpassa användargränssnittet",
+          "interface": {
+            "title": "Gränssnittsinställningar",
+            "description": "Välj ditt föredragna språk",
+            "locale": {
+              "label": "Visningsspråk",
+              "helpText": "Välj språk för användargränssnittet"
+            }
+          },
+          "language": {
+            "title": "Språk",
+            "description": "Konfigurera visningsspråket för användargränssnittet",
+            "locale": {
+              "label": "Gränssnittsspråk",
+              "helpText": "Välj språk för användargränssnittet"
+            }
+          },
+          "dashboard": {
+            "title": "Instrumentpanelsvisning",
+            "description": "Konfigurera hur detektioner visas på instrumentpanelen",
+            "displaySettings": {
+              "title": "Visningsinställningar",
+              "description": "Konfigurera allmänna visningsalternativ för instrumentpanelen som artbegränsningar."
+            },
+            "birdImages": {
+              "title": "Fågelbilder",
+              "description": "Konfigurera miniatyrbilder för fågelarter i detektionslistor."
+            },
+            "spectrogramGeneration": {
+              "title": "Spektrogramgenerering",
+              "description": "Konfigurera när och hur ljudspektrogram genereras för detektioner."
+            },
+            "general": {
+              "title": "Allmänna inställningar"
+            },
+            "summaryLimit": {
+              "label": "Max antal arter i daglig sammanfattningstabell",
+              "helpText": "Max antal arter som visas i den dagliga sammanfattningstabellen (Värde mellan 10 och 1000)"
+            },
+            "thumbnails": {
+              "title": "Miniatyrbildsvisning",
+              "summary": {
+                "label": "Visa miniatyrbilder i daglig sammanfattningstabell",
+                "helpText": "Aktivera för att visa miniatyrbilder av detekterade arter i den dagliga sammanfattningstabellen"
+              },
+              "recent": {
+                "label": "Visa miniatyrbilder i listan över senaste detektioner",
+                "helpText": "Aktivera för att visa miniatyrbilder av detekterade arter i listan över senaste detektioner"
+              },
+              "imageProvider": {
+                "label": "Bildleverantör",
+                "helpText": "Välj föredragen bildleverantör för fågelminiatyrbilder"
+              },
+              "fallbackPolicy": {
+                "label": "Reservpolicy",
+                "helpText": "Välj vad som händer när den föredragna leverantören inte hittar en bild",
+                "options": {
+                  "all": "Prova alla leverantörer i ordning",
+                  "none": "Använd bara vald leverantör"
+                }
+              }
+            },
+            "spectrogram": {
+              "title": "Spektrogramgenerering",
+              "mode": {
+                "label": "Genereringsläge",
+                "auto": {
+                  "label": "Automatiskt (Rekommenderat)",
+                  "helpText": "Spektrogram genereras automatiskt när detektionen visas i användargränssnittet. För långa detektionslistor kan spektrogramgenereringen ta lång tid på system med begränsade CPU-resurser."
+                },
+                "prerender": {
+                  "label": "Förrendera i bakgrunden",
+                  "helpText": "Generera spektrogram automatiskt vid sparning av ljudklipp. På resursbegränsade system som Raspberry Pi Zero eller 3 ger detta ett mer responsivt användargränssnitt eftersom spektrogram renderas i bakgrunden, men detta läge förbrukar mer diskutrymme då spektrogram skapas för varje detektion."
+                },
+                "userRequested": {
+                  "label": "Bara på begäran",
+                  "helpText": "Generera spektrogram bara när du klickar på genereringsknappen. Perfekt för resursbegränsade system (Raspberry Pi 3/Zero) – ingen automatisk belastning, du styr när CPU:n används."
+                }
+              },
+              "style": {
+                "label": "Spektrogramstil",
+                "helpText": "Välj visuellt utseende för genererade spektrogram.",
+                "preview": "Förhandsgranskning",
+                "previewAlt": "Förhandsgranskning av spektrogramstil",
+                "options": {
+                  "default": "Standard (Färgrik)",
+                  "scientificDark": "Vetenskaplig (Mörk)",
+                  "highContrastDark": "Hög kontrast (Mörk)",
+                  "scientific": "Vetenskaplig (Ljus)"
+                },
+                "descriptions": {
+                  "default": "Färgrikt spektrogram med mörk bakgrund",
+                  "scientificDark": "Gråskala med Dolph-fönster, mörk bakgrund",
+                  "highContrastDark": "Hög färgmättnad med mörk bakgrund",
+                  "scientific": "Gråskala med Dolph-fönster, ljus bakgrund (xeno-canto-stil)"
+                }
+              },
+              "dynamicRange": {
+                "label": "Dynamiskt omfång",
+                "helpText": "Styr kontrasten – lägre värden gör svaga signaler tydligare, högre värden visar mer detaljer.",
+                "options": {
+                  "highContrast": "Hög kontrast (80 dB)",
+                  "standard": "Standard (100 dB)",
+                  "extended": "Utökat (120 dB)"
+                },
+                "descriptions": {
+                  "highContrast": "Bäst för svaga signaler. Fågelläten framträder tydligt mot bakgrundsbruset. Rekommenderas för vetenskapliga/gråskalestilar.",
+                  "standard": "Standardbalanserad inställning. Bra för de flesta användningsfall.",
+                  "extended": "Mer detaljer synliga men lägre kontrast. SoX standardvärde."
+                }
+              },
+              "enabled": {
+                "label": "Aktivera förrendering av spektrogram",
+                "helpText": "FÖRÅLDRAD: Använd genereringsläge istället. Generera spektrogram i bakgrunden när detektioner sparas för att eliminera fördröjning i gränssnittet."
+              }
+            }
+          }
+        }
+      },
+      "fields": {
+        "nodeName": {
+          "label": "Nodnamn",
+          "placeholder": "Ange nodnamn",
+          "helpText": "Nodnamn används för att identifiera källsystemet i en flernodskonfiguration, används även som identifierare för MQTT-meddelanden."
+        },
+        "sensitivity": {
+          "label": "Känslighet",
+          "helpText": "Detektionskänslighet. Högre värden ger högre känslighet. Värden mellan 0.5 och 1.5."
+        },
+        "threshold": {
+          "label": "Tröskelvärde",
+          "helpText": "Minsta konfidenströskelvärde. Värden mellan 0.01 och 0.99."
+        },
+        "overlap": {
+          "label": "Överlappning",
+          "helpText": "Överlappning av prediktionssegment. Värden mellan 0.0 och 2.9."
+        },
+        "locale": {
+          "label": "Språk",
+          "helpText": "Språk för översatta artnamn."
+        },
+        "tensorflowThreads": {
+          "label": "TensorFlow CPU-trådar",
+          "helpText": "Antal CPU-trådar. Ange 0 för att använda alla tillgängliga trådar."
+        }
+      },
+      "errors": {
+        "localesLoadFailed": "Kunde inte ladda språkalternativ. Använder standardvärden.",
+        "providersLoadFailed": "Kunde inte ladda bildleverantörer. Använder standardvärden.",
+        "rangeFilterTestFailed": "Kunde inte testa områdesfilterinställningar",
+        "rangeFilterLoadFailed": "Kunde inte ladda artlista",
+        "rangeFilterCountFailed": "Kunde inte ladda artantal",
+        "mapLibraryLoadFailed": "Kunde inte ladda kartbibliotek. Vänligen uppdatera sidan.",
+        "mapLoadFailed": "Kunde inte ladda kartan. Försök att uppdatera sidan.",
+        "modalMapLoadFailed": "Kunde inte ladda modalkartan. Försök att stänga och öppna modalen igen."
+      }
+    },
+    "support": {
+      "sections": {
+        "telemetry": {
+          "title": "Felspårning och telemetri",
+          "description": "Valfri felspårning för att förbättra BirdNET-Gos tillförlitlighet och prestanda"
+        },
+        "diagnostics": {
+          "title": "Support och diagnostik",
+          "description": "Hjälp utvecklare att åtgärda dina problem snabbare genom att tillhandahålla viktig diagnostikinformation"
+        }
+      },
+      "telemetry": {
+        "privacyNotice": "Integritetsmeddelande",
+        "privacyPoints": {
+          "noPersonalData": "Inga personuppgifter samlas in",
+          "anonymousData": "All telemetridata är anonym",
+          "helpImprove": "Telemetridata hjälper utvecklare att identifiera och åtgärda problem i BirdNET-Go"
+        },
+        "enableTracking": "Aktivera felspårning (frivilligt)"
+      },
+      "systemId": {
+        "label": "Ditt system-ID",
+        "description": "Använd detta ID när du rapporterar problem",
+        "copyButton": "Kopiera",
+        "errorLoading": "Fel vid laddning av system-ID"
+      },
+      "diagnostics": {
+        "includeRecentLogs": "Inkludera senaste loggar",
+        "includeConfiguration": "Inkludera konfiguration (känslig data borttagen)",
+        "includeSystemInfo": "Inkludera systeminformation"
+      },
+      "supportReport": {
+        "title": "Generera supportrapport",
+        "description": {
+          "intro": "Supportrapporter är **avgörande för felsökning** och förbättrar dramatiskt vår förmåga att lösa problem du upplever. De ger utvecklare viktigt sammanhang om din systemkonfiguration, senaste applikationsloggar och felmönster som annars vore omöjliga att diagnostisera."
+        },
+        "githubRequired": {
+          "title": "Krav: GitHub-ärende för supportuppladdningar",
+          "description": "<strong>Supportuppladdningar kräver ett GitHub-ärendenummer.</strong> Vänligen <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"underline font-semibold\">skapa ett GitHub-ärende</a> som beskriver ditt problem <strong>innan</strong> du genererar en supportrapport. Utan ett länkat ärende kan utvecklare inte agera på din supportdata."
+        },
+        "githubIssue": {
+          "label": "GitHub-ärendenummer",
+          "placeholder": "t.ex. 123 eller #123",
+          "helper": "<a href=\"https://github.com/tphakala/birdnet-go/issues\" target=\"_blank\" class=\"link link-primary\">Visa befintliga ärenden</a> eller <a href=\"https://github.com/tphakala/birdnet-go/issues/new\" target=\"_blank\" class=\"link link-primary\">skapa ett nytt ärende</a> först"
+        },
+        "whatsIncluded": {
+          "title": "Vad som ingår i rapporten:",
+          "applicationLogs": "**Applikationsloggar** – Senaste fel och felsökningsinformation",
+          "configuration": "**Konfiguration** – Dina inställningar med känslig data borttagen",
+          "systemInfo": "**Systeminformation** – OS-version, minne och körtidsdetaljer",
+          "notIncluded": "**INGÅR INTE** – Ljudfiler, fågeldetektioner eller personuppgifter"
+        },
+        "userMessage": {
+          "label": "Beskriv problemet",
+          "placeholder": "Beskriv problemet och inkludera GitHub-ärendelänk om tillämpligt (t.ex. #123)",
+          "githubTip": "💡 Tips: Om du har ett GitHub-ärende, inkludera ärendenumret (t.ex. #123) och nämn ditt system-ID {systemId} i GitHub-ärendet för att hjälpa utvecklare att koppla ihop din supportdata.",
+          "labelOptional": "Ytterligare detaljer (valfritt)",
+          "placeholderOptional": "Ge eventuellt ytterligare sammanhang om problemet som inte finns i ditt GitHub-ärende",
+          "systemIdNote": "💡 Tips: Ditt system-ID {systemId} inkluderas automatiskt i uppladdningen"
+        },
+        "uploadOption": {
+          "label": "Ladda upp till utvecklare (rekommenderas)",
+          "labelWithRequirement": "Ladda upp till utvecklare (kräver GitHub-ärendenummer)",
+          "details": {
+            "sentryUpload": "Data laddas upp till [Sentry](https://sentry.io) molntjänst",
+            "euDataCenter": "Lagras i EU-datacenter (Frankfurt, Tyskland)",
+            "privacyCompliant": "Integritetssäkert med känslig data borttagen",
+            "manualWarning": "Avmarkera bara om du föredrar att hantera supportfilen manuellt"
+          }
+        },
+        "generateButton": {
+          "upload": "Generera och ladda upp",
+          "download": "Generera och ladda ner"
+        },
+        "statusMessages": {
+          "preparing": "Förbereder supportdump...",
+          "uploadSuccess": "Supportdump har laddats upp till utvecklare!",
+          "uploadSuccessWithId": "Supportdump har laddats upp till utvecklare! Referens-ID: {dumpId}",
+          "downloadSuccess": "Supportdump genererad! Laddar ner...",
+          "generateSuccess": "Supportdump genererad!",
+          "generateFailed": "Kunde inte generera supportdump: {message}",
+          "error": "Fel: {message}",
+          "githubIssueRequired": "Ange ett GitHub-ärendenummer för att ladda upp supportdata"
+        }
+      }
+    },
+    "notifications": {
+      "tabs": {
+        "channels": "Kanaler",
+        "rules": "Regler",
+        "history": "Historik"
+      },
+      "rules": {
+        "summary": {
+          "active": "aktiva",
+          "builtIn": "inbyggda",
+          "total": "totalt"
+        }
+      },
+      "sections": {
+        "testing": {
+          "title": "Testa aviseringar",
+          "description": "Skicka testaviseringar för att verifiera att ditt aviseringssystem fungerar korrekt"
+        },
+        "info": {
+          "title": "Systeminformation",
+          "description": "Lär dig hur du visar och hanterar dina aviseringar"
+        }
+      },
+      "templates": {
+        "title": "Aviseringsmallar",
+        "description": "Anpassa aviseringsmeddelanden för nya artdetektioner med hjälp av mallvariabler",
+        "newSpeciesTitle": "Aviseringsmall för ny art",
+        "titleLabel": "Titelmall",
+        "titlePlaceholder": "t.ex. Ny art: {{.CommonName}}",
+        "messageLabel": "Meddelandemall",
+        "messagePlaceholder": "t.ex. Första detektion av {{.CommonName}}  ({{.ScientificName}})  med {{.ConfidencePercent}}% konfidens",
+        "resetButton": "Återställ",
+        "saveButton": "Spara mallar",
+        "saveButtonUnsaved": "Spara mallar *",
+        "testButton": "Testa",
+        "savingButton": "Sparar...",
+        "sendingButton": "Skickar...",
+        "resetConfirm": "Återställ mallar till standardvärden? Detta förkastar dina aktuella ändringar och återställer standardmallvärdena.",
+        "unsavedChangesWarning": "Du har osparade malländringar. Testet kommer att använda de sparade mallarna, inte dina redigeringar. Fortsätta?",
+        "testWithUnsavedChanges": "Varning: Du har osparade ändringar. Testet använder sparade mallar.",
+        "testNormal": "Skicka en testavisering",
+        "saveSuccess": "Mallar sparade!",
+        "saveError": "Fel: {message}",
+        "availableVariables": "Tillgängliga mallvariabler",
+        "variablesDescription": "Använd dessa variabler i dina mallar med syntaxen",
+        "loading": "Laddar...",
+        "fields": {
+          "commonName": "Fågelns allmänna namn (t.ex. \"Nordkardinal\")",
+          "scientificName": "Vetenskapligt namn (t.ex. \"Cardinalis cardinalis\")",
+          "confidence": "Konfidensvärde (0.0 till 1.0)",
+          "confidencePercent": "Konfidens i procent (t.ex. \"99\")",
+          "detectionTime": "Tidpunkt för detektion (t.ex. \"14:30:45\")",
+          "detectionDate": "Datum för detektion (t.ex. \"2024-10-05\")",
+          "latitude": "GPS-latitudkoordinat",
+          "longitude": "GPS-longitudkoordinat",
+          "location": "Formaterade koordinater (t.ex. \"42.360100, -71.058900\")",
+          "detectionId": "Detektions-ID-nummer (t.ex. \"1234\")",
+          "detectionPath": "Relativ sökväg till detektion (t.ex. \"/ui/detections/1234\")",
+          "detectionUrl": "Fullständig URL till detektion i gränssnittet",
+          "imageUrl": "Länk till artbild",
+          "daysSinceFirstSeen": "Antal dagar sedan första detektionen"
+        }
+      },
+      "testNotification": {
+        "title": "Skicka testavisering för ny art",
+        "description": "Generera en testavisering för en ny artdetektion för att verifiera att ditt aviseringssystem fungerar",
+        "whatHappens": "Vad som händer när du klickar på 'Skicka test':",
+        "sendButton": "Skicka test",
+        "sendingButton": "Skickar...",
+        "statusMessages": {
+          "sending": "Skickar testavisering...",
+          "success": "Testavisering skickad! Kontrollera din aviseringsklocka.",
+          "error": "Kunde inte skicka testavisering: {message}",
+          "serviceUnavailable": "Aviseringstjänsten är inte tillgänglig. Kontrollera dina aviseringsinställningar."
+        }
+      },
+      "statusMessages": {
+        "sending": "Skickar testavisering...",
+        "success": "Testavisering skickad!",
+        "error": "Kunde inte skicka testavisering: {message}",
+        "serviceUnavailable": "Aviseringstjänsten är inte tillgänglig. Kontrollera dina aviseringsinställningar."
+      },
+      "systemInfo": {
+        "howToView": "Så här visar du aviseringar:",
+        "technicalDetails": "Tekniska detaljer om aviseringar i BirdNET-Go:"
+      },
+      "privacy": {
+        "title": "Integritetsmeddelande för externa webhookar",
+        "description": "Detektionsaviseringar kan innehålla känslig data när de skickas till externa tjänster:",
+        "gps": "GPS-koordinater",
+        "gpsDetails": "Exakt plats (latitud/longitud) om konfigurerad",
+        "urls": "Detektions-URL:er",
+        "urlsDetails": "Kan exponera intern nätverksinformation",
+        "species": "Artdata",
+        "speciesDetails": "Vilka fåglar som detekterades och när",
+        "recommendation": "Aktivera bara externa webhookar om du litar på den mottagande tjänsten eller använder själv-hostade/lokala tjänster."
+      },
+      "push": {
+        "title": "Push-aviseringar",
+        "description": "Skicka aviseringar till externa tjänster som Discord, Telegram, Slack med mera",
+        "enable": "Aktivera push-aviseringar",
+        "disabled": "Push-aviseringar är inaktiverade",
+        "enabledDescription": "Push-aviseringar skickas till alla aktiverade leverantörer nedan",
+        "filters": {
+          "title": "Detektionsfilter",
+          "description": "Styr vilka fågeldetektioner som utlöser push-aviseringar",
+          "minConfidence": {
+            "label": "Minsta konfidens",
+            "helpText": "Skicka bara aviseringar för detektioner över denna konfidensnivå. Ange 0 för att inaktivera."
+          },
+          "speciesCooldown": {
+            "label": "Artavkylning",
+            "unit": "min",
+            "helpText": "Förhindra upprepade aviseringar för samma art inom detta tidsfönster. Ange 0 för att inaktivera."
+          }
+        },
+        "noProviders": "Inga leverantörer konfigurerade",
+        "noProvidersDescription": "Lägg till en leverantör för att börja ta emot push-aviseringar",
+        "providers": {
+          "title": "Aviseringsleverantörer",
+          "addButton": "Lägg till leverantör",
+          "editButton": "Redigera",
+          "deleteButton": "Ta bort",
+          "enableToggle": "Aktivera leverantör",
+          "urlsPreview": "{count} URL:er konfigurerade",
+          "deleteConfirm": "Ta bort leverantören \"{name}\"? Denna åtgärd kan inte ångras.",
+          "typeBadge": {
+            "shoutrrr": "Shoutrrr",
+            "webhook": "Webhook"
+          }
+        },
+        "form": {
+          "addTitle": "Lägg till aviseringsleverantör",
+          "editTitle": "Redigera aviseringsleverantör",
+          "name": {
+            "label": "Leverantörsnamn",
+            "placeholder": "t.ex. Discord-aviseringar",
+            "helpText": "Ett vänligt namn för att identifiera denna leverantör"
+          },
+          "urls": {
+            "label": "Tjänst-URL:er",
+            "placeholder": "discord://token@webhookid",
+            "helpText": "Ange en Shoutrrr-URL per rad. Flera URL:er skickar till flera tjänster.",
+            "validation": {
+              "required": "Minst en URL krävs",
+              "invalidFormat": "Ogiltigt URL-format. URL:er ska börja med ett tjänstprefix (t.ex. discord://, telegram://)"
+            }
+          },
+          "notificationTypes": {
+            "label": "Aviseringstyper",
+            "helpText": "Välj vilka typer av aviseringar som ska skickas till denna leverantör",
+            "detection": "Fågeldetektioner",
+            "error": "Fel",
+            "warning": "Varningar",
+            "info": "Information",
+            "system": "Systemhändelser"
+          },
+          "urlFormats": {
+            "title": "Vanliga URL-format",
+            "discord": "Discord",
+            "discordFormat": "discord://token@webhookid",
+            "telegram": "Telegram",
+            "telegramFormat": "telegram://token@telegram?chats=@channel",
+            "slack": "Slack",
+            "slackFormat": "slack://token-a/token-b/token-c",
+            "pushover": "Pushover",
+            "pushoverFormat": "pushover://shoutrrr:apiToken@userKey",
+            "gotify": "Gotify",
+            "gotifyFormat": "gotify://hostname/token",
+            "ntfy": "ntfy",
+            "ntfyFormat": "ntfy://ntfy.sh/mytopic",
+            "moreServices": "Visa alla tjänster som stöds",
+            "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
+          },
+          "saveButton": "Spara leverantör",
+          "savingButton": "Sparar...",
+          "cancelButton": "Avbryt",
+          "testButton": "Testa",
+          "testingButton": "Testar..."
+        },
+        "test": {
+          "button": "Testa leverantör",
+          "description": "Skicka en testavisering för att verifiera att denna leverantör fungerar",
+          "success": "Testavisering skickad!",
+          "error": "Testet misslyckades: {message}",
+          "requiresUrl": "Ange en URL att testa",
+          "requiresEnabled": "Aktivera leverantören för att testa"
+        },
+        "validation": {
+          "nameRequired": "Leverantörsnamn krävs",
+          "urlRequired": "Minst en URL krävs",
+          "invalidUrl": "Ogiltigt URL-format"
+        },
+        "autoName": {
+          "discord": "Discord",
+          "telegram": "Telegram",
+          "slack": "Slack",
+          "pushover": "Pushover",
+          "gotify": "Gotify",
+          "ntfy": "ntfy",
+          "email": "E-post",
+          "generic": "Shoutrrr",
+          "numbered": "{service} #{number}"
+        },
+        "services": {
+          "selectLabel": "Tjänst",
+          "selectHelpText": "Välj en aviseringstjänst att konfigurera",
+          "discord": {
+            "name": "Discord",
+            "webhookUrl": {
+              "label": "Discord Webhook-URL",
+              "placeholder": "https://discord.com/api/webhooks/...",
+              "helpText": "Klistra in din fullständiga Discord webhook-URL"
+            },
+            "invalidUrl": "Ogiltig Discord webhook-URL. URL:en ska innehålla discord.com/api/webhooks/"
+          },
+          "telegram": {
+            "name": "Telegram",
+            "botToken": {
+              "label": "Bot-token",
+              "placeholder": "123456789:ABCdef...",
+              "helpText": "Token från @BotFather"
+            },
+            "chatId": {
+              "label": "Chatt-ID",
+              "placeholder": "-1001234567890 eller @channel",
+              "helpText": "Chatt-ID, grupp-ID eller @användarnamn"
+            },
+            "incomplete": "Både bot-token och chatt-ID krävs"
+          },
+          "ntfy": {
+            "name": "ntfy",
+            "server": {
+              "label": "Server",
+              "placeholder": "ntfy.sh",
+              "helpText": "Lämna som ntfy.sh för publik server eller ange din själv-hostade server"
+            },
+            "protocol": {
+              "label": "Protokoll"
+            },
+            "testConnection": "Testa anslutning",
+            "connectionOk": {
+              "https": "HTTPS fungerar",
+              "http": "HTTP fungerar – servern använder inte HTTPS"
+            },
+            "connectionFailed": "Kunde inte ansluta – kontrollera värdnamn och serverstatus",
+            "auth": {
+              "label": "Autentisering (valfritt)",
+              "username": {
+                "label": "Användarnamn",
+                "placeholder": "admin"
+              },
+              "password": {
+                "label": "Lösenord / Åtkomsttoken",
+                "placeholder": "tk_AgQdq7mVBoFD37zQVN29RioLJNGht"
+              }
+            },
+            "topic": {
+              "label": "Ämne",
+              "placeholder": "my-bird-alerts",
+              "helpText": "Ämnesnamn för dina aviseringar"
+            },
+            "incomplete": "Ämne krävs"
+          },
+          "gotify": {
+            "name": "Gotify",
+            "server": {
+              "label": "Server-URL",
+              "placeholder": "gotify.example.com",
+              "helpText": "Ditt Gotify-servervärdnamn (utan https://)"
+            },
+            "token": {
+              "label": "Applikationstoken",
+              "placeholder": "A...",
+              "helpText": "Token från Gotifys Apps-sida"
+            },
+            "incomplete": "Server och token krävs"
+          },
+          "pushover": {
+            "name": "Pushover",
+            "apiToken": {
+              "label": "API-token",
+              "placeholder": "az...",
+              "helpText": "Applikationens API-token"
+            },
+            "userKey": {
+              "label": "Användarnyckel",
+              "placeholder": "u...",
+              "helpText": "Din användar- eller gruppnyckel"
+            },
+            "incomplete": "API-token och användarnyckel krävs"
+          },
+          "slack": {
+            "name": "Slack",
+            "webhookUrl": {
+              "label": "Slack Webhook-URL",
+              "placeholder": "https://hooks.slack.com/services/...",
+              "helpText": "Klistra in din fullständiga Slack webhook-URL"
+            },
+            "invalidUrl": "Ogiltig Slack webhook-URL. URL:en ska innehålla hooks.slack.com/services/"
+          },
+          "ifttt": {
+            "name": "IFTTT",
+            "webhookKey": {
+              "label": "Webhook-nyckel",
+              "placeholder": "abc123xyz...",
+              "helpText": "Din IFTTT Webhook-nyckel från Maker Webhooks-inställningarna"
+            },
+            "eventName": {
+              "label": "Händelsenamn",
+              "placeholder": "bird_detected",
+              "helpText": "Händelsenamnet som utlöser din IFTTT-applet"
+            },
+            "incomplete": "Webhook-nyckel och händelsenamn krävs"
+          },
+          "webhook": {
+            "name": "Webhook",
+            "url": {
+              "label": "Webhook-URL",
+              "placeholder": "https://api.example.com/webhook",
+              "helpText": "HTTP(S)-slutpunkten att skicka aviseringar till"
+            },
+            "method": {
+              "label": "HTTP-metod",
+              "helpText": "HTTP-metod att använda för begäran (standard: POST)"
+            },
+            "auth": {
+              "label": "Autentisering",
+              "none": "Ingen",
+              "bearer": "Bearer-token",
+              "basic": "Basic Auth",
+              "helpText": "Valfri autentisering för webhook-slutpunkten"
+            },
+            "bearerToken": {
+              "label": "Bearer-token",
+              "placeholder": "your-api-token",
+              "helpText": "Token som skickas i Authorization: Bearer-huvudet"
+            },
+            "basicUser": {
+              "label": "Användarnamn",
+              "placeholder": "username"
+            },
+            "basicPass": {
+              "label": "Lösenord",
+              "placeholder": "password"
+            },
+            "basicAuth": {
+              "helpText": "Autentiseringsuppgifter skickas via HTTP Basic Authentication"
+            },
+            "invalidUrl": "Ogiltig URL. Måste börja med http:// eller https://",
+            "tokenRequired": "Bearer-token krävs vid användning av Bearer-autentisering",
+            "credentialsRequired": "Användarnamn och lösenord krävs vid användning av Basic-autentisering"
+          },
+          "custom": {
+            "name": "Anpassad URL",
+            "url": {
+              "label": "Shoutrrr-URL",
+              "placeholder": "service://credentials@host",
+              "helpText": "Ange en rå Shoutrrr-URL för valfri tjänst som stöds"
+            },
+            "invalidUrl": "Ogiltigt URL-format. URL:en ska börja med service://"
+          }
+        }
+      }
+    },
+    "filters": {
+      "title": "Filter",
+      "privacyFiltering": {
+        "title": "Integritetsfiltrering",
+        "description": "Integritetsfiltrering undviker att spara ljudklipp när mänskliga röster detekteras",
+        "enable": "Aktivera integritetsfiltrering",
+        "disabled": "Integritetsfiltrering är inaktiverad",
+        "confidenceLabel": "Konfidenströskelvärde för mänsklig detektering",
+        "confidenceHelp": "Ange konfidensnivå för detektering av mänsklig röst, lägre värde gör filtret känsligare"
+      },
+      "falsePositivePrevention": {
+        "title": "Förebyggande av falska positiva",
+        "description": "Konfigurera filter för felaktiga detektioner",
+        "enableDogBark": "Aktivera hundskallsfilter",
+        "disabled": "Hundskallsfiltret är inaktiverat",
+        "confidenceLabel": "Konfidenströskelvärde",
+        "confidenceHelp": "Ange konfidensnivå för detektering av hundskall, lägre värde gör filtret känsligare",
+        "expireTimeLabel": "Förfallotid för hundskall (minuter)",
+        "expireTimeHelp": "Ange hur länge ett detekterat hundskall ska sparas i minnet",
+        "addDogBarkSpeciesLabel": "Lägg till hundskallsart",
+        "addDogBarkSpeciesHelp": "Sök och lägg till arter som kan förväxlas med hundskall",
+        "addSpeciesButton": "Lägg till"
+      },
+      "speciesNamePlaceholder": "Artnamn",
+      "typeSpeciesName": "Skriv artnamn...",
+      "dogBarkSpeciesList": "Lista över hundskallsarter",
+      "daylightFilter": {
+        "title": "Dagsljusfilter",
+        "description": "Filtrera bort detektioner av nattaktiva arter under dygnets ljusa timmar. Använder civil gryning/skymning från din konfigurerade plats.",
+        "enable": "Aktivera dagsljusfilter",
+        "disabled": "Dagsljusfiltret är inaktiverat",
+        "offsetLabel": "Dagsljusfönsterförskjutning (timmar)",
+        "offsetHelp": "Justera dagsljusfönstret. Positiva värden krymper det (mer överseende, t.ex. +1 = börjar 1 timme efter gryning). Negativa värden utökar det (striktare, t.ex. -1 = börjar 1 timme före gryning).",
+        "speciesListLabel": "Lista över nattaktiva arter",
+        "addSpeciesLabel": "Lägg till nattaktiv art",
+        "addSpeciesHelp": "Sök och lägg till arter, släkten, familjer eller ordningar att filtrera under dagsljus. Standard: Strigiformes (alla ugglor). Obs: en tom lista inaktiverar dagsljusartfiltreringen."
+      },
+      "errors": {
+        "speciesLoadFailed": "Kunde inte ladda artlista. Försök igen."
+      }
+    },
+    "integration": {
+      "birdweather": {
+        "title": "BirdWeather",
+        "description": "Ladda upp detektioner till BirdWeather",
+        "ffmpegWarning": {
+          "title": "FFmpeg inte detekterat",
+          "message": "Installera FFmpeg för att aktivera stöd för FLAC-kodning, BirdWeather fasar ut WAV-uppladdningar till förmån för komprimerade FLAC-ljudfiler."
+        },
+        "enable": "Aktivera BirdWeather-uppladdningar",
+        "token": {
+          "label": "BirdWeather-token",
+          "helpText": "Din unika BirdWeather-token."
+        },
+        "threshold": {
+          "label": "Uppladdningströskelvärde",
+          "helpText": "Minsta konfidenströskelvärde för uppladdning av prediktioner till BirdWeather."
+        },
+        "test": {
+          "button": "Testa BirdWeather-anslutning",
+          "loading": "Testar...",
+          "enabledRequired": "BirdWeather måste vara aktiverat för att testa",
+          "tokenRequired": "BirdWeather-token måste anges",
+          "inProgress": "Test pågår...",
+          "description": "Testa BirdWeather-anslutning"
+        }
+      },
+      "mqtt": {
+        "title": "MQTT",
+        "description": "Konfigurera MQTT-mäklaranslutning",
+        "enable": "Aktivera MQTT-integration",
+        "broker": {
+          "label": "MQTT-mäklare",
+          "placeholder": "mqtt://localhost:1883"
+        },
+        "topic": {
+          "label": "MQTT-ämne",
+          "placeholder": "birdnet/detections"
+        },
+        "authentication": {
+          "title": "Autentisering",
+          "username": {
+            "label": "Användarnamn"
+          },
+          "password": {
+            "label": "Lösenord",
+            "helpText": "MQTT-lösenordet."
+          }
+        },
+        "tls": {
+          "title": "TLS/SSL-säkerhet",
+          "enable": "Aktivera TLS/SSL",
+          "skipVerify": "Hoppa över certifikatverifiering",
+          "configNote": "<strong>TLS-konfiguration:</strong><br />• Standard-TLS: Lämna certifikat tomma för publika mäklare<br />• Självsignerade certifikat: Ange CA-certifikat<br />• Ömsesidig TLS (mTLS): Ange alla tre certifikat",
+          "certificates": {
+            "title": "Certifikathantering",
+            "description": "Ladda upp certifikat för säkra MQTT-mäklaranslutningar",
+            "caLabel": "CA-certifikat",
+            "caPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "caHelpText": "Certifikatutfärdarens certifikat för att verifiera mäklarens identitet",
+            "clientCertLabel": "Klientcertifikat",
+            "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
+            "clientCertHelpText": "Klientcertifikat för ömsesidig TLS-autentisering",
+            "clientKeyLabel": "Klientens privata nyckel",
+            "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
+            "clientKeyHelpText": "Privat nyckel som matchar klientcertifikatet",
+            "uploadButton": "Ladda upp certifikat",
+            "uploadSuccess": "MQTT TLS-certifikat uppladdade. Använd Testa anslutning för att verifiera.",
+            "uploadError": "Kunde inte ladda upp MQTT TLS-certifikat",
+            "deleteConfirm": "Ta bort alla MQTT TLS-certifikat? MQTT-klienten behöver återansluta.",
+            "deleteSuccess": "MQTT TLS-certifikat borttagna",
+            "deleteError": "Kunde inte ta bort MQTT TLS-certifikat",
+            "loadError": "Kunde inte ladda certifikatinformation",
+            "reconnectNote": "Använd knappen Testa anslutning nedan för att verifiera den nya TLS-konfigurationen."
+          }
+        },
+        "homeAssistant": {
+          "title": "Home Assistant automatisk identifiering",
+          "enable": "Aktivera Home Assistant MQTT-identifiering",
+          "description": "När aktiverat registrerar BirdNET-Go automatiskt enheter och sensorer hos Home Assistant genom MQTT-identifieringsprotokollet. Enheter visas i Home Assistants enhetsregister utan manuell YAML-konfiguration.",
+          "discoveryPrefix": {
+            "label": "Identifieringsprefix",
+            "helpText": "MQTT-ämnesprefix för Home Assistant-identifieringsmeddelanden. Standard är 'homeassistant'. Ändra bara detta om du har konfigurerat ett anpassat identifieringsprefix i Home Assistant."
+          },
+          "deviceName": {
+            "label": "Enhetsnamn",
+            "helpText": "Basnamnet för enheter som de visas i Home Assistant. Varje ljudkälla har sin egen enhet kopplad till denna huvudsakliga BirdNET-Go-enhet."
+          },
+          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline.",
+          "discovery": {
+            "button": "Skicka identifiering",
+            "success": "Identifieringsmeddelanden skickade till Home Assistant",
+            "error": "Kunde inte skicka identifieringsmeddelanden",
+            "saveFirst": "Spara inställningar innan identifiering skickas"
+          },
+          "retain": {
+            "label": "Behåll meddelanden",
+            "note": "<strong>Rekommenderat:</strong> Aktivera retain-flaggan för att säkerställa att MQTT-sensorer visar värden efter att Home Assistant startas om."
+          }
+        },
+        "test": {
+          "button": "Testa MQTT-anslutning",
+          "loading": "Testar...",
+          "enabledRequired": "MQTT måste vara aktiverat för att testa",
+          "brokerRequired": "MQTT-mäklare måste anges",
+          "inProgress": "Test pågår...",
+          "description": "Testa MQTT-anslutning"
+        }
+      },
+      "observability": {
+        "title": "Observerbarhet",
+        "description": "Övervaka BirdNET-Gos prestanda och fågeldetektionsmätvärden genom Prometheus-kompatibel slutpunkt",
+        "enable": "Aktivera observerbarhetsintegration",
+        "disabled": "Observerbarhetsintegration är inte aktiverad",
+        "listenAddress": {
+          "label": "Lyssningsadress",
+          "placeholder": "0.0.0.0:8090",
+          "ipLabel": "Bindningsadress",
+          "portLabel": "Port",
+          "allInterfaces": "Alla gränssnitt",
+          "loopback": "Loopback",
+          "customAddress": "Anpassad adress",
+          "interfaceDown": "nere"
+        }
+      },
+      "weather": {
+        "title": "Väder",
+        "description": "Konfigurera väderdatainsamling",
+        "provider": {
+          "label": "Väderleverantör",
+          "options": {
+            "none": "Ingen",
+            "yrno": "Yr.no",
+            "openweather": "OpenWeather",
+            "wunderground": "Weather Underground"
+          }
+        },
+        "wunderground": {
+          "apiKey": {
+            "label": "Weather Underground API-nyckel",
+            "helpText": "Ange din Weather Underground API-nyckel. Krävs för väderdata."
+          },
+          "stationId": {
+            "label": "Stations-ID",
+            "helpText": "Ditt Weather Underground PWS-stations-ID (t.ex. KCAOAKLA12)."
+          },
+          "endpoint": {
+            "label": "API-slutpunkt",
+            "helpText": "Åsidosätt standardslutpunkten för Weather Underground API vid behov. Använder https://api.weather.com/v2/pws/observations/current som standard om det lämnas tomt."
+          },
+          "units": {
+            "label": "Enheter",
+            "helpText": "Välj enheter för temperatur och vindhastighet (m = Metrisk, e = Imperial, h = UK Hybrid)."
+          }
+        },
+        "notes": {
+          "none": "Ingen väderdata kommer att hämtas.",
+          "yrno": {
+            "description": "Väderprognos tillhandahålls av Yr.no, en gemensam tjänst av Norska Meteorologiska Institutet (met.no) och Norska Rikskringkastningen (NRK).",
+            "freeService": "Yr är en gratis väderdatatjänst. För mer information, besök <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
+          },
+          "openweather": "Användning av OpenWeather kräver en API-nyckel, registrera dig för en gratis API-nyckel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
+          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer."
+        },
+        "apiKey": {
+          "label": "API-nyckel",
+          "helpText": "Din API-nyckel för vald väderleverantör. Håll den hemlig!"
+        },
+        "units": {
+          "label": "Måttenheter",
+          "options": {
+            "standard": "Standard",
+            "metric": "Metrisk",
+            "imperial": "Imperial",
+            "ukhybrid": "UK Hybrid"
+          }
+        },
+        "test": {
+          "button": "Testa väderleverantör",
+          "loading": "Testar...",
+          "noProvider": "Ingen väderleverantör vald",
+          "apiKeyRequired": "API-nyckel måste anges",
+          "inProgress": "Test pågår...",
+          "description": "Testa väderleverantörsanslutning"
+        },
+        "temperatureUnit": {
+          "label": "Temperaturvisningsenhet",
+          "helpText": "Välj hur temperaturer visas i hela applikationen.",
+          "options": {
+            "celsius": "Celsius (°C)",
+            "fahrenheit": "Fahrenheit (°F)"
+          }
+        }
+      },
+      "errors": {
+        "connectionError": "Anslutningsfel",
+        "responseStreamFailed": "Kunde inte läsa svarsströmmen",
+        "configurationCheck": "Konfigurationskontroll",
+        "testStageFallback": "Teststeg"
+      },
+      "ebird": {
+        "title": "eBird",
+        "description": "Anslut till eBird-taxonomidatabasen för utökad artdata inklusive taxonomisk klassificering och underartsinformation.",
+        "enable": "Aktivera eBird-integration",
+        "enabledRequired": "eBird-integration är inte aktiverad",
+        "apiKey": {
+          "label": "eBird API-nyckel",
+          "helpText": "Din eBird API-nyckel. Skaffa en från eBird API-portalen."
+        },
+        "locale": {
+          "label": "Språk för artnamn"
+        },
+        "cacheTTL": {
+          "label": "Cachevaraktighet (timmar)",
+          "helpText": "Hur länge taxonomidata från eBird ska cachelagras. Taxonomi ändras sällan, så längre cachevaraktighet minskar API-anrop."
+        },
+        "note": "eBird tillhandahåller taxonomidata som används för artklassificering och insikter. API-nyckeln är gratis att erhålla från Cornell Lab of Ornithology.",
+        "apiKeyInfo": "En personlig eBird API-nyckel krävs för att använda denna integration. Du kan begära en gratis nyckel från <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "test": {
+          "button": "Testa eBird-anslutning",
+          "loading": "Testar...",
+          "enabledRequired": "Aktivera eBird-integration först",
+          "apiKeyRequired": "API-nyckel krävs",
+          "inProgress": "Test pågår...",
+          "description": "Testa eBird API-anslutning och autentisering"
+        }
+      }
+    },
+    "audio": {
+      "loading": "Laddar ljudenheter...",
+      "tabs": {
+        "soundCard": "Ljudkort",
+        "streams": "Strömmar",
+        "processing": "Bearbetning",
+        "recording": "Inspelning",
+        "retention": "Lagring"
+      },
+      "emptyStates": {
+        "soundCard": {
+          "title": "Inga ljudkort hittades",
+          "description": "Inga lokala ljudingångsenheter hittades på detta system. Detta är normalt för container- eller headless-serverdistributioner.",
+          "errorTitle": "Fel vid laddning av enheter",
+          "hintsTitle": "Du kan:",
+          "hints": {
+            "container": "Detta är normalt för container/headless-distributioner",
+            "streams": "Konfigurera nätverksströmmar i fliken Strömmar istället",
+            "usb": "Anslut en USB-mikrofon och uppdatera listan"
+          },
+          "refresh": "Uppdatera enheter",
+          "retry": "Försök igen"
+        },
+        "streams": {
+          "title": "Inga strömmar konfigurerade",
+          "description": "Lägg till RTSP- eller nätverksljudströmmar från IP-kameror, mikrofonservrar eller andra strömningskällor.",
+          "hintsTitle": "Kom igång:",
+          "hints": {
+            "rtsp": "Ange RTSP-URL:er i formatet: rtsp://ip:port/stream",
+            "multiple": "Du kan lägga till flera strömmar för olika platser",
+            "protocol": "Välj TCP för tillförlitlighet eller UDP för lägre latens"
+          }
+        }
+      },
+      "soundCard": {
+        "title": "Ljudkort",
+        "description": "Konfigurera lokal ljudingångsenhet",
+        "audioSourceLabel": "Ljudkälla (kräver omstart av applikationen för att träda i kraft)",
+        "audioSourceHelp": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen för att träda i kraft.",
+        "noSoundCardCapture": "Ingen ljudkortsinspelning",
+        "empty": {
+          "title": "Inga ljudkort hittades",
+          "description": "Inga lokala ljudingångsenheter hittades på detta system. Detta är normalt för container- eller huvudlösa serverdistributioner.",
+          "hintsTitle": "Du kan:",
+          "hintStream": "Konfigurera nätverksströmmar i fliken Strömmar",
+          "hintUsb": "Anslut en USB-mikrofon och uppdatera listan",
+          "goToStreams": "Gå till Strömmar",
+          "refresh": "Uppdatera enheter"
+        }
+      },
+      "noSources": {
+        "warning": "Inga ljudkällor konfigurerade",
+        "description": "BirdNET-Go behöver en ljudingång för att detektera fåglar. Konfigurera minst en källa i fliken Ljudkort eller Strömmar."
+      },
+      "audioCapture": {
+        "title": "Ljudkortskonfiguration",
+        "description": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen.",
+        "soundCardSource": "Ljudkortskälla",
+        "audioSourceLabel": "Ljudkälla (kräver omstart av applikationen för att träda i kraft)",
+        "audioSourceHelp": "Välj ljudingångsenhet för fågelljudsdetektering. Ändringar kräver omstart av applikationen för att träda i kraft.",
+        "noSoundCardCapture": "Ingen ljudkortsinspelning",
+        "noDeviceSelected": "Ingen ljudenhet vald",
+        "refreshDevices": "Uppdatera",
+        "rtspSource": "RTSP-källa",
+        "rtspTransportLabel": "RTSP-transportprotokoll",
+        "rtspTransportHelp": "TCP är mer tillförlitligt men kan ha högre latens. UDP är snabbare men kan drabbas av paketförlust på dåliga nätverk.",
+        "rtspUrlsLabel": "RTSP-ström-URL:er",
+        "rtspUrlsHelp": "Ange en eller flera RTSP-ström-URL:er för nätverksljudkällor. Format: rtsp://ip:port/ström. Obs: Autentiseringsuppgifter bör konfigureras separat i dina RTSP-serverinställningar av säkerhetsskäl.",
+        "deviceSelected": "Ljudkort valt och redo för inspelning",
+        "availableDevices": "Tillgängliga ljudenheter",
+        "active": "Aktiv",
+        "streamsConfigured": "{count} ström(mar) konfigurerade"
+      },
+      "quietHours": {
+        "title": "Tysta timmar",
+        "sectionTitle": "Tysta timmar",
+        "sectionDescription": "Pausa ljudinspelning under konfigurerade tidsfönster för att minska CPU-användning när fåglar sannolikt inte är aktiva.",
+        "modeLabel": "Schemaläge",
+        "modeFixed": "Fasta tider",
+        "modeSolar": "Soluppgång/Solnedgång",
+        "startTime": "Starttid",
+        "endTime": "Sluttid",
+        "startEvent": "Starthändelse",
+        "endEvent": "Sluthändelse",
+        "offsetMinutes": "Förskjutning (min)",
+        "sunrise": "Soluppgång",
+        "sunset": "Solnedgång",
+        "fixedHint": "Inspelningen pausas mellan start- och sluttider dagligen. Nattliga fönster (t.ex. 22:00 till 06:00) stöds.",
+        "solarHint": "Tider beräknas utifrån soluppgång/solnedgång vid din konfigurerade plats. Använd negativa förskjutningar för före händelsen, positiva för efter.",
+        "badge": "Tyst",
+        "enabledBadge": "Tysta timmar aktiverade för denna ström"
+      },
+      "rtspStreams": {
+        "title": "Konfiguration av ljudströmmar",
+        "description": "Konfigurera nätverksljudströmmar för fjärrinspelning av ljud. Stöder RTSP, HTTP, HLS, RTMP och UDP-protokoll.",
+        "noStreamsConfigured": "Inga strömmar konfigurerade"
+      },
+      "streams": {
+        "streamLabel": "Ström",
+        "nameLabel": "Strömmens namn",
+        "namePlaceholder": "t.ex. Fågelmatare på framsidan",
+        "nameHelp": "Ett beskrivande namn för att identifiera denna ljudström",
+        "urlLabel": "Strömmens URL",
+        "urlHelp": "Ange strömmens URL med valfria autentiseringsuppgifter (t.ex. rtsp://värd:port/sökväg). Använd miljövariabler för autentiseringsuppgifter.",
+        "typeLabel": "Strömtyp",
+        "typeHelp": "Strömprotokoll - identifieras automatiskt från URL",
+        "transportLabel": "Protokoll",
+        "summary": "{count} ström(mar) konfigurerade",
+        "healthy": "frisk",
+        "unhealthy": "ohälsosam",
+        "unknown": "okänd",
+        "refresh": "Uppdatera",
+        "addStream": "Lägg till ström",
+        "deleteConfirm": "Ta bort denna ström?",
+        "restartCount": "Omstartad {count} gång(er)",
+        "healthLoadError": "Kunde inte ladda strömmens hälsostatus",
+        "status": {
+          "connected": "Ansluten",
+          "connecting": "Ansluter",
+          "error": "Fel",
+          "idle": "Inaktiv",
+          "suppressed": "Tysta timmar",
+          "unknown": "Okänd"
+        },
+        "emptyState": {
+          "title": "Inga strömmar konfigurerade",
+          "description": "Lägg till ljudströmmar från IP-kameror, Icecast-servrar eller andra nätverkskällor.",
+          "hintsTitle": "Kom igång",
+          "hints": {
+            "rtsp": "Stöder RTSP, HTTP, HLS, RTMP och UDP/RTP-strömmar",
+            "credentials": "Autentiseringsuppgifter kan inkluderas i URL eller använda miljövariabler",
+            "protocol": "TCP är mer tillförlitligt för RTSP, UDP har lägre latens"
+          }
+        },
+        "errors": {
+          "nameRequired": "Strömmens namn krävs",
+          "duplicateName": "En ström med detta namn finns redan",
+          "urlRequired": "Strömmens URL krävs",
+          "invalidUrl": "Ogiltigt format på strömmens URL",
+          "duplicate": "Denna ström-URL finns redan"
+        },
+        "timeline": {
+          "error": "Fel",
+          "noHistory": "Ingen tillstånds- eller felhistorik tillgänglig.",
+          "stateChange": "Tillståndsändring",
+          "host": "Värd",
+          "troubleshooting": "Felsökning",
+          "from": "Från",
+          "to": "Till",
+          "reason": "Orsak",
+          "eventAt": "Händelse vid {time}"
+        },
+        "diagnostics": {
+          "toggleDiagnostics": "Växla diagnostik",
+          "processState": "Processtillstånd",
+          "lastData": "Senaste data",
+          "restartCount": "Antal omstarter",
+          "connection": "Anslutning",
+          "stateErrorHistory": "Tillstånds- och felhistorik"
+        },
+        "connectionStatus": {
+          "stable": "Stabil",
+          "degraded": "Försämrad",
+          "failed": "Misslyckad",
+          "unknown": "Okänd"
+        }
+      },
+      "audioFilters": {
+        "title": "Ljudfilter",
+        "description": "Konfigurera ljudbearbetningsfilter",
+        "enableEqualizer": "Aktivera ljudequalizer",
+        "enableEqualizerHelp": "Tillämpa frekvensfiltrering för att förbättra detektering av fågelläten genom att minska oönskat brus och frekvenser.",
+        "filterType": "Filtertyp",
+        "newFilterType": "Ny filtertyp",
+        "selectFilterType": "Välj filtertyp",
+        "addFilter": "Lägg till filter",
+        "remove": "Ta bort",
+        "frequencyResponse": "Frekvenssvar",
+        "cutoffFrequency": "Gränsfrekvens",
+        "cutoffFrequencyHelp": "Frekvens vid vilken filtret börjar dämpa signaler. Fågelläten ligger typiskt i intervallet 1–10 kHz.",
+        "qFactor": "Q-faktor",
+        "qFactorHelp": "Kvalitetsfaktorn styr filtrets skärpa. Lägre värden (0,1–1) ger mjukare lutning, högre värden (1–10) ger brantare avskärning.",
+        "gain": "Förstärkning",
+        "gainHelp": "Förstärknings- eller dämpningsnivå i decibel (dB).",
+        "attenuation": "Dämpning",
+        "attenuationHelp": "Filtrets avklingningshastighet. Högre värden ger brantare dämpning av filtrerade frekvenser.",
+        "attenuationLevels": {
+          "0db": "0dB",
+          "12db": "12dB",
+          "24db": "24dB",
+          "36db": "36dB",
+          "48db": "48dB"
+        },
+        "filterHelp": "Lägg till flera filter för att forma frekvensvaret för optimal fågeldetektering i din miljö.",
+        "graph": {
+          "flatResponse": "Plant svar (inga filter tillämpade)",
+          "frequency": "Frekvens (Hz)",
+          "gain": "Förstärkning (dB)"
+        }
+      },
+      "soundLevelMonitoring": {
+        "title": "Övervakning av ljudnivå",
+        "description": "Övervaka och rapportera omgivande ljudnivåer",
+        "enable": "Aktivera övervakning av ljudnivå",
+        "enableHelp": "Spåra omgivande brusnivåer för att förstå din inspelningsmiljö och korrelera med fågelaktivitetsmönster.",
+        "disabled": "Övervakning av ljudnivå är inaktiverad",
+        "intervalLabel": "Mätintervall (sekunder)",
+        "intervalHelp": "Hur ofta ljudnivåer mäts och rapporteras. Lägre värden ger mer detaljerad data men använder mer resurser. Minst 5 sekunder, rekommenderat 60 sekunder.",
+        "dataOutputTitle": "Utdata för ljudnivå",
+        "dataOutputDescription": "När aktiverad publiceras ljudnivåmätningar via:",
+        "mqttTopic": "MQTT-ämne:",
+        "sseEndpoint": "SSE-slutpunkt:",
+        "prometheusMetrics": "Prometheus-mätvärden:"
+      },
+      "clipSettings": {
+        "title": "Klippinställningar",
+        "description": "Konfigurera inspelning och bearbetning av ljudklipp för identifierade fågelläten"
+      },
+      "clipRecording": {
+        "title": "Klippinspelning",
+        "description": "Konfigurera när och hur ljudklipp spelas in för detekterade fågelläten.",
+        "enable": "Aktivera klippinspelning",
+        "enableHelp": "Spara ljudklipp av detekterade fågelläten för granskning, delning eller att bygga egna dataset.",
+        "disabled": "Klippinspelning är inaktiverad",
+        "captureSettings": "Inspelningsinställningar",
+        "lengthLabel": "Inspelningslängd",
+        "lengthHelp": "Längd på ljud som spelas in för varje detektering (10–60 sekunder). Längre klipp ger mer kontext men använder mer lagring.",
+        "preCaptureLabel": "Buffert före detektering",
+        "preCaptureHelp": "Sekunder av ljud att inkludera före fågeln detekterades (0–{max} sekunder). Säkerställer att hela fågellätet fångas från början.",
+        "gainLabel": "Ljudförstärkning",
+        "gainHelp": "Ljudförstärkning för sparade klipp i decibel (0 till 20 dB). Gör sparade ljudklipp högre för enklare lyssning. Påverkar inte detektering. 0 dB innebär ingen förstärkning.",
+        "normalization": "Ljudnormalisering",
+        "normalizationEnable": "Aktivera volymnormalisering",
+        "normalizationHelp": "Justera automatiskt ljudnivåer till EBU R128 sändningsstandard för konsekvent uppspelningsvolym i alla klipp.",
+        "normalizationDisabled": "Ljudnormalisering är inaktiverad",
+        "targetLUFSLabel": "Målhöghet (LUFS)",
+        "targetLUFSHelp": "Integrerad höghetsm mål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
+        "loudnessRangeLabel": "Höghetsintervall (LU)",
+        "loudnessRangeHelp": "Maximal variation i höghet inom klippet (0–20 LU). Lägre värden ger mer konsekvent volym men kan minska dynamiken.",
+        "truePeakLabel": "Sann toppnivå (dBTP)",
+        "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
+        "normalizationNote": "EBU R128-standard",
+        "normalizationNoteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning.",
+        "fileSettings": "Filinställningar",
+        "pathLabel": "Klippmapp",
+        "pathHelp": "Katalog där ljudklipp sparas. Relativa sökvägar utgår från applikationskatalogen. Exempel: 'clips/' eller '/var/audio/birds/'",
+        "typeLabel": "Ljudformat",
+        "typeHelp": "Ljudformat för sparade klipp. WAV och FLAC är förlustfria (bästa kvalitet, större filer). MP3, AAC och Opus är förlustbehäftade (mindre filer, viss kvalitetsförlust).",
+        "bitrateLabel": "Bithastighet",
+        "bitrateHelp": "Ljudkomprimeringens bithastighet för förlustbehäftade format. Intervall: {min}–{max} kbps. Högre värden ger bättre kvalitet men större filer.",
+        "losslessNote": "Förlustfria format bevarar den ursprungliga ljudkvaliteten utan komprimeringsartefakter.",
+        "disabledInfo": "Aktivera klippinspelning ovan för att konfigurera klippinställningar, filformat och lagringsalternativ."
+      },
+      "extendedCapture": {
+        "title": "Utökad inspelning",
+        "description": "Spela in längre ljudklipp när en art sjunger upprepade gånger, vilket producerar en enda kombinerad inspelning istället för många korta klipp.",
+        "ramWarning": "Utökad inspelning kräver extra RAM för ljudbuffertar. Rekommenderas inte för enheter med 512 MB RAM eller mindre (t.ex. Raspberry Pi Zero).",
+        "enable": "Aktivera utökad inspelning",
+        "enableHelp": "När aktiverad slås upprepade detekteringar av konfigurerade arter samman till en enda längre inspelning.",
+        "maxDurationLabel": "Max längd",
+        "maxDurationHelp": "Maximal längd på ett utökat inspelningsklipp. Inspelningen växer allt eftersom detekteringar fortsätter, upp till denna gräns.",
+        "speciesListLabel": "Arter för utökad inspelning",
+        "addSpeciesLabel": "Lägg till art",
+        "addSpeciesHelp": "Arter som utlöser utökad inspelning. Stöder vanliga namn, vetenskapliga namn och släktmatchning (t.ex. \"Strix\" matchar alla Strix-ugglor).",
+        "addSpeciesButton": "Lägg till",
+        "disabled": "Utökad inspelning är inaktiverad"
+      },
+      "fileSettings": {
+        "title": "Filinställningar",
+        "description": "Konfigurera lagringsplats och ljudformat för sparade klipp.",
+        "pathLabel": "Klippmapp",
+        "pathHelp": "Katalog där ljudklipp sparas. Relativa sökvägar utgår från applikationskatalogen. Exempel: 'clips/' eller '/var/audio/birds/'",
+        "typeLabel": "Ljudformat",
+        "typeHelp": "Ljudformat för sparade klipp. WAV och FLAC är förlustfria (bästa kvalitet, större filer). MP3, AAC och Opus är förlustbehäftade (mindre filer, viss kvalitetsförlust).",
+        "bitrateLabel": "Bithastighet",
+        "bitrateHelp": "Ljudkomprimeringens bithastighet för förlustbehäftade format. Intervall: {min}–{max} kbps. Högre värden ger bättre kvalitet men större filer.",
+        "losslessNote": "Förlustfria format bevarar den ursprungliga ljudkvaliteten utan komprimeringsartefakter."
+      },
+      "audioNormalization": {
+        "title": "Ljudnormalisering",
+        "description": "Justera ljudnivåer för konsekvent uppspelningsvolym i alla klipp.",
+        "enable": "Aktivera volymnormalisering",
+        "enableHelp": "Justera automatiskt ljudnivåer till EBU R128 sändningsstandard för konsekvent uppspelningsvolym i alla klipp.",
+        "disabled": "Ljudnormalisering är inaktiverad",
+        "requiresRecording": "Aktivera klippinspelning i fliken Inspelning för att använda ljudnormalisering.",
+        "targetLUFSLabel": "Målhöghet (LUFS)",
+        "targetLUFSHelp": "Integrerat höghetsmål i LUFS (Loudness Units relative to Full Scale). -23 LUFS är EBU R128 sändningsstandard. Intervall: -40 till -10 LUFS.",
+        "loudnessRangeLabel": "Höghetsintervall (LU)",
+        "loudnessRangeHelp": "Maximal variation i höghet inom klippet (0–20 LU). Lägre värden ger mer konsekvent volym men kan minska dynamiken.",
+        "truePeakLabel": "Sann toppnivå (dBTP)",
+        "truePeakHelp": "Maximal sann toppnivå för att förhindra digital klippning (-10 till 0 dBTP). -2 dBTP ger säker marginal för de flesta uppspelningssystem.",
+        "noteTitle": "EBU R128-standard",
+        "noteDescription": "Ljudnormalisering följer EBU R128 sändningsstandard, vilket säkerställer konsekventa uppspelningsnivåer på olika enheter och förhindrar klippning."
+      },
+      "audioClipRetention": {
+        "title": "Lagring av ljudklipp",
+        "description": "Konfigurera automatisk rensning av sparade ljudklipp",
+        "policyLabel": "Lagringspolicy",
+        "policyHelp": "Välj hur ljudklipp tas bort automatiskt. Ingen: behåll alla klipp. Ålder: ta bort klipp äldre än angivet. Användning: ta bort äldsta klipp när diskanvändningen överskrider gränsen.",
+        "maxAgeLabel": "Maximal ålder",
+        "maxAgeHelp": "Ta bort ljudklipp äldre än denna varaktighet. Format: nummer följt av enhet (h=timmar, d=dagar, w=veckor, m=månader). Exempel: '7d' för 7 dagar, '4w' för 4 veckor.",
+        "maxUsageLabel": "Maximal diskanvändning",
+        "maxUsageHelp": "Ta bort äldsta klipp när ljudkatalogen använder mer än denna procentandel av tillgängligt diskutrymme.",
+        "minClipsLabel": "Minsta antal klipp per art",
+        "minClipsHelp": "Behåll alltid minst så här många klipp för varje fågelart, oavsett ålder eller diskanvändning. Hjälper till att bevara sällsynta inspelningar.",
+        "keepSpectrograms": "Behåll spektrogrambilder",
+        "keepSpectrogramsHelp": "Behåll spektrogrambilder även när ljudklipp tas bort. Spektrogram tar mindre plats och ger visuell referens.",
+        "policies": {
+          "none": "Ingen – Behåll alla",
+          "age": "Åldersbaserad",
+          "usage": "Diskanvändningsbaserad"
+        },
+        "noRetentionTitle": "Alla klipp behålls",
+        "noRetentionDescription": "Ljudklipp kommer att behållas på obestämd tid. Övervaka diskanvändningen för att förhindra lagringsproblem.",
+        "ageRetentionTitle": "Åldersbaserad rensning",
+        "ageRetentionDescription": "Klipp äldre än den angivna åldern tas bort automatiskt, samtidigt som det minsta antalet per art bevaras.",
+        "usageRetentionTitle": "Användningsbaserad rensning",
+        "usageRetentionDescription": "När diskanvändningen överskrider tröskelvärdet tas de äldsta klippen bort tills användningen är inom gränserna."
+      },
+      "formats": {
+        "wav": "WAV",
+        "flac": "FLAC",
+        "aac": "AAC",
+        "opus": "Opus",
+        "mp3": "MP3"
+      },
+      "transport": {
+        "tcp": "TCP",
+        "udp": "UDP"
+      },
+      "filterTypes": {
+        "lowpass": "Lågpassfilter",
+        "highpass": "Högpassfilter",
+        "bandpass": "Bandpassfilter",
+        "bandstop": "Bandstoppfilter"
+      },
+      "errors": {
+        "devicesLoadFailed": "Kunde inte ladda ljudenheter. Kontrollera systembehörigheterna.",
+        "invalidBitrate": "Ogiltigt bithastighetsvärde",
+        "invalidRetentionPolicy": "Ogiltig lagringspolicy"
+      }
+    },
+    "security": {
+      "pageLabel": "Säkerhetsinställningar",
+      "baseUrlLabel": "Bas-URL",
+      "baseUrlHelp": "Fullständig extern URL för omvänd proxy-konfigurationer. När satt används denna URL direkt för notifieringar och OAuth-omdirigeringar, utan hänsyn till värd- och AutoTLS-inställningar.",
+      "baseUrlValidation": "Ange en giltig URL som börjar med http:// eller https:// och inkluderar ett värdnamn",
+      "hostLabel": "Värdadress",
+      "allowSubnetBypassLabel": "Tillåt åtkomst från subnät att kringgå autentisering",
+      "allowedSubnetsLabel": "Tillåtna subnät",
+      "allowedSubnetsHelp": "Tillåtna nätverksintervall för att kringgå inloggning (CIDR-notation, kommaseparerad lista)",
+      "securityWarningTitle": "Säkerhetsvarning:",
+      "subnetWarningText": "Enheter från dessa subnät kommer att ha obegränsad åtkomst. Inkludera bara betrodda interna nätverk.",
+      "httpsSettingsTitle": "HTTPS-inställningar",
+      "httpsSettingsDescription": "Säker åtkomst med SSL/TLS-kryptering",
+      "basicAuthTitle": "Grundläggande autentisering",
+      "basicAuthDescription": "Säker åtkomst med ett enkelt lösenord",
+      "serverConfiguration": {
+        "title": "Serverkonfiguration",
+        "description": "Konfigurera HTTPS och SSL/TLS-inställningar",
+        "autoTlsLabel": "Automatisk hantering av SSL-certifikat (AutoTLS)",
+        "autoTlsRequirements": {
+          "title": "AutoTLS-krav:",
+          "domainRequired": "Ett registrerat domännamn krävs",
+          "domainPointing": "Domänen måste peka på denna servers publika IP",
+          "portsAccessible": "Portarna 80 och 443 måste vara tillgängliga från internet"
+        }
+      },
+      "basicAuthentication": {
+        "title": "Grundläggande autentisering",
+        "description": "Säker åtkomst med ett enkelt lösenord",
+        "enableLabel": "Aktivera lösenordsautentisering",
+        "disabled": "Lösenordsautentisering är inaktiverad",
+        "passwordLabel": "Lösenord",
+        "passwordHelpText": "Begränsa åtkomst till inställningar med ett lösenord."
+      },
+      "oauth": {
+        "title": "Extern autentisering",
+        "description": "Logga in med en extern identitetsleverantör eller OIDC",
+        "form": {
+          "editTitle": "Redigera OAuth-leverantör",
+          "addTitle": "Lägg till OAuth-leverantör",
+          "providerLabel": "Leverantör",
+          "providerHelpText": "Välj OAuth-leverantören att konfigurera",
+          "cancelButton": "Avbryt",
+          "saveButton": "Spara"
+        },
+        "providers": {
+          "title": "Konfigurerade leverantörer",
+          "addButton": "Lägg till leverantör",
+          "enableToggle": "Växla leverantörens aktiverade tillstånd",
+          "editButton": "Redigera leverantörsinställningar",
+          "deleteButton": "Ta bort leverantör",
+          "deleteConfirm": "Är du säker på att du vill ta bort OAuth-leverantören {provider}?"
+        },
+        "noProviders": "Inga OAuth-leverantörer konfigurerade",
+        "noProvidersDescription": "Lägg till en leverantör för att aktivera inloggning med Google, GitHub, Microsoft, LINE, Kakao eller en anpassad OIDC-leverantör.",
+        "enableProviderLabel": "Aktivera denna leverantör",
+        "getCredentialsLabel": "Hämta dina uppgifter från {provider}",
+        "redirectUriTitle": "Omdirigerings-URI:",
+        "clientIdLabel": "Klient-ID",
+        "clientIdHelpText": "OAuth 2.0 Klient-ID från din leverantörs utvecklarkonsol",
+        "clientSecretLabel": "Klienthemlighet",
+        "clientSecretHelpText": "OAuth 2.0 Klienthemlighet från din leverantörs utvecklarkonsol",
+        "userIdLabel": "Användar-ID (valfritt)",
+        "userIdHelpText": "Begränsa åtkomst till ett specifikt användarkonto via e-post eller ID",
+        "google": {
+          "title": "Google OAuth",
+          "enableLabel": "Tillåt OAuth2-inloggning via Google",
+          "redirectUriTitle": "Omdirigerings-URI för Google Cloud Console:",
+          "getCredentialsLabel": "Hämta dina uppgifter från Google Cloud Console",
+          "clientIdLabel": "Klient-ID",
+          "clientIdHelpText": "OAuth 2.0 Klient-ID erhållet från Google Cloud Console vid konfigurering av OAuth-uppgifter.",
+          "clientSecretLabel": "Klienthemlighet",
+          "clientSecretHelpText": "OAuth 2.0 Klienthemlighet erhållen från Google Cloud Console vid konfigurering av OAuth-uppgifter.",
+          "userIdLabel": "Användar-ID"
+        },
+        "github": {
+          "title": "GitHub OAuth",
+          "enableLabel": "Tillåt OAuth2-inloggning via GitHub",
+          "redirectUriTitle": "Omdirigerings-URI för GitHub Developer Settings:",
+          "getCredentialsLabel": "Hämta dina uppgifter från GitHub Developer Settings",
+          "clientIdLabel": "Klient-ID",
+          "clientIdHelpText": "OAuth 2.0 Klient-ID erhållet från GitHub Developer Settings vid konfigurering av OAuth-uppgifter.",
+          "clientSecretLabel": "Klienthemlighet",
+          "clientSecretHelpText": "OAuth 2.0 Klienthemlighet erhållen från GitHub Developer Settings vid konfigurering av OAuth-uppgifter.",
+          "userIdLabel": "Användar-ID"
+        },
+        "microsoft": {
+          "title": "Microsoft-konto",
+          "enableLabel": "Tillåt OAuth2-inloggning via Microsoft-konto",
+          "redirectUriTitle": "Omdirigerings-URI för Azure App Registration:",
+          "getCredentialsLabel": "Hämta dina uppgifter från Azure Portal",
+          "clientIdLabel": "Klient-ID",
+          "clientIdHelpText": "Applikationens (klient) ID erhållet från Azure App Registration.",
+          "clientSecretLabel": "Klienthemlighet",
+          "clientSecretHelpText": "Klienthemlighetens värde erhållet från Azure App Registration.",
+          "userIdLabel": "Användar-ID"
+        },
+        "line": {
+          "title": "LINE-inloggning",
+          "enableLabel": "Tillåt OAuth2-inloggning via LINE",
+          "redirectUriTitle": "Omdirigerings-URI för LINE Developers Console:",
+          "getCredentialsLabel": "Hämta dina uppgifter från LINE Developers Console",
+          "clientIdLabel": "Kanal-ID",
+          "clientIdHelpText": "Kanal-ID erhållet från LINE Developers Console vid konfigurering av LINE-inloggning.",
+          "clientSecretLabel": "Kanalhemlighet",
+          "clientSecretHelpText": "Kanalhemligheten erhållen från LINE Developers Console vid konfigurering av LINE-inloggning.",
+          "userIdLabel": "Användar-ID"
+        },
+        "kakao": {
+          "title": "Kakao-inloggning",
+          "enableLabel": "Tillåt OAuth2-inloggning via Kakao",
+          "redirectUriTitle": "Omdirigerings-URI för Kakao Developers Console:",
+          "getCredentialsLabel": "Hämta dina uppgifter från Kakao Developers Console",
+          "clientIdLabel": "REST API-nyckel",
+          "clientIdHelpText": "REST API-nyckeln erhållen från Kakao Developers Console vid konfigurering av Kakao-inloggning.",
+          "clientSecretLabel": "Klienthemlighet",
+          "clientSecretHelpText": "Klienthemligheten erhållen från Kakao Developers Console vid konfigurering av Kakao-inloggning.",
+          "userIdLabel": "Användar-ID"
+        },
+        "oidc": {
+          "title": "OIDC-leverantör",
+          "enableLabel": "Aktivera OIDC-autentisering",
+          "redirectUriTitle": "Omdirigerings-URI",
+          "getCredentialsLabel": "Konfigurera i din identitetsleverantör",
+          "clientIdLabel": "Klient-ID",
+          "clientIdHelpText": "Klient-ID från din OIDC-identitetsleverantör",
+          "clientSecretLabel": "Klienthemlighet",
+          "clientSecretHelpText": "Klienthemligheten från din OIDC-identitetsleverantör",
+          "userIdLabel": "Tillåten användare (e-post eller sub-claim)",
+          "issuerUrlLabel": "Utfärdar-URL",
+          "issuerUrlHelpText": "Utfärdar-URL:en för din OpenID Connect-identitetsleverantör (t.ex. https://auth.example.com)",
+          "issuerUrlPlaceholder": "https://auth.example.com",
+          "issuerUrlRequired": "Utfärdar-URL krävs för OIDC-leverantörer",
+          "issuerUrlInvalid": "Utfärdar-URL måste vara en giltig HTTP- eller HTTPS-URL",
+          "scopesLabel": "Omfång",
+          "scopesHelpText": "Kommaseparerad lista över OIDC-omfång (standard: openid, profile, email)",
+          "scopesPlaceholder": "openid, profile, email"
+        }
+      },
+      "bypassAuthentication": {
+        "title": "Kringgå autentisering",
+        "description": "Tillåt åtkomst till inställningar utan autentisering",
+        "disabled": "Subnätkringgång är inaktiverad"
+      },
+      "exceptions": {
+        "title": "Undantag"
+      },
+      "publicAccess": {
+        "title": "Offentlig åtkomst",
+        "description": "Tillåt att specifika funktioner är tillgängliga utan autentisering.",
+        "liveAudioLabel": "Tillåt offentlig uppspelning av liveaudio",
+        "liveAudioHelp": "När aktiverad kan vem som helst lyssna på liveaudioströmmar utan att logga in. Inställningar och borttagning kräver fortfarande autentisering.",
+        "warningText": "Att aktivera offentlig åtkomst exponerar funktionerna för alla som kan nå denna server. Aktivera bara om du litar på din nätverksmiljö."
+      },
+      "placeholders": {
+        "baseUrl": "https://birdnet.example.com:5500",
+        "host": "Till exempel localhost:8080 eller example.domain.com",
+        "allowedUsers": "Ange en eller flera tillåtna användar-e-postadresser",
+        "subnet": "Ange ett CIDR-subnät (t.ex. 192.168.1.0/24)"
+      },
+      "terminal": {
+        "title": "Webbläsarterminal",
+        "enableLabel": "Aktivera webbläsarterminal",
+        "enableHelpText": "Tillåter skalåtkomst till värdsystemet från alla autentiserade webbläsarsessioner. Inaktivera när den inte används.",
+        "securityWarning": "Att aktivera webbläsarterminalen ger direkt skalåtkomst till värdoperativsystemet. Alla med giltiga uppgifter kan köra godtyckliga kommandon. Aktivera bara denna funktion på betrodda nätverk. Inaktivera den när den inte behövs.",
+        "confirmEnable": "Är du säker på att du vill aktivera webbläsarterminalen? Detta ger skalåtkomst till värdsystemet. Gör bara detta på betrodda nätverk."
+      },
+      "tls": {
+        "title": "TLS / HTTPS",
+        "description": "Konfigurera TLS/HTTPS-kryptering för säkra anslutningar",
+        "modeLabel": "TLS-läge",
+        "modeNone": "Ingen (HTTP)",
+        "modeLetsEncrypt": "Let's Encrypt",
+        "modeManual": "Manuellt certifikat",
+        "modeSelfSigned": "Självsignerat",
+        "modeNoneDescription": "Vanlig HTTP utan kryptering",
+        "modeAutoTLSDescription": "Automatiskt certifikat via Let's Encrypt",
+        "modeManualDescription": "Ladda upp ditt eget certifikat och nyckel",
+        "modeSelfSignedDescription": "Generera ett självsignerat certifikat",
+        "portLabel": "HTTPS-port",
+        "portHelpText": "Port för HTTPS-anslutningar (standard: 8443)",
+        "redirectToHttps": "Omdirigera HTTP till HTTPS",
+        "autoTLSRequirements": "Kräver att portarna 80 och 443 är tillgängliga. På Linux behöver processen root eller CAP_NET_BIND_SERVICE-kapabilitet.",
+        "validityLabel": "Certifikatets giltighet",
+        "validityHelpText": "Hur länge certifikatet ska vara giltigt",
+        "validity365d": "1 år",
+        "validity730d": "2 år",
+        "generateButton": "Generera certifikat",
+        "regenerateButton": "Generera certifikat på nytt",
+        "generating": "Genererar...",
+        "certificateLabel": "Certifikat (PEM)",
+        "privateKeyLabel": "Privat nyckel (PEM)",
+        "caCertificateLabel": "CA-certifikat (PEM, valfritt)",
+        "uploadButton": "Ladda upp certifikat",
+        "uploading": "Laddar upp...",
+        "browseFile": "Bläddra...",
+        "plaintextWarning": "Varning: Din privata nyckel kommer att överföras i klartext via HTTP. Ladda bara upp certifikat när du är ansluten via ett betrott nätverk eller localhost.",
+        "certificateInstalled": "Installerat certifikat",
+        "subject": "Subjekt",
+        "issuer": "Utfärdare",
+        "validFrom": "Giltigt från",
+        "validUntil": "Giltigt till",
+        "daysRemaining": "Dagar kvar",
+        "sans": "Subjektalternativnamn",
+        "fingerprint": "Fingeravtryck",
+        "expiryWarning": "Certifikatet håller på att gå ut",
+        "loading": "Laddar certifikatinfo...",
+        "loadError": "Kunde inte ladda certifikatinfo",
+        "generateSuccess": "Självsignerat certifikat genererat",
+        "generateError": "Kunde inte generera certifikat",
+        "uploadSuccess": "Certifikat uppladdat",
+        "uploadError": "Kunde inte ladda upp certifikat",
+        "deleteSuccess": "Certifikat borttaget",
+        "deleteError": "Kunde inte ta bort certifikat",
+        "removeCertificate": "Ta bort certifikat",
+        "deleteConfirm": "Är du säker på att du vill ta bort det installerade TLS-certifikatet? TLS-läget kommer att återställas till Ingen.",
+        "restartRequired": "TLS-ändringar kräver en omstart av servern för att träda i kraft.",
+        "noCertificate": "Inget certifikat installerat",
+        "validity1825d": "5 år",
+        "autoTLSHostRequired": "Ett värdnamn krävs för Let's Encrypt. Ange ditt publika domännamn i fältet Värd ovan.",
+        "autoTLSNoIP": "Let's Encrypt kräver ett domännamn, inte en IP-adress. Ange en publik domän som birds.example.com.",
+        "autoTLSNeedsFQDN": "Let's Encrypt kräver ett fullständigt kvalificerat domännamn (t.ex. birds.example.com), inte ett ensamt värdnamn.",
+        "autoTLSNoLocalhost": "Let's Encrypt kan inte utfärda certifikat för localhost.",
+        "autoTLSPrivateTLD": "Let's Encrypt kan inte utfärda certifikat för privata domäner ({tld} kan inte lösas publikt).",
+        "downloadCertificate": "Ladda ner certifikat",
+        "downloadCertificateHelp": "Installera detta certifikat i ditt operativsystems förtroendearkiv för att undvika webbläsarens säkerhetsvarningar.",
+        "fileReadError": "Kunde inte läsa den valda filen"
+      }
+    },
+    "species": {
+      "pageLabel": "Artinställningar",
+      "saveError": "Kunde inte spara konfiguration för \"{species}\". Försök igen.",
+      "configUpdated": "Konfiguration uppdaterad för \"{species}\"",
+      "configAdded": "Konfiguration tillagd för \"{species}\"",
+      "duplicateConfigError": "Arten \"{species}\" har redan en konfiguration. Välj ett annat namn.",
+      "activeSpecies": {
+        "title": "Aktiva arter",
+        "tabLabel": "Aktiva",
+        "description": "Arter som kommer att detekteras baserat på din nuvarande plats och filterinställningar",
+        "stats": {
+          "species": "Arter",
+          "location": "Plats",
+          "threshold": "Tröskelvärde",
+          "updated": "Uppdaterad",
+          "justNow": "Just nu",
+          "minutesAgo": "{count}m sedan",
+          "hoursAgo": "{count}t sedan"
+        },
+        "search": {
+          "placeholder": "Sök arter..."
+        },
+        "badges": {
+          "included": "Inkluderad",
+          "configured": "Konfigurerad"
+        },
+        "empty": {
+          "title": "Inga arter hittades",
+          "description": "Konfigurera din plats i Huvudinställningar för att se tillgängliga arter"
+        },
+        "noResults": "Inga arter matchar din sökning",
+        "infoNote": "Denna lista baseras på din plats och tröskelvärdets intervallfilter. Manuellt inkluderade arter läggs alltid till.",
+        "retry": "Försök igen",
+        "expand": "Expandera lista",
+        "collapse": "Fäll ihop lista",
+        "downloadCsv": "Ladda ner CSV",
+        "errors": {
+          "loadFailed": "Kunde inte ladda listan med aktiva arter"
+        },
+        "locationNotConfigured": {
+          "title": "Plats ej konfigurerad",
+          "description": "Ange din plats i Huvudinställningar för att se arter tillgängliga i ditt område. Intervallfiltret använder din plats för att avgöra vilka arter som sannolikt finns i närheten.",
+          "action": "Konfigurera plats"
+        },
+        "columns": {
+          "commonName": "Vanligt namn",
+          "scientificName": "Vetenskapligt namn",
+          "score": "Poäng",
+          "status": "Status"
+        }
+      },
+      "alwaysInclude": {
+        "title": "Alltid inkludera arter",
+        "tabLabel": "Inkludera",
+        "description": "Arter i denna lista kommer alltid att inkluderas i intervallet av detekterade arter",
+        "noSpeciesMessage": "Inga arter tillagda i inkluderingslistan"
+      },
+      "alwaysExclude": {
+        "title": "Alltid exkludera arter",
+        "tabLabel": "Exkludera",
+        "description": "Arter i denna lista kommer alltid att exkluderas från detektering",
+        "noSpeciesMessage": "Inga arter tillagda i exkluderingslistan"
+      },
+      "customConfiguration": {
+        "title": "Anpassad artkonfiguration",
+        "tabLabel": "Anpassad",
+        "description": "Artspecifika tröskelvärden, detekteringsintervall och åtgärder",
+        "helpText": {
+          "intro": "Konfigurera artspecifika inställningar:",
+          "threshold": "Tröskelvärde: Minsta konfidenspoäng (0–1) som krävs för detektering",
+          "interval": "Intervall: Minsta tid i sekunder mellan detekteringar av samma art (0 = använd globalt standardvärde)",
+          "actions": "Åtgärder: Anpassade kommandon att köra när denna art detekteras"
+        },
+        "columnHeaders": {
+          "species": "Art",
+          "settings": "Inställningar",
+          "actions": "Åtgärder"
+        },
+        "badges": {
+          "threshold": "Tröskelvärde: {value}",
+          "interval": "Intervall: {value}s",
+          "customAction": "Anpassad åtgärd",
+          "executeDefaults": "+Standardvärden"
+        },
+        "dropdown": {
+          "editConfig": "Redigera konfiguration",
+          "addAction": "Lägg till åtgärd",
+          "remove": "Ta bort"
+        },
+        "labels": {
+          "threshold": "Tröskelvärde",
+          "interval": "Intervall",
+          "intervalSeconds": "Intervall (s)",
+          "addButton": "Lägg till"
+        },
+        "noConfigurationsMessage": "Inga anpassade artkonfigurationer tillagda",
+        "addForm": {
+          "speciesPlaceholder": "Artnamn",
+          "thresholdPlaceholder": "0.5",
+          "intervalPlaceholder": "0"
+        },
+        "addConfiguration": "Lägg till konfiguration",
+        "newConfiguration": "Ny konfiguration",
+        "editing": "Redigerar: {species}",
+        "configuredCount": "{count} konfigurerade",
+        "searchPlaceholder": "Skriv för att söka...",
+        "saving": "Sparar...",
+        "save": "Spara",
+        "cancel": "Avbryt",
+        "configureActions": "Konfigurera åtgärder",
+        "actionsConfigured": "Konfigurerade",
+        "list": {
+          "threshold": "Tröskelvärde:",
+          "interval": "Intervall:",
+          "intervalNone": "Inget",
+          "actionBadge": "Åtgärd",
+          "editTitle": "Redigera konfiguration",
+          "removeTitle": "Ta bort konfiguration"
+        },
+        "emptyState": {
+          "title": "Inga konfigurationer ännu.",
+          "description": "Klicka på \"Lägg till konfiguration\" för att anpassa artdetekteringsinställningar."
+        }
+      },
+      "actionsModal": {
+        "title": "Åtgärder för {species}",
+        "actionType": {
+          "label": "Åtgärdstyp",
+          "executeCommand": "Kör kommando",
+          "onlySupported": "För närvarande stöds bara Kör kommando-åtgärder"
+        },
+        "command": {
+          "label": "Kommando",
+          "helpText": "Ange den fullständiga sökvägen till kommandot eller skriptet du vill köra"
+        },
+        "parameters": {
+          "label": "Parametrar",
+          "helpText": "Dessa värden skickas till ditt kommando i den ordning de listas",
+          "placeholder": "Klicka på knapparna nedan för att lägga till parametrar eller skriv manuellt",
+          "tooltip": "Använd knapparna nedan eller skriv direkt (kommaseparerade)",
+          "availableTitle": "Tillgängliga parametrar",
+          "buttons": {
+            "commonName": "CommonName",
+            "scientificName": "ScientificName",
+            "confidence": "Confidence",
+            "time": "Time",
+            "source": "Source",
+            "clearParameters": "Rensa parametrar"
+          }
+        },
+        "executeDefaults": {
+          "label": "Kör även standardåtgärder (databaslagring, notifieringar, etc.)",
+          "helpText": "När aktiverad körs både din anpassade åtgärd och systemets standardåtgärder. När inaktiverad körs bara din anpassade åtgärd."
+        }
+      },
+      "add": "Lägg till",
+      "remove": "Ta bort",
+      "suggestions": "Artförslag",
+      "addSpeciesToInclude": "Lägg till art att inkludera",
+      "addSpeciesToIncludeLabel": "Lägg till ny art att inkludera",
+      "addSpeciesToExclude": "Lägg till art att exkludera",
+      "addSpeciesToExcludeLabel": "Lägg till ny art att exkludera",
+      "commandPathPlaceholder": "/sökväg/till/ditt/kommando",
+      "parametersPlaceholder": "Parametrar visas här",
+      "errors": {
+        "speciesLoadFailed": "Kunde inte ladda artlistan. Försök igen."
+      },
+      "tracking": {
+        "title": "Artspårning",
+        "tabLabel": "Spårning",
+        "description": "Konfigurera spårning av nya artdetekteringar baserat på tidsperioder",
+        "enabled": {
+          "label": "Aktivera artspårning",
+          "helpText": "När aktiverad spårar systemet nya artdetekteringar och kan skicka notifieringar"
+        },
+        "newSpeciesWindowDays": {
+          "label": "Fönster för nya arter (dagar)",
+          "helpText": "Antal dagar en art anses vara 'ny' efter första detektering (1–365)"
+        },
+        "syncIntervalMinutes": {
+          "label": "Synkroniseringsintervall (minuter)",
+          "helpText": "Hur ofta spårningsdata synkroniseras med databasen (1–1440)"
+        },
+        "notificationSuppressionHours": {
+          "label": "Undertryckning av notifieringar (timmar)",
+          "helpText": "Timmar att undertrycka duplicerade notifieringar för samma art (0–8760)"
+        },
+        "yearly": {
+          "title": "Årlig spårning",
+          "description": "Spåra första ankomsterna av arter varje år",
+          "enabled": {
+            "label": "Aktivera årlig spårning",
+            "helpText": "Spåra och meddela när en art detekteras för första gången varje år"
+          },
+          "resetMonth": {
+            "label": "Återställningsmånad",
+            "helpText": "Månad då årlig spårning återställs (1–12)"
+          },
+          "resetDay": {
+            "label": "Återställningsdag",
+            "helpText": "Dag i månaden då årlig spårning återställs"
+          },
+          "windowDays": {
+            "label": "Fönster (dagar)",
+            "helpText": "Dagar att visa 'ny i år'-indikator (1–365)"
+          }
+        },
+        "seasonal": {
+          "title": "Säsongsbetonad spårning",
+          "description": "Spåra första ankomsterna av arter varje säsong",
+          "enabled": {
+            "label": "Aktivera säsongsbetonad spårning",
+            "helpText": "Spåra och meddela när en art detekteras för första gången varje säsong"
+          },
+          "windowDays": {
+            "label": "Fönster (dagar)",
+            "helpText": "Dagar att visa 'ny denna säsong'-indikator (1–365)"
+          },
+          "seasons": {
+            "title": "Säsongsdefinitioner",
+            "description": "Definiera när varje säsong börjar. Säsonger justeras automatiskt baserat på din plats halvklot.",
+            "spring": "Vår",
+            "summer": "Sommar",
+            "fall": "Höst",
+            "winter": "Vinter",
+            "wet1": "Regnperiod 1",
+            "dry1": "Torrperiod 1",
+            "wet2": "Regnperiod 2",
+            "dry2": "Torrperiod 2",
+            "startMonth": "Startmånad",
+            "startDay": "Startdag",
+            "hemisphereNote": "Säsongsdatum konfigureras automatiskt baserat på din latitud. Norra halvklotet använder standardsäsonger, södra halvklotet har förskjutna datum och ekvatoriella regioner använder regn-/torrsäsonger."
+          }
+        },
+        "months": {
+          "january": "Januari",
+          "february": "Februari",
+          "march": "Mars",
+          "april": "April",
+          "may": "Maj",
+          "june": "Juni",
+          "july": "Juli",
+          "august": "Augusti",
+          "september": "September",
+          "october": "Oktober",
+          "november": "November",
+          "december": "December"
+        },
+        "units": {
+          "days": "dagar",
+          "min": "min",
+          "hours": "tim"
+        }
+      },
+      "dynamicThreshold": {
+        "tabLabel": "Inlärda",
+        "title": "Inlärda tröskelvärden",
+        "description": "Denna sida visar körtidsdata för dynamiska tröskelvärden. När aktiverad i Huvudinställningar -> Detektering justeras tröskelvärden automatiskt av flera högkonfidensdetekteringar. Arter som visas här antas finnas på denna plats.",
+        "stats": {
+          "active": "Aktiva",
+          "atMinimum": "Vid minimum",
+          "minThreshold": "Minsta tröskelvärde",
+          "validityPeriod": "Giltighetsperiod"
+        },
+        "header": {
+          "species": "Art",
+          "threshold": "Tröskelvärde",
+          "expires": "Upphör"
+        },
+        "searchPlaceholder": "Sök arter...",
+        "threshold": "Tröskelvärde",
+        "level": "Nivå",
+        "expires": "Upphör",
+        "expired": "Upphört",
+        "confidence": "Konfidens",
+        "requiredConfidence": "Erforderlig konfidens",
+        "resetAll": "Återställ alla",
+        "resetSpecies": "Återställ tröskelvärde för denna art",
+        "noEvents": "Ingen historik för tröskeländringar",
+        "changeReason": {
+          "highConfidence": "Högkonfidensdetektering",
+          "expiry": "Tröskelvärdet har upphört",
+          "manualReset": "Manuell återställning"
+        },
+        "note": "Högkonfidensdetekteringar bekräftar vilka arter som finns på denna plats. Efter flera högkonfidensmatchningar sänks detekteringströskelvärdet säkert för att fånga fler läten utan betydande risk för falsklarm. Tröskelvärden återställs automatiskt efter den konfigurerade giltighetsperioden.",
+        "empty": {
+          "title": "Inga inlärda tröskelvärden",
+          "description": "Högkonfidensdetekteringar skapar automatiskt inlärda tröskelvärden för arter"
+        },
+        "resetAllConfirm": {
+          "title": "Återställ alla tröskelvärden",
+          "message": "Detta återställer alla {count} inlärda tröskelvärden. Arter måste detekteras med hög konfidens igen för att sänka sina tröskelvärden."
+        },
+        "loadError": "Kunde inte ladda dynamiska tröskelvärden",
+        "resetSuccess": "Tröskelvärde återställt för {species}",
+        "resetError": "Kunde inte återställa tröskelvärdet",
+        "resetAllSuccess": "Återställde {count} tröskelvärden",
+        "resetAllError": "Kunde inte återställa tröskelvärdena",
+        "expand": "Visa händelsehistorik",
+        "collapse": "Dölj händelsehistorik"
+      }
+    },
+    "database": {
+      "sqlitePlaceholder": "Ange sökväg till SQLite-databas",
+      "mysqlHostPlaceholder": "Ange MySQL-värd",
+      "mysqlUsernamePlaceholder": "Ange MySQL-användarnamn"
+    },
+    "alerts": {
+      "sections": {
+        "history": {
+          "title": "Notifieringshistorik",
+          "description": "Visa tidigare notifieringshändelser och deras resultat."
+        }
+      },
+      "filters": {
+        "objectType": "Objekttyp",
+        "status": "Status",
+        "allTypes": "Alla typer",
+        "allStates": "Alla tillstånd",
+        "enabled": "Aktiverad",
+        "disabled": "Inaktiverad"
+      },
+      "builtIn": "Inbyggd",
+      "enabled": "Aktiverad",
+      "disabled": "Inaktiverad",
+      "trigger": "Utlösare",
+      "conditions": "Villkor",
+      "actions": "Åtgärder",
+      "cooldown": "Väntetid",
+      "noConditions": "Inga villkor",
+      "noActions": "Inga åtgärder",
+      "noRules": "Inga larmregler konfigurerade.",
+      "noMatchingRules": "Inga regler matchar de aktuella filtren.",
+      "noHistory": "Ingen notifieringshistorik.",
+      "confirmDelete": "Är du säker på att du vill ta bort regeln \"{name}\"?",
+      "newRule": "Ny regel",
+      "resetDefaults": "Återställ standardvärden",
+      "resetting": "Återställer...",
+      "clearHistory": "Rensa historik",
+      "clearing": "Rensar...",
+      "historyCount": "{total} totalt antal poster",
+      "actionsExecuted": "Utförda åtgärder",
+      "actionLabels": {
+        "edit": "Redigera regel",
+        "enable": "Aktivera regel",
+        "disable": "Inaktivera regel",
+        "test": "Testa regel",
+        "delete": "Ta bort regel"
+      },
+      "status": {
+        "enabled": "Regel aktiverad",
+        "disabled": "Regel inaktiverad",
+        "deleted": "Regel borttagen",
+        "testFired": "Testlarm utlöst",
+        "defaultsReset": "Standardvärden återställda",
+        "historyCleared": "Historik rensad",
+        "created": "Regel skapad",
+        "updated": "Regel uppdaterad",
+        "exported": "Regler exporterade",
+        "imported": "{imported} av {total} regler importerade"
+      },
+      "errors": {
+        "loadFailed": "Kunde inte ladda larmregler",
+        "historyFailed": "Kunde inte ladda notifieringshistorik",
+        "toggleFailed": "Kunde inte växla regel",
+        "deleteFailed": "Kunde inte ta bort regel",
+        "testFailed": "Kunde inte testa regel",
+        "resetFailed": "Kunde inte återställa standardvärden",
+        "clearHistoryFailed": "Kunde inte rensa historik",
+        "saveFailed": "Kunde inte spara regel",
+        "exportFailed": "Kunde inte exportera regler",
+        "importFailed": "Kunde inte importera regler",
+        "schemaLoadFailed": "Kunde inte ladda larmschema. Uppdatera sidan."
+      },
+      "editor": {
+        "createTitle": "Skapa larmregel",
+        "editTitle": "Redigera larmregel",
+        "name": "Namn",
+        "namePlaceholder": "Ange regelnamn",
+        "description": "Beskrivning",
+        "descriptionPlaceholder": "Valfri beskrivning",
+        "enabled": "Aktiverad",
+        "triggerSection": "Utlösare",
+        "objectType": "Objekttyp",
+        "triggerType": "Utlösartyp",
+        "triggerEvent": "Händelse",
+        "triggerMetric": "Mätvärde",
+        "event": "Händelse",
+        "metric": "Mätvärde",
+        "conditionsSection": "Villkor",
+        "property": "Egenskap",
+        "operator": "Operator",
+        "value": "Värde",
+        "valuePlaceholder": "Ange värde",
+        "duration": "Varaktighet (s)",
+        "addCondition": "Lägg till villkor",
+        "removeCondition": "Ta bort villkor",
+        "actionsSection": "Åtgärder",
+        "actionBell": "Notifiering i appen",
+        "actionPush": "Push-notifiering",
+        "optionsSection": "Alternativ",
+        "cooldownSeconds": "Väntetid (sekunder)",
+        "templateTitle": "Titelmall",
+        "templateTitlePlaceholder": "Lämna tomt för standard",
+        "templateMessage": "Meddelandemall",
+        "templateMessagePlaceholder": "Lämna tomt för standard",
+        "noConditionsEvent": "Inga villkor — regeln utlöses vid varje händelse",
+        "noConditionsMetric": "Inga villkor — regeln utlöses vid varje mätvärdets uppdatering",
+        "eventsCount": "händelser",
+        "metricsCount": "mätvärden",
+        "durationFor": "i",
+        "durationSec": "sek"
+      },
+      "export": "Exportera",
+      "import": "Importera",
+      "exporting": "Exporterar...",
+      "importing": "Importerar...",
+      "schema": {
+        "objectTypes": {
+          "stream": "Ljudström",
+          "detection": "Detektering",
+          "application": "Applikation",
+          "integration": "Integration",
+          "device": "Enhet",
+          "system": "System"
+        },
+        "events": {
+          "stream_connected": "Ström ansluten",
+          "stream_disconnected": "Ström frånkopplad",
+          "stream_error": "Strömfel",
+          "detection_new_species": "Ny art detekterad",
+          "detection_occurred": "Detektering utförd",
+          "application_started": "Applikation startad",
+          "application_stopped": "Applikation stoppad",
+          "integration_birdweather_failed": "BirdWeather-uppladdning misslyckades",
+          "integration_mqtt_connected": "MQTT ansluten",
+          "integration_mqtt_disconnected": "MQTT frånkopplad",
+          "integration_mqtt_publish_failed": "MQTT-publicering misslyckades",
+          "device_started": "Enhet startad",
+          "device_stopped": "Enhet stoppad",
+          "device_error": "Enhetsfel"
+        },
+        "metrics": {
+          "system_cpu_usage": "CPU-användning",
+          "system_memory_usage": "Minnesanvändning",
+          "system_disk_usage": "Diskanvändning"
+        },
+        "properties": {
+          "value": "Värde",
+          "species_name": "Artnamn",
+          "scientific_name": "Vetenskapligt namn",
+          "confidence": "Konfidens",
+          "location": "Plats",
+          "stream_name": "Strömmens namn",
+          "stream_url": "Strömmens URL",
+          "device_name": "Enhetens namn",
+          "error": "Felmeddelande",
+          "broker": "Mäklare"
+        },
+        "operators": {
+          "is": "är",
+          "is_not": "är inte",
+          "contains": "innehåller",
+          "not_contains": "innehåller inte",
+          "greater_than": "större än",
+          "less_than": "mindre än",
+          "greater_or_equal": "större eller lika",
+          "less_or_equal": "mindre eller lika"
+        }
+      },
+      "v2Required": "Det utökade databasschemat krävs för larmregler. Du kan migrera din databas från databassidan under System.",
+      "builtInRules": {
+        "newSpecies": {
+          "name": "Ny art detekterad",
+          "description": "Meddelar när en art detekteras för första gången"
+        },
+        "streamDisconnected": {
+          "name": "Ljudström frånkopplad",
+          "description": "Meddelar när en RTSP- eller ljudström tappar anslutningen"
+        },
+        "streamError": {
+          "name": "Ljudströmfel",
+          "description": "Meddelar när en ljudström stöter på ett fel"
+        },
+        "deviceError": {
+          "name": "Ljudenhetsfel",
+          "description": "Meddelar när en lokal ljudinspelningsenhet stöter på ett fel"
+        },
+        "highCpu": {
+          "name": "Hög CPU-användning",
+          "description": "Meddelar när CPU-användningen överskrider 90 % i 5 minuter"
+        },
+        "highMemory": {
+          "name": "Hög minnesanvändning",
+          "description": "Meddelar när minnesanvändningen överskrider 90 % i 5 minuter"
+        },
+        "lowDisk": {
+          "name": "Lite diskutrymme",
+          "description": "Meddelar när diskanvändningen överskrider 85 % i 5 minuter"
+        },
+        "mqttDisconnected": {
+          "name": "MQTT frånkopplad",
+          "description": "Meddelar när anslutningen till MQTT-mäklaren har tappats"
+        },
+        "mqttPublishFailed": {
+          "name": "MQTT-publicering misslyckades",
+          "description": "Meddelar när publicering av MQTT-meddelande misslyckas"
+        },
+        "birdWeatherFailed": {
+          "name": "BirdWeather-uppladdning misslyckades",
+          "description": "Meddelar när en BirdWeather-uppladdning misslyckas"
+        }
+      }
+    },
+    "appearance": {
+      "colorScheme": "Färgschema",
+      "colorSchemeDescription": "Välj ett färgschema för gränssnittet",
+      "schemeBlue": "Blå",
+      "schemeForest": "Skog",
+      "schemeAmber": "Bärnsten",
+      "schemeViolet": "Violett",
+      "schemeRose": "Rosa",
+      "schemeCustom": "Anpassad",
+      "customPrimary": "Primärfärg",
+      "customAccent": "Accentfärg",
+      "logoGradient": "Gradientlogotyp",
+      "logoGradientDescription": "Använd en gradienteffekt på sidofältets logotyp"
+    },
+    "userInterface": {
+      "tabs": {
+        "appearance": "Utseende",
+        "language": "Språk och region",
+        "visualContent": "Visuellt innehåll",
+        "audioPlayback": "Ljuduppspelning"
+      },
+      "appearance": {
+        "title": "Utseende",
+        "description": "Anpassa utseendet på ditt BirdNET-Go-gränssnitt"
+      },
+      "language": {
+        "title": "Språk och region",
+        "description": "Språk, temperaturenheter och regionala visningsinställningar"
+      },
+      "visualContent": {
+        "title": "Visuellt innehåll",
+        "description": "Konfigurera fågelbilder och inställningar för spektrogramvisning"
+      },
+      "audioPlayback": {
+        "title": "Ljuduppspelning",
+        "description": "Standardinställningar för uppspelning av fågelinspelningar.",
+        "defaultGain": "Standard volymförstärkning",
+        "defaultGainHelpText": "Initial förstärkning vid uppspelning av inspelningar. Fågelljud är ofta svaga, så en förstärkning på 6–12 dB rekommenderas.",
+        "defaultGainUnit": "dB"
+      }
+    },
+    "restartRequired": "Vissa ändringar kräver en omstart av servern för att träda i kraft. Starta om BirdNET-Go."
+  },
+  "auth": {
+    "login": "Logga in",
+    "logout": "Logga ut",
+    "openLoginModal": "Öppna inloggningsdialog",
+    "loginTitle": "Logga in",
+    "loginSubtitle": "Gå till din BirdNET-Go-instrumentpanel",
+    "password": "Lösenord",
+    "passwordPlaceholder": "Ange ditt lösenord",
+    "enterPassword": "Ange ditt lösenord",
+    "continue": "Fortsätt",
+    "or": "eller",
+    "loginWithGoogle": "Logga in med Google",
+    "loginWithGithub": "Logga in med GitHub",
+    "loginWithMicrosoft": "Logga in med Microsoft",
+    "continueWithGoogle": "Fortsätt med Google",
+    "continueWithGithub": "Fortsätt med GitHub",
+    "continueWithMicrosoft": "Fortsätt med Microsoft",
+    "continueWithLine": "Fortsätt med LINE",
+    "continueWithKakao": "Fortsätt med Kakao",
+    "continueWithOidc": "Fortsätt med OIDC",
+    "errors": {
+      "loginFailed": "Inloggningen misslyckades. Kontrollera ditt lösenord och försök igen.",
+      "passwordRequired": "Lösenord krävs.",
+      "passwordTooLong": "Lösenordet är för långt.",
+      "invalidCharacters": "Lösenordet innehåller ogiltiga tecken.",
+      "invalidCredentials": "Ogiltigt användarnamn eller lösenord.",
+      "tooManyAttempts": "För många inloggningsförsök. Försök igen senare.",
+      "serverError": "Ett serverfel inträffade. Försök igen senare.",
+      "rateLimited": "För många försök. Vänta {minutes} minuter innan du försöker igen.",
+      "configurationError": "Konfigurationsfel för autentisering. Kontakta support.",
+      "invalidInput": "Ogiltig inmatning."
+    }
+  },
+  "dataDisplay": {
+    "table": {
+      "noData": "Inga data tillgängliga",
+      "loading": "Laddar data...",
+      "error": "Kunde inte ladda data",
+      "sortBy": "Sortera efter {column}",
+      "rowsPerPage": "Rader per sida",
+      "pageInfo": "Visar {from} till {to} av {total} resultat"
+    },
+    "pagination": {
+      "ariaLabel": "Sidnavigering",
+      "previous": "Föregående",
+      "next": "Nästa",
+      "page": "Sida {current} av {total}",
+      "goToPage": "Gå till sida {page}",
+      "goToPreviousPage": "Gå till föregående sida",
+      "goToNextPage": "Gå till nästa sida",
+      "firstPage": "Första sidan",
+      "lastPage": "Sista sidan"
+    },
+    "stats": {
+      "total": "Totalt",
+      "average": "Medelvärde",
+      "min": "Minimum",
+      "max": "Maximum",
+      "count": "Antal"
+    }
+  },
+  "forms": {
+    "placeholders": {
+      "text": "Ange {field}",
+      "select": "Välj {field}",
+      "search": "Sök...",
+      "date": "Välj datum",
+      "dateRange": "Välj datumintervall",
+      "number": "Ange nummer",
+      "password": "Ange lösenord",
+      "url": "Ange URL",
+      "email": "Ange e-post",
+      "selectFilterType": "Välj filtertyp",
+      "speciesName": "Artnamn"
+    },
+    "labels": {
+      "showPassword": "Visa lösenord",
+      "hidePassword": "Dölj lösenord",
+      "copyToClipboard": "Kopiera till urklipp",
+      "clearSelection": "Rensa val",
+      "selectOption": "Välj ett alternativ"
+    },
+    "help": {
+      "passwordStrength": "Lösenordsstyrka: {strength}",
+      "charactersRemaining": "{count} tecken kvar",
+      "dateFormat": "Format: {format}"
+    },
+    "password": {
+      "strength": {
+        "label": "Lösenordsstyrka:",
+        "levels": {
+          "weak": "Svagt",
+          "fair": "Godtagbart",
+          "good": "Bra",
+          "strong": "Starkt"
+        },
+        "suggestions": {
+          "title": "Förslag:",
+          "minLength": "Minst 8 tecken",
+          "mixedCase": "Blandning av versaler och gemener",
+          "number": "Minst en siffra",
+          "special": "Minst ett specialtecken"
+        }
+      }
+    },
+    "errors": {
+      "radioValueRequired": "radioValue-prop krävs för radioknappar"
+    },
+    "dateRange": {
+      "labels": {
+        "startDate": "Startdatum",
+        "endDate": "Slutdatum",
+        "quickSelect": "Snabbval",
+        "selected": "Valt: {startDate} - {endDate}"
+      },
+      "presets": {
+        "today": "Idag",
+        "yesterday": "Igår",
+        "last7Days": "Senaste 7 dagarna",
+        "last30Days": "Senaste 30 dagarna",
+        "thisMonth": "Denna månad",
+        "lastMonth": "Förra månaden",
+        "thisYear": "I år"
+      },
+      "errors": {
+        "invalidStartDate": "Ogiltigt startdatum",
+        "invalidEndDate": "Ogiltigt slutdatum",
+        "startAfterEnd": "Startdatum kan inte vara efter slutdatum",
+        "endBeforeStart": "Slutdatum kan inte vara före startdatum"
+      }
+    },
+    "species": {
+      "placeholder": "Ange artnamn...",
+      "empty": "Inga arter tillagda",
+      "maxReached": "Maximalt {maxItems} arter har nåtts",
+      "aria": {
+        "dragToReorder": "Dra för att ändra ordning på {species}",
+        "edit": "Redigera art",
+        "remove": "Ta bort art"
+      }
+    }
+  },
+  "media": {
+    "audio": {
+      "settings": "Ljudinställningar",
+      "play": "Spela",
+      "pause": "Pausa",
+      "stop": "Stoppa",
+      "volume": "Volym",
+      "mute": "Ljud av",
+      "unmute": "Ljud på",
+      "download": "Ladda ner ljud",
+      "currentTime": "{current} / {total}",
+      "loading": "Laddar ljud...",
+      "error": "Kunde inte ladda ljud",
+      "errorShort": "Fel",
+      "playError": "Kunde inte spela ljud",
+      "volumeGain": "Volymförstärkning: {value} dB",
+      "filterControl": "Filterkontroll",
+      "highPassFilter": "Högpassfilter: {freq} Hz",
+      "seekProgress": "Sök i ljudet: {current} / {total} sekunder",
+      "playbackSpeed": "Uppspelningshastighet",
+      "speed": "Hastighet",
+      "loop": "Växla upprepning"
+    },
+    "spectrogram": {
+      "notGenerated": "Spektrogrammet har inte genererats ännu",
+      "generate": "Generera spektrogram",
+      "generateButton": "Generera",
+      "generating": "Genererar...",
+      "generationFailed": "Kunde inte generera spektrogram",
+      "generationSuccess": "Spektrogrammet har genererats"
+    }
+  },
+  "components": {
+    "audio": {
+      "spectrogramUnavailable": "Spektrogram ej tillgängligt",
+      "spectrogramLoading": "Laddar spektrogram...",
+      "spectrogramLoaded": "Spektrogram laddat",
+      "spectrogramLoadingAria": "Laddar spektrogram",
+      "spectrogramGeneratingAria": "Genererar spektrogram",
+      "generating": "Genererar...",
+      "queuePosition": "Kö: {position}",
+      "loadError": "Kunde inte ladda ljud"
+    },
+    "forms": {
+      "numberField": {
+        "adjustedToMinimum": "Värdet justerades till minimum ({value})",
+        "adjustedToMaximum": "Värdet justerades till maximum ({value})"
+      },
+      "rtsp": {
+        "addNewStream": "Lägg till ny RTSP-ström",
+        "maxStreamsReached": "Maximalt antal RTSP-strömmar ({max}) har nåtts.",
+        "cameraPlaceholder": "Kamera 1",
+        "urlPlaceholder": "rtsp://användarnamn:lösenord@192.168.1.100:554/stream"
+      },
+      "subnet": {
+        "maxSubnetsReached": "Maximalt antal subnät ({max}) har nåtts."
+      },
+      "species": {
+        "loadingSpecies": "Laddar arter...",
+        "typePlaceholder": "Skriv artnamn...",
+        "suggestionsAvailable": "{count} artförslag tillgängliga. Använd piltangenterna för att navigera.",
+        "noSuggestions": "Inga artförslag tillgängliga."
+      },
+      "select": {
+        "searchPlaceholder": "Sök...",
+        "searchOptions": "Sök alternativ",
+        "noOptions": "Inga alternativ hittades"
+      }
+    },
+    "datePicker": {
+      "today": "Idag",
+      "feedback": {
+        "endDateCleared": "Slutdatum rensades för att behålla ett giltigt intervall",
+        "startDateCleared": "Startdatum rensades för att behålla ett giltigt intervall",
+        "invalidDateFormat": "Ogiltigt datumformat. Använd formatet ÅÅÅÅ-MM-DD",
+        "dateOutOfRange": "Valt datum ligger utanför tillåtet intervall",
+        "futureDate": "Kan inte välja framtida datum",
+        "pastDate": "Kan inte välja tidigare datum"
+      },
+      "aria": {
+        "dateSelected": "Datum {date} valt",
+        "calendarOpened": "Kalender öppnad för datumval",
+        "calendarClosed": "Kalender stängd",
+        "monthChanged": "Visar {month} {year}",
+        "dayUnavailable": "Dag {day} är inte tillgänglig för val",
+        "todayButton": "Välj dagens datum: {today}"
+      },
+      "status": {
+        "loading": "Laddar kalender...",
+        "error": "Fel vid laddning av kalender"
+      }
+    },
+    "audioPlayer": {
+      "errors": {
+        "generationFailedStatus": "Generering misslyckades med status {status}",
+        "spectrogramFailed": "Kunde inte generera spektrogram"
+      },
+      "clipExtraction": {
+        "selectRange": "Klicka och dra för att markera ett intervall",
+        "playSelection": "Spela markerat intervall",
+        "pauseSelection": "Pausa uppspelning",
+        "reviewSelection": "Hoppa till början av markeringen",
+        "selectionStart": "Handtag för markeringsstart",
+        "selectionEnd": "Handtag för markeringsslut",
+        "lossless": "Förlustfri",
+        "lossy": "Förlustig",
+        "extractClip": "Ladda ner markerat klipp",
+        "clearSelection": "Rensa markering",
+        "extracting": "Extraherar klipp...",
+        "extractError": "Kunde inte extrahera klipp",
+        "formatLabel": "Format",
+        "rangeLabel": "{start}s – {end}s"
+      },
+      "processing": {
+        "playSelection": "Spela markering",
+        "skipToStart": "Hoppa till markeringsstart",
+        "clearSelection": "Rensa markering",
+        "gain": "Förstärkning (dB)",
+        "denoise": "Brusreducering",
+        "denoiseOff": "Av",
+        "denoiseLight": "Lätt",
+        "denoiseMedium": "Medel",
+        "denoiseHeavy": "Kraftig",
+        "normalize": "Normalisera ljud",
+        "normalizeTooltip": "EBU R128-normalisering",
+        "export": "Exportera",
+        "exportOriginal": "Original",
+        "processingActive": "Bearbetning aktiv"
+      }
+    },
+    "weatherInfo": {
+      "errors": {
+        "loadFailed": "Kunde inte ladda väderdata"
+      }
+    },
+    "tls": {
+      "certificateInstalled": "Certifikat installerat",
+      "browseFile": "Bläddra",
+      "subject": "Ämne",
+      "issuer": "Utfärdare",
+      "sans": "Alternativa namn (SAN)",
+      "validUntil": "Giltigt till",
+      "daysRemaining": "Dagar kvar",
+      "fingerprint": "Fingeravtryck",
+      "expiryWarning": "Detta certifikat löper ut snart. Överväg att förnya det.",
+      "downloadCertificate": "Ladda ner certifikat",
+      "regenerateButton": "Generera om",
+      "removeCertificate": "Ta bort certifikat",
+      "fileReadError": "Kunde inte läsa fil",
+      "loading": "Laddar certifikatinformation..."
+    }
+  },
+  "connectivity": {
+    "offline": "Anslutningen till servern har förlorats. Försöker återansluta..."
+  },
+  "detection": {
+    "actions": {
+      "back": "Tillbaka",
+      "review": "Granska",
+      "download": "Ladda ner"
+    }
+  },
+  "quietHours": {
+    "indicator": {
+      "tooltip": "Tysta timmar aktiva — {count} källa/källor pausade"
+    }
+  },
+  "errors": {
+    "auth": {
+      "tooManyAttempts": "För många inloggningsförsök. Försök igen om 15 minuter.",
+      "credentialsRequired": "Användarnamn och lösenord krävs",
+      "invalidCredentials": "Ogiltiga inloggningsuppgifter",
+      "missingCode": "Auktoriseringskod saknas",
+      "serviceUnavailable": "Autentiseringstjänsten är inte tillgänglig. Försök igen senare.",
+      "timeout": "Inloggningen tog för lång tid. Försök igen.",
+      "exchangeFailed": "Kunde inte slutföra inloggningen just nu. Försök igen.",
+      "sessionError": "Sessionsfel vid inloggning. Försök igen."
+    },
+    "alert": {
+      "v2Required": "Varningsregler kräver den utökade (v2) databasen",
+      "invalidID": "Ogiltigt regel-ID",
+      "notFound": "Varningsregel hittades inte",
+      "invalidBody": "Ogiltig förfrågningsinnehåll",
+      "nameRequired": "Regelnamn krävs",
+      "typesRequired": "Objekttyp och utlösartyp krävs",
+      "duplicateName": "En regel med detta namn finns redan",
+      "invalidJSON": "Ogiltig JSON"
+    },
+    "detection": {
+      "invalidDate": "Ogiltigt {paramName}-format, använd ÅÅÅÅ-MM-DD"
+    },
+    "backup": {
+      "invalidType": "Typ måste vara 'legacy' eller 'v2'",
+      "alreadyRunning": "Säkerhetskopiering pågår redan",
+      "dbInfoFailed": "Kunde inte hämta databasinformation",
+      "diskSpaceCheck": "Kunde inte kontrollera diskutrymme",
+      "insufficientSpace": "Inte tillräckligt med diskutrymme. Behöver {needed}, har {available}",
+      "createFailed": "Kunde inte skapa säkerhetskopieringsjobb",
+      "notFound": "Säkerhetskopieringsjobb hittades inte eller har löpt ut",
+      "notReady": "Säkerhetskopian är inte redo för nedladdning",
+      "fileNotFound": "Säkerhetskopieringsfil hittades inte — jobbet kan ha löpt ut",
+      "sqliteOnly": "Säkerhetskopiering är bara tillgänglig för SQLite-databaser",
+      "dbNotConfigured": "Databasen är inte konfigurerad",
+      "unsupportedType": "Kan inte säkerhetskopiera denna datalagertyp",
+      "v2NotInitialized": "V2-databasen är inte initierad"
+    },
+    "migration": {
+      "notConfigured": "Migrering är inte konfigurerad",
+      "preFlightFailed": "Förkontroller misslyckades",
+      "invalidBody": "Ogiltigt förfrågningsinnehåll",
+      "recordCountFailed": "Kunde inte bestämma totalt antal poster",
+      "startFailed": "Kunde inte starta migrering",
+      "initFailed": "Kunde inte initiera migrering",
+      "resumeFailed": "Kunde inte återuppta migrering"
+    },
+    "cleanup": {
+      "noLegacyDB": "Ingen äldre databas hittades",
+      "accessFailed": "Kan inte komma åt den äldre databasen",
+      "restartRequired": "Programmet måste startas om efter migrering innan rensning är tillgänglig",
+      "safetyCheck": "Målfilen verkar vara en V2-databas — rensning tillåts inte av säkerhetsskäl",
+      "noLegacyTables": "Inga äldre tabeller hittades",
+      "restartNeeded": "Kan inte rensa: Programmet måste startas om efter migrering",
+      "alreadyRunning": "Rensning pågår redan"
+    },
+    "integration": {
+      "mqttDisabled": "MQTT är inte aktiverat i inställningarna",
+      "mqttNotConfigured": "MQTT-broker inte konfigurerad",
+      "mqttMetricsUnavailable": "Metriktjänst inte tillgänglig för MQTT-test",
+      "mqttClientFailed": "Kunde inte skapa MQTT-klient",
+      "birdweatherDisabled": "BirdWeather-integrationen är inte aktiverad",
+      "birdweatherNotConfigured": "BirdWeather-stations-ID inte konfigurerat",
+      "birdweatherClientFailed": "Kunde inte skapa BirdWeather-klient",
+      "noWeatherProvider": "Ingen väderleverantör vald",
+      "openWeatherKeyRequired": "OpenWeather API-nyckel krävs",
+      "processorUnavailable": "Processor inte tillgänglig",
+      "discoveryFailed": "Kunde inte utlösa Home Assistant-upptäckt"
+    },
+    "notification": {
+      "serviceUnavailable": "Aviseringstjänsten är inte tillgänglig",
+      "idRequired": "Aviserings-ID krävs",
+      "notFound": "Avisering hittades inte",
+      "hostRequired": "Värdparameter krävs",
+      "invalidHost": "Ogiltig värdparameter",
+      "rateLimit": "För många anslutningsförsök till aviseringsströmmen, vänta innan du försöker igen"
+    },
+    "debug": {
+      "notEnabled": "Felsökningsläge är inte aktiverat"
+    },
+    "terminal": {
+      "disabled": "Terminalen är inaktiverad. Aktivera den i inställningarna."
+    },
+    "api": {
+      "badRequest": "Ogiltig förfrågan. Kontrollera din inmatning och försök igen.",
+      "unauthorized": "Autentisering krävs. Logga in och försök igen.",
+      "forbidden": "Du har inte behörighet att utföra denna åtgärd.",
+      "notFound": "Den begärda resursen hittades inte.",
+      "conflict": "Denna åtgärd står i konflikt med aktuellt tillstånd. Uppdatera sidan och försök igen.",
+      "validationFailed": "Ogiltig inmatning. Kontrollera dina data och försök igen.",
+      "tooManyRequests": "För många förfrågningar. Vänta innan du försöker igen.",
+      "serverError": "Ett serverfel inträffade. Försök igen senare.",
+      "clientError": "Klientfel inträffade. Kontrollera din förfrågan och försök igen.",
+      "unknownError": "Ett oväntat fel inträffade. Försök igen.",
+      "validationCheck": "Validering misslyckades. Kontrollera din inmatning.",
+      "conflictData": "Denna åtgärd står i konflikt med befintliga data.",
+      "requestTimeout": "Förfrågan tog för lång tid.",
+      "networkError": "Nätverksfel inträffade. Kontrollera din anslutning."
+    }
+  },
+  "weather": {
+    "moon": {
+      "newMoon": "Nymåne",
+      "waxingCrescent": "Tilltagande skära",
+      "firstQuarter": "Första kvarteret",
+      "waxingGibbous": "Tilltagande halvmåne",
+      "fullMoon": "Fullmåne",
+      "waningGibbous": "Avtagande halvmåne",
+      "lastQuarter": "Sista kvarteret",
+      "waningCrescent": "Avtagande skära"
+    },
+    "birding": {
+      "excellent": "Lugnt — utmärkt för att höra fågelläten",
+      "moderate": "Måttlig vind — vissa fågelläten kan vara svårare att höra",
+      "poor": "Stark vind — fågelläten hörs sannolikt inte"
+    }
+  }
+}

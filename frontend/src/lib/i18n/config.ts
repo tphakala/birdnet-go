@@ -15,6 +15,7 @@ export const LOCALES = {
   pl: { name: 'Polski' },
   pt: { name: 'Portugues' },
   sk: { name: 'Slovenčina' },
+  sv: { name: 'Svenska' },
 } as const;
 
 export type Locale = keyof typeof LOCALES;
