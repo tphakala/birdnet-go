@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -1462,16 +1463,15 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 
 	// No temp file — only the final file appears after a short delay.
 	// This simulates the race window where FFmpeg hasn't started yet.
-	errChan := make(chan error, 1)
-	go func() {
-		time.Sleep(400 * time.Millisecond)
-		errChan <- createTestAudioFile(t, audioFilePath)
-	}()
-	t.Cleanup(func() {
-		if bgErr := <-errChan; bgErr != nil {
-			t.Errorf("Background goroutine failed: %v", bgErr)
+	// Delay is derived from audioGracePeriod to stay aligned with production timing.
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		time.Sleep(audioGracePeriod / 2)
+		if err := createTestAudioFile(t, audioFilePath); err != nil {
+			t.Errorf("Background goroutine failed: %v", err)
 		}
 	})
+	t.Cleanup(wg.Wait)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 	rec := httptest.NewRecorder()

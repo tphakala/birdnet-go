@@ -395,6 +395,12 @@ func (c *Controller) waitForAudioFile(ctx echo.Context, relClipPath string) bool
 // yet, or has already atomically renamed it to the final path.
 // Returns true if the file appeared within the grace period.
 func (c *Controller) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bool {
+	// Check immediately to avoid waiting one full poll interval when the file
+	// appears right after the initial 404.
+	if _, err := c.SFS.StatRel(relClipPath); err == nil {
+		return true
+	}
+
 	graceCtx, cancel := context.WithTimeout(ctx.Request().Context(), audioGracePeriod)
 	defer cancel()
 
