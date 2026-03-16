@@ -31,9 +31,15 @@ type AppConfigResponse struct {
 
 // SecurityConfigDTO represents the security configuration for the frontend.
 type SecurityConfigDTO struct {
-	Enabled       bool          `json:"enabled"`
-	AccessAllowed bool          `json:"accessAllowed"`
-	AuthConfig    AuthConfigDTO `json:"authConfig"`
+	Enabled       bool            `json:"enabled"`
+	AccessAllowed bool            `json:"accessAllowed"`
+	AuthConfig    AuthConfigDTO   `json:"authConfig"`
+	PublicAccess  PublicAccessDTO `json:"publicAccess"`
+}
+
+// PublicAccessDTO exposes which features are accessible without authentication.
+type PublicAccessDTO struct {
+	LiveAudio bool `json:"liveAudio"`
 }
 
 // AuthConfigDTO represents the authentication provider configuration.
@@ -98,6 +104,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 			AuthConfig: AuthConfigDTO{
 				BasicEnabled:     c.Settings.Security.BasicAuth.Enabled,
 				EnabledProviders: enabledProviders,
+			},
+			PublicAccess: PublicAccessDTO{
+				LiveAudio: c.Settings.Security.PublicAccess.LiveAudio,
 			},
 		},
 		Version:      c.Settings.Version,
