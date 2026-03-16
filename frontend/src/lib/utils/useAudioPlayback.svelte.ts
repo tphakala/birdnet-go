@@ -304,6 +304,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
           clearTimeout(audioRetryTimer);
           audioRetryTimer = undefined;
         }
+        if (canplayTimeoutId) {
+          clearTimeout(canplayTimeoutId);
+          canplayTimeoutId = undefined;
+        }
       }
     }
   });
