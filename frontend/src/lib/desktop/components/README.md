@@ -79,6 +79,7 @@ This folder contains **shared components** used across the application. Feature-
 ## Media
 
 - `AudioPlayer.svelte` - Audio playback controls with spectrogram
+- `SpectrogramPlayer.svelte` - Compact spectrogram player for table rows (play overlay + progress bar)
 
 ## Modals
 
