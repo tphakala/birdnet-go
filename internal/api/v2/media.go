@@ -2473,7 +2473,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	getSpectrogramLogger().Debug("Starting singleflight generation",
 		logger.String("spectrogram_key", spectrogramKey))
 
-	_, err, shared := spectrogramGroup.Do(spectrogramKey, func() (any, error) {
+	// Use DoChan so callers can bail out early if their request context is
+	// cancelled (e.g. client disconnect) without blocking the handler goroutine.
+	// The shared work continues in the background using the controller-scoped
+	// context (c.ctx) and the next request will hit the fast path.
+	resultCh := spectrogramGroup.DoChan(spectrogramKey, func() (any, error) {
 		// Use a controller-scoped context with timeout instead of the request-scoped ctx.
 		// Since singleflight shares the result across all concurrent callers, using a
 		// request-scoped context would cause all waiters to fail if the winning request's
@@ -2518,6 +2522,22 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		}()
 		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw)
 	})
+
+	// Wait for either the singleflight result or caller's context cancellation.
+	// If the caller's context is done (client disconnect), return immediately;
+	// the shared generation work continues in the background.
+	var shared bool
+	select {
+	case result := <-resultCh:
+		shared = result.Shared
+		err = result.Err
+	case <-ctx.Done():
+		getSpectrogramLogger().Debug("Caller context cancelled while waiting for spectrogram generation",
+			logger.String("spectrogram_key", spectrogramKey),
+			logger.Error(ctx.Err()),
+			logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
+		return "", ctx.Err()
+	}
 
 	if shared {
 		getSpectrogramLogger().Info("Spectrogram request coalesced via singleflight (duplicate avoided)",
