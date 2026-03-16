@@ -1071,19 +1071,20 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
-	Debug       bool                `json:"debug"`                                          // true to enable debug mode
-	Sensitivity float64             `json:"sensitivity"`                                    // birdnet analysis sigmoid sensitivity
-	Threshold   float64             `json:"threshold"`                                      // threshold for prediction confidence to report
-	Overlap     float64             `json:"overlap"`                                        // birdnet analysis overlap between chunks
-	Longitude   float64             `json:"longitude"`                                      // longitude of recording location for prediction filtering
-	Latitude    float64             `json:"latitude"`                                       // latitude of recording location for prediction filtering
-	Threads     int                 `json:"threads"`                                        // number of CPU threads to use for analysis
-	Locale      string              `json:"locale"`                                         // language to use for labels
-	RangeFilter RangeFilterSettings `json:"rangeFilter"`                                    // range filter settings
-	ModelPath   string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"` // path to external model file (empty for embedded)
-	LabelPath   string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"` // path to external label file (empty for embedded)
-	Labels      []string            `yaml:"-" json:"-"`                                     // list of available species labels, runtime value
-	UseXNNPACK  bool                `json:"useXnnpack"`                                     // true to use XNNPACK delegate for inference acceleration
+	Debug              bool                `json:"debug"`                                          // true to enable debug mode
+	Sensitivity        float64             `json:"sensitivity"`                                    // birdnet analysis sigmoid sensitivity
+	Threshold          float64             `json:"threshold"`                                      // threshold for prediction confidence to report
+	Overlap            float64             `json:"overlap"`                                        // birdnet analysis overlap between chunks
+	Longitude          float64             `json:"longitude"`                                      // longitude of recording location for prediction filtering
+	Latitude           float64             `json:"latitude"`                                       // latitude of recording location for prediction filtering
+	LocationConfigured bool                `json:"locationConfigured" yaml:"locationConfigured"`   // true when location has been explicitly configured by the user
+	Threads            int                 `json:"threads"`                                        // number of CPU threads to use for analysis
+	Locale             string              `json:"locale"`                                         // language to use for labels
+	RangeFilter        RangeFilterSettings `json:"rangeFilter"`                                    // range filter settings
+	ModelPath          string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"` // path to external model file (empty for embedded)
+	LabelPath          string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"` // path to external label file (empty for embedded)
+	Labels             []string            `yaml:"-" json:"-"`                                     // list of available species labels, runtime value
+	UseXNNPACK         bool                `json:"useXnnpack"`                                     // true to use XNNPACK delegate for inference acceleration
 }
 
 // RangeFilterSettings contains settings for the range filter
@@ -1539,6 +1540,9 @@ func Load() (*Settings, error) {
 	// Apply default transport to RTSP/RTMP streams that don't specify one
 	settings.Realtime.RTSP.ApplyStreamDefaults()
 
+	// Migrate LocationConfigured for backward compatibility with existing configs.
+	settings.MigrateLocationConfigured()
+
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if settings.Security.SessionSecret == "" {
 		// Generate a new session secret
@@ -1911,6 +1915,32 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		logger.Int("stream_count", len(rtsp.Streams)))
 
 	return true
+}
+
+// MigrateLocationConfigured sets LocationConfigured to true for existing configs
+// that have non-zero coordinates but predate the explicit flag. This provides
+// backward compatibility so that existing users don't lose location-dependent
+// features after upgrading. New installations start with LocationConfigured=false
+// until the user explicitly sets coordinates (even 0,0).
+func (s *Settings) MigrateLocationConfigured() {
+	if s.BirdNET.LocationConfigured {
+		return
+	}
+
+	if s.BirdNET.Latitude == 0 && s.BirdNET.Longitude == 0 {
+		return
+	}
+
+	s.BirdNET.LocationConfigured = true
+
+	configFile := viper.ConfigFileUsed()
+	if configFile != "" {
+		if err := SaveYAMLConfig(configFile, s); err != nil {
+			GetLogger().Warn("Failed to save migrated LocationConfigured flag", logger.Error(err))
+		} else {
+			GetLogger().Info("Migrated LocationConfigured flag based on existing coordinates")
+		}
+	}
 }
 
 // GetOAuthProvider returns the OAuth provider configuration for the given provider ID.

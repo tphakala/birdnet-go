@@ -93,9 +93,9 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
 	}
 
-	// Skip filtering if location is not set
-	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
-		bn.Debug("Latitude and longitude not set, not using location based prediction filter")
+	// Skip filtering if location is not configured
+	if !bn.Settings.BirdNET.LocationConfigured {
+		bn.Debug("Location not configured, not using location based prediction filter")
 		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
 	}
 

@@ -28,9 +28,9 @@ func (p *Processor) initDaylightFilter() {
 		return
 	}
 
-	// Validate coordinates: lat/lon 0,0 means unconfigured location
-	if p.Settings.BirdNET.Latitude == 0 && p.Settings.BirdNET.Longitude == 0 {
-		GetLogger().Warn("Daylight filter enabled but location not configured (lat/lon 0,0), filter will not be active",
+	// Skip if location has not been explicitly configured by the user
+	if !p.Settings.BirdNET.LocationConfigured {
+		GetLogger().Warn("Daylight filter enabled but location not configured, filter will not be active",
 			logger.String("operation", "daylight_filter_init"))
 		p.daylightFilterMu.Lock()
 		p.daylightFilterAll = false

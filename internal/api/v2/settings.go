@@ -187,6 +187,13 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		settings.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
 	}
 
+	// Ensure LocationConfigured is set when birdnet coordinates are present.
+	// This provides backward compatibility with older frontend versions that
+	// don't send the locationConfigured flag.
+	if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
+		settings.BirdNET.LocationConfigured = true
+	}
+
 	// Run full settings validation after field updates
 	if err := conf.ValidateSettings(settings); err != nil {
 		*settings = oldSettings
@@ -531,6 +538,15 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
 		}
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
+	}
+
+	// Ensure LocationConfigured is set when birdnet coordinates are present.
+	// This handles the case where the frontend sends coordinates without the flag,
+	// and provides backward compatibility with older frontend versions.
+	if strings.EqualFold(section, SettingsSectionBirdnet) {
+		if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
+			settings.BirdNET.LocationConfigured = true
+		}
 	}
 
 	// Run full settings validation after section merge to catch invalid values

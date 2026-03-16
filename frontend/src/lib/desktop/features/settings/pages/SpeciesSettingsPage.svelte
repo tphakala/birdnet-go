@@ -497,6 +497,7 @@
   async function loadActiveSpecies(birdnetData: {
     latitude: number;
     longitude: number;
+    locationConfigured?: boolean;
     rangeFilter?: { threshold: number };
   }) {
     // Prevent re-entrant calls that can corrupt Svelte's internal state
@@ -505,8 +506,8 @@
     }
     isLoadingActiveSpecies = true;
 
-    // Check if location is configured (not 0,0)
-    const locationConfigured = birdnetData.latitude !== 0 || birdnetData.longitude !== 0;
+    // Check if location is configured using the explicit flag
+    const locationConfigured = birdnetData.locationConfigured ?? false;
 
     // IMPORTANT: Capture all reactive values BEFORE any await
     // Reading derived values after await corrupts Svelte's reactivity system
@@ -602,8 +603,7 @@
 
     const hasLocationData =
       birdnetData && birdnetData.latitude !== undefined && birdnetData.longitude !== undefined;
-    const hasRealCoordinates =
-      hasLocationData && (birdnetData.latitude !== 0 || birdnetData.longitude !== 0);
+    const hasRealCoordinates = hasLocationData && (birdnetData.locationConfigured ?? false);
     const isActiveTab = currentTab === 'active';
     const canLoad = !loading || !initialized; // Allow first load even if loading=true initially
     const noDataYet = !data;

@@ -45,6 +45,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
         threads: 4,
         latitude: 40.7128,
         longitude: -74.006,
+        locationConfigured: true,
         rangeFilter: {
           threshold: 0.03,
           speciesCount: null,

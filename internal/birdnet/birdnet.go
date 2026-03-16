@@ -973,8 +973,8 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 		return 0.0
 	}
 
-	// If location not set, range filter is not active, return 0
-	if bn.Settings.BirdNET.Latitude == 0 && bn.Settings.BirdNET.Longitude == 0 {
+	// If location not configured, range filter is not active, return 0
+	if !bn.Settings.BirdNET.LocationConfigured {
 		return 0.0
 	}
 

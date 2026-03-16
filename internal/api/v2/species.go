@@ -259,7 +259,7 @@ func (c *Controller) getSpeciesRarityInfo(bn *birdnet.BirdNET, speciesLabel stri
 	// Create rarity info
 	rarityInfo := &SpeciesRarityInfo{
 		Date:             today.Format(time.DateOnly),
-		LocationBased:    bn.Settings.BirdNET.Latitude != 0 || bn.Settings.BirdNET.Longitude != 0,
+		LocationBased:    bn.Settings.BirdNET.LocationConfigured,
 		ThresholdApplied: float64(bn.Settings.BirdNET.RangeFilter.Threshold),
 	}
 

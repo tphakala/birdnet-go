@@ -31,6 +31,7 @@ export function createEmptySettings(): SettingsFormData {
       threads: 4,
       latitude: 0,
       longitude: 0,
+      locationConfigured: false,
       rangeFilter: {
         threshold: 0.03,
         speciesCount: null,

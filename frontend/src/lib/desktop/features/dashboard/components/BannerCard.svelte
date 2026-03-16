@@ -38,7 +38,7 @@
   let birdnet = $derived($birdnetSettings);
   let latitude = $derived(birdnet?.latitude ?? 0);
   let longitude = $derived(birdnet?.longitude ?? 0);
-  let hasLocation = $derived(latitude !== 0 || longitude !== 0);
+  let hasLocation = $derived(birdnet?.locationConfigured ?? false);
 
   let hasAnyContent = $derived(
     editMode ||

@@ -70,6 +70,7 @@ export interface BirdNetSettings {
   threads: number;
   latitude: number;
   longitude: number;
+  locationConfigured: boolean; // true when location has been explicitly configured
   rangeFilter: RangeFilterSettings;
 }
 
@@ -788,6 +789,7 @@ function createEmptySettings(): SettingsFormData {
       threads: 4,
       latitude: 0,
       longitude: 0,
+      locationConfigured: false,
       rangeFilter: {
         threshold: 0.03,
         speciesCount: null,

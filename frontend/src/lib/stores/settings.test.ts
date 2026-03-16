@@ -44,6 +44,7 @@ describe('Settings Store - Dynamic Threshold and Range Filter', () => {
           threads: 4,
           latitude: 40.7128,
           longitude: -74.006,
+          locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
             speciesCount: null,
@@ -250,6 +251,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
           threads: 4,
           latitude: 40.7128,
           longitude: -74.006,
+          locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
             speciesCount: null,
@@ -269,6 +271,7 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
           threads: 4,
           latitude: 40.7128,
           longitude: -74.006,
+          locationConfigured: true,
           rangeFilter: {
             threshold: 0.03,
             speciesCount: null,

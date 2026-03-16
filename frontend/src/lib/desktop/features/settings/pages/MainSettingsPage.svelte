@@ -452,7 +452,7 @@
 
           if (marker) {
             marker.setLngLat([lng, lat]);
-          } else if (maplibregl && (lat !== 0 || lng !== 0)) {
+          } else if (maplibregl && settings.birdnet.locationConfigured) {
             marker = new maplibregl.Marker({ draggable: true }).setLngLat([lng, lat]).addTo(map!);
             marker.on('dragend', () => {
               const lngLat = marker!.getLngLat();
@@ -632,7 +632,7 @@
       };
       mapElement.addEventListener('wheel', handleWheel as globalThis.EventListener, false);
 
-      if ((initialLat !== 0 || initialLng !== 0) && maplibregl) {
+      if ($birdnetSettings?.locationConfigured && maplibregl) {
         marker = new maplibregl.Marker({ draggable: true })
           .setLngLat([initialLng, initialLat])
           .addTo(map);
@@ -671,6 +671,7 @@
     settingsActions.updateSection('birdnet', {
       latitude: roundedLat,
       longitude: roundedLng,
+      locationConfigured: true,
     });
 
     updateMapView(roundedLat, roundedLng);
@@ -719,6 +720,7 @@
           settingsActions.updateSection('birdnet', {
             latitude: roundedLat,
             longitude: roundedLng,
+            locationConfigured: true,
           });
 
           if (map) {
@@ -779,7 +781,7 @@
         false
       );
 
-      if (currentLat !== 0 || currentLng !== 0) {
+      if ($birdnetSettings?.locationConfigured) {
         modalMarker = new maplibregl!.Marker({ draggable: true })
           .setLngLat([currentLng, currentLat])
           .addTo(modalMap);
@@ -792,6 +794,7 @@
           settingsActions.updateSection('birdnet', {
             latitude: roundedLat,
             longitude: roundedLng,
+            locationConfigured: true,
           });
 
           if (map) {
@@ -819,6 +822,7 @@
           settingsActions.updateSection('birdnet', {
             latitude: roundedLat,
             longitude: roundedLng,
+            locationConfigured: true,
           });
 
           if (modalMarker) {
@@ -892,8 +896,7 @@
   }
 
   async function testCurrentRangeFilter() {
-    if (rangeFilterState.testing || !settings.birdnet.latitude || !settings.birdnet.longitude)
-      return;
+    if (rangeFilterState.testing || !settings.birdnet.locationConfigured) return;
 
     clearTimeout(loadingDelayTimer);
 
@@ -969,7 +972,12 @@
   }
 
   function updateBirdnetSetting(key: string, value: string | number | boolean | null) {
-    settingsActions.updateSection('birdnet', { [key]: value });
+    // When latitude or longitude is updated, mark location as explicitly configured
+    if (key === 'latitude' || key === 'longitude') {
+      settingsActions.updateSection('birdnet', { [key]: value, locationConfigured: true });
+    } else {
+      settingsActions.updateSection('birdnet', { [key]: value });
+    }
   }
 
   function updateDynamicThreshold(key: string, value: number | boolean) {
