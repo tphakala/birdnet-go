@@ -66,7 +66,21 @@ const (
 const (
 	// MetadataKeyIsToast identifies toast notifications in metadata
 	MetadataKeyIsToast = "isToast"
+	// MetadataKeyIsAlertRuleTest identifies alert rule test notifications.
+	// These are created when a user clicks the test button on an alert rule
+	// and should NOT be forwarded to push providers (Telegram, Shoutrrr, etc.).
+	MetadataKeyIsAlertRuleTest = "isAlertRuleTest"
 )
+
+// isAlertRuleTestNotification checks if a notification was created by the
+// alert rule test endpoint. Push providers should skip these.
+func isAlertRuleTestNotification(notif *Notification) bool {
+	if notif == nil || notif.Metadata == nil {
+		return false
+	}
+	isTest, ok := notif.Metadata[MetadataKeyIsAlertRuleTest].(bool)
+	return ok && isTest
+}
 
 // isToastNotification checks if a notification is a toast notification
 // by examining its metadata for the isToast flag

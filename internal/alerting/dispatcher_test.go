@@ -19,6 +19,13 @@ type mockNotifCreator struct {
 		messageKey               string
 		messageParams            map[string]any
 	}
+	testCalls    []struct{ title, message string }
+	testKeyCalls []struct {
+		title, message, titleKey string
+		titleParams              map[string]any
+		messageKey               string
+		messageParams            map[string]any
+	}
 }
 
 func (m *mockNotifCreator) CreateAndBroadcast(title, message string) error {
@@ -31,6 +38,24 @@ func (m *mockNotifCreator) CreateAndBroadcastWithKeys(
 	messageKey string, messageParams map[string]any,
 ) error {
 	m.keyCalls = append(m.keyCalls, struct {
+		title, message, titleKey string
+		titleParams              map[string]any
+		messageKey               string
+		messageParams            map[string]any
+	}{title, message, titleKey, titleParams, messageKey, messageParams})
+	return nil
+}
+
+func (m *mockNotifCreator) CreateAndBroadcastTest(title, message string) error {
+	m.testCalls = append(m.testCalls, struct{ title, message string }{title, message})
+	return nil
+}
+
+func (m *mockNotifCreator) CreateAndBroadcastTestWithKeys(
+	title, message, titleKey string, titleParams map[string]any,
+	messageKey string, messageParams map[string]any,
+) error {
+	m.testKeyCalls = append(m.testKeyCalls, struct {
 		title, message, titleKey string
 		titleParams              map[string]any
 		messageKey               string
@@ -437,4 +462,65 @@ func TestDispatcher_DefaultTemplate_NoProperties_GracefulFallback(t *testing.T) 
 	// Should still work, just without a message (no value property)
 	assert.Empty(t, call.messageKey, "should not set message key when required properties are missing")
 	assert.Empty(t, call.message)
+}
+
+func TestDispatchTest_CustomTemplate_UsesTestMethod(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Stream Down",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell, TemplateTitle: "Stream lost", TemplateMessage: "A stream disconnected"},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeStream,
+		EventName:  EventStreamDisconnected,
+		Timestamp:  time.Now(),
+	}
+
+	dispatcher.DispatchTest(rule, event)
+
+	// DispatchTest should use the test methods, not the normal ones
+	assert.Empty(t, mock.calls, "DispatchTest should not use CreateAndBroadcast")
+	assert.Empty(t, mock.keyCalls, "DispatchTest should not use CreateAndBroadcastWithKeys")
+	require.Len(t, mock.testCalls, 1)
+	assert.Equal(t, "Stream lost", mock.testCalls[0].title)
+	assert.Equal(t, "A stream disconnected", mock.testCalls[0].message)
+}
+
+func TestDispatchTest_DefaultTemplate_UsesTestKeysMethod(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "New species detected",
+		NameKey: RuleKeyNewSpeciesName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell}, // empty templates → defaults with keys
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionNewSpecies,
+		Properties: map[string]any{
+			PropertySpeciesName: "Eurasian Blue Tit",
+			PropertyConfidence:  0.923,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.DispatchTest(rule, event)
+
+	// DispatchTest should use the test key methods, not the normal ones
+	assert.Empty(t, mock.calls, "DispatchTest should not use CreateAndBroadcast")
+	assert.Empty(t, mock.keyCalls, "DispatchTest should not use CreateAndBroadcastWithKeys")
+	require.Len(t, mock.testKeyCalls, 1)
+	call := mock.testKeyCalls[0]
+	assert.Equal(t, MsgAlertFiredTitle, call.titleKey)
+	assert.Equal(t, "New species detected", call.titleParams["rule_name"])
+	assert.Equal(t, MsgAlertDetectionOccurred, call.messageKey)
 }

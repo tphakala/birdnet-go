@@ -213,6 +213,11 @@ func (d *pushDispatcher) runDispatchLoop(ctx context.Context, ch <-chan *Notific
 			if isToastNotification(notif) {
 				continue
 			}
+			// Alert rule test notifications should only appear in the
+			// notification bell, not be forwarded to external push providers.
+			if isAlertRuleTestNotification(notif) {
+				continue
+			}
 			go d.dispatch(ctx, notif)
 		case <-ctx.Done():
 			return

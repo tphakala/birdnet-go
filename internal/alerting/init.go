@@ -40,6 +40,33 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	return svc.CreateWithMetadata(notif)
 }
 
+func (a *notificationAdapter) CreateAndBroadcastTest(title, message string) error {
+	svc := notification.GetService()
+	if svc == nil {
+		return nil // notification service not yet initialized
+	}
+	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, title, message).
+		WithMetadata(notification.MetadataKeyIsAlertRuleTest, true)
+	return svc.CreateWithMetadata(notif)
+}
+
+func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
+	title, message, titleKey string, titleParams map[string]any,
+	messageKey string, messageParams map[string]any,
+) error {
+	svc := notification.GetService()
+	if svc == nil {
+		return nil // notification service not yet initialized
+	}
+	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, title, message).
+		WithMetadata(notification.MetadataKeyIsAlertRuleTest, true).
+		WithTitleKey(titleKey, titleParams)
+	if messageKey != "" {
+		notif = notif.WithMessageKey(messageKey, messageParams)
+	}
+	return svc.CreateWithMetadata(notif)
+}
+
 // Initialize creates and starts the alerting engine.
 // It seeds default rules if none exist, creates the engine with the
 // action dispatcher, subscribes to the event bus, and loads rules.
@@ -60,6 +87,7 @@ func Initialize(
 	// Create dispatcher and engine (adapter lazily resolves notification service)
 	dispatcher := NewActionDispatcher(&notificationAdapter{}, log, at)
 	engine := NewEngine(repo, dispatcher.Dispatch, log, at)
+	engine.SetTestActionFunc(dispatcher.DispatchTest)
 
 	// Load rules from database
 	if err := engine.RefreshRules(ctx); err != nil {

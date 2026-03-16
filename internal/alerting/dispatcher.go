@@ -13,6 +13,11 @@ import (
 type NotificationCreator interface {
 	CreateAndBroadcast(title, message string) error
 	CreateAndBroadcastWithKeys(title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any) error
+	// CreateAndBroadcastTest creates a bell notification marked as a test so
+	// that push providers (Telegram, Shoutrrr, etc.) skip it.
+	CreateAndBroadcastTest(title, message string) error
+	// CreateAndBroadcastTestWithKeys is the i18n-aware variant of CreateAndBroadcastTest.
+	CreateAndBroadcastTestWithKeys(title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any) error
 }
 
 // ActionDispatcher routes alert rule actions to the notification bell
@@ -34,6 +39,18 @@ func NewActionDispatcher(notifCreator NotificationCreator, log logger.Logger, at
 
 // Dispatch implements ActionFunc — called by the engine when a rule fires.
 func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent) {
+	d.dispatchInternal(rule, event, false)
+}
+
+// DispatchTest is like Dispatch but marks the resulting bell notification as a
+// test so that push providers (Telegram, Shoutrrr, etc.) will not forward it.
+func (d *ActionDispatcher) DispatchTest(rule *entities.AlertRule, event *AlertEvent) {
+	d.dispatchInternal(rule, event, true)
+}
+
+// dispatchInternal contains the shared dispatch logic. When isTest is true,
+// the notification is tagged so push providers skip it.
+func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *AlertEvent, isTest bool) {
 	if event == nil {
 		event = &AlertEvent{}
 	}
@@ -45,7 +62,7 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 		switch action.Target {
 		case TargetBell:
 			hasCustomTemplate := action.TemplateTitle != "" || action.TemplateMessage != ""
-			d.dispatchBell(title, message, rule, event, hasCustomTemplate)
+			d.dispatchBell(title, message, rule, event, hasCustomTemplate, isTest)
 		default:
 			d.log.Warn("unknown alert action target",
 				logger.String("target", action.Target),
@@ -54,7 +71,7 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 	}
 }
 
-func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate bool) {
+func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.AlertRule, event *AlertEvent, hasCustomTemplate, isTest bool) {
 	if d.notifCreator == nil {
 		return
 	}
@@ -64,9 +81,17 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 	if !hasCustomTemplate {
 		titleKey, titleParams := defaultTitleKey(rule)
 		msgKey, msgParams, fallbackMsg := defaultMessageKeyAndParams(rule, event)
-		if err := d.notifCreator.CreateAndBroadcastWithKeys(
-			title, fallbackMsg, titleKey, titleParams, msgKey, msgParams,
-		); err != nil {
+		var err error
+		if isTest {
+			err = d.notifCreator.CreateAndBroadcastTestWithKeys(
+				title, fallbackMsg, titleKey, titleParams, msgKey, msgParams,
+			)
+		} else {
+			err = d.notifCreator.CreateAndBroadcastWithKeys(
+				title, fallbackMsg, titleKey, titleParams, msgKey, msgParams,
+			)
+		}
+		if err != nil {
 			d.log.Error("failed to create bell notification",
 				logger.Uint64("rule_id", uint64(rule.ID)),
 				logger.Error(err))
@@ -75,7 +100,13 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 		return
 	}
 
-	if err := d.notifCreator.CreateAndBroadcast(title, message); err != nil {
+	var err error
+	if isTest {
+		err = d.notifCreator.CreateAndBroadcastTest(title, message)
+	} else {
+		err = d.notifCreator.CreateAndBroadcast(title, message)
+	}
+	if err != nil {
 		d.log.Error("failed to create bell notification",
 			logger.Uint64("rule_id", uint64(rule.ID)),
 			logger.Error(err))
