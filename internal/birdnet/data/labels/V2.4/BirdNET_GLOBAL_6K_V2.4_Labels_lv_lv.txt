@@ -5,7 +5,7 @@ Aburria aburri_Wattled Guan
 Acanthagenys rufogularis_Spiny-cheeked Honeyeater
 Acanthidops bairdi_Peg-billed Finch
 Acanthis cabaret_Lesser Redpoll
-Acanthis flammea_Common Redpoll
+Acanthis flammea_Parastais ķeģis
 Acanthis hornemanni_Hoary Redpoll
 Acanthisitta chloris_Rifleman
 Acanthiza apicalis_Inland Thornbill
@@ -51,8 +51,8 @@ Acridotheres tristis_Common Myna
 Acris crepitans_Northern Cricket Frog
 Acris gryllus_Southern Cricket Frog
 Acrobatornis fonsecai_Pink-legged Graveteiro
-Acrocephalus agricola_Paddyfield Warbler
-Acrocephalus arundinaceus_Lielais ķauķis
+Acrocephalus agricola_Palieņu ķauķis
+Acrocephalus arundinaceus_Niedru strazds
 Acrocephalus australis_Australian Reed Warbler
 Acrocephalus baeticatus_African Reed Warbler
 Acrocephalus bistrigiceps_Black-browed Reed Warbler
@@ -63,11 +63,11 @@ Acrocephalus griseldis_Basra Reed Warbler
 Acrocephalus melanopogon_Moustached Warbler
 Acrocephalus newtoni_Madagascar Swamp Warbler
 Acrocephalus orientalis_Oriental Reed Warbler
-Acrocephalus paludicola_Aquatic Warbler
+Acrocephalus paludicola_Grīšļu ķauķis
 Acrocephalus palustris_Purva ķauķis
 Acrocephalus rufescens_Greater Swamp Warbler
 Acrocephalus schoenobaenus_Ceru ķauķis
-Acrocephalus scirpaceus_Niedru ķauķis
+Acrocephalus scirpaceus_Ezeru ķauķis
 Acrocephalus stentoreus_Clamorous Reed Warbler
 Acrocephalus tangorum_Manchurian Reed Warbler
 Acropternis orthonyx_Ocellated Tapaculo
@@ -80,7 +80,7 @@ Actinodura nipalensis_Hoary-throated Barwing
 Actinodura ramsayi_Spectacled Barwing
 Actinodura strigula_Chestnut-tailed Minla
 Actinodura waldeni_Streak-throated Barwing
-Actitis hypoleucos_Common Sandpiper
+Actitis hypoleucos_Upes tilbīte
 Actitis macularius_Spotted Sandpiper
 Actophilornis africanus_African Jacana
 Adelomyia melanogenys_Speckled Hummingbird
@@ -99,7 +99,7 @@ Aegolius funereus_Bikšainais apogs
 Aegolius harrisii_Buff-fronted Owl
 Aegolius ridgwayi_Unspotted Saw-whet Owl
 Aegotheles cristatus_Australian Owlet-nightjar
-Aegypius monachus_Cinereous Vulture
+Aegypius monachus_Melnais grifs
 Aerodramus bartschi_Mariana Swiftlet
 Aerodramus fuciphagus_White-nest Swiftlet
 Aerodramus maximus_Black-nest Swiftlet
@@ -137,8 +137,8 @@ Ailuroedus maculosus_Spotted Catbird
 Aimophila notosticta_Oaxaca Sparrow
 Aimophila rufescens_Rusty Sparrow
 Aimophila ruficeps_Rufous-crowned Sparrow
-Aix galericulata_Mandarin Duck
-Aix sponsa_Wood Duck
+Aix galericulata_Mandarīnpīle
+Aix sponsa_Koku pīle
 Akletos goeldii_Goeldi's Antbird
 Akletos melanoceps_White-shouldered Antbird
 Alaemon alaudipes_Greater Hoopoe-Lark
@@ -149,7 +149,7 @@ Alaudala heinei_Turkestan Short-toed Lark
 Alaudala raytal_Sand Lark
 Alaudala rufescens_Mediterranean Short-toed Lark
 Alaudala somalica_Somali Short-toed Lark
-Alca torda_Razorbill
+Alca torda_Lielais alks
 Alcedo atthis_Zivju dzenītis
 Alcedo meninting_Blue-eared Kingfisher
 Alcippe brunneicauda_Brown Fulvetta
@@ -181,7 +181,7 @@ Alophoixus pallidus_Puff-throated Bulbul
 Alophoixus phaeocephalus_Yellow-bellied Bulbul
 Alophoixus tephrogenys_Gray-cheeked Bulbul
 Alopochelidon fucata_Tawny-headed Swallow
-Alopochen aegyptiaca_Egyptian Goose
+Alopochen aegyptiaca_Ēģiptes zoss
 Alouatta pigra_Mexican Black Howler Monkey
 Amalocichla incerta_Lesser Ground-Robin
 Amandava amandava_Red Avadavat
@@ -304,17 +304,17 @@ Anous ceruleus_Blue-gray Noddy
 Anous minutus_Black Noddy
 Anous stolidus_Brown Noddy
 Anous tenuirostris_Lesser Noddy
-Anser albifrons_Baltvēderis
+Anser albifrons_Baltpieres zoss
 Anser anser_Meža zoss
-Anser brachyrhynchus_Pink-footed Goose
-Anser caerulescens_Snow Goose
+Anser brachyrhynchus_Īsknābja zoss
+Anser caerulescens_Sniega zoss
 Anser canagicus_Emperor Goose
 Anser cygnoides_Swan Goose
-Anser erythropus_Lesser White-fronted Goose
-Anser fabalis_Sējas zoss
-Anser indicus_Bar-headed Goose
+Anser erythropus_Mazā zoss
+Anser fabalis_Taigas sējas zoss
+Anser indicus_Kalnu zoss
 Anser rossii_Ross's Goose
-Anser serrirostris_Tundra Bean-Goose
+Anser serrirostris_Tundras sējas zoss
 Anseranas semipalmata_Magpie Goose
 Anthipes monileger_White-gorgeted Flycatcher
 Anthipes solitaris_Rufous-browed Flycatcher
@@ -337,8 +337,8 @@ Anthropoides paradiseus_Blue Crane
 Anthropoides virgo_Demoiselle Crane
 Anthus berthelotii_Berthelot's Pipit
 Anthus bogotensis_Paramo Pipit
-Anthus campestris_Tawny Pipit
-Anthus cervinus_Red-throated Pipit
+Anthus campestris_Stepes čipste
+Anthus cervinus_Sarkanrīkles čipste
 Anthus chacoensis_Pampas Pipit
 Anthus cinnamomeus_African Pipit
 Anthus correndera_Correndera Pipit
@@ -347,21 +347,21 @@ Anthus furcatus_Short-billed Pipit
 Anthus godlewskii_Blyth's Pipit
 Anthus gustavi_Pechora Pipit
 Anthus hellmayri_Hellmayr's Pipit
-Anthus hodgsoni_Olive-backed Pipit
+Anthus hodgsoni_Taigas čipste
 Anthus leucophrys_Plain-backed Pipit
 Anthus lineiventris_Striped Pipit
 Anthus lutescens_Yellowish Pipit
 Anthus nattereri_Ochre-breasted Pipit
 Anthus novaeseelandiae_Australasian Pipit
 Anthus peruvianus_Peruvian Pipit
-Anthus petrosus_Rock Pipit
+Anthus petrosus_Akmeņu čipste
 Anthus pratensis_Pļavu čipste
-Anthus richardi_Richard's Pipit
+Anthus richardi_Lielā čipste
 Anthus roseatus_Rosy Pipit
 Anthus rubescens_American Pipit
 Anthus rufulus_Paddyfield Pipit
 Anthus similis_Long-billed Pipit
-Anthus spinoletta_Water Pipit
+Anthus spinoletta_Ūdeņu čipste
 Anthus spragueii_Sprague's Pipit
 Anthus sylvanus_Upland Pipit
 Anthus trivialis_Koku čipste
@@ -430,8 +430,8 @@ Apus pallidus_Pallid Swift
 Apus unicolor_Plain Swift
 Aquila adalberti_Spanish Eagle
 Aquila chrysaetos_Klinšu ērglis
-Aquila heliaca_Imperial Eagle
-Aquila nipalensis_Steppe Eagle
+Aquila heliaca_Karaliskais ērglis
+Aquila nipalensis_Stepes ērglis
 Ara ambiguus_Great Green Macaw
 Ara ararauna_Blue-and-yellow Macaw
 Ara chloropterus_Red-and-green Macaw
@@ -476,14 +476,14 @@ Ardea sumatrana_Great-billed Heron
 Ardenna bulleri_Buller's Shearwater
 Ardenna carneipes_Flesh-footed Shearwater
 Ardenna creatopus_Pink-footed Shearwater
-Ardenna grisea_Sooty Shearwater
+Ardenna grisea_Tumšais vētrasputns
 Ardenna pacifica_Wedge-tailed Shearwater
 Ardenna tenuirostris_Short-tailed Shearwater
 Ardeola bacchus_Chinese Pond-Heron
 Ardeola grayii_Indian Pond-Heron
-Ardeola ralloides_Squacco Heron
+Ardeola ralloides_Dzeltenais gārnis
 Ardeola speciosa_Javan Pond-Heron
-Arenaria interpres_Ruddy Turnstone
+Arenaria interpres_Akmeņtārtiņš
 Arenaria melanocephala_Black Turnstone
 Argusianus argus_Great Argus
 Argya affinis_Yellow-billed Babbler
@@ -567,7 +567,7 @@ Atelornis pittoides_Pitta-like Ground-Roller
 Athene blewitti_Forest Owlet
 Athene brama_Spotted Owlet
 Athene cunicularia_Burrowing Owl
-Athene noctua_Little Owl
+Athene noctua_Mājas apogs
 Athene superciliaris_White-browed Owl
 Atimastillas flavicollis_Yellow-throated Greenbul
 Atlanticus testaceus_Protean Shieldback
@@ -627,11 +627,11 @@ Aviceda leuphotes_Black Baza
 Aviceda subcristata_Pacific Baza
 Aythya affinis_Lesser Scaup
 Aythya americana_Redhead
-Aythya collaris_Ring-necked Duck
-Aythya ferina_Common Pochard
-Aythya fuligula_Tufted Duck
-Aythya marila_Greater Scaup
-Aythya nyroca_Ferruginous Duck
+Aythya collaris_Gredzenpīle
+Aythya ferina_Brūnkaklis
+Aythya fuligula_Cekulpīle
+Aythya marila_Ķerra
+Aythya nyroca_Baltacis
 Aythya valisineria_Canvasback
 Baeolophus atricristatus_Black-crested Titmouse
 Baeolophus bicolor_Tufted Titmouse
@@ -696,13 +696,13 @@ Bolborhynchus lineola_Barred Parakeet
 Bolborhynchus orbygnesius_Andean Parakeet
 Bolemoreus frenatus_Bridled Honeyeater
 Bombycilla cedrorum_Cedar Waxwing
-Bombycilla garrulus_Bohemian Waxwing
+Bombycilla garrulus_Zīdaste
 Bombycilla japonica_Japanese Waxwing
 Bonasa umbellus_Ruffed Grouse
 Bostrychia carunculata_Wattled Ibis
 Bostrychia hagedash_Hadada Ibis
 Botaurus lentiginosus_American Bittern
-Botaurus stellaris_Great Bittern
+Botaurus stellaris_Lielais dumpis
 Brachygalba albogularis_White-throated Jacamar
 Brachygalba lugubris_Brown Jacamar
 Brachypodius eutilotus_Puff-backed Bulbul
@@ -724,10 +724,10 @@ Bradypterus carpalis_White-winged Swamp Warbler
 Bradypterus cinnamomeus_Cinnamon Bracken-Warbler
 Bradypterus lopezi_Evergreen-forest Warbler
 Bradypterus sylvaticus_Knysna Warbler
-Branta bernicla_Brant
-Branta canadensis_Canada Goose
-Branta hutchinsii_Cackling Goose
-Branta leucopsis_Barnacle Goose
+Branta bernicla_Melngalvas zoss
+Branta canadensis_Kanādas zoss
+Branta hutchinsii_Bafina zoss
+Branta leucopsis_Baltvaigu zoss
 Branta sandvicensis_Hawaiian Goose
 Brotogeris chiriri_Yellow-chevroned Parakeet
 Brotogeris chrysoptera_Golden-winged Parakeet
@@ -741,21 +741,21 @@ Bubalornis albirostris_White-billed Buffalo-Weaver
 Bubalornis niger_Red-billed Buffalo-Weaver
 Bubo africanus_Spotted Eagle-Owl
 Bubo bengalensis_Rock Eagle-Owl
-Bubo bubo_Eurasian Eagle-Owl
+Bubo bubo_Ūpis
 Bubo coromandus_Dusky Eagle-Owl
 Bubo lacteus_Verreaux's Eagle-Owl
 Bubo nipalensis_Spot-bellied Eagle-Owl
-Bubo scandiacus_Snowy Owl
+Bubo scandiacus_Baltā pūce
 Bubo sumatranus_Barred Eagle-Owl
 Bubo virginianus_Great Horned Owl
-Bubulcus ibis_Cattle Egret
+Bubulcus ibis_Lopu gārnis
 Bucanetes githagineus_Trumpeter Finch
 Buccanodon duchaillui_Yellow-spotted Barbet
 Bucco capensis_Collared Puffbird
 Bucco macrodactylus_Chestnut-capped Puffbird
 Bucco tamatia_Spotted Puffbird
 Bucephala albeola_Bufflehead
-Bucephala clangula_Common Goldeneye
+Bucephala clangula_Gaigala
 Bucephala islandica_Barrow's Goldeneye
 Buceros bicornis_Great Hornbill
 Buceros hydrocorax_Rufous Hornbill
@@ -784,7 +784,7 @@ Buteo brachyurus_Short-tailed Hawk
 Buteo buteo_Peļu klijāns
 Buteo jamaicensis_Red-tailed Hawk
 Buteo japonicus_Eastern Buzzard
-Buteo lagopus_Klijkaija
+Buteo lagopus_Bikšainais klijāns
 Buteo lineatus_Red-shouldered Hawk
 Buteo nitidus_Gray-lined Hawk
 Buteo oreophilus_Mountain Buzzard
@@ -830,17 +830,17 @@ Cacomantis pallidus_Pallid Cuckoo
 Cacomantis passerinus_Gray-bellied Cuckoo
 Cacomantis sonneratii_Banded Bay Cuckoo
 Cacomantis variolosus_Brush Cuckoo
-Cairina moschata_Muscovy Duck
+Cairina moschata_Muskuspīle
 Calamanthus fuliginosus_Striated Fieldwren
 Calamonastes fasciolatus_Barred Wren-Warbler
 Calamonastes simplex_Gray Wren-Warbler
 Calamonastes stierlingi_Stierling's Wren-Warbler
 Calamospiza melanocorys_Lark Bunting
 Calandrella acutirostris_Hume's Lark
-Calandrella brachydactyla_Greater Short-toed Lark
+Calandrella brachydactyla_Īspirkstu cīrulis
 Calandrella cinerea_Red-capped Lark
 Calandrella dukhunensis_Mongolian Short-toed Lark
-Calcarius lapponicus_Lapland Longspur
+Calcarius lapponicus_Lapzemes stērste
 Calcarius ornatus_Chestnut-collared Longspur
 Calcarius pictus_Smith's Longspur
 Calendulauda africanoides_Fawn-colored Lark
@@ -850,34 +850,34 @@ Calendulauda poecilosterna_Pink-breasted Lark
 Calendulauda sabota_Sabota Lark
 Calicalicus madagascariensis_Red-tailed Vanga
 Calidris acuminata_Sharp-tailed Sandpiper
-Calidris alba_Sanderling
-Calidris alpina_Dunlin
+Calidris alba_Gaišais šņibītis
+Calidris alpina_Parastais šņibītis
 Calidris bairdii_Baird's Sandpiper
-Calidris canutus_Red Knot
-Calidris falcinellus_Broad-billed Sandpiper
-Calidris ferruginea_Curlew Sandpiper
+Calidris canutus_Lielais šņibītis
+Calidris falcinellus_Dūņšņibītis
+Calidris ferruginea_Līkšņibītis
 Calidris fuscicollis_White-rumped Sandpiper
 Calidris himantopus_Stilt Sandpiper
-Calidris maritima_Purple Sandpiper
+Calidris maritima_Jūras šņibītis
 Calidris mauri_Western Sandpiper
-Calidris melanotos_Pectoral Sandpiper
-Calidris minuta_Little Stint
+Calidris melanotos_Tundras šņibītis
+Calidris minuta_Trulītis
 Calidris minutilla_Least Sandpiper
 Calidris ptilocnemis_Rock Sandpiper
-Calidris pugnax_Ruff
+Calidris pugnax_Gugatnis
 Calidris pusilla_Semipalmated Sandpiper
 Calidris pygmaea_Spoon-billed Sandpiper
 Calidris ruficollis_Red-necked Stint
 Calidris subminuta_Long-toed Stint
 Calidris subruficollis_Buff-breasted Sandpiper
-Calidris temminckii_Temminck's Stint
-Calidris tenuirostris_Great Knot
+Calidris temminckii_Temminka šņibītis
+Calidris tenuirostris_Garknābja šņibītis
 Calidris virgata_Surfbird
 Caligavis chrysops_Yellow-faced Honeyeater
 Caligavis subfrenata_Black-throated Honeyeater
 Callacanthis burtoni_Spectacled Finch
 Callaeas wilsoni_North Island Kokako
-Calliope calliope_Siberian Rubythroat
+Calliope calliope_Sibīrijas rubīnrīklīte
 Calliope pectardens_Firethroat
 Calliope pectoralis_Himalayan Rubythroat
 Calliope tschebaiewi_Chinese Rubythroat
@@ -983,7 +983,7 @@ Caprimulgus ruficollis_Red-necked Nightjar
 Caprimulgus rufigena_Rufous-cheeked Nightjar
 Caprimulgus tristigma_Freckled Nightjar
 Capsiempis flaveola_Yellow Tyrannulet
-Caracara plancus_Crested Caracara
+Caracara plancus_Dienvidu karakara
 Cardellina canadensis_Canada Warbler
 Cardellina pusilla_Wilson's Warbler
 Cardellina rubra_Red Warbler
@@ -999,7 +999,7 @@ Cariama cristata_Red-legged Seriema
 Carpococcyx radiceus_Bornean Ground-Cuckoo
 Carpococcyx renauldi_Coral-billed Ground-Cuckoo
 Carpodacus dubius_Chinese White-browed Rosefinch
-Carpodacus erythrinus_Common Rosefinch
+Carpodacus erythrinus_Mazais svilpis
 Carpodacus puniceus_Red-fronted Rosefinch
 Carpodacus rodochroa_Pink-browed Rosefinch
 Carpodacus rubicilla_Great Rosefinch
@@ -1077,7 +1077,7 @@ Centropus toulou_Malagasy Coucal
 Centropus viridis_Philippine Coucal
 Cephalopterus penduliger_Long-wattled Umbrellabird
 Cepphus columba_Pigeon Guillemot
-Cepphus grylle_Black Guillemot
+Cepphus grylle_Melnais alks
 Ceratogymna atrata_Black-casqued Hornbill
 Ceratopipra chloromeros_Round-tailed Manakin
 Ceratopipra cornuta_Scarlet-horned Manakin
@@ -1111,7 +1111,7 @@ Cercotrichas podobe_Black Scrub-Robin
 Cercotrichas quadrivirgata_Bearded Scrub-Robin
 Cercotrichas signata_Brown Scrub-Robin
 Certhia americana_Brown Creeper
-Certhia brachydactyla_Short-toed Treecreeper
+Certhia brachydactyla_Īspirkstu mizložņa
 Certhia discolor_Sikkim Treecreeper
 Certhia familiaris_Mizložņa
 Certhia himalayana_Bar-tailed Treecreeper
@@ -1127,7 +1127,7 @@ Certhionyx variegatus_Pied Honeyeater
 Ceryle rudis_Pied Kingfisher
 Cettia brunnifrons_Gray-sided Bush Warbler
 Cettia castaneocoronata_Chestnut-headed Tesia
-Cettia cetti_Cetti's Warbler
+Cettia cetti_Cetija
 Cettia major_Chestnut-crowned Bush Warbler
 Ceuthmochares aereus_Blue Malkoha
 Ceuthmochares australis_Green Malkoha
@@ -1161,19 +1161,19 @@ Chamaeza mollissima_Barred Antthrush
 Chamaeza nobilis_Striated Antthrush
 Chamaeza ruficauda_Rufous-tailed Antthrush
 Chamaeza turdina_Schwartz's Antthrush
-Charadrius alexandrinus_Kentish Plover
+Charadrius alexandrinus_Jūras tārtiņš
 Charadrius bicinctus_Double-banded Plover
 Charadrius collaris_Collared Plover
-Charadrius dubius_Little Ringed Plover
+Charadrius dubius_Upes tārtiņš
 Charadrius falklandicus_Two-banded Plover
-Charadrius hiaticula_Common Ringed Plover
+Charadrius hiaticula_Smilšu tārtiņš
 Charadrius javanicus_Javan Plover
-Charadrius leschenaultii_Greater Sand-Plover
+Charadrius leschenaultii_Tuksneša tārtiņš
 Charadrius melodus_Piping Plover
 Charadrius modestus_Rufous-chested Dotterel
 Charadrius mongolus_Lesser Sand-Plover
 Charadrius montanus_Mountain Plover
-Charadrius morinellus_Eurasian Dotterel
+Charadrius morinellus_Morinella tārtiņš
 Charadrius nivosus_Snowy Plover
 Charadrius peronii_Malaysian Plover
 Charadrius placidus_Long-billed Plover
@@ -1204,9 +1204,9 @@ Chiroxiphia pareola_Blue-backed Manakin
 Chlamydera maculata_Spotted Bowerbird
 Chlamydera nuchalis_Great Bowerbird
 Chlidonias albostriatus_Black-fronted Tern
-Chlidonias hybrida_Whiskered Tern
-Chlidonias leucopterus_White-winged Tern
-Chlidonias niger_Black Tern
+Chlidonias hybrida_Baltvaigu zīriņš
+Chlidonias leucopterus_Baltspārnu zīriņš
+Chlidonias niger_Melnais zīriņš
 Chloephaga picta_Upland Goose
 Chlorestes candida_White-bellied Emerald
 Chlorestes cyanus_White-chinned Sapphire
@@ -1332,7 +1332,7 @@ Cincloramphus timoriensis_Tawny Grassbird
 Cinclosoma ajax_Painted Quail-thrush
 Cinclosoma castaneothorax_Chestnut-breasted Quail-thrush
 Cinclosoma punctatum_Spotted Quail-thrush
-Cinclus cinclus_Ūdensstrazds
+Cinclus cinclus_Ūdenstrazds
 Cinclus mexicanus_American Dipper
 Cinclus pallasii_Brown Dipper
 Cinnycerthia fulva_Fulvous Wren
@@ -1364,15 +1364,15 @@ Cinnyris solaris_Flame-breasted Sunbird
 Cinnyris sovimanga_Souimanga Sunbird
 Cinnyris talatala_White-breasted Sunbird
 Cinnyris venustus_Variable Sunbird
-Circaetus gallicus_Short-toed Snake-Eagle
+Circaetus gallicus_Čūskērglis
 Circus aeruginosus_Niedru lija
 Circus approximans_Swamp Harrier
 Circus buffoni_Long-winged Harrier
 Circus cyaneus_Lauku lija
 Circus hudsonius_Northern Harrier
-Circus macrourus_Pallid Harrier
+Circus macrourus_Stepes lija
 Circus melanoleucos_Pied Harrier
-Circus pygargus_Montagu's Harrier
+Circus pygargus_Pļavu lija
 Circus spilonotus_Eastern Marsh-Harrier
 Cissa chinensis_Common Green-Magpie
 Cissa hypoleuca_Indochinese Green-Magpie
@@ -1414,9 +1414,9 @@ Clamator coromandus_Chestnut-winged Cuckoo
 Clamator glandarius_Great Spotted Cuckoo
 Clamator jacobinus_Pied Cuckoo
 Clamator levaillantii_Levaillant's Cuckoo
-Clanga clanga_Greater Spotted Eagle
-Clanga pomarina_Lesser Spotted Eagle
-Clangula hyemalis_Long-tailed Duck
+Clanga clanga_Vidējais ērglis
+Clanga pomarina_Mazais ērglis
+Clangula hyemalis_Kākaulis
 Claravis pretiosa_Blue Ground Dove
 Clibanornis dendrocolaptoides_Canebrake Groundcreeper
 Clibanornis erythrocephalus_Henna-hooded Foliage-gleaner
@@ -1433,7 +1433,7 @@ Cnipodectes subbrunneus_Brownish Twistwing
 Coccopygia melanotis_Swee Waxbill
 Coccopygia quartinia_Yellow-bellied Waxbill
 Coccothraustes abeillei_Hooded Grosbeak
-Coccothraustes coccothraustes_Svilpis
+Coccothraustes coccothraustes_Dižknābis
 Coccothraustes vespertinus_Evening Grosbeak
 Coccycua cinerea_Ash-colored Cuckoo
 Coccycua minuta_Little Cuckoo
@@ -1487,7 +1487,7 @@ Columba guinea_Speckled Pigeon
 Columba iriditorques_Bronze-naped Pigeon
 Columba janthina_Japanese Wood-Pigeon
 Columba larvata_Lemon Dove
-Columba livia_Rock Pigeon
+Columba livia_Mājas balodis
 Columba oenas_Meža balodis
 Columba palumbus_Lauku balodis
 Columba unicincta_Afep Pigeon
@@ -1552,7 +1552,7 @@ Copsychus saularis_Oriental Magpie-Robin
 Coracias abyssinicus_Abyssinian Roller
 Coracias benghalensis_Indian Roller
 Coracias caudatus_Lilac-breasted Roller
-Coracias garrulus_European Roller
+Coracias garrulus_Zaļā vārna
 Coracina caesia_Gray Cuckooshrike
 Coracina cinerea_Madagascar Cuckooshrike
 Coracina lineata_Barred Cuckooshrike
@@ -1577,7 +1577,7 @@ Corvus brachyrhynchos_American Crow
 Corvus capensis_Cape Crow
 Corvus corax_Krauklis
 Corvus cornix_Pelēkā vārna
-Corvus corone_Carrion Crow
+Corvus corone_Melnā vārna
 Corvus coronoides_Australian Raven
 Corvus cryptoleucus_Chihuahuan Raven
 Corvus dauuricus_Daurian Jackdaw
@@ -1629,7 +1629,7 @@ Cossypha polioptera_Gray-winged Robin-Chat
 Cossypha semirufa_Rüppell's Robin-Chat
 Coturnicops noveboracensis_Yellow Rail
 Coturnix coromandelica_Rain Quail
-Coturnix coturnix_Common Quail
+Coturnix coturnix_Paipala
 Coturnix delegorguei_Harlequin Quail
 Coturnix japonica_Japanese Quail
 Coturnix pectoralis_Stubble Quail
@@ -1728,14 +1728,14 @@ Culicicapa helianthea_Citrine Canary-Flycatcher
 Culicivora caudacuta_Sharp-tailed Tyrant
 Curaeus curaeus_Austral Blackbird
 Curruca boehmi_Banded Parisoma
-Curruca communis_Greater Whitethroat
+Curruca communis_Brūnspārnu ķauķis
 Curruca conspicillata_Spectacled Warbler
 Curruca crassirostris_Eastern Orphean Warbler
-Curruca curruca_Lesser Whitethroat
+Curruca curruca_Gaišais ķauķis
 Curruca hortensis_Western Orphean Warbler
 Curruca iberiae_Western Subalpine Warbler
 Curruca melanocephala_Sardinian Warbler
-Curruca nisoria_Barred Warbler
+Curruca nisoria_Svītrainais ķauķis
 Curruca subcoerulea_Chestnut-vented Warbler
 Curruca undata_Dartford Warbler
 Cutia legalleni_Vietnamese Cutia
@@ -1744,7 +1744,7 @@ Cyanerpes caeruleus_Purple Honeycreeper
 Cyanerpes cyaneus_Red-legged Honeycreeper
 Cyanicterus cyanicterus_Blue-backed Tanager
 Cyanistes caeruleus_Zilzīlīte
-Cyanistes cyanus_Azure Tit
+Cyanistes cyanus_Gaišzilā zīlīte
 Cyanistes teneriffae_African Blue Tit
 Cyanocitta cristata_Blue Jay
 Cyanocitta stelleri_Steller's Jay
@@ -1796,9 +1796,9 @@ Cyanoptila cyanomelana_Blue-and-white Flycatcher
 Cyanoramphus novaezelandiae_Red-crowned Parakeet
 Cyclarhis gujanensis_Rufous-browed Peppershrike
 Cyclarhis nigrirostris_Black-billed Peppershrike
-Cygnus atratus_Black Swan
+Cygnus atratus_Melnais gulbis
 Cygnus buccinator_Trumpeter Swan
-Cygnus columbianus_Tundra Swan
+Cygnus columbianus_Mazais gulbis
 Cygnus cygnus_Ziemeļu gulbis
 Cygnus melancoryphus_Black-necked Swan
 Cygnus olor_Paugurknābja gulbis
@@ -1879,7 +1879,7 @@ Dendrocopos macei_Fulvous-breasted Woodpecker
 Dendrocopos major_Dižraibais dzenis
 Dendrocopos syriacus_Syrian Woodpecker
 Dendrocoptes auriceps_Brown-fronted Woodpecker
-Dendrocoptes medius_Middle Spotted Woodpecker
+Dendrocoptes medius_Vidējais dzenis
 Dendrocygna arcuata_Wandering Whistling-Duck
 Dendrocygna autumnalis_Black-bellied Whistling-Duck
 Dendrocygna bicolor_Fulvous Whistling-Duck
@@ -1983,7 +1983,7 @@ Dryobates fumigatus_Smoky-brown Woodpecker
 Dryobates kirkii_Red-rumped Woodpecker
 Dryobates lignarius_Striped Woodpecker
 Dryobates maculifrons_Yellow-eared Woodpecker
-Dryobates minor_Lesser Spotted Woodpecker
+Dryobates minor_Mazais dzenis
 Dryobates mixtus_Checkered Woodpecker
 Dryobates nigriceps_Bar-bellied Woodpecker
 Dryobates nuttallii_Nuttall's Woodpecker
@@ -2045,7 +2045,7 @@ Edolisoma montanum_Black-bellied Cicadabird
 Edolisoma tenuirostre_Common Cicadabird
 Egretta caerulea_Little Blue Heron
 Egretta eulophotes_Chinese Egret
-Egretta garzetta_Little Egret
+Egretta garzetta_Zīda gārnis
 Egretta gularis_Western Reef-Heron
 Egretta novaehollandiae_White-faced Heron
 Egretta rufescens_Reddish Egret
@@ -2072,7 +2072,7 @@ Elaenia sordida_Small-headed Elaenia
 Elaenia spectabilis_Large Elaenia
 Elaenia strepera_Slaty Elaenia
 Elanoides forficatus_Swallow-tailed Kite
-Elanus caeruleus_Black-winged Kite
+Elanus caeruleus_Melnplecu klija
 Elanus leucurus_White-tailed Kite
 Electron carinatum_Keel-billed Motmot
 Electron platyrhynchum_Broad-billed Motmot
@@ -2084,12 +2084,12 @@ Elminia albonotata_White-tailed Crested-Flycatcher
 Elminia longicauda_African Blue Flycatcher
 Elseyornis melanops_Black-fronted Dotterel
 Emarginata sinuata_Sickle-winged Chat
-Emberiza aureola_Yellow-breasted Bunting
+Emberiza aureola_Birztalu stērste
 Emberiza bruniceps_Red-headed Bunting
 Emberiza buchanani_Gray-necked Bunting
 Emberiza cabanisi_Cabanis's Bunting
 Emberiza caesia_Cretzschmar's Bunting
-Emberiza calandra_Corn Bunting
+Emberiza calandra_Lielā stērste
 Emberiza capensis_Cape Bunting
 Emberiza chrysophrys_Yellow-browed Bunting
 Emberiza cia_Rock Bunting
@@ -2101,14 +2101,14 @@ Emberiza elegans_Yellow-throated Bunting
 Emberiza flaviventris_Golden-breasted Bunting
 Emberiza fucata_Chestnut-eared Bunting
 Emberiza godlewskii_Godlewski's Bunting
-Emberiza hortulana_Ortolan Bunting
+Emberiza hortulana_Dārza stērste
 Emberiza impetuani_Lark-like Bunting
 Emberiza lathami_Crested Bunting
-Emberiza leucocephalos_Pine Bunting
-Emberiza melanocephala_Black-headed Bunting
+Emberiza leucocephalos_Priežu stērste
+Emberiza melanocephala_Melngalvas stērste
 Emberiza pallasi_Pallas's Bunting
-Emberiza pusilla_Little Bunting
-Emberiza rustica_Rustic Bunting
+Emberiza pusilla_Mazā stērste
+Emberiza rustica_Meža stērste
 Emberiza sahari_House Bunting
 Emberiza schoeniclus_Niedru stērste
 Emberiza spodocephala_Black-faced Bunting
@@ -2170,7 +2170,7 @@ Eremomela gregalis_Yellow-rumped Eremomela
 Eremomela icteropygialis_Yellow-bellied Eremomela
 Eremomela pusilla_Senegal Eremomela
 Eremomela scotops_Greencap Eremomela
-Eremophila alpestris_Horned Lark
+Eremophila alpestris_Ausainais cīrulis
 Eremopterix griseus_Ashy-crowned Sparrow-Lark
 Eremopterix hova_Madagascar Lark
 Eremopterix nigriceps_Black-crowned Sparrow-Lark
@@ -2294,16 +2294,16 @@ Falco mexicanus_Prairie Falcon
 Falco naumanni_Lesser Kestrel
 Falco peregrinus_Lielais piekūns
 Falco rufigularis_Bat Falcon
-Falco rusticolus_Gyrfalcon
+Falco rusticolus_Medību piekūns
 Falco sparverius_American Kestrel
 Falco subbuteo_Bezdelīgu piekūns
 Falco tinnunculus_Lauku piekūns
-Falco vespertinus_Red-footed Falcon
+Falco vespertinus_Kukaiņu piekūns
 Falculea palliata_Sickle-billed Vanga
 Falcunculus frontatus_Crested Shrike-tit
 Ferminia cerverai_Zapata Wren
 Ficedula albicilla_Taiga Flycatcher
-Ficedula albicollis_Collared Flycatcher
+Ficedula albicollis_Baltkakla mušķērājs
 Ficedula basilanica_Little Slaty Flycatcher
 Ficedula dumetoria_Rufous-chested Flycatcher
 Ficedula elisae_Green-backed Flycatcher
@@ -2399,7 +2399,7 @@ Galbula leucogastra_Bronzy Jacamar
 Galbula pastazae_Coppery-chested Jacamar
 Galbula ruficauda_Rufous-tailed Jacamar
 Galbula tombacea_White-chinned Jacamar
-Galerida cristata_Crested Lark
+Galerida cristata_Cekulainais cīrulis
 Galerida deva_Tawny Lark
 Galerida magnirostris_Large-billed Lark
 Galerida malabarica_Malabar Lark
@@ -2412,7 +2412,7 @@ Gallinago hardwickii_Latham's Snipe
 Gallinago imperialis_Imperial Snipe
 Gallinago jamesoni_Jameson's Snipe
 Gallinago magellanica_Magellanic Snipe
-Gallinago media_Great Snipe
+Gallinago media_Ķikuts
 Gallinago megala_Swinhoe's Snipe
 Gallinago nobilis_Noble Snipe
 Gallinago paraguaiae_Paraguayan Snipe
@@ -2445,9 +2445,9 @@ Garrulus lanceolatus_Black-headed Jay
 Garrulus lidthi_Lidth's Jay
 Gastrophryne carolinensis_Eastern Narrow-mouthed Toad
 Gastrophryne olivacea_Great Plains Narrow-mouthed Toad
-Gavia adamsii_Yellow-billed Loon
+Gavia adamsii_Dzeltenknābja gārgale
 Gavia arctica_Melnkakla gārgale
-Gavia immer_Common Loon
+Gavia immer_Polārā gārgale
 Gavia pacifica_Pacific Loon
 Gavia stellata_Brūnkakla gārgale
 Gavicalis fasciogularis_Mangrove Honeyeater
@@ -2508,7 +2508,7 @@ Gerygone palpebrosa_Fairy Gerygone
 Gerygone sulphurea_Golden-bellied Gerygone
 Glareola lactea_Small Pratincole
 Glareola maldivarum_Oriental Pratincole
-Glareola pratincola_Collared Pratincole
+Glareola pratincola_Brūnspārnu bezdelīgtārtiņš
 Glaucestrilda caerulescens_Lavender Waxbill
 Glaucidium bolivianum_Yungas Pygmy-Owl
 Glaucidium brasilianum_Ferruginous Pygmy-Owl
@@ -2526,7 +2526,7 @@ Glaucidium nana_Austral Pygmy-Owl
 Glaucidium nubicola_Cloud-forest Pygmy-Owl
 Glaucidium palmarum_Colima Pygmy-Owl
 Glaucidium parkeri_Subtropical Pygmy-Owl
-Glaucidium passerinum_Eurasian Pygmy-Owl
+Glaucidium passerinum_Apodziņš
 Glaucidium perlatum_Pearl-spotted Owlet
 Glaucidium peruanum_Peruvian Pygmy-Owl
 Glaucidium radiatum_Jungle Owlet
@@ -2626,7 +2626,7 @@ Gymnoris dentata_Sahel Bush Sparrow
 Gymnoris pyrgita_Yellow-spotted Bush Sparrow
 Gymnoris superciliaris_Yellow-throated Bush Sparrow
 Gymnoris xanthocollis_Yellow-throated Sparrow
-Gyps fulvus_Eurasian Griffon
+Gyps fulvus_Baltgalvas grifs
 Gyps himalayensis_Himalayan Griffon
 Gypsophila brevicaudata_Streaked Wren-Babbler
 Gypsophila rufipectus_Rusty-breasted Wren-Babbler
@@ -2706,7 +2706,7 @@ Heliornis fulica_Sungrebe
 Heliothryx auritus_Black-eared Fairy
 Hellmayrea gularis_White-browed Spinetail
 Helmitheros vermivorum_Worm-eating Warbler
-Helopsaltes certhiola_Pallas's Grasshopper Warbler
+Helopsaltes certhiola_Pallasa ķauķis
 Helopsaltes ochotensis_Middendorff's Grasshopper Warbler
 Helopsaltes pryeri_Marsh Grassbird
 Hemicircus canente_Heart-spotted Woodpecker
@@ -2778,7 +2778,7 @@ Heterophasia melanoleuca_Black-backed Sibia
 Heterophasia picaoides_Long-tailed Sibia
 Heterophasia pulchella_Beautiful Sibia
 Heterospingus xanthopygius_Scarlet-browed Tanager
-Hieraaetus pennatus_Booted Eagle
+Hieraaetus pennatus_Pundurērglis
 Hierococcyx bocki_Dark Hawk-Cuckoo
 Hierococcyx fugax_Malaysian Hawk-Cuckoo
 Hierococcyx hyperythrus_Northern Hawk-Cuckoo
@@ -2787,11 +2787,11 @@ Hierococcyx pectoralis_Philippine Hawk-Cuckoo
 Hierococcyx sparverioides_Large Hawk-Cuckoo
 Hierococcyx vagans_Moustached Hawk-Cuckoo
 Hierococcyx varius_Common Hawk-Cuckoo
-Himantopus himantopus_Black-winged Stilt
+Himantopus himantopus_Garstilbis
 Himantopus leucocephalus_Pied Stilt
 Himantopus mexicanus_Black-necked Stilt
 Himatione sanguinea_Apapane
-Hippolais icterina_Icterine Warbler
+Hippolais icterina_Iedzeltenais ķauķis
 Hippolais languida_Upcher's Warbler
 Hippolais olivetorum_Olive-tree Warbler
 Hippolais polyglotta_Melodious Warbler
@@ -2803,7 +2803,7 @@ Hirundo neoxena_Welcome Swallow
 Hirundo rustica_Bezdelīga
 Hirundo smithii_Wire-tailed Swallow
 Hirundo tahitica_Pacific Swallow
-Histrionicus histrionicus_Harlequin Duck
+Histrionicus histrionicus_Arlekīnīle
 Histurgops ruficauda_Rufous-tailed Weaver
 Horizocerus albocristatus_White-crested Hornbill
 Horornis acanthizoides_Yellowish-bellied Bush Warbler
@@ -2820,13 +2820,13 @@ Human non-vocal_Human non-vocal
 Human vocal_Human vocal
 Human whistle_Human whistle
 Hydrobates castro_Band-rumped Storm-Petrel
-Hydrobates leucorhous_Leach's Storm-Petrel
+Hydrobates leucorhous_Ziemeļu vētrasburātājs
 Hydrobates monorhis_Swinhoe's Storm-Petrel
 Hydrobates pelagicus_European Storm-Petrel
 Hydrobates tristrami_Tristram's Storm-Petrel
 Hydrocoloeus minutus_Mazais ķīris
 Hydrophasianus chirurgus_Pheasant-tailed Jacana
-Hydroprogne caspia_Caspian Tern
+Hydroprogne caspia_Lielais zīriņš
 Hydropsalis cayennensis_White-tailed Nightjar
 Hydropsalis climacocerca_Ladder-tailed Nightjar
 Hydropsalis maculicaudus_Spot-tailed Nightjar
@@ -2899,7 +2899,7 @@ Ianthocincla rufogularis_Rufous-chinned Laughingthrush
 Ibidorhyncha struthersii_Ibisbill
 Ibycter americanus_Red-throated Caracara
 Ichthyaetus audouinii_Audouin's Gull
-Ichthyaetus melanocephalus_Mediterranean Gull
+Ichthyaetus melanocephalus_Melngalvas kaija
 Icteria virens_Yellow-breasted Chat
 Icterus abeillei_Black-backed Oriole
 Icterus auratus_Orange Oriole
@@ -2929,7 +2929,7 @@ Icterus wagleri_Black-vented Oriole
 Ictinaetus malaiensis_Black Eagle
 Ictinia mississippiensis_Mississippi Kite
 Ictinia plumbea_Plumbeous Kite
-Iduna caligata_Booted Warbler
+Iduna caligata_Klusais ķauķis
 Iduna natalensis_African Yellow-Warbler
 Iduna opaca_Western Olivaceous Warbler
 Iduna pallida_Eastern Olivaceous Warbler
@@ -2975,7 +2975,7 @@ Ixobrychus eurhythmus_Schrenck's Bittern
 Ixobrychus exilis_Least Bittern
 Ixobrychus flavicollis_Black Bittern
 Ixobrychus involucris_Stripe-backed Bittern
-Ixobrychus minutus_Little Bittern
+Ixobrychus minutus_Mazais dumpis
 Ixobrychus sinensis_Yellow Bittern
 Ixonotus guttatus_Spotted Greenbul
 Ixoreus naevius_Varied Thrush
@@ -3013,7 +3013,7 @@ Lafresnaya lafresnayi_Mountain Velvetbreast
 Lagonosticta rhodopareia_Jameson's Firefinch
 Lagonosticta rubricata_African Firefinch
 Lagonosticta senegala_Red-billed Firefinch
-Lagopus lagopus_Willow Ptarmigan
+Lagopus lagopus_Baltirbe
 Lagopus leucura_White-tailed Ptarmigan
 Lagopus muta_Rock Ptarmigan
 Lalage aurea_Rufous-bellied Triller
@@ -3074,12 +3074,12 @@ Lanius corvinus_Yellow-billed Shrike
 Lanius cristatus_Brown Shrike
 Lanius excubitor_Lielā čakste
 Lanius humeralis_Northern Fiscal
-Lanius isabellinus_Isabelline Shrike
+Lanius isabellinus_Daurijas čakste
 Lanius ludovicianus_Loggerhead Shrike
 Lanius meridionalis_Iberian Gray Shrike
-Lanius minor_Lesser Gray Shrike
+Lanius minor_Melnpieres čakste
 Lanius nubicus_Masked Shrike
-Lanius phoenicuroides_Red-tailed Shrike
+Lanius phoenicuroides_Rudastes čakste
 Lanius schach_Long-tailed Shrike
 Lanius senator_Woodchat Shrike
 Lanius sphenocercus_Chinese Gray Shrike
@@ -3090,22 +3090,22 @@ Larosterna inca_Inca Tern
 Larus argentatus_Sudrabkaija
 Larus belcheri_Belcher's Gull
 Larus brachyrhynchus_Short-billed Gull
-Larus cachinnans_Caspian Gull
+Larus cachinnans_Kaspijas kaija
 Larus californicus_California Gull
 Larus canus_Kajaks
 Larus crassirostris_Black-tailed Gull
-Larus delawarensis_Ring-billed Gull
+Larus delawarensis_Gredzenknābja kaija
 Larus dominicanus_Kelp Gull
-Larus fuscus_Lesser Black-backed Gull
+Larus fuscus_Reņģu kaija
 Larus glaucescens_Glaucous-winged Gull
-Larus glaucoides_Iceland Gull
+Larus glaucoides_Mazā polārkaija
 Larus heermanni_Heermann's Gull
-Larus hyperboreus_Glaucous Gull
+Larus hyperboreus_Lielā polārkaija
 Larus livens_Yellow-footed Gull
-Larus marinus_Great Black-backed Gull
-Larus michahellis_Yellow-legged Gull
+Larus marinus_Melnspārnu kaija
+Larus michahellis_Vidusjūras kaija
 Larus occidentalis_Western Gull
-Larus schistisagus_Slaty-backed Gull
+Larus schistisagus_Kamčatkas kaija
 Larvivora akahige_Japanese Robin
 Larvivora brunnea_Indian Blue Robin
 Larvivora cyane_Siberian Blue Robin
@@ -3194,7 +3194,7 @@ Leucippus fallax_Buffy Hummingbird
 Leucochloris albicollis_White-throated Hummingbird
 Leucogeranus leucogeranus_Siberian Crane
 Leucolia violiceps_Violet-crowned Hummingbird
-Leucophaeus atricilla_Laughing Gull
+Leucophaeus atricilla_Acteku kaija
 Leucophaeus modestus_Gray Gull
 Leucophaeus pipixcan_Franklin's Gull
 Leucophaeus scoresbii_Dolphin Gull
@@ -3222,10 +3222,10 @@ Limnornis curvirostris_Curve-billed Reedhaunter
 Limnothlypis swainsonii_Swainson's Warbler
 Limosa fedoa_Marbled Godwit
 Limosa haemastica_Hudsonian Godwit
-Limosa lapponica_Bar-tailed Godwit
+Limosa lapponica_Sarkanā puskuitala
 Limosa limosa_Melnā puskuitala
 Linaria cannabina_Kaņepītis
-Linaria flavirostris_Twite
+Linaria flavirostris_Kalnu ķeģis
 Linaria yemenensis_Yemen Linnet
 Liocichla phoenicea_Red-faced Liocichla
 Liocichla ripponi_Scarlet-faced Liocichla
@@ -3247,8 +3247,8 @@ Locustella alishanensis_Taiwan Bush Warbler
 Locustella caudata_Long-tailed Bush Warbler
 Locustella davidi_Baikal Bush Warbler
 Locustella fluviatilis_Upes ķauķis
-Locustella lanceolata_Lanceolated Warbler
-Locustella luscinioides_Savi's Warbler
+Locustella lanceolata_Lāsainais ķauķis
+Locustella luscinioides_Seivi ķauķis
 Locustella luteoventris_Brown Bush Warbler
 Locustella mandelli_Russet Bush Warbler
 Locustella montis_Javan Bush Warbler
@@ -3292,8 +3292,8 @@ Loriotus luctuosus_White-shouldered Tanager
 Lorius chlorocercus_Yellow-bibbed Lory
 Lorius lory_Black-capped Lory
 Loxia curvirostra_Egļu krustknābis
-Loxia leucoptera_White-winged Crossbill
-Loxia pytyopsittacus_Parrot Crossbill
+Loxia leucoptera_Baltsvītru krustknābis
+Loxia pytyopsittacus_Priežu krustknābis
 Loxia scotica_Scottish Crossbill
 Loxia sinesciuris_Cassia Crossbill
 Loxigilla noctis_Lesser Antillean Bullfinch
@@ -3305,7 +3305,7 @@ Lullula arborea_Sila cīrulis
 Lurocalis rufiventris_Rufous-bellied Nighthawk
 Lurocalis semitorquatus_Short-tailed Nighthawk
 Luscinia luscinia_Lakstīgala
-Luscinia megarhynchos_Common Nightingale
+Luscinia megarhynchos_Rietumu lakstīgala
 Luscinia phaenicuroides_White-bellied Redstart
 Luscinia svecica_Zilrīklīte
 Lybius bidentatus_Double-toothed Barbet
@@ -3313,7 +3313,7 @@ Lybius guifsobalito_Black-billed Barbet
 Lybius torquatus_Black-collared Barbet
 Lybius vieilloti_Vieillot's Barbet
 Lycocorax pyrrhopterus_Paradise-crow
-Lymnocryptes minimus_Jack Snipe
+Lymnocryptes minimus_Vistilbe
 Lyncornis macrotis_Great Eared-Nightjar
 Lyncornis temminckii_Malaysian Eared-Nightjar
 Lyrurus tetrix_Rubenis
@@ -3388,9 +3388,9 @@ Manorina melanocephala_Noisy Miner
 Manorina melanophrys_Bell Miner
 Mareca americana_American Wigeon
 Mareca falcata_Falcated Duck
-Mareca penelope_Eurasian Wigeon
+Mareca penelope_Baltvēderis
 Mareca sibilatrix_Chiloe Wigeon
-Mareca strepera_Gadwall
+Mareca strepera_Pelēkā pīle
 Margarops fuscatus_Pearly-eyed Thrasher
 Margarornis rubiginosus_Ruddy Treerunner
 Margarornis squamiger_Pearled Treerunner
@@ -3469,10 +3469,10 @@ Melaniparus leucomelas_White-winged Black-Tit
 Melaniparus niger_Southern Black-Tit
 Melaniparus rufiventris_Rufous-bellied Tit
 Melaniparus thruppi_Somali Tit
-Melanitta americana_Black Scoter
-Melanitta fusca_Velvet Scoter
-Melanitta nigra_Common Scoter
-Melanitta perspicillata_Surf Scoter
+Melanitta americana_Amerikas melnā pīle
+Melanitta fusca_Tumšā pīle
+Melanitta nigra_Melnā pīle
+Melanitta perspicillata_Bangu pīle
 Melanochlora sultanea_Sultan Tit
 Melanocorypha calandra_Calandra Lark
 Melanocorypha maxima_Tibetan Lark
@@ -3523,11 +3523,11 @@ Melozone kieneri_Rusty-crowned Ground-Sparrow
 Melozone leucotis_White-eared Ground-Sparrow
 Menura alberti_Albert's Lyrebird
 Menura novaehollandiae_Superb Lyrebird
-Mergellus albellus_Smew
+Mergellus albellus_Mazā gaura
 Mergus merganser_Lielā gaura
-Mergus serrator_Vidējā gaura
+Mergus serrator_Garknābja gaura
 Merops albicollis_White-throated Bee-eater
-Merops apiaster_European Bee-eater
+Merops apiaster_Bišu dzenis
 Merops bullockoides_White-fronted Bee-eater
 Merops bulocki_Red-throated Bee-eater
 Merops hirundineus_Swallow-tailed Bee-eater
@@ -3583,7 +3583,7 @@ Microxenops milleri_Rufous-tailed Xenops
 Milvago chimachima_Yellow-headed Caracara
 Milvago chimango_Chimango Caracara
 Milvus migrans_Melnā klija
-Milvus milvus_Red Kite
+Milvus milvus_Sarkanā klija
 Mimus dorsalis_Brown-backed Mockingbird
 Mimus gilvus_Tropical Mockingbird
 Mimus gundlachii_Bahama Mockingbird
@@ -3662,12 +3662,12 @@ Montifringilla taczanowskii_White-rumped Snowfinch
 Morococcyx erythropygus_Lesser Ground-Cuckoo
 Morphnarchus princeps_Barred Hawk
 Morphnus guianensis_Crested Eagle
-Morus bassanus_Northern Gannet
+Morus bassanus_Ziemeļu sulla
 Motacilla aguimp_African Pied Wagtail
 Motacilla alba_Baltā cielava
 Motacilla capensis_Cape Wagtail
 Motacilla cinerea_Pelēkā cielava
-Motacilla citreola_Citrine Wagtail
+Motacilla citreola_Citroncielava
 Motacilla clara_Mountain Wagtail
 Motacilla flava_Dzeltenā cielava
 Motacilla flaviventris_Madagascar Wagtail
@@ -3898,7 +3898,7 @@ Nesoptilotis flavicollis_Yellow-throated Honeyeater
 Nesoptilotis leucotis_White-eared Honeyeater
 Nesospingus speculiferus_Puerto Rican Tanager
 Nestor meridionalis_New Zealand Kaka
-Netta rufina_Red-crested Pochard
+Netta rufina_Lielgalvis
 Nettapus coromandelianus_Cotton Pygmy-Goose
 Newtonia amphichroa_Dark Newtonia
 Newtonia archboldi_Archbold's Newtonia
@@ -3950,13 +3950,13 @@ Nothura darwinii_Darwin's Nothura
 Nothura maculosa_Spotted Nothura
 Notiomystis cincta_Stitchbird
 Notopholia corusca_Black-bellied Starling
-Nucifraga caryocatactes_Eurasian Nutcracker
+Nucifraga caryocatactes_Riekstrozis
 Nucifraga columbiana_Clark's Nutcracker
 Numenius americanus_Long-billed Curlew
-Numenius arquata_Lielā kuitala
+Numenius arquata_Kuitala
 Numenius madagascariensis_Far Eastern Curlew
 Numenius minutus_Little Curlew
-Numenius phaeopus_Kuitala
+Numenius phaeopus_Lietuvainis
 Numenius tahitiensis_Bristle-thighed Curlew
 Numida meleagris_Helmeted Guineafowl
 Nyctanassa violacea_Yellow-crowned Night-Heron
@@ -3966,7 +3966,7 @@ Nyctibius grandis_Great Potoo
 Nyctibius griseus_Common Potoo
 Nyctibius jamaicensis_Northern Potoo
 Nyctibius leucopterus_White-winged Potoo
-Nycticorax nycticorax_Black-crowned Night-Heron
+Nycticorax nycticorax_Nakts gārnis
 Nyctidromus albicollis_Common Pauraque
 Nyctidromus anthonyi_Scrub Nightjar
 Nyctiphrynus mcleodii_Eared Poorwill
@@ -4027,18 +4027,18 @@ Oecanthus niveus_Narrow-winged Tree Cricket
 Oecanthus pini_Pine Tree Cricket
 Oecanthus quadripunctatus_Four-spotted Tree Cricket
 Oena capensis_Namaqua Dove
-Oenanthe deserti_Desert Wheatear
+Oenanthe deserti_Tuksneša čakstīte
 Oenanthe familiaris_Familiar Chat
 Oenanthe fusca_Brown Rock Chat
 Oenanthe hispanica_Western Black-eared Wheatear
-Oenanthe isabellina_Isabelline Wheatear
+Oenanthe isabellina_Smiltāju čakstīte
 Oenanthe leucopyga_White-crowned Wheatear
 Oenanthe leucura_Black Wheatear
 Oenanthe melanoleuca_Eastern Black-eared Wheatear
 Oenanthe melanura_Blackstart
 Oenanthe oenanthe_Akmeņčakstīte
 Oenanthe pileata_Capped Wheatear
-Oenanthe pleschanka_Pied Wheatear
+Oenanthe pleschanka_Daglā čakstīte
 Oenanthe scotocerca_Brown-tailed Chat
 Ognorhynchus icterotis_Yellow-eared Parrot
 Oncostoma cinereigulare_Northern Bentbill
@@ -4152,7 +4152,7 @@ Otus pamelae_Arabian Scops-Owl
 Otus rufescens_Reddish Scops-Owl
 Otus rutilus_Madagascar Scops-Owl
 Otus sagittatus_White-fronted Scops-Owl
-Otus scops_Eurasian Scops-Owl
+Otus scops_Mazā ausainā pūcīte
 Otus semitorques_Japanese Scops-Owl
 Otus senegalensis_African Scops-Owl
 Otus spilocephalus_Mountain Scops-Owl
@@ -4211,7 +4211,7 @@ Palmeria dolei_Akohekohe
 Pampa curvipennis_Wedge-tailed Sabrewing
 Pandion haliaetus_Zivjērglis
 Panterpe insignis_Fiery-throated Hummingbird
-Panurus biarmicus_Bārdzīlīte
+Panurus biarmicus_Bārdas zīlīte
 Panyptila sanctihieronymi_Great Swallow-tailed Swift
 Parabuteo leucorrhous_White-rumped Hawk
 Parabuteo unicinctus_Harris's Hawk
@@ -4264,7 +4264,7 @@ Passerina cyanea_Indigo Bunting
 Passerina leclancherii_Orange-breasted Bunting
 Passerina rositae_Rose-bellied Bunting
 Passerina versicolor_Varied Bunting
-Pastor roseus_Rosy Starling
+Pastor roseus_Sārtais strazds
 Patagioenas araucana_Chilean Pigeon
 Patagioenas cayennensis_Pale-vented Pigeon
 Patagioenas corensis_Bare-eyed Pigeon
@@ -4336,7 +4336,7 @@ Periparus rufonuchalis_Rufous-naped Tit
 Periparus venustulus_Yellow-bellied Tit
 Periporphyrus erythromelas_Red-and-black Grosbeak
 Perisoreus canadensis_Canada Jay
-Perisoreus infaustus_Siberian Jay
+Perisoreus infaustus_Bēdrozis
 Perissocephalus tricolor_Capuchinbird
 Pernis apivorus_Ķīķis
 Pernis ptilorhynchus_Oriental Honey-buzzard
@@ -4408,8 +4408,8 @@ Phaetusa simplex_Large-billed Tern
 Phainopepla nitens_Phainopepla
 Phalacrocorax carbo_Jūras krauklis
 Phalaenoptilus nuttallii_Common Poorwill
-Phalaropus fulicarius_Red Phalarope
-Phalaropus lobatus_Red-necked Phalarope
+Phalaropus fulicarius_Platknābja pūslītis
+Phalaropus lobatus_Šaurknābja pūslītis
 Phalaropus tricolor_Wilson's Phalarope
 Phapitreron amethystinus_Amethyst Brown-Dove
 Phapitreron leucotis_White-eared Brown-Dove
@@ -4420,7 +4420,7 @@ Pharomachrus auriceps_Golden-headed Quetzal
 Pharomachrus fulgidus_White-tipped Quetzal
 Pharomachrus mocinno_Resplendent Quetzal
 Pharomachrus pavoninus_Pavonine Quetzal
-Phasianus colchicus_Ring-necked Pheasant
+Phasianus colchicus_Medību fazāns
 Phedina borbonica_Mascarene Martin
 Phegornis mitchellii_Diademed Sandpiper-Plover
 Phelpsia inornata_White-bearded Flycatcher
@@ -4470,7 +4470,7 @@ Phoeniconaias minor_Lesser Flamingo
 Phoenicoparrus andinus_Andean Flamingo
 Phoenicoparrus jamesi_James's Flamingo
 Phoenicopterus chilensis_Chilean Flamingo
-Phoenicopterus roseus_Greater Flamingo
+Phoenicopterus roseus_Sārtais flamings
 Phoenicopterus ruber_American Flamingo
 Phoeniculus bollei_White-headed Woodhoopoe
 Phoeniculus purpureus_Green Woodhoopoe
@@ -4529,8 +4529,8 @@ Phylloscartes ventralis_Mottle-cheeked Tyrannulet
 Phylloscartes virescens_Olive-green Tyrannulet
 Phylloscopus affinis_Tickell's Leaf Warbler
 Phylloscopus armandii_Yellow-streaked Warbler
-Phylloscopus bonelli_Western Bonelli's Warbler
-Phylloscopus borealis_Arctic Warbler
+Phylloscopus bonelli_Bonelli ķauķītis
+Phylloscopus borealis_Ziemeļu ķauķītis
 Phylloscopus borealoides_Sakhalin Leaf Warbler
 Phylloscopus budongoensis_Uganda Woodland-Warbler
 Phylloscopus burkii_Green-crowned Warbler
@@ -4539,20 +4539,20 @@ Phylloscopus cantator_Yellow-vented Warbler
 Phylloscopus castaniceps_Chestnut-crowned Warbler
 Phylloscopus chloronotus_Lemon-rumped Warbler
 Phylloscopus claudiae_Claudia's Leaf Warbler
-Phylloscopus collybita_Čunčiņš
+Phylloscopus collybita_Čuņčiņš
 Phylloscopus coronatus_Eastern Crowned Warbler
 Phylloscopus emeiensis_Emei Leaf Warbler
 Phylloscopus examinandus_Kamchatka Leaf Warbler
 Phylloscopus forresti_Sichuan Leaf Warbler
 Phylloscopus fuligiventer_Smoky Warbler
-Phylloscopus fuscatus_Dusky Warbler
+Phylloscopus fuscatus_Tumšais ķauķītis
 Phylloscopus goodsoni_Hartert's Leaf Warbler
 Phylloscopus grammiceps_Sunda Warbler
 Phylloscopus griseolus_Sulphur-bellied Warbler
-Phylloscopus humei_Hume's Warbler
+Phylloscopus humei_Hjūma ķauķītis
 Phylloscopus ibericus_Iberian Chiffchaff
 Phylloscopus ijimae_Ijima's Leaf Warbler
-Phylloscopus inornatus_Yellow-browed Warbler
+Phylloscopus inornatus_Dzeltensvītru ķauķītis
 Phylloscopus intensior_Davison's Leaf Warbler
 Phylloscopus intermedius_White-spectacled Warbler
 Phylloscopus kansuensis_Gansu Leaf Warbler
@@ -4570,12 +4570,12 @@ Phylloscopus orientalis_Eastern Bonelli's Warbler
 Phylloscopus plumbeitarsus_Two-barred Warbler
 Phylloscopus poliocephalus_Island Leaf Warbler
 Phylloscopus poliogenys_Gray-cheeked Warbler
-Phylloscopus proregulus_Pallas's Leaf Warbler
+Phylloscopus proregulus_Sibīrijas ķauķītis
 Phylloscopus pulcher_Buff-barred Warbler
 Phylloscopus reguloides_Blyth's Leaf Warbler
 Phylloscopus ruficapilla_Yellow-throated Woodland-Warbler
 Phylloscopus sarasinorum_Sulawesi Leaf Warbler
-Phylloscopus schwarzi_Radde's Warbler
+Phylloscopus schwarzi_Švarca ķauķītis
 Phylloscopus sibilatrix_Svirlītis
 Phylloscopus sindianus_Mountain Chiffchaff
 Phylloscopus soror_Alström's Warbler
@@ -4584,7 +4584,7 @@ Phylloscopus subviridis_Brooks's Leaf Warbler
 Phylloscopus tenellipes_Pale-legged Leaf Warbler
 Phylloscopus tephrocephalus_Gray-crowned Warbler
 Phylloscopus trivirgatus_Mountain Leaf Warbler
-Phylloscopus trochiloides_Greenish Warbler
+Phylloscopus trochiloides_Zaļais ķauķītis
 Phylloscopus trochilus_Vītītis
 Phylloscopus tytleri_Tytler's Leaf Warbler
 Phylloscopus umbrovirens_Brown Woodland-Warbler
@@ -4640,7 +4640,7 @@ Picus vaillantii_Levaillant's Woodpecker
 Picus viridis_Zaļā dzilna
 Picus vittatus_Laced Woodpecker
 Picus xanthopygaeus_Streak-throated Woodpecker
-Pinicola enucleator_Pine Grosbeak
+Pinicola enucleator_Ziemeļu svilpis
 Pionites leucogaster_White-bellied Parrot
 Pionites melanocephalus_Black-headed Parrot
 Pionopsitta pileata_Pileated Parrot
@@ -4700,7 +4700,7 @@ Pittasoma michleri_Black-crowned Antpitta
 Pittasoma rufopileatum_Rufous-crowned Antpitta
 Pityriasis gymnocephala_Bornean Bristlehead
 Platalea ajaja_Roseate Spoonbill
-Platalea leucorodia_Eurasian Spoonbill
+Platalea leucorodia_Karošknābis
 Platycercus adscitus_Pale-headed Rosella
 Platycercus caledonicus_Green Rosella
 Platycercus elegans_Crimson Rosella
@@ -4721,9 +4721,9 @@ Platysteira cyanea_Brown-throated Wattle-eye
 Platysteira peltata_Black-throated Wattle-eye
 Plectorhyncha lanceolata_Striped Honeyeater
 Plectrophenax hyperboreus_McKay's Bunting
-Plectrophenax nivalis_Snow Bunting
+Plectrophenax nivalis_Sniedze
 Plegadis chihi_White-faced Ibis
-Plegadis falcinellus_Glossy Ibis
+Plegadis falcinellus_Brūnais ibiss
 Plegadis ridgwayi_Puna Ibis
 Plocepasser mahali_White-browed Sparrow-Weaver
 Plocepasser superciliosus_Chestnut-crowned Sparrow-Weaver
@@ -4750,22 +4750,22 @@ Ploceus velatus_Southern Masked-Weaver
 Ploceus vitellinus_Vitelline Masked-Weaver
 Ploceus xanthops_Holub's Golden-Weaver
 Ploceus xanthopterus_Southern Brown-throated Weaver
-Pluvialis apricaria_European Golden-Plover
+Pluvialis apricaria_Dzeltenais tārtiņš
 Pluvialis dominica_American Golden-Plover
-Pluvialis fulva_Pacific Golden-Plover
-Pluvialis squatarola_Black-bellied Plover
+Pluvialis fulva_Tundras tārtiņš
+Pluvialis squatarola_Jūras ķīvīte
 Pnoepyga albiventer_Scaly-breasted Cupwing
 Pnoepyga formosana_Taiwan Cupwing
 Pnoepyga immaculata_Immaculate Cupwing
 Pnoepyga pusilla_Pygmy Cupwing
 Podargus ocellatus_Marbled Frogmouth
 Podargus strigoides_Tawny Frogmouth
-Podiceps auritus_Horned Grebe
+Podiceps auritus_Ragainais dūkuris
 Podiceps cristatus_Cekuldūkuris
 Podiceps gallardoi_Hooded Grebe
-Podiceps grisegena_Red-necked Grebe
+Podiceps grisegena_Pelēkvaigu dūkuris
 Podiceps major_Great Grebe
-Podiceps nigricollis_Eared Grebe
+Podiceps nigricollis_Melnkakla dūkuris
 Podiceps occipitalis_Silvery Grebe
 Podilymbus podiceps_Pied-billed Grebe
 Podoces hendersoni_Mongolian Ground-Jay
@@ -4858,7 +4858,7 @@ Porphyrio poliocephalus_Gray-headed Swamphen
 Porphyrio porphyrio_Western Swamphen
 Porphyriops melanops_Spot-flanked Gallinule
 Porzana carolina_Sora
-Porzana porzana_Spotted Crake
+Porzana porzana_Ormanītis
 Porzana spiloptera_Dot-winged Crake
 Power tools_Power tools
 Premnoplex brunnescens_Spotted Barbtail
@@ -4913,7 +4913,7 @@ Protonotaria citrea_Prothonotary Warbler
 Prunella collaris_Alpine Accentor
 Prunella fulvescens_Brown Accentor
 Prunella modularis_Peļkājīte
-Prunella montanella_Siberian Accentor
+Prunella montanella_Sibīrijas peļkājīte
 Prunella ocularis_Radde's Accentor
 Prunella rubeculoides_Robin Accentor
 Prunella strophiata_Rufous-breasted Accentor
@@ -5014,7 +5014,7 @@ Psittacula eques_Echo Parakeet
 Psittacula eupatria_Alexandrine Parakeet
 Psittacula finschii_Gray-headed Parakeet
 Psittacula himalayana_Slaty-headed Parakeet
-Psittacula krameri_Rose-ringed Parakeet
+Psittacula krameri_Krāmera papagailis
 Psittacula longicauda_Long-tailed Parakeet
 Psittacus erithacus_Gray Parrot
 Psittinus cyanurus_Blue-rumped Parrot
@@ -5212,7 +5212,7 @@ Rallina eurizonoides_Slaty-legged Crake
 Rallina fasciata_Red-legged Crake
 Rallina tricolor_Red-necked Crake
 Rallus antarcticus_Austral Rail
-Rallus aquaticus_Ūdensvistiņa
+Rallus aquaticus_Dumbrcālis
 Rallus caerulescens_African Rail
 Rallus crepitans_Clapper Rail
 Rallus elegans_King Rail
@@ -5249,9 +5249,9 @@ Ramsayornis modestus_Brown-backed Honeyeater
 Rauenia bonariensis_Blue-and-yellow Tanager
 Recurvirostra americana_American Avocet
 Recurvirostra andina_Andean Avocet
-Recurvirostra avosetta_Pied Avocet
+Recurvirostra avosetta_Avozeta
 Regulus goodfellowi_Flamecrest
-Regulus ignicapilla_Common Firecrest
+Regulus ignicapilla_Sārtgalvītis
 Regulus madeirensis_Madeira Firecrest
 Regulus regulus_Zeltgalvītis
 Regulus satrapa_Golden-crowned Kinglet
@@ -5259,7 +5259,7 @@ Reinwardtipicus validus_Orange-backed Woodpecker
 Reinwardtoena reinwardti_Great Cuckoo-Dove
 Remiz consobrinus_Chinese Penduline-Tit
 Remiz coronatus_White-crowned Penduline-Tit
-Remiz pendulinus_Eurasian Penduline-Tit
+Remiz pendulinus_Somzīlīte
 Rhabdotorrhinus corrugatus_Wrinkled Hornbill
 Rhabdotorrhinus exarhatus_Sulawesi Hornbill
 Rhaphidura leucopygialis_Silver-rumped Needletail
@@ -5296,7 +5296,7 @@ Rhodinocichla rosea_Rosy Thrush-Tanager
 Rhodophoneus cruentus_Rosy-patched Bushshrike
 Rhodospingus cruentus_Crimson-breasted Finch
 Rhodospiza obsoleta_Desert Finch
-Rhodostethia rosea_Ross's Gull
+Rhodostethia rosea_Sārtā kaija
 Rhodothraupis celaeno_Crimson-collared Grosbeak
 Rhopias gularis_Star-throated Antwren
 Rhopophilus pekinensis_Beijing Babbler
@@ -5324,7 +5324,7 @@ Riparia chinensis_Gray-throated Martin
 Riparia diluta_Pale Sand Martin
 Riparia paludicola_Plain Martin
 Riparia riparia_Krastu čurkste
-Rissa tridactyla_Black-legged Kittiwake
+Rissa tridactyla_Trīspirkstu kaija
 Rollulus rouloul_Crested Partridge
 Roraimia adusta_Roraiman Barbtail
 Rostratula benghalensis_Greater Painted-Snipe
@@ -5374,9 +5374,9 @@ Saucerottia tobaci_Copper-rumped Hummingbird
 Saundersilarus saundersi_Saunders's Gull
 Saxicola caprata_Pied Bushchat
 Saxicola ferreus_Gray Bushchat
-Saxicola maurus_Siberian Stonechat
+Saxicola maurus_Sibīrijas čakstīte
 Saxicola rubetra_Lukstu čakstīte
-Saxicola rubicola_European Stonechat
+Saxicola rubicola_Tumšā čakstīte
 Saxicola stejnegeri_Amur Stonechat
 Saxicola torquatus_African Stonechat
 Sayornis nigricans_Black Phoebe
@@ -5502,7 +5502,7 @@ Serinus canaria_Island Canary
 Serinus canicollis_Cape Canary
 Serinus flavivertex_Yellow-crowned Canary
 Serinus pusillus_Fire-fronted Serin
-Serinus serinus_European Serin
+Serinus serinus_Ģirlicis
 Serpophaga cinerea_Torrent Tyrannulet
 Serpophaga griseicapilla_Straneck's Tyrannulet
 Serpophaga hypoleuca_River Tyrannulet
@@ -5586,15 +5586,15 @@ Smicrornis brevirostris_Weebill
 Smithornis capensis_African Broadbill
 Smithornis rufolateralis_Rufous-sided Broadbill
 Snowornis subalaris_Gray-tailed Piha
-Somateria mollissima_Common Eider
-Somateria spectabilis_King Eider
+Somateria mollissima_Parastā pūkpīle
+Somateria spectabilis_Krāšņā pūkpīle
 Spartonoica maluroides_Bay-capped Wren-Spinetail
-Spatula clypeata_Northern Shoveler
+Spatula clypeata_Platknābis
 Spatula cyanoptera_Cinnamon Teal
 Spatula discors_Blue-winged Teal
 Spatula platalea_Red Shoveler
 Spatula puna_Puna Teal
-Spatula querquedula_Garganey
+Spatula querquedula_Prīkšķe
 Spea bombifrons_Plains Spadefoot
 Spelaeornis caudatus_Rufous-throated Wren-Babbler
 Spelaeornis oatesi_Chin Hills Wren-Babbler
@@ -5626,7 +5626,7 @@ Spinus olivaceus_Olivaceous Siskin
 Spinus pinus_Pine Siskin
 Spinus psaltria_Lesser Goldfinch
 Spinus spinescens_Andean Siskin
-Spinus spinus_Ķeģis
+Spinus spinus_Ķivulis
 Spinus tristis_American Goldfinch
 Spinus xanthogastrus_Yellow-bellied Siskin
 Spiza americana_Dickcissel
@@ -5705,17 +5705,17 @@ Stephanophorus diadematus_Diademed Tanager
 Stephanoxis lalandi_Green-crowned Plovercrest
 Stephanoxis loddigesii_Purple-crowned Plovercrest
 Stercorarius antarcticus_Brown Skua
-Stercorarius longicaudus_Long-tailed Jaeger
+Stercorarius longicaudus_Garastes klijkaija
 Stercorarius maccormicki_South Polar Skua
-Stercorarius parasiticus_Parasitic Jaeger
-Stercorarius pomarinus_Pomarine Jaeger
-Stercorarius skua_Great Skua
+Stercorarius parasiticus_Īsastes klijkaija
+Stercorarius pomarinus_Vidējā klijkaija
+Stercorarius skua_Lielā klijkaija
 Sterna aurantia_River Tern
 Sterna dougallii_Roseate Tern
 Sterna forsteri_Forster's Tern
 Sterna hirundinacea_South American Tern
-Sterna hirundo_Zīriņš
-Sterna paradisaea_Arctic Tern
+Sterna hirundo_Upes zīriņš
+Sterna paradisaea_Jūras zīriņš
 Sterna repressa_White-cheeked Tern
 Sterna striata_White-fronted Tern
 Sterna sumatrana_Black-naped Tern
@@ -5748,12 +5748,12 @@ Streptopelia chinensis_Spotted Dove
 Streptopelia decaocto_Gredzenūbele
 Streptopelia decipiens_Mourning Collared-Dove
 Streptopelia lugens_Dusky Turtle-Dove
-Streptopelia orientalis_Oriental Turtle-Dove
+Streptopelia orientalis_Austrumu ūbele
 Streptopelia roseogrisea_African Collared-Dove
 Streptopelia semitorquata_Red-eyed Dove
 Streptopelia senegalensis_Laughing Dove
 Streptopelia tranquebarica_Red Collared-Dove
-Streptopelia turtur_European Turtle-Dove
+Streptopelia turtur_Parastā ūbele
 Streptopelia vinacea_Vinaceous Dove
 Streptoprocne biscutata_Biscutate Swift
 Streptoprocne rutila_Chestnut-collared Swift
@@ -5764,7 +5764,7 @@ Strix fulvescens_Fulvous Owl
 Strix hadorami_Desert Owl
 Strix hylophila_Rusty-barred Owl
 Strix leptogrammica_Brown Wood-Owl
-Strix nebulosa_Great Gray Owl
+Strix nebulosa_Ziemeļpūce
 Strix nivicolum_Himalayan Owl
 Strix occidentalis_Spotted Owl
 Strix ocellata_Mottled Wood-Owl
@@ -5791,7 +5791,7 @@ Sula dactylatra_Masked Booby
 Sula leucogaster_Brown Booby
 Sula nebouxii_Blue-footed Booby
 Sula sula_Red-footed Booby
-Surnia ulula_Northern Hawk Owl
+Surnia ulula_Svītrainā pūce
 Surniculus dicruroides_Fork-tailed Drongo-Cuckoo
 Surniculus lugubris_Square-tailed Drongo-Cuckoo
 Surniculus velutinus_Philippine Drongo-Cuckoo
@@ -5856,7 +5856,7 @@ Syndactyla ucayalae_Peruvian Recurvebill
 Synoicus chinensis_Blue-breasted Quail
 Synoicus ypsilophorus_Brown Quail
 Syrigma sibilatrix_Whistling Heron
-Syrrhaptes paradoxus_Pallas's Sandgrouse
+Syrrhaptes paradoxus_Stepes smilšvistiņa
 Systellura decussata_Tschudi's Nightjar
 Systellura longirostris_Band-winged Nightjar
 Taccocua leschenaultii_Sirkeer Malkoha
@@ -5880,8 +5880,8 @@ Tachyphonus phoenicius_Red-shouldered Tanager
 Tachyphonus rufus_White-lined Tanager
 Tachyphonus surinamus_Fulvous-crested Tanager
 Tadorna cana_South African Shelduck
-Tadorna ferruginea_Ruddy Shelduck
-Tadorna tadorna_Common Shelduck
+Tadorna ferruginea_Rudā dižpīle
+Tadorna tadorna_Sāmsalas pīle
 Tadorna tadornoides_Australian Shelduck
 Tadorna variegata_Paradise Shelduck
 Taenioptynx brodiei_Collared Owlet
@@ -5920,7 +5920,7 @@ Taraba major_Great Antshrike
 Tarphonomus certhioides_Chaco Earthcreeper
 Tarphonomus harterti_Bolivian Earthcreeper
 Tarsiger chrysaeus_Golden Bush-Robin
-Tarsiger cyanurus_Red-flanked Bluetail
+Tarsiger cyanurus_Rudsānu zilastīte
 Tarsiger indicus_White-browed Bush-Robin
 Tarsiger johnstoniae_Collared Bush-Robin
 Tarsiger rufilatus_Himalayan Bluetail
@@ -5971,14 +5971,14 @@ Tesia superciliaris_Javan Tesia
 Tetrao urogallus_Mednis
 Tetraogallus caucasicus_Caucasian Snowcock
 Tetraogallus tibetanus_Tibetan Snowcock
-Tetrastes bonasia_Hazel Grouse
-Tetrax tetrax_Little Bustard
+Tetrastes bonasia_Mežirbe
+Tetrax tetrax_Mazā sīga
 Thalassarche melanophris_Black-browed Albatross
 Thalasseus bengalensis_Lesser Crested Tern
 Thalasseus bergii_Great Crested Tern
 Thalasseus elegans_Elegant Tern
 Thalasseus maximus_Royal Tern
-Thalasseus sandvicensis_Sandwich Tern
+Thalasseus sandvicensis_Cekulzīriņš
 Thalurania colombica_Crowned Woodnymph
 Thalurania furcata_Fork-tailed Woodnymph
 Thalurania glaucopis_Violet-capped Woodnymph
@@ -6149,7 +6149,7 @@ Tricholestes criniger_Hairy-backed Bulbul
 Trichothraupis melanops_Black-goggled Tanager
 Triclaria malachitacea_Blue-bellied Parrot
 Tringa brevipes_Gray-tailed Tattler
-Tringa erythropus_Spotted Redshank
+Tringa erythropus_Tumšā tilbīte
 Tringa flavipes_Lesser Yellowlegs
 Tringa glareola_Purva tilbīte
 Tringa guttifer_Nordmann's Greenshank
@@ -6159,8 +6159,8 @@ Tringa nebularia_Lielā tilbīte
 Tringa ochropus_Meža tilbīte
 Tringa semipalmata_Willet
 Tringa solitaria_Solitary Sandpiper
-Tringa stagnatilis_Marsh Sandpiper
-Tringa totanus_Pļavas tilbīte
+Tringa stagnatilis_Dīķu tilbīte
+Tringa totanus_Pļavu tilbīte
 Trochalopteron affine_Black-faced Laughingthrush
 Trochalopteron chrysopterum_Assam Laughingthrush
 Trochalopteron elliotii_Elliot's Laughingthrush
@@ -6222,7 +6222,7 @@ Turdus albicollis_White-necked Thrush
 Turdus albocinctus_White-collared Blackbird
 Turdus amaurochalinus_Creamy-bellied Thrush
 Turdus assimilis_White-throated Thrush
-Turdus atrogularis_Black-throated Thrush
+Turdus atrogularis_Melnrīkles strazds
 Turdus aurantius_White-chinned Thrush
 Turdus boulboul_Gray-winged Blackbird
 Turdus cardis_Japanese Thrush
@@ -6281,7 +6281,7 @@ Turdus smithi_Karoo Thrush
 Turdus subalaris_Blacksmith Thrush
 Turdus swalesi_La Selle Thrush
 Turdus tephronotus_African Bare-eyed Thrush
-Turdus torquatus_Ring Ouzel
+Turdus torquatus_Apkakles strazds
 Turdus unicolor_Tickell's Thrush
 Turdus viscivorus_Sila strazds
 Turnix maculosus_Red-backed Buttonquail
@@ -6313,7 +6313,7 @@ Tyrannus savana_Fork-tailed Flycatcher
 Tyrannus tyrannus_Eastern Kingbird
 Tyrannus verticalis_Western Kingbird
 Tyrannus vociferans_Cassin's Kingbird
-Tyto alba_Barn Owl
+Tyto alba_Plīvurpūce
 Tyto novaehollandiae_Australian Masked-Owl
 Tyto tenebricosa_Sooty Owl
 Upucerthia dumetaria_Scale-throated Earthcreeper
@@ -6324,8 +6324,8 @@ Upupa marginata_Madagascar Hoopoe
 Uraeginthus angolensis_Southern Cordonbleu
 Uraeginthus bengalus_Red-cheeked Cordonbleu
 Uranomitra franciae_Andean Emerald
-Uria aalge_Common Murre
-Uria lomvia_Thick-billed Murre
+Uria aalge_Tievknābja kaira
+Uria lomvia_Resnknābja kaira
 Urocissa caerulea_Taiwan Blue-Magpie
 Urocissa erythroryncha_Red-billed Blue-Magpie
 Urocissa flavirostris_Yellow-billed Blue-Magpie
@@ -6412,7 +6412,7 @@ Xanthocephalus xanthocephalus_Yellow-headed Blackbird
 Xanthomixis zosterops_Spectacled Tetraka
 Xanthopsar flavus_Saffron-cowled Blackbird
 Xanthotis macleayanus_Macleay's Honeyeater
-Xema sabini_Sabine's Gull
+Xema sabini_Šķeltastes kaija
 Xenerpestes singularis_Equatorial Graytail
 Xenodacnis parina_Tit-like Dacnis
 Xenoglaux loweryi_Long-whiskered Owlet
@@ -6426,7 +6426,7 @@ Xenopsaris albinucha_White-naped Xenopsaris
 Xenospiza baileyi_Sierra Madre Sparrow
 Xenotriccus callizonus_Belted Flycatcher
 Xenotriccus mexicanus_Pileated Flycatcher
-Xenus cinereus_Terek Sandpiper
+Xenus cinereus_Terekija
 Xiphidiopicus percussus_Cuban Green Woodpecker
 Xiphocolaptes albicollis_White-throated Woodcreeper
 Xiphocolaptes major_Great Rufous Woodcreeper
@@ -6457,9 +6457,9 @@ Yungipicus nanus_Brown-capped Pygmy Woodpecker
 Zapornia bicolor_Black-tailed Crake
 Zapornia flavirostra_Black Crake
 Zapornia fusca_Ruddy-breasted Crake
-Zapornia parva_Little Crake
+Zapornia parva_Mazais ormanītis
 Zapornia paykullii_Band-bellied Crake
-Zapornia pusilla_Baillon's Crake
+Zapornia pusilla_Ceru ormanītis
 Zapornia tabuensis_Spotless Crake
 Zavattariornis stresemanni_Stresemann's Bush-Crow
 Zebrilus undulatus_Zigzag Heron
@@ -6490,7 +6490,7 @@ Zonotrichia atricapilla_Golden-crowned Sparrow
 Zonotrichia capensis_Rufous-collared Sparrow
 Zonotrichia leucophrys_White-crowned Sparrow
 Zonotrichia querula_Harris's Sparrow
-Zoothera aurea_White's Thrush
+Zoothera aurea_Raibais zemesstrazds
 Zoothera heinei_Russet-tailed Thrush
 Zoothera lunulata_Bassian Thrush
 Zoothera major_Amami Thrush
