@@ -520,7 +520,7 @@ func (ds *DataStore) GetTopBirdsData(selectedDate string, minConfidenceNormalize
 	// Use provided limit or fall back to config value
 	reportCount := limit
 	if reportCount <= 0 {
-		reportCount = conf.Setting().Realtime.Dashboard.SummaryLimit
+		reportCount = conf.Setting().GetEffectiveSummaryLimit()
 	}
 
 	// First, get the count and common names

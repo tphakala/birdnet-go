@@ -46,3 +46,19 @@ func (s *Settings) MigrateDashboardLayout() bool {
 
 	return true
 }
+
+// GetEffectiveSummaryLimit returns the summary limit from the dashboard layout element,
+// falling back to the deprecated Dashboard.SummaryLimit field and then to a default.
+// This is needed because MigrateDashboardLayout zeroes the deprecated field after moving
+// the value into the layout element config.
+func (s *Settings) GetEffectiveSummaryLimit() int {
+	for _, el := range s.Realtime.Dashboard.Layout.Elements {
+		if el.Type == "daily-summary" && el.Summary != nil && el.Summary.SummaryLimit > 0 {
+			return el.Summary.SummaryLimit
+		}
+	}
+	if s.Realtime.Dashboard.SummaryLimit > 0 {
+		return s.Realtime.Dashboard.SummaryLimit
+	}
+	return defaultDashboardSummaryLimit
+}
