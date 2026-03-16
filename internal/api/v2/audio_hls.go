@@ -129,14 +129,11 @@ func (c *Controller) initHLSRoutes() {
 	hlsGroup := c.Group.Group("/streams/hls")
 
 	// Stream control endpoints
-	// When PublicAccess.LiveAudio is enabled, unauthenticated users can start streams
-	// Stop always requires authentication to prevent abuse
+	// Start uses dynamic middleware that checks PublicAccess.LiveAudio per-request,
+	// so changes take effect immediately without server restart.
+	// Stop always requires authentication to prevent abuse.
+	hlsGroup.POST("/:sourceID/start", c.StartHLSStream, c.publicLiveAudioAuth)
 	hlsGroup.POST("/:sourceID/stop", c.StopHLSStream, authMiddleware)
-	if c.Settings.Security.PublicAccess.LiveAudio {
-		hlsGroup.POST("/:sourceID/start", c.StartHLSStream)
-	} else {
-		hlsGroup.POST("/:sourceID/start", c.StartHLSStream, authMiddleware)
-	}
 
 	// Public endpoints - no authentication required
 	hlsGroup.POST("/heartbeat", c.HLSHeartbeat)
@@ -150,6 +147,19 @@ func (c *Controller) initHLSRoutes() {
 		hlsMgr.activitySyncCancel = cancel
 		go runHLSActivitySync(ctx)
 	})
+}
+
+// publicLiveAudioAuth is a dynamic middleware that checks PublicAccess.LiveAudio
+// on each request. When enabled, the request proceeds without authentication.
+// When disabled, the standard auth middleware is applied. This allows the setting
+// to take effect immediately without a server restart.
+func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
+	return func(ctx echo.Context) error {
+		if c.Settings.Security.PublicAccess.LiveAudio {
+			return next(ctx)
+		}
+		return c.authMiddleware(next)(ctx)
+	}
 }
 
 // StartHLSStream initiates an HLS stream for a specific audio source

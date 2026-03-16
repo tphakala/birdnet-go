@@ -26,6 +26,7 @@ BirdNET-Go: Go implementation of BirdNET for real-time bird sound identification
 - **Always lint before commit**: `golangci-lint run -v` (Go), `npm run check:all` (Frontend)
 - **Branch from updated main**: `git pull origin main && git checkout -b feature-name`
 - **No magic numbers/strings** - Use named constants with descriptive names
+- **Settings must support hot-reload** - All settings changed via the UI must take effect immediately without requiring a server restart. Use per-request checks (e.g., dynamic middleware) instead of startup-time branching.
 
 ### Project Structure
 
