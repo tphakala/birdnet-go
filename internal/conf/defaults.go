@@ -347,6 +347,7 @@ func setDefaultConfig() {
 	viper.SetDefault("security.redirecttohttps", false)
 	viper.SetDefault("security.allowsubnetbypass.enabled", false)
 	viper.SetDefault("security.allowsubnetbypass.subnet", "")
+	viper.SetDefault("security.publicaccess.liveaudio", false)
 	viper.SetDefault("security.sessionduration", "168h") // 7 days
 
 	// Basic authentication configuration
