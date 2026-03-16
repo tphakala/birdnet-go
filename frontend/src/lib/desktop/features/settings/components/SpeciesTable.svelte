@@ -9,7 +9,6 @@
   - species: ActiveSpecies[] - Species data to display
   - loading: boolean - Show loading spinner
   - searchable: boolean - Show search input
-  - expandable: boolean - Show expand/collapse toggle
   - onDownloadCsv: () => void - CSV download callback
   - title: string - Table title
   - description: string - Table description
