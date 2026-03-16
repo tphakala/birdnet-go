@@ -85,14 +85,14 @@ func TestPushDispatcher_SkipsAlertRuleTestNotifications(t *testing.T) {
 	err = d.start()
 	require.NoError(t, err, "failed to start dispatcher")
 
-	// Use t.Cleanup for teardown per project conventions
+	// Register goleak first so it runs last (LIFO order), after dispatcher cancellation
+	t.Cleanup(func() {
+		goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	})
 	t.Cleanup(func() {
 		if d.cancel != nil {
 			d.cancel()
 		}
-	})
-	t.Cleanup(func() {
-		goleak.VerifyNone(t, goleak.IgnoreCurrent())
 	})
 
 	// Send a regular notification — should be received by provider
