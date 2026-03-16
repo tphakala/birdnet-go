@@ -165,6 +165,12 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	// Check for force restart query param
 	forceRestart := ctx.QueryParam("force") == QueryValueTrue
 
+	// Only allow force restart for authenticated users to prevent DoS
+	// (force kills the FFmpeg process and spawns a new one)
+	if forceRestart && !c.isClientAuthenticated(ctx) {
+		forceRestart = false
+	}
+
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "HLS stream start requested",
 		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
 		logger.String("client_id", clientID),
