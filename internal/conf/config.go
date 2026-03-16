@@ -1121,6 +1121,12 @@ type AllowSubnetBypass struct {
 	Subnet  string `json:"subnet"`  // disable OAuth2 in subnet
 }
 
+// PublicAccess defines which features are accessible without authentication.
+// Each field corresponds to a feature that can be individually made public.
+type PublicAccess struct {
+	LiveAudio bool `json:"liveAudio"` // allow unauthenticated users to start/listen to live audio streams
+}
+
 // OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
 // This replaces the individual GoogleAuth, GithubAuth, MicrosoftAuth fields.
 type OAuthProviderConfig struct {
@@ -1187,6 +1193,7 @@ type Security struct {
 	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"` // port for HTTPS (default: 8443)
 	RedirectToHTTPS   bool              `json:"redirectToHttps"`        // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"`      // subnet bypass configuration
+	PublicAccess      PublicAccess      `json:"publicAccess"`           // features accessible without authentication
 	BasicAuth         BasicAuth         `json:"basicAuth"`              // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
