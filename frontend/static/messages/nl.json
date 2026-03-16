@@ -3933,7 +3933,8 @@
       "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
       "playbackSpeed": "Afspeelsnelheid",
       "speed": "Snelheid",
-      "loop": "Toggle loop"
+      "loop": "Toggle loop",
+      "player": "Audiospeler"
     },
     "spectrogram": {
       "notGenerated": "Spectrogram nog niet beschikbaar",
@@ -3950,6 +3951,7 @@
       "spectrogramLoading": "Spectrogram laden...",
       "spectrogramLoaded": "Spectrogram geladen",
       "spectrogramLoadingAria": "Spectrogram laden",
+      "spectrogramAlt": "Audiospectogram",
       "spectrogramGeneratingAria": "Spectrogram genereren",
       "generating": "Genereren...",
       "queuePosition": "Wachtrij: {position}",

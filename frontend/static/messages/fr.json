@@ -3933,7 +3933,8 @@
       "seekProgress": "Progression de la lecture audio : {current} / {total} secondes",
       "playbackSpeed": "Vitesse de lecture",
       "speed": "Vitesse",
-      "loop": "Toggle loop"
+      "loop": "Toggle loop",
+      "player": "Lecteur audio"
     },
     "spectrogram": {
       "notGenerated": "Spectrogramme pas encore généré",
@@ -3950,6 +3951,7 @@
       "spectrogramLoading": "Chargement du spectrogramme...",
       "spectrogramLoaded": "Spectrogramme chargé",
       "spectrogramLoadingAria": "Chargement du spectrogramme",
+      "spectrogramAlt": "Spectrogramme audio",
       "spectrogramGeneratingAria": "Génération du spectrogramme",
       "generating": "Génération...",
       "queuePosition": "File d'attente: {position}",

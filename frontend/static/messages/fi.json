@@ -3933,7 +3933,8 @@
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
-      "loop": "Toggle loop"
+      "loop": "Toggle loop",
+      "player": "Äänisoitin"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammia ei ole vielä generoitu",
@@ -3950,6 +3951,7 @@
       "spectrogramLoading": "Ladataan spektrogrammia...",
       "spectrogramLoaded": "Spektrogrammi ladattu",
       "spectrogramLoadingAria": "Ladataan spektrogrammia",
+      "spectrogramAlt": "Äänispektrogrammi",
       "spectrogramGeneratingAria": "Luodaan spektrogrammia",
       "generating": "Luodaan...",
       "queuePosition": "Jono: {position}",

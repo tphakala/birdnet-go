@@ -3933,7 +3933,8 @@
       "seekProgress": "Progreso de búsqueda de audio: {current} / {total} segundos",
       "playbackSpeed": "Velocidad de reproducción",
       "speed": "Velocidad",
-      "loop": "Toggle loop"
+      "loop": "Toggle loop",
+      "player": "Reproductor de audio"
     },
     "spectrogram": {
       "notGenerated": "Espectrograma aún no generado",
@@ -3950,6 +3951,7 @@
       "spectrogramLoading": "Cargando espectrograma...",
       "spectrogramLoaded": "Espectrograma cargado",
       "spectrogramLoadingAria": "Cargando espectrograma",
+      "spectrogramAlt": "Espectrograma de audio",
       "spectrogramGeneratingAria": "Generando espectrograma",
       "generating": "Generando...",
       "queuePosition": "Cola: {position}",

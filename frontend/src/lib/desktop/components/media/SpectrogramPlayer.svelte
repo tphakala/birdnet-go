@@ -145,7 +145,7 @@
     {#if spectrogramLoader.showSpinner}
       <div class="spectrogram-overlay">
         <div
-          class="loading loading-spinner loading-sm text-[var(--color-primary)]"
+          class="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent"
           role="status"
           aria-label={t('components.audio.spectrogramLoadingAria')}
         ></div>
@@ -159,7 +159,7 @@
     {:else}
       <img
         src={spectrogramUrl}
-        alt="Audio spectrogram"
+        alt={t('components.audio.spectrogramAlt')}
         decoding="async"
         class="spectrogram-img"
         class:invisible={spectrogramLoader.loading}

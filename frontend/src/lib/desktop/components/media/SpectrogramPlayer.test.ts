@@ -165,7 +165,7 @@ describe('SpectrogramPlayer', () => {
       detectionId: 'test-123',
     });
 
-    const img = screen.getByAltText('Audio spectrogram');
+    const img = screen.getByAltText('components.audio.spectrogramAlt');
     expect(img).toBeInTheDocument();
     expect(img.getAttribute('src')).toContain('/api/v2/spectrogram/test-123');
     expect(img.getAttribute('src')).toContain('size=md');
@@ -302,7 +302,7 @@ describe('SpectrogramPlayer', () => {
       detectionId: 'test/with spaces',
     });
 
-    const img = screen.getByAltText('Audio spectrogram');
+    const img = screen.getByAltText('components.audio.spectrogramAlt');
     const src = img.getAttribute('src') ?? '';
     expect(src).toContain(encodeURIComponent('test/with spaces'));
   });
@@ -317,7 +317,7 @@ describe('SpectrogramPlayer', () => {
       spectrogramSize: 'xl',
     });
 
-    const img = screen.getByAltText('Audio spectrogram');
+    const img = screen.getByAltText('components.audio.spectrogramAlt');
     expect(img.getAttribute('src')).toContain('size=xl');
   });
 

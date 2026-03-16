@@ -3764,7 +3764,8 @@
       "seekProgress": "Posun v nahrávke: {current} / {total} sekúnd",
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
-      "loop": "Toggle loop"
+      "loop": "Toggle loop",
+      "player": "Prehrávač zvuku"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram ešte nebol vygenerovaný",
@@ -3781,6 +3782,7 @@
       "spectrogramLoading": "Načítava sa spektrogram...",
       "spectrogramLoaded": "Spektrogram bol načítaný",
       "spectrogramLoadingAria": "Načítava sa spektrogram",
+      "spectrogramAlt": "Zvukový spektrogram",
       "spectrogramGeneratingAria": "Generuje sa spektrogram",
       "generating": "Generuje sa...",
       "queuePosition": "Poradie: {position}",
