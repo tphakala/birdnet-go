@@ -139,15 +139,16 @@ type CustomColors struct {
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails      Thumbnails           `json:"thumbnails"`             // thumbnails settings
-	SummaryLimit    int                  `json:"summaryLimit"`           // limit for the number of species shown in the summary table
-	Locale          string               `json:"locale,omitempty"`       // UI locale setting
-	Spectrogram     SpectrogramPreRender `json:"spectrogram"`            // Spectrogram pre-rendering settings
-	TemperatureUnit string               `json:"temperatureUnit"`        // display unit for temperature: "celsius" or "fahrenheit"
-	ColorScheme     string               `json:"colorScheme,omitempty"`  // color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
-	CustomColors    *CustomColors        `json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
-	LogoStyle       string               `json:"logoStyle,omitempty"`    // logo display style: "gradient" or "solid"
-	Layout          DashboardLayout      `json:"layout"`                 // configurable dashboard element layout
+	Thumbnails       Thumbnails           `json:"thumbnails"`             // thumbnails settings
+	SummaryLimit     int                  `json:"summaryLimit"`           // limit for the number of species shown in the summary table
+	Locale           string               `json:"locale,omitempty"`       // UI locale setting
+	Spectrogram      SpectrogramPreRender `json:"spectrogram"`            // Spectrogram pre-rendering settings
+	TemperatureUnit  string               `json:"temperatureUnit"`        // display unit for temperature: "celsius" or "fahrenheit"
+	ColorScheme      string               `json:"colorScheme,omitempty"`  // color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
+	CustomColors     *CustomColors        `json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
+	LogoStyle        string               `json:"logoStyle,omitempty"`    // logo display style: "gradient" or "solid"
+	Layout           DashboardLayout      `json:"layout"`                 // configurable dashboard element layout
+	DefaultAudioGain float64              `json:"defaultAudioGain"`       // Default playback gain in dB (0-24)
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.

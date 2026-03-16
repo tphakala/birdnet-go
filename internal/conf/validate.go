@@ -36,6 +36,13 @@ const (
 	MaxAudioGain = 40.0  // Maximum allowed audio gain in dB
 )
 
+// Playback gain limits in dB (UI preference, distinct from export gain)
+const (
+	MinPlaybackGain     = 0.0  // Minimum default playback gain
+	MaxPlaybackGain     = 24.0 // Maximum default playback gain (matches AudioSettingsButton GAIN_MAX_DB)
+	DefaultPlaybackGain = 0.0  // Safe default if invalid value provided
+)
+
 // Stream validation constants
 const (
 	MaxStreamNameLength = 64
@@ -1257,6 +1264,19 @@ func validateDashboardSettings(settings *Dashboard) error {
 			// Log warning but don't fail - fallback to default
 			GetLogger().Warn("Invalid UI locale, will use default", logger.String("invalid_locale", settings.Locale), logger.String("fallback", "en"))
 			settings.Locale = "en"
+		}
+	}
+
+	// Validate default audio gain (playback UI preference)
+	if settings.DefaultAudioGain < MinPlaybackGain || settings.DefaultAudioGain > MaxPlaybackGain {
+		GetLogger().Warn("Dashboard DefaultAudioGain out of range, clamping to safe value",
+			logger.Float64("invalid_value", settings.DefaultAudioGain),
+			logger.Float64("min", MinPlaybackGain),
+			logger.Float64("max", MaxPlaybackGain))
+		if settings.DefaultAudioGain < MinPlaybackGain {
+			settings.DefaultAudioGain = MinPlaybackGain
+		} else {
+			settings.DefaultAudioGain = MaxPlaybackGain
 		}
 	}
 
