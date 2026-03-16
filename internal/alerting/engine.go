@@ -174,6 +174,31 @@ func (e *Engine) isInCooldown(ruleID uint, cooldownSec int) bool {
 }
 
 func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
+	e.fireRuleInternal(rule, event, e.actionFunc)
+}
+
+// TestFireRule fires a rule's actions directly, bypassing condition evaluation
+// and cooldown checks. Used by the test endpoint. The resulting notification
+// is marked as a test so that push providers (Telegram, Shoutrrr, etc.) do
+// not forward it.
+func (e *Engine) TestFireRule(rule *entities.AlertRule) {
+	event := &AlertEvent{
+		ObjectType: rule.ObjectType,
+		EventName:  rule.EventName,
+		MetricName: rule.MetricName,
+		Properties: map[string]any{"test": true},
+		Timestamp:  time.Now(),
+	}
+	actionFn := e.testActionFunc
+	if actionFn == nil {
+		actionFn = e.actionFunc
+	}
+	e.fireRuleInternal(rule, event, actionFn)
+}
+
+// fireRuleInternal contains the shared logic for firing a rule: recording
+// cooldown, persisting history, and dispatching the provided action function.
+func (e *Engine) fireRuleInternal(rule *entities.AlertRule, event *AlertEvent, actionFn ActionFunc) {
 	// Record cooldown
 	e.cooldownsMu.Lock()
 	e.cooldowns[rule.ID] = time.Now()
@@ -206,65 +231,6 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 	}
 
 	// Dispatch actions
-	if e.actionFunc != nil {
-		e.actionFunc(rule, event)
-	}
-}
-
-// TestFireRule fires a rule's actions directly, bypassing condition evaluation
-// and cooldown checks. Used by the test endpoint. The resulting notification
-// is marked as a test so that push providers (Telegram, Shoutrrr, etc.) do
-// not forward it.
-func (e *Engine) TestFireRule(rule *entities.AlertRule) {
-	event := &AlertEvent{
-		ObjectType: rule.ObjectType,
-		EventName:  rule.EventName,
-		MetricName: rule.MetricName,
-		Properties: map[string]any{"test": true},
-		Timestamp:  time.Now(),
-	}
-	e.testFireRule(rule, event)
-}
-
-// testFireRule is like fireRule but uses testActionFunc (which marks the
-// notification as a test) instead of the normal actionFunc.
-func (e *Engine) testFireRule(rule *entities.AlertRule, event *AlertEvent) {
-	// Record cooldown
-	e.cooldownsMu.Lock()
-	e.cooldowns[rule.ID] = time.Now()
-	e.cooldownsMu.Unlock()
-
-	// Record history
-	eventJSON, err := json.Marshal(event.Properties)
-	if err != nil {
-		e.log.Error("failed to marshal event properties", logger.Error(err))
-		eventJSON = []byte("{}")
-	}
-	actionsJSON, err := json.Marshal(rule.Actions)
-	if err != nil {
-		e.log.Error("failed to marshal rule actions", logger.Error(err))
-		actionsJSON = []byte("[]")
-	}
-	history := &entities.AlertHistory{
-		RuleID:    rule.ID,
-		FiredAt:   time.Now(),
-		EventData: string(eventJSON),
-		Actions:   string(actionsJSON),
-	}
-	saveCtx, saveCancel := context.WithTimeout(context.Background(), saveHistoryTimeout)
-	defer saveCancel()
-	if err := e.repo.SaveHistory(saveCtx, history); err != nil {
-		e.log.Error("failed to save alert history",
-			logger.Uint64("rule_id", uint64(rule.ID)),
-			logger.Error(err))
-		e.telemetry.ReportDBWriteFailed("save_history", err.Error())
-	}
-
-	// Dispatch actions via test-aware function if available, otherwise normal
-	actionFn := e.testActionFunc
-	if actionFn == nil {
-		actionFn = e.actionFunc
-	}
 	if actionFn != nil {
 		actionFn(rule, event)
 	}

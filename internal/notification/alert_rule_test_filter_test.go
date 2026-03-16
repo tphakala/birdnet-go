@@ -85,13 +85,15 @@ func TestPushDispatcher_SkipsAlertRuleTestNotifications(t *testing.T) {
 	err = d.start()
 	require.NoError(t, err, "failed to start dispatcher")
 
-	// Stop and verify cleanup
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
-	defer func() {
+	// Use t.Cleanup for teardown per project conventions
+	t.Cleanup(func() {
 		if d.cancel != nil {
 			d.cancel()
 		}
-	}()
+	})
+	t.Cleanup(func() {
+		goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	})
 
 	// Send a regular notification — should be received by provider
 	_, err = svc.Create(TypeWarning, PriorityHigh, "Real Alert", "real message")
@@ -110,14 +112,21 @@ func TestPushDispatcher_SkipsAlertRuleTestNotifications(t *testing.T) {
 	err = svc.CreateWithMetadata(testNotif)
 	require.NoError(t, err)
 
+	// Verify the test notification is NOT forwarded to the provider
+	select {
+	case n := <-fp.recvCh:
+		require.Failf(t, "unexpected forwarded test notification", "got title=%q", n.Title)
+	case <-time.After(200 * time.Millisecond):
+		// Expected: test notifications are filtered out
+	}
+
 	// Send another regular notification to verify the dispatcher is still running
 	_, err = svc.Create(TypeInfo, PriorityLow, "After Test", "after test message")
 	require.NoError(t, err)
 
 	select {
 	case n := <-fp.recvCh:
-		// The next notification received should be "After Test", not "Test Alert"
-		assert.Equal(t, "After Test", n.Title, "alert rule test notification should be skipped")
+		assert.Equal(t, "After Test", n.Title, "dispatcher should still forward regular notifications")
 	case <-time.After(1 * time.Second):
 		require.Fail(t, "timeout waiting for notification after test notification")
 	}
