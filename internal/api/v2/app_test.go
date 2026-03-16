@@ -889,6 +889,7 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"enabled":       true,
 		"accessAllowed": true,
 		"authConfig":    true,
+		"publicAccess":  true,
 	}
 
 	for key := range securityObj {
