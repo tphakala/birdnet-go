@@ -385,6 +385,9 @@ export interface SecuritySettings {
     enabled: boolean;
     subnet: string;
   };
+  publicAccess?: {
+    liveAudio: boolean;
+  };
 }
 
 // Legacy OAuth settings interface (deprecated)

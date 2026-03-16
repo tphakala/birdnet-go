@@ -46,7 +46,7 @@
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { settingsAPI, type TLSCertificateInfo } from '$lib/utils/settingsApi';
   import { toastActions } from '$lib/stores/toast';
-  import { ExternalLink, Server, KeyRound, Users, Network, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw } from '@lucide/svelte';
+  import { ExternalLink, Server, KeyRound, Users, Plus, Pencil, Trash2, Terminal, ShieldCheck, Upload, Globe, RefreshCw } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { GoogleIcon, AUTH_PROVIDERS } from '$lib/auth';
   import type { Component } from 'svelte';
@@ -88,6 +88,9 @@
       allowSubnetBypass: {
         enabled: false,
         subnet: '',
+      },
+      publicAccess: {
+        liveAudio: false,
       },
     }
   );
@@ -348,6 +351,15 @@
     )
   );
 
+  let publicAccessHasChanges = $derived(
+    hasSettingsChanged(
+      store.originalData.security?.publicAccess,
+      store.formData.security?.publicAccess
+    )
+  );
+
+  let exceptionsHasChanges = $derived(subnetBypassHasChanges || publicAccessHasChanges);
+
   // PERFORMANCE OPTIMIZATION: Generate redirect URIs dynamically with $derived
   // Use window.location.origin for display (what the user sees in browser)
   let currentHost = $derived(
@@ -592,6 +604,12 @@
     });
   }
 
+  function updatePublicLiveAudio(checked: boolean) {
+    settingsActions.updateSection('security', {
+      publicAccess: { ...settings.publicAccess, liveAudio: checked },
+    });
+  }
+
   // Terminal toggle — reads from webServer section of the settings store
   let webServerData = $derived($settingsStore.formData.webServer);
   let enableTerminal = $derived(webServerData?.enableTerminal ?? false);
@@ -639,11 +657,11 @@
       hasChanges: oauthHasChanges,
     },
     {
-      id: 'subnet',
-      label: t('settings.security.bypassAuthentication.title'),
-      icon: Network,
-      content: subnetTabContent,
-      hasChanges: subnetBypassHasChanges,
+      id: 'exceptions',
+      label: t('settings.security.exceptions.title'),
+      icon: ShieldCheck,
+      content: exceptionsTabContent,
+      hasChanges: exceptionsHasChanges,
     },
     {
       id: 'terminal',
@@ -1248,7 +1266,7 @@
   </div>
 {/snippet}
 
-{#snippet subnetTabContent()}
+{#snippet exceptionsTabContent()}
   <div class="space-y-6">
     <!-- Bypass Authentication Card -->
     <SettingsSection
@@ -1302,6 +1320,33 @@
             </ErrorAlert>
           </div>
         </fieldset>
+      </div>
+    </SettingsSection>
+
+    <!-- Public Access section -->
+    <SettingsSection
+      title={t('settings.security.publicAccess.title')}
+      description={t('settings.security.publicAccess.description')}
+      originalData={store.originalData.security?.publicAccess}
+      currentData={store.formData.security?.publicAccess}
+    >
+      <div class="space-y-4">
+        <Checkbox
+          checked={settings.publicAccess?.liveAudio ?? false}
+          label={t('settings.security.publicAccess.liveAudioLabel')}
+          helpText={t('settings.security.publicAccess.liveAudioHelp')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={() => updatePublicLiveAudio(!settings.publicAccess?.liveAudio)}
+        />
+
+        <ErrorAlert type="warning">
+          {#snippet children()}
+            <span>
+              <strong>{t('settings.security.securityWarningTitle')}</strong>
+              {t('settings.security.publicAccess.warningText')}
+            </span>
+          {/snippet}
+        </ErrorAlert>
       </div>
     </SettingsSection>
   </div>
