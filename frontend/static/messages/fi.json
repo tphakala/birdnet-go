@@ -131,7 +131,8 @@
       "calendarNavigation": "Käytä nuolinäppäimiä kalenterissa liikkumiseen, Enter valitsee, Esc sulkee",
       "downloadCsv": "Lataa lajilista CSV-tiedostona",
       "visitEbirdLink": "Avaa eBird.org uuteen välilehteen",
-      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen"
+      "learnEbirdTaxonomyLink": "Avaa eBird-taksonomia uuteen välilehteen",
+      "resizeHandle": "Vedä muuttaaksesi kokoa"
     },
     "labels": {
       "confidence": "Luottamus",
@@ -190,7 +191,6 @@
       "unknownError": "Tuntematon virhe"
     },
     "toggle": "Vaihda",
-    "resizeHandle": "Vedä muuttaaksesi kokoa",
     "image": "Kuva",
     "actionsColumn": "Toiminnot",
     "closeModal": "Sulje valintaikkuna",

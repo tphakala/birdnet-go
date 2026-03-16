@@ -131,7 +131,8 @@
       "nextMonth": "Mois suivant",
       "selectToday": "Sélectionner aujourd'hui",
       "dateSelected": "Date sélectionnée : {date}",
-      "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer"
+      "calendarNavigation": "Navigation du calendrier : utilisez les flèches pour vous déplacer, Entrée pour sélectionner, Échap pour fermer",
+      "resizeHandle": "Glisser pour redimensionner"
     },
     "labels": {
       "confidence": "Confiance",
@@ -190,7 +191,6 @@
       "unknownError": "Erreur inconnue"
     },
     "toggle": "Basculer",
-    "resizeHandle": "Glisser pour redimensionner",
     "image": "Image",
     "actionsColumn": "Actions",
     "closeModal": "Fermer la boîte de dialogue",

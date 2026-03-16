@@ -63,6 +63,29 @@
   function onPointerUp() {
     isDragging = false;
   }
+
+  const KEYBOARD_RESIZE_STEP = 24;
+
+  function onKeyDown(event: KeyboardEvent) {
+    switch (event.key) {
+      case 'ArrowUp':
+        event.preventDefault();
+        height = Math.max(minHeight, height - KEYBOARD_RESIZE_STEP);
+        break;
+      case 'ArrowDown':
+        event.preventDefault();
+        height = Math.min(maxHeight, height + KEYBOARD_RESIZE_STEP);
+        break;
+      case 'Home':
+        event.preventDefault();
+        height = minHeight;
+        break;
+      case 'End':
+        event.preventDefault();
+        height = maxHeight;
+        break;
+    }
+  }
 </script>
 
 <div class="flex flex-col">
@@ -73,14 +96,16 @@
     {/if}
   </div>
 
-  <!-- Drag handle -->
+  <!-- Drag handle: focusable separator per WAI-ARIA (has aria-valuenow) -->
+  <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
   <div
     role="separator"
     aria-orientation="horizontal"
-    aria-label={t('common.resizeHandle')}
+    aria-label={t('common.aria.resizeHandle')}
     aria-valuenow={height}
     aria-valuemin={minHeight}
     aria-valuemax={maxHeight}
+    tabindex={0}
     class={cn(
       'flex items-center justify-center h-5 cursor-row-resize select-none',
       'border-t border-[var(--border-100)]',
@@ -92,6 +117,7 @@
     onpointermove={onPointerMove}
     onpointerup={onPointerUp}
     onpointercancel={onPointerUp}
+    onkeydown={onKeyDown}
   >
     <GripHorizontal class="size-4" />
   </div>

@@ -33,7 +33,6 @@
     species: ActiveSpeciesItem[];
     loading?: boolean;
     searchable?: boolean;
-    expandable?: boolean;
     onDownloadCsv?: () => void;
     title?: string;
     description?: string;

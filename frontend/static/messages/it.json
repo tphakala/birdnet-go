@@ -131,7 +131,8 @@
       "calendarNavigation": "Usa le frecce per navigare nel calendario, Invio per selezionare, Esc per chiudere",
       "downloadCsv": "Scarica elenco specie come CSV",
       "visitEbirdLink": "Apri eBird.org in una nuova scheda",
-      "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda"
+      "learnEbirdTaxonomyLink": "Apri Tassonomia eBird in una nuova scheda",
+      "resizeHandle": "Trascina per ridimensionare"
     },
     "labels": {
       "confidence": "Confidenza",
@@ -190,7 +191,6 @@
       "unknownError": "Errore sconosciuto"
     },
     "toggle": "Attiva/Disattiva",
-    "resizeHandle": "Trascina per ridimensionare",
     "image": "Immagine",
     "actionsColumn": "Azioni",
     "closeModal": "Chiudi finestra",

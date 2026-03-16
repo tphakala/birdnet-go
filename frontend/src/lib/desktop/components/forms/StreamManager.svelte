@@ -585,7 +585,13 @@
                 {disabled}
               />
               {#if nameError}
-                <p class="text-xs text-[var(--color-error)] -mt-2">{nameError}</p>
+                <p
+                  role="alert"
+                  aria-live="assertive"
+                  class="text-xs text-[var(--color-error)] -mt-2"
+                >
+                  {nameError}
+                </p>
               {/if}
             </div>
 
@@ -601,7 +607,13 @@
                 {disabled}
               />
               {#if urlError}
-                <p class="text-xs text-[var(--color-error)] -mt-2">{urlError}</p>
+                <p
+                  role="alert"
+                  aria-live="assertive"
+                  class="text-xs text-[var(--color-error)] -mt-2"
+                >
+                  {urlError}
+                </p>
               {/if}
             </div>
 
@@ -647,6 +659,8 @@
                   showAddForm = false;
                   newName = '';
                   newUrl = '';
+                  newStreamType = 'rtsp';
+                  newTransport = 'tcp';
                   newQuietHours = { ...defaultQuietHoursConfig };
                   clearErrors();
                 }}

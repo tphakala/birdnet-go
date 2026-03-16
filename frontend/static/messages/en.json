@@ -131,7 +131,8 @@
       "calendarNavigation": "Use arrow keys to navigate calendar, Enter to select, Escape to close",
       "downloadCsv": "Download species list as CSV",
       "visitEbirdLink": "Open eBird.org in a new tab",
-      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab"
+      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in a new tab",
+      "resizeHandle": "Drag to resize"
     },
     "labels": {
       "confidence": "Confidence",
@@ -190,7 +191,6 @@
       "unknownError": "Unknown error occurred"
     },
     "toggle": "Toggle",
-    "resizeHandle": "Drag to resize",
     "image": "Image",
     "actionsColumn": "Actions",
     "closeModal": "Close dialog",

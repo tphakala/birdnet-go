@@ -131,7 +131,8 @@
       "calendarNavigation": "Navigeer met pijl toetsen door de kalender, Enter om te selecteren, Esc om te sluiten",
       "downloadCsv": "Soorten lijst als CSV ophalen",
       "visitEbirdLink": "Open eBird.org in een nieuwe tab",
-      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab"
+      "learnEbirdTaxonomyLink": "Open eBird Taxonomy in een nieuwe tab",
+      "resizeHandle": "Sleep om te vergroten/verkleinen"
     },
     "labels": {
       "confidence": "Betrouwbaarheid",
@@ -190,7 +191,6 @@
       "unknownError": "Onbekende fout opgetreden"
     },
     "toggle": "Schakelen",
-    "resizeHandle": "Sleep om te vergroten/verkleinen",
     "image": "Afbeelding",
     "actionsColumn": "Acties",
     "closeModal": "Dialoogvenster sluiten",

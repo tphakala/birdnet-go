@@ -162,17 +162,20 @@
 
   // Validate eBird: enabled requires API key
   $effect(() => {
+    const EBIRD_ERROR_KEY = 'ebird-api-key-required';
     const ebirdEnabled = settings.ebird?.enabled ?? false;
     const ebirdApiKey = settings.ebird?.apiKey?.trim() ?? '';
-    const errors: string[] = [];
+
+    // Filter out previous eBird errors, then add back if still invalid
+    let currentErrors = $settingsValidationErrors.filter(e => e !== EBIRD_ERROR_KEY);
     if (ebirdEnabled && !ebirdApiKey) {
-      errors.push('ebird-api-key-required');
+      currentErrors = [...currentErrors, EBIRD_ERROR_KEY];
     }
-    settingsValidationErrors.set(errors);
+    settingsValidationErrors.set(currentErrors);
 
     return () => {
-      // Clear validation errors when leaving this page
-      settingsValidationErrors.set([]);
+      // Clear only eBird validation errors when leaving this page
+      settingsValidationErrors.update(errors => errors.filter(e => e !== EBIRD_ERROR_KEY));
     };
   });
 

@@ -141,7 +141,8 @@
       "nextMonth": "Próximo mês",
       "selectToday": "Selecionar hoje",
       "dateSelected": "Data selecionada: {date}",
-      "calendarNavigation": "Use as teclas de seta para navegar no calendário, Enter para selecionar, Escape para fechar"
+      "calendarNavigation": "Use as teclas de seta para navegar no calendário, Enter para selecionar, Escape para fechar",
+      "resizeHandle": "Arraste para redimensionar"
     },
     "labels": {
       "confidence": "Confiança",
@@ -200,7 +201,6 @@
       "unknownError": "Erro desconhecido"
     },
     "toggle": "Alternar",
-    "resizeHandle": "Arraste para redimensionar",
     "image": "Imagem",
     "actionsColumn": "Ações",
     "closeModal": "Fechar diálogo",

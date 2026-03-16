@@ -131,7 +131,8 @@
       "calendarNavigation": "Verwenden Sie die Pfeiltasten zur Navigation im Kalender, Enter zum Auswählen, Escape zum Schließen",
       "downloadCsv": "Artenliste als CSV herunterladen",
       "visitEbirdLink": "eBird.org in neuem Tab öffnen",
-      "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen"
+      "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen",
+      "resizeHandle": "Ziehen zum Ändern der Größe"
     },
     "labels": {
       "confidence": "Konfidenz",
@@ -190,7 +191,6 @@
       "unknownError": "Unbekannter Fehler aufgetreten"
     },
     "toggle": "Umschalten",
-    "resizeHandle": "Ziehen zum Ändern der Größe",
     "image": "Bild",
     "actionsColumn": "Aktionen",
     "closeModal": "Dialog schließen",
