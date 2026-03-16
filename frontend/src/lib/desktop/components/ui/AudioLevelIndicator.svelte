@@ -25,13 +25,19 @@
     className?: string;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
+    publicLiveAudio?: boolean;
   }
 
   // PERFORMANCE OPTIMIZATION: Cache HLS availability check with $derived
   // Now using imported Hls instead of global window.Hls
   let hlsSupported = $derived(typeof window !== 'undefined' && Hls.isSupported());
 
-  let { className = '', securityEnabled = false, accessAllowed = true }: Props = $props();
+  let {
+    className = '',
+    securityEnabled = false,
+    accessAllowed = true,
+    publicLiveAudio = false,
+  }: Props = $props();
 
   // State
   let levels = $state<AudioLevels>({});
@@ -607,7 +613,7 @@
     </div>
   {/if}
 
-  {#if !securityEnabled || accessAllowed}
+  {#if !securityEnabled || accessAllowed || publicLiveAudio}
     <!-- Dropdown menu -->
     {#if dropdownOpen}
       <div
