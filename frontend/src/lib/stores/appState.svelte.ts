@@ -54,6 +54,9 @@ interface AppConfigResponse {
       basicEnabled: boolean;
       enabledProviders: string[];
     };
+    publicAccess?: {
+      liveAudio: boolean;
+    };
   };
   version: string;
   basePath?: string;
@@ -83,6 +86,9 @@ interface AppState {
     enabled: boolean;
     accessAllowed: boolean;
     authConfig: AuthConfig;
+    publicAccess: {
+      liveAudio: boolean;
+    };
   };
 }
 
@@ -102,6 +108,9 @@ const DEFAULT_STATE: AppState = {
     authConfig: {
       basicEnabled: false,
       enabledProviders: [],
+    },
+    publicAccess: {
+      liveAudio: false,
     },
   },
 };
@@ -187,6 +196,9 @@ export async function initApp(): Promise<boolean> {
         authConfig: {
           basicEnabled: config.security.authConfig.basicEnabled,
           enabledProviders: config.security.authConfig.enabledProviders,
+        },
+        publicAccess: {
+          liveAudio: config.security.publicAccess?.liveAudio ?? false,
         },
       };
 
