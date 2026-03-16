@@ -662,17 +662,22 @@
     }
   }
 
+  // Centralized location update: marks locationConfigured and pushes coordinates to the store
+  function updateLocationSettings(lat: number, lng: number) {
+    settingsActions.updateSection('birdnet', {
+      latitude: lat,
+      longitude: lng,
+      locationConfigured: true,
+    });
+  }
+
   function updateMarker(lat: number, lng: number) {
     if (!map) return;
 
     const roundedLat = parseFloat(lat.toFixed(3));
     const roundedLng = parseFloat(lng.toFixed(3));
 
-    settingsActions.updateSection('birdnet', {
-      latitude: roundedLat,
-      longitude: roundedLng,
-      locationConfigured: true,
-    });
+    updateLocationSettings(roundedLat, roundedLng);
 
     updateMapView(roundedLat, roundedLng);
     debouncedTestRangeFilter();
@@ -717,11 +722,7 @@
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
-          settingsActions.updateSection('birdnet', {
-            latitude: roundedLat,
-            longitude: roundedLng,
-            locationConfigured: true,
-          });
+          updateLocationSettings(roundedLat, roundedLng);
 
           if (map) {
             const mainCurrentZoom = map.getZoom();
@@ -791,11 +792,7 @@
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
-          settingsActions.updateSection('birdnet', {
-            latitude: roundedLat,
-            longitude: roundedLng,
-            locationConfigured: true,
-          });
+          updateLocationSettings(roundedLat, roundedLng);
 
           if (map) {
             const mainCurrentZoom = map.getZoom();
@@ -819,11 +816,7 @@
           const roundedLat = parseFloat(lngLat.lat.toFixed(3));
           const roundedLng = parseFloat(lngLat.lng.toFixed(3));
 
-          settingsActions.updateSection('birdnet', {
-            latitude: roundedLat,
-            longitude: roundedLng,
-            locationConfigured: true,
-          });
+          updateLocationSettings(roundedLat, roundedLng);
 
           if (modalMarker) {
             modalMarker.setLngLat([roundedLng, roundedLat]);
@@ -932,7 +925,7 @@
   }
 
   async function loadRangeFilterSpecies() {
-    if (rangeFilterState.loading) return;
+    if (rangeFilterState.loading || !settings.birdnet.locationConfigured) return;
 
     rangeFilterState.loading = true;
     rangeFilterState.error = null;
@@ -958,10 +951,12 @@
   }
 
   $effect(() => {
-    const lat = settings.birdnet.latitude;
-    const lng = settings.birdnet.longitude;
+    // Track coordinate changes as dependencies
+    const _lat = settings.birdnet.latitude;
+    const _lng = settings.birdnet.longitude;
+    const configured = settings.birdnet.locationConfigured;
 
-    if (lat && lng) {
+    if (configured && _lat != null && _lng != null) {
       debouncedTestRangeFilter();
     }
   });
@@ -974,7 +969,9 @@
   function updateBirdnetSetting(key: string, value: string | number | boolean | null) {
     // When latitude or longitude is updated, mark location as explicitly configured
     if (key === 'latitude' || key === 'longitude') {
-      settingsActions.updateSection('birdnet', { [key]: value, locationConfigured: true });
+      const currentLat = key === 'latitude' ? (value as number) : settings.birdnet.latitude;
+      const currentLng = key === 'longitude' ? (value as number) : settings.birdnet.longitude;
+      updateLocationSettings(currentLat, currentLng);
     } else {
       settingsActions.updateSection('birdnet', { [key]: value });
     }
@@ -1344,7 +1341,7 @@
   }
 
   async function downloadSpeciesCSV() {
-    if (rangeFilterState.downloading) return;
+    if (rangeFilterState.downloading || !settings.birdnet.locationConfigured) return;
 
     try {
       rangeFilterState.downloading = true;

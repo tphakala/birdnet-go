@@ -204,10 +204,8 @@ export function coerceBirdNetSettings(settings: PartialBirdNetSettings): Partial
     coerced.longitude = coerceNumber(settings.longitude, -180, 180, 0);
   }
 
-  // Location configured flag
-  if ('locationConfigured' in settings) {
-    coerced.locationConfigured = coerceBoolean(settings.locationConfigured, false);
-  }
+  // Location configured flag (always materialize required boolean field)
+  coerced.locationConfigured = coerceBoolean(settings.locationConfigured, false);
 
   // Threads: 0 to 32 (0 means use all available threads in backend)
   if ('threads' in settings) {
