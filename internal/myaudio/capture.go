@@ -542,7 +542,7 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 	}
 	log.Warn("configured audio device not found in available devices",
 		logger.String("configured_source", settings.Realtime.Audio.Source),
-		logger.String("available_devices", strings.Join(availableDevices, ", ")))
+		logger.Any("available_devices", availableDevices))
 
 	return fmt.Errorf("configured audio device '%s' not found", settings.Realtime.Audio.Source)
 }
