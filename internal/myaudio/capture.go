@@ -364,7 +364,15 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 					logger.Int("attempt", attempt+1),
 					logger.Int("max_retries", maxRetries),
 					logger.String("retry_delay", retryDelay.String()))
-				time.Sleep(retryDelay)
+				select {
+				case <-quitChan:
+					log.Info("audio device validation retry cancelled by quit signal")
+					return
+				case <-restartChan:
+					log.Info("audio device validation retry cancelled by restart signal")
+					return
+				case <-time.After(retryDelay):
+				}
 			}
 		}
 		if validationErr != nil {
@@ -372,6 +380,7 @@ func CaptureAudio(settings *conf.Settings, wg *sync.WaitGroup, quitChan, restart
 				logger.Error(validationErr),
 				logger.Int("retries", maxRetries),
 				logger.String("source", settings.Realtime.Audio.Source))
+			settings.Realtime.Audio.Source = ""
 			return
 		}
 
@@ -531,7 +540,7 @@ func ValidateAudioDevice(settings *conf.Settings) error {
 		}
 		availableDevices = append(availableDevices, fmt.Sprintf("%s (%s)", infos[i].Name(), decodedID))
 	}
-	log.Debug("configured audio device not found in available devices",
+	log.Warn("configured audio device not found in available devices",
 		logger.String("configured_source", settings.Realtime.Audio.Source),
 		logger.String("available_devices", strings.Join(availableDevices, ", ")))
 
