@@ -1304,37 +1304,34 @@ func FuzzGetAppConfig_SecurityConfig(f *testing.F) {
 
 // TestGetAppConfig_PublicAccessFlags tests that publicAccess flags are included in the response.
 func TestGetAppConfig_PublicAccessFlags(t *testing.T) {
-	// Test with LiveAudio disabled (default)
 	e, controller := setupAppConfigTest(t, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
+	tests := []struct {
+		name     string
+		enabled  bool
+		expected bool
+	}{
+		{"LiveAudio disabled by default", false, false},
+		{"LiveAudio enabled", true, true},
+	}
 
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			controller.Settings.Security.PublicAccess.LiveAudio = tt.enabled
 
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
 
-	assert.False(t, response.Security.PublicAccess.LiveAudio, "LiveAudio should be false by default")
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
 
-	// Test with LiveAudio enabled
-	controller.Settings.Security.PublicAccess.LiveAudio = true
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec2 := httptest.NewRecorder()
-	c2 := e.NewContext(req2, rec2)
-	c2.SetPath("/api/v2/app/config")
-
-	err = controller.GetAppConfig(c2)
-	require.NoError(t, err)
-
-	var response2 AppConfigResponse
-	err = json.Unmarshal(rec2.Body.Bytes(), &response2)
-	require.NoError(t, err)
-
-	assert.True(t, response2.Security.PublicAccess.LiveAudio, "LiveAudio should be true when enabled")
+			assert.Equal(t, tt.expected, response.Security.PublicAccess.LiveAudio)
+		})
+	}
 }

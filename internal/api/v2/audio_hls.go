@@ -128,14 +128,14 @@ func (c *Controller) initHLSRoutes() {
 	// HLS base group (no auth by default)
 	hlsGroup := c.Group.Group("/streams/hls")
 
-	// Stream control endpoints - conditionally require authentication
-	// When PublicAccess.LiveAudio is enabled, unauthenticated users can start/stop streams
+	// Stream control endpoints
+	// When PublicAccess.LiveAudio is enabled, unauthenticated users can start streams
+	// Stop always requires authentication to prevent abuse
+	hlsGroup.POST("/:sourceID/stop", c.StopHLSStream, authMiddleware)
 	if c.Settings.Security.PublicAccess.LiveAudio {
 		hlsGroup.POST("/:sourceID/start", c.StartHLSStream)
-		hlsGroup.POST("/:sourceID/stop", c.StopHLSStream)
 	} else {
 		hlsGroup.POST("/:sourceID/start", c.StartHLSStream, authMiddleware)
-		hlsGroup.POST("/:sourceID/stop", c.StopHLSStream, authMiddleware)
 	}
 
 	// Public endpoints - no authentication required

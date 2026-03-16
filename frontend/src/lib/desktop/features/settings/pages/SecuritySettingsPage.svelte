@@ -606,7 +606,7 @@
 
   function updatePublicLiveAudio(checked: boolean) {
     settingsActions.updateSection('security', {
-      publicAccess: { ...settings.publicAccess, liveAudio: checked },
+      publicAccess: { ...(settings.publicAccess ?? {}), liveAudio: checked },
     });
   }
 
@@ -1336,7 +1336,7 @@
           label={t('settings.security.publicAccess.liveAudioLabel')}
           helpText={t('settings.security.publicAccess.liveAudioHelp')}
           disabled={store.isLoading || store.isSaving}
-          onchange={() => updatePublicLiveAudio(!settings.publicAccess?.liveAudio)}
+          onchange={updatePublicLiveAudio}
         />
 
         <ErrorAlert type="warning">
