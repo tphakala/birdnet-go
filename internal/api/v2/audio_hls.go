@@ -155,7 +155,10 @@ func (c *Controller) initHLSRoutes() {
 // to take effect immediately without a server restart.
 func (c *Controller) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
-		if c.Settings.Security.PublicAccess.LiveAudio {
+		c.settingsMutex.RLock()
+		isPublic := c.Settings.Security.PublicAccess.LiveAudio
+		c.settingsMutex.RUnlock()
+		if isPublic {
 			return next(ctx)
 		}
 		return c.authMiddleware(next)(ctx)
