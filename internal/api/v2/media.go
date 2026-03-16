@@ -2474,6 +2474,14 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		logger.String("spectrogram_key", spectrogramKey))
 
 	_, err, shared := spectrogramGroup.Do(spectrogramKey, func() (any, error) {
+		// Use a controller-scoped context with timeout instead of the request-scoped ctx.
+		// Since singleflight shares the result across all concurrent callers, using a
+		// request-scoped context would cause all waiters to fail if the winning request's
+		// client disconnects. The controller context (c.ctx) respects server shutdown
+		// but is not tied to any individual HTTP request.
+		sharedCtx, sharedCancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
+		defer sharedCancel()
+
 		// Step 4: Check if audio file exists (inside singleflight to avoid redundant stat calls)
 		if err := c.checkAudioFileExists(relAudioPath); err != nil {
 			return nil, err
@@ -2481,7 +2489,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 
 		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess).
 		// Running inside singleflight ensures only one FFprobe call per unique spectrogram key.
-		_, err := c.validateSpectrogramInputs(ctx, absAudioPath, audioPath, spectrogramKey)
+		_, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, spectrogramKey)
 		if err != nil {
 			return nil, err
 		}
@@ -2494,7 +2502,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 			logger.Bool("raw", raw))
 
 		// Acquire semaphore inside singleflight - only the actual worker gets a slot
-		if err := c.acquireSemaphoreSlot(ctx, spectrogramKey); err != nil {
+		if err := c.acquireSemaphoreSlot(sharedCtx, spectrogramKey); err != nil {
 			return nil, err
 		}
 		defer func() {
@@ -2508,7 +2516,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
 				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		}()
-		return c.performSpectrogramGeneration(ctx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw)
+		return c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, spectrogramKey, width, raw)
 	})
 
 	if shared {
