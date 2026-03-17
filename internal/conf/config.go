@@ -149,6 +149,7 @@ type Dashboard struct {
 	LogoStyle        string               `json:"logoStyle,omitempty"`    // logo display style: "gradient" or "solid"
 	Layout           DashboardLayout      `json:"layout"`                 // configurable dashboard element layout
 	DefaultAudioGain float64              `json:"defaultAudioGain"`       // Default playback gain in dB (0-24)
+	LiveSpectrogram  bool                 `json:"liveSpectrogram"`        // auto-start live spectrogram on dashboard
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.

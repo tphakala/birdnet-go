@@ -63,6 +63,7 @@ interface AppConfigResponse {
   colorScheme?: string;
   customColors?: { primary: string; accent: string };
   logoStyle?: string;
+  liveSpectrogram?: boolean;
 }
 
 /**
@@ -81,6 +82,8 @@ interface AppState {
   csrfToken: string;
   /** Application version string */
   version: string;
+  /** Whether live spectrogram is enabled */
+  liveSpectrogram: boolean;
   /** Security configuration */
   security: {
     enabled: boolean;
@@ -102,6 +105,7 @@ const DEFAULT_STATE: AppState = {
   retryCount: 0,
   csrfToken: '',
   version: 'Development Build',
+  liveSpectrogram: false,
   security: {
     enabled: false,
     accessAllowed: true,
@@ -201,6 +205,8 @@ export async function initApp(): Promise<boolean> {
           liveAudio: config.security.publicAccess?.liveAudio ?? false,
         },
       };
+
+      appState.liveSpectrogram = config.liveSpectrogram ?? false;
 
       // Apply server-configured appearance settings
       if (config.colorScheme) {

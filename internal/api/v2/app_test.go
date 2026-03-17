@@ -1335,3 +1335,49 @@ func TestGetAppConfig_PublicAccessFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestGetAppConfig_LiveSpectrogramField verifies the liveSpectrogram field
+// in the app config response reflects the dashboard setting.
+func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		expected bool
+	}{
+		{
+			name:     "default false",
+			enabled:  false,
+			expected: false,
+		},
+		{
+			name:     "enabled true",
+			enabled:  true,
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e, controller := setupAppConfigTest(t, nil)
+
+			// Set the LiveSpectrogram value for this test case
+			controller.Settings.Realtime.Dashboard.LiveSpectrogram = tt.enabled
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			err := controller.GetAppConfig(c)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+			assert.Equal(t, tt.expected, response.LiveSpectrogram)
+		})
+	}
+}
