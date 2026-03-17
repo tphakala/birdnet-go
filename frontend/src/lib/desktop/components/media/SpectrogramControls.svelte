@@ -115,7 +115,7 @@
       value={frequencyRange[0]}
       oninput={handleMinFreqChange}
       class="range range-xs w-20"
-      aria-label={t('spectrogram.controls.frequencyRange') + ' min'}
+      aria-label={t('spectrogram.controls.frequencyRangeMin')}
     />
     <span class="text-base-content/50 tabular-nums">
       {(frequencyRange[0] / 1000).toFixed(1)}&ndash;{(frequencyRange[1] / 1000).toFixed(1)} kHz
@@ -129,7 +129,7 @@
       value={frequencyRange[1]}
       oninput={handleMaxFreqChange}
       class="range range-xs w-20"
-      aria-label={t('spectrogram.controls.frequencyRange') + ' max'}
+      aria-label={t('spectrogram.controls.frequencyRangeMax')}
     />
   </div>
 

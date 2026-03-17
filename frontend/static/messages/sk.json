@@ -891,7 +891,9 @@
       "colorMap": "Color Map",
       "gain": "Gain",
       "mute": "Mute",
-      "unmute": "Unmute"
+      "unmute": "Unmute",
+      "frequencyRangeMin": "Minimum frequency",
+      "frequencyRangeMax": "Maximum frequency"
     },
     "error": {
       "unsupported": "Your browser does not support audio analysis",
