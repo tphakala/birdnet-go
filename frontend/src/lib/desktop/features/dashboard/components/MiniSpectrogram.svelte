@@ -303,7 +303,7 @@
         {#if isActive}
           <button
             onclick={toggleAudio}
-            class="btn btn-ghost btn-xs"
+            class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
             aria-label={audioOutput
               ? t('spectrogram.controls.mute')
               : t('spectrogram.controls.unmute')}
@@ -314,15 +314,19 @@
               <VolumeX class="size-3.5" />
             {/if}
           </button>
-          <button onclick={stop} class="btn btn-ghost btn-xs" aria-label="Stop">
+          <button
+            onclick={stop}
+            class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
+            aria-label={t('media.audio.stop')}
+          >
             <Square class="size-3.5" />
           </button>
         {:else}
           <button
             onclick={start}
-            class="btn btn-ghost btn-xs"
+            class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
             disabled={isConnecting}
-            aria-label="Start"
+            aria-label={t('media.audio.play')}
           >
             <Play class="size-3.5" />
           </button>
