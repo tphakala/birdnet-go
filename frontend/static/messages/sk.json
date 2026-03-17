@@ -904,12 +904,14 @@
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Pripojen\u00e9"
+      "connected": "Pripojené"
     },
     "colorMaps": {
       "magma": "Magma",
       "inferno": "Inferno",
-      "viridis": "Viridis"
+      "viridis": "Viridis",
+      "grayscale": "Grayscale",
+      "sox": "SoX"
     }
   },
   "system": {

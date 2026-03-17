@@ -126,6 +126,47 @@ const COLORMAPS = {
 };
 
 // ---------------------------------------------------------------------------
+// Programmatically generated colormaps
+// ---------------------------------------------------------------------------
+
+// Grayscale: simple linear black → white (used by Xeno-Canto / "scientific" style)
+COLORMAPS.grayscale = Array.from({ length: 256 }, (_, i) => [i, i, i]);
+
+// SoX spectrogram colormap: black → blue → purple → red → yellow → white
+// Approximation of the SoX spectrogram.c color function.
+COLORMAPS.sox = Array.from({ length: 256 }, (_, i) => {
+  const x = i / 255;
+  let r, g, b;
+  if (x < 0.13) {
+    const t = x / 0.13;
+    r = 0; g = 0; b = Math.round(t * 128);
+  } else if (x < 0.25) {
+    const t = (x - 0.13) / 0.12;
+    r = 0; g = 0; b = Math.round(128 + t * 127);
+  } else if (x < 0.38) {
+    const t = (x - 0.25) / 0.13;
+    r = Math.round(t * 128); g = 0; b = Math.round(255 - t * 64);
+  } else if (x < 0.52) {
+    const t = (x - 0.38) / 0.14;
+    r = Math.round(128 + t * 127); g = 0; b = Math.round(191 - t * 191);
+  } else if (x < 0.64) {
+    const t = (x - 0.52) / 0.12;
+    r = 255; g = Math.round(t * 255); b = 0;
+  } else if (x < 0.78) {
+    const t = (x - 0.64) / 0.14;
+    r = 255; g = 255; b = Math.round(t * 128);
+  } else {
+    const t = (x - 0.78) / 0.22;
+    r = 255; g = 255; b = Math.round(128 + t * 127);
+  }
+  return [
+    Math.max(0, Math.min(255, r)),
+    Math.max(0, Math.min(255, g)),
+    Math.max(0, Math.min(255, b)),
+  ];
+});
+
+// ---------------------------------------------------------------------------
 // Packing: RGB -> RGBA Uint32 for little-endian ImageData
 // Layout in memory: [R, G, B, A] at byte level
 // As Uint32 on little-endian: (R) | (G << 8) | (B << 16) | (A << 24)

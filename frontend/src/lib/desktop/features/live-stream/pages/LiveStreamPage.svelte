@@ -372,7 +372,9 @@
 >
   <div
     bind:this={cardEl}
-    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
+    class={isFullscreen
+      ? 'flex h-full w-full flex-col overflow-hidden bg-[var(--color-base-100)]'
+      : 'flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm'}
   >
     <!-- Header bar -->
     <div
