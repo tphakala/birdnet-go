@@ -203,42 +203,15 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	}
 
 	// Path-traversal guard: ensure spectrogram path is within export directory
-	// Use absolute paths to prevent filepath.Rel misclassification on relative inputs
-	exportPath := pr.settings.Realtime.Audio.Export.Path
-	absRoot, err := filepath.Abs(exportPath)
-	if err != nil {
-		pr.logger.Error("Failed to resolve export path to absolute",
-			logger.Any("note_id", job.NoteID),
-			logger.String("export_path", exportPath),
-			logger.Error(err))
-		pr.mu.Lock()
-		pr.stats.Failed++
-		pr.mu.Unlock()
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategoryFileIO).
-			Context("operation", "resolve_export_path").
-			Context("note_id", job.NoteID).
-			Context("export_path", exportPath).
-			Build()
-	}
+	// Use SecureFS base dir (resolved to absolute at init time) instead of
+	// filepath.Abs() which depends on os.Getwd() — unreliable on Windows
+	// when running as a service without a working directory set (#2342).
+	absRoot := pr.sfs.BaseDir()
 
-	absOut, err := filepath.Abs(spectrogramPath)
-	if err != nil {
-		pr.logger.Error("Failed to resolve spectrogram path to absolute",
-			logger.Any("note_id", job.NoteID),
-			logger.String("spectrogram_path", spectrogramPath),
-			logger.Error(err))
-		pr.mu.Lock()
-		pr.stats.Failed++
-		pr.mu.Unlock()
-		return errors.New(err).
-			Component("spectrogram").
-			Category(errors.CategoryFileIO).
-			Context("operation", "resolve_spectrogram_path").
-			Context("note_id", job.NoteID).
-			Context("spectrogram_path", spectrogramPath).
-			Build()
+	// Make spectrogram path absolute using SecureFS base dir
+	absOut := spectrogramPath
+	if !filepath.IsAbs(absOut) {
+		absOut = filepath.Join(absRoot, absOut)
 	}
 
 	relPath, err := filepath.Rel(absRoot, absOut)
@@ -264,14 +237,14 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 			Build()
 	}
 
-	if _, err := os.Stat(spectrogramPath); err == nil {
+	if _, err := os.Stat(absOut); err == nil {
 		// File already exists, skip queueing
 		pr.mu.Lock()
 		pr.stats.Skipped++
 		pr.mu.Unlock()
 		pr.logger.Debug("Spectrogram already exists, skipping queue",
 			logger.Any("note_id", job.NoteID),
-			logger.String("spectrogram_path", spectrogramPath))
+			logger.String("spectrogram_path", absOut))
 		return nil
 	}
 
@@ -395,6 +368,13 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		pr.stats.Failed++
 		pr.mu.Unlock()
 		return
+	}
+
+	// Ensure spectrogram path is absolute using SecureFS base dir.
+	// filepath.Abs() depends on os.Getwd() which is unreliable on Windows
+	// when running as a service without a working directory set (#2342).
+	if !filepath.IsAbs(spectrogramPath) {
+		spectrogramPath = filepath.Join(pr.sfs.BaseDir(), spectrogramPath)
 	}
 
 	// Check if spectrogram already exists
