@@ -39,13 +39,10 @@ test.describe('Live Stream Page', () => {
     await expect(freqMinSlider).toBeVisible();
     await expect(freqMaxSlider).toBeVisible();
 
-    // Should have color map selector
-    const colorMapSelect = page.locator('#spectrogram-colormap');
-    await expect(colorMapSelect).toBeVisible();
-
-    // Should have three colormap options
-    const options = colorMapSelect.locator('option');
-    await expect(options).toHaveCount(3);
+    // Should have color map selector (custom SelectDropdown, not native select)
+    // The SelectDropdown renders as a button trigger with the selected value text
+    const colorMapTrigger = page.getByText('Inferno').first();
+    await expect(colorMapTrigger).toBeVisible();
 
     // Should have gain slider (full page mode, not compact)
     const gainSlider = page.locator('#spectrogram-gain');
@@ -99,19 +96,18 @@ test.describe('Live Stream Page', () => {
     await page.goto('/ui/live-stream');
     await page.waitForLoadState('domcontentloaded');
 
-    const colorMapSelect = page.locator('#spectrogram-colormap');
-    await expect(colorMapSelect).toBeVisible();
+    // Default should be inferno (shown in the SelectDropdown trigger)
+    const trigger = page.getByText('Inferno').first();
+    await expect(trigger).toBeVisible();
 
-    // Default should be magma
-    await expect(colorMapSelect).toHaveValue('magma');
+    // Open the dropdown and select viridis
+    await trigger.click();
+    const viridisOption = page.getByText('Viridis').first();
+    await expect(viridisOption).toBeVisible();
+    await viridisOption.click();
 
-    // Change to viridis
-    await colorMapSelect.selectOption('viridis');
-    await expect(colorMapSelect).toHaveValue('viridis');
-
-    // Change to inferno
-    await colorMapSelect.selectOption('inferno');
-    await expect(colorMapSelect).toHaveValue('inferno');
+    // Trigger should now show viridis
+    await expect(page.getByText('Viridis').first()).toBeVisible();
   });
 
   test('Page fills viewport height without scrollbar', async ({ page }) => {

@@ -113,7 +113,8 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       });
     } catch (error) {
       logger.error('Failed to connect spectrogram analyser', error);
-      isActive = false;
+      // Clean up any partially built graph
+      disconnect();
     }
   }
 

@@ -192,6 +192,7 @@
 
   <!-- Mute/Unmute toggle -->
   <button
+    type="button"
     onclick={onAudioOutputToggle}
     class="btn btn-ghost btn-xs"
     aria-label={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
