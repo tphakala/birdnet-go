@@ -265,7 +265,9 @@
 </script>
 
 {#if hasAudioAccess}
-  <div class="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-3">
+  <div
+    class="col-span-12 rounded-2xl border border-border-100 bg-[var(--color-base-100)] p-3 shadow-sm"
+  >
     <div class="mb-2 flex items-center justify-between">
       <div class="flex items-center gap-2 text-sm font-medium">
         <Radio class="size-4" />
