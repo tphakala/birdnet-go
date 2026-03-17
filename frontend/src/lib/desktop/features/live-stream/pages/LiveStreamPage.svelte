@@ -287,7 +287,9 @@
   });
 </script>
 
-<div class="flex h-full flex-col">
+<div
+  class="col-span-12 flex flex-col h-[calc(100dvh-80px)] lg:h-[calc(100dvh-112px)] overflow-hidden"
+>
   <!-- Header bar -->
   <div
     class="flex flex-none items-center gap-4 border-b border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-3"
