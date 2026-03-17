@@ -184,7 +184,10 @@
           if (audioElement) {
             await spectro.connect(audioElement);
           }
-          if (signal.aborted) return;
+          if (signal.aborted) {
+            spectro.disconnect();
+            return;
+          }
           startHeartbeat(sourceId);
           isActive = true;
           isConnecting = false;
@@ -211,7 +214,10 @@
         }
         if (signal.aborted || !audioElement) return;
         await spectro.connect(audioElement);
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          spectro.disconnect();
+          return;
+        }
         startHeartbeat(sourceId);
         isActive = true;
         isConnecting = false;
@@ -256,6 +262,7 @@
     if (currentSourceId) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
+        keepalive: true,
         body: { source_id: currentSourceId },
       }).catch(() => {});
     }

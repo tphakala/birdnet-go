@@ -397,6 +397,10 @@ export async function fetchWithCSRF<T = unknown>(
     // SECURITY: Handle network and other errors securely
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
+        // Distinguish caller-initiated cancellation from internal timeout
+        if (options.signal?.aborted) {
+          throw error; // Preserve original AbortError for caller cancellation
+        }
         throw new ApiError(t('errors.api.requestTimeout'), 408, new Response(), true);
       }
       if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) {

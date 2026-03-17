@@ -110,7 +110,7 @@
   }
 
   async function startStream() {
-    if (!selectedSourceId || isConnecting) return;
+    if (!selectedSourceId) return;
 
     await stopStream();
     isConnecting = true;
@@ -204,7 +204,10 @@
           if (audioElement) {
             await spectro.connect(audioElement);
           }
-          if (signal.aborted) return;
+          if (signal.aborted) {
+            spectro.disconnect();
+            return;
+          }
           isStreaming = true;
           isConnecting = false;
         });
@@ -246,7 +249,10 @@
         }
         if (signal.aborted || !audioElement) return;
         await spectro.connect(audioElement);
-        if (signal.aborted) return;
+        if (signal.aborted) {
+          spectro.disconnect();
+          return;
+        }
         isStreaming = true;
         isConnecting = false;
       } else {
@@ -303,6 +309,7 @@
     if (activeSourceId) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
+        keepalive: true,
         body: { source_id: activeSourceId },
       }).catch(() => {});
     }
