@@ -42,7 +42,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
 
   // Reactive state (exposed to consumers)
   let analyser = $state<AnalyserNode | null>(null);
-  let frequencyData = $state<Uint8Array>(new Uint8Array(binCount));
+  let frequencyData = $state<Uint8Array<ArrayBuffer>>(new Uint8Array(binCount));
   let isActive = $state(false);
   let sampleRate = $state(48000);
   let audioOutput = $state(options?.audioOutput ?? false);

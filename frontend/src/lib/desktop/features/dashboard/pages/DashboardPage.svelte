@@ -69,6 +69,7 @@ Performance Optimizations:
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
+  import MiniSpectrogram from '$lib/desktop/features/dashboard/components/MiniSpectrogram.svelte';
   import DashboardEditMode from '$lib/desktop/features/dashboard/components/DashboardEditMode.svelte';
   import DailySummaryConfigForm from '$lib/desktop/features/dashboard/components/DailySummaryConfigForm.svelte';
   import {
@@ -1483,6 +1484,9 @@ Performance Optimizations:
         />
       {:else if element.type === 'currently-hearing'}
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
+        {#if isViewingToday}
+          <MiniSpectrogram />
+        {/if}
       {:else if element.type === 'detections-grid'}
         <DetectionCardGrid
           data={recentDetections}
