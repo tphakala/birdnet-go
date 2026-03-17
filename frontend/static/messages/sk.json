@@ -903,7 +903,8 @@
     },
     "page": {
       "title": "Live Audio",
-      "sourceLabel": "Audio Source"
+      "sourceLabel": "Audio Source",
+      "connected": "Pripojen\u00e9"
     },
     "colorMaps": {
       "magma": "Magma",

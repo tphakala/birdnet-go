@@ -908,7 +908,8 @@
     },
     "page": {
       "title": "Live Audio",
-      "sourceLabel": "Audio Source"
+      "sourceLabel": "Audio Source",
+      "connected": "Verbunden"
     },
     "colorMaps": {
       "magma": "Magma",

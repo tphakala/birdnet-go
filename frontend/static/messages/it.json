@@ -896,7 +896,8 @@
     },
     "page": {
       "title": "Live Audio",
-      "sourceLabel": "Audio Source"
+      "sourceLabel": "Audio Source",
+      "connected": "Connesso"
     },
     "colorMaps": {
       "magma": "Magma",

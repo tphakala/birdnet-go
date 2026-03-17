@@ -46,6 +46,7 @@ Performance Optimizations:
   import type { AuthConfig } from '../../../app.d';
   import {
     LayoutDashboard,
+    Radio,
     BarChart3,
     Search,
     Info,
@@ -203,6 +204,7 @@ Performance Optimizations:
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
   let routeCache = $derived.by(() => ({
     dashboard: actualRoute === '/ui/dashboard' || actualRoute === '/ui/',
+    liveStream: actualRoute.startsWith('/ui/live-stream'),
     analytics: actualRoute.startsWith('/ui/analytics'),
     analyticsExact: actualRoute === '/ui/analytics',
     analyticsAdvanced: actualRoute === '/ui/analytics/advanced',
@@ -247,6 +249,7 @@ Performance Optimizations:
   // PERFORMANCE OPTIMIZATION: Cache navigation URL transformations
   let navigationUrls = $derived({
     dashboard: onNavigate ? '/' : '/ui/dashboard',
+    liveStream: onNavigate ? '/live-stream' : '/ui/live-stream',
     analytics: onNavigate ? '/analytics' : '/ui/analytics',
     analyticsAdvanced: '/ui/analytics/advanced',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
@@ -398,6 +401,28 @@ Performance Optimizations:
             <LayoutDashboard class="size-5 shrink-0" />
             {#if !isCollapsed}
               <span>{t('navigation.dashboard')}</span>
+            {/if}
+          </button>
+        </div>
+
+        <!-- Live Stream -->
+        <div class="relative">
+          <button
+            onclick={() => navigate(navigationUrls.liveStream)}
+            onmouseenter={e => isCollapsed && showTooltip(e, t('spectrogram.page.title'))}
+            onmouseleave={hideTooltip}
+            aria-label={t('spectrogram.page.title')}
+            class={cn(
+              menuItemBase,
+              menuItemCollapsed,
+              routeCache.liveStream ? menuItemActive : menuItemDefault
+            )}
+            aria-current={routeCache.liveStream ? 'page' : undefined}
+            role="menuitem"
+          >
+            <Radio class="size-5 shrink-0" />
+            {#if !isCollapsed}
+              <span>{t('spectrogram.page.title')}</span>
             {/if}
           </button>
         </div>

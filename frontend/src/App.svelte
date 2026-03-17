@@ -36,6 +36,7 @@
   let DetectionDetail = $state<Component | null>(null);
   let ErrorPage = $state<Component | null>(null);
   let ServerErrorPage = $state<Component | null>(null);
+  let LiveStream = $state<Component | null>(null);
   let GenericErrorPage = $state<any>(null);
 
   let currentRoute = $state<string>('');
@@ -73,6 +74,12 @@
 
   const routeConfigs: RouteConfig[] = [
     { route: 'dashboard', page: 'dashboard', titleKey: 'navigation.dashboard', component: '' },
+    {
+      route: 'live-stream',
+      page: 'live-stream',
+      titleKey: 'spectrogram.page.title',
+      component: 'live-stream',
+    },
     {
       route: 'notifications',
       page: 'notifications',
@@ -141,6 +148,13 @@
 
     try {
       switch (route) {
+        case 'live-stream':
+          if (!LiveStream) {
+            const module =
+              await import('./lib/desktop/features/live-stream/pages/LiveStreamPage.svelte');
+            LiveStream = module.default;
+          }
+          break;
         case 'analytics':
           if (!Analytics) {
             const module = await import('./lib/desktop/features/analytics/pages/Analytics.svelte');
@@ -272,6 +286,7 @@
     [uiPath() + '/']: findRouteConfig('dashboard'),
     [uiPath()]: findRouteConfig('dashboard'),
     [uiPath('dashboard')]: findRouteConfig('dashboard'),
+    [uiPath('live-stream')]: findRouteConfig('live-stream'),
     [uiPath('notifications')]: findRouteConfig('notifications'),
     [uiPath('analytics', 'species')]: findRouteConfig('species'),
     [uiPath('analytics', 'advanced')]: findRouteConfig('advanced-analytics'),
@@ -503,6 +518,8 @@
   >
     {#if currentRoute === 'dashboard'}
       <DashboardPage />
+    {:else if currentRoute === 'live-stream'}
+      {@render renderRoute(LiveStream)}
     {:else if currentRoute === 'notifications'}
       {@render renderRoute(Notifications)}
     {:else if currentRoute === 'analytics'}
