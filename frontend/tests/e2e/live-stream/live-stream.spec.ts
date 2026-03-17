@@ -15,8 +15,8 @@ test.describe('Live Stream Page', () => {
     const heading = page.getByRole('heading', { level: 1 });
     await expect(heading).toBeVisible();
 
-    // Should have the source picker select element
-    const sourceSelect = page.locator('#live-stream-source');
+    // Should have the source picker (custom SelectDropdown, not native select)
+    const sourceSelect = page.getByRole('button', { name: /Audio Source|Loading/i });
     await expect(sourceSelect).toBeVisible();
   });
 

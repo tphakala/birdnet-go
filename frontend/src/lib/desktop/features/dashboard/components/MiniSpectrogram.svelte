@@ -51,7 +51,6 @@
   // HLS + audio refs
   let hls: Hls | null = null;
   let audioElement: HTMLAudioElement | null = null;
-  let eventSource: ReconnectingEventSource | null = null;
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
@@ -106,8 +105,7 @@
             const sourceIds = Object.keys(data.levels);
             if (sourceIds.length > 0) {
               globalThis.clearTimeout(timeout);
-              // Keep the SSE connection alive for component lifetime
-              eventSource = sse;
+              sse.close(); // Close immediately — only needed for discovery
               resolve(sourceIds[0]);
             }
           }
@@ -187,6 +185,10 @@
       // Start heartbeat
       startHeartbeat(sourceId);
 
+      // Guard: stop() may have been called during async setup (e.g., fatal HLS error).
+      // If isConnecting was cleared by stop(), don't transition to active.
+      if (!isConnecting) return;
+
       isActive = true;
       isConnecting = false;
       persistToggleState(true);
@@ -256,13 +258,7 @@
     if (hasAudioAccess && shouldAutoStart()) {
       start();
     }
-    return () => {
-      stop();
-      if (eventSource) {
-        eventSource.close();
-        eventSource = null;
-      }
-    };
+    return () => stop();
   });
 </script>
 
