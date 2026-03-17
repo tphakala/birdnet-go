@@ -298,3 +298,50 @@ func TestSearchDetections_EmptyBody(t *testing.T) {
 
 	mockDS.AssertExpectations(t)
 }
+
+func TestRequiredParams_ReturnBadRequest(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	e, _, controller := setupAnalyticsTestEnvironment(t)
+
+	tests := []struct {
+		name    string
+		method  string
+		path    string
+		handler echo.HandlerFunc
+	}{
+		{
+			name:    "GET /analytics/time/hourly requires date and species",
+			method:  http.MethodGet,
+			path:    "/api/v2/analytics/time/hourly",
+			handler: controller.GetHourlyAnalytics,
+		},
+		{
+			name:    "GET /analytics/time/daily requires start_date",
+			method:  http.MethodGet,
+			path:    "/api/v2/analytics/time/daily",
+			handler: controller.GetDailyAnalytics,
+		},
+		{
+			name:    "GET /analytics/species/daily/batch requires dates",
+			method:  http.MethodGet,
+			path:    "/api/v2/analytics/species/daily/batch",
+			handler: controller.GetBatchDailySpeciesSummary,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := executeRequest(t, e, tt.method, tt.path, tt.handler)
+
+			// Must return 400, not 500 or panic
+			assert.Equal(t, http.StatusBadRequest, rec.Code,
+				"endpoint should return 400 when called without required params")
+		})
+	}
+}
