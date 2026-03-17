@@ -197,7 +197,7 @@
 
   <!-- Audio error -->
   {#if audio.error}
-    <div class="audio-error" role="alert">
+    <div class="audio-error" role="alert" aria-live="assertive">
       <span class="text-xs text-[var(--color-error)]">{audio.error}</span>
     </div>
   {/if}

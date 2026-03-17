@@ -106,6 +106,7 @@ describe('useAudioPlayback', () => {
   }
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
     capturedState = null;
 
