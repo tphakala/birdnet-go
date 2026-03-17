@@ -58,6 +58,7 @@
   let audioElement: HTMLAudioElement | null = null;
   let eventSource: ReconnectingEventSource | null = null;
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+  let abortController: AbortController | null = null;
   let activeSourceId: string | null = null;
 
   // Initialize composable during component init (registers cleanup $effect)
@@ -115,13 +116,20 @@
     isConnecting = true;
     connectionError = null;
 
+    const controller = new AbortController();
+    abortController = controller;
+    const { signal } = controller;
+
     try {
       const encodedSourceId = encodeURIComponent(selectedSourceId);
 
       // Start HLS stream on backend
       await fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
+        signal,
       });
+
+      if (signal.aborted) return;
 
       const hlsUrl = buildAppUrl(`/api/v2/streams/hls/${encodedSourceId}/playlist.m3u8`);
 
@@ -159,6 +167,7 @@
         let playbackAttempted = false;
 
         hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+          if (signal.aborted) return;
           fragmentsBuffered++;
 
           // Buffer diagnostics
@@ -190,15 +199,18 @@
         });
 
         hls.on(Hls.Events.MANIFEST_PARSED, async () => {
+          if (signal.aborted) return;
           // Connect the spectrogram analyser once manifest is ready
           if (audioElement) {
             await spectro.connect(audioElement);
           }
+          if (signal.aborted) return;
           isStreaming = true;
           isConnecting = false;
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (signal.aborted) return;
           if (data.fatal) {
             connectionError = t('spectrogram.error.connectionFailed');
             logger.error('Fatal HLS error', { type: data.type, details: data.details });
@@ -219,6 +231,7 @@
 
         // Fragment loading log for diagnostics
         hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
+          if (signal.aborted) return;
           logger.debug('HLS frag loading', { sn: data.frag.sn, url: data.frag.relurl });
         });
       } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
@@ -227,9 +240,13 @@
         try {
           await audioElement.play();
         } catch (e) {
-          logger.warn('Autoplay blocked', e);
+          if ((e as Error).name === 'NotAllowedError') {
+            logger.warn('Autoplay blocked by browser');
+          }
         }
+        if (signal.aborted || !audioElement) return;
         await spectro.connect(audioElement);
+        if (signal.aborted) return;
         isStreaming = true;
         isConnecting = false;
       } else {
@@ -238,10 +255,13 @@
         return;
       }
 
-      // Track the active source and start heartbeat
-      activeSourceId = selectedSourceId;
+      // Guard: abort may have fired during async setup
+      if (signal.aborted) return;
+
       startHeartbeat(selectedSourceId);
+      activeSourceId = selectedSourceId;
     } catch (error) {
+      if (signal.aborted) return;
       connectionError = t('spectrogram.error.connectionFailed');
       logger.error('Failed to start HLS stream', error);
       isConnecting = false;
@@ -275,6 +295,10 @@
   }
 
   async function stopStream() {
+    // Abort in-flight async work first
+    abortController?.abort();
+    abortController = null;
+
     // Send disconnect heartbeat for the active source
     if (activeSourceId) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
