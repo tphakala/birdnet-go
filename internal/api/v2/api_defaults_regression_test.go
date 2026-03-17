@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // testNotes is reusable mock data for endpoints returning []datastore.Note.
@@ -65,6 +66,7 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 	return rec
 }
 
+//nolint:dupl // intentional duplicate: same endpoint called via different setup (pre- vs post-migration)
 func TestDailySpeciesSummary_DefaultParams(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "analytics")
@@ -344,4 +346,115 @@ func TestRequiredParams_ReturnBadRequest(t *testing.T) {
 				"endpoint should return 400 when called without required params")
 		})
 	}
+}
+
+// setupPostMigrationTestEnvironment creates a test environment where
+// MigrateDashboardLayout() has been called, zeroing Dashboard.SummaryLimit.
+// This reproduces the exact scenario from #2352.
+func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Controller) {
+	t.Helper()
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Run migration — moves SummaryLimit into layout element, zeros deprecated field
+	migrated := controller.Settings.MigrateDashboardLayout()
+	require.True(t, migrated, "migration should have occurred (no pre-existing layout)")
+
+	// Verify the deprecated field is actually zeroed
+	assert.Equal(t, 0, controller.Settings.Realtime.Dashboard.SummaryLimit,
+		"deprecated SummaryLimit should be zeroed after migration")
+
+	// Verify GetEffectiveSummaryLimit still returns a valid value
+	effectiveLimit := controller.Settings.GetEffectiveSummaryLimit()
+	assert.Positive(t, effectiveLimit,
+		"GetEffectiveSummaryLimit should return positive value after migration")
+
+	return e, mockDS, controller
+}
+
+//nolint:dupl // intentional duplicate: same endpoint called via different setup (pre- vs post-migration)
+func TestDailySpeciesSummary_DefaultParams_AfterMigration(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "analytics")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2352")
+
+	e, mockDS, controller := setupPostMigrationTestEnvironment(t)
+
+	today := time.Now().Format(time.DateOnly)
+	notes := testNotes()
+
+	// After migration, the API handler still passes limit=0 (its default for "no limit param").
+	mockDS.On("GetTopBirdsData", today, 0.0, 0).Return(notes, nil).Once()
+	mockDS.On("GetBatchHourlyOccurrences", today, mock.Anything, 0.0).
+		Return(map[string][24]int{
+			"American Robin": {0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+			"Blue Jay":       {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		}, nil).Once()
+
+	rec := executeRequest(t, e, http.MethodGet, "/api/v2/analytics/species/daily", controller.GetDailySpeciesSummary)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+	body := strings.TrimSpace(rec.Body.String())
+	assert.NotEqual(t, "[]", body, "response must not be empty after migration")
+	assert.NotEqual(t, "null", body, "response must not be null after migration")
+
+	var result []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.NotEmpty(t, result, "should return species data after config migration")
+
+	mockDS.AssertExpectations(t)
+}
+
+func TestGetDetections_DefaultParams_AfterMigration(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	e, mockDS, controller := setupPostMigrationTestEnvironment(t)
+
+	notes := testNotes()
+
+	// Detection defaults (numResults=100) are not config-driven, so should be unaffected
+	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, nil).Once()
+
+	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections", controller.GetDetections)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+
+	detections, ok := result["data"].([]any)
+	require.True(t, ok, "response should contain 'data' array")
+	assert.NotEmpty(t, detections, "should return detections after config migration")
+
+	mockDS.AssertExpectations(t)
+}
+
+func TestGetEffectiveSummaryLimit_AfterMigration(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "config")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2352")
+
+	settings := newValidTestSettings()
+
+	// Pre-migration: deprecated field has value
+	assert.Equal(t, 100, settings.Realtime.Dashboard.SummaryLimit)
+	assert.Equal(t, 100, settings.GetEffectiveSummaryLimit())
+
+	// Run migration
+	migrated := settings.MigrateDashboardLayout()
+	require.True(t, migrated)
+
+	// Post-migration: deprecated field zeroed, but effective limit still valid
+	assert.Equal(t, 0, settings.Realtime.Dashboard.SummaryLimit,
+		"deprecated field should be zeroed")
+	assert.Equal(t, 100, settings.GetEffectiveSummaryLimit(),
+		"effective limit should come from layout element after migration")
+
+	// Second migration is a no-op
+	assert.False(t, settings.MigrateDashboardLayout(),
+		"second migration should be skipped")
 }
