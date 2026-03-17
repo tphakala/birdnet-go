@@ -721,6 +721,7 @@
       "dailySummary": "Daglig sammanfattning",
       "currentlyHearing": "Hörs just nu",
       "detectionsGrid": "Senaste detekteringar",
+      "liveSpectrogram": "Live spektrogram",
       "videoEmbed": "Videoinbäddning"
     }
   },

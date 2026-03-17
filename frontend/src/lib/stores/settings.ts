@@ -527,6 +527,7 @@ export type DashboardElementType =
   | 'daily-summary'
   | 'currently-hearing'
   | 'detections-grid'
+  | 'live-spectrogram'
   | 'video-embed';
 
 // A single configurable element on the dashboard

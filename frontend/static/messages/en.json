@@ -721,6 +721,7 @@
       "dailySummary": "Daily Summary",
       "currentlyHearing": "Currently Hearing",
       "detectionsGrid": "Recent Detections",
+      "liveSpectrogram": "Live Spectrogram",
       "videoEmbed": "Video Embed"
     }
   },

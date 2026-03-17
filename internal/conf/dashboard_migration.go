@@ -34,6 +34,11 @@ func (s *Settings) MigrateDashboardLayout() bool {
 				Enabled: true,
 			},
 			{
+				ID:      "live-spectrogram-0",
+				Type:    "live-spectrogram",
+				Enabled: true,
+			},
+			{
 				ID:      "detections-grid-0",
 				Type:    "detections-grid",
 				Enabled: true,

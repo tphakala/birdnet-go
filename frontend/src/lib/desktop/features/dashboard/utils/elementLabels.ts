@@ -5,6 +5,7 @@ const elementLabelKeys = new Map<string, string>([
   ['daily-summary', 'dashboard.elements.dailySummary'],
   ['currently-hearing', 'dashboard.elements.currentlyHearing'],
   ['detections-grid', 'dashboard.elements.detectionsGrid'],
+  ['live-spectrogram', 'dashboard.elements.liveSpectrogram'],
   ['video-embed', 'dashboard.elements.videoEmbed'],
 ]);
 

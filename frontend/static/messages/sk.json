@@ -721,6 +721,7 @@
       "dailySummary": "Denný prehľad",
       "currentlyHearing": "Práve počuté",
       "detectionsGrid": "Nedávne detekcie",
+      "liveSpectrogram": "Živý spektrogram",
       "videoEmbed": "Vložené video"
     }
   },

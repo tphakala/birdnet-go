@@ -721,6 +721,7 @@
       "dailySummary": "Dagelijks overzicht",
       "currentlyHearing": "Momenteel gehoord",
       "detectionsGrid": "Recente detecties",
+      "liveSpectrogram": "Live spectrogram",
       "videoEmbed": "Video-inbedding"
     }
   },

@@ -50,6 +50,7 @@
     'banner',
     'daily-summary',
     'currently-hearing',
+    'live-spectrogram',
     'detections-grid',
     'video-embed',
   ];

@@ -721,6 +721,7 @@
       "dailySummary": "Podsumowanie dnia",
       "currentlyHearing": "Aktualnie słyszane",
       "detectionsGrid": "Ostatnie detekcje",
+      "liveSpectrogram": "Spektrogram na żywo",
       "videoEmbed": "Osadzenie wideo"
     }
   },
