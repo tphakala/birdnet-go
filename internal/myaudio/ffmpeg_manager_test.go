@@ -607,10 +607,12 @@ func TestFFmpegManager_WatchdogCallsOnStreamReset(t *testing.T) {
 		manager.checkForStuckStreams()
 
 		// Verify callback was called with a new source ID
-		assert.True(t, callbackCalled.Load(), "OnStreamReset callback should have been called")
-		if newID, ok := receivedSourceID.Load().(string); ok {
-			assert.NotEqual(t, oldSourceID, newID, "new source ID should differ from old one")
-			assert.NotEmpty(t, newID)
-		}
+		require.True(t, callbackCalled.Load(), "OnStreamReset callback should have been called")
+		newIDVal := receivedSourceID.Load()
+		require.NotNil(t, newIDVal, "receivedSourceID should have been stored by the callback")
+		newID, ok := newIDVal.(string)
+		require.True(t, ok, "receivedSourceID should be a string")
+		assert.NotEqual(t, oldSourceID, newID, "new source ID should differ from old one")
+		assert.NotEmpty(t, newID, "new source ID should not be empty")
 	})
 }
