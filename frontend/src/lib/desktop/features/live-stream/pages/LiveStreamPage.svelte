@@ -11,7 +11,7 @@
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
-  import { Radio, AlertCircle, Loader2, Play } from '@lucide/svelte';
+  import { Radio, AlertCircle, Loader2, Play, Maximize, Minimize } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY } from '$lib/desktop/components/ui/hls-config';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
@@ -326,6 +326,28 @@
     };
   });
 
+  // Fullscreen support
+  let cardEl: HTMLDivElement | undefined = $state();
+  let isFullscreen = $state(false);
+
+  function toggleFullscreen() {
+    if (!cardEl) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      cardEl.requestFullscreen().catch(() => {});
+    }
+  }
+
+  // Track fullscreen state changes (user can also press Escape)
+  $effect(() => {
+    const handler = () => {
+      isFullscreen = !!document.fullscreenElement;
+    };
+    document.addEventListener('fullscreenchange', handler);
+    return () => document.removeEventListener('fullscreenchange', handler);
+  });
+
   // No auto-start — browsers block AudioContext and audio.play() without a
   // user gesture. The user must click the play button to start streaming.
   function handleStartClick() {
@@ -339,6 +361,7 @@
   class="col-span-12 flex flex-col h-[calc(100dvh-80px)] lg:h-[calc(100dvh-112px)] overflow-hidden"
 >
   <div
+    bind:this={cardEl}
     class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
   >
     <!-- Header bar -->
@@ -383,6 +406,22 @@
           <span>{t('spectrogram.page.connected')}</span>
         </div>
       {/if}
+
+      <!-- Spacer -->
+      <div class="flex-1"></div>
+
+      <!-- Fullscreen toggle -->
+      <button
+        onclick={toggleFullscreen}
+        class="btn btn-ghost btn-sm btn-square"
+        aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      >
+        {#if isFullscreen}
+          <Minimize class="size-4" />
+        {:else}
+          <Maximize class="size-4" />
+        {/if}
+      </button>
     </div>
 
     <!-- Error alert -->
