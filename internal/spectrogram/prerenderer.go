@@ -81,6 +81,21 @@ type Stats struct {
 	Skipped   int64 // Number skipped (already exist)
 }
 
+// normalizeSpectrogramPath converts a relative spectrogram path to absolute
+// using SecureFS base directory, avoiding path doubling when the path
+// already includes the export prefix (e.g., "clips/2026/03/file.png").
+// filepath.Rel with two relative paths is safe (no os.Getwd dependency).
+func (pr *PreRenderer) normalizeSpectrogramPath(spectrogramPath string) string {
+	if filepath.IsAbs(spectrogramPath) {
+		return spectrogramPath
+	}
+	exportPath := pr.settings.Realtime.Audio.Export.Path
+	if relToExport, err := filepath.Rel(exportPath, spectrogramPath); err == nil && !strings.HasPrefix(relToExport, "..") {
+		return filepath.Join(pr.sfs.BaseDir(), relToExport)
+	}
+	return filepath.Join(pr.sfs.BaseDir(), spectrogramPath)
+}
+
 // NewPreRenderer creates a new pre-renderer instance.
 // The parentCtx is used for lifecycle management and cancellation.
 // If logger is nil, GetPreRendererLogger() is used to prevent nil pointer panics.
@@ -208,19 +223,9 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 	// when running as a service without a working directory set (#2342).
 	absRoot := pr.sfs.BaseDir()
 
-	// Make spectrogram path absolute using SecureFS base dir.
-	// The spectrogramPath includes the export prefix (e.g., "clips/2026/03/file.png")
-	// and BaseDir() is already the absolute version of that prefix (e.g., "/app/clips").
-	// Use filepath.Rel to strip the export prefix before joining to avoid path doubling.
-	absOut := spectrogramPath
-	if !filepath.IsAbs(absOut) {
-		exportPath := pr.settings.Realtime.Audio.Export.Path
-		if relToExport, err := filepath.Rel(exportPath, absOut); err == nil && !strings.HasPrefix(relToExport, "..") {
-			absOut = filepath.Join(absRoot, relToExport)
-		} else {
-			absOut = filepath.Join(absRoot, absOut)
-		}
-	}
+	// Make spectrogram path absolute using SecureFS base dir, stripping export
+	// prefix to avoid path doubling (e.g., "clips/clips/..."). See #2342.
+	absOut := pr.normalizeSpectrogramPath(spectrogramPath)
 
 	relPath, err := filepath.Rel(absRoot, absOut)
 	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
@@ -378,19 +383,9 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 		return
 	}
 
-	// Ensure spectrogram path is absolute using SecureFS base dir.
-	// filepath.Abs() depends on os.Getwd() which is unreliable on Windows
-	// when running as a service without a working directory set (#2342).
-	// The spectrogramPath includes the export prefix (e.g., "clips/2026/03/file.png")
-	// so strip it via filepath.Rel before joining with BaseDir to avoid doubling.
-	if !filepath.IsAbs(spectrogramPath) {
-		exportPath := pr.settings.Realtime.Audio.Export.Path
-		if relToExport, err := filepath.Rel(exportPath, spectrogramPath); err == nil && !strings.HasPrefix(relToExport, "..") {
-			spectrogramPath = filepath.Join(pr.sfs.BaseDir(), relToExport)
-		} else {
-			spectrogramPath = filepath.Join(pr.sfs.BaseDir(), spectrogramPath)
-		}
-	}
+	// Make spectrogram path absolute using SecureFS base dir, stripping export
+	// prefix to avoid path doubling (e.g., "clips/clips/..."). See #2342.
+	spectrogramPath = pr.normalizeSpectrogramPath(spectrogramPath)
 
 	// Check if spectrogram already exists
 	// Race conditions are acceptable here (idempotent operation):
