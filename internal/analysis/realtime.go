@@ -445,6 +445,23 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 			logger.String("operation", "startup_audio_check"))
 	}
 
+	// Register watchdog reset callback so analysis monitors are recreated
+	// when the watchdog force-resets a stuck stream. Without this, the monitor
+	// for the old source ID exits (buffer removed) and no new monitor starts,
+	// leaving the stream connected but detection silent (#2374).
+	myaudio.SetOnStreamReset(func(newSourceID string) {
+		if err := bufferManager.AddMonitor(newSourceID); err != nil {
+			GetLogger().Warn("failed to add monitor after watchdog stream reset",
+				logger.String("source_id", newSourceID),
+				logger.Error(err),
+				logger.String("operation", "watchdog_add_monitor"))
+		} else {
+			GetLogger().Info("started analysis monitor after watchdog stream reset",
+				logger.String("source_id", newSourceID),
+				logger.String("operation", "watchdog_add_monitor"))
+		}
+	})
+
 	// Register sound level processors before starting audio capture to avoid
 	// a race where audio chunks arrive before processors are registered (issue #2152).
 	// The control monitor will handle re-registration on hot reloads.

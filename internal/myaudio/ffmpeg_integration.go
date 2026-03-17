@@ -255,6 +255,16 @@ func GetStreamHealth() map[string]StreamHealth {
 	return manager.HealthCheck()
 }
 
+// SetOnStreamReset registers a callback that is invoked after the watchdog
+// force-resets a stuck stream. The callback receives the new source ID so
+// the analysis layer can start a buffer monitor for it.
+func SetOnStreamReset(fn func(newSourceID string)) {
+	manager := getGlobalManager()
+	if manager != nil {
+		manager.SetOnStreamReset(fn)
+	}
+}
+
 // ShutdownFFmpegManager gracefully shuts down the FFmpeg manager
 func ShutdownFFmpegManager() {
 	managerMutex.Lock()

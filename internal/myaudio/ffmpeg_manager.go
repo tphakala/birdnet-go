@@ -69,6 +69,12 @@ type FFmpegManager struct {
 	// Stored when StartMonitoring() is called so watchdog can restart stuck streams
 	audioChan   chan UnifiedAudioData
 	audioChanMu sync.RWMutex
+
+	// onStreamReset is called after watchdog force-resets a stuck stream.
+	// The callback receives the new source ID so the analysis layer can
+	// start a buffer monitor for it. Set via SetOnStreamReset().
+	onStreamReset   func(newSourceID string)
+	onStreamResetMu sync.RWMutex
 }
 
 // NewFFmpegManager creates a new FFmpeg manager
@@ -81,6 +87,15 @@ func NewFFmpegManager() *FFmpegManager {
 		cancel:         cancel,
 		lastForceReset: make(map[string]time.Time),
 	}
+}
+
+// SetOnStreamReset registers a callback invoked after the watchdog
+// force-resets a stuck stream. The callback receives the new source ID.
+// Thread-safe — can be called while the manager is running.
+func (m *FFmpegManager) SetOnStreamReset(fn func(newSourceID string)) {
+	m.onStreamResetMu.Lock()
+	defer m.onStreamResetMu.Unlock()
+	m.onStreamReset = fn
 }
 
 // StartStream starts a new FFmpeg stream for the given URL
@@ -142,6 +157,19 @@ func (m *FFmpegManager) StartStream(url, transport string, audioChan chan Unifie
 		logger.String("transport", transport),
 		logger.String("component", "ffmpeg-manager"),
 		logger.String("operation", "start_stream"))
+
+	// Notify analysis layer about the new source ID so it can ensure a
+	// buffer monitor is running. This is essential after watchdog force-resets,
+	// quiet hours restarts, and transport changes — all of which destroy the
+	// old buffer (killing the monitor) and create a new one (#2374).
+	// AddMonitor is idempotent, so this is safe during initial startup too.
+	m.onStreamResetMu.RLock()
+	callback := m.onStreamReset
+	m.onStreamResetMu.RUnlock()
+
+	if callback != nil {
+		callback(stream.source.ID)
+	}
 
 	return nil
 }
@@ -774,6 +802,8 @@ func (m *FFmpegManager) checkForStuckStreams() {
 			logger.String("transport", transport),
 			logger.Float64("unhealthy_duration_seconds", unhealthyDuration.Seconds()),
 			logger.String("operation", "watchdog_reset_complete"))
+		// Note: StartStream already invokes onStreamReset to ensure a buffer
+		// monitor is running for the new source ID (#2374).
 	}
 }
 
