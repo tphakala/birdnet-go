@@ -16,7 +16,7 @@
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
-  import { Radio, Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
+  import { Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
@@ -312,12 +312,13 @@
 </script>
 
 {#if hasAudioAccess}
-  <div class="rounded-2xl border border-border-100 bg-[var(--color-base-100)] p-3 shadow-sm">
-    <div class="mb-2 flex items-center justify-between">
-      <div class="flex items-center gap-2 text-sm font-medium">
-        <Radio class="size-4" />
-        <span>{t('spectrogram.dashboard.toggle')}</span>
-      </div>
+  <div
+    class="overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
+  >
+    <div
+      class="flex items-center justify-between border-b border-[var(--color-base-200)] px-6 py-4"
+    >
+      <h3 class="font-semibold">{t('spectrogram.dashboard.toggle')}</h3>
       <div class="flex items-center gap-1">
         {#if isActive}
           <button
@@ -327,13 +328,13 @@
             title={GAIN_PRESETS[gainPresetIndex].label}
           >
             {#if gainPresetIndex === 0}
-              <VolumeX class="size-3.5" />
+              <VolumeX class="size-4" />
             {:else if gainPresetIndex === 1}
-              <Volume class="size-3.5" />
+              <Volume class="size-4" />
             {:else if gainPresetIndex === 2}
-              <Volume1 class="size-3.5" />
+              <Volume1 class="size-4" />
             {:else}
-              <Volume2 class="size-3.5" />
+              <Volume2 class="size-4" />
             {/if}
           </button>
           <button
@@ -341,7 +342,7 @@
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
             aria-label={t('media.audio.stop')}
           >
-            <Square class="size-3.5" />
+            <Square class="size-4" />
           </button>
         {:else}
           <button
@@ -350,7 +351,7 @@
             disabled={isConnecting}
             aria-label={t('media.audio.play')}
           >
-            <Play class="size-3.5" />
+            <Play class="size-4" />
           </button>
         {/if}
       </div>
@@ -365,10 +366,10 @@
         {frequencyRange}
         {colorMap}
         isActive={spectro.isActive}
-        className="h-28 w-full rounded"
+        className="h-28 w-full"
       />
     {:else if isActive || isConnecting}
-      <div class="flex h-28 items-center justify-center rounded bg-black">
+      <div class="flex h-28 items-center justify-center bg-black">
         <div
           class="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent"
         ></div>
