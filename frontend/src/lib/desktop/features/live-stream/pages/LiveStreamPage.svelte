@@ -290,88 +290,90 @@
 <div
   class="col-span-12 flex flex-col h-[calc(100dvh-80px)] lg:h-[calc(100dvh-112px)] overflow-hidden"
 >
-  <!-- Header bar -->
   <div
-    class="flex flex-none items-center gap-4 border-b border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-3"
+    class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
   >
-    <div class="flex items-center gap-2">
-      <Radio class="size-5 text-[var(--color-primary)]" />
-      <h1 class="text-lg font-semibold">{t('spectrogram.page.title')}</h1>
-    </div>
-
-    <!-- Source picker -->
-    <div class="flex items-center gap-2">
-      <label for="live-stream-source" class="text-sm text-[var(--color-base-content)]/70">
-        {t('spectrogram.page.sourceLabel')}
-      </label>
-      <select
-        id="live-stream-source"
-        value={selectedSourceId}
-        onchange={handleSourceChange}
-        disabled={sources.length === 0}
-        class="select select-sm select-bordered"
-      >
-        {#each sources as source (source.id)}
-          <option value={source.id}>{source.name}</option>
-        {/each}
-        {#if sources.length === 0}
-          <option value="" disabled>{t('common.loading')}...</option>
-        {/if}
-      </select>
-    </div>
-
-    <!-- Connection status indicator -->
-    {#if isConnecting}
-      <div class="flex items-center gap-1 text-sm text-[var(--color-base-content)]/60">
-        <Loader2 class="size-4 animate-spin" />
-        <span>{t('common.loading')}</span>
+    <!-- Header bar -->
+    <div
+      class="flex flex-none items-center gap-4 border-b border-[var(--color-base-200)] px-4 py-3"
+    >
+      <div class="flex items-center gap-2">
+        <Radio class="size-5 text-[var(--color-primary)]" />
+        <h1 class="text-lg font-semibold">{t('spectrogram.page.title')}</h1>
       </div>
-    {:else if isStreaming}
-      <div class="flex items-center gap-1 text-sm text-[var(--color-success)]">
-        <span class="inline-block size-2 rounded-full bg-[var(--color-success)]"></span>
-        <span>{t('spectrogram.page.connected')}</span>
+
+      <!-- Source picker -->
+      <div class="flex items-center gap-2">
+        <label for="live-stream-source" class="text-sm text-[var(--color-base-content)]/70">
+          {t('spectrogram.page.sourceLabel')}
+        </label>
+        <select
+          id="live-stream-source"
+          value={selectedSourceId}
+          onchange={handleSourceChange}
+          disabled={sources.length === 0}
+          class="select select-sm select-bordered"
+        >
+          {#each sources as source (source.id)}
+            <option value={source.id}>{source.name}</option>
+          {/each}
+          {#if sources.length === 0}
+            <option value="" disabled>{t('common.loading')}...</option>
+          {/if}
+        </select>
+      </div>
+
+      <!-- Connection status indicator -->
+      {#if isConnecting}
+        <div class="flex items-center gap-1 text-sm text-[var(--color-base-content)]/60">
+          <Loader2 class="size-4 animate-spin" />
+          <span>{t('common.loading')}</span>
+        </div>
+      {:else if isStreaming}
+        <div class="flex items-center gap-1 text-sm text-[var(--color-success)]">
+          <span class="inline-block size-2 rounded-full bg-[var(--color-success)]"></span>
+          <span>{t('spectrogram.page.connected')}</span>
+        </div>
+      {/if}
+    </div>
+
+    <!-- Error alert -->
+    {#if connectionError}
+      <div
+        role="alert"
+        class="m-4 flex items-center gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm text-[var(--color-error)]"
+      >
+        <AlertCircle class="size-4 shrink-0" />
+        <span>{connectionError}</span>
       </div>
     {/if}
-  </div>
 
-  <!-- Error alert -->
-  {#if connectionError}
-    <div
-      role="alert"
-      class="m-4 flex items-center gap-2 rounded-lg bg-[var(--color-error)]/10 p-3 text-sm text-[var(--color-error)]"
-    >
-      <AlertCircle class="size-4 shrink-0" />
-      <span>{connectionError}</span>
+    <!-- Spectrogram canvas (fills remaining space) -->
+    <div class="min-h-0 flex-1">
+      <SpectrogramCanvas
+        analyser={spectro.analyser}
+        frequencyData={spectro.frequencyData}
+        sampleRate={spectro.sampleRate}
+        fftSize={spectro.fftSize}
+        {frequencyRange}
+        {colorMap}
+        isActive={spectro.isActive}
+        className="h-full w-full"
+      />
     </div>
-  {/if}
 
-  <!-- Spectrogram canvas (fills remaining space) -->
-  <div class="min-h-0 flex-1">
-    <SpectrogramCanvas
-      analyser={spectro.analyser}
-      frequencyData={spectro.frequencyData}
-      sampleRate={spectro.sampleRate}
-      fftSize={spectro.fftSize}
-      {frequencyRange}
-      {colorMap}
-      isActive={spectro.isActive}
-      className="h-full w-full"
-    />
-  </div>
-
-  <!-- Controls bar -->
-  <div
-    class="flex-none border-t border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-2"
-  >
-    <SpectrogramControls
-      {frequencyRange}
-      {colorMap}
-      {gainDb}
-      {audioOutput}
-      onFrequencyRangeChange={range => (frequencyRange = range)}
-      onColorMapChange={map => (colorMap = map)}
-      onGainChange={handleGainChange}
-      onAudioOutputToggle={handleAudioOutputToggle}
-    />
+    <!-- Controls bar -->
+    <div class="flex-none border-t border-[var(--color-base-200)] px-4 py-2">
+      <SpectrogramControls
+        {frequencyRange}
+        {colorMap}
+        {gainDb}
+        {audioOutput}
+        onFrequencyRangeChange={range => (frequencyRange = range)}
+        onColorMapChange={map => (colorMap = map)}
+        onGainChange={handleGainChange}
+        onAudioOutputToggle={handleAudioOutputToggle}
+      />
+    </div>
   </div>
 </div>
