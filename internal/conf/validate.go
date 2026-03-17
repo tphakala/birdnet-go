@@ -1224,7 +1224,7 @@ func validateDashboardSettings(settings *Dashboard) error {
 	}
 
 	// Validate layout element configs
-	validElementTypes := []string{"banner", "daily-summary", "currently-hearing", "detections-grid", "video-embed"}
+	validElementTypes := []string{"banner", "daily-summary", "currently-hearing", "detections-grid", "live-spectrogram", "video-embed"}
 	validWidths := []string{"", "full", "half"}
 
 	for i, el := range settings.Layout.Elements {
