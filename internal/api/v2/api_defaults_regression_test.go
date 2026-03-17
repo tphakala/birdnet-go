@@ -280,6 +280,7 @@ func TestSearchDetections_EmptyBody(t *testing.T) {
 	mockDS.On("SearchDetections", mock.MatchedBy(func(f *datastore.SearchFilters) bool {
 		return f.Page == 1 &&
 			f.PerPage == defaultPerPage &&
+			f.ConfidenceMin == 0.0 &&
 			f.ConfidenceMax == 1.0 // Normalized from 0 → 1
 	})).Return(mockResults, 1, nil).Once()
 
