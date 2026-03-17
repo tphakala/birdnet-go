@@ -572,6 +572,7 @@ func TestFFmpegManager_WatchdogCallsOnStreamReset(t *testing.T) {
 
 		// Start a stream
 		audioChan := make(chan UnifiedAudioData, 10)
+		defer close(audioChan)
 		err := manager.StartStream(testRTSPURL, "tcp", audioChan)
 		require.NoError(t, err)
 
@@ -601,11 +602,9 @@ func TestFFmpegManager_WatchdogCallsOnStreamReset(t *testing.T) {
 		delete(manager.lastForceReset, testRTSPURL)
 		manager.forceResetMu.Unlock()
 
-		// Trigger watchdog check
+		// Trigger watchdog check — synchronous: callback fires inside StartStream
+		// before checkForStuckStreams returns, so no sleep needed.
 		manager.checkForStuckStreams()
-
-		// Allow time for the stop+start cycle
-		time.Sleep(stopStartDelay + 2*time.Second)
 
 		// Verify callback was called with a new source ID
 		assert.True(t, callbackCalled.Load(), "OnStreamReset callback should have been called")
