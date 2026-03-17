@@ -57,6 +57,11 @@ Source: ISC
 License: https://github.com/eaburns/bit/blob/7bd5cd37375d/LICENSE
 Source: MIT
 
+### github.com/eclipse/paho.golang
+
+License: https://github.com/eclipse/paho.golang/blob/v0.23.0/LICENSE
+Source: EPL-2.0
+
 ### github.com/eclipse/paho.mqtt.golang
 
 License: https://github.com/eclipse/paho.mqtt.golang/blob/v1.5.1/LICENSE
@@ -144,7 +149,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.17.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.18.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -194,7 +199,7 @@ Source: ISC
 
 ### github.com/k3a/html2text
 
-License: https://github.com/k3a/html2text/blob/v1.3.0/LICENSE
+License: https://github.com/k3a/html2text/blob/v1.4.0/LICENSE
 Source: MIT
 
 ### github.com/klauspost/cpuid/v2
@@ -244,7 +249,7 @@ Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.34/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.37/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -254,12 +259,12 @@ Source: BSD-3-Clause
 
 ### github.com/nicholas-fedor/shoutrrr
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.13.2/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.14.0/LICENSE.md
 Source: MIT
 
 ### github.com/nicholas-fedor/shoutrrr/pkg/color
 
-License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.13.2/pkg/color/LICENSE.md
+License: https://github.com/nicholas-fedor/shoutrrr/blob/v0.14.0/pkg/color/LICENSE.md
 Source: MIT
 
 ### github.com/patrickmn/go-cache
@@ -434,17 +439,17 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.40.0/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.41.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/metric
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.40.0/metric/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.41.0/metric/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/trace
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.40.0/trace/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.41.0/trace/LICENSE
 Source: Apache-2.0
 
 ### go.uber.org/goleak
@@ -469,7 +474,7 @@ Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.51.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.52.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -504,12 +509,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.270.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.272.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/a57be14db171/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/84a4fc48630c/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
