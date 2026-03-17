@@ -27,13 +27,14 @@ import (
 // testNotes is reusable mock data for endpoints returning []datastore.Note.
 // ScientificName must be set to prevent aggregation collapse in daily species summary.
 func testNotes() []datastore.Note {
+	today := time.Now().Format(time.DateOnly)
 	return []datastore.Note{
 		{
 			ID:             1,
 			CommonName:     "American Robin",
 			ScientificName: "Turdus migratorius",
 			Confidence:     0.85,
-			Date:           time.Now().Format(time.DateOnly),
+			Date:           today,
 			Time:           "08:30:00",
 		},
 		{
@@ -41,7 +42,7 @@ func testNotes() []datastore.Note {
 			CommonName:     "Blue Jay",
 			ScientificName: "Cyanocitta cristata",
 			Confidence:     0.72,
-			Date:           time.Now().Format(time.DateOnly),
+			Date:           today,
 			Time:           "09:15:00",
 		},
 	}
@@ -61,6 +62,9 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 		// Handler returned an error — check if it wrote an HTTP error response
 		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok {
 			rec.Code = httpErr.Code
+		} else {
+			// Unexpected non-HTTP error — fail the test immediately
+			require.NoError(t, err, "handler returned an unexpected error")
 		}
 	}
 	return rec
@@ -337,8 +341,6 @@ func TestRequiredParams_ReturnBadRequest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			rec := executeRequest(t, e, tt.method, tt.path, tt.handler)
 
 			// Must return 400, not 500 or panic
@@ -440,18 +442,19 @@ func TestGetEffectiveSummaryLimit_AfterMigration(t *testing.T) {
 
 	settings := newValidTestSettings()
 
-	// Pre-migration: deprecated field has value
-	assert.Equal(t, 100, settings.Realtime.Dashboard.SummaryLimit)
-	assert.Equal(t, 100, settings.GetEffectiveSummaryLimit())
+	// Pre-migration baseline: capture effective limit before migration
+	expectedLimit := settings.GetEffectiveSummaryLimit()
+	assert.Positive(t, expectedLimit)
+	assert.Equal(t, expectedLimit, settings.Realtime.Dashboard.SummaryLimit)
 
 	// Run migration
 	migrated := settings.MigrateDashboardLayout()
 	require.True(t, migrated)
 
-	// Post-migration: deprecated field zeroed, but effective limit still valid
+	// Post-migration: deprecated field zeroed, but effective limit preserved
 	assert.Equal(t, 0, settings.Realtime.Dashboard.SummaryLimit,
 		"deprecated field should be zeroed")
-	assert.Equal(t, 100, settings.GetEffectiveSummaryLimit(),
+	assert.Equal(t, expectedLimit, settings.GetEffectiveSummaryLimit(),
 		"effective limit should come from layout element after migration")
 
 	// Second migration is a no-op
