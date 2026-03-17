@@ -16,7 +16,7 @@
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
-  import { Radio, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
+  import { Radio, Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { appState } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
@@ -40,10 +40,18 @@
       appState.security.publicAccess.liveAudio
   );
 
+  // Volume/gain presets: muted → 0dB → +6dB → +12dB
+  const GAIN_PRESETS = [
+    { db: -Infinity, audio: false, label: 'muted' },
+    { db: 0, audio: true, label: '0 dB' },
+    { db: 6, audio: true, label: '+6 dB' },
+    { db: 12, audio: true, label: '+12 dB' },
+  ] as const;
+
   // Local state
   let isActive = $state(false);
   let isConnecting = $state(false);
-  let audioOutput = $state(false);
+  let gainPresetIndex = $state(0);
   let colorMap = $state<ColorMapName>('inferno');
   let frequencyRange = $state<[number, number]>([0, 15000]);
   let currentSourceId = $state<string>('');
@@ -286,9 +294,13 @@
     persistToggleState(false);
   }
 
-  function toggleAudio() {
-    audioOutput = !audioOutput;
-    spectro.setAudioOutput(audioOutput);
+  function cycleVolume() {
+    gainPresetIndex = (gainPresetIndex + 1) % GAIN_PRESETS.length;
+    const preset = GAIN_PRESETS[gainPresetIndex];
+    spectro.setAudioOutput(preset.audio);
+    if (preset.audio) {
+      spectro.setGain(preset.db);
+    }
   }
 
   onMount(() => {
@@ -309,16 +321,19 @@
       <div class="flex items-center gap-1">
         {#if isActive}
           <button
-            onclick={toggleAudio}
+            onclick={cycleVolume}
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
-            aria-label={audioOutput
-              ? t('spectrogram.controls.mute')
-              : t('spectrogram.controls.unmute')}
+            aria-label={GAIN_PRESETS[gainPresetIndex].label}
+            title={GAIN_PRESETS[gainPresetIndex].label}
           >
-            {#if audioOutput}
-              <Volume2 class="size-3.5" />
-            {:else}
+            {#if gainPresetIndex === 0}
               <VolumeX class="size-3.5" />
+            {:else if gainPresetIndex === 1}
+              <Volume class="size-3.5" />
+            {:else if gainPresetIndex === 2}
+              <Volume1 class="size-3.5" />
+            {:else}
+              <Volume2 class="size-3.5" />
             {/if}
           </button>
           <button
