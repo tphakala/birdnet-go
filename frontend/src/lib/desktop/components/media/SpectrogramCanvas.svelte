@@ -15,6 +15,9 @@
     DEFAULT_COLOR_MAP,
     type ColorMapName,
   } from '$lib/utils/spectrogramColorMaps';
+  import { loggers } from '$lib/utils/logger';
+
+  const logger = loggers.audio;
 
   interface Props {
     /** AnalyserNode to read frequency data from */
@@ -137,13 +140,48 @@
     return () => media.removeEventListener('change', handler);
   });
 
-  // Update canvas buffer dimensions when size or DPR changes
+  // Update canvas buffer dimensions when size or DPR changes.
+  // Snapshot existing content before resize, restore after (stretched to fit).
+  // Setting canvas.width/height always clears the buffer — this preserves it.
   $effect(() => {
     if (!canvasEl) return;
-    // Size canvas buffer to device pixels
-    canvasEl.width = deviceWidth;
-    canvasEl.height = deviceHeight;
-    // NO ctx.scale() — we work entirely in device pixels
+    const newW = deviceWidth;
+    const newH = deviceHeight;
+    const oldW = canvasEl.width;
+    const oldH = canvasEl.height;
+
+    // Skip if dimensions haven't actually changed
+    if (oldW === newW && oldH === newH) return;
+
+    // Snapshot current content (only if canvas has visible content)
+    if (oldW > 0 && oldH > 0) {
+      try {
+        // createImageBitmap is sync-ish for canvas sources in all modern browsers
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = oldW;
+        tempCanvas.height = oldH;
+        const tempCtx = tempCanvas.getContext('2d');
+        if (tempCtx) {
+          tempCtx.drawImage(canvasEl, 0, 0);
+          // Resize the real canvas (clears it)
+          canvasEl.width = newW;
+          canvasEl.height = newH;
+          // Draw snapshot back, stretched to new dimensions
+          const ctx = canvasEl.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(tempCanvas, 0, 0, oldW, oldH, 0, 0, newW, newH);
+          }
+          logger.debug('Canvas resized with content preserved', { oldW, oldH, newW, newH });
+          return;
+        }
+      } catch {
+        // Fallback: just resize without preserving
+      }
+    }
+
+    // Fallback: simple resize (clears canvas)
+    canvasEl.width = newW;
+    canvasEl.height = newH;
   });
 
   // Main animation loop

@@ -127,6 +127,27 @@
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
 
+      // Audio element debug listeners for buffer underrun diagnosis
+      audioElement.addEventListener('waiting', () => {
+        logger.warn('Audio element: waiting (buffer underrun)', {
+          currentTime: audioElement?.currentTime,
+          readyState: audioElement?.readyState,
+          networkState: audioElement?.networkState,
+        });
+      });
+      audioElement.addEventListener('stalled', () => {
+        logger.warn('Audio element: stalled (network stall)', {
+          currentTime: audioElement?.currentTime,
+        });
+      });
+      audioElement.addEventListener('error', () => {
+        const err = audioElement?.error;
+        logger.error('Audio element: error', {
+          code: err?.code,
+          message: err?.message,
+        });
+      });
+
       if (Hls.isSupported()) {
         hls = new Hls(HLS_AUDIO_CONFIG);
         hls.loadSource(hlsUrl);
@@ -135,8 +156,21 @@
         let fragmentsBuffered = 0;
         let playbackAttempted = false;
 
-        hls.on(Hls.Events.FRAG_BUFFERED, () => {
+        hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
           fragmentsBuffered++;
+
+          // Buffer diagnostics
+          const buffered = audioElement?.buffered;
+          const currentTime = audioElement?.currentTime ?? 0;
+          let bufferAhead = 0;
+          if (buffered && buffered.length > 0) {
+            bufferAhead = buffered.end(buffered.length - 1) - currentTime;
+          }
+          logger.debug('HLS frag buffered', {
+            sn: data.frag.sn,
+            total: fragmentsBuffered,
+            bufferAhead: bufferAhead.toFixed(2) + 's',
+          });
 
           if (
             !playbackAttempted &&
@@ -168,7 +202,22 @@
             logger.error('Fatal HLS error', { type: data.type, details: data.details });
             isStreaming = false;
             isConnecting = false;
+          } else {
+            // Non-fatal errors — log for debugging buffer issues
+            const info: Record<string, unknown> = {
+              type: data.type,
+              details: data.details,
+            };
+            if ('frag' in data && data.frag) {
+              info.fragSn = (data.frag as { sn?: number }).sn;
+            }
+            logger.warn('HLS non-fatal error', info);
           }
+        });
+
+        // Fragment loading log for diagnostics
+        hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
+          logger.debug('HLS frag loading', { sn: data.frag.sn, url: data.frag.relurl });
         });
       } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS (Safari)
