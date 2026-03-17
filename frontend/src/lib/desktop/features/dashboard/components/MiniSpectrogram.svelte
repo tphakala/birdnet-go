@@ -52,6 +52,7 @@
   let hls: Hls | null = null;
   let audioElement: HTMLAudioElement | null = null;
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+  let abortController: AbortController | null = null;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: false });
@@ -80,21 +81,35 @@
   /**
    * Discover the first available audio source via the SSE audio-level stream.
    * Returns the source ID, or null if none found within the timeout.
+   * Accepts an AbortSignal so callers can cancel discovery mid-flight.
    */
-  async function discoverFirstSource(): Promise<string | null> {
+  async function discoverFirstSource(signal: AbortSignal): Promise<string | null> {
     return new Promise(resolve => {
+      if (signal.aborted) {
+        resolve(null);
+        return;
+      }
+
       const sse = new ReconnectingEventSource(buildAppUrl('/api/v2/streams/audio-level'), {
         max_retry_time: 30000,
         withCredentials: false,
       });
 
+      // Abort listener: clean up SSE and timeout if caller cancels
+      const onAbort = () => {
+        globalThis.clearTimeout(timeout);
+        sse.close();
+        resolve(null);
+      };
+
       const timeout = globalThis.setTimeout(() => {
+        signal.removeEventListener('abort', onAbort);
         sse.close();
         resolve(null);
       }, SOURCE_DISCOVERY_TIMEOUT);
 
-      // SSE sends unnamed events (no event: field), so use onmessage
-      // The JSON payload has a type field: { type: 'audio-level', levels: {...} }
+      signal.addEventListener('abort', onAbort, { once: true });
+
       sse.onmessage = (event: globalThis.MessageEvent) => {
         try {
           const data = JSON.parse(event.data) as {
@@ -105,7 +120,8 @@
             const sourceIds = Object.keys(data.levels);
             if (sourceIds.length > 0) {
               globalThis.clearTimeout(timeout);
-              sse.close(); // Close immediately — only needed for discovery
+              signal.removeEventListener('abort', onAbort);
+              sse.close();
               resolve(sourceIds[0]);
             }
           }
@@ -115,7 +131,7 @@
       };
 
       sse.onerror = () => {
-        // ReconnectingEventSource handles reconnection automatically
+        /* ReconnectingEventSource handles reconnection */
       };
     });
   }
@@ -124,21 +140,28 @@
     if (isActive || isConnecting) return;
     isConnecting = true;
 
+    // Abort any previous in-flight operation
+    abortController?.abort();
+    const controller = new AbortController();
+    abortController = controller;
+    const { signal } = controller;
+
     try {
-      const sourceId = await discoverFirstSource();
-      if (!sourceId) {
-        logger.warn('MiniSpectrogram: no audio source found');
-        isConnecting = false;
+      const sourceId = await discoverFirstSource(signal);
+      if (signal.aborted || !sourceId) {
+        if (!signal.aborted) isConnecting = false;
         return;
       }
 
       currentSourceId = sourceId;
       const encodedSourceId = encodeURIComponent(sourceId);
 
-      // Request the backend to start the HLS stream
       await fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
+        signal,
       });
+
+      if (signal.aborted) return;
 
       const hlsUrl = buildAppUrl(`/api/v2/streams/hls/${encodedSourceId}/playlist.m3u8`);
 
@@ -151,18 +174,25 @@
         hls.attachMedia(audioElement);
 
         hls.on(Hls.Events.MANIFEST_PARSED, async () => {
+          if (signal.aborted) return;
           try {
             await audioElement?.play();
           } catch {
             /* autoplay blocked — spectrogram still renders */
           }
-          // Connect composable after audio starts playing
+          if (signal.aborted) return;
           if (audioElement) {
             await spectro.connect(audioElement);
           }
+          if (signal.aborted) return;
+          startHeartbeat(sourceId);
+          isActive = true;
+          isConnecting = false;
+          persistToggleState(true);
         });
 
         hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (signal.aborted) return;
           if (data.fatal) {
             logger.error('MiniSpectrogram: fatal HLS error', {
               type: data.type,
@@ -179,18 +209,16 @@
         } catch {
           /* autoplay blocked */
         }
+        if (signal.aborted || !audioElement) return;
         await spectro.connect(audioElement);
+        if (signal.aborted) return;
+        startHeartbeat(sourceId);
+        isActive = true;
+        isConnecting = false;
+        persistToggleState(true);
       }
-
-      // Guard: stop() may have been called during async setup (e.g., fatal HLS error).
-      // If isConnecting was cleared by stop(), don't start heartbeat or transition to active.
-      if (!isConnecting) return;
-
-      startHeartbeat(sourceId);
-      isActive = true;
-      isConnecting = false;
-      persistToggleState(true);
     } catch (error) {
+      if (signal.aborted) return;
       logger.error('MiniSpectrogram: failed to start', error);
       isConnecting = false;
     }
@@ -220,6 +248,10 @@
   }
 
   function stop() {
+    // Abort any in-flight async work first
+    abortController?.abort();
+    abortController = null;
+
     // Send disconnect heartbeat
     if (currentSourceId) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
