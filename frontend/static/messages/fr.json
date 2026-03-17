@@ -890,6 +890,32 @@
       "daysSinceFirst": "Jours depuis la première détection"
     }
   },
+  "spectrogram": {
+    "controls": {
+      "frequencyRange": "Frequency Range",
+      "colorMap": "Color Map",
+      "gain": "Gain",
+      "mute": "Mute",
+      "unmute": "Unmute"
+    },
+    "error": {
+      "unsupported": "Your browser does not support audio analysis",
+      "connectionFailed": "Failed to connect to live audio stream"
+    },
+    "dashboard": {
+      "toggle": "Show live spectrogram",
+      "audioToggle": "Enable audio"
+    },
+    "page": {
+      "title": "Live Audio",
+      "sourceLabel": "Audio Source"
+    },
+    "colorMaps": {
+      "magma": "Magma",
+      "inferno": "Inferno",
+      "viridis": "Viridis"
+    }
+  },
   "system": {
     "title": "Tableau de bord système",
     "refreshData": "Actualiser les données",
