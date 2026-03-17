@@ -27,7 +27,22 @@
 
   import { Volume2, VolumeX } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
+
+  // CSS gradients approximating the matplotlib colormaps (sampled at key stops)
+  const COLOR_MAP_GRADIENTS: Record<ColorMapName, string> = {
+    magma: 'linear-gradient(to right, #000004, #51127c, #b73779, #fc8961, #fcfdbf)',
+    inferno: 'linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fcffa4)',
+    viridis: 'linear-gradient(to right, #440154, #31688e, #35b779, #90d743, #fde725)',
+  };
+
+  const colorMapOptions: SelectOption[] = [
+    { value: 'magma', label: 'Magma' },
+    { value: 'inferno', label: 'Inferno' },
+    { value: 'viridis', label: 'Viridis' },
+  ];
 
   interface Props {
     /** Display frequency range [min, max] in Hz */
@@ -74,9 +89,9 @@
     onFrequencyRangeChange?.(newRange);
   }
 
-  function handleColorMapChange(e: Event) {
-    const value = (e.target as HTMLSelectElement).value as ColorMapName;
-    onColorMapChange?.(value);
+  function handleColorMapChange(value: string | string[]) {
+    const selected = (Array.isArray(value) ? value[0] : value) as ColorMapName;
+    onColorMapChange?.(selected);
   }
 
   function handleGainChange(e: Event) {
@@ -120,19 +135,39 @@
 
   <!-- Color map -->
   <div class="flex items-center gap-2">
-    <label for="spectrogram-colormap" class="text-base-content/70 whitespace-nowrap">
+    <span class="text-base-content/70 whitespace-nowrap">
       {t('spectrogram.controls.colorMap')}
-    </label>
-    <select
-      id="spectrogram-colormap"
+    </span>
+    <SelectDropdown
+      options={colorMapOptions}
       value={colorMap}
-      onchange={handleColorMapChange}
-      class="select select-xs"
+      variant="select"
+      size="xs"
+      groupBy={false}
+      onChange={handleColorMapChange}
+      className="w-36"
     >
-      <option value="magma">{t('spectrogram.colorMaps.magma')}</option>
-      <option value="inferno">{t('spectrogram.colorMaps.inferno')}</option>
-      <option value="viridis">{t('spectrogram.colorMaps.viridis')}</option>
-    </select>
+      {#snippet renderOption(option)}
+        <div class="flex items-center gap-2">
+          <span
+            class="inline-block h-3 w-12 shrink-0 rounded-sm"
+            style:background={COLOR_MAP_GRADIENTS[option.value as ColorMapName]}
+          ></span>
+          <span>{t(`spectrogram.colorMaps.${option.value}`)}</span>
+        </div>
+      {/snippet}
+      {#snippet renderSelected(options)}
+        {#if options.length > 0}
+          <span class="flex items-center gap-2">
+            <span
+              class="inline-block h-3 w-12 shrink-0 rounded-sm"
+              style:background={COLOR_MAP_GRADIENTS[options[0].value as ColorMapName]}
+            ></span>
+            <span>{t(`spectrogram.colorMaps.${options[0].value}`)}</span>
+          </span>
+        {/if}
+      {/snippet}
+    </SelectDropdown>
   </div>
 
   <!-- Gain (hidden in compact mode) -->
