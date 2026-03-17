@@ -182,13 +182,11 @@
         await spectro.connect(audioElement);
       }
 
-      // Start heartbeat
-      startHeartbeat(sourceId);
-
       // Guard: stop() may have been called during async setup (e.g., fatal HLS error).
-      // If isConnecting was cleared by stop(), don't transition to active.
+      // If isConnecting was cleared by stop(), don't start heartbeat or transition to active.
       if (!isConnecting) return;
 
+      startHeartbeat(sourceId);
       isActive = true;
       isConnecting = false;
       persistToggleState(true);

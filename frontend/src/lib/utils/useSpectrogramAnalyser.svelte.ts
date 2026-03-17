@@ -42,6 +42,8 @@ export interface SpectrogramAnalyserOptions {
 
 const DEFAULT_FFT_SIZE = 1024;
 const HIGH_PASS_FREQ = 20;
+const HIGH_PASS_Q = 1;
+const ANALYSER_SMOOTHING = 0.8;
 
 export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   const fftSize = options?.fftSize ?? DEFAULT_FFT_SIZE;
@@ -94,14 +96,14 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       highPassNode = audioContext.createBiquadFilter();
       highPassNode.type = 'highpass';
       highPassNode.frequency.value = HIGH_PASS_FREQ;
-      highPassNode.Q.value = 1;
+      highPassNode.Q.value = HIGH_PASS_Q;
 
       gainNode = audioContext.createGain();
       gainNode.gain.value = dbToGain(gainDb);
 
       analyserNode = audioContext.createAnalyser();
       analyserNode.fftSize = fftSize;
-      analyserNode.smoothingTimeConstant = 0.8;
+      analyserNode.smoothingTimeConstant = ANALYSER_SMOOTHING;
 
       // Connect chain: source → highpass → gain → analyser
       sourceNode.connect(highPassNode);
