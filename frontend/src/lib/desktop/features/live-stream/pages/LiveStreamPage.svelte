@@ -11,7 +11,7 @@
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
-  import { Radio, AlertCircle, Loader2 } from '@lucide/svelte';
+  import { Radio, AlertCircle, Loader2, Play } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY } from '$lib/desktop/components/ui/hls-config';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
@@ -277,14 +277,13 @@
     };
   });
 
-  // Auto-start when a source is first discovered
-  let hasAutoStarted = false;
-  $effect(() => {
-    if (selectedSourceId && sources.length > 0 && !hasAutoStarted && !isStreaming) {
-      hasAutoStarted = true;
+  // No auto-start — browsers block AudioContext and audio.play() without a
+  // user gesture. The user must click the play button to start streaming.
+  function handleStartClick() {
+    if (selectedSourceId) {
       startStream();
     }
-  });
+  }
 </script>
 
 <div
@@ -350,16 +349,33 @@
 
     <!-- Spectrogram canvas (fills remaining space) -->
     <div class="min-h-0 flex-1">
-      <SpectrogramCanvas
-        analyser={spectro.analyser}
-        frequencyData={spectro.frequencyData}
-        sampleRate={spectro.sampleRate}
-        fftSize={spectro.fftSize}
-        {frequencyRange}
-        {colorMap}
-        isActive={spectro.isActive}
-        className="h-full w-full"
-      />
+      {#if isStreaming || isConnecting}
+        <SpectrogramCanvas
+          analyser={spectro.analyser}
+          frequencyData={spectro.frequencyData}
+          sampleRate={spectro.sampleRate}
+          fftSize={spectro.fftSize}
+          {frequencyRange}
+          {colorMap}
+          isActive={spectro.isActive}
+          className="h-full w-full"
+        />
+      {:else}
+        <!-- Click to start — user gesture required for AudioContext -->
+        <button
+          onclick={handleStartClick}
+          disabled={!selectedSourceId || sources.length === 0}
+          class="flex h-full w-full flex-col items-center justify-center gap-3 bg-black text-[var(--color-base-content)]/60 transition-colors hover:text-[var(--color-base-content)]/80 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {#if sources.length === 0}
+            <Loader2 class="size-8 animate-spin" />
+            <span class="text-sm">{t('common.loading')}...</span>
+          {:else}
+            <Play class="size-12" />
+            <span class="text-sm">{t('spectrogram.page.sourceLabel')}</span>
+          {/if}
+        </button>
+      {/if}
     </div>
 
     <!-- Controls bar -->
