@@ -912,11 +912,9 @@
       "connected": "Yhdistetty"
     },
     "colorMaps": {
-      "magma": "Magma",
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale",
-      "sox": "SoX"
+      "grayscale": "Grayscale"
     }
   },
   "system": {

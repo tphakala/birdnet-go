@@ -33,19 +33,15 @@
 
   // CSS gradients approximating each colormap (sampled at key stops)
   const COLOR_MAP_GRADIENTS: Record<ColorMapName, string> = {
-    magma: 'linear-gradient(to right, #000004, #51127c, #b73779, #fc8961, #fcfdbf)',
     inferno: 'linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fcffa4)',
     viridis: 'linear-gradient(to right, #440154, #31688e, #35b779, #90d743, #fde725)',
-    grayscale: 'linear-gradient(to right, #000000, #808080, #ffffff)',
-    sox: 'linear-gradient(to right, #000000, #0000ff, #800080, #ff0000, #ffff00, #ffffff)',
+    grayscale: 'linear-gradient(to right, #ffffff, #808080, #000000)',
   };
 
   const colorMapOptions: SelectOption[] = [
-    { value: 'magma', label: 'Magma' },
     { value: 'inferno', label: 'Inferno' },
     { value: 'viridis', label: 'Viridis' },
     { value: 'grayscale', label: 'Grayscale' },
-    { value: 'sox', label: 'SoX' },
   ];
 
   interface Props {

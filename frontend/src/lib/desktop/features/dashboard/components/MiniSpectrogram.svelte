@@ -44,7 +44,7 @@
   let isActive = $state(false);
   let isConnecting = $state(false);
   let audioOutput = $state(false);
-  let colorMap = $state<ColorMapName>('magma');
+  let colorMap = $state<ColorMapName>('inferno');
   let frequencyRange = $state<[number, number]>([0, 15000]);
   let currentSourceId = $state<string>('');
 
