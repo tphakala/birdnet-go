@@ -89,7 +89,7 @@
   let buttonElement = $state<HTMLButtonElement>();
 
   // Position state for fixed dropdown
-  let dropdownPosition = $state({ top: 0, left: 0, width: 0 });
+  let dropdownPosition = $state({ top: 0, left: 0, width: 0, openAbove: false });
 
   // Size classes for trigger (padding + font size)
   const sizeClasses = {
@@ -208,10 +208,17 @@
     if (!buttonElement) return;
 
     const rect = buttonElement.getBoundingClientRect();
+    const viewportHeight = globalThis.innerHeight;
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    // Open above if not enough space below and more space above
+    const openAbove = spaceBelow < maxHeight && spaceAbove > spaceBelow;
+
     dropdownPosition = {
-      top: rect.bottom,
+      top: openAbove ? rect.top : rect.bottom,
       left: rect.left,
       width: rect.width,
+      openAbove,
     };
   }
 
@@ -449,7 +456,10 @@
           'fixed z-[60] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName
         )}
-        style:top="{dropdownPosition.top}px"
+        style:top={dropdownPosition.openAbove ? 'auto' : `${dropdownPosition.top}px`}
+        style:bottom={dropdownPosition.openAbove
+          ? `${globalThis.innerHeight - dropdownPosition.top}px`
+          : 'auto'}
         style:left="{dropdownPosition.left}px"
         style:width="{dropdownPosition.width}px"
         style:max-height="{maxHeight}px"

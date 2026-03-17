@@ -11,12 +11,14 @@
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
-  import { Radio, AlertCircle, Loader2, Play, Maximize, Minimize } from '@lucide/svelte';
+  import { Radio, AlertCircle, Loader2, Play, Maximize, Minimize, Mic } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY } from '$lib/desktop/components/ui/hls-config';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import SpectrogramControls from '$lib/desktop/components/media/SpectrogramControls.svelte';
+  import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
@@ -299,9 +301,17 @@
     isStreaming = false;
   }
 
-  function handleSourceChange(e: Event) {
-    selectedSourceId = (e.target as HTMLSelectElement).value;
-    startStream();
+  // Source options for SelectDropdown
+  let sourceOptions = $derived<SelectOption[]>(
+    sources.map(s => ({ value: s.id, label: s.name, icon: Mic }))
+  );
+
+  function handleSourceChange(value: string | string[]) {
+    const newId = Array.isArray(value) ? value[0] : value;
+    if (newId && newId !== selectedSourceId) {
+      selectedSourceId = newId;
+      startStream();
+    }
   }
 
   function handleAudioOutputToggle() {
@@ -375,23 +385,22 @@
 
       <!-- Source picker -->
       <div class="flex items-center gap-2">
-        <label for="live-stream-source" class="text-sm text-[var(--color-base-content)]/70">
+        <span class="text-sm text-[var(--color-base-content)]/70">
           {t('spectrogram.page.sourceLabel')}
-        </label>
-        <select
-          id="live-stream-source"
+        </span>
+        <SelectDropdown
+          options={sourceOptions}
           value={selectedSourceId}
-          onchange={handleSourceChange}
+          placeholder={sources.length === 0
+            ? t('common.loading') + '...'
+            : t('spectrogram.page.sourceLabel')}
+          variant="select"
+          size="sm"
+          groupBy={false}
           disabled={sources.length === 0}
-          class="select select-sm select-bordered"
-        >
-          {#each sources as source (source.id)}
-            <option value={source.id}>{source.name}</option>
-          {/each}
-          {#if sources.length === 0}
-            <option value="" disabled>{t('common.loading')}...</option>
-          {/if}
-        </select>
+          onChange={handleSourceChange}
+          className="w-48"
+        />
       </div>
 
       <!-- Connection status indicator -->
