@@ -169,25 +169,23 @@
     {/if}
 
     <!-- Play/pause overlay button -->
-    {#if !spectrogramLoader.error}
-      <button
-        class="play-overlay"
-        class:is-playing={audio.isPlaying}
-        onclick={handlePlayClick}
-        disabled={audio.isLoading}
-        aria-label={audio.isPlaying ? t('media.audio.pause') : t('media.audio.play')}
-      >
-        {#if audio.isLoading}
-          <div
-            class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
-          ></div>
-        {:else if audio.isPlaying}
-          <Pause class="size-4" />
-        {:else}
-          <Play class="size-4" />
-        {/if}
-      </button>
-    {/if}
+    <button
+      class="play-overlay"
+      class:is-playing={audio.isPlaying}
+      onclick={handlePlayClick}
+      disabled={audio.isLoading}
+      aria-label={audio.isPlaying ? t('media.audio.pause') : t('media.audio.play')}
+    >
+      {#if audio.isLoading}
+        <div
+          class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"
+        ></div>
+      {:else if audio.isPlaying}
+        <Pause class="size-4" />
+      {:else}
+        <Play class="size-4" />
+      {/if}
+    </button>
 
     <!-- Progress bar (bottom edge) -->
     {#if audio.progress > 0}

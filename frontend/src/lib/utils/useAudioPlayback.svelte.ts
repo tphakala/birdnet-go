@@ -326,6 +326,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     // --- Event listeners ---
     addTrackedEventListener(audio, 'play', () => {
       isPlaying = true;
+      error = null;
       startInterval();
       clearPlayEndTimeout();
       applyPlaybackRate(audio, playbackSpeed);
@@ -371,6 +372,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         canplayTimeoutId = undefined;
       }
       isLoading = false;
+      error = null;
       audioRetryCount = 0;
       if (audioRetryTimer) {
         clearTimeout(audioRetryTimer);
@@ -412,6 +414,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     // Cleanup
     return () => {
       debugLog('cleanup: destroying');
+      const shouldNotifyPlayEnd = isPlaying || playEndTimeout !== undefined;
       stopInterval();
       clearPlayEndTimeout();
       if (canplayTimeoutId) {
@@ -428,6 +431,11 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         element.removeEventListener(event, handler);
       });
       eventListeners = [];
+
+      // Notify play end if playback was active
+      if (shouldNotifyPlayEnd) {
+        onPlayEnd?.();
+      }
 
       // Stop audio
       if (audioElement) {

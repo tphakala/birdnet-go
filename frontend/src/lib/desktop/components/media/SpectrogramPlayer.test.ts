@@ -115,6 +115,7 @@ describe('SpectrogramPlayer', () => {
   const spectrogramTest = createComponentTestFactory(SpectrogramPlayer);
 
   beforeEach(() => {
+    vi.clearAllMocks();
     vi.useFakeTimers();
 
     // Reset audio mock state
@@ -215,11 +216,10 @@ describe('SpectrogramPlayer', () => {
     });
 
     // When error is true, the spectrogram image should not be rendered
-    expect(screen.queryByAltText('Audio spectrogram')).not.toBeInTheDocument();
+    expect(screen.queryByAltText('components.audio.spectrogramAlt')).not.toBeInTheDocument();
 
-    // The play button should also be hidden in error state
-    expect(screen.queryByLabelText('media.audio.play')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('media.audio.pause')).not.toBeInTheDocument();
+    // The play button should still be visible even when spectrogram errors
+    expect(screen.queryByLabelText('media.audio.play')).toBeInTheDocument();
   });
 
   // ---------------------------------------------------------------

@@ -73,7 +73,9 @@ describe('useAudioPlayback', () => {
   /** Helper to fire a synthetic event on the mock audio element */
   function fireAudioEvent(eventName: string) {
     const handlers = safeGet(eventHandlers, eventName, []) as EventListener[];
-    handlers.forEach(handler => handler.call(mockAudioInstance, new Event(eventName)));
+    handlers.forEach(handler => {
+      handler.call(mockAudioInstance, new Event(eventName));
+    });
   }
 
   /** Render the wrapper and capture the composable state */
