@@ -85,6 +85,7 @@
   async function discoverFirstSource(): Promise<string | null> {
     return new Promise(resolve => {
       const sse = new ReconnectingEventSource(buildAppUrl('/api/v2/streams/audio-level'), {
+        max_retry_time: 30000,
         withCredentials: false,
       });
 
@@ -93,26 +94,27 @@
         resolve(null);
       }, SOURCE_DISCOVERY_TIMEOUT);
 
-      sse.addEventListener('audio-level', (event: Event) => {
+      // SSE sends unnamed events (no event: field), so use onmessage
+      // The JSON payload has a type field: { type: 'audio-level', levels: {...} }
+      sse.onmessage = (event: globalThis.MessageEvent) => {
         try {
-          const msgEvent = event as globalThis.MessageEvent;
-          const data = JSON.parse(msgEvent.data as string) as {
+          const data = JSON.parse(event.data) as {
+            type?: string;
             levels?: Record<string, unknown>;
           };
-          if (data.levels) {
+          if (data.type === 'audio-level' && data.levels) {
             const sourceIds = Object.keys(data.levels);
             if (sourceIds.length > 0) {
               globalThis.clearTimeout(timeout);
               // Keep the SSE connection alive for component lifetime
               eventSource = sse;
               resolve(sourceIds[0]);
-              return;
             }
           }
         } catch {
           /* ignore parse errors */
         }
-      });
+      };
 
       sse.onerror = () => {
         // ReconnectingEventSource handles reconnection automatically
@@ -265,9 +267,7 @@
 </script>
 
 {#if hasAudioAccess}
-  <div
-    class="col-span-12 rounded-2xl border border-border-100 bg-[var(--color-base-100)] p-3 shadow-sm"
-  >
+  <div class="mt-4 rounded-2xl border border-border-100 bg-[var(--color-base-100)] p-3 shadow-sm">
     <div class="mb-2 flex items-center justify-between">
       <div class="flex items-center gap-2 text-sm font-medium">
         <Radio class="size-4" />
