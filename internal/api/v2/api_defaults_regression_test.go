@@ -198,3 +198,103 @@ func TestTimeOfDayDistribution_DefaultParams(t *testing.T) {
 
 	mockDS.AssertExpectations(t)
 }
+
+func TestGetDetections_DefaultParams(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	notes := testNotes()
+
+	// Default: queryType="all" → SearchNotes("", false, 100, 0)
+	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, nil).Once()
+
+	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections", controller.GetDetections)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+
+	// Paginated response has a "data" array (PaginatedResponse.Data)
+	detections, ok := result["data"].([]any)
+	require.True(t, ok, "response should contain 'data' array")
+	assert.NotEmpty(t, detections, "should return detections with default params")
+
+	mockDS.AssertExpectations(t)
+}
+
+func TestGetRecentDetections_DefaultParams(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	notes := testNotes()
+
+	// Default limit is 10
+	mockDS.On("GetLastDetections", 10).Return(notes, nil).Once()
+
+	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections/recent", controller.GetRecentDetections)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result []map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.NotEmpty(t, result, "should return recent detections with default limit")
+
+	mockDS.AssertExpectations(t)
+}
+
+func TestSearchDetections_EmptyBody(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "search")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	// Must use setupTestEnvironment (not setupAnalyticsTestEnvironment) because
+	// HandleSearch calls c.Debug() which dereferences c.Settings.WebServer.Debug.
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	mockResults := []datastore.DetectionRecord{
+		{
+			ID:         "1",
+			CommonName: "American Robin",
+			Confidence: 0.85,
+		},
+	}
+
+	// Empty body defaults: page=1, confidenceMin=0, confidenceMax=1 (normalized),
+	// all status filters="any", perPage=20
+	mockDS.On("SearchDetections", mock.MatchedBy(func(f *datastore.SearchFilters) bool {
+		return f.Page == 1 &&
+			f.PerPage == defaultPerPage &&
+			f.ConfidenceMax == 1.0 // Normalized from 0 → 1
+	})).Return(mockResults, 1, nil).Once()
+
+	// Build request with empty JSON body
+	body := strings.NewReader("{}")
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/search", body)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/search")
+
+	err := controller.HandleSearch(c)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result map[string]any
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	results, ok := result["results"].([]any)
+	require.True(t, ok, "response should contain 'results' array")
+	assert.NotEmpty(t, results, "should return results with default search params")
+
+	mockDS.AssertExpectations(t)
+}
