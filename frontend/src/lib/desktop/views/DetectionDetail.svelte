@@ -1144,19 +1144,19 @@
   }
 
   .tod-day {
-    background: oklch(0.8 0.1 85 / 0.4);
+    background: oklch(80% 0.1 85deg / 0.4);
   }
 
   .tod-night {
-    background: oklch(0.5 0.08 270 / 0.25);
+    background: oklch(50% 0.08 270deg / 0.25);
   }
 
   .tod-sunrise {
-    background: oklch(0.8 0.12 55 / 0.4);
+    background: oklch(80% 0.12 55deg / 0.4);
   }
 
   .tod-sunset {
-    background: oklch(0.78 0.12 30 / 0.4);
+    background: oklch(78% 0.12 30deg / 0.4);
   }
 
   /* Weather in metadata card — consistent typographic scale */
