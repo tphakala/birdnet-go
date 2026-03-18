@@ -30,15 +30,16 @@ const (
 	MsgErrorCategory       = "notifications.content.error.categoryError"
 
 	// Settings change toasts
-	MsgSettingsReloadingBirdnet             = "notifications.content.settings.reloadingBirdnet"
-	MsgSettingsRebuildingRangeFilter        = "notifications.content.settings.rebuildingRangeFilter"
-	MsgSettingsUpdatingIntervals            = "notifications.content.settings.updatingIntervals"
-	MsgSettingsReconfiguringMqtt            = "notifications.content.settings.reconfiguringMqtt"
-	MsgSettingsReconfiguringBirdweather     = "notifications.content.settings.reconfiguringBirdweather"
-	MsgSettingsReconfiguringStreams         = "notifications.content.settings.reconfiguringStreams"
-	MsgSettingsReconfiguringTelemetry       = "notifications.content.settings.reconfiguringTelemetry"
-	MsgSettingsReconfiguringSpeciesTracking = "notifications.content.settings.reconfiguringSpeciesTracking"
-	MsgSettingsWebserverRestart             = "notifications.content.settings.webserverRestartRequired"
+	MsgSettingsReloadingBirdnet               = "notifications.content.settings.reloadingBirdnet"
+	MsgSettingsRebuildingRangeFilter          = "notifications.content.settings.rebuildingRangeFilter"
+	MsgSettingsUpdatingIntervals              = "notifications.content.settings.updatingIntervals"
+	MsgSettingsReconfiguringMqtt              = "notifications.content.settings.reconfiguringMqtt"
+	MsgSettingsReconfiguringBirdweather       = "notifications.content.settings.reconfiguringBirdweather"
+	MsgSettingsReconfiguringStreams           = "notifications.content.settings.reconfiguringStreams"
+	MsgSettingsReconfiguringTelemetry         = "notifications.content.settings.reconfiguringTelemetry"
+	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
+	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
+	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
 
 	// Audio settings toasts
 	MsgSettingsReconfiguringSoundLevel = "notifications.content.settings.reconfiguringSoundLevel"

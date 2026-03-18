@@ -1547,6 +1547,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, "info", toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
+	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
 	{"Quiet hours", myaudio.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
 }
@@ -1751,6 +1752,11 @@ func birdWeatherSettingsChanged(oldSettings, currentSettings *conf.Settings) boo
 	}
 
 	return false
+}
+
+// pushNotificationSettingsChanged checks if push notification settings have changed.
+func pushNotificationSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return !reflect.DeepEqual(oldSettings.Notification.Push, currentSettings.Notification.Push)
 }
 
 // telemetrySettingsChanged checks if telemetry/observability settings have changed
