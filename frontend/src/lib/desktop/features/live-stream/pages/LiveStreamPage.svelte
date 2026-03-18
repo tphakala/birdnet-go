@@ -468,7 +468,7 @@
       <!-- Fullscreen toggle -->
       <button
         onclick={toggleFullscreen}
-        class="btn btn-ghost btn-sm btn-square"
+        class="inline-flex items-center justify-center rounded-lg p-1.5 text-[var(--color-base-content)]/70 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]"
         aria-label={isFullscreen
           ? t('spectrogram.page.exitFullscreen')
           : t('spectrogram.page.enterFullscreen')}

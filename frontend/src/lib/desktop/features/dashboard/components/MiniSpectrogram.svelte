@@ -238,7 +238,7 @@
           spectro.disconnect();
           return;
         }
-        startHeartbeat(sourceId);
+        startHeartbeat(activeStreamToken!);
         isActive = true;
         isConnecting = false;
         persistToggleState(true);
