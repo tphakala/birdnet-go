@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -194,6 +195,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureTelemetry()
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
+	case "reconfigure_push_notifications":
+		cm.handleReconfigurePushNotifications()
 	case myaudio.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
 	case myaudio.SignalQuietHoursStopSoundCard:
@@ -725,6 +728,21 @@ func (cm *ControlMonitor) handleReconfigureSpeciesTracking() {
 		logger.Int("sync_minutes", settings.Realtime.SpeciesTracking.SyncIntervalMinutes),
 		logger.String("hemisphere", hemisphere))
 	cm.notifySuccess("Species tracking reconfigured successfully")
+}
+
+// handleReconfigurePushNotifications reconfigures the push notification dispatcher.
+func (cm *ControlMonitor) handleReconfigurePushNotifications() {
+	GetLogger().Info("Reconfiguring push notification providers")
+	settings := conf.Setting()
+
+	if err := notification.ReconfigureFromSettings(settings); err != nil {
+		GetLogger().Error("Failed to reconfigure push notifications", logger.Error(err))
+		cm.notifyError("Failed to reconfigure push notifications", err)
+		return
+	}
+
+	GetLogger().Info("Push notification providers reconfigured successfully")
+	cm.notifySuccess("Push notification providers configured successfully")
 }
 
 // handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.
