@@ -84,6 +84,9 @@ func InitializePushFromConfig(settings *conf.Settings) error {
 // InitializePushFromConfigWithMetrics builds and starts the push dispatcher using app settings.
 // It accepts an optional metrics instance to avoid import cycles.
 func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) error {
+	dispatcherMu.Lock()
+	defer dispatcherMu.Unlock()
+
 	var initErr error
 	dispatcherOnce.Do(func() {
 		initErr = initializePushDispatcher(settings, notificationMetrics)

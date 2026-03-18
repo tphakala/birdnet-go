@@ -52,10 +52,14 @@ func TestReconfigureFromSettings_EnabledWithProviders(t *testing.T) {
 	}
 
 	err := ReconfigureFromSettings(settings)
-	// ValidateConfig may fail without a real shoutrrr URL
 	if err != nil {
-		t.Logf("ReconfigureFromSettings returned error (expected with fake URL): %v", err)
+		// Notification service not running in test environment — start() fails
+		// but dispatcher struct is created with providers initialized.
+		// This is expected: the dispatcher exists but its dispatch loop isn't running.
+		t.Logf("ReconfigureFromSettings returned expected test-env error: %v", err)
+		return
 	}
+	assert.NotNil(t, globalPushDispatcher, "dispatcher should be initialized on successful reconfigure")
 }
 
 func TestReconfigureFromSettings_ReplacesExisting(t *testing.T) {
@@ -75,17 +79,17 @@ func TestReconfigureFromSettings_ReplacesExisting(t *testing.T) {
 	assert.Nil(t, globalPushDispatcher)
 }
 
-func TestReconfigureFromSettings_SyncOnceReset(t *testing.T) {
+func TestReconfigureFromSettings_MultipleReconfigures(t *testing.T) {
 	resetDispatcherState(t)
 
-	// First init: disabled
+	// First reconfigure: disabled
 	settings := &conf.Settings{}
 	settings.Notification.Push.Enabled = false
 	err := ReconfigureFromSettings(settings)
 	require.NoError(t, err)
 	assert.Nil(t, globalPushDispatcher)
 
-	// Second init: still disabled — verifies sync.Once was properly reset
+	// Second reconfigure: verifies repeated calls succeed without error
 	err = ReconfigureFromSettings(settings)
 	require.NoError(t, err)
 	assert.Nil(t, globalPushDispatcher)
