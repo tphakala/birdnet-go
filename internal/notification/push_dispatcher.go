@@ -50,6 +50,7 @@ type pushDispatcher struct {
 	retryDelay        time.Duration
 	defaultTimeout    time.Duration
 	cancel            context.CancelFunc
+	done              chan struct{} // Closed when runDispatchLoop exits
 	mu                sync.RWMutex
 	metrics           *metrics.NotificationMetrics
 	healthChecker     *HealthChecker
@@ -71,6 +72,7 @@ type enhancedProvider struct {
 var (
 	globalPushDispatcher *pushDispatcher
 	dispatcherOnce       sync.Once
+	dispatcherMu         sync.Mutex // Protects reconfigure path against concurrent calls
 )
 
 // InitializePushFromConfig builds and starts the push dispatcher using app settings.
@@ -87,6 +89,27 @@ func InitializePushFromConfigWithMetrics(settings *conf.Settings, notificationMe
 		initErr = initializePushDispatcher(settings, notificationMetrics)
 	})
 	return initErr
+}
+
+// ReconfigureFromSettings tears down the running push dispatcher and
+// rebuilds it with the current notification settings. Safe to call even
+// when no dispatcher was previously running (e.g., first provider added
+// after boot). Thread-safe via dispatcherMu.
+func ReconfigureFromSettings(settings *conf.Settings) error {
+	dispatcherMu.Lock()
+	defer dispatcherMu.Unlock()
+
+	// Stop existing dispatcher if running
+	if globalPushDispatcher != nil {
+		globalPushDispatcher.stop()
+		globalPushDispatcher = nil
+	}
+
+	// Reset sync.Once so we can re-initialize
+	dispatcherOnce = sync.Once{}
+
+	// Re-initialize with current settings
+	return InitializePushFromConfigWithMetrics(settings, nil)
 }
 
 // initializePushDispatcher performs the actual dispatcher initialization.
@@ -184,14 +207,21 @@ func startDispatcherIfNeeded(pd *pushDispatcher) error {
 func (d *pushDispatcher) start() error {
 	service := GetService()
 	if service == nil {
-		return errors.Newf("notification service not initialized").Component("notification").Category(errors.CategoryState).Build()
+		return errors.Newf("notification service not initialized").
+			Component("notification").
+			Category(errors.CategoryState).
+			Build()
 	}
 
 	ch, ctx := service.Subscribe()
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
+	d.done = make(chan struct{})
 
-	go d.runDispatchLoop(ctx, ch, service)
+	go func() {
+		defer close(d.done)
+		d.runDispatchLoop(ctx, ch, service)
+	}()
 	d.startHealthChecker(ctx)
 
 	d.log.Info("push dispatcher started",
@@ -199,6 +229,21 @@ func (d *pushDispatcher) start() error {
 		logger.Bool("health_checker", d.healthChecker != nil),
 		logger.Int64("max_concurrent_dispatches", d.maxConcurrentJobs))
 	return nil
+}
+
+// stop gracefully shuts down the dispatch loop and waits for it to exit.
+func (d *pushDispatcher) stop() {
+	if d.cancel != nil {
+		d.cancel()
+	}
+	// Wait for dispatch loop goroutine to exit to avoid duplicate subscriptions
+	if d.done != nil {
+		<-d.done
+	}
+	if d.healthChecker != nil {
+		d.healthChecker.Stop()
+	}
+	d.log.Info("push dispatcher stopped for reconfiguration")
 }
 
 // runDispatchLoop runs the main notification dispatch loop.
