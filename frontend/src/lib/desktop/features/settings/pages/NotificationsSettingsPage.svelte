@@ -2031,19 +2031,19 @@
           {/if}
 
           <!-- Save and Test Buttons -->
-          {#if pushSettings.providers && pushSettings.providers.length > 0}
-            <div class="flex gap-2 justify-end">
-              <SettingsButton
-                onclick={savePushSettings}
-                loading={savingPush}
-                loadingText={t('settings.notifications.templates.savingButton')}
-                disabled={!hasPushChanges || savingPush}
-                variant={hasPushChanges ? 'primary' : 'ghost'}
-              >
-                {hasPushChanges
-                  ? t('settings.notifications.templates.saveButtonUnsaved')
-                  : t('settings.notifications.templates.saveButton')}
-              </SettingsButton>
+          <div class="flex gap-2 justify-end">
+            <SettingsButton
+              onclick={savePushSettings}
+              loading={savingPush}
+              loadingText={t('settings.notifications.templates.savingButton')}
+              disabled={!hasPushChanges || savingPush}
+              variant={hasPushChanges ? 'primary' : 'ghost'}
+            >
+              {hasPushChanges
+                ? t('settings.notifications.templates.saveButtonUnsaved')
+                : t('settings.notifications.templates.saveButton')}
+            </SettingsButton>
+            {#if pushSettings.providers && pushSettings.providers.length > 0}
               <SettingsButton
                 onclick={testPushNotification}
                 loading={testingProvider}
@@ -2054,8 +2054,8 @@
                 <Bell class="size-4" />
                 {t('settings.notifications.push.test.button')}
               </SettingsButton>
-            </div>
-          {/if}
+            {/if}
+          </div>
         </div>
       {/if}
     </SettingsSection>
