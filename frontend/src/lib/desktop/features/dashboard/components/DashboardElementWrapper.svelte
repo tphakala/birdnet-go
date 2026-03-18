@@ -13,12 +13,10 @@
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
-
-  // Element types that always require full width
-  const FULL_WIDTH_ONLY: string[] = ['daily-summary'];
-
-  // Element types that support half width
-  const SUPPORTS_HALF: string[] = ['banner', 'video-embed', 'currently-hearing', 'detections-grid'];
+  import {
+    FULL_WIDTH_ONLY,
+    SUPPORTS_HALF,
+  } from '$lib/desktop/features/dashboard/utils/elementWidths';
 
   interface Props {
     element: DashboardElement;
@@ -42,8 +40,8 @@
     settingsContent,
   }: Props = $props();
 
-  let canHalf = $derived(SUPPORTS_HALF.includes(element.type));
-  let isFullWidthOnly = $derived(FULL_WIDTH_ONLY.includes(element.type));
+  let canHalf = $derived(SUPPORTS_HALF.has(element.type));
+  let isFullWidthOnly = $derived(FULL_WIDTH_ONLY.has(element.type));
   let currentWidth = $derived(element.width ?? 'full');
   let settingsDropdownId = $derived(`settings-dropdown-${element.id ?? element.type}`);
 

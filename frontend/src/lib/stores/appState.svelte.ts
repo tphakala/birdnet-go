@@ -64,6 +64,18 @@ interface AppConfigResponse {
   customColors?: { primary: string; accent: string };
   logoStyle?: string;
   liveSpectrogram?: boolean;
+  layout?: {
+    elements: {
+      id?: string;
+      type: string;
+      enabled: boolean;
+      width?: string;
+      banner?: Record<string, unknown>;
+      video?: Record<string, unknown>;
+      summary?: Record<string, unknown>;
+      grid?: Record<string, unknown>;
+    }[];
+  };
 }
 
 /**
@@ -84,6 +96,8 @@ interface AppState {
   version: string;
   /** Whether live spectrogram is enabled */
   liveSpectrogram: boolean;
+  /** Dashboard layout from public config (available before auth) */
+  layout: AppConfigResponse['layout'] | null;
   /** Security configuration */
   security: {
     enabled: boolean;
@@ -106,6 +120,7 @@ const DEFAULT_STATE: AppState = {
   csrfToken: '',
   version: 'Development Build',
   liveSpectrogram: false,
+  layout: null,
   security: {
     enabled: false,
     accessAllowed: true,
@@ -207,6 +222,7 @@ export async function initApp(): Promise<boolean> {
       };
 
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
+      appState.layout = config.layout ?? null;
 
       // Apply server-configured appearance settings
       if (config.colorScheme) {

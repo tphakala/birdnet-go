@@ -20,14 +20,15 @@ const (
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
 type AppConfigResponse struct {
-	CSRFToken       string             `json:"csrfToken"`
-	Security        SecurityConfigDTO  `json:"security"`
-	Version         string             `json:"version"`
-	BasePath        string             `json:"basePath"`               // reverse proxy prefix for frontend URL construction
-	ColorScheme     string             `json:"colorScheme,omitempty"`  // admin-configured color scheme for all visitors
-	CustomColors    *conf.CustomColors `json:"customColors,omitempty"` // custom scheme hex colors (when colorScheme is "custom")
-	LogoStyle       string             `json:"logoStyle,omitempty"`    // admin-configured logo style: "gradient" or "solid"
-	LiveSpectrogram bool               `json:"liveSpectrogram"`        // auto-start live spectrogram on dashboard
+	CSRFToken       string                `json:"csrfToken"`
+	Security        SecurityConfigDTO     `json:"security"`
+	Version         string                `json:"version"`
+	BasePath        string                `json:"basePath"`               // reverse proxy prefix for frontend URL construction
+	ColorScheme     string                `json:"colorScheme,omitempty"`  // admin-configured color scheme for all visitors
+	CustomColors    *conf.CustomColors    `json:"customColors,omitempty"` // custom scheme hex colors (when colorScheme is "custom")
+	LogoStyle       string                `json:"logoStyle,omitempty"`    // admin-configured logo style: "gradient" or "solid"
+	LiveSpectrogram bool                  `json:"liveSpectrogram"`        // auto-start live spectrogram on dashboard
+	Layout          *conf.DashboardLayout `json:"layout,omitempty"`       // dashboard element layout for guest/pre-auth rendering
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -116,6 +117,11 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		CustomColors:    c.Settings.Realtime.Dashboard.CustomColors,
 		LogoStyle:       c.Settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram: c.Settings.Realtime.Dashboard.LiveSpectrogram,
+	}
+
+	// Include dashboard layout for guest/pre-auth rendering if configured
+	if len(c.Settings.Realtime.Dashboard.Layout.Elements) > 0 {
+		response.Layout = &c.Settings.Realtime.Dashboard.Layout
 	}
 
 	c.logDebugIfEnabled("Serving app config",

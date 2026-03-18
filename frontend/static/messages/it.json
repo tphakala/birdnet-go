@@ -899,7 +899,7 @@
       "connectionFailed": "Failed to connect to live audio stream"
     },
     "dashboard": {
-      "toggle": "Show live spectrogram",
+      "toggle": "Live Spectrogram",
       "audioToggle": "Enable audio"
     },
     "gain": {

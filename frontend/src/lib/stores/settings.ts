@@ -931,6 +931,7 @@ function createEmptySettings(): SettingsFormData {
               summary: { summaryLimit: 30 },
             },
             { id: 'currently-hearing-0', type: 'currently-hearing', enabled: true },
+            { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
             { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
           ],
         },
