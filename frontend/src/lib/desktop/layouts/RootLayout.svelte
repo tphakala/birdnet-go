@@ -154,6 +154,7 @@
   <Sidebar
     {securityEnabled}
     {accessAllowed}
+    {publicLiveAudio}
     {version}
     currentRoute={currentPath ?? `/ui/${currentPage}`}
     onNavigate={handleNavigate}
