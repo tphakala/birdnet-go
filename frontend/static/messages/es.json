@@ -386,6 +386,7 @@
         "reconfiguringBirdweather": "Actualizando integración de BirdWeather...",
         "reconfiguringStreams": "Actualizando flujos de audio...",
         "reconfiguringTelemetry": "Actualizando ajustes de telemetría...",
+        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Actualizando seguimiento de especies...",
         "webserverRestartRequired": "Los ajustes del servidor web han cambiado. Se requiere reinicio.",
         "reconfiguringSoundLevel": "Actualizando monitorización del nivel de sonido...",

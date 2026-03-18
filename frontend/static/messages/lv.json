@@ -386,6 +386,7 @@
         "reconfiguringBirdweather": "Atjaunina BirdWeather integrāciju...",
         "reconfiguringStreams": "Atjaunina audio straumes...",
         "reconfiguringTelemetry": "Atjaunina telemetrijas iestatījumus...",
+        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Atjaunina sugu izsekošanu...",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",

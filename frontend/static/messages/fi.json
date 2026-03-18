@@ -386,6 +386,7 @@
         "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
         "reconfiguringStreams": "Päivitetään äänistriimejä...",
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
+        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",

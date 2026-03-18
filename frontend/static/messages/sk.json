@@ -386,6 +386,7 @@
         "reconfiguringBirdweather": "Aktualizácia integrácie BirdWeather...",
         "reconfiguringStreams": "Aktualizácia audio streamov...",
         "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
+        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",

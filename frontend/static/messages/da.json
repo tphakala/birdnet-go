@@ -386,6 +386,7 @@
         "reconfiguringBirdweather": "Opdaterer BirdWeather-integration...",
         "reconfiguringStreams": "Opdaterer lydstreams...",
         "reconfiguringTelemetry": "Opdaterer telemetriindstillinger...",
+        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Opdaterer artssporing...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
