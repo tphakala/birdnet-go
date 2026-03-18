@@ -281,8 +281,8 @@ HLS playlist and segment routes use token-based authentication instead of standa
 {
   "status": "ready",
   "source": "rtsp%3A%2F%2Fcamera.local%3A554%2Fstream",
-  "stream_token": "abc123def456",
-  "playlist_url": "/api/v2/streams/hls/t/abc123def456/playlist.m3u8",
+  "stream_token": "<stream_token>",
+  "playlist_url": "/api/v2/streams/hls/t/<stream_token>/playlist.m3u8",
   "active_clients": 1,
   "playlist_ready": true
 }
@@ -292,7 +292,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 ```json
 {
-  "stream_token": "abc123def456",
+  "stream_token": "<stream_token>",
   "client_id": "optional-client-id"
 }
 ```
@@ -486,6 +486,8 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 ## Legend
 
 - ✅ = Authentication required
+- ✅ publicLiveAudio = Authentication required unless `PublicAccess.LiveAudio` is enabled (dynamic per-request check)
+- 🔑 token = Token-based access — the crypto-random `stream_token` returned by `/start` acts as the credential
 - ❌ = No authentication required
 - ⚡ = Rate limited
 - 🔒 = Admin only (subset of authenticated)

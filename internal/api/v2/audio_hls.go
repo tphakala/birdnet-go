@@ -843,8 +843,8 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		current, exists := hlsMgr.streams[sourceID]
 		if exists && current == s {
 			delete(hlsMgr.streams, sourceID)
-			hlsMgr.streamsMu.Unlock()
 			removeStreamToken(sourceID)
+			hlsMgr.streamsMu.Unlock()
 			c.performHLSCleanup(sourceID, s, "context cancelled")
 		} else {
 			hlsMgr.streamsMu.Unlock()
@@ -1266,10 +1266,8 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 	outputDir := stream.OutputDir
 	logFile := stream.logFile
 	delete(hlsMgr.streams, sourceID)
-	hlsMgr.streamsMu.Unlock()
-
-	// Remove stream token mappings
 	removeStreamToken(sourceID)
+	hlsMgr.streamsMu.Unlock()
 
 	// Wait for process termination
 	if cmd != nil && cmd.Process != nil {
@@ -1316,10 +1314,8 @@ func (c *Controller) stopHLSStream(sourceID, reason string) {
 
 	GetLogger().Info("Stopping HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("reason", reason))
 	delete(hlsMgr.streams, sourceID)
-	hlsMgr.streamsMu.Unlock()
-
-	// Remove stream token mappings
 	removeStreamToken(sourceID)
+	hlsMgr.streamsMu.Unlock()
 
 	c.performHLSCleanup(sourceID, stream, reason)
 }
@@ -1502,6 +1498,12 @@ func (c *Controller) CleanupAllHLSStreams() error {
 	clear(hlsMgr.streams)
 	hlsMgr.streamsMu.Unlock()
 
+	// Clear token mappings
+	hlsMgr.tokensMu.Lock()
+	clear(hlsMgr.tokens)
+	clear(hlsMgr.sourceTokens)
+	hlsMgr.tokensMu.Unlock()
+
 	// Cleanup each stream
 	for sourceID, stream := range streamsToClean {
 		c.performHLSCleanup(sourceID, stream, "server shutdown")
@@ -1670,12 +1672,13 @@ func removeStreamFromManager(sourceID string) *HLSStreamInfo {
 	stream, exists := hlsMgr.streams[sourceID]
 	if exists {
 		delete(hlsMgr.streams, sourceID)
+		// Remove token while still holding streamsMu to prevent race:
+		// a new stream could create a token between unlock and removeStreamToken.
+		removeStreamToken(sourceID)
 	}
 	hlsMgr.streamsMu.Unlock()
 
 	if exists {
-		// Remove stream token mappings after releasing streamsMu
-		removeStreamToken(sourceID)
 		return stream
 	}
 	return nil
