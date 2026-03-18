@@ -904,10 +904,16 @@
       "toggle": "Show live spectrogram",
       "audioToggle": "Enable audio"
     },
+    "gain": {
+      "muted": "Stlmené",
+      "level": "Zosilnenie: {value} dB"
+    },
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Pripojené"
+      "connected": "Pripojené",
+      "enterFullscreen": "Celá obrazovka",
+      "exitFullscreen": "Ukončiť celú obrazovku"
     },
     "colorMaps": {
       "inferno": "Inferno",

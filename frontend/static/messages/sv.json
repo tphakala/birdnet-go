@@ -909,10 +909,16 @@
       "toggle": "Show live spectrogram",
       "audioToggle": "Enable audio"
     },
+    "gain": {
+      "muted": "Tystad",
+      "level": "Förstärkning: {value} dB"
+    },
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Ansluten"
+      "connected": "Ansluten",
+      "enterFullscreen": "Helskärm",
+      "exitFullscreen": "Avsluta helskärm"
     },
     "colorMaps": {
       "inferno": "Inferno",

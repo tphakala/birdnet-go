@@ -42,16 +42,21 @@
 
   // Volume/gain presets: muted → 0dB → +6dB → +12dB
   const GAIN_PRESETS = [
-    { db: -Infinity, audio: false, label: 'muted' },
-    { db: 0, audio: true, label: '0 dB' },
-    { db: 6, audio: true, label: '+6 dB' },
-    { db: 12, audio: true, label: '+12 dB' },
+    { db: -Infinity, audio: false, labelKey: 'spectrogram.gain.muted' },
+    { db: 0, audio: true, labelKey: 'spectrogram.gain.level', value: '0' },
+    { db: 6, audio: true, labelKey: 'spectrogram.gain.level', value: '+6' },
+    { db: 12, audio: true, labelKey: 'spectrogram.gain.level', value: '+12' },
   ] as const;
 
   // Local state
   let isActive = $state(false);
   let isConnecting = $state(false);
   let gainPresetIndex = $state(0);
+
+  const gainLabel = $derived.by(() => {
+    const preset = GAIN_PRESETS[gainPresetIndex];
+    return 'value' in preset ? t(preset.labelKey, { value: preset.value }) : t(preset.labelKey);
+  });
   let colorMap = $state<ColorMapName>('inferno');
   let frequencyRange = $state<[number, number]>([0, 15000]);
   let currentSourceId = $state<string>('');
@@ -230,6 +235,11 @@
         isActive = true;
         isConnecting = false;
         persistToggleState(true);
+      } else {
+        // Browser supports neither HLS.js nor native HLS — tear down
+        logger.warn('MiniSpectrogram: browser does not support HLS');
+        stop();
+        return;
       }
     } catch (error) {
       if (signal.aborted) return;
@@ -324,8 +334,8 @@
           <button
             onclick={cycleVolume}
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
-            aria-label={GAIN_PRESETS[gainPresetIndex].label}
-            title={GAIN_PRESETS[gainPresetIndex].label}
+            aria-label={gainLabel}
+            title={gainLabel}
           >
             {#if gainPresetIndex === 0}
               <VolumeX class="size-4" />

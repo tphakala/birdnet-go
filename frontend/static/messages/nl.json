@@ -909,10 +909,16 @@
       "toggle": "Show live spectrogram",
       "audioToggle": "Enable audio"
     },
+    "gain": {
+      "muted": "Gedempt",
+      "level": "Versterking: {value} dB"
+    },
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Verbonden"
+      "connected": "Verbonden",
+      "enterFullscreen": "Volledig scherm",
+      "exitFullscreen": "Volledig scherm sluiten"
     },
     "colorMaps": {
       "inferno": "Inferno",

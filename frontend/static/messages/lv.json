@@ -909,10 +909,16 @@
       "toggle": "Show live spectrogram",
       "audioToggle": "Enable audio"
     },
+    "gain": {
+      "muted": "Izslēgts",
+      "level": "Pastiprinājums: {value} dB"
+    },
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Savienots"
+      "connected": "Savienots",
+      "enterFullscreen": "Pilnekrāna režīms",
+      "exitFullscreen": "Iziet no pilnekrāna"
     },
     "colorMaps": {
       "inferno": "Inferno",

@@ -451,7 +451,9 @@
     <button
       onclick={toggleFullscreen}
       class="btn btn-ghost btn-sm btn-square"
-      aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+      aria-label={isFullscreen
+        ? t('spectrogram.page.exitFullscreen')
+        : t('spectrogram.page.enterFullscreen')}
     >
       {#if isFullscreen}
         <Minimize class="size-4" />

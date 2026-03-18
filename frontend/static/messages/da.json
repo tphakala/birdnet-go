@@ -909,10 +909,16 @@
       "toggle": "Show live spectrogram",
       "audioToggle": "Enable audio"
     },
+    "gain": {
+      "muted": "Lydløs",
+      "level": "Forstærkning: {value} dB"
+    },
     "page": {
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
-      "connected": "Forbundet"
+      "connected": "Forbundet",
+      "enterFullscreen": "Fuld skærm",
+      "exitFullscreen": "Afslut fuld skærm"
     },
     "colorMaps": {
       "inferno": "Inferno",
