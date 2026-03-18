@@ -99,17 +99,18 @@ func ReconfigureFromSettings(settings *conf.Settings) error {
 	dispatcherMu.Lock()
 	defer dispatcherMu.Unlock()
 
-	// Stop existing dispatcher if running
+	// Preserve metrics from existing dispatcher so observability survives reload
+	var existingMetrics *metrics.NotificationMetrics
 	if globalPushDispatcher != nil {
+		existingMetrics = globalPushDispatcher.metrics
 		globalPushDispatcher.stop()
 		globalPushDispatcher = nil
 	}
 
-	// Reset sync.Once so we can re-initialize
-	dispatcherOnce = sync.Once{}
-
-	// Re-initialize with current settings
-	return InitializePushFromConfigWithMetrics(settings, nil)
+	// Call initializePushDispatcher directly — we already hold the lock,
+	// so going through dispatcherOnce.Do is unnecessary and avoids the
+	// anti-pattern of resetting sync.Once by value assignment.
+	return initializePushDispatcher(settings, existingMetrics)
 }
 
 // initializePushDispatcher performs the actual dispatcher initialization.

@@ -10,17 +10,20 @@ import (
 )
 
 // resetDispatcherState resets global push dispatcher state for test isolation.
+// Acquires dispatcherMu to avoid races with ReconfigureFromSettings.
 func resetDispatcherState(t *testing.T) {
 	t.Helper()
-	t.Cleanup(func() {
+	reset := func() {
+		dispatcherMu.Lock()
+		defer dispatcherMu.Unlock()
 		if globalPushDispatcher != nil {
 			globalPushDispatcher.stop()
 		}
 		globalPushDispatcher = nil
 		dispatcherOnce = sync.Once{}
-	})
-	globalPushDispatcher = nil
-	dispatcherOnce = sync.Once{}
+	}
+	t.Cleanup(reset)
+	reset()
 }
 
 func TestReconfigureFromSettings_NoExistingDispatcher(t *testing.T) {
