@@ -59,7 +59,9 @@
   });
   let colorMap = $state<ColorMapName>('inferno');
   let frequencyRange = $state<[number, number]>([0, 15000]);
-  let currentSourceId = $state<string>('');
+
+  // Stream token state
+  let activeStreamToken: string | null = null;
 
   // HLS + audio refs
   let hls: Hls | null = null;
@@ -166,17 +168,22 @@
         return;
       }
 
-      currentSourceId = sourceId;
       const encodedSourceId = encodeURIComponent(sourceId);
 
-      await fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/start`, {
+      const data = await fetchWithCSRF<{
+        status: string;
+        stream_token: string;
+        playlist_url: string;
+        playlist_ready: boolean;
+      }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
       });
 
       if (signal.aborted) return;
 
-      const hlsUrl = buildAppUrl(`/api/v2/streams/hls/${encodedSourceId}/playlist.m3u8`);
+      activeStreamToken = data.stream_token;
+      const hlsUrl = buildAppUrl(data.playlist_url);
 
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
@@ -201,7 +208,7 @@
             spectro.disconnect();
             return;
           }
-          startHeartbeat(sourceId);
+          startHeartbeat(activeStreamToken!);
           isActive = true;
           isConnecting = false;
           persistToggleState(true);
@@ -248,13 +255,13 @@
     }
   }
 
-  function startHeartbeat(sourceId: string) {
+  function startHeartbeat(token: string) {
     stopHeartbeat();
     const sendHeartbeat = async () => {
       try {
         await fetchWithCSRF('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
-          body: { source_id: sourceId },
+          body: { stream_token: token },
         });
       } catch {
         /* ignore heartbeat failures */
@@ -277,12 +284,13 @@
     abortController = null;
 
     // Send disconnect heartbeat
-    if (currentSourceId) {
+    if (activeStreamToken) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
         keepalive: true,
-        body: { source_id: currentSourceId },
+        body: { stream_token: activeStreamToken },
       }).catch(() => {});
+      activeStreamToken = null;
     }
 
     stopHeartbeat();
@@ -300,7 +308,6 @@
 
     isActive = false;
     isConnecting = false;
-    currentSourceId = '';
     persistToggleState(false);
   }
 

@@ -900,7 +900,8 @@
     },
     "error": {
       "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream"
+      "connectionFailed": "Failed to connect to live audio stream",
+      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
     },
     "dashboard": {
       "toggle": "Live Spectrogram",

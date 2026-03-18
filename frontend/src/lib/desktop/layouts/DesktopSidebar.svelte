@@ -83,6 +83,7 @@ Performance Optimizations:
   interface Props {
     securityEnabled?: boolean;
     accessAllowed?: boolean;
+    publicLiveAudio?: boolean;
     version?: string;
     currentRoute?: string;
     onNavigate?: (_url: string) => void;
@@ -93,6 +94,7 @@ Performance Optimizations:
   let {
     securityEnabled = false,
     accessAllowed = true,
+    publicLiveAudio = false,
     version = 'Development Build',
     currentRoute = '/ui/dashboard',
     onNavigate,
@@ -196,6 +198,9 @@ Performance Optimizations:
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
   let isCollapsed = $derived($sidebar);
+
+  // Access control for Live Stream sidebar item
+  const hasLiveStreamAccess = $derived(!securityEnabled || accessAllowed || publicLiveAudio);
 
   // Use the currentRoute prop for reactive highlighting
   // This receives the full URL path (e.g., /ui/settings/main) from RootLayout
@@ -406,26 +411,28 @@ Performance Optimizations:
         </div>
 
         <!-- Live Stream -->
-        <div class="relative">
-          <button
-            onclick={() => navigate(navigationUrls.liveStream)}
-            onmouseenter={e => isCollapsed && showTooltip(e, t('spectrogram.page.title'))}
-            onmouseleave={hideTooltip}
-            aria-label={t('spectrogram.page.title')}
-            class={cn(
-              menuItemBase,
-              menuItemCollapsed,
-              routeCache.liveStream ? menuItemActive : menuItemDefault
-            )}
-            aria-current={routeCache.liveStream ? 'page' : undefined}
-            role="menuitem"
-          >
-            <Radio class="size-5 shrink-0" />
-            {#if !isCollapsed}
-              <span>{t('spectrogram.page.title')}</span>
-            {/if}
-          </button>
-        </div>
+        {#if hasLiveStreamAccess}
+          <div class="relative">
+            <button
+              onclick={() => navigate(navigationUrls.liveStream)}
+              onmouseenter={e => isCollapsed && showTooltip(e, t('spectrogram.page.title'))}
+              onmouseleave={hideTooltip}
+              aria-label={t('spectrogram.page.title')}
+              class={cn(
+                menuItemBase,
+                menuItemCollapsed,
+                routeCache.liveStream ? menuItemActive : menuItemDefault
+              )}
+              aria-current={routeCache.liveStream ? 'page' : undefined}
+              role="menuitem"
+            >
+              <Radio class="size-5 shrink-0" />
+              {#if !isCollapsed}
+                <span>{t('spectrogram.page.title')}</span>
+              {/if}
+            </button>
+          </div>
+        {/if}
 
         <!-- Analytics (Collapsible) -->
         <div class="flex flex-col relative flyout-container">
