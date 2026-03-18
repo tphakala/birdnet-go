@@ -648,7 +648,12 @@
         "unlockDetection": "Lås upp detektering",
         "deleteDetection": "Ta bort detektering"
       },
-      "noDetections": "Inga senaste detekteringar"
+      "noDetections": "Inga senaste detekteringar",
+      "errors": {
+        "toggleSpeciesFailed": "Uppdatering av artuteslutning misslyckades. Försök igen.",
+        "toggleLockFailed": "Uppdatering av låsstatus misslyckades. Försök igen.",
+        "deleteFailed": "Borttagning av detektering misslyckades. Försök igen."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Kunde inte hämta daglig sammanfattning: {status}",

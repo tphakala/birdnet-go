@@ -648,7 +648,12 @@
         "unlockDetection": "Erkennung entsperren",
         "deleteDetection": "Erkennung löschen"
       },
-      "noDetections": "Keine aktuellen Erkennungen"
+      "noDetections": "Keine aktuellen Erkennungen",
+      "errors": {
+        "toggleSpeciesFailed": "Aktualisierung des Artenausschlusses fehlgeschlagen. Bitte erneut versuchen.",
+        "toggleLockFailed": "Aktualisierung des Sperrstatus fehlgeschlagen. Bitte erneut versuchen.",
+        "deleteFailed": "Löschen der Erkennung fehlgeschlagen. Bitte erneut versuchen."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Fehler beim Abrufen der Tageszusammenfassung: {status}",

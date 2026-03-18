@@ -648,7 +648,12 @@
         "unlockDetection": "Sblocca rilevamento",
         "deleteDetection": "Elimina rilevamento"
       },
-      "noDetections": "Nessun rilevamento recente"
+      "noDetections": "Nessun rilevamento recente",
+      "errors": {
+        "toggleSpeciesFailed": "Aggiornamento dell'esclusione della specie non riuscito. Riprova.",
+        "toggleLockFailed": "Aggiornamento dello stato di blocco non riuscito. Riprova.",
+        "deleteFailed": "Eliminazione del rilevamento non riuscita. Riprova."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Impossibile recuperare il riepilogo giornaliero: {status}",

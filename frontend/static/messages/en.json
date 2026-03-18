@@ -648,7 +648,12 @@
         "unlockDetection": "Unlock detection",
         "deleteDetection": "Delete detection"
       },
-      "noDetections": "No recent detections"
+      "noDetections": "No recent detections",
+      "errors": {
+        "toggleSpeciesFailed": "Failed to update species exclusion. Please try again.",
+        "toggleLockFailed": "Failed to update lock status. Please try again.",
+        "deleteFailed": "Failed to delete detection. Please try again."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Failed to fetch daily summary: {status}",

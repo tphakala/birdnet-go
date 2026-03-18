@@ -648,7 +648,12 @@
         "unlockDetection": "Atbloķēt atklāšanu",
         "deleteDetection": "Dzēst atklāšanu"
       },
-      "noDetections": "Nav neseno atklāšanu"
+      "noDetections": "Nav neseno atklāšanu",
+      "errors": {
+        "toggleSpeciesFailed": "Neizdevās atjaunināt sugas izslēgšanu. Lūdzu, mēģiniet vēlreiz.",
+        "toggleLockFailed": "Neizdevās atjaunināt bloķēšanas statusu. Lūdzu, mēģiniet vēlreiz.",
+        "deleteFailed": "Neizdevās dzēst noteikšanu. Lūdzu, mēģiniet vēlreiz."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Neizdevās ielādēt dienas kopsavilkumu: {status}",

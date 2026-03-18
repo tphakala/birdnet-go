@@ -648,7 +648,12 @@
         "unlockDetection": "Odomknúť detekciu",
         "deleteDetection": "Odstrániť detekciu"
       },
-      "noDetections": "Žiadne nedávne detekcie"
+      "noDetections": "Žiadne nedávne detekcie",
+      "errors": {
+        "toggleSpeciesFailed": "Aktualizácia vylúčenia druhu zlyhala. Skúste to znova.",
+        "toggleLockFailed": "Aktualizácia stavu uzamknutia zlyhala. Skúste to znova.",
+        "deleteFailed": "Odstránenie detekcie zlyhalo. Skúste to znova."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Nepodarilo sa získať denný súhrn: {status}",

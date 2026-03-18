@@ -648,7 +648,12 @@
         "unlockDetection": "Avaa lukitus",
         "deleteDetection": "Poista havainto"
       },
-      "noDetections": "Ei viimeaikaisia havaintoja"
+      "noDetections": "Ei viimeaikaisia havaintoja",
+      "errors": {
+        "toggleSpeciesFailed": "Lajin poissulkemisen päivitys epäonnistui. Yritä uudelleen.",
+        "toggleLockFailed": "Lukituksen tilan päivitys epäonnistui. Yritä uudelleen.",
+        "deleteFailed": "Havainnon poistaminen epäonnistui. Yritä uudelleen."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Päivän aktiivisuuden haku epäonnistui: {status}",

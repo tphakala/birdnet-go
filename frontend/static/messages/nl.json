@@ -648,7 +648,12 @@
         "unlockDetection": "Herkenning ontgrendelen",
         "deleteDetection": "Herkenning verwijderen"
       },
-      "noDetections": "Geen recente herkenning"
+      "noDetections": "Geen recente herkenning",
+      "errors": {
+        "toggleSpeciesFailed": "Bijwerken van soortsuitsluiting mislukt. Probeer het opnieuw.",
+        "toggleLockFailed": "Bijwerken van vergrendelingsstatus mislukt. Probeer het opnieuw.",
+        "deleteFailed": "Verwijderen van detectie mislukt. Probeer het opnieuw."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Kon Dagelijks overzicht niet inlezen: {status}",

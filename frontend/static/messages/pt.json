@@ -648,7 +648,12 @@
         "unlockDetection": "Desbloquear detecção",
         "deleteDetection": "Excluir detecção"
       },
-      "noDetections": "Nenhuma detecção recente"
+      "noDetections": "Nenhuma detecção recente",
+      "errors": {
+        "toggleSpeciesFailed": "Falha ao atualizar exclusão de espécie. Tente novamente.",
+        "toggleLockFailed": "Falha ao atualizar estado de bloqueio. Tente novamente.",
+        "deleteFailed": "Falha ao eliminar deteção. Tente novamente."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Falha ao buscar resumo diário: {status}",

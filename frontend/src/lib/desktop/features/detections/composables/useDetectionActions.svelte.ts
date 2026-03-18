@@ -12,6 +12,7 @@
  */
 
 import type { Detection } from '$lib/types/detection.types';
+import { toastActions } from '$lib/stores/toast';
 import { fetchWithCSRF } from '$lib/utils/api';
 import { t } from '$lib/i18n';
 import { loggers } from '$lib/utils/logger';
@@ -65,6 +66,7 @@ export function useDetectionActions(options: DetectionActionOptions) {
           options.onToggleExclusion(detection.commonName, !isExcluded);
           options.onRefresh?.();
         } catch (err) {
+          toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
           logger.error('Error toggling species exclusion:', err);
         }
       },
@@ -95,6 +97,7 @@ export function useDetectionActions(options: DetectionActionOptions) {
           });
           options.onRefresh?.();
         } catch (err) {
+          toastActions.error(t('dashboard.recentDetections.errors.toggleLockFailed'));
           logger.error('Error toggling lock status:', err);
         }
       },
@@ -119,6 +122,7 @@ export function useDetectionActions(options: DetectionActionOptions) {
           });
           options.onRefresh?.();
         } catch (err) {
+          toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
           logger.error('Error deleting detection:', err);
         }
       },

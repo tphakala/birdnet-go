@@ -36,6 +36,7 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection } from '$lib/types/detection.types';
+  import { toastActions } from '$lib/stores/toast';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
@@ -125,6 +126,7 @@
           });
           onRefresh?.();
         } catch (error) {
+          toastActions.error(t('dashboard.recentDetections.errors.toggleSpeciesFailed'));
           logger.error('Error toggling species exclusion:', error);
         }
       },
@@ -158,6 +160,7 @@
           });
           onRefresh?.();
         } catch (error) {
+          toastActions.error(t('dashboard.recentDetections.errors.toggleLockFailed'));
           logger.error('Error toggling lock status:', error);
         }
       },
@@ -181,6 +184,7 @@
           });
           onRefresh?.();
         } catch (error) {
+          toastActions.error(t('dashboard.recentDetections.errors.deleteFailed'));
           logger.error('Error deleting detection:', error);
         }
       },

@@ -648,7 +648,12 @@
         "unlockDetection": "Déverrouiller la détection",
         "deleteDetection": "Supprimer la détection"
       },
-      "noDetections": "Aucune détection récente"
+      "noDetections": "Aucune détection récente",
+      "errors": {
+        "toggleSpeciesFailed": "Échec de la mise à jour de l'exclusion d'espèce. Veuillez réessayer.",
+        "toggleLockFailed": "Échec de la mise à jour du statut de verrouillage. Veuillez réessayer.",
+        "deleteFailed": "Échec de la suppression de la détection. Veuillez réessayer."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Échec de la récupération du résumé quotidien : {status}",

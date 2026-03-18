@@ -648,7 +648,12 @@
         "unlockDetection": "Lås registrering op",
         "deleteDetection": "Slet registrering"
       },
-      "noDetections": "Ingen seneste registreringer"
+      "noDetections": "Ingen seneste registreringer",
+      "errors": {
+        "toggleSpeciesFailed": "Opdatering af artsudelukkelse mislykkedes. Prøv igen.",
+        "toggleLockFailed": "Opdatering af låsestatus mislykkedes. Prøv igen.",
+        "deleteFailed": "Sletning af registrering mislykkedes. Prøv igen."
+      }
     },
     "errors": {
       "dailySummaryFetch": "Kunne ikke hente daglig oversigt: {status}",
