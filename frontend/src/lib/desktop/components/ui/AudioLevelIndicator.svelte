@@ -295,10 +295,11 @@
       heartbeatTimer = null;
     }
 
-    // Send disconnect notification
+    // Send disconnect notification (keepalive ensures delivery during page unload)
     if (activeStreamToken) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
+        keepalive: true,
         body: { stream_token: activeStreamToken },
       }).catch(() => {
         // Ignore errors during disconnect

@@ -834,11 +834,22 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		go c.feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
 	}
 
-	// Start context cleanup goroutine
-	go func() {
-		<-streamCtx.Done()
-		c.cleanupHLSStream(sourceID)
-	}()
+	// Start context cleanup goroutine — pass stream pointer to verify identity
+	// before cleanup, preventing a force-restarted stream from being killed
+	// by the old stream's context cancellation goroutine.
+	go func(s *HLSStreamInfo) {
+		<-s.ctx.Done()
+		hlsMgr.streamsMu.Lock()
+		current, exists := hlsMgr.streams[sourceID]
+		if exists && current == s {
+			delete(hlsMgr.streams, sourceID)
+			hlsMgr.streamsMu.Unlock()
+			removeStreamToken(sourceID)
+			c.performHLSCleanup(sourceID, s, "context cancelled")
+		} else {
+			hlsMgr.streamsMu.Unlock()
+		}
+	}(stream)
 
 	return stream, nil
 }
@@ -1160,6 +1171,13 @@ func (c *Controller) updateHLSActivity(sourceID, clientID, activityType string, 
 		hlsMgr.clientsMu.Unlock()
 	}
 
+	// Update per-client activity for premature disconnect detection
+	if clientID != "" {
+		hlsMgr.activityMu.Lock()
+		hlsMgr.clientActivity[sourceID+":"+clientID] = time.Now()
+		hlsMgr.activityMu.Unlock()
+	}
+
 	// Update activity timestamp
 	hlsMgr.activityMu.Lock()
 	extraTime := time.Duration(0)
@@ -1285,25 +1303,6 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 			}
 		}
 	}
-}
-
-// cleanupHLSStream performs full stream cleanup
-func (c *Controller) cleanupHLSStream(sourceID string) {
-	hlsMgr.streamsMu.Lock()
-	stream, exists := hlsMgr.streams[sourceID]
-	if !exists {
-		hlsMgr.streamsMu.Unlock()
-		return
-	}
-
-	GetLogger().Debug("Cleaning up HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-	delete(hlsMgr.streams, sourceID)
-	hlsMgr.streamsMu.Unlock()
-
-	// Remove stream token mappings
-	removeStreamToken(sourceID)
-
-	c.performHLSCleanup(sourceID, stream, "context cancelled")
 }
 
 // stopHLSStream stops a stream with a specific reason
