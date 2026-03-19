@@ -33,6 +33,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/wikipedia"
 )
 
 // Tunnel provider constant for unknown providers
@@ -64,6 +65,7 @@ type Controller struct {
 	apiLogger            logger.Logger          // Structured logger for API operations
 	metrics              *observability.Metrics // Shared metrics instance
 	spectrogramGenerator *spectrogram.Generator // Shared spectrogram generator (initialized after SFS)
+	WikipediaClient      *wikipedia.Client      // Wikipedia species info client
 
 	// Auth related fields (injected from server via functional options)
 	authService    auth.Service        // Authentication service (injected from server)
@@ -330,6 +332,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		cancel:               cancel,
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+		WikipediaClient:      wikipedia.NewClient(),
 	}
 
 	// Initialize audio processing cache and concurrency limiter

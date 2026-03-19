@@ -41,7 +41,17 @@ type SpeciesInfo struct {
 	CommonName     string              `json:"common_name"`
 	Rarity         *SpeciesRarityInfo  `json:"rarity,omitempty"`
 	Taxonomy       *ebird.TaxonomyTree `json:"taxonomy,omitempty"`
+	Wikipedia      *WikipediaInfo      `json:"wikipedia,omitempty"`
 	Metadata       map[string]any      `json:"metadata,omitempty"`
+}
+
+// WikipediaInfo contains a species summary from Wikipedia
+type WikipediaInfo struct {
+	Title       string `json:"title"`
+	Extract     string `json:"extract"`
+	Description string `json:"description,omitempty"`
+	ArticleURL  string `json:"article_url,omitempty"`
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
 }
 
 // SpeciesRarityInfo contains rarity information for a species
@@ -236,6 +246,25 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 	if result := c.lookupTaxonomyTree(ctx, scientificName); result != nil {
 		info.Taxonomy = result.tree
 		info.Metadata["source"] = result.source
+	}
+
+	// Get Wikipedia summary (non-blocking — skip if unavailable)
+	if c.WikipediaClient != nil {
+		wikiSummary, err := c.WikipediaClient.GetSummary(ctx, commonName, scientificName)
+		if err != nil {
+			c.Debug("Wikipedia summary unavailable for %s: %v", commonName, err)
+		} else {
+			wikiInfo := &WikipediaInfo{
+				Title:       wikiSummary.Title,
+				Extract:     wikiSummary.Extract,
+				Description: wikiSummary.Description,
+				ArticleURL:  wikiSummary.ArticleURL(),
+			}
+			if wikiSummary.Thumbnail != nil {
+				wikiInfo.ThumbnailURL = wikiSummary.Thumbnail.Source
+			}
+			info.Wikipedia = wikiInfo
+		}
 	}
 
 	return info, nil
