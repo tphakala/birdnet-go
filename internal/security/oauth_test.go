@@ -273,11 +273,36 @@ func TestIsUserAuthenticatedGithubAuth(t *testing.T) {
 	t.Skip("Skipping: Gothic session handling requires integration test setup")
 }
 
+// pickLocalSubnetIPv4 returns a non-loopback IPv4 address from the machine's
+// network interfaces that IsInLocalSubnet would recognize. This makes subnet
+// bypass tests reliable across environments (CI containers, development hosts).
+// Returns empty string if no suitable address is found.
+func pickLocalSubnetIPv4(t *testing.T) string {
+	t.Helper()
+	addrs, err := net.InterfaceAddrs()
+	require.NoError(t, err)
+	for _, addr := range addrs {
+		ipnet, ok := addr.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if ip4 := ipnet.IP.To4(); ip4 != nil {
+			return ip4.String()
+		}
+	}
+	return ""
+}
+
 // TestIsUserAuthenticatedSubnetBypassDisabled verifies that local subnet clients
 // are NOT auto-authenticated when AllowSubnetBypass.Enabled is false.
 // This is a regression test for the security fix where IsUserAuthenticated
 // previously called IsInLocalSubnet unconditionally, ignoring the config.
 func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
+	localIP := pickLocalSubnetIPv4(t)
+	if localIP == "" {
+		t.Skip("Skipping: no non-loopback IPv4 interface found for subnet bypass test")
+	}
+
 	conf.Setting()
 
 	settings := &conf.Settings{
@@ -295,8 +320,7 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	// Use loopback IP which IsInLocalSubnet would normally match
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.RemoteAddr = net.JoinHostPort(localIP, "12345")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
@@ -308,14 +332,10 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 // TestIsUserAuthenticatedSubnetBypassEnabled verifies that local subnet clients
 // ARE auto-authenticated when AllowSubnetBypass.Enabled is true (the default
 // home-user configuration).
-// This test requires that IsInLocalSubnet recognizes the loopback address,
-// which depends on the host's network interface configuration. It is skipped
-// in environments (e.g., CI containers) where loopback detection doesn't work.
 func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
-	// Pre-check: skip if IsInLocalSubnet doesn't recognize loopback in this environment
-	loopback := net.ParseIP("127.0.0.1")
-	if !IsInLocalSubnet(loopback) {
-		t.Skip("Skipping: IsInLocalSubnet does not recognize loopback in this environment (e.g., CI container)")
+	localIP := pickLocalSubnetIPv4(t)
+	if localIP == "" {
+		t.Skip("Skipping: no non-loopback IPv4 interface found for subnet bypass test")
 	}
 
 	conf.Setting()
@@ -335,8 +355,7 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	// Use loopback IP which IsInLocalSubnet matches on hosts with standard networking
-	req.RemoteAddr = "127.0.0.1:12345"
+	req.RemoteAddr = net.JoinHostPort(localIP, "12345")
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
