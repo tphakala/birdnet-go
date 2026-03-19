@@ -234,8 +234,12 @@ Interactive MapLibre map for setting coordinates by clicking.
   let map = $state<import('maplibre-gl').Map | undefined>();
   let marker = $state<import('maplibre-gl').Marker | undefined>();
 
+  // Use lower zoom than the standard WORLD_VIEW_ZOOM for the wizard picker
+  // so users can see the full world map and click their approximate area
+  const PICKER_WORLD_ZOOM = 3;
+
   function getZoom(): number {
-    return latitude !== 0 || longitude !== 0 ? MAP_CONFIG.DEFAULT_ZOOM : 3;
+    return latitude !== 0 || longitude !== 0 ? MAP_CONFIG.DEFAULT_ZOOM : PICKER_WORLD_ZOOM;
   }
 
   onMount(() => {
@@ -341,13 +345,15 @@ git commit -m "feat(wizard): add LocationPickerMap interactive map component"
 
 ```svelte
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationPickerMap from '../components/LocationPickerMap.svelte';
-  import { settingsActions } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
+  import { get } from 'svelte/store';
   import { MapPin } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
@@ -363,24 +369,26 @@ git commit -m "feat(wizard): add LocationPickerMap interactive map component"
   let localesLoading = $state(true);
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
   let geolocating = $state(false);
+  let hasGeolocation = $state(false);
 
   // Always valid — defaults are fine
   $effect(() => {
     onValidChange?.(true);
   });
 
-  // Load current settings on mount
-  $effect(() => {
-    const store = settingsActions.getStore();
+  onMount(() => {
+    // Check geolocation availability (safe for SSR/test)
+    hasGeolocation = typeof navigator !== 'undefined' && !!navigator.geolocation;
+
+    // Load current settings
+    const store = get(settingsStore);
     if (store?.formData?.birdnet) {
       latitude = store.formData.birdnet.latitude ?? 0;
       longitude = store.formData.birdnet.longitude ?? 0;
       speciesLocale = store.formData.birdnet.locale ?? 'en';
     }
-  });
 
-  // Load BirdNET locale options from API
-  $effect(() => {
+    // Load BirdNET locale options from API
     api
       .get<Record<string, string>>('/api/v2/settings/locales')
       .then(data => {
@@ -403,7 +411,7 @@ git commit -m "feat(wizard): add LocationPickerMap interactive map component"
   }
 
   function handleGeolocation() {
-    if (!navigator.geolocation) return;
+    if (!hasGeolocation) return;
     geolocating = true;
     navigator.geolocation.getCurrentPosition(
       position => {
@@ -476,7 +484,7 @@ git commit -m "feat(wizard): add LocationPickerMap interactive map component"
           {t('wizard.steps.locationLanguage.locationHelp')}
         </p>
       </div>
-      {#if navigator.geolocation}
+      {#if hasGeolocation}
         <button
           type="button"
           class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] disabled:opacity-50"
@@ -491,19 +499,19 @@ git commit -m "feat(wizard): add LocationPickerMap interactive map component"
 
     <div class="mb-3 grid grid-cols-2 gap-3">
       <NumberField
+        label={t('wizard.steps.locationLanguage.latitudeLabel')}
         value={latitude}
         min={-90}
         max={90}
         step={0.0001}
-        placeholder={t('wizard.steps.locationLanguage.latitudeLabel')}
         onUpdate={value => { latitude = value; }}
       />
       <NumberField
+        label={t('wizard.steps.locationLanguage.longitudeLabel')}
         value={longitude}
         min={-180}
         max={180}
         step={0.0001}
-        placeholder={t('wizard.steps.locationLanguage.longitudeLabel')}
         onUpdate={value => { longitude = value; }}
       />
     </div>
@@ -539,6 +547,7 @@ git commit -m "feat(wizard): add LocationLanguageStep with map picker and locale
 
 ```svelte
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -569,8 +578,8 @@ git commit -m "feat(wizard): add LocationLanguageStep with map picker and locale
     onValidChange?.(isValid);
   });
 
-  // Load audio devices
-  $effect(() => {
+  // Load audio devices on mount (one-time fetch)
+  onMount(() => {
     api
       .get<Array<{ name: string; index: number; id: string }>>('/api/v2/system/audio/devices')
       .then(data => {
@@ -1101,15 +1110,22 @@ const onboardingSteps: WizardStep[] = [
 
 - [ ] **Step 2: Update wizardRegistry.test.ts**
 
-Add tests for the populated onboarding steps. Add after existing tests:
+First, update the existing test that asserts onboarding returns an empty array — it will now return 6 steps:
+
+```typescript
+// REPLACE the existing test:
+//   it('returns empty array when no steps are registered', ...)
+// WITH:
+it('returns 6 steps for onboarding flow', () => {
+  const steps = getStepsForFlow('onboarding');
+  expect(steps).toHaveLength(6);
+});
+```
+
+Then add these additional tests after existing tests:
 
 ```typescript
 describe('onboarding flow', () => {
-  it('returns 6 steps for onboarding flow', () => {
-    const steps = getStepsForFlow('onboarding');
-    expect(steps).toHaveLength(6);
-  });
-
   it('all onboarding steps are component type', () => {
     const steps = getStepsForFlow('onboarding');
     for (const step of steps) {
@@ -1178,15 +1194,19 @@ Run: `golangci-lint run -v`
 
 Expected: No new issues.
 
-- [ ] **Step 4: Validate Svelte components with MCP autofixer**
+- [ ] **Step 4: Add component smoke tests if time permits**
+
+The spec calls for unit tests for each step component. At minimum, the registry tests from Task 9 validate step registration. For deeper coverage, add render tests for `DetectionStep` and `ResponsibleUseStep` (simplest components, no API calls) to verify they render and their validation callbacks work. Component tests for steps with API calls (LocationLanguageStep, AudioSourceStep, IntegrationStep) require mocking the settings store and API — these can be added as a follow-up.
+
+- [ ] **Step 6: Validate Svelte components with MCP autofixer**
 
 Run the Svelte autofixer (`mcp__svelte__svelte-autofixer`) on each new component to check for Svelte 5 best practice issues. Fix any issues found.
 
-- [ ] **Step 5: Format all changed files**
+- [ ] **Step 7: Format all changed files**
 
 Run: `cd frontend && npx prettier --write src/lib/desktop/features/wizard/`
 
-- [ ] **Step 6: Final commit if any formatting changes**
+- [ ] **Step 8: Final commit if any formatting changes**
 
 ```bash
 git add -A && git commit -m "style: format wizard components"
