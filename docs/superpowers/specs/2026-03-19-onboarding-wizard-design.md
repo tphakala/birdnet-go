@@ -13,10 +13,10 @@ First-time setup wizard that guides new BirdNET-Go users through essential confi
 | # | Step | Component | Saves to | Validity |
 |---|------|-----------|----------|----------|
 | 1 | Welcome | `WelcomeStep.svelte` | nothing | always valid |
-| 2 | Location & Language | `LocationLanguageStep.svelte` | `node` (lat/lon), `birdnet` (locale), `realtime.dashboard` (UI locale) | always valid (defaults work) |
-| 3 | Audio Source | `AudioSourceStep.svelte` | `audio` (capture source or RTSP URL) | valid when source selected |
+| 2 | Location & Language | `LocationLanguageStep.svelte` | `birdnet` (lat/lon, species locale), localStorage (UI locale) | always valid (defaults work) |
+| 3 | Audio Source | `AudioSourceStep.svelte` | `audio` (soundcard source) or `realtime` (RTSP stream) | valid when source selected |
 | 4 | Detection Threshold | `DetectionStep.svelte` | `birdnet` (threshold) | always valid (preset pre-selected) |
-| 5 | Privacy & Integration | `IntegrationStep.svelte` | `realtime` (privacy filter, birdweather, telemetry) | always valid |
+| 5 | Privacy & Integration | `IntegrationStep.svelte` | `realtime` (privacy filter, birdweather), `sentry` (error reporting) | always valid |
 | 6 | Responsible Use | `ResponsibleUseStep.svelte` | nothing | valid when "I understand" checked |
 
 All step components live in `frontend/src/lib/desktop/features/wizard/steps/`.
@@ -42,11 +42,13 @@ Three configuration groups in a single step.
 **UI Language:**
 - Reuse existing `LanguageSelector` component (13 locales)
 - Changing UI language immediately updates the wizard text
+- Saves to localStorage via existing `setLocale()` mechanism (no backend save needed — UI locale is a browser-level preference)
 
 **Species Name Language:**
-- New `SelectDropdown` populated from the 40+ BirdNET locales defined in `internal/conf/locale.go`
+- `SelectDropdown` populated from `GET /api/v2/settings/locales` (returns 40+ BirdNET locales as `Record<string, string>`)
+- Same API and pattern used by `MainSettingsPage.svelte`
 - Independent from UI language (e.g., UI in Finnish, species names in English)
-- Saved to `birdnet.locale` — will support hot-reload (no restart needed)
+- Saved to `birdnet.locale` via `settingsActions.updateSection('birdnet', ...)`
 
 **Location:**
 - Latitude/longitude `NumberField` inputs
@@ -58,8 +60,9 @@ Three configuration groups in a single step.
   - Number fields update when map is clicked
   - Built on existing `mapConfig.ts` (OpenStreetMap tiles)
   - New `LocationPickerMap.svelte` component
+- Saved to `birdnet` section (latitude, longitude fields on `BirdNETConfig`)
 
-**Save behavior:** Calls `settingsActions.updateSection()` for each affected section when the user navigates away from this step (next or back).
+**Save behavior:** Step saves via `$effect` cleanup (fires when component unmounts on step transition). Calls `settingsActions.updateSection('birdnet', { latitude, longitude, locale })`. UI locale is handled separately by `LanguageSelector` via localStorage.
 
 ### Step 3: Audio Source
 
@@ -73,10 +76,15 @@ Single audio source configuration. Additional sources can be added later in Sett
 - `SelectDropdown` populated from `GET /api/v2/system/audio/devices`
 - Shows device name for each available capture device
 - Loading state while devices are fetched
+- If no devices found: show message suggesting RTSP as alternative
+- Saves to `audio` section (`source` field)
 
 **RTSP mode:**
 - `TextInput` for stream URL
 - Placeholder: `rtsp://user:password@host:port/stream`
+- Saves to `realtime` section — adds a `StreamConfig` entry to `realtime.rtsp.streams[]` with default name "Stream 1", the provided URL, type "rtsp", and transport "tcp"
+
+**Edge case — no audio devices:** When the device list API returns empty, show an info message ("No audio devices detected") and auto-switch to RTSP mode. The user can still toggle back to soundcard mode if they want to enter a device name manually.
 
 **Validation:** Step is valid when a source is selected (soundcard chosen or RTSP URL non-empty).
 
@@ -112,7 +120,7 @@ Three independent settings, each with a toggle and brief explanation.
 **Error Reporting** (default: OFF):
 - Checkbox: "Send anonymous error reports"
 - Description: "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
-- Saves to `realtime.telemetry.enabled`
+- Saves to `sentry` section (`sentry.enabled`) — this is Sentry error tracking, separate from Prometheus telemetry
 
 ### Step 6: Responsible Use
 
@@ -204,13 +212,25 @@ wizard.steps.locationLanguage.speciesLanguage
 
 ## Settings Save Strategy
 
-Each step saves independently when the user navigates away (next or back). This is implemented by having each step component track its local state and call `settingsActions.updateSection()` in an `onDestroy` or via a save callback.
+Each step saves independently when the user navigates away (next or back). Steps use Svelte 5 `$effect` cleanup to trigger saves when the component unmounts during step transitions.
 
 Pattern:
+```svelte
+$effect(() => {
+  return () => {
+    // Fires when component unmounts (step transition)
+    saveSettings();
+  };
+});
+```
+
 1. Step mounts, loads current settings from the store
 2. User makes changes (local `$state` variables)
-3. On step transition (next/back/skip), step saves changes via settings API
-4. If save fails, show a toast error but don't block navigation
+3. On step transition (next/back/skip), the component unmounts and `$effect` cleanup fires
+4. Cleanup calls `settingsActions.updateSection()` for the relevant sections
+5. If save fails, show a toast error but don't block navigation (save is fire-and-forget)
+
+Note: `$effect` cleanup runs synchronously when the component is destroyed, which happens before the next step mounts. The actual API call is async but we don't await it — the settings store handles optimistic updates.
 
 ## No Backend Changes
 
@@ -218,6 +238,7 @@ All required API endpoints already exist:
 - `GET /api/v2/app/config` — wizard state detection (PR #2418)
 - `POST /api/v2/app/wizard/dismiss` — mark wizard completed (PR #2418)
 - `GET /api/v2/system/audio/devices` — audio device list
+- `GET /api/v2/settings/locales` — BirdNET species locale list (returns `Record<string, string>`)
 - `POST /api/v2/settings/*` — settings updates (existing)
 
 ## File Structure
