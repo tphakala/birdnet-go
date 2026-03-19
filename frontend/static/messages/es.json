@@ -4269,5 +4269,16 @@
       "moderate": "Viento moderado — algunos cantos pueden ser difíciles de oír",
       "poor": "Viento fuerte — cantos de aves difícilmente audibles"
     }
+  },
+  "wizard": {
+    "skip": "Omitir",
+    "back": "Atrás",
+    "next": "Siguiente",
+    "done": "Listo",
+    "progress": "Paso {current} de {total}",
+    "progressLabel": "Progreso del asistente",
+    "whatsNew": {
+      "title": "Novedades en {version}"
+    }
   }
 }

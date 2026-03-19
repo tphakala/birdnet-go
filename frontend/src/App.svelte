@@ -11,6 +11,8 @@
   import { navigation } from './lib/stores/navigation.svelte';
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
+  import WizardDialog from './lib/desktop/features/wizard/WizardDialog.svelte';
+  import { wizardState } from './lib/desktop/features/wizard/wizardState.svelte';
 
   const logger = getLogger('app');
 
@@ -448,6 +450,28 @@
     handleRouting(currentPath);
   });
 
+  // Wizard trigger: launch after first route loads
+  let wizardChecked = $state(false);
+  $effect(() => {
+    if (!appInitialized || loadingComponent || wizardChecked) return;
+    wizardChecked = true;
+
+    // Check localStorage fallback first
+    const dismissedVersion = localStorage.getItem('birdnet-wizard-dismissed-version');
+    if (dismissedVersion === appState.version) return;
+
+    if (appState.freshInstall) {
+      wizardState.launch('onboarding', {
+        currentVersion: appState.version,
+      });
+    } else if (appState.newVersion) {
+      wizardState.launch('whats-new', {
+        previousVersion: appState.previousVersion ?? undefined,
+        currentVersion: appState.version,
+      });
+    }
+  });
+
   // Use $effect for browser back/forward navigation with automatic cleanup
   $effect(() => {
     const handlePopState = () => {
@@ -556,4 +580,6 @@
       {/if}
     {/if}
   </RootLayout>
+
+  <WizardDialog />
 {/if}

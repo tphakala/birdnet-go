@@ -4269,5 +4269,16 @@
       "moderate": "Vent modéré — certains chants peuvent être difficiles à entendre",
       "poor": "Vent fort — chants d'oiseaux difficilement audibles"
     }
+  },
+  "wizard": {
+    "skip": "Passer",
+    "back": "Retour",
+    "next": "Suivant",
+    "done": "Terminé",
+    "progress": "Étape {current} sur {total}",
+    "progressLabel": "Progression de l'assistant",
+    "whatsNew": {
+      "title": "Nouveautés de la {version}"
+    }
   }
 }

@@ -4269,5 +4269,16 @@
       "moderate": "Matige wind — sommige vogelgeluiden moeilijker te horen",
       "poor": "Harde wind — vogelgeluiden nauwelijks hoorbaar"
     }
+  },
+  "wizard": {
+    "skip": "Overslaan",
+    "back": "Terug",
+    "next": "Volgende",
+    "done": "Gereed",
+    "progress": "Stap {current} van {total}",
+    "progressLabel": "Wizard-voortgang",
+    "whatsNew": {
+      "title": "Nieuw in {version}"
+    }
   }
 }

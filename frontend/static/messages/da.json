@@ -4267,5 +4267,16 @@
       "moderate": "Moderat vind — nogle fuglekald kan være sværere at høre",
       "poor": "Kraftig vind — fuglekald er usandsynligt at høre"
     }
+  },
+  "wizard": {
+    "skip": "Spring over",
+    "back": "Tilbage",
+    "next": "Næste",
+    "done": "Færdig",
+    "progress": "Trin {current} af {total}",
+    "progressLabel": "Guideforløb",
+    "whatsNew": {
+      "title": "Nyheder i {version}"
+    }
   }
 }

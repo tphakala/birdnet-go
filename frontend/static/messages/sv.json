@@ -4267,5 +4267,16 @@
       "moderate": "Måttlig vind — vissa fågelläten kan vara svårare att höra",
       "poor": "Stark vind — fågelläten hörs sannolikt inte"
     }
+  },
+  "wizard": {
+    "skip": "Hoppa över",
+    "back": "Tillbaka",
+    "next": "Nästa",
+    "done": "Klar",
+    "progress": "Steg {current} av {total}",
+    "progressLabel": "Guideförlopp",
+    "whatsNew": {
+      "title": "Nyheter i {version}"
+    }
   }
 }

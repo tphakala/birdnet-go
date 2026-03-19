@@ -197,6 +197,8 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.AlertCondition{},
 		&entities.AlertAction{},
 		&entities.AlertHistory{},
+		// Application metadata
+		&entities.AppMetadata{},
 	)
 	if err != nil {
 		reportInitFailure("sqlite", "AutoMigrate", err, m.dbPath)

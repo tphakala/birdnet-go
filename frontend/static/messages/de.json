@@ -4269,5 +4269,16 @@
       "moderate": "Mäßiger Wind — einige Vogelrufe schwerer hörbar",
       "poor": "Starker Wind — Vogelrufe kaum hörbar"
     }
+  },
+  "wizard": {
+    "skip": "Überspringen",
+    "back": "Zurück",
+    "next": "Weiter",
+    "done": "Fertig",
+    "progress": "Schritt {current} von {total}",
+    "progressLabel": "Assistent-Fortschritt",
+    "whatsNew": {
+      "title": "Neuigkeiten in {version}"
+    }
   }
 }

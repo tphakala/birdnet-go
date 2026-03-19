@@ -70,6 +70,16 @@
   let isConfirming = $state(false);
   let modalElement = $state<HTMLDivElement>();
   let previousActiveElement: HTMLElement | null = null;
+  let focusGeneration = $state(0);
+
+  /**
+   * Increment the focus generation counter to force re-evaluation of the
+   * cached focusable elements list. Call this after dynamic content changes
+   * (e.g., wizard step transitions) that add or remove focusable elements.
+   */
+  export function refreshFocusTrap() {
+    focusGeneration++;
+  }
 
   const modalBoxBase =
     'bg-[var(--color-base-100)] rounded-[var(--radius-box)] p-6 max-h-[calc(100vh-2rem)] overflow-y-auto shadow-xl relative scale-95 transition-transform duration-200 ease-out';
@@ -144,8 +154,10 @@
   }
 
   // PERFORMANCE OPTIMIZATION: Cache focusable elements with $derived
-  // Avoids repeated DOM queries during focus management
+  // Avoids repeated DOM queries during focus management.
+  // Reading focusGeneration ensures the list is refreshed when refreshFocusTrap() is called.
   let focusableElements = $derived.by(() => {
+    void focusGeneration; // trigger re-evaluation when incremented
     if (!modalElement) return [];
     return Array.from(modalElement.querySelectorAll(FOCUSABLE_SELECTOR)) as HTMLElement[];
   });

@@ -125,6 +125,8 @@ func (m *MySQLManager) Initialize() error {
 		&entities.AlertCondition{},
 		&entities.AlertAction{},
 		&entities.AlertHistory{},
+		// Application metadata
+		&entities.AppMetadata{},
 	)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)

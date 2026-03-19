@@ -4269,5 +4269,16 @@
       "moderate": "Moderate wind — some bird calls may be harder to hear",
       "poor": "High wind — bird calls unlikely to be heard"
     }
+  },
+  "wizard": {
+    "skip": "Skip",
+    "back": "Back",
+    "next": "Next",
+    "done": "Done",
+    "progress": "Step {current} of {total}",
+    "progressLabel": "Wizard progress",
+    "whatsNew": {
+      "title": "What's New in {version}"
+    }
   }
 }

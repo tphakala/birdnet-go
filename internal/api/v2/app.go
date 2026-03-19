@@ -2,12 +2,14 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -15,7 +17,13 @@ import (
 const (
 	// AppConfigEndpoint is the path for the app config endpoint
 	AppConfigEndpoint = "/app/config"
+	// WizardDismissEndpoint is the path for the wizard dismiss endpoint
+	WizardDismissEndpoint = "/app/wizard/dismiss"
 )
+
+// appMetadataKeyLastSeenVersion is the app_metadata key that tracks the last application
+// version acknowledged by the user through the wizard dismiss action.
+const appMetadataKeyLastSeenVersion = "last_seen_version"
 
 // AppConfigResponse represents the application configuration returned to the frontend.
 // This replaces the server-side injected window.BIRDNET_CONFIG.
@@ -23,12 +31,15 @@ type AppConfigResponse struct {
 	CSRFToken       string                `json:"csrfToken"`
 	Security        SecurityConfigDTO     `json:"security"`
 	Version         string                `json:"version"`
-	BasePath        string                `json:"basePath"`               // reverse proxy prefix for frontend URL construction
-	ColorScheme     string                `json:"colorScheme,omitempty"`  // admin-configured color scheme for all visitors
-	CustomColors    *conf.CustomColors    `json:"customColors,omitempty"` // custom scheme hex colors (when colorScheme is "custom")
-	LogoStyle       string                `json:"logoStyle,omitempty"`    // admin-configured logo style: "gradient" or "solid"
-	LiveSpectrogram bool                  `json:"liveSpectrogram"`        // auto-start live spectrogram on dashboard
-	Layout          *conf.DashboardLayout `json:"layout,omitempty"`       // dashboard element layout for guest/pre-auth rendering
+	BasePath        string                `json:"basePath"`                  // reverse proxy prefix for frontend URL construction
+	ColorScheme     string                `json:"colorScheme,omitempty"`     // admin-configured color scheme for all visitors
+	CustomColors    *conf.CustomColors    `json:"customColors,omitempty"`    // custom scheme hex colors (when colorScheme is "custom")
+	LogoStyle       string                `json:"logoStyle,omitempty"`       // admin-configured logo style: "gradient" or "solid"
+	LiveSpectrogram bool                  `json:"liveSpectrogram"`           // auto-start live spectrogram on dashboard
+	Layout          *conf.DashboardLayout `json:"layout,omitempty"`          // dashboard element layout for guest/pre-auth rendering
+	FreshInstall    bool                  `json:"freshInstall"`              // true when this is a brand-new installation
+	NewVersion      bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
+	PreviousVersion string                `json:"previousVersion,omitempty"` // last version the user acknowledged
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -52,10 +63,31 @@ type AuthConfigDTO struct {
 
 // initAppRoutes registers application-level API endpoints
 func (c *Controller) initAppRoutes() {
+	// Initialize app metadata repository from V2Manager if available
+	if c.V2Manager != nil {
+		var useV2Prefix bool
+		if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok {
+			useV2Prefix = tp.TablePrefix() != ""
+		}
+		c.appMetadataRepo = repository.NewAppMetadataRepository(
+			c.V2Manager.DB(),
+			useV2Prefix,
+			c.V2Manager.IsMySQL(),
+		)
+	}
+
 	// App config endpoint - publicly accessible (no auth required)
 	// This endpoint provides the frontend with configuration data
 	// that was previously injected server-side into the HTML template.
 	c.Group.GET(AppConfigEndpoint, c.GetAppConfig)
+
+	// Wizard dismiss endpoint - conditionally protected.
+	// When security is enabled, require authentication; otherwise allow public access.
+	if c.authMiddleware != nil {
+		c.Group.POST(WizardDismissEndpoint, c.DismissWizard, c.authMiddleware)
+	} else {
+		c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
+	}
 }
 
 // GetAppConfig handles GET /api/v2/app/config
@@ -97,6 +129,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// Priority: X-Ingress-Path > X-Forwarded-Prefix > config BasePath > empty.
 	basePath := requestBasePath(ctx, c.Settings)
 
+	// Determine wizard state (freshInstall, newVersion, previousVersion)
+	freshInstall, newVersion, previousVersion := c.determineWizardState(ctx.Request().Context())
+
 	// Build response
 	response := AppConfigResponse{
 		CSRFToken: csrfToken,
@@ -117,6 +152,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 		CustomColors:    c.Settings.Realtime.Dashboard.CustomColors,
 		LogoStyle:       c.Settings.Realtime.Dashboard.LogoStyle,
 		LiveSpectrogram: c.Settings.Realtime.Dashboard.LiveSpectrogram,
+		FreshInstall:    freshInstall,
+		NewVersion:      newVersion,
+		PreviousVersion: previousVersion,
 	}
 
 	// Include dashboard layout for guest/pre-auth rendering if configured
@@ -131,6 +169,91 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	)
 
 	return ctx.JSON(http.StatusOK, response)
+}
+
+// determineWizardState computes the freshInstall, newVersion, and previousVersion fields
+// by comparing the current app version with the last_seen_version stored in app_metadata.
+//
+// Rules:
+//   - Dev builds (empty version or "Development Build"): both flags forced to false.
+//   - If last_seen_version is missing and the database has zero detections: freshInstall = true.
+//   - If last_seen_version differs from the current version (and not fresh install): newVersion = true.
+func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, newVersion bool, previousVersion string) {
+	// Skip wizard triggers for dev builds
+	if isDevBuild(c.Settings.Version) {
+		return false, false, ""
+	}
+
+	// If metadata repository is not available, skip wizard state
+	if c.appMetadataRepo == nil {
+		return false, false, ""
+	}
+
+	lastSeenVersion, err := c.appMetadataRepo.Get(ctx, appMetadataKeyLastSeenVersion)
+	if err != nil {
+		c.logWarnIfEnabled("Failed to read last_seen_version from app_metadata", logger.Error(err))
+		return false, false, ""
+	}
+
+	// If last_seen_version has never been set, check for fresh install
+	if lastSeenVersion == "" {
+		if c.hasZeroDetections(ctx) {
+			return true, false, ""
+		}
+		// Existing install that predates wizard tracking — treat as upgrade from unknown version
+		return false, true, ""
+	}
+
+	// If versions differ, this is an upgrade
+	if lastSeenVersion != c.Settings.Version {
+		return false, true, lastSeenVersion
+	}
+
+	// Version matches — no wizard needed
+	return false, false, lastSeenVersion
+}
+
+// hasZeroDetections returns true if the V2 database contains no detections.
+// Used to distinguish a fresh install (no data) from an existing install
+// that predates wizard version tracking.
+func (c *Controller) hasZeroDetections(ctx context.Context) bool {
+	if c.V2Manager == nil {
+		return true
+	}
+
+	tableName := "detections"
+	if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok && tp.TablePrefix() != "" {
+		tableName = tp.TablePrefix() + tableName
+	}
+
+	var count int64
+	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).Count(&count).Error
+	if err != nil {
+		c.logWarnIfEnabled("Failed to count detections for wizard state", logger.Error(err))
+		// On error, assume not a fresh install to avoid showing wizard incorrectly
+		return false
+	}
+	return count == 0
+}
+
+// isDevBuild returns true for development/unversioned builds where wizard should be suppressed.
+func isDevBuild(version string) bool {
+	return version == "" || version == "Development Build"
+}
+
+// DismissWizard handles POST /api/v2/app/wizard/dismiss
+// Updates the last_seen_version in app_metadata to the current application version,
+// preventing the wizard from showing again until the next upgrade.
+func (c *Controller) DismissWizard(ctx echo.Context) error {
+	if c.appMetadataRepo == nil {
+		return c.HandleError(ctx, nil, "App metadata not available", http.StatusServiceUnavailable)
+	}
+
+	if err := c.appMetadataRepo.Set(ctx.Request().Context(), appMetadataKeyLastSeenVersion, c.Settings.Version); err != nil {
+		return c.HandleError(ctx, err, "Failed to dismiss wizard", http.StatusInternalServerError)
+	}
+
+	return ctx.NoContent(http.StatusNoContent)
 }
 
 // determineAccessAllowed checks if the current request has access.

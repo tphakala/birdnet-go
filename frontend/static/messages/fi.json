@@ -4269,5 +4269,16 @@
       "moderate": "Kohtalaista tuulta — osa linnunäänistä voi jäädä kuulematta",
       "poor": "Kovaa tuulta — linnunäänet tuskin kuultavissa"
     }
+  },
+  "wizard": {
+    "skip": "Ohita",
+    "back": "Takaisin",
+    "next": "Seuraava",
+    "done": "Valmis",
+    "progress": "Vaihe {current}/{total}",
+    "progressLabel": "Ohjatun toiminnon eteneminen",
+    "whatsNew": {
+      "title": "Uutta versiossa {version}"
+    }
   }
 }

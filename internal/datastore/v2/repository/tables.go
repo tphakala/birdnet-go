@@ -24,6 +24,8 @@ const (
 	tableAlertConditions = "alert_conditions"
 	tableAlertActions    = "alert_actions"
 	tableAlertHistories  = "alert_histories"
+	// Application metadata
+	tableAppMetadata = "app_metadata"
 )
 
 // Table name constants for v2 prefixed schema (MySQL).
@@ -50,4 +52,6 @@ const (
 	tableV2AlertConditions = "v2_alert_conditions"
 	tableV2AlertActions    = "v2_alert_actions"
 	tableV2AlertHistories  = "v2_alert_histories"
+	// Application metadata
+	tableV2AppMetadata = "v2_app_metadata"
 )

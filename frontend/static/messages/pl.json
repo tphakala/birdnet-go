@@ -4269,5 +4269,16 @@
       "moderate": "Umiarkowany wiatr — niektóre głosy ptaków mogą być trudne do usłyszenia",
       "poor": "Silny wiatr — głosy ptaków prawie niesłyszalne"
     }
+  },
+  "wizard": {
+    "skip": "Pomiń",
+    "back": "Wstecz",
+    "next": "Dalej",
+    "done": "Gotowe",
+    "progress": "Krok {current} z {total}",
+    "progressLabel": "Postęp kreatora",
+    "whatsNew": {
+      "title": "Co nowego w {version}"
+    }
   }
 }

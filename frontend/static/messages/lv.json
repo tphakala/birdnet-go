@@ -4267,5 +4267,16 @@
       "moderate": "Mērens vējš — dažas putnu dziesmas var būt grūtāk sadzirdamas",
       "poor": "Stiprs vējš — putnu dziesmas, visticamāk, nav sadzirdamas"
     }
+  },
+  "wizard": {
+    "skip": "Izlaist",
+    "back": "Atpakaļ",
+    "next": "Tālāk",
+    "done": "Gatavs",
+    "progress": "Solis {current} no {total}",
+    "progressLabel": "Vedņa progress",
+    "whatsNew": {
+      "title": "Jaunumi versijā {version}"
+    }
   }
 }

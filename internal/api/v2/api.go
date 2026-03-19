@@ -92,6 +92,9 @@ type Controller struct {
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
 
+	// Application metadata repository (initialized lazily in initAppRoutes)
+	appMetadataRepo repository.AppMetadataRepository
+
 	// Alerting fields (initialized lazily in initAlertRoutes)
 	alertRuleRepo repository.AlertRuleRepository
 	alertEngine   *alerting.Engine

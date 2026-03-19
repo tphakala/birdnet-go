@@ -4066,5 +4066,16 @@
       "moderate": "Vento moderato — alcuni canti potrebbero essere difficili da sentire",
       "poor": "Vento forte — canti degli uccelli difficilmente udibili"
     }
+  },
+  "wizard": {
+    "skip": "Salta",
+    "back": "Indietro",
+    "next": "Avanti",
+    "done": "Fine",
+    "progress": "Passo {current} di {total}",
+    "progressLabel": "Avanzamento procedura guidata",
+    "whatsNew": {
+      "title": "Novità nella {version}"
+    }
   }
 }

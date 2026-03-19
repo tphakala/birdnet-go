@@ -4100,5 +4100,16 @@
       "moderate": "Mierny vietor — niektoré hlasy vtákov môžu byť ťažšie počuteľné",
       "poor": "Silný vietor — hlasy vtákov takmer nepočuteľné"
     }
+  },
+  "wizard": {
+    "skip": "Preskočiť",
+    "back": "Späť",
+    "next": "Ďalej",
+    "done": "Hotovo",
+    "progress": "Krok {current} z {total}",
+    "progressLabel": "Priebeh sprievodcu",
+    "whatsNew": {
+      "title": "Čo je nové vo {version}"
+    }
   }
 }

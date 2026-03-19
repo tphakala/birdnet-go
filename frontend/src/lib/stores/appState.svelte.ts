@@ -59,6 +59,9 @@ interface AppConfigResponse {
     };
   };
   version: string;
+  freshInstall?: boolean;
+  newVersion?: boolean;
+  previousVersion?: string;
   basePath?: string;
   colorScheme?: string;
   customColors?: { primary: string; accent: string };
@@ -94,6 +97,12 @@ interface AppState {
   csrfToken: string;
   /** Application version string */
   version: string;
+  /** Whether this is a fresh install (no prior data) */
+  freshInstall: boolean;
+  /** Whether the app was updated to a new version */
+  newVersion: boolean;
+  /** Previous version before the update */
+  previousVersion: string | null;
   /** Whether live spectrogram is enabled */
   liveSpectrogram: boolean;
   /** Dashboard layout from public config (available before auth) */
@@ -119,6 +128,9 @@ const DEFAULT_STATE: AppState = {
   retryCount: 0,
   csrfToken: '',
   version: 'Development Build',
+  freshInstall: false,
+  newVersion: false,
+  previousVersion: null,
   liveSpectrogram: false,
   layout: null,
   security: {
@@ -234,6 +246,9 @@ export async function initApp(): Promise<boolean> {
         },
       };
 
+      appState.freshInstall = config.freshInstall ?? false;
+      appState.newVersion = config.newVersion ?? false;
+      appState.previousVersion = config.previousVersion ?? null;
       appState.liveSpectrogram = config.liveSpectrogram ?? false;
       appState.layout = config.layout ?? null;
 
