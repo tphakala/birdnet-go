@@ -88,10 +88,11 @@
   {#snippet children()}
     <div class="min-h-[200px]">
       {#if isLoadingStep}
-        <div class="flex items-center justify-center py-12">
+        <div class="flex items-center justify-center py-12" role="status">
           <span
             class="inline-block size-6 animate-spin rounded-full border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)]"
           ></span>
+          <span class="sr-only">{t('common.loading')}</span>
         </div>
       {:else if wizardState.currentStep?.type === 'content'}
         <WizardContentRenderer step={wizardState.currentStep} />

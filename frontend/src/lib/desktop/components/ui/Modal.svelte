@@ -225,7 +225,7 @@
   role="dialog"
   aria-modal="true"
   aria-labelledby={title ? 'modal-title' : undefined}
-  aria-describedby="modal-body"
+  aria-describedby={children ? 'modal-body' : undefined}
   onclick={handleBackdropClick}
   {...rest}
 >

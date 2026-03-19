@@ -12,7 +12,10 @@
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
   import WizardDialog from './lib/desktop/features/wizard/WizardDialog.svelte';
-  import { wizardState } from './lib/desktop/features/wizard/wizardState.svelte';
+  import {
+    wizardState,
+    WIZARD_DISMISSED_VERSION_KEY,
+  } from './lib/desktop/features/wizard/wizardState.svelte';
 
   const logger = getLogger('app');
 
@@ -457,8 +460,12 @@
     wizardChecked = true;
 
     // Check localStorage fallback first
-    const dismissedVersion = localStorage.getItem('birdnet-wizard-dismissed-version');
-    if (dismissedVersion === appState.version) return;
+    try {
+      const dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
+      if (dismissedVersion === appState.version) return;
+    } catch {
+      // localStorage unavailable (private browsing, etc.) — proceed with wizard check
+    }
 
     if (appState.freshInstall) {
       wizardState.launch('onboarding', {

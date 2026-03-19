@@ -267,6 +267,8 @@ func (m *MySQLManager) Delete() error {
 		prefix + "ai_models",
 		prefix + "taxonomic_classes",
 		prefix + "label_types",
+		// Application metadata (no dependencies)
+		prefix + "app_metadata",
 		// Migration tracking
 		prefix + "migration_states",
 		prefix + "migration_dirty_ids",

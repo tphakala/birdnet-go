@@ -2,6 +2,8 @@ import { api } from '$lib/utils/api';
 import type { WizardFlow, WizardLaunchOptions, WizardStatus, WizardStep } from './types';
 import { getStepsForFlow } from './wizardRegistry';
 
+export const WIZARD_DISMISSED_VERSION_KEY = 'birdnet-wizard-dismissed-version';
+
 let status = $state<WizardStatus>('idle');
 let flow = $state<WizardFlow | null>(null);
 let currentStepIndex = $state(0);
@@ -20,7 +22,11 @@ async function dismiss(): Promise<void> {
   // Optimistic localStorage update
   const version = currentVersion ?? '';
   if (version) {
-    localStorage.setItem('birdnet-wizard-dismissed-version', version);
+    try {
+      localStorage.setItem(WIZARD_DISMISSED_VERSION_KEY, version);
+    } catch {
+      // localStorage unavailable (private browsing, etc.)
+    }
   }
 
   try {
