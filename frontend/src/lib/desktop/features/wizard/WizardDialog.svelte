@@ -40,6 +40,8 @@
     } else {
       loadedComponent = null;
       isLoadingStep = false;
+      // Refresh focus trap for ContentStep transitions too
+      tick().then(() => modalRef?.refreshFocusTrap());
     }
   });
 

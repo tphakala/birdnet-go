@@ -226,14 +226,15 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 		tableName = tp.TablePrefix() + tableName
 	}
 
-	var count int64
-	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).Count(&count).Error
+	var exists int
+	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).
+		Select("1").Limit(1).Scan(&exists).Error
 	if err != nil {
-		c.logWarnIfEnabled("Failed to count detections for wizard state", logger.Error(err))
+		c.logWarnIfEnabled("Failed to check detections for wizard state", logger.Error(err))
 		// On error, assume not a fresh install to avoid showing wizard incorrectly
 		return false
 	}
-	return count == 0
+	return exists == 0
 }
 
 // isDevBuild returns true for development/unversioned builds where wizard should be suppressed.
