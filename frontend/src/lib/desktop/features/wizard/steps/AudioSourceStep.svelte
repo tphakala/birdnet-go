@@ -4,7 +4,8 @@
   import { api } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
-  import { settingsActions, type RealtimeSettings } from '$lib/stores/settings';
+  import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
+  import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
@@ -20,6 +21,7 @@
   let rtspUrl = $state('');
   let devices = $state<Array<{ value: string; label: string }>>([]);
   let devicesLoading = $state(true);
+  let dirty = $state(false);
 
   let isValid = $derived(
     sourceType === 'soundcard' ? selectedDevice !== '' : rtspUrl.trim() !== ''
@@ -30,29 +32,61 @@
   });
 
   onMount(() => {
+    // Load current settings
+    const store = get(settingsStore);
+    const currentSource = store?.formData?.realtime?.audio?.source;
+    if (currentSource) {
+      selectedDevice = currentSource;
+    }
+    const currentStreams = store?.formData?.realtime?.rtsp?.streams;
+    if (currentStreams && currentStreams.length > 0) {
+      rtspUrl = currentStreams[0].url ?? '';
+      if (!currentSource && rtspUrl) {
+        sourceType = 'rtsp';
+      }
+    }
+
+    // Fetch audio devices
     api
       .get<Array<{ name: string; index: number; id: string }>>('/api/v2/system/audio/devices')
       .then(data => {
+        // Use index as unique key to avoid duplicate name issues with ALSA sub-devices
         devices = (data ?? []).map(d => ({
           value: d.name,
-          label: d.name,
+          label: d.index >= 0 ? `${d.name} (#${d.index})` : d.name,
         }));
-        if (devices.length === 0) {
+        if (devices.length === 0 && !selectedDevice) {
           sourceType = 'rtsp';
         }
       })
       .catch(err => {
         logger.error('Failed to load audio devices', err);
         devices = [];
-        sourceType = 'rtsp';
+        if (!selectedDevice) {
+          sourceType = 'rtsp';
+        }
       })
       .finally(() => {
         devicesLoading = false;
       });
   });
 
+  function setSourceType(type: SourceType) {
+    sourceType = type;
+    dirty = true;
+  }
+
+  function setDevice(value: string | string[]) {
+    if (typeof value === 'string') {
+      selectedDevice = value;
+      dirty = true;
+    }
+  }
+
+  // Save on unmount — only if user made changes
   $effect(() => {
     return () => {
+      if (!dirty) return;
       if (sourceType === 'soundcard' && selectedDevice) {
         settingsActions.updateSection('realtime', {
           audio: { source: selectedDevice } as RealtimeSettings['audio'],
@@ -88,9 +122,7 @@
         'soundcard'
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
           : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => {
-          sourceType = 'soundcard';
-        }}
+        onclick={() => setSourceType('soundcard')}
       >
         <Mic class="size-5 shrink-0 text-[var(--color-base-content)]" />
         <span class="text-sm font-medium text-[var(--color-base-content)]">
@@ -104,9 +136,7 @@
         'rtsp'
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
           : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => {
-          sourceType = 'rtsp';
-        }}
+        onclick={() => setSourceType('rtsp')}
       >
         <Video class="size-5 shrink-0 text-[var(--color-base-content)]" />
         <span class="text-sm font-medium text-[var(--color-base-content)]">
@@ -134,9 +164,7 @@
           options={devices}
           value={selectedDevice}
           searchable={true}
-          onChange={value => {
-            if (typeof value === 'string') selectedDevice = value;
-          }}
+          onChange={setDevice}
         />
       {/if}
     </div>
@@ -153,6 +181,9 @@
       <TextInput
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
+        onchange={() => {
+          dirty = true;
+        }}
       />
     </div>
   {/if}

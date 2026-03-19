@@ -1,6 +1,8 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
-  import { settingsActions } from '$lib/stores/settings';
+  import { settingsActions, settingsStore } from '$lib/stores/settings';
+  import { get } from 'svelte/store';
   import { Scale, Target, Radio } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
 
@@ -41,13 +43,33 @@
   ];
 
   let selectedPreset = $state('balanced');
+  let dirty = $state(false);
 
   $effect(() => {
     onValidChange?.(true);
   });
 
+  onMount(() => {
+    // Load current threshold and match to a preset
+    const store = get(settingsStore);
+    const currentThreshold = store?.formData?.birdnet?.threshold;
+    if (currentThreshold !== undefined) {
+      const match = presets.find(p => p.threshold === currentThreshold);
+      if (match) {
+        selectedPreset = match.id;
+      }
+    }
+  });
+
+  function selectPreset(id: string) {
+    selectedPreset = id;
+    dirty = true;
+  }
+
+  // Save on unmount — only if user made changes
   $effect(() => {
     return () => {
+      if (!dirty) return;
       const preset = presets.find(p => p.id === selectedPreset);
       if (preset) {
         settingsActions.updateSection('birdnet', {
@@ -73,9 +95,7 @@
         preset.id
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
           : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => {
-          selectedPreset = preset.id;
-        }}
+        onclick={() => selectPreset(preset.id)}
       >
         <PresetIcon class="mt-0.5 size-5 shrink-0 text-[var(--color-base-content)]" />
         <div class="flex-1">

@@ -28,8 +28,8 @@
 
     let mounted = true;
 
-    import('maplibre-gl')
-      .then(maplibregl => {
+    Promise.all([import('maplibre-gl'), import('maplibre-gl/dist/maplibre-gl.css')])
+      .then(([maplibregl]) => {
         if (!mounted || !mapContainer) return;
 
         const mapInstance = new maplibregl.Map({

@@ -23,6 +23,7 @@
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
   let geolocating = $state(false);
   let hasGeolocation = $state(false);
+  let dirty = $state(false);
 
   $effect(() => {
     onValidChange?.(true);
@@ -57,6 +58,7 @@
   function handleLocationChange(lat: number, lon: number) {
     latitude = lat;
     longitude = lon;
+    dirty = true;
   }
 
   function handleGeolocation() {
@@ -67,6 +69,7 @@
         latitude = Math.round(position.coords.latitude * 10000) / 10000;
         longitude = Math.round(position.coords.longitude * 10000) / 10000;
         geolocating = false;
+        dirty = true;
       },
       error => {
         logger.error('Geolocation failed', error);
@@ -76,8 +79,10 @@
     );
   }
 
+  // Save on unmount — only if user made changes
   $effect(() => {
     return () => {
+      if (!dirty) return;
       settingsActions.updateSection('birdnet', {
         latitude,
         longitude,
@@ -112,7 +117,10 @@
       searchable={true}
       disabled={localesLoading}
       onChange={value => {
-        if (typeof value === 'string') speciesLocale = value;
+        if (typeof value === 'string') {
+          speciesLocale = value;
+          dirty = true;
+        }
       }}
     />
   </div>
@@ -149,6 +157,7 @@
         step={0.0001}
         onUpdate={value => {
           latitude = value;
+          dirty = true;
         }}
       />
       <NumberField
@@ -159,6 +168,7 @@
         step={0.0001}
         onUpdate={value => {
           longitude = value;
+          dirty = true;
         }}
       />
     </div>
