@@ -515,16 +515,14 @@ func (c *Controller) ServeHLSPlaylist(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
-	clientID := c.generateClientID(ctx)
-
 	// Get stream info
 	stream := c.getHLSStream(sourceID)
 	if stream == nil {
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
-	// Update activity
-	c.updateHLSActivity(sourceID, clientID, "playlist_request")
+	// Update stream-level activity (no client registration — lifecycle managed by start/stop/heartbeat)
+	c.updateStreamActivity(sourceID)
 
 	// Get HLS base directory
 	hlsBaseDir, err := conf.GetHLSDirectory()
@@ -579,7 +577,6 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
-	clientID := c.generateClientID(ctx)
 	requestPath := ctx.Param("*")
 
 	// Decode URL path
@@ -594,8 +591,8 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
 	}
 
-	// Update activity for segment requests
-	c.updateHLSActivity(sourceID, clientID, "segment_request")
+	// Update stream-level activity (no client registration — lifecycle managed by start/stop/heartbeat)
+	c.updateStreamActivity(sourceID)
 
 	// Log client connection (rate-limited)
 	c.logHLSClientConnection(sourceID, ctx.RealIP(), decodedPath)
@@ -1225,6 +1222,15 @@ func (c *Controller) updateHLSActivity(sourceID, clientID, activityType string, 
 		extraTime = gracePeriod[0]
 	}
 	hlsMgr.activity[sourceID] = time.Now().Add(extraTime)
+	hlsMgr.activityMu.Unlock()
+}
+
+// updateStreamActivity updates stream-level activity without registering a client.
+// Used by playlist/segment handlers where session context is not available,
+// preventing ghost client entries from non-session-aware traffic.
+func (c *Controller) updateStreamActivity(sourceID string) {
+	hlsMgr.activityMu.Lock()
+	hlsMgr.activity[sourceID] = time.Now()
 	hlsMgr.activityMu.Unlock()
 }
 
