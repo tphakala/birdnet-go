@@ -640,18 +640,10 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 					logger.String("operation", "shutdown_ffmpeg_manager"))
 				myaudio.ShutdownFFmpegManagerWithContext(ctx)
 
-				// Check context after step 7 — if the timeout fired while the
-				// FFmpeg manager was shutting down, return immediately and let
-				// the deferred cleanup handle database close.
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 7",
-						logger.Int("step", 7),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 8: Wait for all goroutines (with context deadline)
+				// Step 8: Wait for all goroutines (with context deadline).
+				// No early return between steps 7-9 — steps 8 and 9 handle
+				// expired contexts internally, and step 9 must always run so
+				// the processor's cancel functions fire (workerCancel, flusherCancel).
 				log.Info("shutdown step 8: waiting for goroutines to finish",
 					logger.Int("step", 8),
 					logger.String("operation", "shutdown_wait_goroutines"))
@@ -673,15 +665,10 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 						logger.String("operation", "shutdown_goroutines_timeout"))
 				}
 
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 8",
-						logger.Int("step", 8),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 9: Shutdown processor (MQTT, job queue, thresholds)
+				// Step 9: Shutdown processor (MQTT, job queue, thresholds).
+				// Always called even if context is expired — ShutdownWithContext
+				// fires cancel functions unconditionally and handles expired
+				// contexts gracefully (skips non-critical cleanup).
 				log.Info("shutdown step 9: shutting down processor",
 					logger.Int("step", 9),
 					logger.String("operation", "shutdown_processor"))

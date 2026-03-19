@@ -829,8 +829,16 @@ func (m *FFmpegManager) ShutdownWithContext(ctx context.Context) {
 	urls := slices.Collect(maps.Keys(m.streams))
 	m.streamsMu.Unlock()
 
-	// Stop each stream using StopStream which handles unregistration
-	for _, url := range urls {
+	// Stop each stream using StopStream which handles unregistration.
+	// Check the context between iterations so the loop doesn't block past
+	// the caller's deadline when many streams are active.
+	for i, url := range urls {
+		if ctx.Err() != nil {
+			getManagerLogger().Warn("skipping remaining stream stops — context expired",
+				logger.Int("remaining_streams", len(urls)-i),
+				logger.String("operation", "shutdown"))
+			break
+		}
 		if err := m.StopStream(url); err != nil {
 			getManagerLogger().Warn("failed to stop stream during shutdown",
 				logger.String("url", privacy.SanitizeStreamUrl(url)),

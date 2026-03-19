@@ -268,29 +268,41 @@ func SetOnStreamReset(fn func(newSourceID string)) {
 
 // ShutdownFFmpegManager gracefully shuts down the FFmpeg manager
 func ShutdownFFmpegManager() {
+	// Copy and nil the global reference under the lock, then release the lock
+	// before calling the blocking Shutdown(). This prevents deadlock if any
+	// teardown code path tries to acquire managerMutex.
 	managerMutex.Lock()
-	defer managerMutex.Unlock()
-
-	if globalManager != nil {
-		globalManager.Shutdown()
+	manager := globalManager
+	if manager != nil {
 		globalManager = nil
 		// Don't reset managerOnce or monitoringOnce to maintain consistent lifecycle semantics
 		// Both the manager and its monitoring can only be initialized once per process
 		// After shutdown, the manager cannot be recreated (getGlobalManager returns nil)
+	}
+	managerMutex.Unlock()
+
+	if manager != nil {
+		manager.Shutdown()
 	}
 }
 
 // ShutdownFFmpegManagerWithContext gracefully shuts down the FFmpeg manager,
 // respecting the provided context deadline.
 func ShutdownFFmpegManagerWithContext(ctx context.Context) {
+	// Copy and nil the global reference under the lock, then release the lock
+	// before calling the blocking ShutdownWithContext(). This prevents deadlock
+	// if any teardown code path tries to acquire managerMutex.
 	managerMutex.Lock()
-	defer managerMutex.Unlock()
-
-	if globalManager != nil {
-		globalManager.ShutdownWithContext(ctx)
+	manager := globalManager
+	if manager != nil {
 		globalManager = nil
 		// See ShutdownFFmpegManager for lifecycle semantics — managerOnce and
 		// monitoringOnce are intentionally not reset; the manager cannot be
 		// recreated after shutdown.
+	}
+	managerMutex.Unlock()
+
+	if manager != nil {
+		manager.ShutdownWithContext(ctx)
 	}
 }
