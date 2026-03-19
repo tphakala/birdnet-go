@@ -88,7 +88,9 @@
         longitude,
         locale: speciesLocale,
       });
-      settingsActions.saveSettings().catch(() => {});
+      settingsActions.saveSettings().catch(err => {
+        logger.error('Failed to save location/language settings', err);
+      });
     };
   });
 </script>

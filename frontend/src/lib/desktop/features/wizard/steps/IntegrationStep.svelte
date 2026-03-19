@@ -4,7 +4,10 @@
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
   import { get } from 'svelte/store';
+  import { getLogger } from '$lib/utils/logger';
   import type { WizardStepProps } from '../types';
+
+  const logger = getLogger('IntegrationStep');
 
   let { onValidChange }: WizardStepProps = $props();
 
@@ -53,7 +56,9 @@
       settingsActions.updateSection('sentry', {
         enabled: sentryEnabled,
       });
-      settingsActions.saveSettings().catch(() => {});
+      settingsActions.saveSettings().catch(err => {
+        logger.error('Failed to save integration settings', err);
+      });
     };
   });
 </script>
@@ -100,7 +105,7 @@
         <TextInput
           bind:value={birdweatherId}
           placeholder={t('wizard.steps.integration.birdweatherIdPlaceholder')}
-          onchange={markDirty}
+          oninput={markDirty}
         />
       </div>
     {/if}

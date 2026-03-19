@@ -107,7 +107,9 @@
           } as RealtimeSettings['rtsp'],
         });
       }
-      settingsActions.saveSettings().catch(() => {});
+      settingsActions.saveSettings().catch(err => {
+        logger.error('Failed to save audio source settings', err);
+      });
     };
   });
 </script>
@@ -191,7 +193,7 @@
       <TextInput
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
-        onchange={() => {
+        oninput={() => {
           dirty = true;
         }}
       />

@@ -3,8 +3,11 @@
   import { t } from '$lib/i18n';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
+  import { getLogger } from '$lib/utils/logger';
   import { Scale, Target, Radio } from '@lucide/svelte';
   import type { WizardStepProps } from '../types';
+
+  const logger = getLogger('DetectionStep');
 
   let { onValidChange }: WizardStepProps = $props();
 
@@ -75,7 +78,9 @@
         settingsActions.updateSection('birdnet', {
           threshold: preset.threshold,
         });
-        settingsActions.saveSettings().catch(() => {});
+        settingsActions.saveSettings().catch(err => {
+          logger.error('Failed to save detection settings', err);
+        });
       }
     };
   });
