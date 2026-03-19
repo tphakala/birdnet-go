@@ -631,6 +631,13 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 					logger.String("operation", "close_control_channel"))
 				close(controlChan)
 
+				// Shutdown FFmpegManager — cancels manager context (stops monitoring/watchdog),
+				// stops any remaining streams. RTSP goroutines may have already stopped
+				// their streams via quitChan; StopStream is safe to call twice.
+				log.Info("shutting down FFmpeg manager",
+					logger.String("operation", "shutdown_ffmpeg_manager"))
+				myaudio.ShutdownFFmpegManagerWithContext(ctx)
+
 				// Check context after step 5 — if the timeout fired while the
 				// HTTP server was shutting down, return immediately and let the
 				// deferred cleanup handle database close.
@@ -642,14 +649,47 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 					return
 				}
 
-				// Step 6: Wait for all goroutines
+				// Step 6: Wait for all goroutines (with context deadline)
 				log.Info("shutdown step 6: waiting for goroutines to finish",
 					logger.Int("step", 6),
 					logger.String("operation", "shutdown_wait_goroutines"))
-				wg.Wait()
+
+				wgDone := make(chan struct{})
+				go func() {
+					wg.Wait()
+					close(wgDone)
+				}()
+
+				select {
+				case <-wgDone:
+					log.Info("all goroutines finished",
+						logger.Int("step", 6),
+						logger.String("operation", "shutdown_goroutines_done"))
+				case <-ctx.Done():
+					log.Warn("timed out waiting for goroutines",
+						logger.Int("step", 6),
+						logger.String("operation", "shutdown_goroutines_timeout"))
+				}
 
 				if ctx.Err() != nil {
 					log.Warn("shutdown context cancelled after step 6",
+						logger.Int("step", 6),
+						logger.Error(ctx.Err()),
+						logger.String("operation", "shutdown_timeout"))
+					return
+				}
+
+				// Step 6b: Shutdown processor (MQTT, job queue, thresholds)
+				log.Info("shutting down processor",
+					logger.String("operation", "shutdown_processor"))
+				if err := proc.ShutdownWithContext(ctx); err != nil {
+					log.Warn("processor shutdown error",
+						logger.Error(err),
+						logger.String("operation", "shutdown_processor"))
+				}
+
+				if ctx.Err() != nil {
+					log.Warn("shutdown context cancelled after step 6b",
 						logger.Int("step", 6),
 						logger.Error(ctx.Err()),
 						logger.String("operation", "shutdown_timeout"))
@@ -730,11 +770,17 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 				// Ensure migration worker is stopped on timeout
 				apiv2.StopMigrationWorker()
 				cancel()
-				// Wait for the shutdown goroutine to finish before returning.
-				// The goroutine checks ctx.Err() between steps and will exit
-				// quickly now that the context is cancelled. This prevents a
-				// race between the goroutine and deferred cleanup (database close).
-				<-shutdownComplete
+				// Give the shutdown goroutine a brief grace period to exit.
+				// With the timeout-aware wg.Wait(), it should exit quickly
+				// after context cancellation. But if it doesn't, don't block
+				// forever — let deferred cleanup handle the rest.
+				select {
+				case <-shutdownComplete:
+					// Goroutine exited cleanly
+				case <-time.After(500 * time.Millisecond):
+					GetLogger().Warn("shutdown goroutine did not exit within grace period",
+						logger.String("operation", "shutdown_forced_exit"))
+				}
 				return nil
 			}
 
