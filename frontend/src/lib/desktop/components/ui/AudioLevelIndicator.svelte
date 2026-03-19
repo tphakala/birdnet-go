@@ -69,6 +69,7 @@
   let hlsInstance: Hls | null = null;
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
+  let startRequestId = 0;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
@@ -431,6 +432,7 @@
     // Starting audio playback for source
     stopPlayback();
 
+    const requestId = ++startRequestId;
     playingSource = sourceId;
     showStatusMessage('Starting audio stream...');
 
@@ -448,12 +450,21 @@
         body: { session_id: sessionId },
       });
 
+      // Discard stale response if user switched sources during fetch
+      if (requestId !== startRequestId) return;
+
       activeStreamToken = data.stream_token;
       const hlsUrl = buildAppUrl(data.playlist_url);
       await setupHLSStream(hlsUrl, sourceId);
 
+      // Re-check after second await
+      if (requestId !== startRequestId) return;
+
       startHeartbeat();
     } catch (error) {
+      // Only show error if this is still the active request
+      if (requestId !== startRequestId) return;
+
       // Handle audio stream access error
       const message =
         error instanceof Error && error.message.includes('permission')
