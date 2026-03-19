@@ -297,16 +297,16 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		return c.buildHLSStreamResponse(ctx, sourceID, existingStream)
 	}
 
-	// Cleanup existing stream if force restart requested
-	if forceRestart {
-		c.cleanupExistingHLSStream(sourceID)
-	}
-
 	// Register client and update activity with grace period
 	c.updateHLSActivity(sourceID, clientID, "stream_start", hlsNewStreamGracePeriod)
 
-	// Create or get the HLS stream
-	stream, err := c.getOrCreateHLSStream(sourceID)
+	// Create or get the HLS stream (force-restart uses atomic cleanup+create)
+	var stream *HLSStreamInfo
+	if forceRestart {
+		stream, err = c.forceCreateHLSStream(sourceID)
+	} else {
+		stream, err = c.getOrCreateHLSStream(sourceID)
+	}
 	if err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to create HLS stream",
 			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
@@ -751,6 +751,25 @@ func (c *Controller) getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, erro
 		if stream := c.getHLSStream(sourceID); stream != nil {
 			return stream, nil
 		}
+		return c.createHLSStream(sourceID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*HLSStreamInfo), nil
+}
+
+// forceCreateHLSStream cleans up any existing stream and creates a new one,
+// atomically under the singleflight gate to prevent cleanup/creation races.
+func (c *Controller) forceCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
+	result, err, _ := hlsMgr.streamCreate.Do(sourceID, func() (any, error) {
+		// Phase 1: Synchronous cleanup under singleflight serialization.
+		// This prevents a concurrent request from creating a new stream
+		// while the old one's directory is still being deleted.
+		c.cleanupExistingHLSStream(sourceID)
+
+		// Phase 2: Create new stream (directory path is deterministic,
+		// so cleanup must complete before creation).
 		return c.createHLSStream(sourceID)
 	})
 	if err != nil {
