@@ -5,7 +5,6 @@
   import { X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { safeGet } from '$lib/utils/security';
 
   const logger = loggers.ui;
 
@@ -72,29 +71,43 @@
   let modalElement = $state<HTMLDivElement>();
   let previousActiveElement: HTMLElement | null = null;
 
+  const modalBoxBase =
+    'bg-[var(--color-base-100)] rounded-[var(--radius-box)] p-6 max-h-[calc(100vh-2rem)] overflow-y-auto shadow-xl relative scale-95 transition-transform duration-200 ease-out';
+
   const sizeClasses: Record<ModalSize, string> = {
-    sm: 'modal-box max-w-sm',
-    md: 'modal-box max-w-md',
-    lg: 'modal-box max-w-lg',
-    xl: 'modal-box max-w-xl',
-    '2xl': 'modal-box max-w-2xl',
-    '3xl': 'modal-box max-w-3xl',
-    '4xl': 'modal-box max-w-4xl',
-    '5xl': 'modal-box max-w-5xl',
-    '6xl': 'modal-box max-w-6xl',
-    '7xl': 'modal-box max-w-7xl',
-    full: 'modal-box max-w-full w-full',
+    sm: `${modalBoxBase} max-w-sm`,
+    md: `${modalBoxBase} max-w-md`,
+    lg: `${modalBoxBase} max-w-lg`,
+    xl: `${modalBoxBase} max-w-xl`,
+    '2xl': `${modalBoxBase} max-w-2xl`,
+    '3xl': `${modalBoxBase} max-w-3xl`,
+    '4xl': `${modalBoxBase} max-w-4xl`,
+    '5xl': `${modalBoxBase} max-w-5xl`,
+    '6xl': `${modalBoxBase} max-w-6xl`,
+    '7xl': `${modalBoxBase} max-w-7xl`,
+    full: `${modalBoxBase} max-w-full w-full`,
   };
 
-  const confirmButtonClasses: Record<typeof confirmVariant, string> = {
-    primary: 'btn-primary',
-    secondary: 'btn-secondary',
-    accent: 'btn-accent',
-    info: 'btn-info',
-    success: 'btn-success',
-    warning: 'btn-warning',
-    error: 'btn-error',
+  const confirmButtonStyles: Record<typeof confirmVariant, string> = {
+    primary:
+      'bg-[var(--color-primary)] text-[var(--color-primary-content)] border-[var(--color-primary)] hover:not-disabled:bg-[var(--color-primary-hover)] hover:not-disabled:border-[var(--color-primary-hover)]',
+    secondary:
+      'bg-[var(--color-secondary)] text-[var(--color-secondary-content)] border-[var(--color-secondary)] hover:not-disabled:bg-[var(--color-secondary-hover)] hover:not-disabled:border-[var(--color-secondary-hover)]',
+    accent:
+      'bg-[var(--color-accent)] text-[var(--color-accent-content)] border-[var(--color-accent)] hover:not-disabled:bg-[var(--color-accent-hover)] hover:not-disabled:border-[var(--color-accent-hover)]',
+    info: 'bg-[var(--color-info)] text-[var(--color-info-content)] border-[var(--color-info)] hover:not-disabled:bg-[var(--color-info-hover)] hover:not-disabled:border-[var(--color-info-hover)]',
+    success:
+      'bg-[var(--color-success)] text-[var(--color-success-content)] border-[var(--color-success)] hover:not-disabled:bg-[var(--color-success-hover)] hover:not-disabled:border-[var(--color-success-hover)]',
+    warning:
+      'bg-[var(--color-warning)] text-[var(--color-warning-content)] border-[var(--color-warning)] hover:not-disabled:bg-[var(--color-warning-hover)] hover:not-disabled:border-[var(--color-warning-hover)]',
+    error:
+      'bg-[var(--color-error)] text-[var(--color-error-content)] border-[var(--color-error)] hover:not-disabled:bg-[var(--color-error-hover)] hover:not-disabled:border-[var(--color-error-hover)]',
   };
+
+  const btnBase =
+    'inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium leading-5 rounded-[var(--radius-field)] cursor-pointer transition-all duration-[var(--animation-btn)] ease-in-out border border-transparent select-none disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-2 focus-visible:outline-[var(--color-primary)] focus-visible:outline-offset-2 active:not-disabled:scale-[0.98]';
+
+  const ghostBtnClasses = `${btnBase} bg-transparent border-transparent text-[var(--color-base-content)] hover:not-disabled:bg-[var(--hover-overlay)]`;
 
   async function handleConfirm() {
     if (!onConfirm || isConfirming) return;
@@ -103,9 +116,7 @@
     try {
       await onConfirm();
     } catch (error) {
-      // Log error for debugging
       logger.error('Modal onConfirm callback threw an error:', error);
-      // Rethrow error so parent component can handle it
       throw error;
     } finally {
       isConfirming = false;
@@ -147,13 +158,11 @@
     const lastFocusable = elements[elements.length - 1];
 
     if (event.shiftKey) {
-      // Shift + Tab - move focus backwards
       if (document.activeElement === firstFocusable) {
         lastFocusable?.focus();
         event.preventDefault();
       }
     } else {
-      // Tab - move focus forwards
       if (document.activeElement === lastFocusable) {
         firstFocusable?.focus();
         event.preventDefault();
@@ -165,7 +174,6 @@
   function setInitialFocus() {
     if (!modalElement) return;
 
-    // Use cached focusable elements instead of querying DOM
     const elements = focusableElements;
 
     if (elements.length > 0) {
@@ -183,18 +191,14 @@
 
   $effect(() => {
     if (isOpen) {
-      // Store the currently focused element
       previousActiveElement = document.activeElement as HTMLElement;
 
-      // Set focus to modal when opened
       setTimeout(() => setInitialFocus(), 0);
 
-      // Add event listener for keyboard navigation
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
         document.removeEventListener('keydown', handleKeydown);
-        // Restore focus when modal closes
         restoreFocus();
       };
     }
@@ -202,22 +206,33 @@
 </script>
 
 <div
-  class={cn('modal', { 'modal-open': isOpen })}
+  class={cn(
+    'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
+    { 'opacity-100 visible': isOpen }
+  )}
   role="dialog"
   aria-modal="true"
   aria-labelledby={title ? 'modal-title' : undefined}
+  aria-describedby="modal-body"
   onclick={handleBackdropClick}
   {...rest}
 >
   <div
     bind:this={modalElement}
-    class={cn(safeGet(sizeClasses, size, 'modal-box'), className)}
+    class={cn(sizeClasses[size], { 'scale-100': isOpen }, className)}
+    role="document"
     tabindex="-1"
   >
     {#if showCloseButton && type === 'default'}
       <button
         type="button"
-        class="btn btn-sm btn-circle btn-ghost absolute right-2 top-2"
+        class={cn(
+          btnBase,
+          'bg-transparent border-transparent text-[var(--color-base-content)] hover:not-disabled:bg-[var(--hover-overlay)]',
+          'rounded-[var(--radius-full)] p-2 aspect-square',
+          'px-0 py-0 text-[0.8125rem] leading-[1.125rem]',
+          'absolute right-2 top-2 size-8'
+        )}
         onclick={handleClose}
         disabled={loading || isConfirming}
         aria-label={t('common.aria.closeModal')}
@@ -233,20 +248,20 @@
     {/if}
 
     {#if children}
-      <div class="py-4">
+      <div id="modal-body" class="py-4">
         {@render children()}
       </div>
     {/if}
 
     {#if footer}
-      <div class="modal-action">
+      <div class="flex justify-end gap-2 mt-6">
         {@render footer()}
       </div>
     {:else if type !== 'default'}
-      <div class="modal-action">
+      <div class="flex justify-end gap-2 mt-6">
         <button
           type="button"
-          class="btn btn-ghost"
+          class={ghostBtnClasses}
           onclick={handleClose}
           disabled={loading || isConfirming}
         >
@@ -254,12 +269,14 @@
         </button>
         <button
           type="button"
-          class={cn('btn', safeGet(confirmButtonClasses, confirmVariant, 'btn-primary'))}
+          class={cn(btnBase, confirmButtonStyles[confirmVariant])}
           onclick={handleConfirm}
           disabled={loading || isConfirming}
         >
           {#if isConfirming}
-            <span class="loading loading-spinner loading-sm"></span>
+            <span
+              class="inline-block aspect-square pointer-events-none size-4 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+            ></span>
           {/if}
           {confirmLabel}
         </button>
