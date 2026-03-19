@@ -462,3 +462,53 @@ func TestStreamTokenMapping(t *testing.T) {
 		removeStreamToken("nonexistent_source_xyz")
 	})
 }
+
+// TestGetOrCreateStreamTokenConcurrency tests that concurrent token requests
+// for the same source all return the same token.
+func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
+	t.Run("concurrent token requests for same source return same token", func(t *testing.T) {
+		// Save and restore original state
+		originalTokens := hlsMgr.tokens
+		originalSourceTokens := hlsMgr.sourceTokens
+		hlsMgr.tokensMu.Lock()
+		hlsMgr.tokens = make(map[string]string)
+		hlsMgr.sourceTokens = make(map[string]string)
+		hlsMgr.tokensMu.Unlock()
+
+		t.Cleanup(func() {
+			hlsMgr.tokensMu.Lock()
+			hlsMgr.tokens = originalTokens
+			hlsMgr.sourceTokens = originalSourceTokens
+			hlsMgr.tokensMu.Unlock()
+		})
+
+		const numGoroutines = 20
+		results := make(chan string, numGoroutines)
+		var wg sync.WaitGroup
+		wg.Add(numGoroutines)
+
+		for range numGoroutines {
+			go func() {
+				defer wg.Done()
+				token, err := getOrCreateStreamToken("concurrent_source")
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+				results <- token
+			}()
+		}
+
+		wg.Wait()
+		close(results)
+
+		// All goroutines should get the same token
+		var firstToken string
+		for token := range results {
+			if firstToken == "" {
+				firstToken = token
+			}
+			assert.Equal(t, firstToken, token, "all concurrent requests should get same token")
+		}
+	})
+}

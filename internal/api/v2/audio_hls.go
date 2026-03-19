@@ -26,6 +26,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+	"golang.org/x/sync/singleflight"
 )
 
 // HLS streaming configuration constants
@@ -111,6 +112,9 @@ type hlsManager struct {
 	tokens       map[string]string // streamToken → sourceID
 	sourceTokens map[string]string // sourceID → streamToken (reverse lookup)
 	tokensMu     sync.RWMutex      // Protects both token maps
+
+	// Singleflight for stream creation to prevent concurrent creation races
+	streamCreate singleflight.Group
 
 	// Activity sync lifecycle management
 	activitySyncOnce   sync.Once
@@ -694,13 +698,31 @@ func (c *Controller) setHLSContentType(ctx echo.Context, path string) {
 
 // Stream management methods
 
-// getOrCreateHLSStream gets existing stream or creates a new one
+// getOrCreateHLSStream gets existing stream or creates a new one.
+// Uses singleflight to serialize creation per sourceID, preventing concurrent
+// goroutines from racing on directory creation and FFmpeg spawning.
 func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*HLSStreamInfo, error) {
-	// Check for existing stream
+	// Fast-path: existing stream (no singleflight overhead)
 	if stream := c.getHLSStream(sourceID); stream != nil {
 		return stream, nil
 	}
 
+	// Serialize creation per sourceID
+	result, err, _ := hlsMgr.streamCreate.Do(sourceID, func() (any, error) {
+		// Re-check: another goroutine may have created it while we waited
+		if stream := c.getHLSStream(sourceID); stream != nil {
+			return stream, nil
+		}
+		return c.createHLSStream(sourceID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return result.(*HLSStreamInfo), nil
+}
+
+// createHLSStream creates a new HLS stream (called under singleflight serialization).
+func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	GetLogger().Info("Creating new HLS stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 
 	// Generate filesystem-safe name
@@ -794,35 +816,8 @@ func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*
 		cancel:       streamCancel,
 	}
 
-	// Handle race condition - check if another goroutine created the stream
+	// Register the stream (singleflight guarantees no concurrent creation for this sourceID)
 	hlsMgr.streamsMu.Lock()
-	if existingStream, exists := hlsMgr.streams[sourceID]; exists {
-		hlsMgr.streamsMu.Unlock()
-
-		// Cleanup our stream
-		stream.cancel()
-		if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
-			if killErr := stream.FFmpegCmd.Process.Kill(); killErr != nil {
-				GetLogger().Error("Failed to kill FFmpeg process", logger.Error(killErr))
-			}
-			if _, waitErr := stream.FFmpegCmd.Process.Wait(); waitErr != nil {
-				GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(waitErr))
-			}
-		}
-		// Close log file after process exits
-		if stream.logFile != nil {
-			if closeErr := stream.logFile.Close(); closeErr != nil {
-				GetLogger().Error("Failed to close log file", logger.Error(closeErr))
-			}
-		}
-		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			GetLogger().Error("Failed to remove output directory", logger.Error(removeErr))
-		}
-
-		GetLogger().Debug("Race condition detected, using existing stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
-		return existingStream, nil
-	}
-
 	hlsMgr.streams[sourceID] = stream
 	hlsMgr.streamsMu.Unlock()
 
