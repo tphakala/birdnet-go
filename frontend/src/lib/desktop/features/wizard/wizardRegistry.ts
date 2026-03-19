@@ -2,7 +2,42 @@ import type { WizardFlow, WizardStep, WizardLaunchOptions } from './types';
 
 // Onboarding steps — static list, content added later
 const onboardingSteps: WizardStep[] = [
-  // Placeholder — steps will be added by the user later
+  {
+    id: 'welcome',
+    type: 'component',
+    titleKey: 'wizard.steps.welcome.title',
+    component: () => import('./steps/WelcomeStep.svelte'),
+  },
+  {
+    id: 'location-language',
+    type: 'component',
+    titleKey: 'wizard.steps.locationLanguage.title',
+    component: () => import('./steps/LocationLanguageStep.svelte'),
+  },
+  {
+    id: 'audio-source',
+    type: 'component',
+    titleKey: 'wizard.steps.audioSource.title',
+    component: () => import('./steps/AudioSourceStep.svelte'),
+  },
+  {
+    id: 'detection',
+    type: 'component',
+    titleKey: 'wizard.steps.detection.title',
+    component: () => import('./steps/DetectionStep.svelte'),
+  },
+  {
+    id: 'integration',
+    type: 'component',
+    titleKey: 'wizard.steps.integration.title',
+    component: () => import('./steps/IntegrationStep.svelte'),
+  },
+  {
+    id: 'responsible-use',
+    type: 'component',
+    titleKey: 'wizard.steps.responsibleUse.title',
+    component: () => import('./steps/ResponsibleUseStep.svelte'),
+  },
 ];
 
 // Changelog registry — ordered from oldest to newest
