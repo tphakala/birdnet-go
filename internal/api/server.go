@@ -250,26 +250,24 @@ func (s *Server) setupMiddleware() {
 	// Request logging using custom middleware package (uses centralized logger)
 	s.echo.Use(mw.NewRequestLogger())
 
-	// Security middleware configuration
-	securityConfig := mw.SecurityConfig{
-		AllowedOrigins:        s.config.AllowedOrigins,
-		AllowCredentials:      true,
-		HSTSMaxAge:            mw.HSTSMaxAge,
-		HSTSExcludeSubdomains: false,
-		ContentSecurityPolicy: "",
-		AllowEmbedding:        s.config.AllowEmbedding,
-	}
+	// Security middleware configuration — start from defaults, override server-specific values
+	securityConfig := mw.DefaultSecurityConfig()
+	securityConfig.AllowedOrigins = s.config.AllowedOrigins
+	securityConfig.AllowCredentials = true
+	securityConfig.AllowEmbedding = s.config.AllowEmbedding
 
 	// CORS middleware
 	s.echo.Use(mw.NewCORS(securityConfig))
 
 	// CSRF protection middleware (uses centralized logger)
-	s.echo.Use(mw.NewCSRF(nil))
+	s.echo.Use(mw.NewCSRF(&mw.CSRFConfig{
+		SecureCookie: s.config.TLSEnabled,
+	}))
 
 	// Refresh CSRF cookie expiration on every API request.
 	// Echo v4.15's Sec-Fetch-Site check short-circuits before the built-in
 	// cookie refresh code, so the cookie expires after 30 minutes without this.
-	s.echo.Use(mw.CSRFCookieRefresh())
+	s.echo.Use(mw.CSRFCookieRefresh(nil))
 
 	// Body limit middleware
 	s.echo.Use(mw.NewBodyLimit(s.config.BodyLimit))

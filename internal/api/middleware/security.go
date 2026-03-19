@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -41,6 +42,10 @@ type SecurityConfig struct {
 	// Leave empty to not set the header.
 	ContentSecurityPolicy string
 
+	// ReferrerPolicy specifies the Referrer-Policy header value.
+	// Default is "strict-origin-when-cross-origin".
+	ReferrerPolicy string
+
 	// AllowEmbedding controls whether the application can be embedded in iframes.
 	// When true, the X-Frame-Options header is omitted, allowing embedding.
 	AllowEmbedding bool
@@ -54,18 +59,19 @@ type SecurityConfig struct {
 // Important: AllowCredentials is false by default because wildcard origins ("*")
 // cannot be combined with credentials per the CORS specification. If you need
 // credentials, specify explicit origins instead of using this default.
-func DefaultSecurityConfig() SecurityConfig {
-	return SecurityConfig{
+func DefaultSecurityConfig() *SecurityConfig {
+	return &SecurityConfig{
 		AllowedOrigins:        []string{"*"},
 		AllowCredentials:      false, // Must be false with wildcard origins per CORS spec
 		HSTSMaxAge:            HSTSMaxAge,
 		HSTSExcludeSubdomains: false,
 		ContentSecurityPolicy: "",
+		ReferrerPolicy:        "strict-origin-when-cross-origin",
 	}
 }
 
 // NewCORS creates a CORS middleware with the given configuration.
-func NewCORS(config SecurityConfig) echo.MiddlewareFunc {
+func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 	return middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: config.AllowedOrigins,
 		AllowMethods: []string{
@@ -90,20 +96,50 @@ func NewCORS(config SecurityConfig) echo.MiddlewareFunc {
 }
 
 // NewSecureHeaders creates a middleware that sets security-related HTTP headers.
-func NewSecureHeaders(config SecurityConfig) echo.MiddlewareFunc {
+// In addition to Echo's built-in secure headers, this sets Cross-Origin-Opener-Policy
+// and adds a frame-ancestors CSP directive when embedding is not allowed.
+func NewSecureHeaders(config *SecurityConfig) echo.MiddlewareFunc {
 	xFrameOptions := "SAMEORIGIN"
 	if config.AllowEmbedding {
 		xFrameOptions = ""
 	}
 
-	return middleware.SecureWithConfig(middleware.SecureConfig{
+	// Build CSP: add frame-ancestors 'self' when embedding is disabled
+	csp := config.ContentSecurityPolicy
+	if !config.AllowEmbedding && !strings.Contains(csp, "frame-ancestors") {
+		if csp == "" {
+			csp = "frame-ancestors 'self'"
+		} else {
+			csp += "; frame-ancestors 'self'"
+		}
+	}
+
+	referrerPolicy := config.ReferrerPolicy
+	if referrerPolicy == "" {
+		referrerPolicy = "strict-origin-when-cross-origin"
+	}
+
+	echoSecure := middleware.SecureWithConfig(middleware.SecureConfig{
 		XSSProtection:         "1; mode=block",
 		ContentTypeNosniff:    "nosniff",
 		XFrameOptions:         xFrameOptions,
 		HSTSMaxAge:            config.HSTSMaxAge,
 		HSTSExcludeSubdomains: config.HSTSExcludeSubdomains,
-		ContentSecurityPolicy: config.ContentSecurityPolicy,
+		ContentSecurityPolicy: csp,
+		ReferrerPolicy:        referrerPolicy,
 	})
+
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		// Wrap next once at setup time, not per-request.
+		wrapped := echoSecure(next)
+		return func(c echo.Context) error {
+			// Set headers not supported by Echo's SecureConfig.
+			// COOP isolates the browsing context, preventing tabnabbing and cross-window attacks.
+			// Note: "same-origin" is safe here because OAuth uses redirects, not popups.
+			c.Response().Header().Set("Cross-Origin-Opener-Policy", "same-origin")
+			return wrapped(c)
+		}
+	}
 }
 
 // NewBodyLimit creates a middleware that limits the request body size.
