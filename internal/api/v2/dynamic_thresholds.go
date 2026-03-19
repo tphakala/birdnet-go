@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -181,7 +182,9 @@ func (c *Controller) getMergedThresholdData() map[string]*DynamicThresholdRespon
 	return thresholdMap
 }
 
-// addDatabaseThresholds adds thresholds from the database to the map
+// addDatabaseThresholds adds thresholds from the database to the map.
+// Map keys are normalized to lowercase to ensure case-insensitive merging
+// with in-memory data (which uses lowercase species names).
 func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThresholdResponse) {
 	dbThresholds, err := c.DS.GetAllDynamicThresholds()
 	if err != nil {
@@ -192,7 +195,7 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 	now := time.Now()
 	for i := range dbThresholds {
 		dt := &dbThresholds[i]
-		thresholdMap[dt.SpeciesName] = &DynamicThresholdResponse{
+		thresholdMap[strings.ToLower(dt.SpeciesName)] = &DynamicThresholdResponse{
 			SpeciesName:    dt.SpeciesName,
 			ScientificName: dt.ScientificName,
 			Level:          dt.Level,
@@ -218,12 +221,13 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 	baseThreshold := c.Settings.BirdNET.Threshold
 
 	for _, dt := range memoryData {
-		if existing, exists := thresholdMap[dt.SpeciesName]; exists {
+		key := strings.ToLower(dt.SpeciesName)
+		if existing, exists := thresholdMap[key]; exists {
 			// Update existing entry with in-memory values
 			applyMemoryOverlay(existing, dt.Level, dt.HighConfCount, dt.CurrentValue, dt.ExpiresAt, dt.IsActive, dt.ScientificName)
 		} else {
 			// Add new entry from memory
-			thresholdMap[dt.SpeciesName] = &DynamicThresholdResponse{
+			thresholdMap[key] = &DynamicThresholdResponse{
 				SpeciesName:    dt.SpeciesName,
 				ScientificName: dt.ScientificName,
 				Level:          dt.Level,
@@ -305,7 +309,7 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 	// Try to get more current data from processor memory
 	if c.Processor != nil {
 		for _, md := range c.Processor.GetDynamicThresholdData() {
-			if md.SpeciesName == species {
+			if strings.EqualFold(md.SpeciesName, species) {
 				applyMemoryOverlay(&response, md.Level, md.HighConfCount, md.CurrentValue, md.ExpiresAt, md.IsActive, md.ScientificName)
 				break
 			}
