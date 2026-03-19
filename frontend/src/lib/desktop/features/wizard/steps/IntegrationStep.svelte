@@ -70,12 +70,16 @@
       bind:checked={privacyEnabled}
       class="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
       onchange={markDirty}
+      aria-describedby="privacy-filter-help"
     />
     <div>
       <span class="text-sm font-medium text-[var(--color-base-content)]">
         {t('wizard.steps.integration.privacyFilterLabel')}
       </span>
-      <p class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
+      <p
+        id="privacy-filter-help"
+        class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60"
+      >
         {t('wizard.steps.integration.privacyFilterHelp')}
       </p>
     </div>
@@ -90,18 +94,25 @@
         bind:checked={birdweatherEnabled}
         class="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
         onchange={markDirty}
+        aria-describedby="birdweather-help"
       />
       <div>
         <span class="text-sm font-medium text-[var(--color-base-content)]">
           {t('wizard.steps.integration.birdweatherLabel')}
         </span>
-        <p class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
+        <p id="birdweather-help" class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
           {t('wizard.steps.integration.birdweatherHelp')}
         </p>
       </div>
     </label>
     {#if birdweatherEnabled}
       <div class="ml-7 mt-2">
+        <label
+          for="birdweather-id"
+          class="mb-1 block text-xs text-[var(--color-base-content)] opacity-70"
+        >
+          {t('wizard.steps.integration.birdweatherIdLabel')}
+        </label>
         <TextInput
           bind:value={birdweatherId}
           placeholder={t('wizard.steps.integration.birdweatherIdPlaceholder')}
@@ -119,12 +130,16 @@
       bind:checked={sentryEnabled}
       class="mt-0.5 size-4 shrink-0 accent-[var(--color-primary)]"
       onchange={markDirty}
+      aria-describedby="error-reporting-help"
     />
     <div>
       <span class="text-sm font-medium text-[var(--color-base-content)]">
         {t('wizard.steps.integration.errorReportingLabel')}
       </span>
-      <p class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
+      <p
+        id="error-reporting-help"
+        class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60"
+      >
         {t('wizard.steps.integration.errorReportingHelp')}
       </p>
     </div>

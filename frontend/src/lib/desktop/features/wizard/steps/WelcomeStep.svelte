@@ -12,7 +12,7 @@
 
 <div class="flex flex-col items-center gap-6 py-4 text-center">
   <img
-    src="/ui/assets/BirdNET-Go-logo.webp"
+    src="/assets/BirdNET-Go-logo.webp"
     alt={t('about.logoAlt')}
     class="h-24 w-24 rounded-2xl shadow-lg"
   />

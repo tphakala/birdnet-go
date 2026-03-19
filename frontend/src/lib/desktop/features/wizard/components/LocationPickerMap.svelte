@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { t } from '$lib/i18n';
   import { createMapStyle, MAP_CONFIG } from '$lib/desktop/features/settings/utils/mapConfig';
   import { getLogger } from '$lib/utils/logger';
 
@@ -17,6 +18,7 @@
   // Use $state.raw to avoid deep proxying of complex 3rd-party classes (WebGL context, etc.)
   let map = $state.raw<import('maplibre-gl').Map | undefined>(undefined);
   let marker = $state.raw<import('maplibre-gl').Marker | undefined>(undefined);
+  let mapLoadFailed = $state(false);
 
   const PICKER_WORLD_ZOOM = 3;
 
@@ -70,11 +72,14 @@
       })
       .catch(err => {
         logger.error('Failed to load MapLibre', err);
+        mapLoadFailed = true;
       });
 
     return () => {
       mounted = false;
       map?.remove();
+      map = undefined;
+      marker = undefined;
     };
   });
 
@@ -95,7 +100,16 @@
   });
 </script>
 
-<div
-  bind:this={mapContainer}
-  class="h-48 w-full overflow-hidden rounded-lg border border-[var(--border-200)]"
-></div>
+{#if mapLoadFailed}
+  <div
+    role="alert"
+    class="flex h-48 items-center justify-center rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] p-3 text-sm text-[var(--color-base-content)] opacity-60"
+  >
+    {t('wizard.steps.locationLanguage.locationError')}
+  </div>
+{:else}
+  <div
+    bind:this={mapContainer}
+    class="h-48 w-full overflow-hidden rounded-lg border border-[var(--border-200)]"
+  ></div>
+{/if}
