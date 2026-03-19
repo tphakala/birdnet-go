@@ -1105,8 +1105,12 @@ func (c *Controller) feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Co
 		}
 	}()
 
-	// Open FIFO
-	fifo, err := secFS.OpenFile(pipePath, os.O_WRONLY, 0)
+	// Open FIFO with O_RDWR to prevent blocking on open() if FFmpeg hasn't started
+	// or crashes before opening the read end. This is a well-known POSIX pattern:
+	// the opener becomes both reader and writer, so open() returns immediately.
+	// Writes still block when the pipe buffer is full (normal backpressure),
+	// and the goroutine responds to ctx.Done() via the select loop.
+	fifo, err := secFS.OpenFile(pipePath, os.O_RDWR, 0)
 	if err != nil {
 		GetLogger().Error("Error opening pipe", logger.Error(err))
 		return
