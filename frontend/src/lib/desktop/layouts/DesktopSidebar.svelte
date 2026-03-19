@@ -407,7 +407,7 @@ Performance Optimizations:
         </div>
 
         <!-- Live Stream -->
-        {#if hasLiveAudioAccess}
+        {#if hasLiveAudioAccess()}
           <div class="relative">
             <button
               onclick={() => navigate(navigationUrls.liveStream)}

@@ -318,14 +318,14 @@
   }
 
   onMount(() => {
-    if (hasLiveAudioAccess && shouldAutoStart()) {
+    if (hasLiveAudioAccess() && shouldAutoStart()) {
       start();
     }
     return () => stop();
   });
 </script>
 
-{#if hasLiveAudioAccess}
+{#if hasLiveAudioAccess()}
   <div
     class="overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
   >

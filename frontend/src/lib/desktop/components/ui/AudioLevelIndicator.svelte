@@ -631,7 +631,7 @@
     </div>
   {/if}
 
-  {#if hasLiveAudioAccess}
+  {#if hasLiveAudioAccess()}
     <!-- Dropdown menu -->
     {#if dropdownOpen}
       <div

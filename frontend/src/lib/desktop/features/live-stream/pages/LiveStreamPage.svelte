@@ -366,7 +366,7 @@
   }
 
   onMount(() => {
-    if (hasLiveAudioAccess) {
+    if (hasLiveAudioAccess()) {
       connectSSE();
     }
 
@@ -410,7 +410,7 @@
   }
 </script>
 
-{#if hasLiveAudioAccess}
+{#if hasLiveAudioAccess()}
   <div
     bind:this={cardEl}
     class={isFullscreen
