@@ -57,6 +57,12 @@
   const ZERO_LEVEL_TIMEOUT = 5000;
   const HEARTBEAT_INTERVAL = 20000;
 
+  // Generate unique session ID per tab/component instance for server-side client tracking
+  const sessionId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
   let audioElement: HTMLAudioElement | null = null;
@@ -277,7 +283,7 @@
       try {
         await fetchWithCSRF('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
-          body: { stream_token: activeStreamToken },
+          body: { stream_token: activeStreamToken, session_id: sessionId },
         });
       } catch {
         // Failed to send heartbeat - ignore
@@ -300,7 +306,7 @@
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
         keepalive: true,
-        body: { stream_token: activeStreamToken },
+        body: { stream_token: activeStreamToken, session_id: sessionId },
       }).catch(() => {
         // Ignore errors during disconnect
       });
@@ -439,6 +445,7 @@
         playlist_ready: boolean;
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
+        body: { session_id: sessionId },
       });
 
       activeStreamToken = data.stream_token;
@@ -488,6 +495,7 @@
       const encodedSourceId = encodeURIComponent(previousSource);
       fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
+        body: { session_id: sessionId },
       }).catch(_err => {
         // Failed to notify server of playback stop
       });

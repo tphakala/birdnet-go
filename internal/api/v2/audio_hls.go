@@ -77,10 +77,16 @@ type HLSStreamStatus struct {
 	PlaylistReady bool   `json:"playlist_ready"`
 }
 
+// HLSStartRequest represents an optional request body for stream start
+type HLSStartRequest struct {
+	SessionID string `json:"session_id,omitempty"` // Per-tab session UUID from frontend
+}
+
 // HLSHeartbeatRequest represents a client heartbeat message
 type HLSHeartbeatRequest struct {
 	StreamToken string `json:"stream_token"`
-	ClientID    string `json:"client_id,omitempty"` // Optional, server can identify from request
+	SessionID   string `json:"session_id,omitempty"` // Per-tab session UUID from frontend
+	ClientID    string `json:"client_id,omitempty"`  // Deprecated: kept for backwards compat
 }
 
 // hlsManager manages HLS streaming state
@@ -244,7 +250,13 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		return err
 	}
 
-	clientID := c.generateClientID(ctx)
+	// Bind optional request body for session_id
+	var req HLSStartRequest
+	if err := ctx.Bind(&req); err != nil {
+		GetLogger().Debug("Failed to bind start request body", logger.Error(err))
+	}
+
+	clientID := c.resolveClientID(ctx, req.SessionID)
 
 	// Check for force restart query param
 	forceRestart := ctx.QueryParam("force") == QueryValueTrue
@@ -381,7 +393,13 @@ func (c *Controller) StopHLSStream(ctx echo.Context) error {
 		return err
 	}
 
-	clientID := c.generateClientID(ctx)
+	// Bind optional request body for session_id
+	var req HLSStartRequest
+	if err := ctx.Bind(&req); err != nil {
+		GetLogger().Debug("Failed to bind stop request body", logger.Error(err))
+	}
+
+	clientID := c.resolveClientID(ctx, req.SessionID)
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "HLS stream stop requested",
 		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
@@ -415,7 +433,7 @@ func (c *Controller) HLSHeartbeat(ctx echo.Context) error {
 		return ctx.JSON(http.StatusOK, map[string]string{"status": "ok"})
 	}
 
-	clientID := c.generateClientID(ctx)
+	clientID := c.resolveClientID(ctx, heartbeat.SessionID)
 
 	// Handle disconnection announcements
 	if ctx.QueryParam("disconnect") == QueryValueTrue || ctx.QueryParam("status") == "disconnect" {
@@ -652,6 +670,16 @@ func (c *Controller) generateClientID(ctx echo.Context) string {
 	}
 
 	return clientIP + "-" + clientType
+}
+
+// resolveClientID returns a client identifier, preferring session-based ID when available.
+// Session ID is prefixed with IP to prevent session spoofing across clients.
+func (c *Controller) resolveClientID(ctx echo.Context, sessionID string) string {
+	if sessionID != "" {
+		return c.extractRemoteAddr(ctx) + "-" + sessionID
+	}
+	// Fallback for non-browser clients (VLC, FFmpeg, etc.)
+	return c.generateClientID(ctx)
 }
 
 // generateFilesystemSafeName creates a filesystem-safe identifier from source ID

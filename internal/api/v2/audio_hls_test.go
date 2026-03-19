@@ -5,10 +5,13 @@ package api
 import (
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -510,5 +513,53 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 			}
 			assert.Equal(t, firstToken, token, "all concurrent requests should get same token")
 		}
+	})
+}
+
+// TestResolveClientID tests the resolveClientID method
+func TestResolveClientID(t *testing.T) {
+	const testRemoteAddr = "192.168.1.100:12345"
+
+	t.Run("prefers session ID when provided", func(t *testing.T) {
+		c := &Controller{}
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req.RemoteAddr = testRemoteAddr
+		ctx := e.NewContext(req, httptest.NewRecorder())
+
+		clientID := c.resolveClientID(ctx, "test-uuid-1234")
+		assert.Contains(t, clientID, "192.168.1.100")
+		assert.Contains(t, clientID, "test-uuid-1234")
+	})
+
+	t.Run("falls back to generateClientID when no session", func(t *testing.T) {
+		c := &Controller{}
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req.RemoteAddr = testRemoteAddr
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		ctx := e.NewContext(req, httptest.NewRecorder())
+
+		clientID := c.resolveClientID(ctx, "")
+		assert.Contains(t, clientID, "192.168.1.100")
+		assert.Contains(t, clientID, "Browser")
+		assert.NotContains(t, clientID, "uuid")
+	})
+
+	t.Run("different sessions from same IP get different IDs", func(t *testing.T) {
+		c := &Controller{}
+		e := echo.New()
+
+		req1 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req1.RemoteAddr = testRemoteAddr
+		ctx1 := e.NewContext(req1, httptest.NewRecorder())
+
+		req2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req2.RemoteAddr = "192.168.1.100:12346"
+		ctx2 := e.NewContext(req2, httptest.NewRecorder())
+
+		id1 := c.resolveClientID(ctx1, "session-aaa")
+		id2 := c.resolveClientID(ctx2, "session-bbb")
+		assert.NotEqual(t, id1, id2)
 	})
 }
