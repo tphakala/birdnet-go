@@ -12,22 +12,28 @@
   let modalRef = $state<Modal>();
   let loadedComponent = $state<Component<WizardStepProps> | null>(null);
   let isLoadingStep = $state(false);
+  let importGeneration = 0;
 
-  // Load component when step changes (for ComponentStep types)
+  // Load component when step changes (for ComponentStep types).
+  // The generation counter prevents stale imports from overwriting
+  // the current step if the user navigates before an import resolves.
   $effect(() => {
     const step = wizardState.currentStep;
+    const gen = ++importGeneration;
     if (step?.type === 'component') {
       isLoadingStep = true;
       loadedComponent = null;
       step
         .component()
         .then(async mod => {
+          if (gen !== importGeneration) return;
           loadedComponent = mod.default;
           isLoadingStep = false;
           await tick();
           modalRef?.refreshFocusTrap();
         })
         .catch(() => {
+          if (gen !== importGeneration) return;
           loadedComponent = null;
           isLoadingStep = false;
         });
