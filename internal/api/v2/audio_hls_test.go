@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -529,9 +528,10 @@ func TestResolveClientID(t *testing.T) {
 		req.RemoteAddr = testRemoteAddr
 		ctx := e.NewContext(req, httptest.NewRecorder())
 
-		clientID := c.resolveClientID(ctx, "test-uuid-1234")
+		validUUID := "550e8400-e29b-41d4-a716-446655440000"
+		clientID := c.resolveClientID(ctx, validUUID)
 		assert.Contains(t, clientID, "192.168.1.100")
-		assert.Contains(t, clientID, "test-uuid-1234")
+		assert.Contains(t, clientID, validUUID)
 	})
 
 	t.Run("falls back to generateClientID when no session", func(t *testing.T) {
@@ -560,24 +560,23 @@ func TestResolveClientID(t *testing.T) {
 		req2.RemoteAddr = testRemoteAddr // Same IP, same port — session ID differentiates
 		ctx2 := e.NewContext(req2, httptest.NewRecorder())
 
-		id1 := c.resolveClientID(ctx1, "session-aaa")
-		id2 := c.resolveClientID(ctx2, "session-bbb")
+		id1 := c.resolveClientID(ctx1, "550e8400-e29b-41d4-a716-446655440000")
+		id2 := c.resolveClientID(ctx2, "660e8400-e29b-41d4-a716-446655440000")
 		assert.NotEqual(t, id1, id2)
 	})
 
-	t.Run("rejects oversized session ID", func(t *testing.T) {
+	t.Run("rejects invalid session ID format", func(t *testing.T) {
 		c := &Controller{}
 		e := echo.New()
 		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
-		req.RemoteAddr = "192.168.1.100:12345"
+		req.RemoteAddr = testRemoteAddr
 		req.Header.Set("User-Agent", "Mozilla/5.0")
 		ctx := e.NewContext(req, httptest.NewRecorder())
 
-		// Session ID longer than hlsMaxSessionIDLen should be rejected
-		longSession := strings.Repeat("a", hlsMaxSessionIDLen+1)
-		clientID := c.resolveClientID(ctx, longSession)
+		// Non-UUID session ID should be rejected
+		clientID := c.resolveClientID(ctx, "not-a-valid-uuid")
 		// Should fall back to IP+UA-based ID
 		assert.Contains(t, clientID, "Browser")
-		assert.NotContains(t, clientID, longSession)
+		assert.NotContains(t, clientID, "not-a-valid-uuid")
 	})
 }

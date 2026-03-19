@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -57,7 +58,6 @@ const (
 	hlsPrematureDisconnectThreshold = 10 * time.Second // Ignore disconnects within this window
 
 	// Session ID validation
-	hlsMaxSessionIDLen = 128 // Maximum session ID length (UUID is 36 chars)
 
 	// FFmpeg HLS muxer settings
 	hlsListSize    = 3 // Number of HLS segments to keep in playlist
@@ -306,7 +306,7 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	c.updateHLSActivity(sourceID, clientID, "stream_start", hlsNewStreamGracePeriod)
 
 	// Create or get the HLS stream
-	stream, err := c.getOrCreateHLSStream(ctx.Request().Context(), sourceID)
+	stream, err := c.getOrCreateHLSStream(sourceID)
 	if err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to create HLS stream",
 			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
@@ -683,13 +683,15 @@ func (c *Controller) generateClientID(ctx echo.Context) string {
 }
 
 // resolveClientID returns a client identifier, preferring session-based ID when available.
-// Session ID is prefixed with IP to prevent session spoofing across clients.
-// Session IDs exceeding hlsMaxSessionIDLen are rejected to prevent memory exhaustion.
+// Session ID is validated as a UUID and prefixed with IP to prevent spoofing.
+// Invalid or missing session IDs fall back to IP+UA-based identification.
 func (c *Controller) resolveClientID(ctx echo.Context, sessionID string) string {
-	if sessionID != "" && len(sessionID) <= hlsMaxSessionIDLen {
-		return c.extractRemoteAddr(ctx) + "-" + sessionID
+	if sessionID != "" {
+		if _, err := uuid.Parse(sessionID); err == nil {
+			return c.extractRemoteAddr(ctx) + "-" + sessionID
+		}
 	}
-	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or oversized session IDs
+	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or invalid session IDs
 	return c.generateClientID(ctx)
 }
 
@@ -740,7 +742,7 @@ func (c *Controller) setHLSContentType(ctx echo.Context, path string) {
 // getOrCreateHLSStream gets existing stream or creates a new one.
 // Uses singleflight to serialize creation per sourceID, preventing concurrent
 // goroutines from racing on directory creation and FFmpeg spawning.
-func (c *Controller) getOrCreateHLSStream(_ context.Context, sourceID string) (*HLSStreamInfo, error) {
+func (c *Controller) getOrCreateHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	// Fast-path: existing stream (no singleflight overhead)
 	if stream := c.getHLSStream(sourceID); stream != nil {
 		return stream, nil
