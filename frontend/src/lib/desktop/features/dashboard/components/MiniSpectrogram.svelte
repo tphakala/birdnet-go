@@ -167,6 +167,10 @@
 
       const encodedSourceId = encodeURIComponent(sourceId);
 
+      // Capture source before await so stop() can clean up if the request
+      // is aborted after the server processes it
+      activeSourceId = sourceId;
+
       const data = await fetchWithCSRF<{
         status: string;
         stream_token: string;
@@ -181,7 +185,6 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
-      activeSourceId = sourceId;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       audioElement = new globalThis.Audio();
@@ -277,8 +280,9 @@
     }
   }
 
-  function stop() {
-    // Abort any in-flight async work first
+  // stopRuntime tears down the stream without clearing localStorage persistence.
+  // Used by $effect cleanup so reactive re-runs don't erase the user's play preference.
+  function stopRuntime() {
     abortController?.abort();
     abortController = null;
 
@@ -318,6 +322,12 @@
 
     isActive = false;
     isConnecting = false;
+  }
+
+  // stop tears down the stream AND clears the user's auto-start preference.
+  // Used by explicit user actions (stop button, fatal errors).
+  function stop() {
+    stopRuntime();
     persistToggleState(false);
   }
 
@@ -340,7 +350,7 @@
     if (hasAccess && shouldAutoStart()) {
       start();
     }
-    return () => stop();
+    return () => stopRuntime();
   });
 </script>
 
