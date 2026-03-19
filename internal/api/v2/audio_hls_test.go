@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -486,7 +487,11 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 		})
 
 		const numGoroutines = 20
-		results := make(chan string, numGoroutines)
+		type result struct {
+			token string
+			err   error
+		}
+		results := make(chan result, numGoroutines)
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
 
@@ -494,24 +499,21 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				token, err := getOrCreateStreamToken("concurrent_source")
-				if err != nil {
-					t.Errorf("unexpected error: %v", err)
-					return
-				}
-				results <- token
+				results <- result{token: token, err: err}
 			}()
 		}
 
 		wg.Wait()
 		close(results)
 
-		// All goroutines should get the same token
+		// Verify all goroutines succeeded and got the same token
 		var firstToken string
-		for token := range results {
+		for r := range results {
+			require.NoError(t, r.err)
 			if firstToken == "" {
-				firstToken = token
+				firstToken = r.token
 			}
-			assert.Equal(t, firstToken, token, "all concurrent requests should get same token")
+			assert.Equal(t, firstToken, r.token, "all concurrent requests should get same token")
 		}
 	})
 }
@@ -561,5 +563,21 @@ func TestResolveClientID(t *testing.T) {
 		id1 := c.resolveClientID(ctx1, "session-aaa")
 		id2 := c.resolveClientID(ctx2, "session-bbb")
 		assert.NotEqual(t, id1, id2)
+	})
+
+	t.Run("rejects oversized session ID", func(t *testing.T) {
+		c := &Controller{}
+		e := echo.New()
+		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req.RemoteAddr = "192.168.1.100:12345"
+		req.Header.Set("User-Agent", "Mozilla/5.0")
+		ctx := e.NewContext(req, httptest.NewRecorder())
+
+		// Session ID longer than hlsMaxSessionIDLen should be rejected
+		longSession := strings.Repeat("a", hlsMaxSessionIDLen+1)
+		clientID := c.resolveClientID(ctx, longSession)
+		// Should fall back to IP+UA-based ID
+		assert.Contains(t, clientID, "Browser")
+		assert.NotContains(t, clientID, longSession)
 	})
 }

@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,6 +55,15 @@ const (
 	hlsDefaultSampleRate            = 48000            // Default audio sample rate in Hz
 	hlsCleanupDelay                 = 5                // Delay in seconds before cleanup
 	hlsPrematureDisconnectThreshold = 10 * time.Second // Ignore disconnects within this window
+
+	// Session ID validation
+	hlsMaxSessionIDLen = 128 // Maximum session ID length (UUID is 36 chars)
+
+	// FFmpeg HLS muxer settings
+	hlsListSize    = 3 // Number of HLS segments to keep in playlist
+	hlsInitTime    = 3 // Initial segment time for FFmpeg HLS muxer
+	hlsAllowCache  = 1 // Allow client-side caching of HLS segments
+	hlsStartNumber = 0 // Starting sequence number for HLS segments
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -674,11 +684,12 @@ func (c *Controller) generateClientID(ctx echo.Context) string {
 
 // resolveClientID returns a client identifier, preferring session-based ID when available.
 // Session ID is prefixed with IP to prevent session spoofing across clients.
+// Session IDs exceeding hlsMaxSessionIDLen are rejected to prevent memory exhaustion.
 func (c *Controller) resolveClientID(ctx echo.Context, sessionID string) string {
-	if sessionID != "" {
+	if sessionID != "" && len(sessionID) <= hlsMaxSessionIDLen {
 		return c.extractRemoteAddr(ctx) + "-" + sessionID
 	}
-	// Fallback for non-browser clients (VLC, FFmpeg, etc.)
+	// Fallback for non-browser clients (VLC, FFmpeg, etc.) or oversized session IDs
 	return c.generateClientID(ctx)
 }
 
@@ -986,14 +997,14 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 		"-b:a", fmt.Sprintf("%dk", bitrate),
 		"-f", "hls",
 		"-hls_time", fmt.Sprintf("%d", segmentLength),
-		"-hls_list_size", "3",
+		"-hls_list_size", strconv.Itoa(hlsListSize),
 		"-hls_flags", "delete_segments+temp_file",
 		"-hls_segment_type", "fmp4",
 		"-hls_fmp4_init_filename", "init.mp4",
-		"-hls_init_time", "3",
-		"-hls_allow_cache", "1",
+		"-hls_init_time", strconv.Itoa(hlsInitTime),
+		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
 		"-movflags", "faststart+empty_moov+separate_moof",
-		"-start_number", "0",
+		"-start_number", strconv.Itoa(hlsStartNumber),
 		"-loglevel", logLevel,
 		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d.m4s")),
 		playlistPath,
@@ -1360,7 +1371,7 @@ func (c *Controller) performHLSCleanup(sourceID string, stream *HLSStreamInfo, r
 	c.cleanupFFmpegProcess(sourceID, stream)
 
 	// Clean up output directory
-	c.cleanupStreamDirectory(stream.OutputDir)
+	cleanupStreamDirectory(stream.OutputDir)
 
 	// Clean up tracking data
 	c.cleanupStreamTracking(sourceID)
@@ -1395,35 +1406,6 @@ func closeLogFile(f *os.File) {
 	}
 	if err := f.Close(); err != nil {
 		GetLogger().Error("Failed to close log file", logger.Error(err))
-	}
-}
-
-// cleanupStreamDirectory removes a single stream's output directory.
-func (c *Controller) cleanupStreamDirectory(outputDir string) {
-	if outputDir == "" {
-		return
-	}
-
-	hlsBaseDir, err := conf.GetHLSDirectory()
-	if err != nil {
-		return
-	}
-
-	secFS, err := securefs.New(hlsBaseDir)
-	if err != nil {
-		return
-	}
-	defer func() {
-		if closeErr := secFS.Close(); closeErr != nil {
-			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
-		}
-	}()
-
-	if secFS.ExistsNoErr(outputDir) {
-		GetLogger().Debug("Removing stream directory", logger.String("output_dir", outputDir))
-		if removeErr := secFS.RemoveAll(outputDir); removeErr != nil {
-			GetLogger().Error("Failed to remove stream directory", logger.Error(removeErr))
-		}
 	}
 }
 

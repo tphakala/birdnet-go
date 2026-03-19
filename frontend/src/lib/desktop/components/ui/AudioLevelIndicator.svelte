@@ -5,6 +5,7 @@
   import { loggers } from '$lib/utils/logger';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { generateSessionId } from '$lib/utils/session';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
@@ -26,9 +27,7 @@
     className?: string;
   }
 
-  // PERFORMANCE OPTIMIZATION: Cache HLS availability check with $derived
-  // Now using imported Hls instead of global window.Hls
-  let hlsSupported = $derived(typeof window !== 'undefined' && Hls.isSupported());
+  const hlsSupported = typeof window !== 'undefined' && Hls.isSupported();
 
   let { className = '' }: Props = $props();
 
@@ -50,11 +49,7 @@
   const ZERO_LEVEL_TIMEOUT = 5000;
   const HEARTBEAT_INTERVAL = 20000;
 
-  // Generate unique session ID per tab/component instance for server-side client tracking
-  const sessionId =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const sessionId = generateSessionId();
 
   // Internal state
   let eventSource: ReconnectingEventSource | null = null;
@@ -308,7 +303,7 @@
   }
 
   // Setup HLS streaming
-  async function setupHLSStream(hlsUrl: string, _sourceId: string) {
+  async function setupHLSStream(hlsUrl: string) {
     const audio = getAudioElement();
     if (!audio) return;
 
@@ -448,7 +443,7 @@
 
       activeStreamToken = data.stream_token;
       const hlsUrl = buildAppUrl(data.playlist_url);
-      await setupHLSStream(hlsUrl, sourceId);
+      await setupHLSStream(hlsUrl);
 
       // Re-check after second await
       if (requestId !== startRequestId) return;

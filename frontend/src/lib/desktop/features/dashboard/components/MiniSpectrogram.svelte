@@ -24,6 +24,7 @@
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { generateSessionId } from '$lib/utils/session';
   import { loggers } from '$lib/utils/logger';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
 
@@ -33,11 +34,7 @@
   const HEARTBEAT_INTERVAL = 20000;
   const SOURCE_DISCOVERY_TIMEOUT = 5000;
 
-  // Generate unique session ID per tab/component instance for server-side client tracking
-  const sessionId =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const sessionId = generateSessionId();
 
   // Volume/gain presets: muted → 0dB → +6dB → +12dB
   const GAIN_PRESETS = [
