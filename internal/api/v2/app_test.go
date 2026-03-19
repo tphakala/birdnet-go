@@ -878,6 +878,8 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 		"customColors":    true,
 		"logoStyle":       true,
 		"liveSpectrogram": true,
+		"freshInstall":    true,
+		"newVersion":      true,
 	}
 
 	for key := range rawResponse {

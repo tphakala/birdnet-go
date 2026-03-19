@@ -33,15 +33,16 @@ describe('Modal', () => {
   });
 
   it('does not render when isOpen is false', () => {
-    const { container } = modalTest.render({
+    modalTest.render({
       props: {
         isOpen: false,
         title: 'Hidden Modal',
       },
     });
 
-    const modal = container.querySelector('.modal');
-    expect(modal).not.toHaveClass('modal-open');
+    const dialog = screen.getByRole('dialog', { hidden: true });
+    expect(dialog).toHaveClass('opacity-0', 'invisible');
+    expect(dialog).not.toHaveClass('opacity-100', 'visible');
     expect(screen.queryByText('Hidden Modal')).toBeInTheDocument(); // Still in DOM but hidden
   });
 
@@ -60,14 +61,14 @@ describe('Modal', () => {
     const sizes = ['sm', 'md', 'lg', 'xl', 'full'] as const;
 
     sizes.forEach(size => {
-      const { container, unmount } = modalTest.render({
+      const { unmount } = modalTest.render({
         props: {
           isOpen: true,
           size,
         },
       });
 
-      const modalBox = container.querySelector('.modal-box');
+      const modalBox = screen.getByRole('document');
       const expectedClass = size === 'full' ? 'max-w-full' : `max-w-${size}`;
       expect(modalBox).toHaveClass(expectedClass);
       unmount();
@@ -118,7 +119,7 @@ describe('Modal', () => {
   it('calls onClose when backdrop clicked and closeOnBackdrop is true', async () => {
     const onClose = vi.fn();
 
-    const { container } = modalTest.render({
+    modalTest.render({
       props: {
         isOpen: true,
         title: 'Backdrop Close',
@@ -127,10 +128,8 @@ describe('Modal', () => {
       },
     });
 
-    const modal = container.querySelector('.modal');
-    if (modal) {
-      await fireEvent.click(modal);
-    }
+    const dialog = screen.getByRole('dialog');
+    await fireEvent.click(dialog);
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
@@ -138,7 +137,7 @@ describe('Modal', () => {
   it('does not close on backdrop click when closeOnBackdrop is false', async () => {
     const onClose = vi.fn();
 
-    const { container } = modalTest.render({
+    modalTest.render({
       props: {
         isOpen: true,
         title: 'No Backdrop Close',
@@ -147,10 +146,8 @@ describe('Modal', () => {
       },
     });
 
-    const modal = container.querySelector('.modal');
-    if (modal) {
-      await fireEvent.click(modal);
-    }
+    const dialog = screen.getByRole('dialog');
+    await fireEvent.click(dialog);
 
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -247,12 +244,12 @@ describe('Modal', () => {
     const confirmButton = screen.getByText('Confirm');
     await fireEvent.click(confirmButton);
 
-    // Should show loading spinner
-    expect(confirmButton.querySelector('.loading-spinner')).toBeInTheDocument();
+    // Should show loading spinner (animate-spin class on the spinner element)
+    expect(confirmButton.querySelector('.animate-spin')).toBeInTheDocument();
 
     // Wait for async operation to complete
     await waitFor(() => {
-      expect(confirmButton.querySelector('.loading-spinner')).not.toBeInTheDocument();
+      expect(confirmButton.querySelector('.animate-spin')).not.toBeInTheDocument();
     });
 
     expect(onConfirm).toHaveBeenCalledTimes(1);
@@ -318,7 +315,7 @@ describe('Modal', () => {
       });
 
       const confirmButton = screen.getByText('Confirm');
-      expect(confirmButton).toHaveClass(`btn-${variant}`);
+      expect(confirmButton).toHaveClass(`bg-[var(--color-${variant})]`);
       unmount();
     });
   });
@@ -347,19 +344,19 @@ describe('Modal', () => {
 
     // Wait for confirmation to complete
     await waitFor(() => {
-      expect(confirmButton.querySelector('.loading-spinner')).not.toBeInTheDocument();
+      expect(confirmButton.querySelector('.animate-spin')).not.toBeInTheDocument();
     });
   });
 
   it('applies custom className', () => {
-    const { container } = modalTest.render({
+    modalTest.render({
       props: {
         isOpen: true,
         className: 'custom-modal-box',
       },
     });
 
-    const modalBox = container.querySelector('.modal-box');
+    const modalBox = screen.getByRole('document');
     expect(modalBox).toHaveClass('custom-modal-box');
   });
 

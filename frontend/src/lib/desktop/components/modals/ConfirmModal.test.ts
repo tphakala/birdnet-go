@@ -26,8 +26,8 @@ describe('ConfirmModal', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
-  it('does not show modal-open class when isOpen is false', () => {
-    const { container } = render(ConfirmModal, {
+  it('has invisible classes when isOpen is false', () => {
+    render(ConfirmModal, {
       props: {
         isOpen: false,
         onClose: vi.fn(),
@@ -35,8 +35,9 @@ describe('ConfirmModal', () => {
       },
     });
 
-    const modal = container.querySelector('.modal');
-    expect(modal).not.toHaveClass('modal-open');
+    const dialog = screen.getByRole('dialog', { hidden: true });
+    expect(dialog).toHaveClass('opacity-0', 'invisible');
+    expect(dialog).not.toHaveClass('opacity-100', 'visible');
   });
 
   it('renders custom title', () => {
@@ -125,10 +126,10 @@ describe('ConfirmModal', () => {
     });
 
     const confirmButton = screen.getByText('Confirm');
-    expect(confirmButton).toHaveClass('btn-error');
+    expect(confirmButton).toHaveClass('bg-[var(--color-error)]');
   });
 
-  it('applies primary variant by default', () => {
+  it('applies error variant by default', () => {
     render(ConfirmModal, {
       props: {
         isOpen: true,
@@ -139,7 +140,7 @@ describe('ConfirmModal', () => {
 
     // Default confirmVariant is 'error' per component implementation
     const confirmButton = screen.getByText('Confirm');
-    expect(confirmButton).toHaveClass('btn-error');
+    expect(confirmButton).toHaveClass('bg-[var(--color-error)]');
   });
 
   it('closes on escape key', async () => {
@@ -199,7 +200,7 @@ describe('ConfirmModal', () => {
     });
 
     const confirmButton = screen.getByText('Confirm');
-    expect(confirmButton).toHaveClass('btn-warning');
+    expect(confirmButton).toHaveClass('bg-[var(--color-warning)]');
   });
 
   it('renders with success variant for positive confirmations', () => {
@@ -216,7 +217,7 @@ describe('ConfirmModal', () => {
     });
 
     const confirmButton = screen.getByText('Save');
-    expect(confirmButton).toHaveClass('btn-success');
+    expect(confirmButton).toHaveClass('bg-[var(--color-success)]');
     expect(screen.getByText('Save Changes?')).toBeInTheDocument();
   });
 });
