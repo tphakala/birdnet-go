@@ -807,8 +807,9 @@ func (m *FFmpegManager) checkForStuckStreams() {
 	}
 }
 
-// Shutdown gracefully shuts down all streams
-func (m *FFmpegManager) Shutdown() {
+// ShutdownWithContext gracefully shuts down all streams, respecting the
+// provided context deadline instead of the default 30-second timeout.
+func (m *FFmpegManager) ShutdownWithContext(ctx context.Context) {
 	start := time.Now()
 
 	// Get active stream count safely
@@ -845,17 +846,24 @@ func (m *FFmpegManager) Shutdown() {
 		close(done)
 	}()
 
-	// Wait with timeout
+	// Wait with context deadline
 	select {
 	case <-done:
 		getManagerLogger().Info("FFmpeg manager shutdown complete",
 			logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 			logger.Int("stopped_streams", activeStreams),
 			logger.String("operation", "shutdown"))
-	case <-time.After(30 * time.Second):
-		getManagerLogger().Warn("FFmpeg manager shutdown timeout",
+	case <-ctx.Done():
+		getManagerLogger().Warn("FFmpeg manager shutdown timeout (context deadline)",
 			logger.Int64("duration_ms", time.Since(start).Milliseconds()),
 			logger.Int("active_streams", activeStreams),
 			logger.String("operation", "shutdown"))
 	}
+}
+
+// Shutdown gracefully shuts down all streams with a 30-second timeout.
+func (m *FFmpegManager) Shutdown() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	m.ShutdownWithContext(ctx)
 }

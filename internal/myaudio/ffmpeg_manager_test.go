@@ -6,6 +6,7 @@
 package myaudio
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -614,5 +615,69 @@ func TestFFmpegManager_WatchdogCallsOnStreamReset(t *testing.T) {
 		require.True(t, ok, "receivedSourceID should be a string")
 		assert.NotEqual(t, oldSourceID, newID, "new source ID should differ from old one")
 		assert.NotEmpty(t, newID, "new source ID should not be empty")
+	})
+}
+
+// TestFFmpegManager_ShutdownWithContext verifies the context-aware shutdown method.
+func TestFFmpegManager_ShutdownWithContext(t *testing.T) {
+	// Do not use t.Parallel() - this test may indirectly access global soundLevelProcessors map
+
+	t.Run("cancels manager context and stops streams", func(t *testing.T) {
+		manager := NewFFmpegManager()
+		audioChan := make(chan UnifiedAudioData, 10)
+		defer close(audioChan)
+
+		// Start a stream so there's something to shut down
+		err := manager.StartStream(testRTSPURL, "tcp", audioChan)
+		require.NoError(t, err)
+
+		activeStreams := manager.GetActiveStreams()
+		assert.Len(t, activeStreams, 1)
+
+		// Shut down with a generous context
+		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+		manager.ShutdownWithContext(ctx)
+
+		// Manager context should be cancelled
+		require.Error(t, manager.ctx.Err(), "manager context should be cancelled after shutdown")
+
+		// All streams should be stopped
+		activeStreams = manager.GetActiveStreams()
+		assert.Empty(t, activeStreams, "no streams should remain after shutdown")
+	})
+
+	t.Run("respects context deadline", func(t *testing.T) {
+		manager := NewFFmpegManager()
+
+		// Use an already-cancelled context to verify the deadline path
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel() // Cancel immediately
+
+		// ShutdownWithContext should return promptly (context already done)
+		start := time.Now()
+		manager.ShutdownWithContext(ctx)
+		elapsed := time.Since(start)
+
+		// Should complete quickly — not wait 30 seconds
+		assert.Less(t, elapsed, 5*time.Second,
+			"shutdown with cancelled context should not block for the default 30s timeout")
+
+		// Manager context should be cancelled
+		require.Error(t, manager.ctx.Err(), "manager context should be cancelled")
+	})
+
+	t.Run("existing Shutdown delegates with 30s context", func(t *testing.T) {
+		manager := NewFFmpegManager()
+
+		// Call the existing Shutdown (no streams, should complete immediately)
+		manager.Shutdown()
+
+		// Manager context should be cancelled
+		require.Error(t, manager.ctx.Err(), "manager context should be cancelled after Shutdown()")
+
+		// No streams should remain
+		activeStreams := manager.GetActiveStreams()
+		assert.Empty(t, activeStreams, "no streams should remain after Shutdown()")
 	})
 }

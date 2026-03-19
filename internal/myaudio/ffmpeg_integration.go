@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -276,5 +277,17 @@ func ShutdownFFmpegManager() {
 		// Don't reset managerOnce or monitoringOnce to maintain consistent lifecycle semantics
 		// Both the manager and its monitoring can only be initialized once per process
 		// After shutdown, the manager cannot be recreated (getGlobalManager returns nil)
+	}
+}
+
+// ShutdownFFmpegManagerWithContext gracefully shuts down the FFmpeg manager,
+// respecting the provided context deadline.
+func ShutdownFFmpegManagerWithContext(ctx context.Context) {
+	managerMutex.Lock()
+	defer managerMutex.Unlock()
+
+	if globalManager != nil {
+		globalManager.ShutdownWithContext(ctx)
+		globalManager = nil
 	}
 }
