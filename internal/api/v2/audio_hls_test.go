@@ -348,17 +348,17 @@ func TestHLSHeartbeatRequest(t *testing.T) {
 		}
 
 		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Empty(t, req.ClientID)
+		assert.Empty(t, req.SessionID)
 	})
 
-	t.Run("heartbeat with client id", func(t *testing.T) {
+	t.Run("heartbeat with session id", func(t *testing.T) {
 		req := HLSHeartbeatRequest{
 			StreamToken: "abc123def456abc123def456abc123de",
-			ClientID:    "client_123",
+			SessionID:   "session-uuid-1234",
 		}
 
 		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Equal(t, "client_123", req.ClientID)
+		assert.Equal(t, "session-uuid-1234", req.SessionID)
 	})
 }
 
@@ -555,7 +555,7 @@ func TestResolveClientID(t *testing.T) {
 		ctx1 := e.NewContext(req1, httptest.NewRecorder())
 
 		req2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
-		req2.RemoteAddr = "192.168.1.100:12346"
+		req2.RemoteAddr = testRemoteAddr // Same IP, same port — session ID differentiates
 		ctx2 := e.NewContext(req2, httptest.NewRecorder())
 
 		id1 := c.resolveClientID(ctx1, "session-aaa")

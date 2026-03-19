@@ -33,6 +33,12 @@
   const HEARTBEAT_INTERVAL = 20000;
   const SOURCE_DISCOVERY_TIMEOUT = 5000;
 
+  // Generate unique session ID per tab/component instance for server-side client tracking
+  const sessionId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   // Volume/gain presets: muted → 0dB → +6dB → +12dB
   const GAIN_PRESETS = [
     { db: -Infinity, audio: false, labelKey: 'spectrogram.gain.muted' },
@@ -171,6 +177,7 @@
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
+        body: { session_id: sessionId },
       });
 
       if (signal.aborted) return;
@@ -254,7 +261,7 @@
       try {
         await fetchWithCSRF('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
-          body: { stream_token: token },
+          body: { stream_token: token, session_id: sessionId },
         });
       } catch {
         /* ignore heartbeat failures */
@@ -281,7 +288,7 @@
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
         keepalive: true,
-        body: { stream_token: activeStreamToken },
+        body: { stream_token: activeStreamToken, session_id: sessionId },
       }).catch(() => {});
       activeStreamToken = null;
     }

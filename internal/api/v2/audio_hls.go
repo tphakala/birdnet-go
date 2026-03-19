@@ -44,15 +44,16 @@ const (
 	hlsClientLogRetention = 24 * time.Hour        // Retention period for client log timestamps
 
 	// Audio encoding
-	hlsMinSegments       = 2     // Minimum HLS segments required
-	hlsDefaultSegmentLen = 2     // Default HLS segment length in seconds
-	hlsMinSegmentLen     = 1     // Minimum HLS segment length in seconds
-	hlsMaxSegmentLen     = 30    // Maximum HLS segment length in seconds
-	hlsAudioBitDepth     = 16    // Audio bit depth for encoding
-	hlsMinBitrate        = 16    // Minimum audio bitrate in kbps
-	hlsMaxBitrate        = 320   // Maximum audio bitrate in kbps
-	hlsDefaultSampleRate = 48000 // Default audio sample rate in Hz
-	hlsCleanupDelay      = 5     // Delay in seconds before cleanup
+	hlsMinSegments                  = 2                // Minimum HLS segments required
+	hlsDefaultSegmentLen            = 2                // Default HLS segment length in seconds
+	hlsMinSegmentLen                = 1                // Minimum HLS segment length in seconds
+	hlsMaxSegmentLen                = 30               // Maximum HLS segment length in seconds
+	hlsAudioBitDepth                = 16               // Audio bit depth for encoding
+	hlsMinBitrate                   = 16               // Minimum audio bitrate in kbps
+	hlsMaxBitrate                   = 320              // Maximum audio bitrate in kbps
+	hlsDefaultSampleRate            = 48000            // Default audio sample rate in Hz
+	hlsCleanupDelay                 = 5                // Delay in seconds before cleanup
+	hlsPrematureDisconnectThreshold = 10 * time.Second // Ignore disconnects within this window
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -77,8 +78,8 @@ type HLSStreamStatus struct {
 	PlaylistReady bool   `json:"playlist_ready"`
 }
 
-// HLSStartRequest represents an optional request body for stream start
-type HLSStartRequest struct {
+// HLSSessionRequest represents an optional request body for stream start
+type HLSSessionRequest struct {
 	SessionID string `json:"session_id,omitempty"` // Per-tab session UUID from frontend
 }
 
@@ -86,7 +87,6 @@ type HLSStartRequest struct {
 type HLSHeartbeatRequest struct {
 	StreamToken string `json:"stream_token"`
 	SessionID   string `json:"session_id,omitempty"` // Per-tab session UUID from frontend
-	ClientID    string `json:"client_id,omitempty"`  // Deprecated: kept for backwards compat
 }
 
 // hlsManager manages HLS streaming state
@@ -98,7 +98,7 @@ type hlsManager struct {
 
 	// Client tracking per stream
 	clients   map[string]map[string]bool // sourceID -> clientID -> true
-	clientsMu sync.Mutex
+	clientsMu sync.RWMutex               // RWMutex for read-heavy client count operations
 
 	// Activity tracking for cleanup
 	activity   map[string]time.Time // sourceID -> lastActivityTime
@@ -251,7 +251,7 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 	}
 
 	// Bind optional request body for session_id
-	var req HLSStartRequest
+	var req HLSSessionRequest
 	if err := ctx.Bind(&req); err != nil {
 		GetLogger().Debug("Failed to bind start request body", logger.Error(err))
 	}
@@ -394,7 +394,7 @@ func (c *Controller) StopHLSStream(ctx echo.Context) error {
 	}
 
 	// Bind optional request body for session_id
-	var req HLSStartRequest
+	var req HLSSessionRequest
 	if err := ctx.Bind(&req); err != nil {
 		GetLogger().Debug("Failed to bind stop request body", logger.Error(err))
 	}
@@ -1250,7 +1250,7 @@ func (c *Controller) handleHLSDisconnect(ctx echo.Context, sourceID, clientID st
 	// Check for premature disconnect
 	hlsMgr.activityMu.Lock()
 	if lastTime, exists := hlsMgr.clientActivity[sourceID+":"+clientID]; exists {
-		if time.Since(lastTime) < 10*time.Second {
+		if time.Since(lastTime) < hlsPrematureDisconnectThreshold {
 			hlsMgr.activityMu.Unlock()
 			c.logAPIRequest(ctx, logger.LogLevelWarn, "Ignoring premature disconnect",
 				logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
@@ -1674,8 +1674,8 @@ func shouldCleanupStream(sourceID string) bool {
 
 // getStreamClientCount returns the number of clients for a stream
 func getStreamClientCount(sourceID string) int {
-	hlsMgr.clientsMu.Lock()
-	defer hlsMgr.clientsMu.Unlock()
+	hlsMgr.clientsMu.RLock()
+	defer hlsMgr.clientsMu.RUnlock()
 
 	if clients, exists := hlsMgr.clients[sourceID]; exists {
 		return len(clients)

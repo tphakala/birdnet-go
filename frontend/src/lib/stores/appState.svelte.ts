@@ -144,7 +144,7 @@ export const appState: AppState = $state({ ...DEFAULT_STATE });
  * Whether the current user has access to live audio features.
  * Centralized check: security disabled, user authenticated, or public live audio enabled.
  */
-export const hasLiveAudioAccess: boolean = $derived(
+export const hasLiveAudioAccess = $derived(
   !appState.security.enabled ||
     appState.security.accessAllowed ||
     appState.security.publicAccess.liveAudio

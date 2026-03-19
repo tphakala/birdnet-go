@@ -29,6 +29,12 @@
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
 
+  // Generate unique session ID per tab/component instance for server-side client tracking
+  const sessionId =
+    typeof crypto !== 'undefined' && crypto.randomUUID
+      ? crypto.randomUUID()
+      : `fallback-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
   interface AudioLevelData {
     level: number;
     clipping: boolean;
@@ -133,6 +139,7 @@
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
+        body: { session_id: sessionId },
       });
 
       if (signal.aborted) return;
@@ -287,7 +294,7 @@
       try {
         await fetchWithCSRF('/api/v2/streams/hls/heartbeat', {
           method: 'POST',
-          body: { stream_token: token },
+          body: { stream_token: token, session_id: sessionId },
         });
       } catch {
         // Ignore heartbeat errors
@@ -316,7 +323,7 @@
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
         keepalive: true,
-        body: { stream_token: activeStreamToken },
+        body: { stream_token: activeStreamToken, session_id: sessionId },
       }).catch(() => {});
     }
 
