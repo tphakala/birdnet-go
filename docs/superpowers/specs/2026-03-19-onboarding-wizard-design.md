@@ -14,7 +14,7 @@ First-time setup wizard that guides new BirdNET-Go users through essential confi
 |---|------|-----------|----------|----------|
 | 1 | Welcome | `WelcomeStep.svelte` | nothing | always valid |
 | 2 | Location & Language | `LocationLanguageStep.svelte` | `birdnet` (lat/lon, species locale), localStorage (UI locale) | always valid (defaults work) |
-| 3 | Audio Source | `AudioSourceStep.svelte` | `audio` (soundcard source) or `realtime` (RTSP stream) | valid when source selected |
+| 3 | Audio Source | `AudioSourceStep.svelte` | `realtime` (`realtime.audio.source` for soundcard, `realtime.rtsp.streams[]` for RTSP) | valid when source selected |
 | 4 | Detection Threshold | `DetectionStep.svelte` | `birdnet` (threshold) | always valid (preset pre-selected) |
 | 5 | Privacy & Integration | `IntegrationStep.svelte` | `realtime` (privacy filter, birdweather), `sentry` (error reporting) | always valid |
 | 6 | Responsible Use | `ResponsibleUseStep.svelte` | nothing | valid when "I understand" checked |
@@ -77,7 +77,7 @@ Single audio source configuration. Additional sources can be added later in Sett
 - Shows device name for each available capture device
 - Loading state while devices are fetched
 - If no devices found: show message suggesting RTSP as alternative
-- Saves to `audio` section (`source` field)
+- Saves to `realtime` section (`realtime.audio.source` field)
 
 **RTSP mode:**
 - `TextInput` for stream URL
@@ -214,23 +214,28 @@ wizard.steps.locationLanguage.speciesLanguage
 
 Each step saves independently when the user navigates away (next or back). Steps use Svelte 5 `$effect` cleanup to trigger saves when the component unmounts during step transitions.
 
+Two-phase save:
+1. `settingsActions.updateSection()` — updates the in-memory store (synchronous)
+2. `settingsActions.saveSettings()` — persists to backend via `PUT /api/v2/settings` (async)
+
 Pattern:
 ```svelte
 $effect(() => {
   return () => {
     // Fires when component unmounts (step transition)
-    saveSettings();
+    settingsActions.updateSection('birdnet', { latitude, longitude, locale });
+    settingsActions.saveSettings().catch(() => {
+      // Toast error handled by settings store
+    });
   };
 });
 ```
 
-1. Step mounts, loads current settings from the store
+1. Step mounts, reads current settings from the store
 2. User makes changes (local `$state` variables)
 3. On step transition (next/back/skip), the component unmounts and `$effect` cleanup fires
-4. Cleanup calls `settingsActions.updateSection()` for the relevant sections
-5. If save fails, show a toast error but don't block navigation (save is fire-and-forget)
-
-Note: `$effect` cleanup runs synchronously when the component is destroyed, which happens before the next step mounts. The actual API call is async but we don't await it — the settings store handles optimistic updates.
+4. Cleanup calls `updateSection()` to merge changes into the store, then `saveSettings()` to persist
+5. If the API call fails, the settings store shows a toast error but navigation is not blocked
 
 ## No Backend Changes
 
@@ -239,7 +244,7 @@ All required API endpoints already exist:
 - `POST /api/v2/app/wizard/dismiss` — mark wizard completed (PR #2418)
 - `GET /api/v2/system/audio/devices` — audio device list
 - `GET /api/v2/settings/locales` — BirdNET species locale list (returns `Record<string, string>`)
-- `POST /api/v2/settings/*` — settings updates (existing)
+- `PUT /api/v2/settings` — persist all settings (existing)
 
 ## File Structure
 
