@@ -125,8 +125,12 @@
     abortController = controller;
     const { signal } = controller;
 
+    // Capture the source being started so stopStream() can clean up
+    // even if the request is aborted after the server processes it
+    activeSourceId = selectedSourceId;
+
     try {
-      const encodedSourceId = encodeURIComponent(selectedSourceId);
+      const encodedSourceId = encodeURIComponent(activeSourceId);
 
       // Start HLS stream on backend
       const data = await fetchWithCSRF<{
@@ -143,7 +147,6 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
-      activeSourceId = selectedSourceId;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       // Create audio element
@@ -379,10 +382,15 @@
     spectro.setGain(db);
   }
 
+  // $derived memoizes the boolean so the effect only re-runs when the
+  // access result actually changes (true↔false), not on every internal
+  // auth state mutation (e.g., token refresh).
+  const hasAccess = $derived(hasLiveAudioAccess());
+
   // $effect (not onMount) so the block re-runs when auth state changes,
   // establishing SSE connection if user logs in after page mount.
   $effect(() => {
-    if (hasLiveAudioAccess()) {
+    if (hasAccess) {
       connectSSE();
     }
 

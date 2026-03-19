@@ -891,9 +891,18 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	// Initialize activity
 	c.updateHLSActivity(sourceID, "", "stream_creation")
 
-	// Start audio feed (non-Windows platforms)
+	// Start audio feed (non-Windows platforms).
+	// If the feed goroutine exits abnormally (not due to context cancellation),
+	// cancel the stream context to trigger cleanup via the context goroutine below.
 	if runtime.GOOS != OSWindows {
-		go c.feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
+		go func() {
+			c.feedAudioToFFmpeg(sourceID, stream.FifoPipe, stream.ctx)
+			if stream.ctx.Err() == nil {
+				GetLogger().Warn("Audio feed exited unexpectedly, cancelling stream",
+					logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
+				stream.cancel()
+			}
+		}()
 	}
 
 	// Start context cleanup goroutine — pass stream pointer to verify identity
@@ -1461,10 +1470,11 @@ func (c *Controller) performHLSCleanup(sourceID string, stream *HLSStreamInfo, r
 }
 
 // cleanupFFmpegProcess terminates the FFmpeg process and closes the log file.
+// Waits synchronously for the process to exit so that callers can safely
+// remove the output directory afterward (cmd.WaitDelay caps the wait at 5s).
 func (c *Controller) cleanupFFmpegProcess(sourceID string, stream *HLSStreamInfo) {
-	hasProcess := stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil
-	if hasProcess {
-		go c.waitForFFmpegProcess(sourceID, stream.FFmpegCmd, stream.logFile)
+	if stream.FFmpegCmd != nil && stream.FFmpegCmd.Process != nil {
+		c.waitForFFmpegProcess(sourceID, stream.FFmpegCmd, stream.logFile)
 		return
 	}
 	// No process, just close log file if present
@@ -1494,6 +1504,12 @@ func closeLogFile(f *os.File) {
 
 // cleanupStreamTracking removes all tracking data for a stream.
 func (c *Controller) cleanupStreamTracking(sourceID string) {
+	cleanupStreamTrackingData(sourceID)
+}
+
+// cleanupStreamTrackingData removes all tracking data for a stream from the global manager.
+// Package-level function so it can be called from both Controller methods and standalone functions.
+func cleanupStreamTrackingData(sourceID string) {
 	// Clean up client tracking
 	hlsMgr.clientsMu.Lock()
 	delete(hlsMgr.clients, sourceID)
@@ -1799,6 +1815,10 @@ func cleanupStream(s *HLSStreamInfo, sourceID string) {
 	}
 
 	cleanupStreamDirectory(s.OutputDir)
+
+	// Clean up tracking data (clients, activity) so stale entries don't persist
+	cleanupStreamTrackingData(sourceID)
+
 	GetLogger().Debug("Cleaned up inactive stream", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
 }
 

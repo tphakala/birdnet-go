@@ -330,10 +330,14 @@
     }
   }
 
+  // $derived memoizes the boolean so the effect only re-runs when the
+  // access result actually changes, not on every internal auth state mutation.
+  const hasAccess = $derived(hasLiveAudioAccess());
+
   // $effect (not onMount) so the block re-runs when auth state changes,
   // starting the stream if user logs in after page mount.
   $effect(() => {
-    if (hasLiveAudioAccess() && shouldAutoStart()) {
+    if (hasAccess && shouldAutoStart()) {
       start();
     }
     return () => stop();
