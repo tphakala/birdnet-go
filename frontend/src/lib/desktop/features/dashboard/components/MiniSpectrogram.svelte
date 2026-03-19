@@ -64,6 +64,7 @@
   let audioElement: HTMLAudioElement | null = null;
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let abortController: AbortController | null = null;
+  let activeSourceId: string | null = null;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: false });
@@ -180,6 +181,7 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
+      activeSourceId = sourceId;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       audioElement = new globalThis.Audio();
@@ -280,7 +282,17 @@
     abortController?.abort();
     abortController = null;
 
-    // Send disconnect heartbeat
+    // Send explicit stop for immediate server-side client removal
+    if (activeSourceId) {
+      const encodedSourceId = encodeURIComponent(activeSourceId);
+      fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
+        method: 'POST',
+        body: { session_id: sessionId },
+      }).catch(() => {});
+      activeSourceId = null;
+    }
+
+    // Send disconnect heartbeat as fallback
     if (activeStreamToken) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',

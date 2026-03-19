@@ -315,7 +315,16 @@
     abortController?.abort();
     abortController = null;
 
-    // Send disconnect heartbeat for the active stream
+    // Send explicit stop for immediate server-side client removal
+    if (selectedSourceId) {
+      const encodedSourceId = encodeURIComponent(selectedSourceId);
+      fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
+        method: 'POST',
+        body: { session_id: sessionId },
+      }).catch(() => {});
+    }
+
+    // Also send disconnect heartbeat as fallback (keepalive ensures delivery during page unload)
     if (activeStreamToken) {
       fetchWithCSRF('/api/v2/streams/hls/heartbeat?disconnect=true', {
         method: 'POST',
