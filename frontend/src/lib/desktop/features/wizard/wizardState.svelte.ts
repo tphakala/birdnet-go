@@ -3,6 +3,7 @@ import type { WizardFlow, WizardLaunchOptions, WizardStatus, WizardStep } from '
 import { getStepsForFlow } from './wizardRegistry';
 
 export const WIZARD_DISMISSED_VERSION_KEY = 'birdnet-wizard-dismissed-version';
+const WIZARD_DISMISS_ENDPOINT = '/api/v2/app/wizard/dismiss';
 
 let status = $state<WizardStatus>('idle');
 let flow = $state<WizardFlow | null>(null);
@@ -30,7 +31,7 @@ async function dismiss(): Promise<void> {
   }
 
   try {
-    await api.post('/api/v2/app/wizard/dismiss');
+    await api.post(WIZARD_DISMISS_ENDPOINT);
   } catch {
     // Swallow error — localStorage fallback prevents re-display
   }
@@ -38,6 +39,34 @@ async function dismiss(): Promise<void> {
 
 function resetState(): void {
   status = 'completed';
+  flow = null;
+  currentStepIndex = 0;
+  steps = [];
+  isStepValid = true;
+  previousVersion = null;
+  currentVersion = null;
+}
+
+// Dismiss without changing wizard state. Used when launch() didn't activate
+// (e.g., no changelog steps matched) but we still need to update last_seen_version.
+async function dismissOnly(version?: string): Promise<void> {
+  const ver = version ?? currentVersion ?? '';
+  if (ver) {
+    try {
+      localStorage.setItem(WIZARD_DISMISSED_VERSION_KEY, ver);
+    } catch {
+      // localStorage unavailable
+    }
+  }
+  try {
+    await api.post(WIZARD_DISMISS_ENDPOINT);
+  } catch {
+    // Swallow — localStorage fallback covers this
+  }
+}
+
+function _resetForTesting(): void {
+  status = 'idle';
   flow = null;
   currentStepIndex = 0;
   steps = [];
@@ -123,4 +152,6 @@ export const wizardState = {
   setStepValid,
   skip,
   complete,
+  dismissOnly,
+  _resetForTesting,
 };

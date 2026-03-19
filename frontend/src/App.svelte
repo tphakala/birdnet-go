@@ -459,7 +459,15 @@
     if (!appInitialized || loadingComponent || wizardChecked) return;
     wizardChecked = true;
 
-    // Check localStorage fallback first
+    // Fresh install always shows onboarding, regardless of localStorage
+    if (appState.freshInstall) {
+      wizardState.launch('onboarding', {
+        currentVersion: appState.version,
+      });
+      return;
+    }
+
+    // For updates, check localStorage fallback before triggering what's-new
     try {
       const dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
       if (dismissedVersion === appState.version) return;
@@ -467,15 +475,16 @@
       // localStorage unavailable (private browsing, etc.) — proceed with wizard check
     }
 
-    if (appState.freshInstall) {
-      wizardState.launch('onboarding', {
-        currentVersion: appState.version,
-      });
-    } else if (appState.newVersion) {
+    if (appState.newVersion) {
       wizardState.launch('whats-new', {
         previousVersion: appState.previousVersion ?? undefined,
         currentVersion: appState.version,
       });
+      // If no changelog steps matched (e.g., pre-wizard install with empty
+      // previousVersion), auto-dismiss to prevent repeated triggering on reload
+      if (!wizardState.isActive) {
+        wizardState.dismissOnly(appState.version);
+      }
     }
   });
 

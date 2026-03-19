@@ -30,21 +30,14 @@ function createTestSteps(count: number): WizardStep[] {
 describe('wizardState — state machine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset localStorage mock
     localStorage.clear();
-    // Reset state by completing any active wizard
-    // The state needs a fresh start for each test — call skip() to reset to 'completed'
-    // But skip is async, so we use a simpler approach: launch with empty steps (no-op)
-    // then the state remains from previous test. We need a reliable reset.
+    wizardState._resetForTesting();
     vi.mocked(getStepsForFlow).mockReturnValue([]);
   });
 
   describe('initial state', () => {
     it('starts with idle status', () => {
-      // After module first loads, status is 'idle'
-      // Note: status may be 'completed' if a prior test called skip/complete
-      // We verify the exported properties are accessible
-      expect(['idle', 'completed']).toContain(wizardState.status);
+      expect(wizardState.status).toBe('idle');
     });
 
     it('has null flow when not active', () => {
