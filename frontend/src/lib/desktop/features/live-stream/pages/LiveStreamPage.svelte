@@ -10,7 +10,7 @@
 <script lang="ts">
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { onMount } from 'svelte';
+
   import { Radio, AlertCircle, Loader2, Play, Maximize, Minimize, Mic } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY } from '$lib/desktop/components/ui/hls-config';
@@ -374,7 +374,7 @@
     spectro.setGain(db);
   }
 
-  onMount(() => {
+  $effect(() => {
     if (hasLiveAudioAccess()) {
       connectSSE();
     }

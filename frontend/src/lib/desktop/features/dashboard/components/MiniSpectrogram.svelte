@@ -15,7 +15,7 @@
 
   import Hls from 'hls.js';
   import ReconnectingEventSource from 'reconnecting-eventsource';
-  import { onMount } from 'svelte';
+
   import { Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
@@ -329,7 +329,7 @@
     }
   }
 
-  onMount(() => {
+  $effect(() => {
     if (hasLiveAudioAccess() && shouldAutoStart()) {
       start();
     }
