@@ -1858,20 +1858,18 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
-	if deadline, ok := ctx.Deadline(); ok {
-		remaining := max(time.Until(deadline), 0)
-		if err := p.JobQueue.StopWithTimeout(remaining); err != nil {
-			GetLogger().Warn("Job queue shutdown timed out",
-				logger.Error(err),
-				logger.String("operation", "job_queue_shutdown"))
-		}
-	} else {
-		// No deadline — fall back to default
-		if err := p.JobQueue.StopWithTimeout(30 * time.Second); err != nil {
-			GetLogger().Warn("Job queue shutdown timed out",
-				logger.Error(err),
-				logger.String("operation", "job_queue_shutdown"))
-		}
+	// Check ctx.Err() first to handle cancellation without deadline (WithCancel).
+	queueStopTimeout := 30 * time.Second
+	if ctx.Err() != nil {
+		queueStopTimeout = 0
+	} else if deadline, ok := ctx.Deadline(); ok {
+		queueStopTimeout = max(time.Until(deadline), 0)
+	}
+
+	if err := p.JobQueue.StopWithTimeout(queueStopTimeout); err != nil {
+		GetLogger().Warn("Job queue shutdown timed out",
+			logger.Error(err),
+			logger.String("operation", "job_queue_shutdown"))
 	}
 
 	// Skip remaining cleanup if context is already expired — these are
