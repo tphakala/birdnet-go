@@ -106,7 +106,7 @@ func NewSecureHeaders(config *SecurityConfig) echo.MiddlewareFunc {
 
 	// Build CSP: add frame-ancestors 'self' when embedding is disabled
 	csp := config.ContentSecurityPolicy
-	if !config.AllowEmbedding && !strings.Contains(csp, "frame-ancestors") {
+	if !config.AllowEmbedding && !strings.Contains(strings.ToLower(csp), "frame-ancestors") {
 		if csp == "" {
 			csp = "frame-ancestors 'self'"
 		} else {
