@@ -574,8 +574,8 @@ func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
-	if IsInLocalSubnet(clientIP) {
-		secLog.Info("User authenticated: request from local subnet")
+	if s.Settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(clientIP) {
+		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)")
 		return true
 	}
 

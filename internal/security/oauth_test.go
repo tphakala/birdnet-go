@@ -272,6 +272,104 @@ func TestIsUserAuthenticatedGithubAuth(t *testing.T) {
 	t.Skip("Skipping: Gothic session handling requires integration test setup")
 }
 
+// TestIsUserAuthenticatedSubnetBypassDisabled verifies that local subnet clients
+// are NOT auto-authenticated when AllowSubnetBypass.Enabled is false.
+// This is a regression test for the security fix where IsUserAuthenticated
+// previously called IsInLocalSubnet unconditionally, ignoring the config.
+func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
+	conf.Setting()
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			SessionSecret: "test-secret-32-bytes-minimum-len",
+			AllowSubnetBypass: conf.AllowSubnetBypass{
+				Enabled: false, // Explicitly disabled
+				Subnet:  "192.168.1.0/24",
+			},
+		},
+	}
+
+	server := NewOAuth2ServerForTesting(settings)
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	// Use loopback IP which IsInLocalSubnet would normally match
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// No token or session — only subnet would grant access
+	result := server.IsUserAuthenticated(c)
+	assert.False(t, result, "local subnet client must NOT be auto-authenticated when AllowSubnetBypass.Enabled is false")
+}
+
+// TestIsUserAuthenticatedSubnetBypassEnabled verifies that local subnet clients
+// ARE auto-authenticated when AllowSubnetBypass.Enabled is true (the default
+// home-user configuration).
+func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
+	conf.Setting()
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			SessionSecret: "test-secret-32-bytes-minimum-len",
+			AllowSubnetBypass: conf.AllowSubnetBypass{
+				Enabled: true, // Explicitly enabled
+				Subnet:  "192.168.1.0/24",
+			},
+		},
+	}
+
+	server := NewOAuth2ServerForTesting(settings)
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	// Use loopback IP which IsInLocalSubnet matches
+	req.RemoteAddr = "127.0.0.1:12345"
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	result := server.IsUserAuthenticated(c)
+	assert.True(t, result, "local subnet client should be auto-authenticated when AllowSubnetBypass.Enabled is true")
+}
+
+// TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled verifies that
+// disabling subnet bypass does NOT break token-based authentication.
+func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T) {
+	conf.Setting()
+
+	settings := &conf.Settings{
+		Security: conf.Security{
+			SessionSecret: "test-secret-32-bytes-minimum-len",
+			AllowSubnetBypass: conf.AllowSubnetBypass{
+				Enabled: false, // Subnet bypass disabled
+			},
+		},
+	}
+
+	server := NewOAuth2ServerForTesting(settings)
+	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	// Store token using gothic's method
+	_ = gothic.StoreInSession("access_token", "valid_token", req, rec)
+	req.Header.Set("Cookie", rec.Header().Get("Set-Cookie"))
+
+	// Add valid token to OAuth2Server
+	server.accessTokens["valid_token"] = AccessToken{
+		Token:     "valid_token",
+		ExpiresAt: time.Now().Add(time.Hour),
+	}
+
+	result := server.IsUserAuthenticated(c)
+	assert.True(t, result, "token auth must work even when subnet bypass is disabled")
+}
+
 // TestIsValidUserId tests the isValidUserId helper function
 func TestIsValidUserId(t *testing.T) {
 	tests := []struct {

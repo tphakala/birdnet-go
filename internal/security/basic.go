@@ -172,10 +172,13 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 	}
 
 	// Check if client is in local subnet and configure cookie store accordingly
-	if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
-		// For clients in the local subnet, allow non-HTTPS cookies
-		secLog.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
-		s.configureLocalNetworkCookieStore()
+	// Only relax cookie security when subnet bypass is explicitly enabled
+	if s.Settings.Security.AllowSubnetBypass.Enabled {
+		if clientIP := net.ParseIP(c.RealIP()); IsInLocalSubnet(clientIP) {
+			// For clients in the local subnet, allow non-HTTPS cookies
+			secLog.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
+			s.configureLocalNetworkCookieStore()
+		}
 	}
 
 	grantType := c.FormValue("grant_type")
