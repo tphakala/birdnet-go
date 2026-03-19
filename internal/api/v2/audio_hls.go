@@ -980,6 +980,9 @@ func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource
 	// Windows doesn't support SIGINT; exec.CommandContext defaults to TerminateProcess.
 	if runtime.GOOS != OSWindows {
 		cmd.Cancel = func() error {
+			if cmd.Process == nil {
+				return nil
+			}
 			return cmd.Process.Signal(syscall.SIGINT)
 		}
 	}
