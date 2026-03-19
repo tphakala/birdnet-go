@@ -14,8 +14,9 @@
   let { latitude, longitude, onLocationChange }: Props = $props();
 
   let mapContainer = $state<HTMLDivElement>();
-  let map = $state<import('maplibre-gl').Map | undefined>();
-  let marker = $state<import('maplibre-gl').Marker | undefined>();
+  // Use $state.raw to avoid deep proxying of complex 3rd-party classes (WebGL context, etc.)
+  let map = $state.raw<import('maplibre-gl').Map | undefined>(undefined);
+  let marker = $state.raw<import('maplibre-gl').Marker | undefined>(undefined);
 
   const PICKER_WORLD_ZOOM = 3;
 

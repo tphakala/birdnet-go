@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
@@ -15,7 +15,7 @@
   let dirty = $state(false);
 
   $effect(() => {
-    onValidChange?.(true);
+    untrack(() => onValidChange?.(true));
   });
 
   onMount(() => {

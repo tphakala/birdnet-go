@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
@@ -46,7 +46,7 @@
   let dirty = $state(false);
 
   $effect(() => {
-    onValidChange?.(true);
+    untrack(() => onValidChange?.(true));
   });
 
   onMount(() => {
@@ -86,11 +86,13 @@
     {t('wizard.steps.detection.description')}
   </p>
 
-  <div class="space-y-3">
+  <div class="space-y-3" role="radiogroup" aria-label={t('wizard.steps.detection.title')}>
     {#each presets as preset (preset.id)}
       {@const PresetIcon = preset.icon}
       <button
         type="button"
+        role="radio"
+        aria-checked={selectedPreset === preset.id}
         class="flex w-full items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {selectedPreset ===
         preset.id
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'

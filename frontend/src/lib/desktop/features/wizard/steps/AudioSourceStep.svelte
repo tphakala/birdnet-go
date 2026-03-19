@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -28,7 +28,9 @@
   );
 
   $effect(() => {
-    onValidChange?.(isValid);
+    // Read isValid (tracked), but untrack the callback to avoid re-run if parent recreates it
+    const valid = isValid;
+    untrack(() => onValidChange?.(valid));
   });
 
   onMount(() => {
@@ -115,9 +117,15 @@
     <label class="mb-2 block text-sm font-medium text-[var(--color-base-content)]">
       {t('wizard.steps.audioSource.sourceTypeLabel')}
     </label>
-    <div class="grid grid-cols-2 gap-3">
+    <div
+      class="grid grid-cols-2 gap-3"
+      role="radiogroup"
+      aria-label={t('wizard.steps.audioSource.sourceTypeLabel')}
+    >
       <button
         type="button"
+        role="radio"
+        aria-checked={sourceType === 'soundcard'}
         class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
         'soundcard'
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
@@ -132,6 +140,8 @@
 
       <button
         type="button"
+        role="radio"
+        aria-checked={sourceType === 'rtsp'}
         class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
         'rtsp'
           ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { WizardStepProps } from '../types';
 
@@ -7,7 +8,8 @@
   let acknowledged = $state(false);
 
   $effect(() => {
-    onValidChange?.(acknowledged);
+    const valid = acknowledged;
+    untrack(() => onValidChange?.(valid));
   });
 </script>
 

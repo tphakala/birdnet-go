@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { WizardStepProps } from '../types';
 
   let { onValidChange }: WizardStepProps = $props();
 
   $effect(() => {
-    onValidChange?.(true);
+    untrack(() => onValidChange?.(true));
   });
 </script>
 

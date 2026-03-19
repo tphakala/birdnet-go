@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
@@ -26,7 +26,7 @@
   let dirty = $state(false);
 
   $effect(() => {
-    onValidChange?.(true);
+    untrack(() => onValidChange?.(true));
   });
 
   onMount(() => {
