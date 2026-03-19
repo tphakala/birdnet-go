@@ -289,5 +289,8 @@ func ShutdownFFmpegManagerWithContext(ctx context.Context) {
 	if globalManager != nil {
 		globalManager.ShutdownWithContext(ctx)
 		globalManager = nil
+		// See ShutdownFFmpegManager for lifecycle semantics — managerOnce and
+		// monitoringOnce are intentionally not reset; the manager cannot be
+		// recreated after shutdown.
 	}
 }
