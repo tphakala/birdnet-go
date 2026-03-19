@@ -4,6 +4,7 @@ package api
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -340,25 +341,24 @@ func TestHLSManagerConcurrency(t *testing.T) {
 	})
 }
 
-// TestHLSHeartbeatRequest tests the heartbeat request struct
+// TestHLSHeartbeatRequest tests the heartbeat request struct JSON binding
 func TestHLSHeartbeatRequest(t *testing.T) {
 	t.Run("heartbeat with stream token only", func(t *testing.T) {
-		req := HLSHeartbeatRequest{
-			StreamToken: "abc123def456abc123def456abc123de",
-		}
+		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de"}`)
+		var req HLSHeartbeatRequest
+		require.NoError(t, json.Unmarshal(body, &req))
 
 		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
 		assert.Empty(t, req.SessionID)
 	})
 
 	t.Run("heartbeat with session id", func(t *testing.T) {
-		req := HLSHeartbeatRequest{
-			StreamToken: "abc123def456abc123def456abc123de",
-			SessionID:   "session-uuid-1234",
-		}
+		body := []byte(`{"stream_token":"abc123def456abc123def456abc123de","session_id":"550e8400-e29b-41d4-a716-446655440000"}`)
+		var req HLSHeartbeatRequest
+		require.NoError(t, json.Unmarshal(body, &req))
 
 		assert.Equal(t, "abc123def456abc123def456abc123de", req.StreamToken)
-		assert.Equal(t, "session-uuid-1234", req.SessionID)
+		assert.Equal(t, "550e8400-e29b-41d4-a716-446655440000", req.SessionID)
 	})
 }
 
@@ -505,12 +505,13 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 		wg.Wait()
 		close(results)
 
-		// Verify all goroutines succeeded and got the same token
+		// Verify all goroutines succeeded and got the same non-empty token
 		var firstToken string
 		for r := range results {
 			require.NoError(t, r.err)
 			if firstToken == "" {
 				firstToken = r.token
+				require.NotEmpty(t, firstToken, "token should not be empty")
 			}
 			assert.Equal(t, firstToken, r.token, "all concurrent requests should get same token")
 		}
