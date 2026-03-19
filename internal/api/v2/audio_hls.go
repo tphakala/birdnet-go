@@ -302,9 +302,6 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		return c.buildHLSStreamResponse(ctx, sourceID, existingStream)
 	}
 
-	// Register client and update activity with grace period
-	c.updateHLSActivity(sourceID, clientID, "stream_start", hlsNewStreamGracePeriod)
-
 	// Create or get the HLS stream (force-restart uses atomic cleanup+create)
 	var stream *HLSStreamInfo
 	if forceRestart {
@@ -318,6 +315,10 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 			logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to start audio stream", http.StatusInternalServerError)
 	}
+
+	// Register client AFTER stream creation so force-restart gets clean tracking
+	// (forceCreateHLSStream clears stale tracking before creating the new stream)
+	c.updateHLSActivity(sourceID, clientID, "stream_start", hlsNewStreamGracePeriod)
 
 	// Check if playlist is ready
 	playlistReady := c.waitForHLSPlaylist(ctx, sourceID, stream)
@@ -773,7 +774,11 @@ func (c *Controller) forceCreateHLSStream(sourceID string) (*HLSStreamInfo, erro
 		// while the old one's directory is still being deleted.
 		c.cleanupExistingHLSStream(sourceID)
 
-		// Phase 2: Create new stream (directory path is deterministic,
+		// Phase 2: Clear stale tracking data (clients, activity) from the
+		// old stream so the replacement starts with a clean slate.
+		c.cleanupStreamTracking(sourceID)
+
+		// Phase 3: Create new stream (directory path is deterministic,
 		// so cleanup must complete before creation).
 		return c.createHLSStream(sourceID)
 	})
@@ -1775,9 +1780,11 @@ func cleanupStream(s *HLSStreamInfo, sourceID string) {
 		s.cancel()
 	}
 
-	if s.FFmpegCmd != nil && s.FFmpegCmd.Process != nil {
-		if _, err := s.FFmpegCmd.Process.Wait(); err != nil {
-			GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(err))
+	// Use cmd.Wait() (not cmd.Process.Wait()) so that cmd.Cancel/cmd.WaitDelay
+	// escalation to SIGKILL works correctly.
+	if s.FFmpegCmd != nil {
+		if err := s.FFmpegCmd.Wait(); err != nil {
+			GetLogger().Debug("FFmpeg process exited during cleanup", logger.Error(err))
 		}
 	}
 

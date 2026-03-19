@@ -64,6 +64,7 @@
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let abortController: AbortController | null = null;
   let activeStreamToken: string | null = null;
+  let activeSourceId: string | null = null;
 
   // Initialize composable during component init (registers cleanup $effect)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: true });
@@ -142,6 +143,7 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
+      activeSourceId = selectedSourceId;
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       // Create audio element
@@ -315,11 +317,10 @@
     abortController?.abort();
     abortController = null;
 
-    // Send explicit stop for immediate server-side client removal
-    // Guard with activeStreamToken to avoid sending /stop when no stream was started
-    // (selectedSourceId is set by SSE discovery before any stream is created)
-    if (activeStreamToken && selectedSourceId) {
-      const encodedSourceId = encodeURIComponent(selectedSourceId);
+    // Send explicit stop for the source that actually has an active stream
+    // (selectedSourceId may have changed if user switched sources before stop)
+    if (activeSourceId) {
+      const encodedSourceId = encodeURIComponent(activeSourceId);
       fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
         keepalive: true,
@@ -351,6 +352,7 @@
     }
 
     activeStreamToken = null;
+    activeSourceId = null;
     isStreaming = false;
   }
 
