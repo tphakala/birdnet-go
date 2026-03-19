@@ -141,6 +141,16 @@ const DEFAULT_STATE: AppState = {
 export const appState: AppState = $state({ ...DEFAULT_STATE });
 
 /**
+ * Whether the current user has access to live audio features.
+ * Centralized check: security disabled, user authenticated, or public live audio enabled.
+ */
+export const hasLiveAudioAccess: boolean = $derived(
+  !appState.security.enabled ||
+    appState.security.accessAllowed ||
+    appState.security.publicAccess.liveAudio
+);
+
+/**
  * Delays execution for the specified number of milliseconds.
  */
 function delay(ms: number): Promise<void> {

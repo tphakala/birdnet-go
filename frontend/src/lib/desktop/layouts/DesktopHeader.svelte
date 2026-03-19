@@ -19,7 +19,6 @@
     debugMode?: boolean;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
-    publicLiveAudio?: boolean;
     onSidebarToggle?: () => void;
     onSearch?: (_query: string) => void;
     onNavigate?: (_url: string) => void;
@@ -36,7 +35,6 @@
     debugMode = false,
     securityEnabled = false,
     accessAllowed = true,
-    publicLiveAudio = false,
     onSidebarToggle,
     onSearch,
     onNavigate,
@@ -113,7 +111,7 @@
     <QuietHoursIndicator />
 
     {#if showAudioLevel}
-      <AudioLevelIndicator {securityEnabled} {accessAllowed} {publicLiveAudio} />
+      <AudioLevelIndicator />
     {/if}
 
     {#if showNotifications}

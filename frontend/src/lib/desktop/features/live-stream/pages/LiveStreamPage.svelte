@@ -23,7 +23,7 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
-  import { appState } from '$lib/stores/appState.svelte';
+  import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
 
   const logger = loggers.audio;
   const FFT_SIZE = 1024;
@@ -61,13 +61,6 @@
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let abortController: AbortController | null = null;
   let activeStreamToken: string | null = null;
-
-  // Access control
-  const hasAudioAccess = $derived(
-    !appState.security.enabled ||
-      appState.security.accessAllowed ||
-      appState.security.publicAccess.liveAudio
-  );
 
   // Initialize composable during component init (registers cleanup $effect)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: true });
@@ -369,7 +362,7 @@
   }
 
   onMount(() => {
-    if (hasAudioAccess) {
+    if (hasLiveAudioAccess) {
       connectSSE();
     }
 
@@ -413,7 +406,7 @@
   }
 </script>
 
-{#if hasAudioAccess}
+{#if hasLiveAudioAccess}
   <div
     bind:this={cardEl}
     class={isFullscreen

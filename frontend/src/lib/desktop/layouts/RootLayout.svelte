@@ -16,7 +16,6 @@
     currentPath?: string;
     securityEnabled?: boolean;
     accessAllowed?: boolean;
-    publicLiveAudio?: boolean;
     version?: string;
     children?: Snippet;
     className?: string;
@@ -30,7 +29,6 @@
     currentPath,
     securityEnabled = false,
     accessAllowed = true,
-    publicLiveAudio = false,
     version = 'Development Build',
     children,
     className = '',
@@ -117,7 +115,6 @@
           {currentPage}
           {securityEnabled}
           {accessAllowed}
-          {publicLiveAudio}
           showSidebarToggle={true}
           showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
           onSidebarToggle={handleSidebarToggle}
@@ -154,7 +151,6 @@
   <Sidebar
     {securityEnabled}
     {accessAllowed}
-    {publicLiveAudio}
     {version}
     currentRoute={currentPath ?? `/ui/${currentPage}`}
     onNavigate={handleNavigate}

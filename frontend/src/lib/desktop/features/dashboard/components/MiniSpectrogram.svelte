@@ -18,7 +18,7 @@
   import { onMount } from 'svelte';
   import { Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
   import { t } from '$lib/i18n';
-  import { appState } from '$lib/stores/appState.svelte';
+  import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
@@ -32,13 +32,6 @@
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
   const SOURCE_DISCOVERY_TIMEOUT = 5000;
-
-  // Access control — handled internally, no props from parent
-  const hasAudioAccess = $derived(
-    !appState.security.enabled ||
-      appState.security.accessAllowed ||
-      appState.security.publicAccess.liveAudio
-  );
 
   // Volume/gain presets: muted → 0dB → +6dB → +12dB
   const GAIN_PRESETS = [
@@ -321,14 +314,14 @@
   }
 
   onMount(() => {
-    if (hasAudioAccess && shouldAutoStart()) {
+    if (hasLiveAudioAccess && shouldAutoStart()) {
       start();
     }
     return () => stop();
   });
 </script>
 
-{#if hasAudioAccess}
+{#if hasLiveAudioAccess}
   <div
     class="overflow-hidden rounded-2xl border border-border-100 bg-[var(--color-base-100)] shadow-sm"
   >

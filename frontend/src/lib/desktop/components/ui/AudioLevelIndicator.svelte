@@ -5,6 +5,7 @@
   import { loggers } from '$lib/utils/logger';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
@@ -23,21 +24,13 @@
 
   interface Props {
     className?: string;
-    securityEnabled?: boolean;
-    accessAllowed?: boolean;
-    publicLiveAudio?: boolean;
   }
 
   // PERFORMANCE OPTIMIZATION: Cache HLS availability check with $derived
   // Now using imported Hls instead of global window.Hls
   let hlsSupported = $derived(typeof window !== 'undefined' && Hls.isSupported());
 
-  let {
-    className = '',
-    securityEnabled = false,
-    accessAllowed = true,
-    publicLiveAudio = false,
-  }: Props = $props();
+  let { className = '' }: Props = $props();
 
   // Stream token state
   let activeStreamToken: string | null = null;
@@ -643,7 +636,7 @@
     </div>
   {/if}
 
-  {#if !securityEnabled || accessAllowed || publicLiveAudio}
+  {#if hasLiveAudioAccess}
     <!-- Dropdown menu -->
     {#if dropdownOpen}
       <div

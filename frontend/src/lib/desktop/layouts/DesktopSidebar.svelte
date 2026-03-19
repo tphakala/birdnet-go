@@ -73,6 +73,7 @@ Performance Optimizations:
     Paintbrush,
   } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+  import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
   import LogoBadge from '$lib/components/LogoBadge.svelte';
@@ -83,7 +84,6 @@ Performance Optimizations:
   interface Props {
     securityEnabled?: boolean;
     accessAllowed?: boolean;
-    publicLiveAudio?: boolean;
     version?: string;
     currentRoute?: string;
     onNavigate?: (_url: string) => void;
@@ -94,7 +94,6 @@ Performance Optimizations:
   let {
     securityEnabled = false,
     accessAllowed = true,
-    publicLiveAudio = false,
     version = 'Development Build',
     currentRoute = '/ui/dashboard',
     onNavigate,
@@ -198,9 +197,6 @@ Performance Optimizations:
 
   // Get collapsed state from store (using $ prefix for auto-subscription)
   let isCollapsed = $derived($sidebar);
-
-  // Access control for Live Stream sidebar item
-  const hasLiveStreamAccess = $derived(!securityEnabled || accessAllowed || publicLiveAudio);
 
   // Use the currentRoute prop for reactive highlighting
   // This receives the full URL path (e.g., /ui/settings/main) from RootLayout
@@ -411,7 +407,7 @@ Performance Optimizations:
         </div>
 
         <!-- Live Stream -->
-        {#if hasLiveStreamAccess}
+        {#if hasLiveAudioAccess}
           <div class="relative">
             <button
               onclick={() => navigate(navigationUrls.liveStream)}
