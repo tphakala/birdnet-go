@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,6 +57,10 @@ const (
 	hlsDefaultSampleRate            = 48000            // Default audio sample rate in Hz
 	hlsCleanupDelay                 = 5                // Delay in seconds before cleanup
 	hlsPrematureDisconnectThreshold = 10 * time.Second // Ignore disconnects within this window
+
+	// fifoWriteTimeout is the maximum duration a single FIFO write can block
+	// before being considered hung. Normal writes complete in microseconds.
+	fifoWriteTimeout = 30 * time.Second
 
 	// Session ID validation
 
@@ -963,7 +968,19 @@ func (c *Controller) setupHLSFifo(secFS *securefs.SecureFS, hlsBaseDir, outputDi
 func (c *Controller) setupHLSFFmpeg(ctx context.Context, ffmpegPath, inputSource, outputDir, playlistPath string) (*exec.Cmd, error) {
 	args := c.buildFFmpegArgs(inputSource, outputDir, playlistPath)
 	//nolint:gosec // G204: ffmpegPath is from admin config (Settings.Realtime.Audio.FfmpegPath), not user input
-	return exec.CommandContext(ctx, ffmpegPath, args...), nil
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
+
+	// Graceful shutdown: send SIGINT first (lets FFmpeg flush output buffers),
+	// escalate to SIGKILL after WaitDelay if it hasn't exited.
+	// Windows doesn't support SIGINT; exec.CommandContext defaults to TerminateProcess.
+	if runtime.GOOS != OSWindows {
+		cmd.Cancel = func() error {
+			return cmd.Process.Signal(syscall.SIGINT)
+		}
+	}
+	cmd.WaitDelay = 5 * time.Second
+
+	return cmd, nil
 }
 
 // buildFFmpegArgs constructs FFmpeg command line arguments
@@ -1140,6 +1157,27 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	return audioChan, cleanup, nil
 }
 
+// writeToFIFO performs a context-aware write to the FIFO pipe.
+// If the context is cancelled or the write exceeds fifoWriteTimeout,
+// it returns immediately. The orphaned write goroutine is cleaned up
+// when the caller's defer closes the FIFO (unblocking the write with an error).
+func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
+	done := make(chan error, 1)
+	go func() {
+		_, err := fifo.Write(data)
+		done <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-done:
+		return err
+	case <-time.After(fifoWriteTimeout):
+		return fmt.Errorf("FIFO write timeout: FFmpeg may be unresponsive")
+	}
+}
+
 // feedAudioToFFmpeg feeds audio data to FFmpeg via FIFO (Unix platforms)
 func (c *Controller) feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Context) {
 	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
@@ -1200,8 +1238,12 @@ func (c *Controller) feedAudioToFFmpeg(sourceID, pipePath string, ctx context.Co
 				return
 			}
 
-			if _, err := fifo.Write(data); err != nil {
-				GetLogger().Error("Error writing to FIFO", logger.Error(err))
+			if err := writeToFIFO(ctx, fifo, data); err != nil {
+				if ctx.Err() != nil {
+					GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
+				} else {
+					GetLogger().Error("Error writing to FIFO", logger.Error(err))
+				}
 				return
 			}
 
