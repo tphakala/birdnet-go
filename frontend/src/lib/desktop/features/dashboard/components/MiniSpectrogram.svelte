@@ -287,6 +287,7 @@
       const encodedSourceId = encodeURIComponent(activeSourceId);
       fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
+        keepalive: true,
         body: { session_id: sessionId },
       }).catch(() => {});
       activeSourceId = null;
@@ -329,6 +330,8 @@
     }
   }
 
+  // $effect (not onMount) so the block re-runs when auth state changes,
+  // starting the stream if user logs in after page mount.
   $effect(() => {
     if (hasLiveAudioAccess() && shouldAutoStart()) {
       start();

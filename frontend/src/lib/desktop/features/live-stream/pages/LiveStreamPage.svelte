@@ -316,10 +316,13 @@
     abortController = null;
 
     // Send explicit stop for immediate server-side client removal
-    if (selectedSourceId) {
+    // Guard with activeStreamToken to avoid sending /stop when no stream was started
+    // (selectedSourceId is set by SSE discovery before any stream is created)
+    if (activeStreamToken && selectedSourceId) {
       const encodedSourceId = encodeURIComponent(selectedSourceId);
       fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
         method: 'POST',
+        keepalive: true,
         body: { session_id: sessionId },
       }).catch(() => {});
     }
@@ -374,6 +377,8 @@
     spectro.setGain(db);
   }
 
+  // $effect (not onMount) so the block re-runs when auth state changes,
+  // establishing SSE connection if user logs in after page mount.
   $effect(() => {
     if (hasLiveAudioAccess()) {
       connectSSE();

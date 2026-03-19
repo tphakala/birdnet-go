@@ -1168,12 +1168,15 @@ func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
 		done <- err
 	}()
 
+	timer := time.NewTimer(fifoWriteTimeout)
+	defer timer.Stop()
+
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-done:
 		return err
-	case <-time.After(fifoWriteTimeout):
+	case <-timer.C:
 		return fmt.Errorf("FIFO write timeout: FFmpeg may be unresponsive")
 	}
 }
@@ -1376,10 +1379,11 @@ func (c *Controller) cleanupExistingHLSStream(sourceID string) {
 	removeStreamToken(sourceID)
 	hlsMgr.streamsMu.Unlock()
 
-	// Wait for process termination
-	if cmd != nil && cmd.Process != nil {
-		if _, err := cmd.Process.Wait(); err != nil {
-			GetLogger().Error("Failed to wait for FFmpeg process", logger.Error(err))
+	// Wait for process termination using cmd.Wait() (not cmd.Process.Wait())
+	// so that cmd.Cancel/cmd.WaitDelay escalation to SIGKILL works correctly.
+	if cmd != nil {
+		if err := cmd.Wait(); err != nil {
+			GetLogger().Debug("FFmpeg process exited during cleanup", logger.Error(err))
 		}
 	}
 
@@ -1460,9 +1464,11 @@ func (c *Controller) cleanupFFmpegProcess(sourceID string, stream *HLSStreamInfo
 }
 
 // waitForFFmpegProcess waits for FFmpeg to exit and cleans up resources.
+// Uses cmd.Wait() (not cmd.Process.Wait()) so that cmd.Cancel/cmd.WaitDelay
+// escalation to SIGKILL works correctly.
 func (c *Controller) waitForFFmpegProcess(sourceID string, cmd *exec.Cmd, logFile *os.File) {
-	if _, err := cmd.Process.Wait(); err != nil {
-		GetLogger().Error("FFmpeg process wait error", logger.Error(err))
+	if err := cmd.Wait(); err != nil {
+		GetLogger().Debug("FFmpeg process exited", logger.Error(err))
 	}
 	closeLogFile(logFile)
 	GetLogger().Debug("FFmpeg process terminated", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
