@@ -92,7 +92,7 @@ func mainWithExitCode() int {
 	}
 
 	// Apply taxonomy synonym overrides from config.
-	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms)
+	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, nil)
 
 	// Set runtime values
 	settings.Version = version
