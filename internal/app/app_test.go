@@ -317,3 +317,32 @@ func TestApp_Wait_ShutdownOnSignal(t *testing.T) {
 	assert.Contains(t, order, "stop:svc1")
 	mu.Unlock()
 }
+
+func TestRequestShutdownUnblocksWait(t *testing.T) {
+	a := New()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- a.Wait()
+	}()
+
+	// Give Wait() time to set up signal handler
+	time.Sleep(50 * time.Millisecond)
+
+	a.RequestShutdown()
+
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "Wait() did not return after RequestShutdown()")
+	}
+}
+
+func TestRequestShutdownIdempotent(t *testing.T) {
+	a := New()
+	// Should not panic on multiple calls
+	a.RequestShutdown()
+	a.RequestShutdown()
+	a.RequestShutdown()
+}

@@ -407,6 +407,7 @@ func init() {
 	RegisterComponent("monitor", "monitor")
 	RegisterComponent("app", "app")
 	RegisterComponent("api", "api")
+	RegisterComponent("restart", "restart")
 
 	// Analysis package components - use slash-separated paths for subpackages
 	RegisterComponent("analysis", "analysis")
