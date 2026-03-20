@@ -8,6 +8,8 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/restart"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // ControlAction represents a control action request
@@ -26,9 +28,11 @@ type ControlResult struct {
 
 // Available control actions
 const (
-	ActionRestartAnalysis = "restart_analysis"
-	ActionReloadModel     = "reload_model"
-	ActionRebuildFilter   = "rebuild_filter"
+	ActionRestartAnalysis  = "restart_analysis"
+	ActionReloadModel      = "reload_model"
+	ActionRebuildFilter    = "rebuild_filter"
+	ActionRestartServer    = "restart_server"
+	ActionRestartContainer = "restart_container"
 )
 
 // Control channel signals
@@ -49,6 +53,8 @@ func (c *Controller) initControlRoutes() {
 	controlGroup.POST("/restart", c.RestartAnalysis)
 	controlGroup.POST("/reload", c.ReloadModel)
 	controlGroup.POST("/rebuild-filter", c.RebuildFilter)
+	controlGroup.POST("/restart-server", c.RestartServer)
+	controlGroup.POST("/restart-container", c.RestartContainer)
 	controlGroup.GET("/actions", c.GetAvailableActions)
 
 	c.logInfoIfEnabled("Control routes initialized successfully")
@@ -74,6 +80,14 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 		{
 			Action:      ActionRebuildFilter,
 			Description: "Rebuild the species filter based on current location",
+		},
+		{
+			Action:      ActionRestartServer,
+			Description: "Restart the server binary",
+		},
+		{
+			Action:      ActionRestartContainer,
+			Description: "Restart the container",
 		},
 	}
 
@@ -167,4 +181,108 @@ func (c *Controller) ReloadModel(ctx echo.Context) error {
 func (c *Controller) RebuildFilter(ctx echo.Context) error {
 	return c.handleControlSignal(ctx, SignalRebuildFilter, ActionRebuildFilter,
 		"Received request to rebuild species filter", "Filter rebuild signal sent")
+}
+
+// RestartServer handles POST /api/v2/control/restart-server
+// Triggers a graceful binary restart.
+func (c *Controller) RestartServer(ctx echo.Context) error {
+	c.logInfoIfEnabled("Received request to restart server",
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	if c.shutdownRequester == nil {
+		err := fmt.Errorf("shutdown requester not initialized")
+		return c.HandleError(ctx, err,
+			"Restart not available - server may not support programmatic restart",
+			http.StatusInternalServerError)
+	}
+
+	if !restart.SetBinaryRestart() {
+		return ctx.JSON(http.StatusConflict, ControlResult{
+			Success:   false,
+			Message:   "A restart is already in progress",
+			Action:    ActionRestartServer,
+			Timestamp: time.Now(),
+		})
+	}
+
+	c.logInfoIfEnabled("Binary restart requested",
+		logger.String("action", ActionRestartServer),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	// Schedule shutdown after response is sent (500ms to ensure HTTP flush)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		c.shutdownRequester.RequestShutdown()
+	}()
+
+	return ctx.JSON(http.StatusOK, ControlResult{
+		Success:   true,
+		Message:   "Server restart initiated",
+		Action:    ActionRestartServer,
+		Timestamp: time.Now(),
+	})
+}
+
+// RestartContainer handles POST /api/v2/control/restart-container
+// Triggers a container restart by exiting the process.
+func (c *Controller) RestartContainer(ctx echo.Context) error {
+	c.logInfoIfEnabled("Received request to restart container",
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	// Check if running in a container
+	envType, _ := sysinfo.GetEnvironment()
+	if !isContainerEnvironment(envType) {
+		return c.HandleError(ctx, fmt.Errorf("not running in a container (environment: %s)", envType),
+			"Container restart is only available when running inside a container",
+			http.StatusBadRequest)
+	}
+
+	if c.shutdownRequester == nil {
+		err := fmt.Errorf("shutdown requester not initialized")
+		return c.HandleError(ctx, err,
+			"Restart not available",
+			http.StatusInternalServerError)
+	}
+
+	if !restart.SetContainerRestart() {
+		return ctx.JSON(http.StatusConflict, ControlResult{
+			Success:   false,
+			Message:   "A restart is already in progress",
+			Action:    ActionRestartContainer,
+			Timestamp: time.Now(),
+		})
+	}
+
+	c.logInfoIfEnabled("Container restart requested",
+		logger.String("action", ActionRestartContainer),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	// Schedule shutdown after response is sent (500ms to ensure HTTP flush)
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		c.shutdownRequester.RequestShutdown()
+	}()
+
+	return ctx.JSON(http.StatusOK, ControlResult{
+		Success:   true,
+		Message:   "Container restart initiated",
+		Action:    ActionRestartContainer,
+		Timestamp: time.Now(),
+	})
+}
+
+// isContainerEnvironment checks if the given environment type is a container.
+func isContainerEnvironment(envType string) bool {
+	switch envType {
+	case "Docker", "Podman", "LXC", "systemd-nspawn", "Container":
+		return true
+	default:
+		return false
+	}
 }
