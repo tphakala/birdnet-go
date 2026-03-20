@@ -3,6 +3,7 @@
   import SystemDetailsCard from '$lib/desktop/features/system/components/SystemDetailsCard.svelte';
   import StorageCard from '$lib/desktop/features/system/components/StorageCard.svelte';
   import SystemProcessTable from '$lib/desktop/features/system/components/SystemProcessTable.svelte';
+  import RestartCard from '$lib/desktop/features/system/components/RestartCard.svelte';
   import { DatabaseDashboard } from '$lib/desktop/components/database';
   import TerminalPage from '$lib/desktop/features/system/TerminalPage.svelte';
   import { t } from '$lib/i18n';
@@ -561,5 +562,8 @@
         loadProcesses();
       }}
     />
+
+    <!-- Restart Controls -->
+    <RestartCard />
   </div>
 {/if}

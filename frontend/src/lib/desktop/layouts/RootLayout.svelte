@@ -9,6 +9,8 @@
   import { sidebar } from '$lib/stores/sidebar';
   import ToastContainer from '$lib/desktop/components/ui/ToastContainer.svelte';
   import OfflineBanner from '$lib/desktop/components/ui/OfflineBanner.svelte';
+  import RestartBanner from '$lib/desktop/components/ui/RestartBanner.svelte';
+  import { fetchRestartStatus } from '$lib/stores/restart.svelte';
 
   interface Props {
     title?: string;
@@ -49,6 +51,9 @@
   onMount(() => {
     // Initialize auth state (CSRF is now handled by appState in App.svelte)
     authStore.init(securityEnabled, accessAllowed);
+
+    // Fetch restart status to show banner if restart is pending
+    fetchRestartStatus();
 
     // SSE notifications are auto-initialized when imported
 
@@ -127,6 +132,11 @@
     <!-- Offline connectivity banner -->
     <div class="mx-auto max-w-7xl px-3 lg:px-8">
       <OfflineBanner />
+    </div>
+
+    <!-- Restart required banner -->
+    <div class="mx-auto max-w-7xl px-3 lg:px-8">
+      <RestartBanner />
     </div>
 
     <!-- Main content -->
