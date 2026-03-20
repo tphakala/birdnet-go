@@ -1083,8 +1083,8 @@ type BirdNETConfig struct {
 	Threads            int                 `yaml:"threads" json:"threads"`                         // number of CPU threads to use for analysis
 	Locale             string              `yaml:"locale" json:"locale"`                           // language to use for labels
 	RangeFilter        RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                 // range filter settings
-	ModelPath          string              `yaml:"modelPath,omitempty" json:"modelPath,omitempty"` // path to external model file (empty for embedded)
-	LabelPath          string              `yaml:"labelPath,omitempty" json:"labelPath,omitempty"` // path to external label file (empty for embedded)
+	ModelPath          string              `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to external model file (empty for embedded)
+	LabelPath          string              `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to external label file (empty for embedded)
 	Labels             []string            `yaml:"-" json:"-"`                                     // list of available species labels, runtime value
 	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                   // true to use XNNPACK delegate for inference acceleration
 }
@@ -1193,7 +1193,7 @@ type Security struct {
 	// Uses Go duration format with day/month suffixes (e.g., "365d", "1y").
 	SelfSignedValidity string `yaml:"selfSignedValidity" json:"selfSignedValidity"`
 
-	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"`                     // port for HTTPS (default: 8443)
+	TLSPort           string            `yaml:"tlsport" json:"tlsPort"`                     // port for HTTPS (default: 8443)
 	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
 	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
 	PublicAccess      PublicAccess      `yaml:"publicaccess" json:"publicAccess"`           // features accessible without authentication
