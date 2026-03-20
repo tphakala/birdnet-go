@@ -383,13 +383,27 @@
   // Diff incoming pending detections and queue new labels
   $effect(() => {
     if (!activeSourceId || pendingDetections.length === 0) return;
+    console.warn('[overlay] diffing', {
+      activeSourceId,
+      pending: pendingDetections.length,
+      prevCount: prevSnapshot.length,
+      sourceIDs: pendingDetections.map(d => d.sourceID),
+    });
     const newDetections = diffPendingSnapshot(prevSnapshot, pendingDetections, activeSourceId);
+    if (newDetections.length > 0) {
+      console.warn('[overlay] new species found', { species: newDetections.map(d => d.species) });
+    }
     for (const det of newDetections) {
       if (shouldDedup(det.species, det.firstDetected, lastSeenSpecies)) continue;
       lastSeenSpecies.set(det.species, det.firstDetected);
       const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
       slotCounter = next;
       labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
+      console.warn('[overlay] queued', {
+        species: det.species,
+        firstDetected: det.firstDetected,
+        queueLen: labelQueue.length,
+      });
     }
     prevSnapshot = [...pendingDetections];
   });
@@ -397,12 +411,23 @@
   // Promote queued detection labels when playhead catches up
   $effect(() => {
     if (!audioElement || !streamEpochMs) return;
+    console.warn('[overlay] promotion effect started', {
+      streamEpochMs,
+      currentTime: audioElement.currentTime,
+    });
 
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
       if (labelQueue.length === 0) return;
       const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
       const now = globalThis.performance.now();
+      console.warn('[overlay] promote check', {
+        wallClock: wallClockAtPlayhead,
+        firstInQueue: labelQueue[0]?.firstDetected,
+        diff: wallClockAtPlayhead - (labelQueue[0]?.firstDetected ?? 0),
+        queueLen: labelQueue.length,
+        overlayCount: overlayLabels.length,
+      });
       const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
       if (promoted.length > 0) {
         labelQueue = remaining;
