@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // ControlAction represents a control action request
@@ -211,6 +213,11 @@ func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFl
 		logger.String("action", action),
 		logger.String("ip", ctx.RealIP()),
 	)
+
+	// Record restart event as Sentry breadcrumb for diagnostics
+	telemetry.AddBreadcrumb("restart", successMessage, sentry.LevelInfo, map[string]any{
+		"action": action,
+	})
 
 	// Schedule shutdown after response is sent (500ms to ensure HTTP flush).
 	// Capture sr locally so the goroutine uses a stable reference.

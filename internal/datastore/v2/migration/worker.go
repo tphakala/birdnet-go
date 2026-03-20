@@ -72,6 +72,11 @@ const catchUpMaxBatches = 10000
 // database between migration completion and system restart.
 const tailSyncInterval = 10 * time.Second
 
+// tailSyncDirtyIDInterval is how often dirty IDs are retried during tail sync.
+// Every N tail sync iterations, processDirtyIDs runs to retry previously failed records.
+// With tailSyncInterval=10s, 6 iterations ≈ 60 seconds between retries.
+const tailSyncDirtyIDInterval = 6
+
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
 
@@ -134,6 +139,9 @@ type Worker struct {
 	// Progress logging tracking
 	lastProgressLog     time.Time
 	recordsSinceLastLog int64
+
+	// Tail sync iteration counter for periodic dirty ID retries
+	tailSyncIterations int
 
 	// Telemetry
 	telemetry *MigrationTelemetry
@@ -922,6 +930,22 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 		case <-w.stopCh:
 			return runActionReturn
 		default:
+		}
+	}
+
+	// Periodically retry dirty IDs that failed during tail sync.
+	// Without this, dirty IDs accumulated during tail sync would only be
+	// retried on a future startup (issue #29 on Forgejo).
+	w.tailSyncIterations++
+	if w.tailSyncIterations%tailSyncDirtyIDInterval == 0 {
+		caught, err := w.processDirtyIDs(ctx)
+		if err != nil {
+			w.logger.Warn("tail sync: dirty ID processing interrupted", logger.Error(err))
+			return runActionReturn
+		}
+		if caught > 0 {
+			w.logger.Info("tail sync: retried dirty IDs",
+				logger.Int64("records_recovered", caught))
 		}
 	}
 

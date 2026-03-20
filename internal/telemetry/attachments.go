@@ -312,6 +312,26 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 	return nil
 }
 
+// AddBreadcrumb adds a breadcrumb to the current Sentry scope for diagnostic context.
+// Breadcrumbs appear in subsequent error events and help trace the sequence of actions
+// leading up to an issue.
+func AddBreadcrumb(category, message string, level sentry.Level, data map[string]any) {
+	if shouldSkipTelemetry() {
+		return
+	}
+
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.AddBreadcrumb(&sentry.Breadcrumb{
+			Type:      "default",
+			Category:  category,
+			Message:   message,
+			Level:     level,
+			Data:      data,
+			Timestamp: time.Now(),
+		}, maxBreadcrumbs)
+	})
+}
+
 // contextKey is a typed key for context values to avoid collisions with other packages
 type contextKey string
 

@@ -726,6 +726,171 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 	return true, nil
 }
 
+// HasPostCompletionStragglers checks whether the legacy database contains records
+// that were written after migration completed but before the system was restarted.
+// This can happen when a hard crash (kill -9, OOM, power loss) occurs during the
+// tail sync sleep window, preventing the final drain from running.
+//
+// For SQLite: this must be called BEFORE CheckAndConsolidateAtStartup, because
+// consolidation renames the legacy database to a backup path.
+//
+// For MySQL: both table sets are in the same database, so timing doesn't matter.
+//
+// Returns true if stragglers are detected and the system should start in legacy
+// mode so the migration worker can handle them via tail sync.
+func HasPostCompletionStragglers(settings *conf.Settings, log logger.Logger) bool {
+	if settings.Output.MySQL.Enabled {
+		return hasMySQLStragglers(settings, log)
+	}
+	return hasSQLiteStragglers(settings, log)
+}
+
+// hasSQLiteStragglers checks for straggler records in SQLite deployments.
+func hasSQLiteStragglers(settings *conf.Settings, log logger.Logger) bool {
+	configuredPath := settings.Output.SQLite.Path
+	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
+
+	// Both databases must exist for stragglers to be possible
+	if _, err := os.Stat(configuredPath); os.IsNotExist(err) {
+		return false
+	}
+	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
+		return false
+	}
+
+	// Open v2 migration database to get migration state
+	v2DB, err := gorm.Open(sqlite.Open(v2MigrationPath+"?mode=ro"), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return false
+	}
+	v2SQL, err := v2DB.DB()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = v2SQL.Close() }()
+
+	// Read migration state
+	migrationTable := resolveSQLiteTableName(v2DB, "migration_states", "migration_state")
+	if migrationTable == "" {
+		return false
+	}
+	var state entities.MigrationState
+	if err := v2DB.Table(migrationTable).First(&state).Error; err != nil {
+		return false
+	}
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// Open legacy database to check for records beyond LastMigratedID
+	legacyDB, err := gorm.Open(sqlite.Open(configuredPath+"?mode=ro"), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return false
+	}
+	legacySQL, err := legacyDB.DB()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = legacySQL.Close() }()
+
+	// Check if notes table exists (it's a legacy DB)
+	var tableCount int64
+	if err := legacyDB.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='notes'").
+		Scan(&tableCount).Error; err != nil || tableCount == 0 {
+		return false
+	}
+
+	// Count records beyond the migration watermark
+	var stragglerCount int64
+	if err := legacyDB.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).
+		Scan(&stragglerCount).Error; err != nil {
+		return false
+	}
+
+	if stragglerCount > 0 {
+		log.Warn("detected post-completion straggler records in legacy database",
+			logger.Int64("straggler_count", stragglerCount),
+			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)),
+			logger.String("operation", "startup_reconciliation"))
+		return true
+	}
+	return false
+}
+
+// hasMySQLStragglers checks for straggler records in MySQL deployments.
+func hasMySQLStragglers(settings *conf.Settings, log logger.Logger) bool {
+	cfg := mysql.Config{
+		User:   settings.Output.MySQL.Username,
+		Passwd: settings.Output.MySQL.Password,
+		Net:    "tcp",
+		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName: settings.Output.MySQL.Database,
+		Params: map[string]string{
+			"charset":      "utf8mb4",
+			"parseTime":    "True",
+			"loc":          "Local",
+			"timeout":      dbStartupTimeout,
+			"readTimeout":  dbStartupTimeout,
+			"writeTimeout": dbStartupTimeout,
+		},
+	}
+	db, err := gorm.Open(gormmysql.Open(cfg.FormatDSN()), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		return false
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return false
+	}
+	defer func() { _ = sqlDB.Close() }()
+
+	// Check if legacy notes table exists
+	var legacyCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
+		settings.Output.MySQL.Database).Scan(&legacyCount).Error; err != nil || legacyCount == 0 {
+		return false
+	}
+
+	// Resolve migration state table (v2_ prefix during migration)
+	tableNameNew := v2TablePrefix + "migration_states"
+	tableNameOld := v2TablePrefix + "migration_state"
+	var v2MigrationTableName string
+	if err := db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
+		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error; err != nil || v2MigrationTableName == "" {
+		return false
+	}
+
+	var state entities.MigrationState
+	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
+		return false
+	}
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// Count records beyond the migration watermark
+	var stragglerCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).
+		Scan(&stragglerCount).Error; err != nil {
+		return false
+	}
+
+	if stragglerCount > 0 {
+		log.Warn("detected post-completion straggler records in legacy database",
+			logger.Int64("straggler_count", stragglerCount),
+			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)),
+			logger.String("operation", "startup_reconciliation"))
+		return true
+	}
+	return false
+}
+
 // resolveSQLiteTableName checks which of the given SQLite table names exists.
 // Returns the first match or empty string if none exist.
 // This handles the migration_state→migration_states and alert_history→alert_histories

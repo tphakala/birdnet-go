@@ -176,10 +176,17 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Print system details and configuration
 	printSystemDetails(settings)
 
+	// Check for post-completion straggler records BEFORE consolidation.
+	// A hard crash during the tail sync sleep window could leave records in the
+	// legacy database that never got migrated. If found, we defer consolidation
+	// and start in legacy mode so the migration worker's tail sync can handle them.
+	datastoreLog := logger.Global().Module("datastore")
+	hasPostCompletionStragglers := datastoreV2.HasPostCompletionStragglers(settings, datastoreLog)
+
 	// Check for and perform database consolidation if needed (SQLite only)
-	// This moves the v2 database from migration path to configured path after migration completes
-	if settings.Output.SQLite.Enabled {
-		datastoreLog := logger.Global().Module("datastore")
+	// This moves the v2 database from migration path to configured path after migration completes.
+	// Skip consolidation if stragglers were detected — the legacy DB must remain accessible.
+	if settings.Output.SQLite.Enabled && !hasPostCompletionStragglers {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
 			datastoreLog.Error("database consolidation failed", logger.Error(err))
@@ -187,16 +194,18 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 		} else if consolidated {
 			datastoreLog.Info("database consolidation completed, continuing startup")
 		}
+	} else if hasPostCompletionStragglers {
+		datastoreLog.Info("deferring database consolidation until straggler records are migrated")
 	}
 
 	// Check migration state before initializing database
 	// This allows us to skip the legacy database when migration is complete
 	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
-	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted &&
+		startupState.V2Available && !hasPostCompletionStragglers
 	freshInstall := startupState.FreshInstall
 
-	// Log startup mode detection - use datastore module for database mode messages
-	datastoreLog := logger.Global().Module("datastore")
+	// Log startup mode detection
 	switch {
 	case v2OnlyMode:
 		datastoreLog.Info("migration completed, starting in enhanced database mode",

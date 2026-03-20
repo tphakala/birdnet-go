@@ -18,6 +18,7 @@
  */
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 import { getLogger } from '$lib/utils/logger';
+import { restartInProgress } from '$lib/stores/restart.svelte';
 
 const logger = getLogger('connectionState');
 
@@ -81,6 +82,14 @@ export function markOnline(): void {
     logger.info('Backend connectivity restored');
     connectionState.isOnline = true;
     stopPingPolling();
+
+    // If reconnecting after a restart, reload the page to get fresh state
+    if (restartInProgress.value) {
+      logger.info('Reloading page after restart reconnection');
+      restartInProgress.value = false;
+      window.location.reload();
+      return;
+    }
   }
   resetWatchdog(HEARTBEAT_TIMEOUT_MS);
 }
