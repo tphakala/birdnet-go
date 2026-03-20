@@ -376,7 +376,9 @@
         "criticalSystem": "Kritiska sistēmas kļūda",
         "application": "Lietotnes kļūda",
         "imageProvider": "Attēlu nodrošinātāja paziņojums",
-        "categoryError": "{category} kļūda"
+        "categoryError": "{category} kļūda",
+        "burstTitle": "Multiple {component} errors",
+        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Piemēro jaunos analīzes iestatījumus...",

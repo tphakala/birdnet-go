@@ -376,7 +376,9 @@
         "criticalSystem": "Kritiskt systemfel",
         "application": "Applikationsfel",
         "imageProvider": "Bildleverantörsmeddelande",
-        "categoryError": "{category}-fel"
+        "categoryError": "{category}-fel",
+        "burstTitle": "Multiple {component} errors",
+        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Tillämpar nya analysinställningar...",

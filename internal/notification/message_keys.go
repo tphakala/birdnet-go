@@ -155,4 +155,8 @@ const (
 	// Buffer overwrite notifications
 	MsgBufferOverloadTitle   = "notifications.content.buffer.overloadTitle"
 	MsgBufferOverloadMessage = "notifications.content.buffer.overloadMessage"
+
+	// Error burst grouping notifications
+	MsgErrorBurstTitle   = "notifications.content.error.burstTitle"
+	MsgErrorBurstMessage = "notifications.content.error.burstMessage"
 )

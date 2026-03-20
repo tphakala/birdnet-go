@@ -376,7 +376,9 @@
         "criticalSystem": "Error crítico del sistema",
         "application": "Error de aplicación",
         "imageProvider": "Aviso del proveedor de imágenes",
-        "categoryError": "Error de {category}"
+        "categoryError": "Error de {category}",
+        "burstTitle": "Multiple {component} errors",
+        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Aplicando nuevos ajustes de análisis...",

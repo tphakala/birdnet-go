@@ -376,7 +376,9 @@
         "criticalSystem": "Kritieke systeemfout",
         "application": "Applicatiefout",
         "imageProvider": "Melding afbeeldingprovider",
-        "categoryError": "{category}-fout"
+        "categoryError": "{category}-fout",
+        "burstTitle": "Multiple {component} errors",
+        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Nieuwe analyse-instellingen worden toegepast...",
