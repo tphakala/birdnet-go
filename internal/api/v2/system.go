@@ -372,11 +372,9 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 
 // GetRestartStatus handles GET /api/v2/system/restart-status
 func (c *Controller) GetRestartStatus(ctx echo.Context) error {
-	envType, _ := sysinfo.GetEnvironment()
-
 	status := RestartStatus{
 		BinaryRestartAvailable:    true,
-		ContainerRestartAvailable: isContainerEnvironment(envType),
+		ContainerRestartAvailable: sysinfo.IsContainer(),
 		RestartRequired:           restart.IsRestartRequired(),
 		RestartReasons:            restart.GetRestartReasons(),
 	}

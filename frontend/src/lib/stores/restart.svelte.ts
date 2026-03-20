@@ -37,28 +37,25 @@ export async function fetchRestartStatus(): Promise<void> {
   }
 }
 
-/** Request a binary restart */
-export async function requestBinaryRestart(): Promise<boolean> {
+/** Shared restart request logic */
+async function requestRestart(endpoint: string, logMessage: string): Promise<boolean> {
   try {
     restartInProgress.value = true;
-    await api.post('/api/v2/control/restart-server');
+    await api.post(endpoint);
     return true;
   } catch (error) {
     restartInProgress.value = false;
-    logger.error('Failed to request binary restart', error);
+    logger.error(logMessage, error);
     return false;
   }
 }
 
+/** Request a binary restart */
+export function requestBinaryRestart(): Promise<boolean> {
+  return requestRestart('/api/v2/control/restart-server', 'Failed to request binary restart');
+}
+
 /** Request a container restart */
-export async function requestContainerRestart(): Promise<boolean> {
-  try {
-    restartInProgress.value = true;
-    await api.post('/api/v2/control/restart-container');
-    return true;
-  } catch (error) {
-    restartInProgress.value = false;
-    logger.error('Failed to request container restart', error);
-    return false;
-  }
+export function requestContainerRestart(): Promise<boolean> {
+  return requestRestart('/api/v2/control/restart-container', 'Failed to request container restart');
 }

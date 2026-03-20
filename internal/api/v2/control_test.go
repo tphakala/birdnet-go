@@ -655,7 +655,7 @@ func TestRestartContainerNotInContainer(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	envType, _ := sysinfo.GetEnvironment()
-	if isContainerEnvironment(envType) {
+	if sysinfo.IsContainer() {
 		t.Skipf("Skipping: detected container environment %q", envType)
 	}
 
@@ -676,7 +676,7 @@ func TestRestartContainerInContainer(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	envType, _ := sysinfo.GetEnvironment()
-	if !isContainerEnvironment(envType) {
+	if !sysinfo.IsContainer() {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 
@@ -702,7 +702,7 @@ func TestRestartContainerNoShutdownRequester(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	envType, _ := sysinfo.GetEnvironment()
-	if !isContainerEnvironment(envType) {
+	if !sysinfo.IsContainer() {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 
@@ -720,7 +720,7 @@ func TestRestartContainerAlreadyInProgress(t *testing.T) {
 	t.Cleanup(restart.Reset)
 
 	envType, _ := sysinfo.GetEnvironment()
-	if !isContainerEnvironment(envType) {
+	if !sysinfo.IsContainer() {
 		t.Skipf("Skipping: detected non-container environment %q", envType)
 	}
 

@@ -242,22 +242,12 @@ func (c *Controller) RestartContainer(ctx echo.Context) error {
 	)
 
 	// Check if running in a container
-	envType, _ := sysinfo.GetEnvironment()
-	if !isContainerEnvironment(envType) {
+	if !sysinfo.IsContainer() {
+		envType, _ := sysinfo.GetEnvironment()
 		return c.HandleError(ctx, fmt.Errorf("not running in a container (environment: %s)", envType),
 			"Container restart is only available when running inside a container",
 			http.StatusBadRequest)
 	}
 
 	return c.handleRestartRequest(ctx, ActionRestartContainer, restart.SetContainerRestart, "Container restart initiated")
-}
-
-// isContainerEnvironment checks if the given environment type is a container.
-func isContainerEnvironment(envType string) bool {
-	switch envType {
-	case "Docker", "Podman", "LXC", "systemd-nspawn", "Container":
-		return true
-	default:
-		return false
-	}
 }

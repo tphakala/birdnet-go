@@ -15,10 +15,12 @@ import (
 
 // Common string constants to avoid repetition.
 const (
-	armFallback = "arm"
-	envDocker   = "Docker"
-	envPodman   = "Podman"
-	envLXC      = "LXC"
+	armFallback     = "arm"
+	envDocker       = "Docker"
+	envPodman       = "Podman"
+	envLXC          = "LXC"
+	envNspawn       = "systemd-nspawn"
+	envContainerGen = "Container"
 )
 
 // Cached detection results — environment never changes at runtime.
@@ -114,6 +116,18 @@ func DetectEnvironment(rootPath string) (envType, detail string) {
 	return detectLinuxEnvironment(rootPath)
 }
 
+// IsContainer reports whether the runtime environment is a container
+// (Docker, Podman, LXC, systemd-nspawn, or generic container).
+func IsContainer() bool {
+	envType, _ := GetEnvironment()
+	switch envType {
+	case envDocker, envPodman, envLXC, envNspawn, envContainerGen:
+		return true
+	default:
+		return false
+	}
+}
+
 // GetEnvironment returns the cached environment detection result.
 // Safe for concurrent use. Results are computed once on first call.
 func GetEnvironment() (envType, detail string) {
@@ -179,10 +193,10 @@ func mapContainerEnvVar(value string) (envType, detail string) {
 		return envPodman, ""
 	case "lxc":
 		return envLXC, ""
-	case "systemd-nspawn":
-		return "systemd-nspawn", ""
+	case envNspawn:
+		return envNspawn, ""
 	default:
-		return "Container", value
+		return envContainerGen, value
 	}
 }
 
