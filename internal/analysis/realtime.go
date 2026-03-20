@@ -176,17 +176,15 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Print system details and configuration
 	printSystemDetails(settings)
 
-	// Check for post-completion straggler records BEFORE consolidation.
-	// A hard crash during the tail sync sleep window could leave records in the
-	// legacy database that never got migrated. If found, we defer consolidation
-	// and start in legacy mode so the migration worker's tail sync can handle them.
+	// Check for unmigrated legacy records from a potential hard crash during tail sync.
+	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
+	// has unmigrated records that the worker needs to sync.
 	datastoreLog := logger.Global().Module("datastore")
-	hasPostCompletionStragglers := datastoreV2.HasPostCompletionStragglers(settings, datastoreLog)
+	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
 
 	// Check for and perform database consolidation if needed (SQLite only)
-	// This moves the v2 database from migration path to configured path after migration completes.
-	// Skip consolidation if stragglers were detected — the legacy DB must remain accessible.
-	if settings.Output.SQLite.Enabled && !hasPostCompletionStragglers {
+	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
+	if settings.Output.SQLite.Enabled && !hasUnmigrated {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
 			datastoreLog.Error("database consolidation failed", logger.Error(err))
@@ -194,16 +192,25 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 		} else if consolidated {
 			datastoreLog.Info("database consolidation completed, continuing startup")
 		}
-	} else if hasPostCompletionStragglers {
-		datastoreLog.Info("deferring database consolidation until straggler records are migrated")
+	} else if hasUnmigrated {
+		datastoreLog.Info("deferring database consolidation until unmigrated records are synced")
 	}
 
 	// Check migration state before initializing database
 	// This allows us to skip the legacy database when migration is complete
 	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
-	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted &&
-		startupState.V2Available && !hasPostCompletionStragglers
+	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
+
+	// Override v2-only mode when unmigrated legacy records were found. This forces
+	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
+	// Consolidation will complete on the next clean restart.
+	if hasUnmigrated && v2OnlyMode {
+		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
+			logger.String("operation", "startup_reconciliation"))
+		v2OnlyMode = false
+		startupState.LegacyRequired = true
+	}
 
 	// Log startup mode detection
 	switch {
@@ -1999,9 +2006,12 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			logger.Int64("total_records", state.TotalRecords),
 			logger.String("operation", cfg.opName))
 
-		// Resume worker if migration was in progress
+		// Resume worker if migration was in progress, or if migration completed
+		// but we're running in legacy mode due to unmigrated records from a crash.
+		// In the COMPLETED case, the worker enters tail sync to drain stragglers.
 		if state.State == entities.MigrationStatusDualWrite ||
-			state.State == entities.MigrationStatusMigrating {
+			state.State == entities.MigrationStatusMigrating ||
+			state.State == entities.MigrationStatusCompleted {
 			migrationLogger.Info("resuming migration worker after restart",
 				logger.String("state", string(state.State)),
 				logger.String("operation", cfg.opName))

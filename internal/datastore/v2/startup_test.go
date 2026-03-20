@@ -2,6 +2,7 @@ package v2
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func TestCheckMigrationState_FreshInstall_SQLite(t *testing.T) {
@@ -207,6 +212,159 @@ func TestCheckSQLiteHasV2Schema(t *testing.T) {
 
 		assert.False(t, CheckSQLiteHasV2Schema(dbPath), "should return false for empty file")
 	})
+}
+
+// createLegacySQLite creates a minimal legacy SQLite database with a notes table
+// containing the specified number of records starting from ID 1.
+func createLegacySQLite(t *testing.T, path string, recordCount int) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(path), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+
+	require.NoError(t, db.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, source_node TEXT)").Error)
+	for i := range recordCount {
+		require.NoError(t, db.Exec("INSERT INTO notes (id, source_node) VALUES (?, 'test')", i+1).Error)
+	}
+}
+
+// createCompletedV2MigrationDB creates a v2 migration database with COMPLETED state
+// and the given LastMigratedID.
+func createCompletedV2MigrationDB(t *testing.T, dir string, lastMigratedID uint) {
+	t.Helper()
+	mgr, err := NewSQLiteManager(Config{DataDir: dir})
+	require.NoError(t, err)
+	require.NoError(t, mgr.Initialize())
+	sm := NewStateManager(mgr.DB())
+	require.NoError(t, sm.StartMigration(10))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+
+	// Set LastMigratedID to the desired watermark
+	if lastMigratedID > 0 {
+		require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+			Where("id = 1").
+			Update("last_migrated_id", lastMigratedID).Error)
+	}
+
+	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToCutover())
+	require.NoError(t, sm.Complete())
+	require.NoError(t, mgr.Close())
+}
+
+func TestHasUnmigratedLegacyRecords_StragglerFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "birdnet.db")
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+
+	// Create legacy DB with 15 records
+	createLegacySQLite(t, legacyPath, 15)
+
+	// Create v2 migration DB with LastMigratedID=10 (5 stragglers)
+	createCompletedV2MigrationDB(t, tmpDir, 10)
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.True(t, hasUnmigrated, "should detect 5 unmigrated records")
+}
+
+func TestHasUnmigratedLegacyRecords_NoStragglers(t *testing.T) {
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "birdnet.db")
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+
+	// Create legacy DB with 10 records
+	createLegacySQLite(t, legacyPath, 10)
+
+	// Create v2 migration DB with LastMigratedID=10 (all migrated)
+	createCompletedV2MigrationDB(t, tmpDir, 10)
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.False(t, hasUnmigrated, "should not detect stragglers when all migrated")
+}
+
+func TestHasUnmigratedLegacyRecords_NoV2Database(t *testing.T) {
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "birdnet.db")
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+
+	// Create legacy DB but no v2 migration DB
+	createLegacySQLite(t, legacyPath, 10)
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.False(t, hasUnmigrated, "should return false when no v2 database")
+}
+
+func TestHasUnmigratedLegacyRecords_NoLegacyDatabase(t *testing.T) {
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "birdnet.db")
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+
+	// Create v2 migration DB but no legacy DB
+	createCompletedV2MigrationDB(t, tmpDir, 10)
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.False(t, hasUnmigrated, "should return false when no legacy database")
+}
+
+func TestHasUnmigratedLegacyRecords_MigrationNotCompleted(t *testing.T) {
+	tmpDir := t.TempDir()
+	legacyPath := filepath.Join(tmpDir, "birdnet.db")
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+
+	// Create legacy DB with records
+	createLegacySQLite(t, legacyPath, 15)
+
+	// Create v2 migration DB in MIGRATING state (not completed)
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	require.NoError(t, mgr.Initialize())
+	sm := NewStateManager(mgr.DB())
+	require.NoError(t, sm.StartMigration(10))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, mgr.Close())
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.False(t, hasUnmigrated, "should return false when migration not completed")
+}
+
+func TestHasUnmigratedLegacyRecords_NeitherDBEnabled(t *testing.T) {
+	settings := &conf.Settings{}
+	// Neither SQLite nor MySQL enabled
+
+	log := testStartupLogger()
+	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	assert.False(t, hasUnmigrated, "should return false when no DB enabled")
+}
+
+// testStartupLogger returns a silent logger for startup tests.
+func testStartupLogger() logger.Logger {
+	return logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
 }
 
 func TestReportStartupError_NilSafe(t *testing.T) {

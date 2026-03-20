@@ -320,11 +320,13 @@ func AddBreadcrumb(category, message string, level sentry.Level, data map[string
 		return
 	}
 
+	scrubbedMessage := privacy.ScrubMessage(message)
+
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.AddBreadcrumb(&sentry.Breadcrumb{
 			Type:      "default",
 			Category:  category,
-			Message:   message,
+			Message:   scrubbedMessage,
 			Level:     level,
 			Data:      data,
 			Timestamp: time.Now(),
