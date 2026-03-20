@@ -26,6 +26,14 @@
   import { loggers } from '$lib/utils/logger';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
+  import type { PendingDetection } from '$lib/types/pending.types';
+  import type { OverlayLabel, QueuedLabel } from '$lib/utils/detectionOverlay';
+  import {
+    diffPendingSnapshot,
+    shouldDedup,
+    promoteFromQueue,
+    nextYSlot,
+  } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
   const FFT_SIZE = 1024;
@@ -57,6 +65,17 @@
   let colorMap = $state<ColorMapName>('inferno');
   let gainDb = $state(0);
   let audioOutput = $state(true);
+
+  // Detection overlay state
+  let showDetectionLabels = $state(true);
+  let overlayLabels = $state<OverlayLabel[]>([]);
+  let labelQueue: QueuedLabel[] = [];
+  let prevSnapshot: PendingDetection[] = [];
+  let lastSeenSpecies = new Map<string, number>();
+  let slotCounter = 0;
+  let streamEpochMs = 0;
+  let detectionEventSource: ReconnectingEventSource | null = null;
+  const MAX_OVERLAY_SLOTS = 7;
 
   // Internal state
   let hls: Hls | null = null;
@@ -139,6 +158,7 @@
         stream_token: string;
         playlist_url: string;
         playlist_ready: boolean;
+        stream_epoch?: string;
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
@@ -148,6 +168,9 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
+      if (data.stream_epoch) {
+        streamEpochMs = new Date(data.stream_epoch).getTime();
+      }
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       // Create audio element
@@ -282,6 +305,9 @@
       if (signal.aborted) return;
 
       startHeartbeat(activeStreamToken!);
+      if (activeSourceId) {
+        connectDetectionStream(activeSourceId);
+      }
     } catch (error) {
       if (signal.aborted) return;
       connectionError = t('spectrogram.error.connectionFailed');
@@ -316,6 +342,45 @@
     }
   }
 
+  function connectDetectionStream(sourceId: string) {
+    disconnectDetectionStream();
+    detectionEventSource = new ReconnectingEventSource(buildAppUrl('/api/v2/detections/stream'), {
+      max_retry_time: 30000,
+      withCredentials: false,
+    });
+    detectionEventSource.addEventListener('pending', (event: Event) => {
+      try {
+        // eslint-disable-next-line no-undef
+        const messageEvent = event as MessageEvent;
+        const data = JSON.parse(messageEvent.data);
+        if (!Array.isArray(data)) return;
+        const curr = data as PendingDetection[];
+        const newDetections = diffPendingSnapshot(prevSnapshot, curr, sourceId);
+
+        for (const det of newDetections) {
+          if (shouldDedup(det.species, det.firstDetected, lastSeenSpecies)) continue;
+          lastSeenSpecies.set(det.species, det.firstDetected);
+          const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+          slotCounter = next;
+          labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
+        }
+        prevSnapshot = curr;
+      } catch {
+        // Ignore parse errors
+      }
+    });
+  }
+
+  function disconnectDetectionStream() {
+    detectionEventSource?.close();
+    detectionEventSource = null;
+    prevSnapshot = [];
+    lastSeenSpecies.clear();
+    labelQueue = [];
+    overlayLabels = [];
+    slotCounter = 0;
+  }
+
   async function stopStream() {
     // Abort in-flight async work first
     abortController?.abort();
@@ -342,6 +407,8 @@
     }
 
     stopHeartbeat();
+    disconnectDetectionStream();
+    streamEpochMs = 0;
     spectro.disconnect();
 
     if (hls) {
@@ -428,6 +495,28 @@
       startStream();
     }
   }
+
+  // Promote queued detection labels when playhead catches up
+  $effect(() => {
+    if (!audioElement || !streamEpochMs) return;
+
+    const interval = globalThis.setInterval(() => {
+      if (!audioElement || !streamEpochMs) return;
+      if (labelQueue.length === 0) return;
+      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
+      const now = globalThis.performance.now();
+      const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
+      if (promoted.length > 0) {
+        labelQueue = remaining;
+        overlayLabels = [...overlayLabels, ...promoted];
+      }
+      // Prune labels older than 60 seconds
+      const cutoff = now - 60000;
+      overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
+    }, 500);
+
+    return () => globalThis.clearInterval(interval);
+  });
 </script>
 
 {#if hasLiveAudioAccess()}
@@ -520,6 +609,7 @@
           {frequencyRange}
           {colorMap}
           isActive={spectro.isActive}
+          overlayLabels={showDetectionLabels ? overlayLabels : []}
           className="h-full w-full"
         />
       {:else}
@@ -547,10 +637,14 @@
         {colorMap}
         {gainDb}
         {audioOutput}
+        {showDetectionLabels}
         onFrequencyRangeChange={range => (frequencyRange = range)}
         onColorMapChange={map => (colorMap = map)}
         onGainChange={handleGainChange}
         onAudioOutputToggle={handleAudioOutputToggle}
+        onDetectionLabelsToggle={() => {
+          showDetectionLabels = !showDetectionLabels;
+        }}
       />
     </div>
   </div>
