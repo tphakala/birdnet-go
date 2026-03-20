@@ -14,6 +14,10 @@ vi.mock('$lib/utils/logger', () => ({
   }),
 }));
 
+vi.mock('$lib/stores/restart.svelte', () => ({
+  restartInProgress: { value: false },
+}));
+
 describe('connectionState', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -139,6 +143,36 @@ describe('connectionState', () => {
     await vi.advanceTimersByTimeAsync(5_000);
 
     expect(connectionState.isOnline).toBe(true);
+
+    deactivateWatchdog();
+  });
+
+  it('should reload page when reconnecting after restart', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce({ ok: true });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const reloadMock = vi.fn();
+    vi.stubGlobal('location', { ...window.location, reload: reloadMock });
+
+    // Set restartInProgress before importing
+    const { restartInProgress } = await import('$lib/stores/restart.svelte');
+    restartInProgress.value = true;
+
+    const { activateWatchdog, onSSEError, deactivateWatchdog } =
+      await import('$lib/stores/connectionState.svelte');
+
+    activateWatchdog();
+    onSSEError();
+    vi.advanceTimersByTime(6_000); // Trigger offline
+
+    await vi.advanceTimersByTimeAsync(0); // First ping fails
+    await vi.advanceTimersByTimeAsync(5_000); // Second ping succeeds
+
+    expect(reloadMock).toHaveBeenCalled();
+    expect(restartInProgress.value).toBe(false);
 
     deactivateWatchdog();
   });
