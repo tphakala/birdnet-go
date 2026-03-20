@@ -108,6 +108,22 @@ func TestBuildSynonymIndexes_ConfigOverridesBuiltIn(t *testing.T) {
 	assert.Equal(t, "Bubulcus ibis", original)
 }
 
+func TestBuildSynonymIndexes_OverrideRemovesStaleReverse(t *testing.T) {
+	t.Parallel()
+
+	// Built-in maps "Bubulcus ibis" → "Ardea coromanda".
+	// Override changes it to "Bubulcus ibis" → "Ardea ibis".
+	// The old reverse entry "ardea coromanda" → "Bubulcus ibis" must NOT exist.
+	overrides := map[string]string{
+		"Bubulcus ibis": "Ardea ibis",
+	}
+
+	_, reverse := buildSynonymIndexes(overrides)
+
+	_, found := reverse["ardea coromanda"]
+	assert.False(t, found, "stale reverse entry for overridden built-in should not exist")
+}
+
 func TestBuildSynonymIndexes_ConfigAddsCustomEntry(t *testing.T) {
 	t.Parallel()
 
@@ -142,4 +158,26 @@ func TestBuildSynonymIndexes_IgnoresBlankEntries(t *testing.T) {
 
 	_, found = forward["turdus merula"]
 	assert.False(t, found)
+}
+
+func TestSetCustomSynonyms_IntegrationWithGetTaxonomySynonym(t *testing.T) {
+	// Not parallel: mutates package-level cache.
+
+	// Add a custom synonym and verify it's visible via GetTaxonomySynonym.
+	SetCustomSynonyms(map[string]string{
+		"Testus oldus": "Testus newus",
+	})
+	t.Cleanup(func() {
+		// Restore to built-ins only.
+		SetCustomSynonyms(nil)
+	})
+
+	synonym, found := GetTaxonomySynonym("Testus oldus")
+	assert.True(t, found)
+	assert.Equal(t, "Testus newus", synonym)
+
+	// Built-in should still work.
+	synonym, found = GetTaxonomySynonym("Accipiter cooperii")
+	assert.True(t, found)
+	assert.Equal(t, "Astur cooperii", synonym)
 }

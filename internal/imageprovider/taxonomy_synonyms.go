@@ -5,9 +5,9 @@
 package imageprovider
 
 import (
+	"maps"
 	"strings"
-
-	"github.com/tphakala/birdnet-go/internal/conf"
+	"sync"
 )
 
 // builtInTaxonomySynonyms maps BirdNET scientific names (2021E taxonomy) to their updated
@@ -31,21 +31,40 @@ var builtInTaxonomySynonyms = map[string]string{
 
 	// Streptopelia → Spilopelia reclassification
 	"Streptopelia senegalensis": "Spilopelia senegalensis",
-	"Streptopelia chinensis": "Spilopelia chinensis",
+	"Streptopelia chinensis":    "Spilopelia chinensis",
 
 	// Bubulcus → Ardea reclassification
 	"Bubulcus ibis": "Ardea coromanda",
 }
 
+// Cached forward/reverse lookup maps. Protected by synonymMu.
+var (
+	synonymMu     sync.RWMutex
+	cachedForward map[string]string
+	cachedReverse map[string]string
+)
+
+func init() {
+	// Build initial indexes from built-ins only (no overrides).
+	cachedForward, cachedReverse = buildSynonymIndexes(nil)
+}
+
+// SetCustomSynonyms replaces the current config-based synonym overrides and
+// rebuilds the cached lookup maps. Safe for concurrent use.
+// Call this when settings are loaded or hot-reloaded.
+func SetCustomSynonyms(overrides map[string]string) {
+	synonymMu.Lock()
+	defer synonymMu.Unlock()
+	cachedForward, cachedReverse = buildSynonymIndexes(overrides)
+}
+
 // buildSynonymIndexes builds normalized forward and reverse lookup maps using
 // built-in defaults plus optional config overrides.
-func buildSynonymIndexes(overrides map[string]string) (map[string]string, map[string]string) {
+func buildSynonymIndexes(overrides map[string]string) (forward, reverse map[string]string) {
 	merged := make(map[string]string, len(builtInTaxonomySynonyms)+len(overrides))
 
 	// Start with built-ins.
-	for old, updated := range builtInTaxonomySynonyms {
-		merged[old] = updated
-	}
+	maps.Copy(merged, builtInTaxonomySynonyms)
 
 	// Apply config overrides/additions.
 	for old, updated := range overrides {
@@ -57,14 +76,20 @@ func buildSynonymIndexes(overrides map[string]string) (map[string]string, map[st
 		merged[oldTrimmed] = updatedTrimmed
 	}
 
-	forwardSynonyms := make(map[string]string, len(merged))
-	reverseSynonyms := make(map[string]string, len(merged))
+	forward = make(map[string]string, len(merged))
+	reverse = make(map[string]string, len(merged))
 	for old, updated := range merged {
-		forwardSynonyms[strings.ToLower(old)] = updated
-		reverseSynonyms[strings.ToLower(updated)] = old
+		lowerOld := strings.ToLower(old)
+		lowerUpdated := strings.ToLower(updated)
+		forward[lowerOld] = updated
+		// Only set reverse if no forward entry exists for this updated name,
+		// avoiding phantom reverse entries from overridden built-ins.
+		if _, isForwardKey := forward[lowerUpdated]; !isForwardKey {
+			reverse[lowerUpdated] = old
+		}
 	}
 
-	return forwardSynonyms, reverseSynonyms
+	return forward, reverse
 }
 
 // GetTaxonomySynonym returns the alternate scientific name for a given name, if one exists.
@@ -76,21 +101,18 @@ func GetTaxonomySynonym(scientificName string) (string, bool) {
 		return "", false
 	}
 
-	settings := conf.GetSettings()
-	var configured map[string]string
-	if settings != nil {
-		configured = settings.TaxonomySynonyms
-	}
-
-	forwardSynonyms, reverseSynonyms := buildSynonymIndexes(configured)
+	synonymMu.RLock()
+	forward := cachedForward
+	reverse := cachedReverse
+	synonymMu.RUnlock()
 
 	// Check forward: BirdNET name → updated name
-	if updated, found := forwardSynonyms[normalized]; found {
+	if updated, found := forward[normalized]; found {
 		return updated, true
 	}
 
 	// Check reverse: updated name → BirdNET name
-	if original, found := reverseSynonyms[normalized]; found {
+	if original, found := reverse[normalized]; found {
 		return original, true
 	}
 

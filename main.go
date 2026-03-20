@@ -91,6 +91,9 @@ func mainWithExitCode() int {
 		return 1
 	}
 
+	// Apply taxonomy synonym overrides from config.
+	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms)
+
 	// Set runtime values
 	settings.Version = version
 	settings.BuildDate = buildDate
