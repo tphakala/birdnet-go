@@ -357,8 +357,8 @@ type PushSettings struct {
 	RateLimiting   RateLimitingConfig   `yaml:"rate_limiting" json:"rate_limiting" mapstructure:"rate_limiting"`
 	Providers      []PushProviderConfig `yaml:"providers" json:"providers"`
 	// Detection filtering settings
-	MinConfidenceThreshold float64 `yaml:"minconfidencethreshold" json:"minConfidenceThreshold" mapstructure:"min_confidence_threshold"` // 0.0-1.0, 0 = disabled
-	SpeciesCooldownMinutes int     `yaml:"speciescooldownminutes" json:"speciesCooldownMinutes" mapstructure:"species_cooldown_minutes"` // 0 = disabled
+	MinConfidenceThreshold float64 `yaml:"min_confidence_threshold" json:"minConfidenceThreshold" mapstructure:"min_confidence_threshold"` // 0.0-1.0, 0 = disabled
+	SpeciesCooldownMinutes int     `yaml:"species_cooldown_minutes" json:"speciesCooldownMinutes" mapstructure:"species_cooldown_minutes"` // 0 = disabled
 }
 
 // CircuitBreakerConfig holds circuit breaker configuration.
