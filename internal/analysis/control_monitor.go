@@ -248,6 +248,12 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		GetLogger().Info("Range filter rebuilt successfully")
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
+
+	// Rebuild datastore name maps with new locale labels
+	if cm.proc != nil && cm.proc.Ds != nil {
+		cm.proc.Ds.UpdateNameMaps(cm.bn.Settings.BirdNET.Labels)
+		GetLogger().Info("Datastore name maps updated with new labels")
+	}
 }
 
 // handleReconfigureMQTT reconfigures the MQTT connection
