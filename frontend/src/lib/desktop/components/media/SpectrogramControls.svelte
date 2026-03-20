@@ -213,6 +213,7 @@
   <!-- Detection labels toggle -->
   {#if onDetectionLabelsToggle}
     <button
+      type="button"
       onclick={onDetectionLabelsToggle}
       class="rounded p-1.5 transition-colors {showDetectionLabels
         ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
