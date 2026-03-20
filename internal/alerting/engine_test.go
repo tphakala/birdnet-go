@@ -503,6 +503,173 @@ func TestEngine_DiskMetricPathIsolation_Sustained(t *testing.T) {
 	assert.Empty(t, firedPath, "sustained disk usage rule should not fire for /data at 15%%")
 }
 
+func TestEngine_EscalationSteps_FiresAtEachStep(t *testing.T) {
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     0,
+		EscalationSteps: []float64{85, 90, 95, 99},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0, SortOrder: 0},
+		},
+	}
+
+	var fired []float64
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(r *entities.AlertRule, e *AlertEvent) {
+		fired = append(fired, e.Properties[PropertyValue].(float64))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(value float64) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+			Timestamp:  time.Now(),
+		})
+	}
+
+	emit(86)
+	assert.Equal(t, []float64{86}, fired, "first breach should fire")
+
+	emit(87)
+	assert.Equal(t, []float64{86}, fired, "same step should be suppressed")
+
+	emit(91)
+	assert.Equal(t, []float64{86, 91}, fired, "crossing 90 step should fire")
+
+	emit(91)
+	assert.Equal(t, []float64{86, 91}, fired, "same step should be suppressed")
+
+	emit(96)
+	assert.Equal(t, []float64{86, 91, 96}, fired, "crossing 95 step should fire")
+
+	emit(99.5)
+	assert.Equal(t, []float64{86, 91, 96, 99.5}, fired, "crossing 99 step should fire")
+
+	emit(99.9)
+	assert.Equal(t, []float64{86, 91, 96, 99.5}, fired, "top step should be suppressed")
+}
+
+func TestEngine_EscalationSteps_ResetOnRecovery(t *testing.T) {
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     0,
+		EscalationSteps: []float64{85, 90, 95, 99},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0, SortOrder: 0},
+		},
+	}
+
+	var fireCount int
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
+		fireCount++
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(value float64) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+			Timestamp:  time.Now(),
+		})
+	}
+
+	emit(86)
+	assert.Equal(t, 1, fireCount)
+
+	emit(80) // drops below base threshold 85
+	assert.Equal(t, 1, fireCount, "below threshold should not fire")
+
+	emit(86) // re-breach after recovery
+	assert.Equal(t, 2, fireCount, "re-breach after recovery should fire")
+}
+
+func TestEngine_EscalationSteps_MultiplePathsIndependent(t *testing.T) {
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     0,
+		EscalationSteps: []float64{85, 90, 95, 99},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0, SortOrder: 0},
+		},
+	}
+
+	var fired []string
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, e *AlertEvent) {
+		fired = append(fired, e.Properties[PropertyPath].(string))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(value float64, path string) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: path},
+			Timestamp:  time.Now(),
+		})
+	}
+
+	emit(96, "/")
+	assert.Equal(t, []string{"/"}, fired)
+
+	emit(86, "/mnt/data")
+	assert.Equal(t, []string{"/", "/mnt/data"}, fired)
+
+	emit(96, "/")
+	assert.Equal(t, []string{"/", "/mnt/data"}, fired, "same path+step should be suppressed")
+}
+
+func TestEngine_NoEscalationSteps_LegacyBehavior(t *testing.T) {
+	rule := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeSystem,
+		TriggerType: TriggerTypeMetric,
+		MetricName:  MetricDiskUsage,
+		CooldownSec: 0,
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0, SortOrder: 0},
+		},
+	}
+
+	var fireCount int
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
+		fireCount++
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(value float64) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+			Timestamp:  time.Now(),
+		})
+	}
+
+	emit(86)
+	emit(87)
+	emit(88)
+	assert.Equal(t, 3, fireCount, "without escalation steps, all events should fire")
+}
+
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
 	// Two rules targeting the same metric — metric sample should be recorded once per event.
 	rule1 := entities.AlertRule{

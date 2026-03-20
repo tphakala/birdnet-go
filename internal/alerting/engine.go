@@ -3,6 +3,8 @@ package alerting
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"maps"
 	"runtime/debug"
 	"sync"
 	"time"
@@ -37,6 +39,11 @@ type Engine struct {
 	cooldowns   map[uint]time.Time // rule ID → last fired time
 	cooldownsMu sync.RWMutex
 
+	// Escalation tracking: maps "ruleID|metricKey" → last fired step value.
+	// Prevents re-fire until metric crosses the next higher step.
+	escalations   map[string]float64
+	escalationsMu sync.RWMutex
+
 	// Cached rules (refreshed periodically)
 	rules   []entities.AlertRule
 	rulesMu sync.RWMutex
@@ -54,6 +61,7 @@ func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log l
 		log:           log,
 		telemetry:     at,
 		cooldowns:     make(map[uint]time.Time),
+		escalations:   make(map[string]float64),
 	}
 }
 
@@ -86,6 +94,101 @@ func metricBufferKey(metricName string, properties map[string]any) string {
 	return metricName
 }
 
+// escalationKey builds the escalation state key from the rule ID and metric
+// instance (path). Multiple mount points are tracked independently.
+func escalationKey(ruleID uint, metricName string, properties map[string]any) string {
+	return fmt.Sprintf("%d|%s", ruleID, metricBufferKey(metricName, properties))
+}
+
+// clearEscalationIfRecovered clears escalation state for rules whose metric
+// has dropped below the base threshold (EscalationSteps[0]). This must run
+// for every metric event, even when ruleMatches returns false, because a
+// metric below threshold causes ruleMatches to return false — which would
+// leave stale escalation state that suppresses future alerts.
+func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *AlertEvent) {
+	if event.MetricName == "" {
+		return
+	}
+	val, ok := event.Properties[PropertyValue]
+	if !ok {
+		return
+	}
+	floatVal, err := toFloat64(val)
+	if err != nil {
+		return
+	}
+
+	for i := range rules {
+		rule := &rules[i]
+		if rule.TriggerType != TriggerTypeMetric || rule.MetricName != event.MetricName {
+			continue
+		}
+		if rule.ObjectType != event.ObjectType {
+			continue
+		}
+		if len(rule.EscalationSteps) == 0 {
+			continue
+		}
+		if floatVal < rule.EscalationSteps[0] {
+			key := escalationKey(rule.ID, event.MetricName, event.Properties)
+			e.escalationsMu.Lock()
+			delete(e.escalations, key)
+			e.escalationsMu.Unlock()
+		}
+	}
+}
+
+// shouldSuppressEscalation checks if a metric rule should be suppressed
+// because the metric hasn't crossed a new escalation step. Returns true
+// if the rule should NOT fire. When it returns false (allow fire), it also
+// returns a shallow copy of properties with PropertyThresholdStep set.
+func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent) (suppress bool, props map[string]any) {
+	if len(rule.EscalationSteps) == 0 {
+		return false, event.Properties
+	}
+
+	val, ok := event.Properties[PropertyValue]
+	if !ok {
+		return false, event.Properties
+	}
+	floatVal, err := toFloat64(val)
+	if err != nil {
+		return false, event.Properties
+	}
+
+	// Find the highest step the current value exceeds.
+	currentStep := float64(-1)
+	for _, step := range rule.EscalationSteps {
+		if floatVal >= step {
+			currentStep = step
+		}
+	}
+	if currentStep < 0 {
+		return true, nil
+	}
+
+	key := escalationKey(rule.ID, event.MetricName, event.Properties)
+
+	e.escalationsMu.RLock()
+	lastStep, exists := e.escalations[key]
+	e.escalationsMu.RUnlock()
+
+	if exists && lastStep >= currentStep {
+		return true, nil
+	}
+
+	e.escalationsMu.Lock()
+	e.escalations[key] = currentStep
+	e.escalationsMu.Unlock()
+
+	// Shallow-copy properties and add the threshold step (don't mutate shared map).
+	propsCopy := make(map[string]any, len(event.Properties)+1)
+	maps.Copy(propsCopy, event.Properties)
+	propsCopy[PropertyThresholdStep] = currentStep
+
+	return false, propsCopy
+}
+
 // HandleEvent evaluates an event against all enabled rules.
 func (e *Engine) HandleEvent(event *AlertEvent) {
 	// Record metric sample once before rule iteration to avoid duplicates
@@ -104,9 +207,29 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	copy(rules, e.rules)
 	e.rulesMu.RUnlock()
 
+	// Phase 1: Clear escalation state for metrics that have recovered.
+	e.clearEscalationIfRecovered(rules, event)
+
+	// Phase 2: Evaluate rules.
 	for i := range rules {
 		rule := &rules[i]
 		if e.ruleMatches(rule, event) && !e.isInCooldown(rule.ID, rule.CooldownSec) {
+			// Check escalation suppression for metric rules with steps.
+			if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
+				suppress, props := e.shouldSuppressEscalation(rule, event)
+				if suppress {
+					continue
+				}
+				augmentedEvent := &AlertEvent{
+					ObjectType: event.ObjectType,
+					EventName:  event.EventName,
+					MetricName: event.MetricName,
+					Properties: props,
+					Timestamp:  event.Timestamp,
+				}
+				e.fireRule(rule, augmentedEvent)
+				continue
+			}
 			e.fireRule(rule, event)
 		}
 	}
