@@ -5,7 +5,6 @@
 package imageprovider
 
 import (
-	"maps"
 	"strings"
 	"sync"
 )
@@ -37,6 +36,12 @@ var builtInTaxonomySynonyms = map[string]string{
 	"Bubulcus ibis": "Ardea coromanda",
 }
 
+// synonymEntry stores a canonical old→updated pair for building lookup maps.
+type synonymEntry struct {
+	old     string // canonical old name (Title Case for built-ins, as-provided for overrides)
+	updated string // canonical updated name
+}
+
 // Cached forward/reverse lookup maps. Protected by synonymMu.
 var (
 	synonymMu     sync.RWMutex
@@ -60,32 +65,42 @@ func SetCustomSynonyms(overrides map[string]string) {
 
 // buildSynonymIndexes builds normalized forward and reverse lookup maps using
 // built-in defaults plus optional config overrides.
+//
+// Viper lowercases map keys during YAML deserialization, so overrides arrive
+// with lowercase keys (e.g., "bubulcus ibis") while built-ins use Title Case.
+// We use lowercased keys in the merge map to ensure overrides properly replace
+// built-ins regardless of casing.
 func buildSynonymIndexes(overrides map[string]string) (forward, reverse map[string]string) {
-	merged := make(map[string]string, len(builtInTaxonomySynonyms)+len(overrides))
+	// Merge built-ins and overrides with case-insensitive deduplication.
+	// Key: lowercased old name (for dedup). Value: canonical entry.
+	merged := make(map[string]synonymEntry, len(builtInTaxonomySynonyms)+len(overrides))
 
-	// Start with built-ins.
-	maps.Copy(merged, builtInTaxonomySynonyms)
+	for old, updated := range builtInTaxonomySynonyms {
+		merged[strings.ToLower(old)] = synonymEntry{old, updated}
+	}
 
-	// Apply config overrides/additions.
 	for old, updated := range overrides {
 		oldTrimmed := strings.TrimSpace(old)
 		updatedTrimmed := strings.TrimSpace(updated)
 		if oldTrimmed == "" || updatedTrimmed == "" {
 			continue
 		}
-		merged[oldTrimmed] = updatedTrimmed
+		merged[strings.ToLower(oldTrimmed)] = synonymEntry{oldTrimmed, updatedTrimmed}
 	}
 
+	// Build forward map first (fully populated before reverse).
 	forward = make(map[string]string, len(merged))
+	for lowerOld, e := range merged {
+		forward[lowerOld] = e.updated
+	}
+
+	// Build reverse map: only add entries whose updated name is not itself
+	// a forward key, preventing cycles in chained synonyms (A→B, B→C).
 	reverse = make(map[string]string, len(merged))
-	for old, updated := range merged {
-		lowerOld := strings.ToLower(old)
-		lowerUpdated := strings.ToLower(updated)
-		forward[lowerOld] = updated
-		// Only set reverse if no forward entry exists for this updated name,
-		// avoiding phantom reverse entries from overridden built-ins.
+	for _, e := range merged {
+		lowerUpdated := strings.ToLower(e.updated)
 		if _, isForwardKey := forward[lowerUpdated]; !isForwardKey {
-			reverse[lowerUpdated] = old
+			reverse[lowerUpdated] = e.old
 		}
 	}
 

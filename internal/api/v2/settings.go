@@ -219,6 +219,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// Update the cached telemetry state after settings change
 	telemetry.UpdateTelemetryEnabled()
 
+	// Rebuild taxonomy synonym lookup cache if overrides changed
+	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms)
+
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully", logger.Int("skipped_fields_count", len(skippedFields)))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       "Settings updated successfully",

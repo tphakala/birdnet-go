@@ -108,6 +108,33 @@ func TestBuildSynonymIndexes_ConfigOverridesBuiltIn(t *testing.T) {
 	assert.Equal(t, "Bubulcus ibis", original)
 }
 
+func TestBuildSynonymIndexes_ViperLowercasedKeysOverrideBuiltIn(t *testing.T) {
+	t.Parallel()
+
+	// Viper lowercases map keys during YAML deserialization.
+	// Built-in has Title Case "Bubulcus ibis", Viper provides "bubulcus ibis".
+	// The override must still win despite different casing.
+	overrides := map[string]string{
+		"bubulcus ibis": "Ardea ibis", // Viper-style lowercase key
+	}
+
+	forward, reverse := buildSynonymIndexes(overrides)
+
+	// Forward must return the override value, not the built-in.
+	updated, found := forward["bubulcus ibis"]
+	assert.True(t, found)
+	assert.Equal(t, "Ardea ibis", updated, "override must replace built-in even with lowercase key")
+
+	// Old built-in reverse entry must not exist.
+	_, found = reverse["ardea coromanda"]
+	assert.False(t, found, "stale reverse entry for overridden built-in should not exist")
+
+	// New reverse entry must exist.
+	original, found := reverse["ardea ibis"]
+	assert.True(t, found)
+	assert.Equal(t, "bubulcus ibis", original)
+}
+
 func TestBuildSynonymIndexes_OverrideRemovesStaleReverse(t *testing.T) {
 	t.Parallel()
 
