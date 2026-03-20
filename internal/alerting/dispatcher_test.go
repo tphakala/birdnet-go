@@ -491,6 +491,46 @@ func TestDispatchTest_CustomTemplate_UsesTestMethod(t *testing.T) {
 	assert.Equal(t, "A stream disconnected", mock.testCalls[0].message)
 }
 
+func TestMetricMessage_UsesThresholdStep(t *testing.T) {
+	rule := &entities.AlertRule{
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", SortOrder: 0},
+		},
+	}
+	event := &AlertEvent{
+		MetricName: MetricDiskUsage,
+		Properties: map[string]any{
+			PropertyValue:         float64(91.2),
+			PropertyThresholdStep: float64(90),
+		},
+	}
+
+	key, params, fallback := metricMessage(rule, event)
+	assert.Equal(t, MsgAlertMetricExceeded, key)
+	assert.Equal(t, "90", params["threshold"])
+	assert.Equal(t, "91.2", params["value"])
+	assert.Equal(t, "Current value: 91.2% (threshold: 90%)", fallback)
+}
+
+func TestMetricMessage_NoThresholdStep_UsesCondition(t *testing.T) {
+	rule := &entities.AlertRule{
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", SortOrder: 0},
+		},
+	}
+	event := &AlertEvent{
+		MetricName: MetricDiskUsage,
+		Properties: map[string]any{
+			PropertyValue: float64(87),
+		},
+	}
+
+	key, params, fallback := metricMessage(rule, event)
+	assert.Equal(t, MsgAlertMetricExceeded, key)
+	assert.Equal(t, "85", params["threshold"])
+	assert.Equal(t, "Current value: 87% (threshold: 85%)", fallback)
+}
+
 func TestDispatchTest_DefaultTemplate_UsesTestKeysMethod(t *testing.T) {
 	mock := &mockNotifCreator{}
 	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)

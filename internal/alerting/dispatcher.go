@@ -188,12 +188,20 @@ func metricMessage(rule *entities.AlertRule, event *AlertEvent) (key string, par
 	}
 	formatted := formatMetricValue(floatVal)
 
-	// Get threshold from the metric value condition.
+	// Prefer the escalation step threshold if available; fall back to the
+	// condition-level threshold for rules without escalation steps.
 	threshold := ""
-	for i := range rule.Conditions {
-		if rule.Conditions[i].Property == PropertyValue {
-			threshold = rule.Conditions[i].Value
-			break
+	if step, ok := event.Properties[PropertyThresholdStep]; ok {
+		if stepFloat, err := toFloat64(step); err == nil {
+			threshold = formatMetricValue(stepFloat)
+		}
+	}
+	if threshold == "" {
+		for i := range rule.Conditions {
+			if rule.Conditions[i].Property == PropertyValue {
+				threshold = rule.Conditions[i].Value
+				break
+			}
 		}
 	}
 	if threshold == "" {
