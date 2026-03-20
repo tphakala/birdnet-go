@@ -163,6 +163,13 @@ birdnet:
   labelpath: ""           # path to external label file (empty for embedded)
   usexnnpack: true        # true to use XNNPACK delegate for inference acceleration
 
+# Optional taxonomy synonym overrides for image lookups.
+# Built-in mappings are always loaded first; entries below override/add to them.
+# Format: "old scientific name": "new scientific name"
+taxonomySynonyms: {}
+  # "Accipiter cooperii": "Astur cooperii"
+  # "Corvus monedula": "Coloeus monedula"
+
 # Realtime processing settings
 realtime:
   interval: 15            # duplicate prediction interval in seconds

@@ -1415,6 +1415,8 @@ type Settings struct {
 
 	BirdNET BirdNETConfig `json:"birdnet"` // BirdNET configuration
 
+	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
+
 	Input InputConfig `yaml:"-" json:"-"` // Input configuration for file and directory analysis
 
 	Realtime  RealtimeSettings  `json:"realtime"`  // Realtime processing settings
