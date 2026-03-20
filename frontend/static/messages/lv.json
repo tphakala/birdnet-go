@@ -4356,7 +4356,7 @@
   },
   "restart": {
     "applicationRestart": "Restartēt lietojumprogrammu",
-    "containerRestart": "Restartēt konteineri",
+    "containerRestart": "Restartēt konteineru",
     "confirmTitle": "Apstiprināt restartēšanu",
     "confirmApplicationMessage": "Serveris tiks restartēts. Jūs uz laiku tiksiet atvienots.",
     "confirmContainerMessage": "Konteiners tiks restartēts. Jūs uz laiku tiksiet atvienots.",
