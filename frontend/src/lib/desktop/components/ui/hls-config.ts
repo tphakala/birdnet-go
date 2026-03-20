@@ -26,7 +26,7 @@ export const HLS_AUDIO_CONFIG: Partial<Hls['config']> = {
 
   // Buffer management for live audio
   backBufferLength: 10, // Keep 10s of back buffer for seeking
-  liveSyncDurationCount: 5, // Start playback 5 segments from live edge
+  liveSyncDurationCount: 3, // Start playback 3 segments from live edge (reduced from 5 for faster startup)
   liveMaxLatencyDurationCount: 30, // Max 30 segments behind live
 
   // Buffer hole tolerance - increased for audio streams
