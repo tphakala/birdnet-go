@@ -249,10 +249,15 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
 
-	// Rebuild datastore name maps with new locale labels
+	// Rebuild name maps with new locale labels
+	labels := cm.bn.Settings.BirdNET.Labels
 	if cm.proc != nil && cm.proc.Ds != nil {
-		cm.proc.Ds.UpdateNameMaps(cm.bn.Settings.BirdNET.Labels)
+		cm.proc.Ds.UpdateNameMaps(labels)
 		GetLogger().Info("Datastore name maps updated with new labels")
+	}
+	if cm.apiController != nil {
+		cm.apiController.UpdateCommonNameMap(labels)
+		GetLogger().Info("API controller common name map updated with new labels")
 	}
 }
 

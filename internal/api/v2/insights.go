@@ -165,6 +165,12 @@ func buildCommonNameMap(labels []string) map[string]string {
 	return m
 }
 
+// UpdateCommonNameMap rebuilds the cached common name map from updated BirdNET labels.
+// Called after locale or model changes to keep insights endpoints current.
+func (c *Controller) UpdateCommonNameMap(labels []string) {
+	c.commonNameMap = buildCommonNameMap(labels)
+}
+
 // resolveCommonName looks up the common name for a scientific name.
 // Returns the scientific name itself as fallback.
 func resolveCommonName(nameMap map[string]string, scientificName string) string {
