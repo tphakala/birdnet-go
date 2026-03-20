@@ -136,6 +136,18 @@
     }
   }
 
+  // Describe the buffered time ranges of an audio element for diagnostics.
+  // Returns a string like "0.00-4.12, 6.00-8.50" showing all buffered ranges,
+  // which helps identify buffer holes that cause audio gaps.
+  function describeBuffered(el: HTMLAudioElement | null): string {
+    if (!el?.buffered || el.buffered.length === 0) return 'empty';
+    const ranges: string[] = [];
+    for (let i = 0; i < el.buffered.length; i++) {
+      ranges.push(`${el.buffered.start(i).toFixed(2)}-${el.buffered.end(i).toFixed(2)}`);
+    }
+    return ranges.join(', ');
+  }
+
   async function startStream() {
     if (!selectedSourceId) return;
 
@@ -180,16 +192,28 @@
       audioElement.crossOrigin = 'anonymous';
 
       // Audio element debug listeners for buffer underrun diagnosis
+      let hasStalled = false;
       audioElement.addEventListener('waiting', () => {
+        hasStalled = true;
         logger.warn('Audio element: waiting (buffer underrun)', {
-          currentTime: audioElement?.currentTime,
+          currentTime: audioElement?.currentTime?.toFixed(3),
           readyState: audioElement?.readyState,
           networkState: audioElement?.networkState,
+          buffered: describeBuffered(audioElement),
         });
       });
       audioElement.addEventListener('stalled', () => {
         logger.warn('Audio element: stalled (network stall)', {
-          currentTime: audioElement?.currentTime,
+          currentTime: audioElement?.currentTime?.toFixed(3),
+          buffered: describeBuffered(audioElement),
+        });
+      });
+      audioElement.addEventListener('playing', () => {
+        if (!hasStalled) return; // Ignore initial play — only log stall recovery
+        hasStalled = false;
+        logger.warn('Audio element: resumed from stall', {
+          currentTime: audioElement?.currentTime?.toFixed(3),
+          buffered: describeBuffered(audioElement),
         });
       });
       audioElement.addEventListener('error', () => {
@@ -208,22 +232,73 @@
         let fragmentsBuffered = 0;
         let playbackAttempted = false;
 
+        // Fragment load timing: track how long each fragment takes to download.
+        // Keyed by string to handle both numeric sn and 'initSegment'.
+        const fragLoadStartTimes = new Map<string, number>();
+
+        hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
+          if (signal.aborted) return;
+          const snKey = String(data.frag.sn);
+          fragLoadStartTimes.set(snKey, performance.now());
+          // Cap map size to prevent leaks from abandoned loads
+          if (fragLoadStartTimes.size > 20) {
+            const oldest = fragLoadStartTimes.keys().next().value;
+            if (oldest !== undefined) fragLoadStartTimes.delete(oldest);
+          }
+          logger.debug('HLS frag loading', { sn: data.frag.sn, url: data.frag.relurl });
+        });
+
+        hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
+          if (signal.aborted) return;
+          const snKey = String(data.frag.sn);
+          const startTime = fragLoadStartTimes.get(snKey);
+          fragLoadStartTimes.delete(snKey);
+
+          const now = performance.now();
+          const loadMs = startTime ? now - startTime : 0;
+          const loadDurationMs = startTime ? loadMs.toFixed(0) : '?';
+          const bytes = data.payload?.byteLength ?? data.frag.stats?.total ?? 0;
+          // Warn if fragment download took unusually long (>2s for a ~2s segment)
+          if (loadMs > 2000) {
+            logger.warn('Slow fragment download (possible network/server I/O stall)', {
+              sn: data.frag.sn,
+              loadDurationMs,
+              fragDuration: data.frag.duration?.toFixed(2),
+              bytes,
+            });
+          } else {
+            logger.debug('HLS frag loaded', { sn: data.frag.sn, loadDurationMs, bytes });
+          }
+        });
+
         hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
           if (signal.aborted) return;
           fragmentsBuffered++;
 
           // Buffer diagnostics
-          const buffered = audioElement?.buffered;
+          const bufferInfo = describeBuffered(audioElement);
           const currentTime = audioElement?.currentTime ?? 0;
+          const buffered = audioElement?.buffered;
           let bufferAhead = 0;
           if (buffered && buffered.length > 0) {
             bufferAhead = buffered.end(buffered.length - 1) - currentTime;
           }
-          logger.debug('HLS frag buffered', {
-            sn: data.frag.sn,
-            total: fragmentsBuffered,
-            bufferAhead: bufferAhead.toFixed(2) + 's',
-          });
+
+          // Warn if buffer is getting dangerously low
+          if (playbackAttempted && bufferAhead < 1.0) {
+            logger.warn('HLS buffer running low', {
+              sn: data.frag.sn,
+              bufferAhead: bufferAhead.toFixed(2) + 's',
+              buffered: bufferInfo,
+              currentTime: currentTime.toFixed(3),
+            });
+          } else {
+            logger.debug('HLS frag buffered', {
+              sn: data.frag.sn,
+              total: fragmentsBuffered,
+              bufferAhead: bufferAhead.toFixed(2) + 's',
+            });
+          }
 
           if (
             !playbackAttempted &&
@@ -258,7 +333,12 @@
           if (signal.aborted) return;
           if (data.fatal) {
             connectionError = t('spectrogram.error.connectionFailed');
-            logger.error('Fatal HLS error', { type: data.type, details: data.details });
+            logger.error('Fatal HLS error', {
+              type: data.type,
+              details: data.details,
+              buffered: describeBuffered(audioElement),
+              currentTime: audioElement?.currentTime?.toFixed(3),
+            });
             isStreaming = false;
             isConnecting = false;
           } else {
@@ -266,18 +346,35 @@
             const info: Record<string, unknown> = {
               type: data.type,
               details: data.details,
+              buffered: describeBuffered(audioElement),
+              currentTime: audioElement?.currentTime?.toFixed(3),
             };
             if ('frag' in data && data.frag) {
-              info.fragSn = (data.frag as { sn?: number }).sn;
+              const fragSn = (data.frag as { sn?: number | string }).sn;
+              info.fragSn = fragSn;
+              // Clean up fragment timing entry on error (FRAG_LOADED won't fire)
+              fragLoadStartTimes.delete(String(fragSn));
             }
-            logger.warn('HLS non-fatal error', info);
+            // Buffer stall events are key diagnostic signals
+            if (
+              data.details === 'bufferStalledError' ||
+              data.details === 'bufferNudgeOnStall' ||
+              data.details === 'bufferSeekOverHole'
+            ) {
+              logger.warn('HLS buffer stall event', info);
+            } else {
+              logger.warn('HLS non-fatal error', info);
+            }
           }
         });
 
-        // Fragment loading log for diagnostics
-        hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
+        // Level/track switching diagnostics
+        hls.on(Hls.Events.BUFFER_FLUSHING, () => {
           if (signal.aborted) return;
-          logger.debug('HLS frag loading', { sn: data.frag.sn, url: data.frag.relurl });
+          logger.warn('HLS buffer flushing', {
+            currentTime: audioElement?.currentTime?.toFixed(3),
+            buffered: describeBuffered(audioElement),
+          });
         });
       } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
         // Native HLS (Safari)
@@ -499,6 +596,75 @@
       startStream();
     }
   }
+
+  // Periodic buffer health monitor — logs buffer state every 10s to help
+  // diagnose intermittent audio gaps. Uses warn level so it appears in production.
+  $effect(() => {
+    if (!audioElement || !isStreaming) return;
+
+    let lastCurrentTime = audioElement.currentTime;
+    let lastCheckTime = performance.now();
+    let stallCount = 0;
+
+    const interval = globalThis.setInterval(() => {
+      if (!audioElement) return;
+
+      const now = performance.now();
+      const elapsed = (now - lastCheckTime) / 1000;
+      const currentTime = audioElement.currentTime;
+      const playbackDelta = currentTime - lastCurrentTime;
+
+      // Detect playback stall: if currentTime hasn't advanced in 10s while
+      // we're supposed to be streaming, something is wrong
+      if (elapsed > 9 && playbackDelta < 0.5 && currentTime > 0) {
+        stallCount++;
+        logger.warn('Playback stall detected: currentTime not advancing', {
+          currentTime: currentTime.toFixed(3),
+          expectedAdvance: elapsed.toFixed(1) + 's',
+          actualAdvance: playbackDelta.toFixed(3) + 's',
+          stallCount,
+          readyState: audioElement.readyState,
+          paused: audioElement.paused,
+          buffered: describeBuffered(audioElement),
+          hlsLatency: hls?.latency?.toFixed(2),
+        });
+      }
+
+      // Periodic buffer health snapshot (every 10s)
+      const buffered = audioElement.buffered;
+      let bufferAhead = 0;
+      let bufferRangeCount = 0;
+      if (buffered && buffered.length > 0) {
+        bufferAhead = buffered.end(buffered.length - 1) - currentTime;
+        bufferRangeCount = buffered.length;
+      }
+
+      const healthInfo = {
+        currentTime: currentTime.toFixed(3),
+        bufferAhead: bufferAhead.toFixed(2) + 's',
+        bufferRanges: bufferRangeCount,
+        buffered: describeBuffered(audioElement),
+        readyState: audioElement.readyState,
+        hlsLatency: hls?.latency?.toFixed(2),
+        hlsBandwidth: hls?.bandwidthEstimate
+          ? (hls.bandwidthEstimate / 1000).toFixed(0) + 'kbps'
+          : undefined,
+      };
+
+      // Use warn for unhealthy state (low buffer, multiple ranges = holes),
+      // debug for normal operation to avoid spamming production console
+      if (bufferAhead < 2.0 || bufferRangeCount > 1) {
+        logger.warn('HLS buffer health: degraded', healthInfo);
+      } else {
+        logger.debug('HLS buffer health', healthInfo);
+      }
+
+      lastCurrentTime = currentTime;
+      lastCheckTime = now;
+    }, 10000);
+
+    return () => globalThis.clearInterval(interval);
+  });
 
   // Promote queued detection labels when playhead catches up
   $effect(() => {

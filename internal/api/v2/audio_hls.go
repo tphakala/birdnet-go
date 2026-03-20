@@ -62,6 +62,30 @@ const (
 	// before being considered hung. Normal writes complete in microseconds.
 	fifoWriteTimeout = 30 * time.Second
 
+	// fifoWriteSlowThreshold is the duration above which a FIFO write is
+	// considered slow and logged as a warning. Slow writes suggest FFmpeg is
+	// blocked (possibly on SD card I/O) and not consuming from the pipe fast enough.
+	fifoWriteSlowThreshold = 100 * time.Millisecond
+
+	// hlsDropLogInterval is the minimum interval between audio data drop log messages
+	// to avoid flooding the log when the channel is consistently full.
+	hlsDropLogInterval = 5 * time.Second
+
+	// hlsSegmentFreshnessMultiplier is the multiplier applied to the configured
+	// segment length to determine the staleness threshold. A segment older than
+	// segmentLength * multiplier is considered stale. Using 3x allows for normal
+	// jitter in segment production timing.
+	hlsSegmentFreshnessMultiplier = 3
+
+	// hlsServeSlowThreshold is the duration above which serving a segment or
+	// playlist file is considered slow and logged. Slow reads suggest SD card
+	// I/O latency.
+	hlsServeSlowThreshold = 500 * time.Millisecond
+
+	// hlsFreshnessCheckInterval is the minimum interval between segment freshness
+	// checks to avoid adding I/O load on every playlist poll.
+	hlsFreshnessCheckInterval = 10 * time.Second
+
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
@@ -580,7 +604,19 @@ func (c *Controller) ServeHLSPlaylist(ctx echo.Context) error {
 		return ctx.String(http.StatusOK, emptyPlaylist)
 	}
 
-	return secFS.ServeFile(ctx, stream.PlaylistPath)
+	// Check segment freshness: how old is the newest segment file?
+	// Stale segments suggest FFmpeg is blocked (possibly SD card I/O stall).
+	c.checkSegmentFreshness(stream.OutputDir, sourceID)
+
+	serveStart := time.Now()
+	err = secFS.ServeFile(ctx, stream.PlaylistPath)
+	serveDuration := time.Since(serveStart)
+	if serveDuration > hlsServeSlowThreshold {
+		GetLogger().Warn("Slow playlist serve (disk read + network write)",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("serve_duration", serveDuration.String()))
+	}
+	return err
 }
 
 // ServeHLSContent serves HLS segment files
@@ -654,7 +690,16 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 	c.setHLSHeaders(ctx)
 	c.setHLSContentType(ctx, safeRequestPath)
 
-	return secFS.ServeFile(ctx, segmentPath)
+	serveStart := time.Now()
+	serveErr := secFS.ServeFile(ctx, segmentPath)
+	serveDuration := time.Since(serveStart)
+	if serveDuration > hlsServeSlowThreshold {
+		GetLogger().Warn("Slow segment serve (disk read + network write)",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("serve_duration", serveDuration.String()),
+			logger.String("segment", safeRequestPath))
+	}
+	return serveErr
 }
 
 // Helper methods
@@ -746,6 +791,63 @@ func (c *Controller) setHLSContentType(ctx echo.Context, path string) {
 		ctx.Response().Header().Set("Cache-Control", "public, max-age=3600")
 	default:
 		ctx.Response().Header().Set("Content-Type", "application/octet-stream")
+	}
+}
+
+// lastFreshnessCheck tracks the last time segment freshness was checked per source
+// to avoid adding I/O load on every playlist poll.
+var lastFreshnessCheck sync.Map // sourceID → time.Time
+
+// checkSegmentFreshness checks the modification time of the newest segment file
+// in the output directory. If the newest segment is older than segmentLength * multiplier,
+// it logs a warning indicating FFmpeg may be blocked (e.g., SD card I/O stall).
+// The threshold is derived from the configured segment length to avoid false positives.
+// Rate-limited to avoid adding I/O load on every playlist poll.
+func (c *Controller) checkSegmentFreshness(outputDir, sourceID string) {
+	now := time.Now()
+	if v, ok := lastFreshnessCheck.Load(sourceID); ok {
+		if now.Sub(v.(time.Time)) < hlsFreshnessCheckInterval {
+			return
+		}
+	}
+	lastFreshnessCheck.Store(sourceID, now)
+
+	entries, err := os.ReadDir(outputDir)
+	if err != nil {
+		return // Don't log errors for diagnostics — the caller handles missing dirs
+	}
+
+	var newestMod time.Time
+	var newestName string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		ext := filepath.Ext(e.Name())
+		if ext != ".m4s" && ext != ".ts" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newestMod) {
+			newestMod = info.ModTime()
+			newestName = e.Name()
+		}
+	}
+
+	if newestMod.IsZero() {
+		return // No segments yet
+	}
+
+	age := time.Since(newestMod)
+	freshnessThreshold := time.Duration(c.getEffectiveSegmentLength()*hlsSegmentFreshnessMultiplier) * time.Second
+	if age > freshnessThreshold {
+		GetLogger().Warn("Stale HLS segments detected (FFmpeg may be blocked on I/O)",
+			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+			logger.String("newest_segment", newestName),
+			logger.String("segment_age", age.Truncate(time.Millisecond).String()))
 	}
 }
 
@@ -1158,6 +1260,13 @@ func (c *Controller) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd,
 func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
 	audioChan = make(chan []byte, DefaultReadBufferSize)
 
+	// Drop tracking for diagnostics
+	var dropCount int64
+	var lastDropLog time.Time
+	var dropMu sync.Mutex
+
+	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
+
 	callback := func(callbackSourceID string, data []byte) {
 		if callbackSourceID == sourceID {
 			select {
@@ -1169,6 +1278,20 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 					audioChan <- data
 				default:
 				}
+
+				// Track and periodically log drops
+				dropMu.Lock()
+				dropCount++
+				now := time.Now()
+				if now.Sub(lastDropLog) >= hlsDropLogInterval {
+					GetLogger().Warn("HLS audio data dropped: channel full",
+						logger.String("source_id", sanitizedID),
+						logger.Int64("drops_since_last_log", dropCount),
+						logger.Int("channel_cap", DefaultReadBufferSize))
+					dropCount = 0
+					lastDropLog = now
+				}
+				dropMu.Unlock()
 			}
 		}
 	}
@@ -1257,10 +1380,17 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 	GetLogger().Debug("Audio feed ready", logger.String("source_id", sanitizedID))
 
 	dataWritten := false
+	var totalWrites int64
+	var slowWrites int64
+	var maxWriteDuration time.Duration
 	for {
 		select {
 		case <-ctx.Done():
-			GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
+			GetLogger().Debug("Audio feed stopped due to context cancellation",
+				logger.String("source_id", sanitizedID),
+				logger.Int64("total_fifo_writes", totalWrites),
+				logger.Int64("slow_fifo_writes", slowWrites),
+				logger.String("max_write_duration", maxWriteDuration.String()))
 			return
 		case data, ok := <-audioChan:
 			if !ok {
@@ -1268,13 +1398,31 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 				return
 			}
 
+			writeStart := time.Now()
 			if err := writeToFIFO(ctx, fifo, data); err != nil {
 				if ctx.Err() != nil {
 					GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
 				} else {
-					GetLogger().Error("Error writing to FIFO", logger.Error(err))
+					GetLogger().Error("Error writing to FIFO", logger.Error(err),
+						logger.String("write_duration", time.Since(writeStart).String()))
 				}
 				return
+			}
+			writeDuration := time.Since(writeStart)
+			totalWrites++
+
+			if writeDuration > maxWriteDuration {
+				maxWriteDuration = writeDuration
+			}
+
+			if writeDuration > fifoWriteSlowThreshold {
+				slowWrites++
+				GetLogger().Warn("Slow FIFO write detected (possible I/O stall)",
+					logger.String("source_id", sanitizedID),
+					logger.String("write_duration", writeDuration.String()),
+					logger.Int("data_bytes", len(data)),
+					logger.Int64("slow_writes_total", slowWrites),
+					logger.Int64("total_writes", totalWrites))
 			}
 
 			if !dataWritten {
