@@ -54,7 +54,7 @@
     </div>
 
     {#if restartInProgress.value}
-      <div class="flex items-center gap-2 text-sm opacity-70" role="status" aria-live="polite">
+      <div class="flex items-center gap-2 text-sm opacity-70" role="status">
         <div class="loading loading-spinner loading-xs"></div>
         <span>{t('restart.inProgress')}</span>
       </div>

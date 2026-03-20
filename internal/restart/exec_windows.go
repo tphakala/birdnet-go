@@ -26,8 +26,11 @@ func Exec() error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	// Detach child so it survives parent exit.
+	// CREATE_NEW_PROCESS_GROUP: new console group.
+	// CREATE_BREAKAWAY_FROM_JOB: survive if parent runs in a Job Object
+	// (Windows services, task scheduler). Silently ignored if not allowed.
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP,
+		CreationFlags: syscall.CREATE_NEW_PROCESS_GROUP | 0x01000000, // CREATE_BREAKAWAY_FROM_JOB
 	}
 	if err := cmd.Start(); err != nil {
 		return errors.Newf("failed to start new process: %w", err).

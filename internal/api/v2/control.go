@@ -85,10 +85,13 @@ func (c *Controller) GetAvailableActions(ctx echo.Context) error {
 			Action:      ActionRestartServer,
 			Description: "Restart the server binary",
 		},
-		{
+	}
+
+	if sysinfo.IsContainer() {
+		actions = append(actions, ControlAction{
 			Action:      ActionRestartContainer,
 			Description: "Restart the container",
-		},
+		})
 	}
 
 	c.logInfoIfEnabled("Retrieved available control actions successfully",
@@ -187,7 +190,8 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 // It checks the shutdown requester, applies the CAS flag via setFlag,
 // and schedules an async shutdown after the HTTP response is sent.
 func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFlag func() bool, successMessage string) error {
-	if c.shutdownRequester == nil {
+	sr := c.getShutdownRequester()
+	if sr == nil {
 		err := fmt.Errorf("shutdown requester not initialized")
 		return c.HandleError(ctx, err,
 			"Restart not available - server may not support programmatic restart",
@@ -208,10 +212,11 @@ func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFl
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Schedule shutdown after response is sent (500ms to ensure HTTP flush)
+	// Schedule shutdown after response is sent (500ms to ensure HTTP flush).
+	// Capture sr locally so the goroutine uses a stable reference.
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		c.shutdownRequester.RequestShutdown()
+		sr.RequestShutdown()
 	}()
 
 	return ctx.JSON(http.StatusOK, ControlResult{

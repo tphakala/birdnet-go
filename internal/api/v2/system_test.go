@@ -946,7 +946,8 @@ func TestGetRestartStatus(t *testing.T) {
 
 	var result RestartStatus
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	assert.True(t, result.BinaryRestartAvailable)
+	// In test environment, shutdownRequester is not wired, so restart is not available
+	assert.False(t, result.BinaryRestartAvailable)
 	assert.False(t, result.RestartRequired)
 	assert.Empty(t, result.RestartReasons)
 }

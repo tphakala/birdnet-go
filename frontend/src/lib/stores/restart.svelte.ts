@@ -32,6 +32,8 @@ export async function fetchRestartStatus(): Promise<void> {
   try {
     const data = await api.get<RestartStatus>('/api/v2/system/restart-status');
     Object.assign(restartState, data);
+    // If the server is reachable, any in-progress restart has completed.
+    restartInProgress.value = false;
   } catch (error) {
     logger.error('Failed to fetch restart status', error);
   }

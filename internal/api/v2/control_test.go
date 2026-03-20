@@ -201,8 +201,12 @@ func TestGetAvailableActions(t *testing.T) {
 		err := json.Unmarshal(rec.Body.Bytes(), &actions)
 		require.NoError(t, err)
 
-		// Check response content
-		require.Len(t, actions, 5, "Should have 5 control actions")
+		// Expected action count depends on container environment
+		expectedCount := 4 // base actions + restart_server
+		if sysinfo.IsContainer() {
+			expectedCount = 5 // + restart_container
+		}
+		require.Len(t, actions, expectedCount, "Should have expected control actions")
 
 		// Verify actions include all expected types
 		var hasRestartAction, hasReloadAction, hasRebuildFilterAction, hasRestartServerAction, hasRestartContainerAction bool
@@ -231,7 +235,9 @@ func TestGetAvailableActions(t *testing.T) {
 		assert.True(t, hasReloadAction, "Missing reload_model action")
 		assert.True(t, hasRebuildFilterAction, "Missing rebuild_filter action")
 		assert.True(t, hasRestartServerAction, "Missing restart_server action")
-		assert.True(t, hasRestartContainerAction, "Missing restart_container action")
+		if sysinfo.IsContainer() {
+			assert.True(t, hasRestartContainerAction, "Missing restart_container action")
+		}
 	}
 }
 

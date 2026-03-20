@@ -52,6 +52,7 @@ type Controller struct {
 	TaxonomyDB          *birdnet.TaxonomyDatabase
 	controlChan         chan string
 	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
+	shutdownMu          sync.RWMutex      // protects shutdownRequester
 	speciesExcludeMutex sync.RWMutex      // Mutex for species exclude list operations
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
@@ -686,8 +687,19 @@ func (c *Controller) Shutdown() {
 }
 
 // SetShutdownRequester sets the shutdown requester for programmatic restart.
+// SetShutdownRequester sets the shutdown requester for programmatic restart.
+// Thread-safe: may be called after the HTTP server starts accepting requests.
 func (c *Controller) SetShutdownRequester(sr ShutdownRequester) {
+	c.shutdownMu.Lock()
+	defer c.shutdownMu.Unlock()
 	c.shutdownRequester = sr
+}
+
+// getShutdownRequester returns the current shutdown requester, or nil.
+func (c *Controller) getShutdownRequester() ShutdownRequester {
+	c.shutdownMu.RLock()
+	defer c.shutdownMu.RUnlock()
+	return c.shutdownRequester
 }
 
 // Error response structure
