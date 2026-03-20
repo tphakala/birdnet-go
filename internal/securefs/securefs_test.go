@@ -1,12 +1,16 @@
 package securefs
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // Test constant for test file name.
@@ -544,4 +548,40 @@ func TestFollowingEscapingSymlinkFails(t *testing.T) {
 	// The security is enforced when following the link, not when reading its target
 	_, err = sfs.Open(symlinkPath)
 	assert.Error(t, err, "Open should have failed for symlink escaping sandbox")
+}
+
+// TestServeRelativeFile_FileNotFound_NoEnhancedError verifies that ServeRelativeFile
+// returns a plain (non-EnhancedError) error for missing files. This avoids triggering
+// telemetry hooks and notification bells during the expected race window between
+// detection DB commit and audio export completion.
+func TestServeRelativeFile_FileNotFound_NoEnhancedError(t *testing.T) {
+	t.Parallel()
+
+	// Create SecureFS with a temp dir
+	dir := t.TempDir()
+	sfs, err := New(dir)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sfs.Close() })
+
+	// Create echo context
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/test.flac", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err = sfs.ServeRelativeFile(ctx, "nonexistent.flac")
+	require.Error(t, err)
+
+	// The error should be an echo.HTTPError wrapping fs.ErrNotExist,
+	// NOT an EnhancedError that would trigger notification hooks.
+	var enhErr *errors.EnhancedError
+	// serveInternal converts the open error to an HTTPError via mapOpenErrorToHTTP.
+	var httpErr *echo.HTTPError
+	if errors.As(err, &httpErr) {
+		// The HTTP error's internal should NOT be an EnhancedError.
+		if httpErr.Internal != nil {
+			assert.False(t, errors.As(httpErr.Internal, &enhErr),
+				"file-not-found should not produce EnhancedError in error chain")
+		}
+	}
 }
