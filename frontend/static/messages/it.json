@@ -4155,5 +4155,17 @@
         "acknowledge": "I understand"
       }
     }
+  },
+  "restart": {
+    "applicationRestart": "Restart Application",
+    "containerRestart": "Restart Container",
+    "confirmTitle": "Confirm Restart",
+    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
+    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
+    "inProgress": "Restarting...",
+    "bannerTitle": "Restart Required",
+    "bannerMessage": "Configuration changes require a restart to take effect:",
+    "bannerAction": "Restart Now",
+    "restartFailed": "Failed to initiate restart"
   }
 }
