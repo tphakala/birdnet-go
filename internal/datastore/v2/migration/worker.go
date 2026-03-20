@@ -888,7 +888,7 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 	select {
 	case <-ctx.Done():
 		w.logger.Info("tail sync: context cancelled, performing final drain")
-		w.drainLegacyRecords(ctx)
+		w.drainLegacyRecords(context.Background())
 		return runActionReturn
 	case <-w.stopCh:
 		w.logger.Info("tail sync: shutdown requested, performing final drain")
