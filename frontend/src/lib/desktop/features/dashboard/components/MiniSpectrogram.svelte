@@ -17,7 +17,7 @@
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { onMount } from 'svelte';
 
-  import { Volume, Volume1, Volume2, VolumeX, Play, Square } from '@lucide/svelte';
+  import { Volume, Volume1, Volume2, VolumeX, Play, Square, Tag } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
@@ -60,6 +60,7 @@
   let isActive = $state(false);
   let isConnecting = $state(false);
   let gainPresetIndex = $state(0);
+  let showDetectionLabels = $state(true);
 
   const gainLabel = $derived.by(() => {
     const preset = GAIN_PRESETS[gainPresetIndex];
@@ -85,6 +86,8 @@
   let lastSeenSpecies = new Map<string, number>();
   let slotCounter = 0;
   let streamEpochMs = $state(0);
+  let epochOffset = 0;
+  let epochOffsetCalibrated = false;
   const MAX_OVERLAY_SLOTS = 4;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
@@ -359,6 +362,8 @@
     lastSeenSpecies.clear();
     slotCounter = 0;
     streamEpochMs = 0;
+    epochOffset = 0;
+    epochOffsetCalibrated = false;
 
     isActive = false;
     isConnecting = false;
@@ -418,8 +423,21 @@
 
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
+
+      // Calibrate epoch offset once when playback begins.
+      // streamEpoch is set at stream creation (before FFmpeg starts), so
+      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
+      // startup delay. hls.latency bridges this gap.
+      if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
+        const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
+        const latency = hls ? hls.latency : 6;
+        epochOffset = Date.now() / 1000 - latency - rawWallClock;
+        epochOffsetCalibrated = true;
+        console.warn('[overlay] calibrated epoch', { epochOffset, latency, rawWallClock });
+      }
+
       if (labelQueue.length === 0) return;
-      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
+      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
       const now = globalThis.performance.now();
       console.warn('[overlay] promote check', {
         wallClock: wallClockAtPlayhead,
@@ -443,7 +461,7 @@
           lastSeenSpecies.delete(species);
         }
       }
-    }, 500);
+    }, 200);
 
     return () => globalThis.clearInterval(interval);
   });
@@ -472,6 +490,20 @@
       <h3 class="font-semibold">{t('spectrogram.dashboard.toggle')}</h3>
       <div class="flex items-center gap-1">
         {#if isActive}
+          <button
+            type="button"
+            onclick={() => {
+              showDetectionLabels = !showDetectionLabels;
+            }}
+            class="rounded p-1 transition-colors {showDetectionLabels
+              ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+              : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
+            aria-label={t('spectrogram.labels.toggle')}
+            aria-pressed={showDetectionLabels}
+            title={t('spectrogram.labels.toggle')}
+          >
+            <Tag class="size-4" />
+          </button>
           <button
             onclick={cycleVolume}
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
@@ -517,7 +549,7 @@
         {frequencyRange}
         {colorMap}
         isActive={spectro.isActive}
-        {overlayLabels}
+        overlayLabels={showDetectionLabels ? overlayLabels : []}
         overlayFontSize={9}
         className="h-28 w-full"
       />

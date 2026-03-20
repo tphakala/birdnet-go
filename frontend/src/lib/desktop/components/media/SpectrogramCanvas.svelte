@@ -194,10 +194,21 @@
 
     // Cache overlay canvas context outside the loop
     const olCtx = overlayCanvasEl?.getContext('2d') ?? null;
-
-    // Set up overlay font/style once (depends on dpr and overlayFontSize,
-    // which are captured at effect creation time and trigger re-run if changed)
     const fontSize = overlayFontSize * dpr;
+
+    // Ensure overlay canvas buffer dimensions match the waterfall canvas.
+    // The resize $effect may not have fired yet when this effect starts
+    // (overlayCanvasEl wasn't bound during the initial resize), leaving
+    // the canvas buffer at 0x0 (invisible drawing).
+    if (
+      overlayCanvasEl &&
+      (overlayCanvasEl.width !== canvasEl.width || overlayCanvasEl.height !== canvasEl.height)
+    ) {
+      overlayCanvasEl.width = canvasEl.width;
+      overlayCanvasEl.height = canvasEl.height;
+    }
+
+    // Set up overlay font/style once
     if (olCtx) {
       olCtx.font = `bold ${fontSize}px sans-serif`;
       olCtx.fillStyle = '#ffffff';
@@ -257,7 +268,26 @@
 
       // --- Overlay detection labels on separate canvas (avoids self-blit smearing) ---
       if (olCtx && overlayLabels.length > 0) {
+        if (!overlayHadContent) {
+          console.warn('[overlay] canvas: rendering labels', {
+            count: overlayLabels.length,
+            canvasW: overlayCanvasEl!.width,
+            canvasH: overlayCanvasEl!.height,
+            deviceW: deviceWidth,
+            deviceH: deviceHeight,
+            fontSize,
+          });
+        }
         olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
+
+        // Re-apply styles every frame (canvas state can be lost on resize)
+        olCtx.font = `bold ${fontSize}px sans-serif`;
+        olCtx.fillStyle = '#ffffff';
+        olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        olCtx.shadowBlur = 3 * dpr;
+        olCtx.shadowOffsetX = 1 * dpr;
+        olCtx.shadowOffsetY = 1 * dpr;
+        olCtx.textBaseline = 'middle';
 
         const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
 
@@ -271,6 +301,17 @@
           const y = slotHeight * (1 + (label.ySlot % maxSlots));
 
           olCtx.fillText(label.text, x, y);
+
+          if (!overlayHadContent) {
+            console.warn('[overlay] drew label', {
+              text: label.text,
+              x,
+              y,
+              labelAge: labelAge.toFixed(2),
+              deviceWidth,
+              deviceHeight,
+            });
+          }
         }
         overlayHadContent = true;
       } else if (olCtx && overlayHadContent) {
@@ -293,6 +334,6 @@
     bind:this={overlayCanvasEl}
     style:width="100%"
     style:height="100%"
-    class="pointer-events-none absolute inset-0"
+    class="pointer-events-none absolute inset-0 z-10"
   ></canvas>
 </div>

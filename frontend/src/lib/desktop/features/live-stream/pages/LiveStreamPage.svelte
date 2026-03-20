@@ -74,6 +74,8 @@
   let lastSeenSpecies = new Map<string, number>();
   let slotCounter = 0;
   let streamEpochMs = $state(0);
+  let epochOffset = 0;
+  let epochOffsetCalibrated = false;
   let detectionEventSource: ReconnectingEventSource | null = null;
   const MAX_OVERLAY_SLOTS = 7;
 
@@ -170,6 +172,12 @@
       activeStreamToken = data.stream_token;
       if (data.stream_epoch) {
         streamEpochMs = new Date(data.stream_epoch).getTime();
+        console.warn('[overlay] LiveStream streamEpochMs set', {
+          streamEpochMs,
+          raw: data.stream_epoch,
+        });
+      } else {
+        console.warn('[overlay] LiveStream NO stream_epoch in response', data);
       }
       const hlsUrl = buildAppUrl(data.playlist_url);
 
@@ -409,6 +417,8 @@
     stopHeartbeat();
     disconnectDetectionStream();
     streamEpochMs = 0;
+    epochOffset = 0;
+    epochOffsetCalibrated = false;
     spectro.disconnect();
 
     if (hls) {
@@ -498,15 +508,29 @@
 
   // Promote queued detection labels when playhead catches up
   $effect(() => {
+    console.warn('[overlay] LiveStream promotion guard', {
+      hasAudio: !!audioElement,
+      streamEpochMs,
+    });
     if (!audioElement || !streamEpochMs) return;
+    console.warn('[overlay] LiveStream promotion effect STARTED');
 
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
+
+      // Calibrate epoch offset once when playback begins.
+      // streamEpoch is set at stream creation (before FFmpeg starts), so
+      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
+      // startup delay. hls.latency bridges this gap.
+      if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
+        const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
+        const latency = hls ? hls.latency : 6;
+        epochOffset = Date.now() / 1000 - latency - rawWallClock;
+        epochOffsetCalibrated = true;
+      }
+
       if (labelQueue.length === 0) return;
-      // Note: audioElement.currentTime may not start at 0 — HLS.js seeks to the
-      // live sync position. This introduces a ~1s offset that is acceptable for
-      // overlay placement accuracy; exact sync is not critical here.
-      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
+      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
       const now = globalThis.performance.now();
       const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
       if (promoted.length > 0) {
@@ -524,7 +548,7 @@
           lastSeenSpecies.delete(species);
         }
       }
-    }, 500);
+    }, 200);
 
     return () => globalThis.clearInterval(interval);
   });
