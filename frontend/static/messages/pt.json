@@ -893,6 +893,19 @@
         "species": "Espécie"
       }
     },
+    "synonyms": {
+      "tabLabel": "Sinônimos taxonômicos",
+      "description": "Substituir mapeamentos de nomes científicos usados para busca de imagens de aves. O BirdNET usa a taxonomia 2021E, mas fontes de imagens podem usar nomes atualizados. Os mapeamentos integrados são sempre carregados; suas substituições os complementam ou substituem.",
+      "birdnetName": "Nome BirdNET",
+      "updatedName": "Nome atualizado",
+      "addButton": "Adicionar sinônimo",
+      "emptyState": "Nenhum sinônimo taxonômico personalizado configurado.",
+      "errors": {
+        "unknownSpecies": "Espécie não encontrada nos rótulos do BirdNET",
+        "duplicateKey": "Já existe um sinônimo para esta espécie",
+        "emptyUpdatedName": "O nome atualizado é obrigatório"
+      }
+    },
     "tracking": {
       "title": "Rastreamento de espécies",
       "newSpecies": "Nova espécie",

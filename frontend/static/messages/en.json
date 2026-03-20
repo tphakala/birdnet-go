@@ -893,6 +893,19 @@
         "species": "Species"
       }
     },
+    "synonyms": {
+      "tabLabel": "Taxonomy Synonyms",
+      "description": "Override scientific name mappings used for bird image lookups. BirdNET uses 2021E taxonomy, but image sources may use updated names. Built-in mappings are always loaded; your overrides add to or replace them.",
+      "birdnetName": "BirdNET Name",
+      "updatedName": "Updated Name",
+      "addButton": "Add Synonym",
+      "emptyState": "No custom taxonomy synonyms configured.",
+      "errors": {
+        "unknownSpecies": "Species not found in BirdNET labels",
+        "duplicateKey": "A synonym for this species already exists",
+        "emptyUpdatedName": "Updated name is required"
+      }
+    },
     "tracking": {
       "title": "Species Tracking",
       "newSpecies": "New species",

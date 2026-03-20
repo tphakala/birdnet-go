@@ -893,6 +893,19 @@
         "species": "Art"
       }
     },
+    "synonyms": {
+      "tabLabel": "Taksonomi-synonymer",
+      "description": "Tilsidesæt videnskabelige navnetilknytninger, der bruges til opslag af fuglebilleder. BirdNET bruger 2021E-taksonomi, men billedkilder kan bruge opdaterede navne. Indbyggede tilknytninger indlæses altid; dine tilsidesættelser tilføjer til eller erstatter dem.",
+      "birdnetName": "BirdNET-navn",
+      "updatedName": "Opdateret navn",
+      "addButton": "Tilføj synonym",
+      "emptyState": "Ingen brugerdefinerede taksonomi-synonymer konfigureret.",
+      "errors": {
+        "unknownSpecies": "Art ikke fundet i BirdNET-etiketter",
+        "duplicateKey": "Et synonym for denne art findes allerede",
+        "emptyUpdatedName": "Opdateret navn er påkrævet"
+      }
+    },
     "tracking": {
       "title": "Artssporing",
       "newSpecies": "Ny art",
