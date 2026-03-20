@@ -1272,26 +1272,31 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 			select {
 			case audioChan <- data:
 			default:
-				// Channel full, drop oldest
+				// Channel full, drop oldest to make room
+				dropped := false
 				select {
 				case <-audioChan:
+					dropped = true // Old chunk discarded
 					audioChan <- data
 				default:
+					// Channel was drained between selects — no data lost,
+					// but new data also couldn't be pushed (rare race)
 				}
 
-				// Track and periodically log drops
-				dropMu.Lock()
-				dropCount++
-				now := time.Now()
-				if now.Sub(lastDropLog) >= hlsDropLogInterval {
-					GetLogger().Warn("HLS audio data dropped: channel full",
-						logger.String("source_id", sanitizedID),
-						logger.Int64("drops_since_last_log", dropCount),
-						logger.Int("channel_cap", DefaultReadBufferSize))
-					dropCount = 0
-					lastDropLog = now
+				if dropped {
+					dropMu.Lock()
+					dropCount++
+					now := time.Now()
+					if now.Sub(lastDropLog) >= hlsDropLogInterval {
+						GetLogger().Warn("HLS audio data dropped: channel full",
+							logger.String("source_id", sanitizedID),
+							logger.Int64("drops_since_last_log", dropCount),
+							logger.Int("channel_cap", DefaultReadBufferSize))
+						dropCount = 0
+						lastDropLog = now
+					}
+					dropMu.Unlock()
 				}
-				dropMu.Unlock()
 			}
 		}
 	}

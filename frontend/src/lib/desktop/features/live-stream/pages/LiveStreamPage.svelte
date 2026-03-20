@@ -615,8 +615,9 @@
       const playbackDelta = currentTime - lastCurrentTime;
 
       // Detect playback stall: if currentTime hasn't advanced in 10s while
-      // we're supposed to be streaming, something is wrong
-      if (elapsed > 9 && playbackDelta < 0.5 && currentTime > 0) {
+      // we're supposed to be streaming, something is wrong.
+      // Skip when paused (e.g., browser tab backgrounded) to avoid false positives.
+      if (elapsed > 9 && playbackDelta < 0.5 && currentTime > 0 && !audioElement.paused) {
         stallCount++;
         logger.warn('Playback stall detected: currentTime not advancing', {
           currentTime: currentTime.toFixed(3),
