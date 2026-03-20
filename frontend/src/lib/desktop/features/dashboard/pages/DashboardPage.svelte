@@ -1493,7 +1493,7 @@ Performance Optimizations:
         <CurrentlyHearingCard detections={isViewingToday ? pendingDetections : []} />
       {:else if element.type === 'live-spectrogram'}
         {#if isViewingToday}
-          <MiniSpectrogram />
+          <MiniSpectrogram {pendingDetections} />
         {/if}
       {:else if element.type === 'detections-grid'}
         <DetectionCardGrid
