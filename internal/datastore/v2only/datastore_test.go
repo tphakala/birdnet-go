@@ -2,6 +2,7 @@ package v2only
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -1204,4 +1205,77 @@ func TestGetSpeciesSummaryData_WithDateFilter(t *testing.T) {
 	summaries, err = ds.GetSpeciesSummaryData(t.Context(), "2024-07-01", "2024-07-31")
 	require.NoError(t, err)
 	assert.Empty(t, summaries, "should return empty for dates with no detections")
+}
+
+func TestV2OnlyDatastore_UpdateNameMaps(t *testing.T) {
+	t.Parallel()
+
+	// Start with English labels
+	englishLabels := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit",
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, englishLabels)
+	defer cleanup()
+
+	// Verify initial English resolution
+	assert.Equal(t, "Common Blackbird", ds.resolveCommonName("Turdus merula"))
+	assert.Equal(t, "Great Tit", ds.resolveCommonName("Parus major"))
+	assert.Equal(t, "Turdus merula", ds.resolveToScientificName("common blackbird"))
+
+	// Switch to Finnish labels
+	finnishLabels := []string{
+		"Turdus merula_mustarastas",
+		"Parus major_talitiainen",
+		"Strix aluco_lehtopöllö",
+	}
+	ds.UpdateNameMaps(finnishLabels)
+
+	// Verify Finnish resolution
+	assert.Equal(t, "mustarastas", ds.resolveCommonName("Turdus merula"))
+	assert.Equal(t, "talitiainen", ds.resolveCommonName("Parus major"))
+	assert.Equal(t, "lehtopöllö", ds.resolveCommonName("Strix aluco"))
+
+	// Verify reverse lookup works with new locale
+	assert.Equal(t, "Turdus merula", ds.resolveToScientificName("mustarastas"))
+
+	// Verify old English names no longer resolve
+	assert.Equal(t, "common blackbird", ds.resolveToScientificName("common blackbird"),
+		"Old English common name should no longer resolve to scientific name")
+
+	// Verify unknown species still falls back to scientific name
+	assert.Equal(t, "Unknown species", ds.resolveCommonName("Unknown species"))
+}
+
+func TestV2OnlyDatastore_UpdateNameMaps_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
+
+	labels := []string{"Turdus merula_Common Blackbird"}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	var wg sync.WaitGroup
+	const goroutines = 50
+	const iterations = 100
+
+	// Concurrent readers
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				name := ds.resolveCommonName("Turdus merula")
+				// Must be either old or new name, never empty or panicked
+				assert.NotEmpty(t, name)
+			}
+		})
+	}
+
+	// Concurrent writer
+	wg.Go(func() {
+		for range iterations {
+			ds.UpdateNameMaps([]string{"Turdus merula_mustarastas"})
+			ds.UpdateNameMaps([]string{"Turdus merula_Common Blackbird"})
+		}
+	})
+
+	wg.Wait()
 }

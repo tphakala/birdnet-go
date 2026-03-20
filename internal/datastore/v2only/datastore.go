@@ -301,6 +301,13 @@ func buildNameMaps(labels []string) *nameMaps {
 	return &nameMaps{common: commonMap, species: speciesMap}
 }
 
+// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
+// Called after locale or model changes to keep common name resolution current.
+// The new maps are built first, then atomically swapped in — readers are never blocked.
+func (ds *Datastore) UpdateNameMaps(labels []string) {
+	ds.names.Store(buildNameMaps(labels))
+}
+
 // Open is a no-op since the manager is already open.
 func (ds *Datastore) Open() error {
 	return nil
