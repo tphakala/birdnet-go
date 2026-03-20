@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -514,6 +515,11 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Unlike other services that start directly here, telemetry is managed by the control monitor
 	// to allow users to dynamically enable/disable metrics and change the listen address without
 	// restarting the application. The control monitor will start the endpoint if enabled.
+
+	// Wire app shutdown requester into API controller for restart endpoints
+	if appInstance := app.GetGlobal(); appInstance != nil {
+		apiServer.APIController().SetShutdownRequester(appInstance)
+	}
 
 	// start control monitor for hot reloads
 	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)

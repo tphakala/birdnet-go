@@ -25,6 +25,7 @@ web interface, database) and runs until interrupted.
 The "realtime" command is an alias for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			application := app.New()
+			app.SetGlobal(application)
 			application.Register(app.NewLegacyService("birdnet-go", func(quit <-chan struct{}) error {
 				return analysis.RealtimeAnalysisWithQuit(settings, quit)
 			}))

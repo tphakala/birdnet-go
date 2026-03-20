@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -43,6 +44,18 @@ func New() *App {
 	return &App{
 		shutdownCh: make(chan struct{}),
 	}
+}
+
+var globalApp atomic.Pointer[App]
+
+// SetGlobal stores the app instance for global access (e.g., by API handlers).
+func SetGlobal(a *App) {
+	globalApp.Store(a)
+}
+
+// GetGlobal returns the global app instance, or nil if not set.
+func GetGlobal() *App {
+	return globalApp.Load()
 }
 
 // RequestShutdown triggers a programmatic shutdown. Safe to call multiple times.
