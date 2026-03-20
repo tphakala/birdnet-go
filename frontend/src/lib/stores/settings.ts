@@ -1125,12 +1125,6 @@ export const extendedCaptureSettings = derived(
   $store => $store.formData.realtime?.extendedCapture
 );
 
-// Taxonomy synonym settings derived store
-export const taxonomySynonymSettings = derived(
-  settingsStore,
-  $store => $store.formData.taxonomySynonyms
-);
-
 // Settings actions
 export const settingsActions = {
   async loadSettings() {

@@ -295,10 +295,7 @@
     }
 
     // Validate BirdNET name matches a known label (case-insensitive)
-    const knownScientific = new Set(
-      Array.from(speciesScientificNameMap.values()).map(n => n.toLowerCase())
-    );
-    if (!knownScientific.has(birdnetName.toLowerCase())) {
+    if (!knownScientificNames.has(birdnetName.toLowerCase())) {
       synonymError = t('settings.species.synonyms.errors.unknownSpecies');
       return;
     }
@@ -368,6 +365,10 @@
 
   // Taxonomy synonyms state
   let synonyms = $derived(store.formData.taxonomySynonyms ?? {});
+  let synonymCount = $derived(Object.keys(synonyms).length);
+  let knownScientificNames = $derived(
+    new Set(Array.from(speciesScientificNameMap.values()).map(n => n.toLowerCase()))
+  );
   let synonymBirdnetName = $state('');
   let synonymUpdatedName = $state('');
   let synonymError = $state('');
@@ -1673,11 +1674,11 @@
         <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
           {t('settings.species.synonyms.tabLabel')}
         </h3>
-        {#if Object.keys(synonyms).length > 0}
+        {#if synonymCount > 0}
           <span
             class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
           >
-            {Object.keys(synonyms).length}
+            {synonymCount}
           </span>
         {/if}
       </div>
@@ -1719,7 +1720,7 @@
         {/if}
 
         <!-- Synonyms table -->
-        {#if Object.keys(synonyms).length === 0}
+        {#if synonymCount === 0}
           <p class="text-sm text-muted py-6 text-center">
             {t('settings.species.synonyms.emptyState')}
           </p>

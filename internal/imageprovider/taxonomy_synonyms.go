@@ -83,15 +83,15 @@ func SetCustomSynonyms(overrides map[string]string, knownLabels []string) {
 	}
 
 	synonymMu.Lock()
-	defer synonymMu.Unlock()
 	cachedForward, cachedReverse = buildSynonymIndexes(overrides)
-
-	// Log summary of applied synonyms.
-	overrideCount := len(overrides)
 	totalCount := len(cachedForward)
+	synonymMu.Unlock()
+
+	// Log summary of applied synonyms (outside the lock).
+	overrideCount := len(overrides)
 	if overrideCount > 0 {
 		// Identify which built-in keys were replaced by overrides.
-		replaced := make([]string, 0)
+		replaced := make([]string, 0, len(builtInTaxonomySynonyms))
 		for old := range builtInTaxonomySynonyms {
 			lowerOld := strings.ToLower(old)
 			for overrideKey := range overrides {
