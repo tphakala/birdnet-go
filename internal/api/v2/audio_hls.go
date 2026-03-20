@@ -1063,7 +1063,7 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 		"-hls_flags", "delete_segments+temp_file",
 		"-hls_segment_type", "fmp4",
 		"-hls_fmp4_init_filename", "init.mp4",
-		"-hls_init_time", "0",
+		"-hls_init_time", strconv.Itoa(hlsInitTime),
 		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
 		"-movflags", "empty_moov+separate_moof+default_base_moof",
 		"-start_number", strconv.Itoa(hlsStartNumber),
