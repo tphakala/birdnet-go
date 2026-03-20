@@ -4633,6 +4633,39 @@ func (_c *MockInterface_UpdateDynamicThresholdExpiry_Call) RunAndReturn(run func
 	return _c
 }
 
+// UpdateNameMaps provides a mock function with given fields: labels
+func (_m *MockInterface) UpdateNameMaps(labels []string) {
+	_m.Called(labels)
+}
+
+// MockInterface_UpdateNameMaps_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateNameMaps'
+type MockInterface_UpdateNameMaps_Call struct {
+	*mock.Call
+}
+
+// UpdateNameMaps is a helper method to define mock.On call
+//   - labels []string
+func (_e *MockInterface_Expecter) UpdateNameMaps(labels interface{}) *MockInterface_UpdateNameMaps_Call {
+	return &MockInterface_UpdateNameMaps_Call{Call: _e.mock.On("UpdateNameMaps", labels)}
+}
+
+func (_c *MockInterface_UpdateNameMaps_Call) Run(run func(labels []string)) *MockInterface_UpdateNameMaps_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].([]string))
+	})
+	return _c
+}
+
+func (_c *MockInterface_UpdateNameMaps_Call) Return() *MockInterface_UpdateNameMaps_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockInterface_UpdateNameMaps_Call) RunAndReturn(run func([]string)) *MockInterface_UpdateNameMaps_Call {
+	_c.Run(run)
+	return _c
+}
+
 // UpdateNoteComment provides a mock function with given fields: commentID, entry
 func (_m *MockInterface) UpdateNoteComment(commentID string, entry string) error {
 	ret := _m.Called(commentID, entry)

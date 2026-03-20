@@ -220,6 +220,9 @@ type Interface interface {
 	GetDatabaseStats() (*DatabaseStats, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
+	// UpdateNameMaps rebuilds species name lookup maps from updated BirdNET labels.
+	// Called after locale or model changes. No-op for legacy datastores.
+	UpdateNameMaps(labels []string)
 }
 
 // DatabaseStats contains basic runtime statistics about the database
@@ -291,6 +294,9 @@ func (ds *DataStore) GetDB() *gorm.DB {
 func (ds *DataStore) GetDBCounters() *dbstats.Counters {
 	return ds.dbCounters
 }
+
+// UpdateNameMaps is a no-op for legacy DataStore (common names stored directly in DB).
+func (ds *DataStore) UpdateNameMaps(_ []string) {}
 
 // SetSunCalcMetrics sets the metrics instance for the SunCalc service
 func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {

@@ -349,7 +349,8 @@ func (m *ActionMockDatastore) GetActiveNotificationHistory(_ time.Time) ([]datas
 func (m *ActionMockDatastore) DeleteExpiredNotificationHistory(_ time.Time) (int64, error) {
 	return 0, nil
 }
-func (m *ActionMockDatastore) SchemaVersion() string { return datastore.SchemaVersionLegacy }
+func (m *ActionMockDatastore) SchemaVersion() string     { return datastore.SchemaVersionLegacy }
+func (m *ActionMockDatastore) UpdateNameMaps(_ []string) {}
 func (m *ActionMockDatastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	return &datastore.DatabaseStats{Type: "mock", Connected: true}, nil
 }
