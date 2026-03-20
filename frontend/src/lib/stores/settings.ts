@@ -751,6 +751,7 @@ export interface SettingsFormData {
   output?: OutputSettings;
   backup?: BackupSettings;
   notification?: NotificationSettings;
+  taxonomySynonyms?: Record<string, string>;
 }
 
 // Global settings state interface
@@ -991,6 +992,7 @@ function createEmptySettings(): SettingsFormData {
         },
       },
     },
+    taxonomySynonyms: {},
   };
 }
 
@@ -1123,6 +1125,12 @@ export const extendedCaptureSettings = derived(
   $store => $store.formData.realtime?.extendedCapture
 );
 
+// Taxonomy synonym settings derived store
+export const taxonomySynonymSettings = derived(
+  settingsStore,
+  $store => $store.formData.taxonomySynonyms
+);
+
 // Settings actions
 export const settingsActions = {
   async loadSettings() {
@@ -1182,6 +1190,13 @@ export const settingsActions = {
         },
       };
     });
+  },
+
+  updateTaxonomySynonyms(synonyms: Record<string, string>) {
+    settingsStore.update(state => ({
+      ...state,
+      formData: { ...state.formData, taxonomySynonyms: synonyms },
+    }));
   },
 
   async saveSettings() {
