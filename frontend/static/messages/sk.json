@@ -930,6 +930,9 @@
       "inferno": "Inferno",
       "viridis": "Viridis",
       "grayscale": "Grayscale"
+    },
+    "labels": {
+      "toggle": "Prepnúť štítky detekcie"
     }
   },
   "system": {

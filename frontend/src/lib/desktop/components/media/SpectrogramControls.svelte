@@ -25,7 +25,7 @@
    * Uses callback props for state changes.
    */
 
-  import { Volume2, VolumeX } from '@lucide/svelte';
+  import { Tag, Volume2, VolumeX } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -55,6 +55,10 @@
     audioOutput?: boolean;
     /** Compact mode — hides gain slider */
     compact?: boolean;
+    /** Whether detection labels are shown */
+    showDetectionLabels?: boolean;
+    /** Toggle detection label visibility */
+    onDetectionLabelsToggle?: () => void;
     /** Callbacks */
     onFrequencyRangeChange?: (_range: [number, number]) => void;
     onColorMapChange?: (_map: ColorMapName) => void;
@@ -68,6 +72,8 @@
     gainDb = 0,
     audioOutput = false,
     compact = false,
+    showDetectionLabels = true,
+    onDetectionLabelsToggle,
     onFrequencyRangeChange,
     onColorMapChange,
     onGainChange,
@@ -203,4 +209,18 @@
       <VolumeX class="size-4" />
     {/if}
   </button>
+
+  <!-- Detection labels toggle -->
+  {#if onDetectionLabelsToggle}
+    <button
+      onclick={onDetectionLabelsToggle}
+      class="rounded p-1.5 transition-colors {showDetectionLabels
+        ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+        : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
+      aria-label={t('spectrogram.labels.toggle')}
+      title={t('spectrogram.labels.toggle')}
+    >
+      <Tag class="size-4" />
+    </button>
+  {/if}
 </div>

@@ -923,6 +923,9 @@
       "inferno": "Inferno",
       "viridis": "Viridis",
       "grayscale": "Grayscale"
+    },
+    "labels": {
+      "toggle": "Mostra/nascondi etichette di rilevamento"
     }
   },
   "system": {

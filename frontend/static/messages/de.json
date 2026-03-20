@@ -935,6 +935,9 @@
       "inferno": "Inferno",
       "viridis": "Viridis",
       "grayscale": "Grayscale"
+    },
+    "labels": {
+      "toggle": "Erkennungslabels umschalten"
     }
   },
   "system": {
