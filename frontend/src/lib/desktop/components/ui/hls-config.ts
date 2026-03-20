@@ -85,14 +85,11 @@ export const BUFFERING_STRATEGY = {
   /**
    * Number of fragments to buffer before starting playback
    *
-   * Why 2 fragments?
-   * - 1 fragment: Too aggressive, causes buffer stalls
-   * - 2 fragments: Sweet spot for audio - provides runway without excessive latency
-   * - 3+ fragments: Adds unnecessary latency for live audio monitoring
-   *
-   * Typical fragment duration is 2-6 seconds, so 2 fragments = 4-12s initial delay
+   * With hls_init_time=1, the first segment is ~1 second. Starting playback
+   * after 1 fragment gives fast startup (~1s) while subsequent segments
+   * buffer in the background.
    */
-  MIN_FRAGMENTS_BEFORE_PLAY: 2,
+  MIN_FRAGMENTS_BEFORE_PLAY: 1,
 
   /**
    * Fragment buffer target for stable playback
