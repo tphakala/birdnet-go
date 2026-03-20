@@ -267,6 +267,7 @@
 
   // Taxonomy synonyms management
   function updateSynonymPredictions(input: string) {
+    synonymError = '';
     if (!input || input.length < 2) {
       synonymPredictions = [];
       return;
@@ -1701,6 +1702,9 @@
             bind:value={synonymUpdatedName}
             label={t('settings.species.synonyms.updatedName')}
             disabled={store.isLoading || store.isSaving}
+            oninput={() => {
+              synonymError = '';
+            }}
           />
           <button
             type="button"
