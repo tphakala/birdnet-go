@@ -44,10 +44,12 @@ Props:
     for (const d of detections) {
       const key = detectionKey(d);
       if ((d.status === 'approved' || d.status === 'rejected') && !(key in removalTimers)) {
+        /* eslint-disable security/detect-object-injection -- key is derived from detectionKey(), a controlled string */
         retainedData[key] = d;
         removalTimers[key] = setTimeout(() => {
           delete retainedData[key];
           delete removalTimers[key];
+          /* eslint-enable security/detect-object-injection */
           retainedKeys = retainedKeys.filter(k => k !== key);
         }, TERMINAL_RETENTION_MS);
         if (!untrack(() => retainedKeys).includes(key)) {
@@ -70,6 +72,7 @@ Props:
     const result: PendingDetection[] = [...detections];
     for (const key of retained) {
       if (!incomingByKey.has(key)) {
+        // eslint-disable-next-line security/detect-object-injection -- key is from retainedKeys, a controlled string array
         const data = retainedData[key];
         if (data) {
           result.push(data);
@@ -114,6 +117,11 @@ Props:
     return result;
   });
 
+  function getElapsedForKey(key: string): string {
+    // eslint-disable-next-line security/detect-object-injection -- key is a controlled detection key string
+    return elapsedTexts[key] ?? '';
+  }
+
   // Show source column only when multiple sources are present
   let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
 
@@ -121,6 +129,7 @@ Props:
   $effect(() => {
     return () => {
       for (const key in removalTimers) {
+        // eslint-disable-next-line security/detect-object-injection -- key is from for-in over own Record
         clearTimeout(removalTimers[key]);
       }
     };
@@ -145,6 +154,7 @@ Props:
     <div class="flex flex-wrap gap-3 p-4">
       {#each displayDetections as detection (`${detection.source}_${detection.scientificName}`)}
         {@const key = detection.source + detection.scientificName}
+        {@const elapsedText = getElapsedForKey(key)}
         <div
           class="flex items-center gap-2 rounded-lg px-3 py-2 transition-colors duration-300
             {detection.status === 'approved'
@@ -175,7 +185,7 @@ Props:
               {detection.species}
             </span>
             <span class="text-xs text-[var(--color-base-content)]/60">
-              {elapsedTexts[key] ?? ''}
+              {elapsedText}
               {#if hasMultipleSources}
                 · {detection.source}
               {/if}

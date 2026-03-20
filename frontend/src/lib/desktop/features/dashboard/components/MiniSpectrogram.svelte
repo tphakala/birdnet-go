@@ -63,6 +63,7 @@
   let showDetectionLabels = $state(true);
 
   const gainLabel = $derived.by(() => {
+    // eslint-disable-next-line security/detect-object-injection -- gainPresetIndex is a numeric index bounded by GAIN_PRESETS.length
     const preset = GAIN_PRESETS[gainPresetIndex];
     return 'value' in preset ? t(preset.labelKey, { value: preset.value }) : t(preset.labelKey);
   });
@@ -378,6 +379,7 @@
 
   function cycleVolume() {
     gainPresetIndex = (gainPresetIndex + 1) % GAIN_PRESETS.length;
+    // eslint-disable-next-line security/detect-object-injection -- gainPresetIndex is a numeric index bounded by modulo
     const preset = GAIN_PRESETS[gainPresetIndex];
     spectro.setAudioOutput(preset.audio);
     if (preset.audio) {

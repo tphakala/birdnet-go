@@ -86,6 +86,7 @@
       const freqRatio = 1 - y / (height - 1 || 1);
       const freq = minFreq + freqRatio * (maxFreq - minFreq);
       const binIndex = Math.round((freq / nyquist) * (binCount - 1));
+      // eslint-disable-next-line security/detect-object-injection -- y is a loop counter bounded by canvas height
       map[y] = Math.max(0, Math.min(binCount - 1, binIndex));
     }
 
@@ -93,6 +94,7 @@
   });
 
   // Selected color LUT
+  // eslint-disable-next-line security/detect-object-injection -- colorMap is typed as ColorMapName
   let colorLUT = $derived(COLOR_MAPS[colorMap] ?? COLOR_MAPS[DEFAULT_COLOR_MAP]);
 
   // ResizeObserver with debouncing (100ms)
@@ -248,9 +250,11 @@
 
         for (let col = 0; col < pixelsToScroll; col++) {
           for (let y = 0; y < h; y++) {
+            /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
             const binIndex = currentBinMap[y];
             const magnitude = frequencyData[binIndex];
             data[y * pixelsToScroll + col] = currentLUT[magnitude];
+            /* eslint-enable security/detect-object-injection */
           }
         }
 

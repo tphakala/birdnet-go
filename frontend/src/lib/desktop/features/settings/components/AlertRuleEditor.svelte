@@ -192,6 +192,7 @@
       integration: Globe,
       application: Server,
     };
+    // eslint-disable-next-line security/detect-object-injection -- typeName is from a controlled set of object type strings
     return icons[typeName] ?? Cpu;
   }
 
@@ -217,6 +218,7 @@
       application: { bg: 'bg-sky-500/10', text: 'text-sky-500' },
     };
     return (
+      // eslint-disable-next-line security/detect-object-injection -- typeName is from a controlled set of object type strings
       colors[typeName] ?? {
         bg: 'bg-[var(--color-base-300)]',
         text: 'text-[var(--color-base-content)]',

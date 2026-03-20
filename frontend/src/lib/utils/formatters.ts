@@ -100,6 +100,7 @@ export function formatBytesCompact(bytes: number): string {
   const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
   const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / Math.pow(1024, i);
+  // eslint-disable-next-line security/detect-object-injection -- i is a computed numeric index clamped to units.length
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[i]}`;
 }
 

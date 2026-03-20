@@ -8,9 +8,10 @@
   // Props
   interface Props {
     className?: string;
+    id?: string;
   }
 
-  let { className = '' }: Props = $props();
+  let { className = '', id }: Props = $props();
 
   // Extended option type for locale with typed locale code
   interface LocaleOption extends SelectOption {
@@ -55,6 +56,7 @@
   size="sm"
   groupBy={false}
   {className}
+  {id}
   onChange={handleLanguageChange}
 >
   {#snippet renderOption(option)}

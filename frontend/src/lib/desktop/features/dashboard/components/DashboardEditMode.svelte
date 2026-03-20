@@ -67,6 +67,7 @@
   let missingTypes = $derived(
     ALL_ELEMENT_TYPES.filter(type => {
       const count = editElements.filter(el => el.type === type).length;
+      // eslint-disable-next-line security/detect-object-injection -- type is from ALL_ELEMENT_TYPES, a typed constant array
       const max = MAX_INSTANCES[type] ?? 1;
       return count < max;
     })

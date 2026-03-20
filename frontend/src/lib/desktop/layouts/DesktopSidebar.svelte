@@ -106,6 +106,7 @@ Performance Optimizations:
 
   // Logo variant: solid uses flat color, gradient uses per-scheme handcrafted gradient
   let logoVariant: LogoVariant = $derived(
+    // eslint-disable-next-line security/detect-object-injection -- $scheme is a controlled color scheme identifier
     $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
   );
 

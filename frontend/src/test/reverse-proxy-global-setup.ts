@@ -86,6 +86,7 @@ function startNginxContainer(
   backendHost: string
 ): string {
   // Read and template the config
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- configPath is a hardcoded test fixture path
   let config = readFileSync(configPath, 'utf-8');
   config = config.replace(/BACKEND_HOST/g, backendHost);
   config = config.replace(/BACKEND_PORT/g, String(BACKEND_PORT));
@@ -95,6 +96,7 @@ function startNginxContainer(
     throw new Error('tmpDir not initialized');
   }
   const templatedPath = join(tmpDir, `${name}.conf`);
+  // eslint-disable-next-line security/detect-non-literal-fs-filename -- templatedPath is constructed from a controlled temp directory and test name
   writeFileSync(templatedPath, config);
 
   // Remove stale container from a previous crashed run (ignore errors if absent)

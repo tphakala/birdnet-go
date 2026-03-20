@@ -14,6 +14,7 @@ let previousVersion = $state<string | null>(null);
 let currentVersion = $state<string | null>(null);
 
 const totalSteps = $derived(steps.length);
+// eslint-disable-next-line security/detect-object-injection -- currentStepIndex is a numeric index bounded by steps.length
 const currentStep = $derived(steps[currentStepIndex] ?? null);
 const isFirstStep = $derived(currentStepIndex === 0);
 const isLastStep = $derived(currentStepIndex === totalSteps - 1);

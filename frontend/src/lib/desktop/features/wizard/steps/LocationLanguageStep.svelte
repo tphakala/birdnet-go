@@ -97,23 +97,30 @@
 
 <div class="space-y-5">
   <div>
-    <label class="mb-1 block text-sm font-medium text-[var(--color-base-content)]">
+    <label
+      for="wizard-ui-language"
+      class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
+    >
       {t('wizard.steps.locationLanguage.uiLanguageLabel')}
     </label>
     <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
       {t('wizard.steps.locationLanguage.uiLanguageHelp')}
     </p>
-    <LanguageSelector />
+    <LanguageSelector id="wizard-ui-language" />
   </div>
 
   <div>
-    <label class="mb-1 block text-sm font-medium text-[var(--color-base-content)]">
+    <label
+      for="wizard-species-locale"
+      class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
+    >
       {t('wizard.steps.locationLanguage.speciesLanguageLabel')}
     </label>
     <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
       {t('wizard.steps.locationLanguage.speciesLanguageHelp')}
     </p>
     <SelectDropdown
+      id="wizard-species-locale"
       options={localeOptions}
       value={speciesLocale}
       searchable={true}
@@ -130,9 +137,9 @@
   <div>
     <div class="mb-2 flex items-center justify-between">
       <div>
-        <label class="block text-sm font-medium text-[var(--color-base-content)]">
+        <span class="block text-sm font-medium text-[var(--color-base-content)]">
           {t('wizard.steps.locationLanguage.locationLabel')}
-        </label>
+        </span>
         <p class="text-xs text-[var(--color-base-content)] opacity-60">
           {t('wizard.steps.locationLanguage.locationHelp')}
         </p>

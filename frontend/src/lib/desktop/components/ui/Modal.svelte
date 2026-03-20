@@ -231,7 +231,12 @@
 >
   <div
     bind:this={modalElement}
-    class={cn(sizeClasses[size], { 'scale-100': isOpen }, className)}
+    class={cn(
+      // eslint-disable-next-line security/detect-object-injection -- size is typed as ModalSize
+      sizeClasses[size],
+      { 'scale-100': isOpen },
+      className
+    )}
     role="document"
     tabindex="-1"
   >
@@ -281,7 +286,11 @@
         </button>
         <button
           type="button"
-          class={cn(btnBase, confirmButtonStyles[confirmVariant])}
+          class={cn(
+            btnBase,
+            // eslint-disable-next-line security/detect-object-injection -- confirmVariant is typed union
+            confirmButtonStyles[confirmVariant]
+          )}
           onclick={handleConfirm}
           disabled={loading || isConfirming}
         >

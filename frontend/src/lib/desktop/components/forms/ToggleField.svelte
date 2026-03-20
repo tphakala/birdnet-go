@@ -59,6 +59,7 @@
     md: 'w-12 h-6 before:w-5 before:h-5 checked:before:translate-x-6',
   };
 
+  // eslint-disable-next-line security/detect-object-injection -- size is typed as 'sm' | 'md'
   let toggleBaseClasses = $derived(`${toggleSharedClasses} ${toggleSizeClasses[size]}`);
 
   const toggleErrorClasses = 'checked:bg-[var(--color-error)]';

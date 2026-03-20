@@ -291,6 +291,7 @@
 
   let templateFields = $derived(
     templateFieldKeys.map(key => ({
+      // eslint-disable-next-line security/detect-object-injection -- key iterates over templateFieldKeys, a hardcoded string array
       name: templateFieldNames[key],
       description: t(`settings.notifications.templates.fields.${key}`),
     }))
@@ -305,6 +306,7 @@
   let isServiceFormValid = $derived.by(() => {
     switch (selectedService) {
       case 'discord':
+        // eslint-disable-next-line security/detect-unsafe-regex -- no nested quantifiers; each segment is bounded by literal anchors
         return /^https?:\/\/(?:\w+\.)?discord\.com\/api\/webhooks\/\d+\/[A-Za-z0-9_-]+$/.test(
           serviceFormData.discordWebhookUrl
         );
@@ -1250,6 +1252,7 @@
       system: Cpu,
       integration: Globe,
     };
+    // eslint-disable-next-line security/detect-object-injection -- typeName is from a controlled set of object type strings
     return icons[typeName] ?? Cpu;
   }
 
@@ -1274,6 +1277,7 @@
       },
     };
     return (
+      // eslint-disable-next-line security/detect-object-injection -- typeName is from a controlled set of object type strings
       colors[typeName] ?? {
         bg: 'bg-[var(--color-base-300)]',
         text: 'text-[var(--color-base-content)]',

@@ -72,6 +72,7 @@
 
   // Logo preview variant based on current style and scheme
   let logoPreviewVariant: LogoVariant = $derived(
+    // eslint-disable-next-line security/detect-object-injection -- $scheme is a controlled color scheme identifier
     $logoStyle === 'solid' ? 'solid' : (SCHEME_GRADIENT_MAP[$scheme] ?? 'scheme')
   );
 

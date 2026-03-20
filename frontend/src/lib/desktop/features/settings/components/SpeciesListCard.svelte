@@ -83,6 +83,7 @@
     teal: { bg: 'bg-teal-500/10', text: 'text-teal-500' },
   };
 
+  // eslint-disable-next-line security/detect-object-injection -- iconColorClass is a prop with a fixed set of color values
   let colors = $derived(colorMap[iconColorClass] ?? colorMap.emerald);
 
   type SortColumn = 'commonName' | 'scientificName';
@@ -164,7 +165,9 @@
   function handleKeydown(e: KeyboardEvent) {
     if (e.key === 'Enter') {
       e.preventDefault();
+      // eslint-disable-next-line security/detect-object-injection -- selectedPredictionIndex is a numeric index managed by keyboard navigation
       if (selectedPredictionIndex >= 0 && filteredPredictions[selectedPredictionIndex]) {
+        // eslint-disable-next-line security/detect-object-injection -- same numeric index, bounds-checked above
         selectPrediction(filteredPredictions[selectedPredictionIndex]);
       } else {
         handleAdd();

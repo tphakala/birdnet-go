@@ -214,7 +214,7 @@ test.describe('MiniSpectrogram — Effect Loop Regression', () => {
           '.col-span-12 h3, section h3, [class*="card"] h3'
         );
         return Array.from(headings)
-          .map(h => h.textContent?.trim())
+          .map(h => h.textContent.trim())
           .filter(Boolean);
       });
     };
@@ -223,6 +223,7 @@ test.describe('MiniSpectrogram — Effect Loop Regression', () => {
 
     // Skip if no cards found (backend might not serve layout config in CI)
     if (initialOrder.length === 0) {
+      // eslint-disable-next-line playwright/no-skipped-test -- intentionally skipped
       test.skip(true, 'No dashboard cards found — backend may not serve layout config');
       return;
     }

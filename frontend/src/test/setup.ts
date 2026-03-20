@@ -36,6 +36,7 @@ if (
     },
     key(index: number): string | null {
       const keys = [...store.keys()];
+      // eslint-disable-next-line security/detect-object-injection -- index is a numeric parameter from the Storage.key() API
       return keys[index] ?? null;
     },
   };

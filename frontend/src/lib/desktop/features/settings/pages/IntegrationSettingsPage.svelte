@@ -76,6 +76,7 @@
     const redacted = Object.assign({}, obj) as Record<string, unknown>;
     for (const field of fields) {
       if (field in redacted) {
+        // eslint-disable-next-line security/detect-object-injection -- field is from a hardcoded allowlist of field names
         redacted[field] = redacted[field] ? REDACTED : '';
       }
     }

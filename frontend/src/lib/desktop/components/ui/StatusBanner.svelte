@@ -25,10 +25,13 @@
     info: 'bg-[var(--color-info)]/15 text-[var(--color-info)]',
     warning: 'bg-[var(--color-warning)]/15 text-[var(--color-warning)]',
   };
+
+  // eslint-disable-next-line security/detect-object-injection -- type is typed as StatusType
+  let typeStyle = $derived(styleMap[type]);
 </script>
 
 <div
-  class="flex items-center gap-2 rounded-lg p-3 text-sm {styleMap[type]} {className}"
+  class="flex items-center gap-2 rounded-lg p-3 text-sm {typeStyle} {className}"
   role={type === 'error' ? 'alert' : 'status'}
   aria-live={type === 'error' ? 'assertive' : 'polite'}
 >

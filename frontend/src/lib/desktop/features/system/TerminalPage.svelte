@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
   /* global WebSocket, ResizeObserver, Element */
+  /* eslint-disable security/detect-object-injection -- theme lookups use controlled TerminalThemeId keys */
   import { Terminal } from '@xterm/xterm';
   import { FitAddon } from '@xterm/addon-fit';
   import { t } from '$lib/i18n';

@@ -692,6 +692,7 @@
 
       // Map format to container file extension (must match backend clipFileExtension)
       const extMap: Record<string, string> = { alac: 'm4a', aac: 'm4a', opus: 'ogg' };
+      // eslint-disable-next-line security/detect-object-injection -- extractionFormat is a controlled string from component props
       const ext = extMap[extractionFormat] ?? extractionFormat;
       // Sanitize label for filesystem safety (remove reserved chars, normalize whitespace)
       const safeLabel = clipLabel

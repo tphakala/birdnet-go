@@ -84,6 +84,7 @@
 
   let { icon, size = 32, className = '', title = '' }: Props = $props();
 
+  // eslint-disable-next-line security/detect-object-injection -- icon is a string prop used as key in a static icon map
   let svgContent = $derived(iconMap[icon] ?? iconMap['not-available']);
 </script>
 

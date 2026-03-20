@@ -116,9 +116,9 @@
 
 <div class="space-y-5">
   <div>
-    <label class="mb-2 block text-sm font-medium text-[var(--color-base-content)]">
+    <span class="mb-2 block text-sm font-medium text-[var(--color-base-content)]">
       {t('wizard.steps.audioSource.sourceTypeLabel')}
-    </label>
+    </span>
     <div
       class="grid grid-cols-2 gap-3"
       role="radiogroup"
@@ -160,7 +160,10 @@
 
   {#if sourceType === 'soundcard'}
     <div>
-      <label class="mb-1 block text-sm font-medium text-[var(--color-base-content)]">
+      <label
+        for="wizard-audio-device"
+        class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
+      >
         {t('wizard.steps.audioSource.deviceLabel')}
       </label>
       {#if devicesLoading}
@@ -173,6 +176,7 @@
         </p>
       {:else}
         <SelectDropdown
+          id="wizard-audio-device"
           options={devices}
           value={selectedDevice}
           searchable={true}
@@ -184,13 +188,17 @@
 
   {#if sourceType === 'rtsp'}
     <div>
-      <label class="mb-1 block text-sm font-medium text-[var(--color-base-content)]">
+      <label
+        for="wizard-rtsp-url"
+        class="mb-1 block text-sm font-medium text-[var(--color-base-content)]"
+      >
         {t('wizard.steps.audioSource.rtspUrlLabel')}
       </label>
       <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
         {t('wizard.steps.audioSource.rtspUrlHelp')}
       </p>
       <TextInput
+        id="wizard-rtsp-url"
         bind:value={rtspUrl}
         placeholder={t('wizard.steps.audioSource.rtspUrlPlaceholder')}
         oninput={() => {
