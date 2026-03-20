@@ -73,7 +73,7 @@ func TestTaxonomySynonymsCompleteness(t *testing.T) {
 	t.Parallel()
 
 	// Verify that every forward mapping has a working reverse mapping
-	for old, updated := range taxonomySynonyms {
+	for old, updated := range builtInTaxonomySynonyms {
 		t.Run(old+" forward", func(t *testing.T) {
 			t.Parallel()
 			synonym, found := GetTaxonomySynonym(old)
@@ -88,4 +88,58 @@ func TestTaxonomySynonymsCompleteness(t *testing.T) {
 			assert.Equal(t, old, synonym)
 		})
 	}
+}
+
+func TestBuildSynonymIndexes_ConfigOverridesBuiltIn(t *testing.T) {
+	t.Parallel()
+
+	overrides := map[string]string{
+		"Bubulcus ibis": "Ardea ibis", // Override built-in value.
+	}
+
+	forward, reverse := buildSynonymIndexes(overrides)
+
+	updated, found := forward["bubulcus ibis"]
+	assert.True(t, found)
+	assert.Equal(t, "Ardea ibis", updated)
+
+	original, found := reverse["ardea ibis"]
+	assert.True(t, found)
+	assert.Equal(t, "Bubulcus ibis", original)
+}
+
+func TestBuildSynonymIndexes_ConfigAddsCustomEntry(t *testing.T) {
+	t.Parallel()
+
+	overrides := map[string]string{
+		"Oldus nameus": "Newus nameus",
+	}
+
+	forward, reverse := buildSynonymIndexes(overrides)
+
+	updated, found := forward["oldus nameus"]
+	assert.True(t, found)
+	assert.Equal(t, "Newus nameus", updated)
+
+	original, found := reverse["newus nameus"]
+	assert.True(t, found)
+	assert.Equal(t, "Oldus nameus", original)
+}
+
+func TestBuildSynonymIndexes_IgnoresBlankEntries(t *testing.T) {
+	t.Parallel()
+
+	overrides := map[string]string{
+		"":              "Astur cooperii",
+		"  ":            "Astur cooperii",
+		"Turdus merula": "",
+	}
+
+	forward, _ := buildSynonymIndexes(overrides)
+
+	_, found := forward[""]
+	assert.False(t, found)
+
+	_, found = forward["turdus merula"]
+	assert.False(t, found)
 }
