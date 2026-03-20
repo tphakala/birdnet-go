@@ -17,7 +17,7 @@ type AlertRule struct {
 	EventName       string           `gorm:"size:100;default:'';index" json:"event_name"`
 	MetricName      string           `gorm:"size:100;default:''" json:"metric_name"`
 	CooldownSec     int              `gorm:"not null;default:300" json:"cooldown_sec"`
-	EscalationSteps []float64        `gorm:"serializer:json;default:null" json:"escalation_steps,omitempty"` // Must be sorted ascending; [0] is the base threshold
+	EscalationSteps []float64        `gorm:"serializer:json;default:null" json:"escalation_steps,omitempty"` // Threshold steps; order-independent, lowest is the base threshold
 	CreatedAt       time.Time        `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time        `gorm:"autoUpdateTime" json:"updated_at"`
 	Conditions      []AlertCondition `gorm:"foreignKey:RuleID;constraint:OnDelete:CASCADE" json:"conditions"`

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"maps"
 	"runtime/debug"
+	"slices"
 	"sync"
 	"time"
 
@@ -142,7 +143,9 @@ func (e *Engine) clearEscalationIfRecovered(rules []entities.AlertRule, event *A
 		if len(rule.EscalationSteps) == 0 {
 			continue
 		}
-		if floatVal < rule.EscalationSteps[0] {
+		// Find the lowest step (base threshold) — steps may not be sorted.
+		baseStep := slices.Min(rule.EscalationSteps)
+		if floatVal < baseStep {
 			key := escalationKey(rule.ID, event.MetricName, event.Properties)
 			e.escalationsMu.Lock()
 			delete(e.escalations, key)
