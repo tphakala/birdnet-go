@@ -9,6 +9,7 @@
   - Always exclude species list management
   - Custom species configurations with threshold and interval settings
   - Action configuration for species-specific commands
+  - Taxonomy synonym override management for image lookups
   - Species autocomplete with API-loaded predictions
   - Real-time validation and change detection
   
@@ -1734,7 +1735,7 @@
                 <button
                   type="button"
                   class="p-1 rounded-md text-muted hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100"
-                  aria-label={t('settings.species.remove')}
+                  aria-label="{t('settings.species.remove')} {oldName}"
                   onclick={() => removeSynonym(oldName)}
                   disabled={store.isLoading || store.isSaving}
                 >
