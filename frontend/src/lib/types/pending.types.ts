@@ -17,4 +17,6 @@ export interface PendingDetection {
   source: string;
   /** Raw source ID for filtering detections by active stream */
   sourceID: string;
+  /** Number of inference hits accumulated for this pending detection */
+  hitCount?: number;
 }

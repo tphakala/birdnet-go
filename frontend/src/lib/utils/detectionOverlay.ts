@@ -24,12 +24,14 @@ interface PendingEntry {
   sourceID: string;
   firstDetected: number;
   status: 'active' | 'approved' | 'rejected';
+  hitCount?: number;
 }
 
 const DEDUP_INTERVAL_SECONDS = 6;
 
 /**
- * Diff two pending snapshots, returning newly appeared species for a given source.
+ * Diff two pending snapshots, returning species with new activity for a given source.
+ * Returns species that are newly appeared OR have an increased hitCount (new inference hit).
  * Filters by sourceID and ignores rejected status.
  */
 export function diffPendingSnapshot(
@@ -37,11 +39,17 @@ export function diffPendingSnapshot(
   curr: PendingEntry[],
   activeSourceID: string
 ): PendingEntry[] {
-  const prevSpecies = new Set(prev.filter(d => d.sourceID === activeSourceID).map(d => d.species));
-
-  return curr.filter(
-    d => d.sourceID === activeSourceID && d.status !== 'rejected' && !prevSpecies.has(d.species)
+  const prevBySpecies = new Map(
+    prev.filter(d => d.sourceID === activeSourceID).map(d => [d.species, d])
   );
+
+  return curr.filter(d => {
+    if (d.sourceID !== activeSourceID || d.status === 'rejected') return false;
+    const prevEntry = prevBySpecies.get(d.species);
+    if (!prevEntry) return true; // New species
+    // Existing species with increased hit count means a new inference hit
+    return (d.hitCount ?? 0) > (prevEntry.hitCount ?? 0);
+  });
 }
 
 /**

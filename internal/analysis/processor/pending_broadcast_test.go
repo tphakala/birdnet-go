@@ -269,3 +269,144 @@ func TestBuildFlushNotification_UsesCreatedAt(t *testing.T) {
 	assert.Equal(t, realCreationTime.Unix(), notification.FirstDetected,
 		"Flush notification should use CreatedAt for display timestamp")
 }
+
+func TestSnapshotVisiblePending_IncludesHitCount(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{
+		Settings: &conf.Settings{},
+		pendingDetections: map[string]PendingDetection{
+			"src1:species_a": {
+				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     "Species A",
+							ScientificName: "Genus speciesA",
+						},
+					},
+				},
+				Source:    "src1",
+				CreatedAt: time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
+				Count:     7,
+			},
+		},
+	}
+
+	result := p.SnapshotVisiblePending(4) // threshold = 2, count=7 passes
+	require.Len(t, result, 1)
+	assert.Equal(t, 7, result[0].HitCount, "HitCount should match pending detection Count")
+}
+
+func TestBuildFlushNotification_IncludesHitCount(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{Settings: &conf.Settings{}}
+	item := &PendingDetection{
+		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Test Bird",
+					ScientificName: "Testus birdus",
+				},
+			},
+		},
+		Source:    "src1",
+		CreatedAt: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
+		Count:     5,
+	}
+
+	notif := p.buildFlushNotification(item, PendingStatusApproved)
+	assert.Equal(t, 5, notif.HitCount, "Flush notification should include HitCount")
+}
+
+func TestPendingSnapshotChanged(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		prev    []SSEPendingDetection
+		curr    []SSEPendingDetection
+		changed bool
+	}{
+		{
+			name:    "both_empty",
+			prev:    []SSEPendingDetection{},
+			curr:    []SSEPendingDetection{},
+			changed: false,
+		},
+		{
+			name: "identical_snapshots",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			changed: false,
+		},
+		{
+			name: "new_species_added",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+				{Species: "Great Tit", SourceID: "src1", HitCount: 2, Status: PendingStatusActive},
+			},
+			changed: true,
+		},
+		{
+			name: "species_removed",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+				{Species: "Great Tit", SourceID: "src1", HitCount: 2, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			changed: true,
+		},
+		{
+			name: "hit_count_increased",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 4, Status: PendingStatusActive},
+			},
+			changed: true,
+		},
+		{
+			name: "status_changed",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusApproved},
+			},
+			changed: true,
+		},
+		{
+			name:    "nil_prev_empty_curr",
+			prev:    nil,
+			curr:    []SSEPendingDetection{},
+			changed: false,
+		},
+		{
+			name: "nil_prev_with_curr",
+			prev: nil,
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 2, Status: PendingStatusActive},
+			},
+			changed: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := pendingSnapshotChanged(tt.prev, tt.curr)
+			assert.Equal(t, tt.changed, result)
+		})
+	}
+}

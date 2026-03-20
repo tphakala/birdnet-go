@@ -46,6 +46,53 @@ describe('diffPendingSnapshot', () => {
     const newDetections = diffPendingSnapshot([], curr, 'src1');
     expect(newDetections).toHaveLength(1);
   });
+
+  it('detects increased hitCount as new activity', () => {
+    const prev = [
+      {
+        species: 'Blue Tit',
+        sourceID: 'src1',
+        firstDetected: 100,
+        status: 'active' as const,
+        hitCount: 3,
+      },
+    ];
+    const curr = [
+      {
+        species: 'Blue Tit',
+        sourceID: 'src1',
+        firstDetected: 100,
+        status: 'active' as const,
+        hitCount: 5,
+      },
+    ];
+    const newDetections = diffPendingSnapshot(prev, curr, 'src1');
+    expect(newDetections).toHaveLength(1);
+    expect(newDetections[0].species).toBe('Blue Tit');
+  });
+
+  it('ignores unchanged hitCount', () => {
+    const prev = [
+      {
+        species: 'Blue Tit',
+        sourceID: 'src1',
+        firstDetected: 100,
+        status: 'active' as const,
+        hitCount: 3,
+      },
+    ];
+    const curr = [
+      {
+        species: 'Blue Tit',
+        sourceID: 'src1',
+        firstDetected: 100,
+        status: 'active' as const,
+        hitCount: 3,
+      },
+    ];
+    const newDetections = diffPendingSnapshot(prev, curr, 'src1');
+    expect(newDetections).toHaveLength(0);
+  });
 });
 
 describe('shouldDedup', () => {
