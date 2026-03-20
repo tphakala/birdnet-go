@@ -66,7 +66,7 @@ const (
 
 	// FFmpeg HLS muxer settings
 	hlsListSize    = 3 // Number of HLS segments to keep in playlist
-	hlsInitTime    = 1 // Short initial segments for fast playlist availability (hls_time takes over after initial fill)
+	hlsInitTime    = 3 // Initial segment time for FFmpeg HLS muxer
 	hlsAllowCache  = 1 // Allow client-side caching of HLS segments
 	hlsStartNumber = 0 // Starting sequence number for HLS segments
 )

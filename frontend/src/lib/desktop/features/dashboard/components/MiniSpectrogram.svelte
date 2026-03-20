@@ -401,9 +401,6 @@
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
       if (labelQueue.length === 0) return;
-      // Note: audioElement.currentTime may not start at 0 — HLS.js seeks to the
-      // live sync position. This introduces a ~1s offset that is acceptable for
-      // overlay placement accuracy; exact sync is not critical here.
       const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
       const now = globalThis.performance.now();
       const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);

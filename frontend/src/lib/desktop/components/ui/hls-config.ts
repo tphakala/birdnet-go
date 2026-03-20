@@ -26,7 +26,7 @@ export const HLS_AUDIO_CONFIG: Partial<Hls['config']> = {
 
   // Buffer management for live audio
   backBufferLength: 10, // Keep 10s of back buffer for seeking
-  liveSyncDurationCount: 3, // Start playback 3 segments from live edge (reduced from 5 for faster startup)
+  liveSyncDurationCount: 5, // Start playback 5 segments from live edge
   liveMaxLatencyDurationCount: 30, // Max 30 segments behind live
 
   // Buffer hole tolerance - increased for audio streams
@@ -85,11 +85,14 @@ export const BUFFERING_STRATEGY = {
   /**
    * Number of fragments to buffer before starting playback
    *
-   * With hls_init_time=1, the first segment is ~1 second. Starting playback
-   * after 1 fragment gives fast startup (~1s) while subsequent segments
-   * buffer in the background.
+   * Why 2 fragments?
+   * - 1 fragment: Too aggressive, causes buffer stalls
+   * - 2 fragments: Sweet spot for audio - provides runway without excessive latency
+   * - 3+ fragments: Adds unnecessary latency for live audio monitoring
+   *
+   * Typical fragment duration is 2-6 seconds, so 2 fragments = 4-12s initial delay
    */
-  MIN_FRAGMENTS_BEFORE_PLAY: 1,
+  MIN_FRAGMENTS_BEFORE_PLAY: 2,
 
   /**
    * Fragment buffer target for stable playback
