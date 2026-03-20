@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"slices"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,13 +32,22 @@ const (
 
 // App is the top-level application that owns all subsystems.
 type App struct {
-	services  []Service
-	analyzers []Analyzer
+	services   []Service
+	analyzers  []Analyzer
+	shutdownCh chan struct{}
+	closeOnce  sync.Once
 }
 
 // New creates a new App instance.
 func New() *App {
-	return &App{}
+	return &App{
+		shutdownCh: make(chan struct{}),
+	}
+}
+
+// RequestShutdown triggers a programmatic shutdown. Safe to call multiple times.
+func (a *App) RequestShutdown() {
+	a.closeOnce.Do(func() { close(a.shutdownCh) })
 }
 
 // Register adds services to the app in the order they should be started.
@@ -141,6 +151,9 @@ func (a *App) Wait() error {
 	case legacyErr = <-legacyErrChan:
 		log.Info("legacy service exited",
 			logger.Error(legacyErr),
+			logger.String("operation", "graceful_shutdown"))
+	case <-a.shutdownCh:
+		log.Info("programmatic shutdown requested",
 			logger.String("operation", "graceful_shutdown"))
 	}
 
