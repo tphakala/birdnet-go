@@ -71,6 +71,7 @@ const (
 	PropertyError          = "error"
 	PropertyPath           = "path"
 	PropertyBroker         = "broker"
+	PropertyThresholdStep  = "threshold_step"
 )
 
 // Action targets identify where notifications are sent.
