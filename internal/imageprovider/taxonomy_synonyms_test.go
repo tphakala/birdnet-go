@@ -238,3 +238,27 @@ func TestSetCustomSynonyms_WarnsOnUnknownLabel(t *testing.T) {
 	assert.True(t, found)
 	assert.Equal(t, "Astur cooperii", synonym)
 }
+
+func TestSetCustomSynonyms_LogsOverrideSummary(t *testing.T) {
+	// Not parallel: mutates package-level cache.
+
+	overrides := map[string]string{
+		"Bubulcus ibis": "Ardea ibis",   // Replaces built-in
+		"Testus oldus":  "Testus newus", // New custom entry
+	}
+
+	// Should not panic or error — logging is best-effort.
+	SetCustomSynonyms(overrides, nil)
+	t.Cleanup(func() {
+		SetCustomSynonyms(nil, nil)
+	})
+
+	// Verify the overrides are applied correctly.
+	synonym, found := GetTaxonomySynonym("Bubulcus ibis")
+	assert.True(t, found)
+	assert.Equal(t, "Ardea ibis", synonym)
+
+	synonym, found = GetTaxonomySynonym("Testus oldus")
+	assert.True(t, found)
+	assert.Equal(t, "Testus newus", synonym)
+}

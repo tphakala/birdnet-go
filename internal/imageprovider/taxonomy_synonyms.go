@@ -85,6 +85,30 @@ func SetCustomSynonyms(overrides map[string]string, knownLabels []string) {
 	synonymMu.Lock()
 	defer synonymMu.Unlock()
 	cachedForward, cachedReverse = buildSynonymIndexes(overrides)
+
+	// Log summary of applied synonyms.
+	overrideCount := len(overrides)
+	totalCount := len(cachedForward)
+	if overrideCount > 0 {
+		// Identify which built-in keys were replaced by overrides.
+		replaced := make([]string, 0)
+		for old := range builtInTaxonomySynonyms {
+			lowerOld := strings.ToLower(old)
+			for overrideKey := range overrides {
+				if strings.ToLower(strings.TrimSpace(overrideKey)) == lowerOld {
+					replaced = append(replaced, old)
+					break
+				}
+			}
+		}
+		GetLogger().Debug("taxonomy synonyms rebuilt",
+			logger.Int("userOverrides", overrideCount),
+			logger.Int("totalSynonyms", totalCount),
+			logger.Any("replacedBuiltIns", replaced))
+	} else {
+		GetLogger().Debug("taxonomy synonyms rebuilt from built-ins only",
+			logger.Int("totalSynonyms", totalCount))
+	}
 }
 
 // buildSynonymIndexes builds normalized forward and reverse lookup maps using
