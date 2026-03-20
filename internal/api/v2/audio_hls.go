@@ -66,7 +66,7 @@ const (
 
 	// FFmpeg HLS muxer settings
 	hlsListSize    = 3 // Number of HLS segments to keep in playlist
-	hlsInitTime    = 3 // Initial segment time for FFmpeg HLS muxer
+	hlsInitTime    = 0 // Disabled: use hls_time for all segments to avoid TARGETDURATION transitions
 	hlsAllowCache  = 1 // Allow client-side caching of HLS segments
 	hlsStartNumber = 0 // Starting sequence number for HLS segments
 )
@@ -81,6 +81,7 @@ type HLSStreamInfo struct {
 	logFile      *os.File           // FFmpeg log file (closed after process exits)
 	ctx          context.Context    // Stream lifecycle context
 	cancel       context.CancelFunc // Cancel function for cleanup
+	StreamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -91,6 +92,7 @@ type HLSStreamStatus struct {
 	PlaylistURL   string `json:"playlist_url,omitempty"` // API URL for the playlist (not filesystem path)
 	ActiveClients int    `json:"active_clients"`
 	PlaylistReady bool   `json:"playlist_ready"`
+	StreamEpoch   string `json:"stream_epoch,omitempty"` // ISO8601 wall-clock time of stream position 0
 }
 
 // HLSSessionRequest represents an optional request body for stream start
@@ -358,6 +360,12 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 			logger.String("playlist_url", playlistURL))
 	}
 
+	// Format stream epoch as ISO8601 if set
+	var epochStr string
+	if !stream.StreamEpoch.IsZero() {
+		epochStr = stream.StreamEpoch.UTC().Format(time.RFC3339Nano)
+	}
+
 	return ctx.JSON(http.StatusOK, HLSStreamStatus{
 		Status:        status,
 		Source:        url.PathEscape(sourceID),
@@ -365,6 +373,7 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 		PlaylistURL:   playlistURL,
 		ActiveClients: clientCount,
 		PlaylistReady: isReady,
+		StreamEpoch:   epochStr,
 	})
 }
 
@@ -881,6 +890,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		logFile:      logFile,
 		ctx:          streamCtx,
 		cancel:       streamCancel,
+		StreamEpoch:  time.Now(),
 	}
 
 	// Register the stream (singleflight guarantees no concurrent creation for this sourceID)
@@ -1053,9 +1063,9 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 		"-hls_flags", "delete_segments+temp_file",
 		"-hls_segment_type", "fmp4",
 		"-hls_fmp4_init_filename", "init.mp4",
-		"-hls_init_time", strconv.Itoa(hlsInitTime),
+		"-hls_init_time", "0",
 		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
-		"-movflags", "faststart+empty_moov+separate_moof",
+		"-movflags", "empty_moov+separate_moof+default_base_moof",
 		"-start_number", strconv.Itoa(hlsStartNumber),
 		"-loglevel", logLevel,
 		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d.m4s")),
