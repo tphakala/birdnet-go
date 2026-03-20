@@ -1716,7 +1716,9 @@
 
         <!-- Validation error -->
         {#if synonymError}
-          <p class="text-xs text-[var(--color-error)]">{synonymError}</p>
+          <p class="text-xs text-[var(--color-error)]" role="alert" aria-live="assertive">
+            {synonymError}
+          </p>
         {/if}
 
         <!-- Synonyms table -->

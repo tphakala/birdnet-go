@@ -574,6 +574,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 
 	telemetry.UpdateTelemetryEnabled()
 
+	// Rebuild taxonomy synonym lookup cache if overrides changed
+	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, settings.BirdNET.Labels)
+
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields": skippedFields,
