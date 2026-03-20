@@ -23,11 +23,13 @@ interface PendingEntry {
   species: string;
   sourceID: string;
   firstDetected: number;
+  lastUpdated?: number;
   status: 'active' | 'approved' | 'rejected';
   hitCount?: number;
 }
 
 const DEDUP_INTERVAL_SECONDS = 6;
+const STALE_THRESHOLD_SECONDS = 6;
 
 /**
  * Diff two pending snapshots, returning species with new activity for a given source.
@@ -53,16 +55,19 @@ export function diffPendingSnapshot(
 }
 
 /**
- * Check if a species label should be deduplicated (last label < 6s ago in media time).
+ * Check if a species label should be deduplicated (last label < 6s ago).
+ * The timestamp parameter should be the current wall-clock time (Unix seconds),
+ * NOT the detection's firstDetected — using firstDetected was the original bug
+ * that caused all repeat labels to be silently deduped.
  */
 export function shouldDedup(
   species: string,
-  firstDetected: number,
+  timestamp: number,
   lastSeenMap: Map<string, number>
 ): boolean {
   const last = lastSeenMap.get(species);
   if (last === undefined) return false;
-  return firstDetected - last < DEDUP_INTERVAL_SECONDS;
+  return timestamp - last < DEDUP_INTERVAL_SECONDS;
 }
 
 /**
@@ -98,4 +103,39 @@ export function promoteFromQueue(
 export function nextYSlot(counter: number, maxSlots: number): { slot: number; next: number } {
   const slot = counter % maxSlots;
   return { slot, next: counter + 1 };
+}
+
+/**
+ * Generate repeat labels for species that are still actively detected.
+ * A repeat label is emitted when:
+ * 1. The species already has a previous label (exists in lastLabelledMap)
+ * 2. More than DEDUP_INTERVAL_SECONDS have elapsed since the last label
+ * 3. The species is still fresh (lastUpdated within STALE_THRESHOLD_SECONDS of nowUnix)
+ *
+ * Returns entries that should get new labels. The caller must update lastLabelledMap.
+ */
+export function getRepeatLabels(
+  activePending: PendingEntry[],
+  activeSourceID: string,
+  lastLabelledMap: Map<string, number>,
+  nowUnix: number
+): PendingEntry[] {
+  const results: PendingEntry[] = [];
+
+  for (const entry of activePending) {
+    if (entry.sourceID !== activeSourceID || entry.status === 'rejected') continue;
+
+    const lastLabelTime = lastLabelledMap.get(entry.species);
+    if (lastLabelTime === undefined) continue; // No initial label yet — skip repeats
+
+    const lastUpdated = entry.lastUpdated ?? entry.firstDetected;
+    const isFresh = nowUnix - lastUpdated < STALE_THRESHOLD_SECONDS;
+    const intervalElapsed = nowUnix - lastLabelTime >= DEDUP_INTERVAL_SECONDS;
+
+    if (isFresh && intervalElapsed) {
+      results.push(entry);
+    }
+  }
+
+  return results;
 }
