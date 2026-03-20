@@ -157,9 +157,11 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	}
 
 	// Find the highest step the current value exceeds.
+	// Uses explicit max tracking so the result is correct even if
+	// EscalationSteps is not sorted ascending.
 	currentStep := float64(-1)
 	for _, step := range rule.EscalationSteps {
-		if floatVal >= step {
+		if floatVal >= step && step > currentStep {
 			currentStep = step
 		}
 	}

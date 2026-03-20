@@ -41,7 +41,7 @@ func TestBurstTracker_SuppressAfterSummary(t *testing.T) {
 }
 
 func TestBurstTracker_WindowReset(t *testing.T) {
-	synctest.Test(t, func(_ *testing.T) {
+	synctest.Test(t, func(t *testing.T) { //nolint:thelper // synctest callback, not a test helper
 		bt := NewErrorBurstTracker(3, 5*time.Minute)
 		for range 4 {
 			bt.Record("securefs", "file-io", "error")
