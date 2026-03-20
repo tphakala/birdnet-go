@@ -30,6 +30,7 @@ type SSEPendingDetection struct {
 	Thumbnail      string                 `json:"thumbnail"`      // Bird image URL
 	Status         PendingDetectionStatus `json:"status"`         // "active", "approved", "rejected"
 	FirstDetected  int64                  `json:"firstDetected"`  // Unix timestamp (seconds)
+	LastUpdated    int64                  `json:"lastUpdated"`    // Unix seconds — most recent inference hit
 	Source         string                 `json:"source"`         // Source display name
 	SourceID       string                 `json:"sourceID"`       // Raw source ID for client-side filtering
 	HitCount       int                    `json:"hitCount"`       // Number of inference hits accumulated
@@ -94,6 +95,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 			Status:         PendingStatusActive,
 			FirstDetected:  item.CreatedAt.Unix(),
+			LastUpdated:    item.LastUpdated.Unix(),
 			Source:         p.getDisplayNameForSource(item.Source),
 			SourceID:       item.Source,
 			HitCount:       item.Count,
@@ -157,6 +159,7 @@ func (p *Processor) buildFlushNotification(item *PendingDetection, status Pendin
 		Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 		Status:         status,
 		FirstDetected:  item.CreatedAt.Unix(),
+		LastUpdated:    item.LastUpdated.Unix(),
 		Source:         p.getDisplayNameForSource(item.Source),
 		SourceID:       item.Source,
 		HitCount:       item.Count,
@@ -173,7 +176,8 @@ func pendingSnapshotChanged(prev, curr []SSEPendingDetection) bool {
 		if prev[i].Species != curr[i].Species ||
 			prev[i].SourceID != curr[i].SourceID ||
 			prev[i].HitCount != curr[i].HitCount ||
-			prev[i].Status != curr[i].Status {
+			prev[i].Status != curr[i].Status ||
+			prev[i].LastUpdated != curr[i].LastUpdated {
 			return true
 		}
 	}

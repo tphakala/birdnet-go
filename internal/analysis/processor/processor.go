@@ -1334,6 +1334,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 					Status:         PendingStatusActive,
 					FirstDetected:  item.CreatedAt.Unix(),
+					LastUpdated:    item.LastUpdated.Unix(),
 					Source:         p.getDisplayNameForSource(item.Source),
 					SourceID:       item.Source,
 					HitCount:       item.Count,

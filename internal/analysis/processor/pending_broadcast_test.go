@@ -400,6 +400,16 @@ func TestPendingSnapshotChanged(t *testing.T) {
 			},
 			changed: true,
 		},
+		{
+			name: "last_updated_changed",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive, LastUpdated: 1000},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", HitCount: 3, Status: PendingStatusActive, LastUpdated: 1006},
+			},
+			changed: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -409,4 +419,64 @@ func TestPendingSnapshotChanged(t *testing.T) {
 			assert.Equal(t, tt.changed, result)
 		})
 	}
+}
+
+func TestSnapshotVisiblePending_IncludesLastUpdated(t *testing.T) {
+	t.Parallel()
+
+	createdAt := time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC)
+	lastUpdated := time.Date(2026, 3, 7, 10, 0, 18, 0, time.UTC) // 18s after creation
+
+	p := &Processor{
+		Settings: &conf.Settings{},
+		pendingDetections: map[string]PendingDetection{
+			"src1:species_a": {
+				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     "Species A",
+							ScientificName: "Genus speciesA",
+						},
+					},
+				},
+				Source:      "src1",
+				CreatedAt:   createdAt,
+				LastUpdated: lastUpdated,
+				Count:       5,
+			},
+		},
+	}
+
+	result := p.SnapshotVisiblePending(4) // threshold=2, count=5 passes
+	require.Len(t, result, 1)
+	assert.Equal(t, lastUpdated.Unix(), result[0].LastUpdated,
+		"SSE LastUpdated should reflect the most recent inference hit time")
+}
+
+func TestBuildFlushNotification_IncludesLastUpdated(t *testing.T) {
+	t.Parallel()
+
+	p := &Processor{Settings: &conf.Settings{}}
+
+	createdAt := time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC)
+	lastUpdated := time.Date(2026, 3, 7, 10, 0, 24, 0, time.UTC)
+
+	item := &PendingDetection{
+		Detection: Detections{
+			Result: detection.Result{
+				Species: detection.Species{
+					CommonName:     "Test Bird",
+					ScientificName: "Testus birdus",
+				},
+			},
+		},
+		Source:      "src1",
+		CreatedAt:   createdAt,
+		LastUpdated: lastUpdated,
+		Count:       8,
+	}
+
+	notif := p.buildFlushNotification(item, PendingStatusApproved)
+	assert.Equal(t, lastUpdated.Unix(), notif.LastUpdated,
+		"Flush notification LastUpdated should reflect latest hit time")
 }
