@@ -35,6 +35,27 @@ type SSEPendingDetection struct {
 	HitCount       int                    `json:"hitCount"`       // Number of inference hits accumulated
 }
 
+// sortPendingSnapshot sorts a pending detection snapshot by FirstDetected
+// (oldest first), with species name as tie-breaker for determinism.
+// This ordering is required by pendingSnapshotChanged which does index-based comparison.
+func sortPendingSnapshot(s []SSEPendingDetection) {
+	slices.SortFunc(s, func(a, b SSEPendingDetection) int {
+		if a.FirstDetected != b.FirstDetected {
+			if a.FirstDetected < b.FirstDetected {
+				return -1
+			}
+			return 1
+		}
+		if a.Species < b.Species {
+			return -1
+		}
+		if a.Species > b.Species {
+			return 1
+		}
+		return 0
+	})
+}
+
 // CalculateVisibilityThreshold computes the minimum hit count for a pending
 // detection to be visible in the "currently hearing" card.
 // It returns 25% of minDetections, floored at 2, but never exceeds minDetections.
@@ -74,23 +95,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 	}
 	p.pendingMutex.RUnlock()
 
-	// Sort by FirstDetected (oldest first) for stable ordering across broadcasts.
-	slices.SortFunc(result, func(a, b SSEPendingDetection) int {
-		if a.FirstDetected != b.FirstDetected {
-			if a.FirstDetected < b.FirstDetected {
-				return -1
-			}
-			return 1
-		}
-		// Tie-break by species name for determinism.
-		if a.Species < b.Species {
-			return -1
-		}
-		if a.Species > b.Species {
-			return 1
-		}
-		return 0
-	})
+	sortPendingSnapshot(result)
 
 	return result
 }

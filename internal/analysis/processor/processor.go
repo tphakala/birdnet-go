@@ -1342,6 +1342,8 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		}
 		logPendingBroadcast(len(broadcastSnapshot), len(terminalNotifs))
 		broadcastSnapshot = append(broadcastSnapshot, terminalNotifs...)
+		// Sort for stable comparison in broadcastPendingSnapshot.
+		sortPendingSnapshot(broadcastSnapshot)
 	}
 
 	p.pendingMutex.Unlock()
