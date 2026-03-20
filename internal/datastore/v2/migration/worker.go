@@ -883,13 +883,16 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 		return runActionReturn
 	}
 
-	// Sleep with responsive cancellation
+	// Sleep with responsive cancellation. On shutdown, perform a final
+	// drain to minimize data loss before the system switches to v2-only mode.
 	select {
 	case <-ctx.Done():
-		w.logger.Info("tail sync stopped: context cancelled")
+		w.logger.Info("tail sync: context cancelled, performing final drain")
+		w.drainLegacyRecords(ctx)
 		return runActionReturn
 	case <-w.stopCh:
-		w.logger.Info("tail sync stopped: shutdown requested")
+		w.logger.Info("tail sync: shutdown requested, performing final drain")
+		w.drainLegacyRecords(context.Background())
 		return runActionReturn
 	case <-time.After(tailSyncInterval):
 	}
@@ -903,6 +906,13 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 				logger.Int64("count", synced))
 		}
 		if done {
+			break
+		}
+		// If no records were synced in a non-empty batch, all records failed.
+		// Break to avoid a tight retry loop — failed records are tracked as
+		// dirty IDs and will be retried on the next tail sync cycle.
+		if synced == 0 {
+			w.logger.Warn("tail sync: all records in batch failed, backing off")
 			break
 		}
 		// Check for shutdown between batches
@@ -974,6 +984,24 @@ func (w *Worker) tailSyncBatch(ctx context.Context) (synced int64, done bool) {
 
 	// If we got fewer than batchSize results, we've reached the end
 	return synced, len(results) < w.batchSize
+}
+
+// drainLegacyRecords performs a best-effort final sync of any remaining
+// legacy records before shutdown. This minimizes the data loss window
+// between the last periodic sync and the system restart.
+func (w *Worker) drainLegacyRecords(ctx context.Context) {
+	var totalSynced int64
+	for {
+		synced, done := w.tailSyncBatch(ctx)
+		totalSynced += synced
+		if done || synced == 0 {
+			break
+		}
+	}
+	if totalSynced > 0 {
+		w.logger.Info("tail sync: final drain migrated records",
+			logger.Int64("count", totalSynced))
+	}
 }
 
 // handleMigratingState processes a batch of records.

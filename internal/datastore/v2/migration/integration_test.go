@@ -949,17 +949,9 @@ func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
 
 	// Wait for tail sync to pick up the new records.
 	// Tail sync interval is 10s, give it up to 30s for safety.
-	deadline := time.Now().Add(30 * time.Second)
-	for time.Now().Before(deadline) {
+	require.Eventually(t, func() bool {
 		v2Count = ctx.GetV2DetectionCount(t)
-		if v2Count >= 15 {
-			break
-		}
-		time.Sleep(time.Second)
-	}
-
-	// Verify all records including post-completion ones are in v2
-	v2Count = ctx.GetV2DetectionCount(t)
-	assert.Equal(t, int64(15), v2Count,
+		return v2Count >= 15
+	}, 30*time.Second, time.Second,
 		"tail sync should have migrated the 5 post-completion detections to v2")
 }
