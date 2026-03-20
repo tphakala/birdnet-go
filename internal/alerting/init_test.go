@@ -38,9 +38,17 @@ func (m *initMockRepo) CreateRule(_ context.Context, rule *entities.AlertRule) e
 	return nil
 }
 
-func (m *initMockRepo) UpdateRule(_ context.Context, _ *entities.AlertRule) error { return nil }
-func (m *initMockRepo) DeleteRule(_ context.Context, _ uint) error                { return nil }
-func (m *initMockRepo) ToggleRule(_ context.Context, _ uint, _ bool) error        { return nil }
+func (m *initMockRepo) UpdateRule(_ context.Context, rule *entities.AlertRule) error {
+	for i := range m.rules {
+		if m.rules[i].ID == rule.ID {
+			m.rules[i] = *rule
+			return nil
+		}
+	}
+	return nil
+}
+func (m *initMockRepo) DeleteRule(_ context.Context, _ uint) error         { return nil }
+func (m *initMockRepo) ToggleRule(_ context.Context, _ uint, _ bool) error { return nil }
 
 func (m *initMockRepo) GetEnabledRules(_ context.Context) ([]entities.AlertRule, error) {
 	var enabled []entities.AlertRule
@@ -136,4 +144,30 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 	handlerCount := len(bus.handlers)
 	bus.mu.RUnlock()
 	assert.Equal(t, 1, handlerCount)
+}
+
+func TestSeedDefaultRules_MigratesEscalationSteps(t *testing.T) {
+	// Simulate existing installation: all default rules exist but the low disk
+	// rule has no escalation steps (pre-migration state).
+	defaults := DefaultRules()
+	existing := make([]entities.AlertRule, len(defaults))
+	copy(existing, defaults)
+	for i := range existing {
+		existing[i].ID = uint(i + 1)      //nolint:gosec // test, no overflow risk
+		existing[i].EscalationSteps = nil // pre-migration: no steps
+	}
+	repo := &initMockRepo{rules: existing}
+
+	err := seedDefaultRules(t.Context(), repo, initTestLogger())
+	require.NoError(t, err)
+
+	// Verify the low disk rule was updated with escalation steps.
+	for i := range repo.rules {
+		if repo.rules[i].NameKey == RuleKeyLowDiskName {
+			assert.Equal(t, []float64{85, 90, 95, 99}, repo.rules[i].EscalationSteps,
+				"existing low disk rule should get escalation steps from migration")
+			return
+		}
+	}
+	t.Fatal("low disk rule not found after seeding")
 }

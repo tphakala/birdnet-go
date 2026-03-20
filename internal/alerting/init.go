@@ -152,5 +152,35 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 	if created > 0 {
 		log.Info("seeded default alert rules", logger.Int("created", created))
 	}
+
+	// Migrate existing built-in rules: populate EscalationSteps on rules
+	// that were seeded before escalation support was added.
+	allDefaults := DefaultRules()
+	defaultSteps := make(map[string][]float64, len(allDefaults))
+	for i := range allDefaults {
+		if allDefaults[i].BuiltIn && len(allDefaults[i].EscalationSteps) > 0 {
+			defaultSteps[allDefaults[i].NameKey] = allDefaults[i].EscalationSteps
+		}
+	}
+	for i := range existing {
+		rule := &existing[i]
+		if !rule.BuiltIn || rule.NameKey == "" {
+			continue
+		}
+		steps, ok := defaultSteps[rule.NameKey]
+		if !ok || len(rule.EscalationSteps) > 0 {
+			continue
+		}
+		rule.EscalationSteps = steps
+		if err := repo.UpdateRule(ctx, rule); err != nil {
+			log.Warn("failed to migrate escalation steps for built-in rule",
+				logger.String("name", rule.Name),
+				logger.Error(err))
+			continue
+		}
+		log.Info("migrated escalation steps for built-in rule",
+			logger.String("name", rule.Name))
+	}
+
 	return nil
 }
