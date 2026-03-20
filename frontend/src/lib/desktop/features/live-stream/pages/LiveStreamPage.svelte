@@ -701,18 +701,20 @@
         }
       }
 
-      // Generate repeat labels for species still actively detected
-      const repeats = getRepeatLabels(
-        prevSnapshot,
-        activeSourceId ?? '',
-        lastSeenSpecies,
-        wallClockAtPlayhead
-      );
-      for (const rep of repeats) {
-        lastSeenSpecies.set(rep.species, wallClockAtPlayhead);
-        const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
-        slotCounter = next;
-        overlayLabels = [...overlayLabels, { text: rep.species, birthTime: now, ySlot: slot }];
+      // Generate repeat labels for species still actively detected.
+      // Use wall-clock time (not playhead time) for dedup tracking so it stays
+      // consistent with the SSE handler which also uses Date.now().
+      const nowUnix = Date.now() / 1000;
+      const repeats = getRepeatLabels(prevSnapshot, activeSourceId ?? '', lastSeenSpecies, nowUnix);
+      if (repeats.length > 0) {
+        const newLabels: Array<{ text: string; birthTime: number; ySlot: number }> = [];
+        for (const rep of repeats) {
+          lastSeenSpecies.set(rep.species, nowUnix);
+          const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+          slotCounter = next;
+          newLabels.push({ text: rep.species, birthTime: now, ySlot: slot });
+        }
+        overlayLabels = [...overlayLabels, ...newLabels];
       }
 
       // Prune labels older than 60 seconds

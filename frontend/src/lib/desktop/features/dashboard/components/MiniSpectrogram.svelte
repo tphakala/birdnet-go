@@ -410,6 +410,10 @@
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
 
+      // Calibrate epoch offset once when playback begins.
+      // streamEpoch is set at stream creation (before FFmpeg starts), so
+      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
+      // startup delay. hls.latency bridges this gap.
       if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
         const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
         const latency = hls ? hls.latency : 6;
@@ -429,18 +433,20 @@
         }
       }
 
-      // Generate repeat labels for species still actively detected
-      const repeats = getRepeatLabels(
-        prevSnapshot,
-        activeSourceId ?? '',
-        lastSeenSpecies,
-        wallClockAtPlayhead
-      );
-      for (const rep of repeats) {
-        lastSeenSpecies.set(rep.species, wallClockAtPlayhead);
-        const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
-        slotCounter = next;
-        overlayLabels = [...overlayLabels, { text: rep.species, birthTime: now, ySlot: slot }];
+      // Generate repeat labels for species still actively detected.
+      // Use wall-clock time (not playhead time) for dedup tracking so it stays
+      // consistent with the pending diff $effect which also uses Date.now().
+      const nowUnix = Date.now() / 1000;
+      const repeats = getRepeatLabels(prevSnapshot, activeSourceId ?? '', lastSeenSpecies, nowUnix);
+      if (repeats.length > 0) {
+        const newLabels: Array<{ text: string; birthTime: number; ySlot: number }> = [];
+        for (const rep of repeats) {
+          lastSeenSpecies.set(rep.species, nowUnix);
+          const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+          slotCounter = next;
+          newLabels.push({ text: rep.species, birthTime: now, ySlot: slot });
+        }
+        overlayLabels = [...overlayLabels, ...newLabels];
       }
 
       // Prune labels older than 60 seconds
