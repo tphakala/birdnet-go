@@ -15,4 +15,6 @@ export interface PendingDetection {
   firstDetected: number;
   /** Audio source display name */
   source: string;
+  /** Raw source ID for filtering detections by active stream */
+  sourceID: string;
 }

@@ -31,6 +31,7 @@ type SSEPendingDetection struct {
 	Status         PendingDetectionStatus `json:"status"`         // "active", "approved", "rejected"
 	FirstDetected  int64                  `json:"firstDetected"`  // Unix timestamp (seconds)
 	Source         string                 `json:"source"`         // Source display name
+	SourceID       string                 `json:"sourceID"`       // Raw source ID for client-side filtering
 }
 
 // CalculateVisibilityThreshold computes the minimum hit count for a pending
@@ -66,6 +67,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			Status:         PendingStatusActive,
 			FirstDetected:  item.CreatedAt.Unix(),
 			Source:         p.getDisplayNameForSource(item.Source),
+			SourceID:       item.Source,
 		})
 	}
 	p.pendingMutex.RUnlock()
@@ -128,6 +130,7 @@ func (p *Processor) buildFlushNotification(item *PendingDetection, status Pendin
 		Status:         status,
 		FirstDetected:  item.CreatedAt.Unix(),
 		Source:         p.getDisplayNameForSource(item.Source),
+		SourceID:       item.Source,
 	}
 }
 
