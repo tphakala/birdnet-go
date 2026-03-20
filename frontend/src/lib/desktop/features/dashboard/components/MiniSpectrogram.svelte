@@ -388,17 +388,21 @@
     }
   }
 
-  // Diff incoming pending detections and queue new labels
+  // Diff incoming pending detections and queue new labels.
+  // Always update prevSnapshot — even when pendingDetections is empty — so
+  // getRepeatLabels doesn't see stale species after detections stop.
   $effect(() => {
-    if (!activeSourceId || pendingDetections.length === 0) return;
-    const newDetections = diffPendingSnapshot(prevSnapshot, pendingDetections, activeSourceId);
-    const nowUnix = Date.now() / 1000;
-    for (const det of newDetections) {
-      if (shouldDedup(det.species, nowUnix, lastSeenSpecies)) continue;
-      lastSeenSpecies.set(det.species, nowUnix);
-      const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
-      slotCounter = next;
-      labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
+    if (!activeSourceId) return;
+    if (pendingDetections.length > 0) {
+      const newDetections = diffPendingSnapshot(prevSnapshot, pendingDetections, activeSourceId);
+      const nowUnix = Date.now() / 1000;
+      for (const det of newDetections) {
+        if (shouldDedup(det.species, nowUnix, lastSeenSpecies)) continue;
+        lastSeenSpecies.set(det.species, nowUnix);
+        const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+        slotCounter = next;
+        labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
+      }
     }
     prevSnapshot = [...pendingDetections];
   });
