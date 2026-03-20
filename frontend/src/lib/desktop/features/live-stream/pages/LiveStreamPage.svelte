@@ -239,7 +239,7 @@
         hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
           if (signal.aborted) return;
           const snKey = String(data.frag.sn);
-          fragLoadStartTimes.set(snKey, performance.now());
+          fragLoadStartTimes.set(snKey, globalThis.performance.now());
           // Cap map size to prevent leaks from abandoned loads
           if (fragLoadStartTimes.size > 20) {
             const oldest = fragLoadStartTimes.keys().next().value;
@@ -254,7 +254,7 @@
           const startTime = fragLoadStartTimes.get(snKey);
           fragLoadStartTimes.delete(snKey);
 
-          const now = performance.now();
+          const now = globalThis.performance.now();
           const loadMs = startTime ? now - startTime : 0;
           const loadDurationMs = startTime ? loadMs.toFixed(0) : '?';
           const bytes = data.payload?.byteLength ?? data.frag.stats?.total ?? 0;
@@ -603,13 +603,13 @@
     if (!audioElement || !isStreaming) return;
 
     let lastCurrentTime = audioElement.currentTime;
-    let lastCheckTime = performance.now();
+    let lastCheckTime = globalThis.performance.now();
     let stallCount = 0;
 
     const interval = globalThis.setInterval(() => {
       if (!audioElement) return;
 
-      const now = performance.now();
+      const now = globalThis.performance.now();
       const elapsed = (now - lastCheckTime) / 1000;
       const currentTime = audioElement.currentTime;
       const playbackDelta = currentTime - lastCurrentTime;
