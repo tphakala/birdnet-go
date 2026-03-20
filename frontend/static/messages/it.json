@@ -887,19 +887,6 @@
         "genus": "Genere",
         "species": "Specie"
       }
-    },
-    "synonyms": {
-      "tabLabel": "Sinonimi tassonomici",
-      "description": "Sovrascrivi le associazioni dei nomi scientifici utilizzate per la ricerca di immagini di uccelli. BirdNET utilizza la tassonomia 2021E, ma le fonti di immagini potrebbero utilizzare nomi aggiornati. Le associazioni integrate vengono sempre caricate; le tue sovrascritture le integrano o sostituiscono.",
-      "birdnetName": "Nome BirdNET",
-      "updatedName": "Nome aggiornato",
-      "addButton": "Aggiungi sinonimo",
-      "emptyState": "Nessun sinonimo tassonomico personalizzato configurato.",
-      "errors": {
-        "unknownSpecies": "Specie non trovata nelle etichette BirdNET",
-        "duplicateKey": "Un sinonimo per questa specie esiste già",
-        "emptyUpdatedName": "Il nome aggiornato è obbligatorio"
-      }
     }
   },
   "spectrogram": {
@@ -4170,15 +4157,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Riavvia applicazione",
+    "containerRestart": "Riavvia container",
+    "confirmTitle": "Conferma riavvio",
+    "confirmApplicationMessage": "Il server verrà riavviato. Sarai temporaneamente disconnesso.",
+    "confirmContainerMessage": "Il container verrà riavviato. Sarai temporaneamente disconnesso.",
+    "inProgress": "Riavvio in corso...",
+    "bannerTitle": "Riavvio necessario",
+    "bannerMessage": "Le modifiche alla configurazione richiedono un riavvio:",
+    "bannerAction": "Riavvia ora",
+    "restartFailed": "Impossibile avviare il riavvio"
   }
 }

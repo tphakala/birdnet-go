@@ -893,19 +893,6 @@
         "species": "Gatunek"
       }
     },
-    "synonyms": {
-      "tabLabel": "Synonimy taksonomiczne",
-      "description": "Nadpisz przypisania nazw naukowych używanych do wyszukiwania obrazów ptaków. BirdNET używa taksonomii 2021E, ale źródła obrazów mogą używać zaktualizowanych nazw. Wbudowane przypisania są zawsze ładowane; Twoje nadpisania je uzupełniają lub zastępują.",
-      "birdnetName": "Nazwa BirdNET",
-      "updatedName": "Zaktualizowana nazwa",
-      "addButton": "Dodaj synonim",
-      "emptyState": "Nie skonfigurowano niestandardowych synonimów taksonomicznych.",
-      "errors": {
-        "unknownSpecies": "Gatunek nie został znaleziony w etykietach BirdNET",
-        "duplicateKey": "Synonim dla tego gatunku już istnieje",
-        "emptyUpdatedName": "Zaktualizowana nazwa jest wymagana"
-      }
-    },
     "tracking": {
       "title": "Śledzenie gatunków",
       "newSpecies": "Nowy gatunek",
@@ -4373,15 +4360,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Uruchom ponownie aplikację",
+    "containerRestart": "Uruchom ponownie kontener",
+    "confirmTitle": "Potwierdź ponowne uruchomienie",
+    "confirmApplicationMessage": "Serwer zostanie uruchomiony ponownie. Połączenie zostanie tymczasowo przerwane.",
+    "confirmContainerMessage": "Kontener zostanie uruchomiony ponownie. Połączenie zostanie tymczasowo przerwane.",
+    "inProgress": "Ponowne uruchamianie...",
+    "bannerTitle": "Wymagane ponowne uruchomienie",
+    "bannerMessage": "Zmiany konfiguracji wymagają ponownego uruchomienia:",
+    "bannerAction": "Uruchom ponownie teraz",
+    "restartFailed": "Nie udało się zainicjować ponownego uruchomienia"
   }
 }

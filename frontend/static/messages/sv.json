@@ -893,19 +893,6 @@
         "species": "Art"
       }
     },
-    "synonyms": {
-      "tabLabel": "Taxonomiska synonymer",
-      "description": "Skriv över vetenskapliga namnmappningar som används för sökning av fågelbilder. BirdNET använder 2021E-taxonomi, men bildkällor kan använda uppdaterade namn. Inbyggda mappningar laddas alltid; dina överskrivningar lägger till eller ersätter dem.",
-      "birdnetName": "BirdNET-namn",
-      "updatedName": "Uppdaterat namn",
-      "addButton": "Lägg till synonym",
-      "emptyState": "Inga anpassade taxonomiska synonymer konfigurerade.",
-      "errors": {
-        "unknownSpecies": "Art hittades inte i BirdNET-etiketter",
-        "duplicateKey": "En synonym för denna art finns redan",
-        "emptyUpdatedName": "Uppdaterat namn krävs"
-      }
-    },
     "tracking": {
       "title": "Artspårning",
       "newSpecies": "Ny art",
@@ -4368,15 +4355,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Starta om applikation",
+    "containerRestart": "Starta om container",
+    "confirmTitle": "Bekräfta omstart",
+    "confirmApplicationMessage": "Servern startar om. Du kopplas tillfälligt bort.",
+    "confirmContainerMessage": "Containern startar om. Du kopplas tillfälligt bort.",
+    "inProgress": "Startar om...",
+    "bannerTitle": "Omstart krävs",
+    "bannerMessage": "Konfigurationsändringar kräver en omstart:",
+    "bannerAction": "Starta om nu",
+    "restartFailed": "Det gick inte att starta om"
   }
 }

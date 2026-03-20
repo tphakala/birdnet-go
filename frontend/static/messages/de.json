@@ -893,19 +893,6 @@
         "species": "Art"
       }
     },
-    "synonyms": {
-      "tabLabel": "Taxonomie-Synonyme",
-      "description": "Überschreiben Sie wissenschaftliche Namenszuordnungen für die Vogelbildersuche. BirdNET verwendet die 2021E-Taxonomie, aber Bildquellen können aktualisierte Namen verwenden. Eingebaute Zuordnungen werden immer geladen; Ihre Überschreibungen ergänzen oder ersetzen diese.",
-      "birdnetName": "BirdNET-Name",
-      "updatedName": "Aktualisierter Name",
-      "addButton": "Synonym hinzufügen",
-      "emptyState": "Keine benutzerdefinierten Taxonomie-Synonyme konfiguriert.",
-      "errors": {
-        "unknownSpecies": "Art nicht in BirdNET-Labels gefunden",
-        "duplicateKey": "Ein Synonym für diese Art existiert bereits",
-        "emptyUpdatedName": "Aktualisierter Name ist erforderlich"
-      }
-    },
     "tracking": {
       "title": "Artenbeobachtung",
       "newSpecies": "Neue Art",
@@ -4373,15 +4360,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Anwendung neu starten",
+    "containerRestart": "Container neu starten",
+    "confirmTitle": "Neustart bestätigen",
+    "confirmApplicationMessage": "Der Server wird neu gestartet. Sie werden vorübergehend getrennt.",
+    "confirmContainerMessage": "Der Container wird neu gestartet. Sie werden vorübergehend getrennt.",
+    "inProgress": "Neustart läuft...",
+    "bannerTitle": "Neustart erforderlich",
+    "bannerMessage": "Konfigurationsänderungen erfordern einen Neustart:",
+    "bannerAction": "Jetzt neu starten",
+    "restartFailed": "Neustart konnte nicht eingeleitet werden"
   }
 }

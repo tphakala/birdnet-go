@@ -893,19 +893,6 @@
         "species": "Espèce"
       }
     },
-    "synonyms": {
-      "tabLabel": "Synonymes taxonomiques",
-      "description": "Remplacer les associations de noms scientifiques utilisées pour la recherche d'images d'oiseaux. BirdNET utilise la taxonomie 2021E, mais les sources d'images peuvent utiliser des noms mis à jour. Les associations intégrées sont toujours chargées ; vos remplacements les complètent ou les remplacent.",
-      "birdnetName": "Nom BirdNET",
-      "updatedName": "Nom mis à jour",
-      "addButton": "Ajouter un synonyme",
-      "emptyState": "Aucun synonyme taxonomique personnalisé configuré.",
-      "errors": {
-        "unknownSpecies": "Espèce non trouvée dans les étiquettes BirdNET",
-        "duplicateKey": "Un synonyme pour cette espèce existe déjà",
-        "emptyUpdatedName": "Le nom mis à jour est requis"
-      }
-    },
     "tracking": {
       "title": "Suivi des espèces",
       "newSpecies": "Nouvelle espèce",
@@ -4373,15 +4360,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Redémarrer l'application",
+    "containerRestart": "Redémarrer le conteneur",
+    "confirmTitle": "Confirmer le redémarrage",
+    "confirmApplicationMessage": "Le serveur va redémarrer. Vous serez temporairement déconnecté.",
+    "confirmContainerMessage": "Le conteneur va redémarrer. Vous serez temporairement déconnecté.",
+    "inProgress": "Redémarrage en cours...",
+    "bannerTitle": "Redémarrage requis",
+    "bannerMessage": "Les modifications de configuration nécessitent un redémarrage :",
+    "bannerAction": "Redémarrer maintenant",
+    "restartFailed": "Échec du lancement du redémarrage"
   }
 }

@@ -888,19 +888,6 @@
         "species": "Druh"
       }
     },
-    "synonyms": {
-      "tabLabel": "Taxonomické synonymá",
-      "description": "Prepíšte priradenia vedeckých názvov používaných na vyhľadávanie obrázkov vtákov. BirdNET používa taxonómiu 2021E, ale zdroje obrázkov môžu používať aktualizované názvy. Vstavané priradenia sa vždy načítajú; vaše prepísania ich dopĺňajú alebo nahrádzajú.",
-      "birdnetName": "Názov BirdNET",
-      "updatedName": "Aktualizovaný názov",
-      "addButton": "Pridať synonymum",
-      "emptyState": "Žiadne vlastné taxonomické synonymá nie sú nakonfigurované.",
-      "errors": {
-        "unknownSpecies": "Druh sa nenašiel v štítkoch BirdNET",
-        "duplicateKey": "Synonymum pre tento druh už existuje",
-        "emptyUpdatedName": "Aktualizovaný názov je povinný"
-      }
-    },
     "tracking": {
       "title": "Sledovanie druhov",
       "newSpecies": "Nový druh",
@@ -4204,15 +4191,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Reštartovať aplikáciu",
+    "containerRestart": "Reštartovať kontajner",
+    "confirmTitle": "Potvrdiť reštart",
+    "confirmApplicationMessage": "Server sa reštartuje. Budete dočasne odpojený.",
+    "confirmContainerMessage": "Kontajner sa reštartuje. Budete dočasne odpojený.",
+    "inProgress": "Reštartuje sa...",
+    "bannerTitle": "Vyžaduje sa reštart",
+    "bannerMessage": "Zmeny konfigurácie vyžadujú reštart:",
+    "bannerAction": "Reštartovať teraz",
+    "restartFailed": "Nepodarilo sa spustiť reštart"
   }
 }

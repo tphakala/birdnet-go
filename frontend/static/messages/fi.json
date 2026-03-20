@@ -893,19 +893,6 @@
         "species": "Laji"
       }
     },
-    "synonyms": {
-      "tabLabel": "Taksonomiasynonyymit",
-      "description": "Korvaa tieteellisten nimien yhdistämismääritykset, joita käytetään lintukuvien haussa. BirdNET käyttää 2021E-taksonomiaa, mutta kuvalähteet voivat käyttää päivitettyjä nimiä. Sisäänrakennetut yhdistämismääritykset ladataan aina; omat korvauksesi lisäävät tai korvaavat niitä.",
-      "birdnetName": "BirdNET-nimi",
-      "updatedName": "Päivitetty nimi",
-      "addButton": "Lisää synonyymi",
-      "emptyState": "Mukautettuja taksonomiasynonyymejä ei ole määritetty.",
-      "errors": {
-        "unknownSpecies": "Lajia ei löydy BirdNET-tunnisteista",
-        "duplicateKey": "Synonyymi tälle lajille on jo olemassa",
-        "emptyUpdatedName": "Päivitetty nimi on pakollinen"
-      }
-    },
     "tracking": {
       "title": "Lajiseuranta",
       "newSpecies": "Uusi laji",
@@ -4373,15 +4360,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Käynnistä sovellus uudelleen",
+    "containerRestart": "Käynnistä kontti uudelleen",
+    "confirmTitle": "Vahvista uudelleenkäynnistys",
+    "confirmApplicationMessage": "Palvelin käynnistetään uudelleen. Yhteys katkeaa väliaikaisesti.",
+    "confirmContainerMessage": "Kontti käynnistetään uudelleen. Yhteys katkeaa väliaikaisesti.",
+    "inProgress": "Käynnistetään uudelleen...",
+    "bannerTitle": "Uudelleenkäynnistys vaaditaan",
+    "bannerMessage": "Asetusten muutokset vaativat uudelleenkäynnistyksen:",
+    "bannerAction": "Käynnistä uudelleen nyt",
+    "restartFailed": "Uudelleenkäynnistyksen aloittaminen epäonnistui"
   }
 }

@@ -893,19 +893,6 @@
         "species": "Espécie"
       }
     },
-    "synonyms": {
-      "tabLabel": "Sinônimos taxonômicos",
-      "description": "Substituir mapeamentos de nomes científicos usados para busca de imagens de aves. O BirdNET usa a taxonomia 2021E, mas fontes de imagens podem usar nomes atualizados. Os mapeamentos integrados são sempre carregados; suas substituições os complementam ou substituem.",
-      "birdnetName": "Nome BirdNET",
-      "updatedName": "Nome atualizado",
-      "addButton": "Adicionar sinônimo",
-      "emptyState": "Nenhum sinônimo taxonômico personalizado configurado.",
-      "errors": {
-        "unknownSpecies": "Espécie não encontrada nos rótulos do BirdNET",
-        "duplicateKey": "Já existe um sinônimo para esta espécie",
-        "emptyUpdatedName": "O nome atualizado é obrigatório"
-      }
-    },
     "tracking": {
       "title": "Rastreamento de espécies",
       "newSpecies": "Nova espécie",
@@ -4373,15 +4360,15 @@
     }
   },
   "restart": {
-    "applicationRestart": "Restart Application",
-    "containerRestart": "Restart Container",
-    "confirmTitle": "Confirm Restart",
-    "confirmApplicationMessage": "The server will restart. You will be temporarily disconnected.",
-    "confirmContainerMessage": "The container will restart. You will be temporarily disconnected.",
-    "inProgress": "Restarting...",
-    "bannerTitle": "Restart Required",
-    "bannerMessage": "Configuration changes require a restart to take effect:",
-    "bannerAction": "Restart Now",
-    "restartFailed": "Failed to initiate restart"
+    "applicationRestart": "Reiniciar aplicação",
+    "containerRestart": "Reiniciar contêiner",
+    "confirmTitle": "Confirmar reinicialização",
+    "confirmApplicationMessage": "O servidor será reiniciado. Você será desconectado temporariamente.",
+    "confirmContainerMessage": "O contêiner será reiniciado. Você será desconectado temporariamente.",
+    "inProgress": "Reiniciando...",
+    "bannerTitle": "Reinicialização necessária",
+    "bannerMessage": "As alterações de configuração requerem uma reinicialização:",
+    "bannerAction": "Reiniciar agora",
+    "restartFailed": "Falha ao iniciar a reinicialização"
   }
 }
