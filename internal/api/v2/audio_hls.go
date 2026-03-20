@@ -1388,14 +1388,22 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 	var totalWrites int64
 	var slowWrites int64
 	var maxWriteDuration time.Duration
+	var lastSlowWriteLog time.Time
+
+	// Always log exit stats regardless of how the feed stops
+	defer func() {
+		GetLogger().Debug("Audio feed stats on exit",
+			logger.String("source_id", sanitizedID),
+			logger.Int64("total_fifo_writes", totalWrites),
+			logger.Int64("slow_fifo_writes", slowWrites),
+			logger.String("max_write_duration", maxWriteDuration.String()))
+	}()
+
 	for {
 		select {
 		case <-ctx.Done():
 			GetLogger().Debug("Audio feed stopped due to context cancellation",
-				logger.String("source_id", sanitizedID),
-				logger.Int64("total_fifo_writes", totalWrites),
-				logger.Int64("slow_fifo_writes", slowWrites),
-				logger.String("max_write_duration", maxWriteDuration.String()))
+				logger.String("source_id", sanitizedID))
 			return
 		case data, ok := <-audioChan:
 			if !ok {
@@ -1422,12 +1430,18 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 
 			if writeDuration > fifoWriteSlowThreshold {
 				slowWrites++
-				GetLogger().Warn("Slow FIFO write detected (possible I/O stall)",
-					logger.String("source_id", sanitizedID),
-					logger.String("write_duration", writeDuration.String()),
-					logger.Int("data_bytes", len(data)),
-					logger.Int64("slow_writes_total", slowWrites),
-					logger.Int64("total_writes", totalWrites))
+				// Rate-limit slow write warnings to avoid spamming logs
+				// during sustained I/O stalls (which would worsen the problem)
+				now := time.Now()
+				if now.Sub(lastSlowWriteLog) >= hlsDropLogInterval {
+					lastSlowWriteLog = now
+					GetLogger().Warn("Slow FIFO write detected (possible I/O stall)",
+						logger.String("source_id", sanitizedID),
+						logger.String("write_duration", writeDuration.String()),
+						logger.Int("data_bytes", len(data)),
+						logger.Int64("slow_writes_total", slowWrites),
+						logger.Int64("total_writes", totalWrites))
+				}
 			}
 
 			if !dataWritten {
@@ -1686,6 +1700,9 @@ func cleanupStreamTrackingData(sourceID string) {
 		return strings.HasPrefix(key, prefix)
 	})
 	hlsMgr.activityMu.Unlock()
+
+	// Clean up freshness check timestamp
+	lastFreshnessCheck.Delete(sourceID)
 }
 
 // waitForHLSPlaylist waits for the playlist file to be ready

@@ -203,6 +203,7 @@
         });
       });
       audioElement.addEventListener('stalled', () => {
+        hasStalled = true;
         logger.warn('Audio element: stalled (network stall)', {
           currentTime: audioElement?.currentTime?.toFixed(3),
           buffered: describeBuffered(audioElement),
