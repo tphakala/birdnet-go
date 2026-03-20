@@ -1220,9 +1220,10 @@ export const settingsActions = {
       try {
         const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
         await fetchRestartStatus();
-      } catch {
+      } catch (e) {
         // Non-critical: restart status refresh failed, but settings were saved.
         // The banner may show stale state until next page load.
+        console.error('Failed to refresh restart status after settings save:', e);
       }
 
       // Check if UI locale changed and apply it

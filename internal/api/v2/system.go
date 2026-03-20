@@ -379,10 +379,6 @@ func (c *Controller) GetRestartStatus(ctx echo.Context) error {
 		RestartReasons:            restart.GetRestartReasons(),
 	}
 
-	if status.RestartReasons == nil {
-		status.RestartReasons = []string{}
-	}
-
 	return ctx.JSON(http.StatusOK, status)
 }
 

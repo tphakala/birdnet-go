@@ -73,9 +73,6 @@ func IsRestartRequired() bool {
 func GetRestartReasons() []string {
 	reasonsMu.RLock()
 	defer reasonsMu.RUnlock()
-	if len(reasons) == 0 {
-		return nil
-	}
 	out := make([]string, len(reasons))
 	copy(out, reasons)
 	return out

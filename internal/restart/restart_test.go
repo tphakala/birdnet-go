@@ -33,7 +33,7 @@ func TestCASPreventsDoubleSet(t *testing.T) {
 func TestMarkRestartRequired(t *testing.T) {
 	t.Cleanup(Reset)
 	assert.False(t, IsRestartRequired())
-	assert.Nil(t, GetRestartReasons())
+	assert.Empty(t, GetRestartReasons())
 
 	MarkRestartRequired("Web server port changed")
 	assert.True(t, IsRestartRequired())
@@ -59,5 +59,5 @@ func TestResetClearsReasons(t *testing.T) {
 	MarkRestartRequired("Something")
 	Reset()
 	assert.False(t, IsRestartRequired())
-	assert.Nil(t, GetRestartReasons())
+	assert.Empty(t, GetRestartReasons())
 }
