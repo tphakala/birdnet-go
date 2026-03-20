@@ -2004,9 +2004,12 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			logger.Int64("total_records", state.TotalRecords),
 			logger.String("operation", cfg.opName))
 
-		// Resume worker if migration was in progress
+		// Resume worker if migration was in progress, or if migration completed
+		// but we're running in legacy mode due to unmigrated records from a crash.
+		// In the COMPLETED case, the worker enters tail sync to drain stragglers.
 		if state.State == entities.MigrationStatusDualWrite ||
-			state.State == entities.MigrationStatusMigrating {
+			state.State == entities.MigrationStatusMigrating ||
+			state.State == entities.MigrationStatusCompleted {
 			migrationLogger.Info("resuming migration worker after restart",
 				logger.String("state", string(state.State)),
 				logger.String("operation", cfg.opName))

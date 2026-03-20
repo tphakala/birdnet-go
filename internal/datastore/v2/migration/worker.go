@@ -929,10 +929,12 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 	// a no-op when no dirty IDs exist (empty query returns immediately).
 	if caught, err := w.processDirtyIDs(ctx); err != nil {
 		w.logger.Warn("tail sync: dirty ID retry interrupted",
+			logger.String("operation", "tail_sync_dirty_id_retry"),
 			logger.Int64("recovered_before_error", caught),
 			logger.Error(err))
 	} else if caught > 0 {
 		w.logger.Info("tail sync: recovered dirty IDs",
+			logger.String("operation", "tail_sync_dirty_id_retry"),
 			logger.Int64("count", caught))
 	}
 
