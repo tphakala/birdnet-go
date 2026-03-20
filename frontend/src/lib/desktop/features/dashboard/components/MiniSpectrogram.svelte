@@ -35,6 +35,7 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
+    getRepeatLabels,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -391,9 +392,10 @@
   $effect(() => {
     if (!activeSourceId || pendingDetections.length === 0) return;
     const newDetections = diffPendingSnapshot(prevSnapshot, pendingDetections, activeSourceId);
+    const nowUnix = Date.now() / 1000;
     for (const det of newDetections) {
-      if (shouldDedup(det.species, det.firstDetected, lastSeenSpecies)) continue;
-      lastSeenSpecies.set(det.species, det.firstDetected);
+      if (shouldDedup(det.species, nowUnix, lastSeenSpecies)) continue;
+      lastSeenSpecies.set(det.species, nowUnix);
       const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
       slotCounter = next;
       labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
@@ -408,10 +410,6 @@
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
 
-      // Calibrate epoch offset once when playback begins.
-      // streamEpoch is set at stream creation (before FFmpeg starts), so
-      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
-      // startup delay. hls.latency bridges this gap.
       if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
         const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
         const latency = hls ? hls.latency : 6;
@@ -419,19 +417,37 @@
         epochOffsetCalibrated = true;
       }
 
-      if (labelQueue.length === 0) return;
       const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
       const now = globalThis.performance.now();
-      const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
-      if (promoted.length > 0) {
-        labelQueue = remaining;
-        overlayLabels = [...overlayLabels, ...promoted];
+
+      // Promote queued labels
+      if (labelQueue.length > 0) {
+        const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
+        if (promoted.length > 0) {
+          labelQueue = remaining;
+          overlayLabels = [...overlayLabels, ...promoted];
+        }
       }
+
+      // Generate repeat labels for species still actively detected
+      const repeats = getRepeatLabels(
+        prevSnapshot,
+        activeSourceId ?? '',
+        lastSeenSpecies,
+        wallClockAtPlayhead
+      );
+      for (const rep of repeats) {
+        lastSeenSpecies.set(rep.species, wallClockAtPlayhead);
+        const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+        slotCounter = next;
+        overlayLabels = [...overlayLabels, { text: rep.species, birthTime: now, ySlot: slot }];
+      }
+
+      // Prune labels older than 60 seconds
       const cutoff = now - 60000;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
 
-      // Prune stale dedup entries (older than 10s in media time — generous
-      // buffer beyond the 6s dedup window in shouldDedup)
+      // Prune stale dedup entries
       for (const [species, time] of lastSeenSpecies) {
         if (wallClockAtPlayhead - time > 10) {
           lastSeenSpecies.delete(species);
