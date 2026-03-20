@@ -115,7 +115,7 @@ func escalationKey(ruleID uint, metricName string, properties map[string]any) st
 }
 
 // clearEscalationIfRecovered clears escalation state for rules whose metric
-// has dropped below the base threshold (EscalationSteps[0]). This must run
+// has dropped below the base threshold (lowest EscalationStep). This must run
 // for every metric event, even when ruleMatches returns false, because a
 // metric below threshold causes ruleMatches to return false — which would
 // leave stale escalation state that suppresses future alerts.

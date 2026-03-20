@@ -572,16 +572,17 @@ func TestServeRelativeFile_FileNotFound_NoEnhancedError(t *testing.T) {
 	err = sfs.ServeRelativeFile(ctx, "nonexistent.flac")
 	require.Error(t, err)
 
-	// The error should be an echo.HTTPError wrapping fs.ErrNotExist,
-	// NOT an EnhancedError that would trigger notification hooks.
-	var enhErr *errors.EnhancedError
 	// serveInternal converts the open error to an HTTPError via mapOpenErrorToHTTP.
+	// Assert the exact contract that the API layer depends on (media.go:501).
 	var httpErr *echo.HTTPError
-	if errors.As(err, &httpErr) {
-		// The HTTP error's internal should NOT be an EnhancedError.
-		if httpErr.Internal != nil {
-			assert.False(t, errors.As(httpErr.Internal, &enhErr),
-				"file-not-found should not produce EnhancedError in error chain")
-		}
+	require.ErrorAs(t, err, &httpErr, "should return *echo.HTTPError")
+	assert.Equal(t, http.StatusNotFound, httpErr.Code, "should be 404")
+
+	// The internal error chain must NOT contain an EnhancedError —
+	// that would trigger telemetry hooks and notification bells.
+	if httpErr.Internal != nil {
+		var enhErr *errors.EnhancedError
+		assert.False(t, errors.As(httpErr.Internal, &enhErr),
+			"file-not-found should not produce EnhancedError in error chain")
 	}
 }
