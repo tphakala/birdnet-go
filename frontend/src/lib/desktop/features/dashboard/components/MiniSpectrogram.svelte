@@ -73,10 +73,10 @@
 
   // HLS + audio refs
   let hls: Hls | null = null;
-  let audioElement: HTMLAudioElement | null = null;
+  let audioElement = $state<HTMLAudioElement | null>(null);
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let abortController: AbortController | null = null;
-  let activeSourceId: string | null = null;
+  let activeSourceId = $state<string | null>(null);
 
   // Detection overlay state
   let overlayLabels = $state<OverlayLabel[]>([]);
@@ -84,7 +84,7 @@
   let prevSnapshot: PendingDetection[] = [];
   let lastSeenSpecies = new Map<string, number>();
   let slotCounter = 0;
-  let streamEpochMs = 0;
+  let streamEpochMs = $state(0);
   const MAX_OVERLAY_SLOTS = 4;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
@@ -401,6 +401,9 @@
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
       if (labelQueue.length === 0) return;
+      // Note: audioElement.currentTime may not start at 0 — HLS.js seeks to the
+      // live sync position. This introduces a ~1s offset that is acceptable for
+      // overlay placement accuracy; exact sync is not critical here.
       const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime;
       const now = globalThis.performance.now();
       const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
@@ -410,6 +413,14 @@
       }
       const cutoff = now - 60000;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
+
+      // Prune stale dedup entries (older than 10s in media time — generous
+      // buffer beyond the 6s dedup window in shouldDedup)
+      for (const [species, time] of lastSeenSpecies) {
+        if (wallClockAtPlayhead - time > 10) {
+          lastSeenSpecies.delete(species);
+        }
+      }
     }, 500);
 
     return () => globalThis.clearInterval(interval);

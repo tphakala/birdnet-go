@@ -81,7 +81,7 @@ type HLSStreamInfo struct {
 	logFile      *os.File           // FFmpeg log file (closed after process exits)
 	ctx          context.Context    // Stream lifecycle context
 	cancel       context.CancelFunc // Cancel function for cleanup
-	StreamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
+	streamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -362,8 +362,8 @@ func (c *Controller) buildHLSStreamResponse(ctx echo.Context, sourceID string, s
 
 	// Format stream epoch as ISO8601 if set
 	var epochStr string
-	if !stream.StreamEpoch.IsZero() {
-		epochStr = stream.StreamEpoch.UTC().Format(time.RFC3339Nano)
+	if !stream.streamEpoch.IsZero() {
+		epochStr = stream.streamEpoch.UTC().Format(time.RFC3339Nano)
 	}
 
 	return ctx.JSON(http.StatusOK, HLSStreamStatus{
@@ -890,7 +890,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		logFile:      logFile,
 		ctx:          streamCtx,
 		cancel:       streamCancel,
-		StreamEpoch:  time.Now(),
+		streamEpoch:  time.Now(),
 	}
 
 	// Register the stream (singleflight guarantees no concurrent creation for this sourceID)

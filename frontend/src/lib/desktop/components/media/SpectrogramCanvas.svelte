@@ -65,9 +65,6 @@
   let cssWidth = $state(800);
   let cssHeight = $state(300);
 
-  // Timing exposure for future DetectionOverlay
-  let startTime = $state(0);
-
   // DPR tracking
   let dpr = $state(globalThis.devicePixelRatio ?? 1);
 
@@ -97,15 +94,6 @@
 
   // Selected color LUT
   let colorLUT = $derived(COLOR_MAPS[colorMap] ?? COLOR_MAPS[DEFAULT_COLOR_MAP]);
-
-  // Internal timestampToX for future use (not exported — Svelte 5 limitation)
-  // eslint-disable-next-line no-unused-vars
-  function timestampToX(eventTime: number): number {
-    const elapsed = (performance.now() - startTime) / 1000;
-    const eventAge = elapsed - (eventTime - startTime / 1000);
-    const x = cssWidth - eventAge * scrollSpeed;
-    return x >= 0 ? x : -1;
-  }
 
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
@@ -204,10 +192,27 @@
     const ctx = canvasEl.getContext('2d');
     if (!ctx) return;
 
-    startTime = performance.now();
+    // Cache overlay canvas context outside the loop
+    const olCtx = overlayCanvasEl?.getContext('2d') ?? null;
+
+    // Set up overlay font/style once (depends on dpr and overlayFontSize,
+    // which are captured at effect creation time and trigger re-run if changed)
+    const fontSize = overlayFontSize * dpr;
+    if (olCtx) {
+      olCtx.font = `bold ${fontSize}px sans-serif`;
+      olCtx.fillStyle = '#ffffff';
+      olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+      olCtx.shadowBlur = 3 * dpr;
+      olCtx.shadowOffsetX = 1 * dpr;
+      olCtx.shadowOffsetY = 1 * dpr;
+      olCtx.textBaseline = 'middle';
+    }
+
     let lastFrameTime = performance.now();
     let scrollAccumulator = 0;
     let frameId: number;
+    // Track whether overlay was drawn last frame to avoid clearing an already-empty canvas
+    let overlayHadContent = false;
 
     // Convert CSS px/s to device px/s
     const deviceScrollSpeed = scrollSpeed * dpr;
@@ -251,37 +256,27 @@
       }
 
       // --- Overlay detection labels on separate canvas (avoids self-blit smearing) ---
-      if (overlayCanvasEl && overlayLabels.length > 0) {
-        const olCtx = overlayCanvasEl.getContext('2d');
-        if (olCtx) {
-          olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
-          const fontSize = overlayFontSize * dpr;
-          olCtx.font = `bold ${fontSize}px sans-serif`;
-          olCtx.fillStyle = '#ffffff';
-          olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-          olCtx.shadowBlur = 3 * dpr;
-          olCtx.shadowOffsetX = 1 * dpr;
-          olCtx.shadowOffsetY = 1 * dpr;
-          olCtx.textBaseline = 'middle';
+      if (olCtx && overlayLabels.length > 0) {
+        olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
 
-          const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+        const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
 
-          for (const label of overlayLabels) {
-            const labelAge = (now - label.birthTime) / 1000;
-            const x = deviceWidth - labelAge * deviceScrollSpeed;
+        for (const label of overlayLabels) {
+          const labelAge = (now - label.birthTime) / 1000;
+          const x = deviceWidth - labelAge * deviceScrollSpeed;
 
-            if (x < -200 * dpr || x > deviceWidth) continue;
+          if (x < -200 * dpr || x > deviceWidth) continue;
 
-            const slotHeight = deviceHeight / (maxSlots + 1);
-            const y = slotHeight * (1 + (label.ySlot % maxSlots));
+          const slotHeight = deviceHeight / (maxSlots + 1);
+          const y = slotHeight * (1 + (label.ySlot % maxSlots));
 
-            olCtx.fillText(label.text, x, y);
-          }
+          olCtx.fillText(label.text, x, y);
         }
-      } else if (overlayCanvasEl) {
-        // Clear overlay when no labels
-        const olCtx = overlayCanvasEl.getContext('2d');
-        olCtx?.clearRect(0, 0, deviceWidth, deviceHeight);
+        overlayHadContent = true;
+      } else if (olCtx && overlayHadContent) {
+        // Only clear overlay when transitioning from content to empty
+        olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
+        overlayHadContent = false;
       }
 
       frameId = requestAnimationFrame(loop);
