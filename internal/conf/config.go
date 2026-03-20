@@ -422,19 +422,19 @@ type WebhookAuthConfig struct {
 	Type string `yaml:"type" json:"type"` // "none", "bearer", "basic", "custom"
 
 	// Bearer authentication
-	Token     string `yaml:"token" json:"token"`           // Token value or ${ENV_VAR}
-	TokenFile string `yaml:"token_file" json:"token_file"` // Path to file containing token
+	Token     string `yaml:"token" json:"token"`          // Token value or ${ENV_VAR}
+	TokenFile string `yaml:"tokenfile" json:"token_file"` // Path to file containing token
 
 	// Basic authentication
-	User     string `yaml:"user" json:"user"`           // Username value or ${ENV_VAR}
-	UserFile string `yaml:"user_file" json:"user_file"` // Path to file containing username
-	Pass     string `yaml:"pass" json:"pass"`           // Password value or ${ENV_VAR}
-	PassFile string `yaml:"pass_file" json:"pass_file"` // Path to file containing password
+	User     string `yaml:"user" json:"user"`          // Username value or ${ENV_VAR}
+	UserFile string `yaml:"userfile" json:"user_file"` // Path to file containing username
+	Pass     string `yaml:"pass" json:"pass"`          // Password value or ${ENV_VAR}
+	PassFile string `yaml:"passfile" json:"pass_file"` // Path to file containing password
 
 	// Custom header authentication
-	Header    string `yaml:"header" json:"header"`         // Header name
-	Value     string `yaml:"value" json:"value"`           // Header value or ${ENV_VAR}
-	ValueFile string `yaml:"value_file" json:"value_file"` // Path to file containing header value
+	Header    string `yaml:"header" json:"header"`        // Header name
+	Value     string `yaml:"value" json:"value"`          // Header value or ${ENV_VAR}
+	ValueFile string `yaml:"valuefile" json:"value_file"` // Path to file containing header value
 }
 
 // PushFilterConfig limits which notifications a provider receives.
