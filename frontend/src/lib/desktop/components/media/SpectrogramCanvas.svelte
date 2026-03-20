@@ -208,16 +208,8 @@
       overlayCanvasEl.height = canvasEl.height;
     }
 
-    // Set up overlay font/style once
-    if (olCtx) {
-      olCtx.font = `bold ${fontSize}px sans-serif`;
-      olCtx.fillStyle = '#ffffff';
-      olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-      olCtx.shadowBlur = 3 * dpr;
-      olCtx.shadowOffsetX = 1 * dpr;
-      olCtx.shadowOffsetY = 1 * dpr;
-      olCtx.textBaseline = 'middle';
-    }
+    // Overlay font/style is set per-frame in the render loop (canvas state
+    // can be lost on resize), so no initial setup needed here.
 
     let lastFrameTime = performance.now();
     let scrollAccumulator = 0;
