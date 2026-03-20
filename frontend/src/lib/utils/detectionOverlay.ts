@@ -31,6 +31,10 @@ interface PendingEntry {
 const DEDUP_INTERVAL_SECONDS = 6;
 const STALE_THRESHOLD_SECONDS = 6;
 
+/** How long (seconds) to keep a species in the dedup map after last label.
+ *  Generous buffer beyond DEDUP_INTERVAL_SECONDS to avoid premature cleanup. */
+export const STALE_DEDUP_PRUNE_SECONDS = 10;
+
 /**
  * Diff two pending snapshots, returning species with new activity for a given source.
  * Returns species that are newly appeared OR have an increased hitCount (new inference hit).

@@ -36,6 +36,7 @@
     promoteFromQueue,
     nextYSlot,
     getRepeatLabels,
+    STALE_DEDUP_PRUNE_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -459,7 +460,7 @@
 
       // Prune stale dedup entries
       for (const [species, time] of lastSeenSpecies) {
-        if (wallClockAtPlayhead - time > 10) {
+        if (wallClockAtPlayhead - time > STALE_DEDUP_PRUNE_SECONDS) {
           lastSeenSpecies.delete(species);
         }
       }
