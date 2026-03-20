@@ -33,49 +33,49 @@ var configFiles embed.FS
 
 // EqualizerFilter is a struct for equalizer filter settings
 type EqualizerFilter struct {
-	Type      string  `json:"type"` // e.g., "LowPass", "HighPass", "BandPass", etc.
-	Frequency float64 `json:"frequency"`
-	Q         float64 `json:"q"`
-	Gain      float64 `json:"gain"`   // Only used for certain filter types like Peaking
-	Width     float64 `json:"width"`  // Only used for certain filter types like BandPass and BandReject
-	Passes    int     `json:"passes"` // Filter passes for added attenuation or gain
+	Type      string  `yaml:"type" json:"type"` // e.g., "LowPass", "HighPass", "BandPass", etc.
+	Frequency float64 `yaml:"frequency" json:"frequency"`
+	Q         float64 `yaml:"q" json:"q"`
+	Gain      float64 `yaml:"gain" json:"gain"`     // Only used for certain filter types like Peaking
+	Width     float64 `yaml:"width" json:"width"`   // Only used for certain filter types like BandPass and BandReject
+	Passes    int     `yaml:"passes" json:"passes"` // Filter passes for added attenuation or gain
 }
 
 // EqualizerSettings is a struct for audio EQ settings
 type EqualizerSettings struct {
-	Enabled bool              `json:"enabled"` // global flag to enable/disable equalizer filters
-	Filters []EqualizerFilter `json:"filters"` // equalizer filter configuration
+	Enabled bool              `yaml:"enabled" json:"enabled"` // global flag to enable/disable equalizer filters
+	Filters []EqualizerFilter `yaml:"filters" json:"filters"` // equalizer filter configuration
 }
 
 type ExportSettings struct {
-	Debug         bool                  `json:"debug" mapstructure:"debug"`                 // true to enable audio export debug
-	Enabled       bool                  `json:"enabled" mapstructure:"enabled"`             // export audio clips containing indentified bird calls
-	Path          string                `json:"path" mapstructure:"path"`                   // path to audio clip export directory
-	Type          string                `json:"type" mapstructure:"type"`                   // audio file type, wav, mp3 or flac
-	Bitrate       string                `json:"bitrate" mapstructure:"bitrate"`             // bitrate for audio export
-	Retention     RetentionSettings     `json:"retention" mapstructure:"retention"`         // retention settings
-	Length        int                   `json:"length" mapstructure:"length"`               // audio capture length in seconds
-	PreCapture    int                   `json:"preCapture" mapstructure:"preCapture"`       // pre-capture in seconds
-	Gain          float64               `json:"gain" mapstructure:"gain"`                   // gain in dB for audio capture
-	Normalization NormalizationSettings `json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
+	Debug         bool                  `yaml:"debug" json:"debug" mapstructure:"debug"`                         // true to enable audio export debug
+	Enabled       bool                  `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // export audio clips containing indentified bird calls
+	Path          string                `yaml:"path" json:"path" mapstructure:"path"`                            // path to audio clip export directory
+	Type          string                `yaml:"type" json:"type" mapstructure:"type"`                            // audio file type, wav, mp3 or flac
+	Bitrate       string                `yaml:"bitrate" json:"bitrate" mapstructure:"bitrate"`                   // bitrate for audio export
+	Retention     RetentionSettings     `yaml:"retention" json:"retention" mapstructure:"retention"`             // retention settings
+	Length        int                   `yaml:"length" json:"length" mapstructure:"length"`                      // audio capture length in seconds
+	PreCapture    int                   `yaml:"precapture" json:"preCapture" mapstructure:"preCapture"`          // pre-capture in seconds
+	Gain          float64               `yaml:"gain" json:"gain" mapstructure:"gain"`                            // gain in dB for audio capture
+	Normalization NormalizationSettings `yaml:"normalization" json:"normalization" mapstructure:"normalization"` // audio normalization settings (EBU R128)
 }
 
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard
 type NormalizationSettings struct {
-	Enabled       bool    `json:"enabled" mapstructure:"enabled"`             // true to enable loudness normalization
-	TargetLUFS    float64 `json:"targetLUFS" mapstructure:"targetLUFS"`       // target integrated loudness in LUFS (default: -23)
-	LoudnessRange float64 `json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
-	TruePeak      float64 `json:"truePeak" mapstructure:"truePeak"`           // true peak limit in dBTP (default: -2)
+	Enabled       bool    `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                   // true to enable loudness normalization
+	TargetLUFS    float64 `yaml:"targetlufs" json:"targetLUFS" mapstructure:"targetLUFS"`          // target integrated loudness in LUFS (default: -23)
+	LoudnessRange float64 `yaml:"loudnessrange" json:"loudnessRange" mapstructure:"loudnessRange"` // loudness range in LU (default: 7)
+	TruePeak      float64 `yaml:"truepeak" json:"truePeak" mapstructure:"truePeak"`                // true peak limit in dBTP (default: -2)
 }
 
 type RetentionSettings struct {
-	Debug            bool   `json:"debug"`            // true to enable retention debug
-	Policy           string `json:"policy"`           // retention policy, "none", "age" or "usage"
-	MaxAge           string `json:"maxAge"`           // maximum age of audio clips to keep
-	MaxUsage         string `json:"maxUsage"`         // maximum disk usage percentage before cleanup
-	MinClips         int    `json:"minClips"`         // minimum number of clips per species to keep
-	KeepSpectrograms bool   `json:"keepSpectrograms"` // true to keep spectrograms
-	CheckInterval    int    `json:"checkInterval"`    // cleanup check interval in minutes (default: 15)
+	Debug            bool   `yaml:"debug" json:"debug"`                       // true to enable retention debug
+	Policy           string `yaml:"policy" json:"policy"`                     // retention policy, "none", "age" or "usage"
+	MaxAge           string `yaml:"maxage" json:"maxAge"`                     // maximum age of audio clips to keep
+	MaxUsage         string `yaml:"maxusage" json:"maxUsage"`                 // maximum disk usage percentage before cleanup
+	MinClips         int    `yaml:"minclips" json:"minClips"`                 // minimum number of clips per species to keep
+	KeepSpectrograms bool   `yaml:"keepspectrograms" json:"keepSpectrograms"` // true to keep spectrograms
+	CheckInterval    int    `yaml:"checkinterval" json:"checkInterval"`       // cleanup check interval in minutes (default: 15)
 }
 
 // AudioSettings contains settings for audio processing and export.
@@ -95,11 +95,11 @@ type AudioSettings struct {
 	FfmpegMinor     int                `yaml:"-" json:"ffmpegMinor,omitempty"`                         // ffmpeg minor version number, runtime value
 	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`          // path to sox, runtime value
 	SoxAudioTypes   []string           `yaml:"-" json:"-"`                                             // supported audio types of sox, runtime value
-	StreamTransport string             `json:"streamTransport"`                                        // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          ExportSettings     `json:"export"`                                                 // export settings
-	SoundLevel      SoundLevelSettings `json:"soundLevel"`                                             // sound level monitoring settings
+	StreamTransport string             `yaml:"streamtransport" json:"streamTransport"`                 // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings     `yaml:"export" json:"export"`                                   // export settings
+	SoundLevel      SoundLevelSettings `yaml:"soundlevel" json:"soundLevel"`                           // sound level monitoring settings
 
-	Equalizer  EqualizerSettings `json:"equalizer"`                                              // equalizer settings
+	Equalizer  EqualizerSettings `yaml:"equalizer" json:"equalizer"`                             // equalizer settings
 	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours for sound card
 }
 
@@ -118,11 +118,11 @@ func (a *AudioSettings) HasFfmpegVersion() bool {
 }
 
 type Thumbnails struct {
-	Debug          bool   `json:"debug"`          // true to enable debug mode
-	Summary        bool   `json:"summary"`        // show thumbnails on summary table
-	Recent         bool   `json:"recent"`         // show thumbnails on recent table
-	ImageProvider  string `json:"imageProvider"`  // preferred image provider: "auto", "wikimedia", "avicommons"
-	FallbackPolicy string `json:"fallbackPolicy"` // fallback policy: "none", "all" - try all available providers if preferred fails
+	Debug          bool   `yaml:"debug" json:"debug"`                   // true to enable debug mode
+	Summary        bool   `yaml:"summary" json:"summary"`               // show thumbnails on summary table
+	Recent         bool   `yaml:"recent" json:"recent"`                 // show thumbnails on recent table
+	ImageProvider  string `yaml:"imageprovider" json:"imageProvider"`   // preferred image provider: "auto", "wikimedia", "avicommons"
+	FallbackPolicy string `yaml:"fallbackpolicy" json:"fallbackPolicy"` // fallback policy: "none", "all" - try all available providers if preferred fails
 }
 
 // Temperature unit constants for display preference
@@ -133,23 +133,23 @@ const (
 
 // CustomColors holds the user-defined primary and accent hex colors for the "custom" color scheme.
 type CustomColors struct {
-	Primary string `json:"primary,omitempty"` // primary hex color, e.g. "#2563eb"
-	Accent  string `json:"accent,omitempty"`  // accent hex color, e.g. "#0284c7"
+	Primary string `yaml:"primary,omitempty" json:"primary,omitempty"` // primary hex color, e.g. "#2563eb"
+	Accent  string `yaml:"accent,omitempty" json:"accent,omitempty"`   // accent hex color, e.g. "#0284c7"
 }
 
 // Dashboard contains settings for the web dashboard.
 type Dashboard struct {
-	Thumbnails       Thumbnails           `json:"thumbnails"`             // thumbnails settings
-	SummaryLimit     int                  `json:"summaryLimit"`           // limit for the number of species shown in the summary table
-	Locale           string               `json:"locale,omitempty"`       // UI locale setting
-	Spectrogram      SpectrogramPreRender `json:"spectrogram"`            // Spectrogram pre-rendering settings
-	TemperatureUnit  string               `json:"temperatureUnit"`        // display unit for temperature: "celsius" or "fahrenheit"
-	ColorScheme      string               `json:"colorScheme,omitempty"`  // color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
-	CustomColors     *CustomColors        `json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
-	LogoStyle        string               `json:"logoStyle,omitempty"`    // logo display style: "gradient" or "solid"
-	Layout           DashboardLayout      `json:"layout"`                 // configurable dashboard element layout
-	DefaultAudioGain float64              `json:"defaultAudioGain"`       // Default playback gain in dB (0-24)
-	LiveSpectrogram  bool                 `json:"liveSpectrogram"`        // auto-start live spectrogram on dashboard
+	Thumbnails       Thumbnails           `yaml:"thumbnails" json:"thumbnails"`                         // thumbnails settings
+	SummaryLimit     int                  `yaml:"summarylimit" json:"summaryLimit"`                     // limit for the number of species shown in the summary table
+	Locale           string               `yaml:"locale,omitempty" json:"locale,omitempty"`             // UI locale setting
+	Spectrogram      SpectrogramPreRender `yaml:"spectrogram" json:"spectrogram"`                       // Spectrogram pre-rendering settings
+	TemperatureUnit  string               `yaml:"temperatureunit" json:"temperatureUnit"`               // display unit for temperature: "celsius" or "fahrenheit"
+	ColorScheme      string               `yaml:"colorscheme,omitempty" json:"colorScheme,omitempty"`   // color scheme: "blue", "forest", "amber", "violet", "rose", "custom"
+	CustomColors     *CustomColors        `yaml:"customcolors,omitempty" json:"customColors,omitempty"` // custom scheme colors (used when colorScheme is "custom")
+	LogoStyle        string               `yaml:"logostyle,omitempty" json:"logoStyle,omitempty"`       // logo display style: "gradient" or "solid"
+	Layout           DashboardLayout      `yaml:"layout" json:"layout"`                                 // configurable dashboard element layout
+	DefaultAudioGain float64              `yaml:"defaultaudiogain" json:"defaultAudioGain"`             // Default playback gain in dB (0-24)
+	LiveSpectrogram  bool                 `yaml:"livespectrogram" json:"liveSpectrogram"`               // auto-start live spectrogram on dashboard
 }
 
 // DashboardLayout defines the ordered list of elements displayed on the dashboard.
@@ -174,26 +174,26 @@ type DashboardElement struct {
 
 // BannerConfig holds configuration for the dashboard banner element.
 type BannerConfig struct {
-	ShowImage       bool   `json:"showImage"`              // whether to show a custom image
-	ImagePath       string `json:"imagePath"`              // relative path or URL to the banner image
-	Title           string `json:"title"`                  // station name or custom title
-	Description     string `json:"description"`            // brief description text
-	ShowLocationMap bool   `json:"showLocationMap"`        // whether to show the location map
-	ShowWeather     bool   `json:"showWeather"`            // whether to show weather conditions
-	MapZoom         int    `json:"mapZoom,omitempty"`      // zoom level for the location map (default 11)
-	ShowPin         *bool  `json:"showPin,omitzero"`       // whether to show the location pin marker (default false)
-	MapExpandable   *bool  `json:"mapExpandable,omitzero"` // whether visitors can expand the map (default true)
+	ShowImage       bool   `yaml:"showimage" json:"showImage"`                            // whether to show a custom image
+	ImagePath       string `yaml:"imagepath" json:"imagePath"`                            // relative path or URL to the banner image
+	Title           string `yaml:"title" json:"title"`                                    // station name or custom title
+	Description     string `yaml:"description" json:"description"`                        // brief description text
+	ShowLocationMap bool   `yaml:"showlocationmap" json:"showLocationMap"`                // whether to show the location map
+	ShowWeather     bool   `yaml:"showweather" json:"showWeather"`                        // whether to show weather conditions
+	MapZoom         int    `yaml:"mapzoom,omitempty" json:"mapZoom,omitempty"`            // zoom level for the location map (default 11)
+	ShowPin         *bool  `yaml:"showpin,omitempty" json:"showPin,omitzero"`             // whether to show the location pin marker (default false)
+	MapExpandable   *bool  `yaml:"mapexpandable,omitempty" json:"mapExpandable,omitzero"` // whether visitors can expand the map (default true)
 }
 
 // VideoEmbedConfig holds configuration for the YouTube video embed element.
 type VideoEmbedConfig struct {
-	URL   string `json:"url"`   // YouTube URL or video ID
-	Title string `json:"title"` // optional display title
+	URL   string `yaml:"url" json:"url"`     // YouTube URL or video ID
+	Title string `yaml:"title" json:"title"` // optional display title
 }
 
 // DailySummaryConfig holds configuration for the daily summary element.
 type DailySummaryConfig struct {
-	SummaryLimit int `json:"summaryLimit"` // number of species to show
+	SummaryLimit int `yaml:"summarylimit" json:"summaryLimit"` // number of species to show
 }
 
 // DetectionsGridConfig holds configuration for the detections grid element.
@@ -231,12 +231,12 @@ const (
 //   - "prerender": Background worker generates during audio clip save (continuous CPU usage)
 //   - "user-requested": Only generate when user clicks button in UI (zero automatic overhead)
 type SpectrogramPreRender struct {
-	Mode         string `json:"mode"         mapstructure:"mode"`         // Generation mode: "auto" (default), "prerender", "user-requested"
-	Enabled      bool   `json:"enabled"      mapstructure:"enabled"`      // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
-	Size         string `json:"size"         mapstructure:"size"`         // Default size for all modes (see recommendations below)
-	Raw          bool   `json:"raw"          mapstructure:"raw"`          // Generate raw spectrogram without axes/legend (default: true)
-	Style        string `json:"style"        mapstructure:"style"`        // Visual style preset: "default", "scientific_dark", "high_contrast_dark", "scientific"
-	DynamicRange string `json:"dynamicRange" mapstructure:"dynamicRange"` // Dynamic range in dB: "80" (high contrast), "100" (standard), "120" (extended)
+	Mode         string `yaml:"mode" json:"mode"                     mapstructure:"mode"`         // Generation mode: "auto" (default), "prerender", "user-requested"
+	Enabled      bool   `yaml:"enabled" json:"enabled"               mapstructure:"enabled"`      // DEPRECATED: Use Mode instead. Kept for backward compatibility (true = "prerender", false = "auto")
+	Size         string `yaml:"size" json:"size"                     mapstructure:"size"`         // Default size for all modes (see recommendations below)
+	Raw          bool   `yaml:"raw" json:"raw"                       mapstructure:"raw"`          // Generate raw spectrogram without axes/legend (default: true)
+	Style        string `yaml:"style" json:"style"                   mapstructure:"style"`        // Visual style preset: "default", "scientific_dark", "high_contrast_dark", "scientific"
+	DynamicRange string `yaml:"dynamicrange" json:"dynamicRange"     mapstructure:"dynamicRange"` // Dynamic range in dB: "80" (high contrast), "100" (standard), "120" (extended)
 }
 
 // GetMode returns the effective spectrogram generation mode, handling backward compatibility.
@@ -284,30 +284,30 @@ func (s *SpectrogramPreRender) IsUserRequestedMode() bool {
 
 // DynamicThresholdSettings contains settings for dynamic threshold adjustment.
 type DynamicThresholdSettings struct {
-	Enabled    bool    `json:"enabled"`    // true to enable dynamic threshold
-	Debug      bool    `json:"debug"`      // true to enable debug mode
-	Trigger    float64 `json:"trigger"`    // trigger threshold for dynamic threshold
-	Min        float64 `json:"min"`        // minimum threshold for dynamic threshold
-	ValidHours int     `json:"validHours"` // number of hours to consider for dynamic threshold
+	Enabled    bool    `yaml:"enabled" json:"enabled"`       // true to enable dynamic threshold
+	Debug      bool    `yaml:"debug" json:"debug"`           // true to enable debug mode
+	Trigger    float64 `yaml:"trigger" json:"trigger"`       // trigger threshold for dynamic threshold
+	Min        float64 `yaml:"min" json:"min"`               // minimum threshold for dynamic threshold
+	ValidHours int     `yaml:"validhours" json:"validHours"` // number of hours to consider for dynamic threshold
 }
 
 // RetrySettings contains common settings for retry mechanisms
 type RetrySettings struct {
-	Enabled           bool    `json:"enabled"`           // true to enable retry mechanism
-	MaxRetries        int     `json:"maxRetries"`        // maximum number of retry attempts
-	InitialDelay      int     `json:"initialDelay"`      // initial delay before first retry in seconds
-	MaxDelay          int     `json:"maxDelay"`          // maximum delay between retries in seconds
-	BackoffMultiplier float64 `json:"backoffMultiplier"` // multiplier for exponential backoff
+	Enabled           bool    `yaml:"enabled" json:"enabled"`                     // true to enable retry mechanism
+	MaxRetries        int     `yaml:"maxretries" json:"maxRetries"`               // maximum number of retry attempts
+	InitialDelay      int     `yaml:"initialdelay" json:"initialDelay"`           // initial delay before first retry in seconds
+	MaxDelay          int     `yaml:"maxdelay" json:"maxDelay"`                   // maximum delay between retries in seconds
+	BackoffMultiplier float64 `yaml:"backoffmultiplier" json:"backoffMultiplier"` // multiplier for exponential backoff
 }
 
 // BirdweatherSettings contains settings for BirdWeather API integration.
 type BirdweatherSettings struct {
-	Enabled          bool          `json:"enabled"`          // true to enable birdweather uploads
-	Debug            bool          `json:"debug"`            // true to enable debug mode
-	ID               string        `json:"id"`               // birdweather ID
-	Threshold        float64       `json:"threshold"`        // threshold for prediction confidence for uploads
-	LocationAccuracy float64       `json:"locationAccuracy"` // accuracy of location in meters
-	RetrySettings    RetrySettings `json:"retrySettings"`    // settings for retry mechanism
+	Enabled          bool          `yaml:"enabled" json:"enabled"`                   // true to enable birdweather uploads
+	Debug            bool          `yaml:"debug" json:"debug"`                       // true to enable debug mode
+	ID               string        `yaml:"id" json:"id"`                             // birdweather ID
+	Threshold        float64       `yaml:"threshold" json:"threshold"`               // threshold for prediction confidence for uploads
+	LocationAccuracy float64       `yaml:"locationaccuracy" json:"locationAccuracy"` // accuracy of location in meters
+	RetrySettings    RetrySettings `yaml:"retrysettings" json:"retrySettings"`       // settings for retry mechanism
 }
 
 // EBirdSettings contains settings for eBird API integration.
@@ -320,11 +320,11 @@ type EBirdSettings struct {
 
 // WeatherSettings contains all weather-related settings
 type WeatherSettings struct {
-	Provider     string               `json:"provider"`     // "none", "yrno", "openweather", or "wunderground"
-	PollInterval int                  `json:"pollInterval"` // weather data polling interval in minutes
-	Debug        bool                 `json:"debug"`        // true to enable debug mode
-	OpenWeather  OpenWeatherSettings  `json:"openWeather"`  // OpenWeather integration settings
-	Wunderground WundergroundSettings `json:"wunderground"` // WeatherUnderground integration settings
+	Provider     string               `yaml:"provider" json:"provider"`         // "none", "yrno", "openweather", or "wunderground"
+	PollInterval int                  `yaml:"pollinterval" json:"pollInterval"` // weather data polling interval in minutes
+	Debug        bool                 `yaml:"debug" json:"debug"`               // true to enable debug mode
+	OpenWeather  OpenWeatherSettings  `yaml:"openweather" json:"openWeather"`   // OpenWeather integration settings
+	Wunderground WundergroundSettings `yaml:"wunderground" json:"wunderground"` // WeatherUnderground integration settings
 }
 
 // ---------------- Notification push configuration -----------------
@@ -348,67 +348,67 @@ type NewSpeciesTemplate struct {
 
 // PushSettings controls global push delivery and provider list.
 type PushSettings struct {
-	Enabled        bool                 `json:"enabled"`
-	DefaultTimeout Duration             `json:"default_timeout" mapstructure:"default_timeout"`
-	MaxRetries     int                  `json:"max_retries" mapstructure:"max_retries"`
-	RetryDelay     Duration             `json:"retry_delay" mapstructure:"retry_delay"`
-	CircuitBreaker CircuitBreakerConfig `json:"circuit_breaker" mapstructure:"circuit_breaker"`
-	HealthCheck    HealthCheckConfig    `json:"health_check" mapstructure:"health_check"`
-	RateLimiting   RateLimitingConfig   `json:"rate_limiting" mapstructure:"rate_limiting"`
-	Providers      []PushProviderConfig `json:"providers"`
+	Enabled        bool                 `yaml:"enabled" json:"enabled"`
+	DefaultTimeout Duration             `yaml:"default_timeout" json:"default_timeout" mapstructure:"default_timeout"`
+	MaxRetries     int                  `yaml:"max_retries" json:"max_retries" mapstructure:"max_retries"`
+	RetryDelay     Duration             `yaml:"retry_delay" json:"retry_delay" mapstructure:"retry_delay"`
+	CircuitBreaker CircuitBreakerConfig `yaml:"circuit_breaker" json:"circuit_breaker" mapstructure:"circuit_breaker"`
+	HealthCheck    HealthCheckConfig    `yaml:"health_check" json:"health_check" mapstructure:"health_check"`
+	RateLimiting   RateLimitingConfig   `yaml:"rate_limiting" json:"rate_limiting" mapstructure:"rate_limiting"`
+	Providers      []PushProviderConfig `yaml:"providers" json:"providers"`
 	// Detection filtering settings
-	MinConfidenceThreshold float64 `json:"minConfidenceThreshold" mapstructure:"min_confidence_threshold"` // 0.0-1.0, 0 = disabled
-	SpeciesCooldownMinutes int     `json:"speciesCooldownMinutes" mapstructure:"species_cooldown_minutes"` // 0 = disabled
+	MinConfidenceThreshold float64 `yaml:"minconfidencethreshold" json:"minConfidenceThreshold" mapstructure:"min_confidence_threshold"` // 0.0-1.0, 0 = disabled
+	SpeciesCooldownMinutes int     `yaml:"speciescooldownminutes" json:"speciesCooldownMinutes" mapstructure:"species_cooldown_minutes"` // 0 = disabled
 }
 
 // CircuitBreakerConfig holds circuit breaker configuration.
 type CircuitBreakerConfig struct {
-	Enabled             bool     `json:"enabled" mapstructure:"enabled"`
-	MaxFailures         int      `json:"max_failures" mapstructure:"max_failures"`
-	Timeout             Duration `json:"timeout" mapstructure:"timeout"`
-	HalfOpenMaxRequests int      `json:"half_open_max_requests" mapstructure:"half_open_max_requests"`
+	Enabled             bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	MaxFailures         int      `yaml:"max_failures" json:"max_failures" mapstructure:"max_failures"`
+	Timeout             Duration `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
+	HalfOpenMaxRequests int      `yaml:"half_open_max_requests" json:"half_open_max_requests" mapstructure:"half_open_max_requests"`
 }
 
 // HealthCheckConfig holds health check configuration.
 type HealthCheckConfig struct {
-	Enabled  bool     `json:"enabled" mapstructure:"enabled"`
-	Interval Duration `json:"interval" mapstructure:"interval"`
-	Timeout  Duration `json:"timeout" mapstructure:"timeout"`
+	Enabled  bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	Interval Duration `yaml:"interval" json:"interval" mapstructure:"interval"`
+	Timeout  Duration `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 }
 
 // RateLimitingConfig holds rate limiting configuration.
 type RateLimitingConfig struct {
-	Enabled           bool `json:"enabled"`
-	RequestsPerMinute int  `json:"requests_per_minute" mapstructure:"requests_per_minute"`
-	BurstSize         int  `json:"burst_size" mapstructure:"burst_size"`
+	Enabled           bool `yaml:"enabled" json:"enabled"`
+	RequestsPerMinute int  `yaml:"requests_per_minute" json:"requests_per_minute" mapstructure:"requests_per_minute"`
+	BurstSize         int  `yaml:"burst_size" json:"burst_size" mapstructure:"burst_size"`
 }
 
 // PushProviderConfig configures a single push provider instance.
 type PushProviderConfig struct {
-	Type    string           `json:"type"`
-	Enabled bool             `json:"enabled"`
-	Name    string           `json:"name"`
-	Filter  PushFilterConfig `json:"filter"`
+	Type    string           `yaml:"type" json:"type"`
+	Enabled bool             `yaml:"enabled" json:"enabled"`
+	Name    string           `yaml:"name" json:"name"`
+	Filter  PushFilterConfig `yaml:"filter" json:"filter"`
 	// Shoutrrr-specific
-	URLs    []string `json:"urls"`
-	Timeout Duration `json:"timeout" mapstructure:"timeout"`
+	URLs    []string `yaml:"urls" json:"urls"`
+	Timeout Duration `yaml:"timeout" json:"timeout" mapstructure:"timeout"`
 	// Script-specific
-	Command     string            `json:"command"`
-	Args        []string          `json:"args"`
-	Environment map[string]string `json:"environment"`
-	InputFormat string            `json:"input_format" mapstructure:"input_format"`
+	Command     string            `yaml:"command" json:"command"`
+	Args        []string          `yaml:"args" json:"args"`
+	Environment map[string]string `yaml:"environment" json:"environment"`
+	InputFormat string            `yaml:"input_format" json:"input_format" mapstructure:"input_format"`
 	// Webhook-specific
-	Endpoints []WebhookEndpointConfig `json:"endpoints"`
-	Template  string                  `json:"template"` // Custom JSON template
+	Endpoints []WebhookEndpointConfig `yaml:"endpoints" json:"endpoints"`
+	Template  string                  `yaml:"template" json:"template"` // Custom JSON template
 }
 
 // WebhookEndpointConfig configures a single webhook endpoint.
 type WebhookEndpointConfig struct {
-	URL     string            `json:"url"`
-	Method  string            `json:"method"`                         // POST, PUT, PATCH (default: POST)
-	Headers map[string]string `json:"headers"`                        // Custom HTTP headers
-	Timeout Duration          `json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
-	Auth    WebhookAuthConfig `json:"auth"`                           // Authentication configuration
+	URL     string            `yaml:"url" json:"url"`
+	Method  string            `yaml:"method" json:"method"`                          // POST, PUT, PATCH (default: POST)
+	Headers map[string]string `yaml:"headers" json:"headers"`                        // Custom HTTP headers
+	Timeout Duration          `yaml:"timeout" json:"timeout" mapstructure:"timeout"` // Per-endpoint timeout (default: use provider timeout)
+	Auth    WebhookAuthConfig `yaml:"auth" json:"auth"`                              // Authentication configuration
 }
 
 // WebhookAuthConfig configures authentication for webhook requests.
@@ -419,78 +419,78 @@ type WebhookEndpointConfig struct {
 //
 // File fields take precedence over value fields when both are set.
 type WebhookAuthConfig struct {
-	Type string `json:"type"` // "none", "bearer", "basic", "custom"
+	Type string `yaml:"type" json:"type"` // "none", "bearer", "basic", "custom"
 
 	// Bearer authentication
-	Token     string `json:"token"`      // Token value or ${ENV_VAR}
-	TokenFile string `json:"token_file"` // Path to file containing token
+	Token     string `yaml:"token" json:"token"`           // Token value or ${ENV_VAR}
+	TokenFile string `yaml:"token_file" json:"token_file"` // Path to file containing token
 
 	// Basic authentication
-	User     string `json:"user"`      // Username value or ${ENV_VAR}
-	UserFile string `json:"user_file"` // Path to file containing username
-	Pass     string `json:"pass"`      // Password value or ${ENV_VAR}
-	PassFile string `json:"pass_file"` // Path to file containing password
+	User     string `yaml:"user" json:"user"`           // Username value or ${ENV_VAR}
+	UserFile string `yaml:"user_file" json:"user_file"` // Path to file containing username
+	Pass     string `yaml:"pass" json:"pass"`           // Password value or ${ENV_VAR}
+	PassFile string `yaml:"pass_file" json:"pass_file"` // Path to file containing password
 
 	// Custom header authentication
-	Header    string `json:"header"`     // Header name
-	Value     string `json:"value"`      // Header value or ${ENV_VAR}
-	ValueFile string `json:"value_file"` // Path to file containing header value
+	Header    string `yaml:"header" json:"header"`         // Header name
+	Value     string `yaml:"value" json:"value"`           // Header value or ${ENV_VAR}
+	ValueFile string `yaml:"value_file" json:"value_file"` // Path to file containing header value
 }
 
 // PushFilterConfig limits which notifications a provider receives.
 type PushFilterConfig struct {
-	Types           []string       `json:"types" mapstructure:"types"`
-	Priorities      []string       `json:"priorities" mapstructure:"priorities"`
-	Components      []string       `json:"components" mapstructure:"components"`
-	MetadataFilters map[string]any `json:"metadata_filters" mapstructure:"metadata_filters"`
+	Types           []string       `yaml:"types" json:"types" mapstructure:"types"`
+	Priorities      []string       `yaml:"priorities" json:"priorities" mapstructure:"priorities"`
+	Components      []string       `yaml:"components" json:"components" mapstructure:"components"`
+	MetadataFilters map[string]any `yaml:"metadata_filters" json:"metadata_filters" mapstructure:"metadata_filters"`
 }
 
 // WundergroundSettings contains settings for WeatherUnderground integration.
 type WundergroundSettings struct {
-	APIKey    string `json:"apiKey"`    // WeatherUnderground API key
-	StationID string `json:"stationId"` // WeatherUnderground station ID
-	Endpoint  string `json:"endpoint"`  // WeatherUnderground API endpoint
-	Units     string `json:"units"`     // units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid)
+	APIKey    string `yaml:"apikey" json:"apiKey"`       // WeatherUnderground API key
+	StationID string `yaml:"stationid" json:"stationId"` // WeatherUnderground station ID
+	Endpoint  string `yaml:"endpoint" json:"endpoint"`   // WeatherUnderground API endpoint
+	Units     string `yaml:"units" json:"units"`         // units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid)
 }
 
 // OpenWeatherSettings contains settings for OpenWeather integration.
 type OpenWeatherSettings struct {
-	Enabled  bool   `json:"enabled"`  // true to enable OpenWeather integration, for legacy support
-	APIKey   string `json:"apiKey"`   // OpenWeather API key
-	Endpoint string `json:"endpoint"` // OpenWeather API endpoint
-	Units    string `json:"units"`    // units of measurement: standard, metric, or imperial
-	Language string `json:"language"` // language code for the response
+	Enabled  bool   `yaml:"enabled" json:"enabled"`   // true to enable OpenWeather integration, for legacy support
+	APIKey   string `yaml:"apikey" json:"apiKey"`     // OpenWeather API key
+	Endpoint string `yaml:"endpoint" json:"endpoint"` // OpenWeather API endpoint
+	Units    string `yaml:"units" json:"units"`       // units of measurement: standard, metric, or imperial
+	Language string `yaml:"language" json:"language"` // language code for the response
 }
 
 // PrivacyFilterSettings contains settings for the privacy filter.
 type PrivacyFilterSettings struct {
-	Debug      bool    `json:"debug"`      // true to enable debug mode
-	Enabled    bool    `json:"enabled"`    // true to enable privacy filter
-	Confidence float32 `json:"confidence"` // confidence threshold for human detection
+	Debug      bool    `yaml:"debug" json:"debug"`           // true to enable debug mode
+	Enabled    bool    `yaml:"enabled" json:"enabled"`       // true to enable privacy filter
+	Confidence float32 `yaml:"confidence" json:"confidence"` // confidence threshold for human detection
 }
 
 // DogBarkFilterSettings contains settings for the dog bark filter.
 type DogBarkFilterSettings struct {
-	Debug      bool     `json:"debug"`      // true to enable debug mode
-	Enabled    bool     `json:"enabled"`    // true to enable dog bark filter
-	Confidence float32  `json:"confidence"` // confidence threshold for dog bark detection
-	Remember   int      `json:"remember"`   // how long we should remember bark for filtering?
-	Species    []string `json:"species"`    // species list for filtering
+	Debug      bool     `yaml:"debug" json:"debug"`           // true to enable debug mode
+	Enabled    bool     `yaml:"enabled" json:"enabled"`       // true to enable dog bark filter
+	Confidence float32  `yaml:"confidence" json:"confidence"` // confidence threshold for dog bark detection
+	Remember   int      `yaml:"remember" json:"remember"`     // how long we should remember bark for filtering?
+	Species    []string `yaml:"species" json:"species"`       // species list for filtering
 }
 
 // DaylightFilterSettings contains settings for the daylight species filter.
 // It discards detections of configured species (default: nocturnal birds) during daylight hours.
 type DaylightFilterSettings struct {
-	Debug   bool     `json:"debug"`   // true to enable debug logging
-	Enabled bool     `json:"enabled"` // true to enable daylight filter
-	Offset  int      `json:"offset"`  // hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)
-	Species []string `json:"species"` // species, families, orders, or genera to filter during daylight
+	Debug   bool     `yaml:"debug" json:"debug"`     // true to enable debug logging
+	Enabled bool     `yaml:"enabled" json:"enabled"` // true to enable daylight filter
+	Offset  int      `yaml:"offset" json:"offset"`   // hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict)
+	Species []string `yaml:"species" json:"species"` // species, families, orders, or genera to filter during daylight
 }
 
 // RTSPHealthSettings contains settings for RTSP stream health monitoring.
 type RTSPHealthSettings struct {
-	HealthyDataThreshold int `json:"healthyDataThreshold"` // seconds before stream considered unhealthy (default: 60)
-	MonitoringInterval   int `json:"monitoringInterval"`   // health check interval in seconds (default: 30)
+	HealthyDataThreshold int `yaml:"healthydatathreshold" json:"healthyDataThreshold"` // seconds before stream considered unhealthy (default: 60)
+	MonitoringInterval   int `yaml:"monitoringinterval" json:"monitoringInterval"`     // health check interval in seconds (default: 30)
 }
 
 // QuietHoursConfig defines a time window during which an audio source is stopped
@@ -544,22 +544,22 @@ type RTSPSettings struct {
 
 // MQTTSettings contains settings for MQTT integration.
 type MQTTSettings struct {
-	Enabled       bool                  `json:"enabled"`                                                         // true to enable MQTT
-	Debug         bool                  `json:"debug"`                                                           // true to enable MQTT debug
-	Broker        string                `json:"broker"`                                                          // MQTT broker URL
-	Topic         string                `json:"topic"`                                                           // MQTT topic
-	Username      string                `json:"username"`                                                        // MQTT username
-	Password      string                `json:"password"`                                                        // MQTT password
-	Retain        bool                  `json:"retain"`                                                          // true to retain messages
-	RetrySettings RetrySettings         `json:"retrySettings"`                                                   // settings for retry mechanism
-	TLS           MQTTTLSSettings       `json:"tls"`                                                             // TLS/SSL configuration
+	Enabled       bool                  `yaml:"enabled" json:"enabled"`                                          // true to enable MQTT
+	Debug         bool                  `yaml:"debug" json:"debug"`                                              // true to enable MQTT debug
+	Broker        string                `yaml:"broker" json:"broker"`                                            // MQTT broker URL
+	Topic         string                `yaml:"topic" json:"topic"`                                              // MQTT topic
+	Username      string                `yaml:"username" json:"username"`                                        // MQTT username
+	Password      string                `yaml:"password" json:"password"`                                        // MQTT password
+	Retain        bool                  `yaml:"retain" json:"retain"`                                            // true to retain messages
+	RetrySettings RetrySettings         `yaml:"retrysettings" json:"retrySettings"`                              // settings for retry mechanism
+	TLS           MQTTTLSSettings       `yaml:"tls" json:"tls"`                                                  // TLS/SSL configuration
 	HomeAssistant HomeAssistantSettings `yaml:"homeassistant" mapstructure:"homeassistant" json:"homeAssistant"` // Home Assistant auto-discovery settings
 }
 
 // MQTTTLSSettings contains TLS/SSL configuration for secure MQTT connections
 type MQTTTLSSettings struct {
-	Enabled            bool   `json:"enabled"`                                          // true to enable TLS (auto-detected from broker URL)
-	InsecureSkipVerify bool   `json:"insecureSkipVerify"`                               // true to skip certificate verification (for self-signed certs)
+	Enabled            bool   `yaml:"enabled" json:"enabled"`                           // true to enable TLS (auto-detected from broker URL)
+	InsecureSkipVerify bool   `yaml:"insecureskipverify" json:"insecureSkipVerify"`     // true to skip certificate verification (for self-signed certs)
 	CACert             string `yaml:"cacert,omitempty" json:"caCert,omitempty"`         // path to CA certificate file (managed internally)
 	ClientCert         string `yaml:"clientcert,omitempty" json:"clientCert,omitempty"` // path to client certificate file (managed internally)
 	ClientKey          string `yaml:"clientkey,omitempty" json:"clientKey,omitempty"`   // path to client key file (managed internally)
@@ -574,35 +574,35 @@ type HomeAssistantSettings struct {
 
 // TelemetrySettings contains settings for telemetry.
 type TelemetrySettings struct {
-	Enabled bool   `json:"enabled"` // true to enable Prometheus compatible telemetry endpoint
-	Listen  string `json:"listen"`  // IP address and port to listen on
+	Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable Prometheus compatible telemetry endpoint
+	Listen  string `yaml:"listen" json:"listen"`   // IP address and port to listen on
 }
 
 // MonitoringSettings controls system resource metric collection.
 // Thresholds and notifications are managed by the alerting engine rules.
 type MonitoringSettings struct {
-	Enabled       bool              `json:"enabled"`       // true to enable system resource monitoring
-	CheckInterval int               `json:"checkInterval"` // interval in seconds between resource checks
-	CPU           ResourceEnabled   `json:"cpu"`           // CPU metric collection
-	Memory        ResourceEnabled   `json:"memory"`        // Memory metric collection
-	Disk          DiskMonitorConfig `json:"disk"`          // Disk metric collection
+	Enabled       bool              `yaml:"enabled" json:"enabled"`             // true to enable system resource monitoring
+	CheckInterval int               `yaml:"checkinterval" json:"checkInterval"` // interval in seconds between resource checks
+	CPU           ResourceEnabled   `yaml:"cpu" json:"cpu"`                     // CPU metric collection
+	Memory        ResourceEnabled   `yaml:"memory" json:"memory"`               // Memory metric collection
+	Disk          DiskMonitorConfig `yaml:"disk" json:"disk"`                   // Disk metric collection
 }
 
 // ResourceEnabled controls whether a resource type is monitored.
 type ResourceEnabled struct {
-	Enabled bool `json:"enabled"` // true to enable monitoring for this resource
+	Enabled bool `yaml:"enabled" json:"enabled"` // true to enable monitoring for this resource
 }
 
 // DiskMonitorConfig controls disk monitoring and which paths to check.
 type DiskMonitorConfig struct {
-	Enabled bool     `json:"enabled"` // true to enable disk monitoring
-	Paths   []string `json:"paths"`   // filesystem paths to monitor
+	Enabled bool     `yaml:"enabled" json:"enabled"` // true to enable disk monitoring
+	Paths   []string `yaml:"paths" json:"paths"`     // filesystem paths to monitor
 }
 
 // SentrySettings contains settings for Sentry error tracking
 type SentrySettings struct {
-	Enabled bool `json:"enabled"` // true to enable Sentry error tracking (opt-in)
-	Debug   bool `json:"debug"`   // true to enable transparent telemetry logging
+	Enabled bool `yaml:"enabled" json:"enabled"` // true to enable Sentry error tracking (opt-in)
+	Debug   bool `yaml:"debug" json:"debug"`     // true to enable transparent telemetry logging
 }
 
 // FalsePositiveFilterSettings contains settings for false positive filtering aggressivity levels.
@@ -610,7 +610,7 @@ type SentrySettings struct {
 // to filter out false positives (wind, cars, etc.). Higher levels require more confirmations
 // but need faster hardware and higher overlap settings.
 type FalsePositiveFilterSettings struct {
-	Level int `json:"level"` // Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
+	Level int `yaml:"level" json:"level"` // Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum
 }
 
 // Validate checks if the filter level is within the valid range (0-5).
@@ -624,10 +624,10 @@ func (f *FalsePositiveFilterSettings) Validate() error {
 // ExtendedCaptureSettings contains settings for extended capture mode.
 // Extended capture produces a single audio clip for long continuous calling sessions.
 type ExtendedCaptureSettings struct {
-	Enabled              bool     `json:"enabled" mapstructure:"enabled"`
-	MaxDuration          int      `json:"maxDuration" mapstructure:"maxDuration"`
-	CaptureBufferSeconds int      `json:"captureBufferSeconds" mapstructure:"captureBufferSeconds"`
-	Species              []string `json:"species" mapstructure:"species"`
+	Enabled              bool     `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+	MaxDuration          int      `yaml:"maxduration" json:"maxDuration" mapstructure:"maxDuration"`
+	CaptureBufferSeconds int      `yaml:"capturebufferseconds" json:"captureBufferSeconds" mapstructure:"captureBufferSeconds"`
+	Species              []string `yaml:"species" json:"species" mapstructure:"species"`
 }
 
 // EffectiveCaptureBufferSeconds returns the capture buffer duration to use for
@@ -698,31 +698,31 @@ func (e *ExtendedCaptureSettings) Validate(preCapture int) error {
 
 // RealtimeSettings contains all settings related to realtime processing.
 type RealtimeSettings struct {
-	Interval            int                         `json:"interval"`            // minimum interval between log messages in seconds
-	ProcessingTime      bool                        `json:"processingTime"`      // true to report processing time for each prediction
-	Audio               AudioSettings               `json:"audio"`               // Audio processing settings
-	Dashboard           Dashboard                   `json:"dashboard"`           // Dashboard settings
-	DynamicThreshold    DynamicThresholdSettings    `json:"dynamicThreshold"`    // Dynamic threshold settings
-	FalsePositiveFilter FalsePositiveFilterSettings `json:"falsePositiveFilter"` // False positive filtering aggressivity settings
+	Interval            int                         `yaml:"interval" json:"interval"`                       // minimum interval between log messages in seconds
+	ProcessingTime      bool                        `yaml:"processingtime" json:"processingTime"`           // true to report processing time for each prediction
+	Audio               AudioSettings               `yaml:"audio" json:"audio"`                             // Audio processing settings
+	Dashboard           Dashboard                   `yaml:"dashboard" json:"dashboard"`                     // Dashboard settings
+	DynamicThreshold    DynamicThresholdSettings    `yaml:"dynamicthreshold" json:"dynamicThreshold"`       // Dynamic threshold settings
+	FalsePositiveFilter FalsePositiveFilterSettings `yaml:"falsepositivefilter" json:"falsePositiveFilter"` // False positive filtering aggressivity settings
 	Log                 struct {
-		Enabled bool   `json:"enabled"` // true to enable OBS chat log
-		Path    string `json:"path"`    // path to OBS chat log
-	} `json:"log"`
-	LogDeduplication LogDeduplicationSettings `json:"logDeduplication"` // Log deduplication settings
-	Birdweather      BirdweatherSettings      `json:"birdweather"`      // Birdweather integration settings
-	EBird            EBirdSettings            `json:"ebird"`            // eBird integration settings
-	OpenWeather      OpenWeatherSettings      `yaml:"-" json:"-"`       // OpenWeather integration settings
-	PrivacyFilter    PrivacyFilterSettings    `json:"privacyFilter"`    // Privacy filter settings
-	DogBarkFilter    DogBarkFilterSettings    `json:"dogBarkFilter"`    // Dog bark filter settings
-	DaylightFilter   DaylightFilterSettings   `json:"daylightFilter"`   // Daylight filter settings
-	RTSP             RTSPSettings             `json:"rtsp"`             // RTSP settings
-	MQTT             MQTTSettings             `json:"mqtt"`             // MQTT settings
-	Telemetry        TelemetrySettings        `json:"telemetry"`        // Telemetry settings
-	Monitoring       MonitoringSettings       `json:"monitoring"`       // System resource monitoring settings
-	Species          SpeciesSettings          `json:"species"`          // Custom thresholds and actions for species
-	Weather          WeatherSettings          `json:"weather"`          // Weather provider related settings
-	SpeciesTracking  SpeciesTrackingSettings  `json:"speciesTracking"`  // New species tracking settings
-	ExtendedCapture  ExtendedCaptureSettings  `json:"extendedCapture"`  // Extended capture for long calling species
+		Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable OBS chat log
+		Path    string `yaml:"path" json:"path"`       // path to OBS chat log
+	} `yaml:"log" json:"log"`
+	LogDeduplication LogDeduplicationSettings `yaml:"logdeduplication" json:"logDeduplication"` // Log deduplication settings
+	Birdweather      BirdweatherSettings      `yaml:"birdweather" json:"birdweather"`           // Birdweather integration settings
+	EBird            EBirdSettings            `yaml:"ebird" json:"ebird"`                       // eBird integration settings
+	OpenWeather      OpenWeatherSettings      `yaml:"-" json:"-"`                               // OpenWeather integration settings
+	PrivacyFilter    PrivacyFilterSettings    `yaml:"privacyfilter" json:"privacyFilter"`       // Privacy filter settings
+	DogBarkFilter    DogBarkFilterSettings    `yaml:"dogbarkfilter" json:"dogBarkFilter"`       // Dog bark filter settings
+	DaylightFilter   DaylightFilterSettings   `yaml:"daylightfilter" json:"daylightFilter"`     // Daylight filter settings
+	RTSP             RTSPSettings             `yaml:"rtsp" json:"rtsp"`                         // RTSP settings
+	MQTT             MQTTSettings             `yaml:"mqtt" json:"mqtt"`                         // MQTT settings
+	Telemetry        TelemetrySettings        `yaml:"telemetry" json:"telemetry"`               // Telemetry settings
+	Monitoring       MonitoringSettings       `yaml:"monitoring" json:"monitoring"`             // System resource monitoring settings
+	Species          SpeciesSettings          `yaml:"species" json:"species"`                   // Custom thresholds and actions for species
+	Weather          WeatherSettings          `yaml:"weather" json:"weather"`                   // Weather provider related settings
+	SpeciesTracking  SpeciesTrackingSettings  `yaml:"speciestracking" json:"speciesTracking"`   // New species tracking settings
+	ExtendedCapture  ExtendedCaptureSettings  `yaml:"extendedcapture" json:"extendedCapture"`   // Extended capture for long calling species
 }
 
 // SpeciesAction represents a single action configuration
@@ -753,39 +753,39 @@ type SpeciesSettings struct {
 
 // LogDeduplicationSettings contains settings for log deduplication
 type LogDeduplicationSettings struct {
-	Enabled                    bool `json:"enabled"`                    // true to enable log deduplication
-	HealthCheckIntervalSeconds int  `json:"healthCheckIntervalSeconds"` // Health check interval in seconds (default: 60)
+	Enabled                    bool `yaml:"enabled" json:"enabled"`                                       // true to enable log deduplication
+	HealthCheckIntervalSeconds int  `yaml:"healthcheckintervalseconds" json:"healthCheckIntervalSeconds"` // Health check interval in seconds (default: 60)
 }
 
 // SpeciesTrackingSettings contains settings for tracking new species
 type SpeciesTrackingSettings struct {
-	Enabled                      bool                     `json:"enabled"`                      // true to enable new species tracking
-	NewSpeciesWindowDays         int                      `json:"newSpeciesWindowDays"`         // Days to consider a species "new" (default: 14)
-	SyncIntervalMinutes          int                      `json:"syncIntervalMinutes"`          // Interval to sync with database (default: 60)
-	NotificationSuppressionHours int                      `json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
-	YearlyTracking               YearlyTrackingSettings   `json:"yearlyTracking"`               // Settings for yearly species tracking
-	SeasonalTracking             SeasonalTrackingSettings `json:"seasonalTracking"`             // Settings for seasonal species tracking
+	Enabled                      bool                     `yaml:"enabled" json:"enabled"`                                           // true to enable new species tracking
+	NewSpeciesWindowDays         int                      `yaml:"newspecieswindowdays" json:"newSpeciesWindowDays"`                 // Days to consider a species "new" (default: 14)
+	SyncIntervalMinutes          int                      `yaml:"syncintervalminutes" json:"syncIntervalMinutes"`                   // Interval to sync with database (default: 60)
+	NotificationSuppressionHours int                      `yaml:"notificationsuppressionhours" json:"notificationSuppressionHours"` // Hours to suppress duplicate notifications (default: 168)
+	YearlyTracking               YearlyTrackingSettings   `yaml:"yearlytracking" json:"yearlyTracking"`                             // Settings for yearly species tracking
+	SeasonalTracking             SeasonalTrackingSettings `yaml:"seasonaltracking" json:"seasonalTracking"`                         // Settings for seasonal species tracking
 }
 
 // YearlyTrackingSettings contains settings for tracking first arrivals each year
 type YearlyTrackingSettings struct {
-	Enabled    bool `json:"enabled"`    // true to enable yearly tracking
-	ResetMonth int  `json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
-	ResetDay   int  `json:"resetDay"`   // Day to reset yearly tracking (default: 1)
-	WindowDays int  `json:"windowDays"` // Days to show "new this year" indicator (default: 30)
+	Enabled    bool `yaml:"enabled" json:"enabled"`       // true to enable yearly tracking
+	ResetMonth int  `yaml:"resetmonth" json:"resetMonth"` // Month to reset yearly tracking (1=January, default: 1)
+	ResetDay   int  `yaml:"resetday" json:"resetDay"`     // Day to reset yearly tracking (default: 1)
+	WindowDays int  `yaml:"windowdays" json:"windowDays"` // Days to show "new this year" indicator (default: 30)
 }
 
 // SeasonalTrackingSettings contains settings for tracking first arrivals each season
 type SeasonalTrackingSettings struct {
-	Enabled    bool              `json:"enabled"`    // true to enable seasonal tracking
-	WindowDays int               `json:"windowDays"` // Days to show "new this season" indicator (default: 21)
-	Seasons    map[string]Season `json:"seasons"`    // Season definitions
+	Enabled    bool              `yaml:"enabled" json:"enabled"`       // true to enable seasonal tracking
+	WindowDays int               `yaml:"windowdays" json:"windowDays"` // Days to show "new this season" indicator (default: 21)
+	Seasons    map[string]Season `yaml:"seasons" json:"seasons"`       // Season definitions
 }
 
 // Season defines the start date for a season
 type Season struct {
-	StartMonth int `json:"startMonth"` // Month when season starts (1-12)
-	StartDay   int `json:"startDay"`   // Day when season starts (1-31)
+	StartMonth int `yaml:"startmonth" json:"startMonth"` // Month when season starts (1-12)
+	StartDay   int `yaml:"startday" json:"startDay"`     // Day when season starts (1-31)
 }
 
 // DetectHemisphere determines the hemisphere based on latitude
@@ -1061,8 +1061,8 @@ func (s *Season) Validate(name string) error {
 
 // ActionConfig holds configuration details for a specific action.
 type ActionConfig struct {
-	Type       string   `json:"type"`       // Type of the action (e.g. ExecuteScript which is only type for now)
-	Parameters []string `json:"parameters"` // List of parameters for the action
+	Type       string   `yaml:"type" json:"type"`             // Type of the action (e.g. ExecuteScript which is only type for now)
+	Parameters []string `yaml:"parameters" json:"parameters"` // List of parameters for the action
 }
 
 // InputConfig holds settings for file or directory analysis
@@ -1073,61 +1073,61 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
-	Debug              bool                `json:"debug"`                                          // true to enable debug mode
-	Sensitivity        float64             `json:"sensitivity"`                                    // birdnet analysis sigmoid sensitivity
-	Threshold          float64             `json:"threshold"`                                      // threshold for prediction confidence to report
-	Overlap            float64             `json:"overlap"`                                        // birdnet analysis overlap between chunks
-	Longitude          float64             `json:"longitude"`                                      // longitude of recording location for prediction filtering
-	Latitude           float64             `json:"latitude"`                                       // latitude of recording location for prediction filtering
-	LocationConfigured bool                `json:"locationConfigured" yaml:"locationConfigured"`   // true when location has been explicitly configured by the user
-	Threads            int                 `json:"threads"`                                        // number of CPU threads to use for analysis
-	Locale             string              `json:"locale"`                                         // language to use for labels
-	RangeFilter        RangeFilterSettings `json:"rangeFilter"`                                    // range filter settings
-	ModelPath          string              `json:"modelPath,omitempty" yaml:"modelPath,omitempty"` // path to external model file (empty for embedded)
-	LabelPath          string              `json:"labelPath,omitempty" yaml:"labelPath,omitempty"` // path to external label file (empty for embedded)
+	Debug              bool                `yaml:"debug" json:"debug"`                             // true to enable debug mode
+	Sensitivity        float64             `yaml:"sensitivity" json:"sensitivity"`                 // birdnet analysis sigmoid sensitivity
+	Threshold          float64             `yaml:"threshold" json:"threshold"`                     // threshold for prediction confidence to report
+	Overlap            float64             `yaml:"overlap" json:"overlap"`                         // birdnet analysis overlap between chunks
+	Longitude          float64             `yaml:"longitude" json:"longitude"`                     // longitude of recording location for prediction filtering
+	Latitude           float64             `yaml:"latitude" json:"latitude"`                       // latitude of recording location for prediction filtering
+	LocationConfigured bool                `yaml:"locationconfigured" json:"locationConfigured"`   // true when location has been explicitly configured by the user
+	Threads            int                 `yaml:"threads" json:"threads"`                         // number of CPU threads to use for analysis
+	Locale             string              `yaml:"locale" json:"locale"`                           // language to use for labels
+	RangeFilter        RangeFilterSettings `yaml:"rangefilter" json:"rangeFilter"`                 // range filter settings
+	ModelPath          string              `yaml:"modelPath,omitempty" json:"modelPath,omitempty"` // path to external model file (empty for embedded)
+	LabelPath          string              `yaml:"labelPath,omitempty" json:"labelPath,omitempty"` // path to external label file (empty for embedded)
 	Labels             []string            `yaml:"-" json:"-"`                                     // list of available species labels, runtime value
-	UseXNNPACK         bool                `json:"useXnnpack"`                                     // true to use XNNPACK delegate for inference acceleration
+	UseXNNPACK         bool                `yaml:"usexnnpack" json:"useXnnpack"`                   // true to use XNNPACK delegate for inference acceleration
 }
 
 // RangeFilterSettings contains settings for the range filter
 type RangeFilterSettings struct {
-	Debug       bool      `json:"debug"`                      // true to enable debug mode
-	Model       string    `json:"model"`                      // range filter model version: "legacy" for v1, or empty/default for v2
-	ModelPath   string    `json:"modelPath"`                  // path to external meta model file (empty for embedded)
-	Threshold   float32   `json:"threshold"`                  // rangefilter species occurrence threshold
+	Debug       bool      `yaml:"debug" json:"debug"`         // true to enable debug mode
+	Model       string    `yaml:"model" json:"model"`         // range filter model version: "legacy" for v1, or empty/default for v2
+	ModelPath   string    `yaml:"modelpath" json:"modelPath"` // path to external meta model file (empty for embedded)
+	Threshold   float32   `yaml:"threshold" json:"threshold"` // rangefilter species occurrence threshold
 	Species     []string  `yaml:"-" json:"species,omitempty"` // list of included species, runtime value
 	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`       // last time the species list was updated, runtime value
 }
 
 // BasicAuth holds settings for the password authentication
 type BasicAuth struct {
-	Enabled        bool          `json:"enabled"`        // true to enable password authentication
-	Password       string        `json:"password"`       // password for admin interface
-	ClientID       string        `json:"clientId"`       // client id for OAuth2
-	ClientSecret   string        `json:"clientSecret"`   // client secret for OAuth2
-	RedirectURI    string        `json:"redirectUri"`    // redirect uri for OAuth2
-	AuthCodeExp    time.Duration `json:"authCodeExp"`    // duration for authorization code
-	AccessTokenExp time.Duration `json:"accessTokenExp"` // duration for access token
+	Enabled        bool          `yaml:"enabled" json:"enabled"`               // true to enable password authentication
+	Password       string        `yaml:"password" json:"password"`             // password for admin interface
+	ClientID       string        `yaml:"clientid" json:"clientId"`             // client id for OAuth2
+	ClientSecret   string        `yaml:"clientsecret" json:"clientSecret"`     // client secret for OAuth2
+	RedirectURI    string        `yaml:"redirecturi" json:"redirectUri"`       // redirect uri for OAuth2
+	AuthCodeExp    time.Duration `yaml:"authcodeexp" json:"authCodeExp"`       // duration for authorization code
+	AccessTokenExp time.Duration `yaml:"accesstokenexp" json:"accessTokenExp"` // duration for access token
 }
 
 // SocialProvider holds settings for an OAuth2 identity provider
 type SocialProvider struct {
-	Enabled      bool   `json:"enabled"`      // true to enable social provider
-	ClientID     string `json:"clientId"`     // client id for OAuth2
-	ClientSecret string `json:"clientSecret"` // client secret for OAuth2
-	RedirectURI  string `json:"redirectUri"`  // redirect uri for OAuth2
-	UserId       string `json:"userId"`       // valid user id for OAuth2
+	Enabled      bool   `yaml:"enabled" json:"enabled"`           // true to enable social provider
+	ClientID     string `yaml:"clientid" json:"clientId"`         // client id for OAuth2
+	ClientSecret string `yaml:"clientsecret" json:"clientSecret"` // client secret for OAuth2
+	RedirectURI  string `yaml:"redirecturi" json:"redirectUri"`   // redirect uri for OAuth2
+	UserId       string `yaml:"userid" json:"userId"`             // valid user id for OAuth2
 }
 
 type AllowSubnetBypass struct {
-	Enabled bool   `json:"enabled"` // true to enable subnet bypass
-	Subnet  string `json:"subnet"`  // disable OAuth2 in subnet
+	Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable subnet bypass
+	Subnet  string `yaml:"subnet" json:"subnet"`   // disable OAuth2 in subnet
 }
 
 // PublicAccess defines which features are accessible without authentication.
 // Each field corresponds to a feature that can be individually made public.
 type PublicAccess struct {
-	LiveAudio bool `json:"liveAudio"` // allow unauthenticated users to start/listen to live audio streams
+	LiveAudio bool `yaml:"liveaudio" json:"liveAudio"` // allow unauthenticated users to start/listen to live audio streams
 }
 
 // OAuthProviderConfig holds settings for a single OAuth2 provider in the new array-based format.
@@ -1160,7 +1160,7 @@ const (
 // SecurityConfig handles all security-related settings and validations
 // for the application, including authentication, TLS, and access control.
 type Security struct {
-	Debug bool `json:"debug"` // true to enable debug mode
+	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
 
 	// BaseURL is the complete external URL for this instance, including
 	// scheme, host, and optional port (e.g., "https://birdnet.example.com:5500").
@@ -1168,7 +1168,7 @@ type Security struct {
 	// Takes precedence over Host when set.
 	// Can be overridden with BIRDNET_URL environment variable.
 	// NOTE: This field is prepared for future implementation (issue #1462)
-	BaseURL string `json:"baseUrl"`
+	BaseURL string `yaml:"baseurl" json:"baseUrl"`
 
 	// Host is the primary hostname used for TLS certificates,
 	// OAuth redirect URLs, and notification link generation.
@@ -1176,7 +1176,7 @@ type Security struct {
 	// Also used to generate URLs in push notifications - set this
 	// to your public hostname when using a reverse proxy.
 	// Can be overridden with BIRDNET_HOST environment variable.
-	Host string `json:"host"`
+	Host string `yaml:"host" json:"host"`
 
 	// Deprecated: AutoTLS is replaced by TLSMode. Kept for backward-compatible
 	// config migration. Will be removed in a future version.
@@ -1193,11 +1193,11 @@ type Security struct {
 	// Uses Go duration format with day/month suffixes (e.g., "365d", "1y").
 	SelfSignedValidity string `yaml:"selfSignedValidity" json:"selfSignedValidity"`
 
-	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"` // port for HTTPS (default: 8443)
-	RedirectToHTTPS   bool              `json:"redirectToHttps"`        // true to redirect to HTTPS
-	AllowSubnetBypass AllowSubnetBypass `json:"allowSubnetBypass"`      // subnet bypass configuration
-	PublicAccess      PublicAccess      `json:"publicAccess"`           // features accessible without authentication
-	BasicAuth         BasicAuth         `json:"basicAuth"`              // password authentication configuration
+	TLSPort           string            `yaml:"tlsPort" json:"tlsPort"`                     // port for HTTPS (default: 8443)
+	RedirectToHTTPS   bool              `yaml:"redirecttohttps" json:"redirectToHttps"`     // true to redirect to HTTPS
+	AllowSubnetBypass AllowSubnetBypass `yaml:"allowsubnetbypass" json:"allowSubnetBypass"` // subnet bypass configuration
+	PublicAccess      PublicAccess      `yaml:"publicaccess" json:"publicAccess"`           // features accessible without authentication
+	BasicAuth         BasicAuth         `yaml:"basicauth" json:"basicAuth"`                 // password authentication configuration
 
 	// OAuthProviders is the new array-based OAuth configuration.
 	// This is the preferred format for configuring OAuth providers.
@@ -1210,26 +1210,26 @@ type Security struct {
 	GithubAuth    SocialProvider `yaml:"githubAuth,omitempty" json:"githubAuth,omitempty"`       //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
 	MicrosoftAuth SocialProvider `yaml:"microsoftAuth,omitempty" json:"microsoftAuth,omitempty"` //nolint:modernize // Deprecated: use OAuthProviders, yaml.v3 doesn't support omitzero
 
-	SessionSecret   string        `json:"sessionSecret"`   // secret for session cookie
-	SessionDuration time.Duration `json:"sessionDuration"` // duration for browser session cookies
+	SessionSecret   string        `yaml:"sessionsecret" json:"sessionSecret"`     // secret for session cookie
+	SessionDuration time.Duration `yaml:"sessionduration" json:"sessionDuration"` // duration for browser session cookies
 }
 
 type WebServerSettings struct {
-	Debug          bool               `json:"debug"`          // true to enable debug mode
-	Enabled        bool               `json:"enabled"`        // true to enable web server
-	Port           string             `json:"port"`           // port for web server
-	BasePath       string             `json:"basePath"`       // reverse proxy subpath prefix (e.g., "/birdnet")
-	AllowEmbedding bool               `json:"allowEmbedding"` // true to allow embedding in iframes (e.g., Home Assistant)
-	LiveStream     LiveStreamSettings `json:"liveStream"`     // live stream configuration
-	EnableTerminal bool               `json:"enableTerminal"` // Enable browser terminal (security risk)
+	Debug          bool               `yaml:"debug" json:"debug"`                   // true to enable debug mode
+	Enabled        bool               `yaml:"enabled" json:"enabled"`               // true to enable web server
+	Port           string             `yaml:"port" json:"port"`                     // port for web server
+	BasePath       string             `yaml:"basepath" json:"basePath"`             // reverse proxy subpath prefix (e.g., "/birdnet")
+	AllowEmbedding bool               `yaml:"allowembedding" json:"allowEmbedding"` // true to allow embedding in iframes (e.g., Home Assistant)
+	LiveStream     LiveStreamSettings `yaml:"livestream" json:"liveStream"`         // live stream configuration
+	EnableTerminal bool               `yaml:"enableterminal" json:"enableTerminal"` // Enable browser terminal (security risk)
 }
 
 type LiveStreamSettings struct {
-	Debug          bool   `json:"debug"`          // true to enable debug mode
-	BitRate        int    `json:"bitRate"`        // bitrate for live stream in kbps
-	SampleRate     int    `json:"sampleRate"`     // sample rate for live stream in Hz
-	SegmentLength  int    `json:"segmentLength"`  // length of each segment in seconds
-	FfmpegLogLevel string `json:"ffmpegLogLevel"` // log level for ffmpeg
+	Debug          bool   `yaml:"debug" json:"debug"`                   // true to enable debug mode
+	BitRate        int    `yaml:"bitrate" json:"bitRate"`               // bitrate for live stream in kbps
+	SampleRate     int    `yaml:"samplerate" json:"sampleRate"`         // sample rate for live stream in Hz
+	SegmentLength  int    `yaml:"segmentlength" json:"segmentLength"`   // length of each segment in seconds
+	FfmpegLogLevel string `yaml:"ffmpegloglevel" json:"ffmpegLogLevel"` // log level for ffmpeg
 }
 
 // BackupRetention defines backup retention policy
@@ -1392,12 +1392,12 @@ type BackupConfig struct {
 		Store   time.Duration `yaml:"store" json:"store"`     // Maximum duration allowed for storing a single backup archive to one target. Default: 15m.
 		Cleanup time.Duration `yaml:"cleanup" json:"cleanup"` // Maximum duration allowed for the backup cleanup process (deleting old backups based on retention policy). Default: 10m.
 		Delete  time.Duration `yaml:"delete" json:"delete"`   // Maximum duration allowed for deleting a single backup archive from a target. Default: 2m.
-	} `json:"operationTimeouts"`
+	} `yaml:"operationtimeouts" json:"operationTimeouts"`
 }
 
 // Settings contains all configuration options for the BirdNET-Go application.
 type Settings struct {
-	Debug bool `json:"debug"` // true to enable debug mode
+	Debug bool `yaml:"debug" json:"debug"` // true to enable debug mode
 
 	// Runtime values, not stored in config file
 	Version            string   `yaml:"-" json:"version,omitempty"`            // Version from build
@@ -1409,48 +1409,48 @@ type Settings struct {
 	Logging logger.LoggingConfig `yaml:"logging" json:"logging" mapstructure:"logging"` // centralized logging configuration
 
 	Main struct {
-		Name      string `json:"name"`      // name of BirdNET-Go node, can be used to identify source of notes
-		TimeAs24h bool   `json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
-	} `json:"main"`
+		Name      string `yaml:"name" json:"name"`           // name of BirdNET-Go node, can be used to identify source of notes
+		TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"` // true 24-hour time format, false 12-hour time format
+	} `yaml:"main" json:"main"`
 
-	BirdNET BirdNETConfig `json:"birdnet"` // BirdNET configuration
+	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 
 	Input InputConfig `yaml:"-" json:"-"` // Input configuration for file and directory analysis
 
-	Realtime  RealtimeSettings  `json:"realtime"`  // Realtime processing settings
-	WebServer WebServerSettings `json:"webServer"` // web server configuration
-	Security  Security          `json:"security"`  // security configuration
-	Sentry    SentrySettings    `json:"sentry"`    // Sentry error tracking configuration
+	Realtime  RealtimeSettings  `yaml:"realtime" json:"realtime"`   // Realtime processing settings
+	WebServer WebServerSettings `yaml:"webserver" json:"webServer"` // web server configuration
+	Security  Security          `yaml:"security" json:"security"`   // security configuration
+	Sentry    SentrySettings    `yaml:"sentry" json:"sentry"`       // Sentry error tracking configuration
 
 	Output struct {
 		File struct {
 			Enabled bool   `yaml:"-" json:"-"` // true to enable file output
 			Path    string `yaml:"-" json:"-"` // directory to output results
 			Type    string `yaml:"-" json:"-"` // table, csv
-		} `json:"file"`
+		} `yaml:"file" json:"file"`
 
 		SQLite struct {
-			Enabled bool   `json:"enabled"` // true to enable sqlite output
-			Path    string `json:"path"`    // path to sqlite database
-		} `json:"sqlite"`
+			Enabled bool   `yaml:"enabled" json:"enabled"` // true to enable sqlite output
+			Path    string `yaml:"path" json:"path"`       // path to sqlite database
+		} `yaml:"sqlite" json:"sqlite"`
 
 		MySQL struct {
-			Enabled  bool   `json:"enabled"`  // true to enable mysql output
-			Username string `json:"username"` // username for mysql database
-			Password string `json:"password"` // password for mysql database
-			Database string `json:"database"` // database name for mysql database
-			Host     string `json:"host"`     // host for mysql database
-			Port     string `json:"port"`     // port for mysql database
-		} `json:"mysql"`
-	} `json:"output"`
+			Enabled  bool   `yaml:"enabled" json:"enabled"`   // true to enable mysql output
+			Username string `yaml:"username" json:"username"` // username for mysql database
+			Password string `yaml:"password" json:"password"` // password for mysql database
+			Database string `yaml:"database" json:"database"` // database name for mysql database
+			Host     string `yaml:"host" json:"host"`         // host for mysql database
+			Port     string `yaml:"port" json:"port"`         // port for mysql database
+		} `yaml:"mysql" json:"mysql"`
+	} `yaml:"output" json:"output"`
 
-	Backup BackupConfig `json:"backup"` // Backup configuration
+	Backup BackupConfig `yaml:"backup" json:"backup"` // Backup configuration
 
-	Notification NotificationConfig `json:"notification"` // Configuration for push notifications
+	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
-	Alerting AlertSettings `json:"alerting"` // Alerting rules engine settings
+	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
 }
 
 // AlertSettings configures the alerting rules engine.

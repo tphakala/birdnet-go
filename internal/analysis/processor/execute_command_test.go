@@ -178,8 +178,8 @@ func TestExecuteCommandAction_ExecuteDefaultsWithNoParams(t *testing.T) {
 			Debug: true,
 			Realtime: conf.RealtimeSettings{
 				Log: struct {
-					Enabled bool   `json:"enabled"`
-					Path    string `json:"path"`
+					Enabled bool   `yaml:"enabled" json:"enabled"`
+					Path    string `yaml:"path" json:"path"`
 				}{
 					Enabled: true,
 				},

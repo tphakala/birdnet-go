@@ -161,8 +161,8 @@ func TestSettingsSaveAndLoad(t *testing.T) {
 	// Create settings with species config containing zero values
 	settings := &Settings{
 		Main: struct {
-			Name      string `json:"name"`
-			TimeAs24h bool   `json:"timeAs24h"`
+			Name      string `yaml:"name" json:"name"`
+			TimeAs24h bool   `yaml:"timeas24h" json:"timeAs24h"`
 		}{
 			Name: "TestNode",
 		},
