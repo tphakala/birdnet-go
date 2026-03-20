@@ -910,3 +910,56 @@ func TestMigration_OutOfOrderIDs_AllRecordsMigrated(t *testing.T) {
 	assert.Equal(t, int64(150), v2Count,
 		"all 150 records must be migrated, including those with out-of-order IDs")
 }
+
+// ============================================================================
+// Test: Post-Completion Tail Sync (Issue #2442)
+// ============================================================================
+
+// TestMigration_TailSyncCatchesPostCompletionRecords verifies that detections
+// written to the legacy database AFTER migration completes are synced to v2
+// by the tail sync loop. This is the fix for issue #2442 where hours of
+// detections were lost between migration completion and system restart.
+func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.SetupIntegrationTest(t)
+
+	// Seed 10 initial detections
+	notes := testutil.GenerateDetections(10)
+	err := ctx.Seeder.SeedDetections(notes)
+	require.NoError(t, err)
+
+	// Run migration to completion
+	ctx.StartMigration(t, len(notes))
+	ctx.WaitForCompletion(t, 30*time.Second)
+
+	// Verify initial migration
+	v2Count := ctx.GetV2DetectionCount(t)
+	assert.Equal(t, int64(10), v2Count, "should have 10 detections after migration")
+
+	// Simulate post-completion detections: seed 5 more into legacy DB.
+	// In production, the processor writes these while waiting for restart.
+	postNotes := testutil.GenerateDetectionsWithIDOffset(5, 11)
+	err = ctx.Seeder.SeedDetections(postNotes)
+	require.NoError(t, err)
+
+	// Verify legacy has more records than v2
+	legacyCount := ctx.GetLegacyNoteCount(t)
+	assert.Equal(t, 15, legacyCount, "legacy should have 15 notes (10 original + 5 post-completion)")
+
+	// Wait for tail sync to pick up the new records.
+	// Tail sync interval is 10s, give it up to 30s for safety.
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		v2Count = ctx.GetV2DetectionCount(t)
+		if v2Count >= 15 {
+			break
+		}
+		time.Sleep(time.Second)
+	}
+
+	// Verify all records including post-completion ones are in v2
+	v2Count = ctx.GetV2DetectionCount(t)
+	assert.Equal(t, int64(15), v2Count,
+		"tail sync should have migrated the 5 post-completion detections to v2")
+}

@@ -1003,6 +1003,31 @@ func GenerateDetections(count int) []datastore.Note {
 	return notes
 }
 
+// GenerateDetectionsWithIDOffset creates detections with IDs starting from startID.
+// Useful for simulating post-completion records added to legacy DB after migration.
+func GenerateDetectionsWithIDOffset(count int, startID uint) []datastore.Note {
+	notes := make([]datastore.Note, count)
+	baseTime := time.Now().Add(-time.Duration(count) * time.Hour)
+
+	for i := range count {
+		speciesIdx := i % len(TestSpecies)
+		species := TestSpecies[speciesIdx]
+
+		ts := baseTime.Add(time.Duration(i) * time.Hour)
+		confidence := 0.5 + (float64(i%50) / 100.0)
+
+		notes[i] = NewDetectionBuilder().
+			WithID(startID+uint(i)). //nolint:gosec // G115: test data uses small values that cannot overflow
+			WithTimestamp(ts).
+			WithSpecies(species.Code, species.Scientific, species.Common).
+			WithConfidence(confidence).
+			WithClipName(fmt.Sprintf("clip_%d.wav", startID+uint(i))).
+			Build()
+	}
+
+	return notes
+}
+
 // GenerateOutOfOrderDetections creates detections where IDs don't correlate with dates.
 // This simulates bulk imports of historical data where newer IDs have older dates.
 // Count must exceed batch size (100 for SQLite) to trigger multi-batch pagination bugs.
@@ -1032,7 +1057,7 @@ func GenerateOutOfOrderDetections(count int) []datastore.Note {
 		confidence := 0.5 + (float64(i%50) / 100.0)
 
 		notes[i] = NewDetectionBuilder().
-			WithID(uint(i + 1)). //nolint:gosec // G115: test data uses small values
+			WithID(uint(i+1)). //nolint:gosec // G115: test data uses small values
 			WithTimestamp(ts).
 			WithSpecies(species.Code, species.Scientific, species.Common).
 			WithConfidence(confidence).

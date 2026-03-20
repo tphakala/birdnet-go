@@ -67,6 +67,11 @@ const validationPreDelay = 3 * time.Second
 // With batch size of 100, this allows scanning up to 1M records (10000 * 100).
 const catchUpMaxBatches = 10000
 
+// tailSyncInterval is the interval between tail sync checks after migration completes.
+// The worker stays alive in COMPLETED state to catch detections saved to the legacy
+// database between migration completion and system restart.
+const tailSyncInterval = 10 * time.Second
+
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.New("migration paused")
 
@@ -435,9 +440,9 @@ func (w *Worker) runIteration(ctx context.Context) runAction {
 	case entities.MigrationStatusCutover:
 		return w.handleCutoverState(ctx)
 	case entities.MigrationStatusCompleted:
-		// Zombie prevention: worker may wake up after migration completed
-		w.logger.Info("migration already completed")
-		return runActionReturn
+		// Stay alive in tail sync mode to catch detections saved to legacy DB
+		// between migration completion and system restart (issue #2442).
+		return w.runTailSync(ctx)
 	case entities.MigrationStatusDualWrite, entities.MigrationStatusMigrating:
 		return w.handleMigratingState(ctx)
 	default:
@@ -574,7 +579,8 @@ func (w *Worker) reportCompletedTelemetry() {
 }
 
 // completeValidation handles the successful validation path.
-func (w *Worker) completeValidation(ctx context.Context) runAction {
+// After completing, the worker continues running in tail sync mode (issue #2442).
+func (w *Worker) completeValidation(_ context.Context) runAction {
 	w.logger.Info("validation passed, transitioning to cutover")
 
 	if err := w.stateManager.TransitionToCutover(); err != nil {
@@ -587,7 +593,7 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 		return runActionContinue
 	}
 
-	w.logger.Info("migration completed successfully")
+	w.logger.Info("migration completed, entering tail sync mode to catch post-completion detections")
 
 	w.reportCompletedTelemetry()
 
@@ -608,7 +614,8 @@ func (w *Worker) completeValidation(ctx context.Context) runAction {
 		}
 	}
 
-	return runActionReturn
+	// Continue running — next iteration will enter tail sync via COMPLETED case
+	return runActionContinue
 }
 
 // processDirtyIDs fetches and migrates known dirty IDs from the state manager.
@@ -836,7 +843,7 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 		}
 	}
 
-	w.logger.Info("migration completed successfully from cutover state")
+	w.logger.Info("migration completed from cutover state, entering tail sync mode")
 
 	w.reportCompletedTelemetry()
 
@@ -857,7 +864,116 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 		}
 	}
 
-	return runActionReturn
+	// Continue running — next iteration will enter tail sync via COMPLETED case
+	return runActionContinue
+}
+
+// runTailSync runs a single tail sync iteration after migration has completed.
+// It checks for legacy records added after the last migrated ID and syncs them
+// to v2. This prevents data loss between migration completion and system restart
+// (issue #2442).
+//
+// The method sleeps for tailSyncInterval between checks, responding to stop
+// signals during the wait. Returns runActionContinue to keep the worker loop
+// alive, or runActionReturn on shutdown.
+func (w *Worker) runTailSync(ctx context.Context) runAction {
+	// If legacy repository is not available, nothing to sync
+	if w.legacy == nil {
+		w.logger.Debug("tail sync: no legacy repository, stopping")
+		return runActionReturn
+	}
+
+	// Sleep with responsive cancellation
+	select {
+	case <-ctx.Done():
+		w.logger.Info("tail sync stopped: context cancelled")
+		return runActionReturn
+	case <-w.stopCh:
+		w.logger.Info("tail sync stopped: shutdown requested")
+		return runActionReturn
+	case <-time.After(tailSyncInterval):
+	}
+
+	// Drain any backlog by processing batches until fewer than batchSize
+	// records are returned, then return to the polling loop.
+	for {
+		synced, done := w.tailSyncBatch(ctx)
+		if synced > 0 {
+			w.logger.Info("tail sync: migrated post-completion detections",
+				logger.Int64("count", synced))
+		}
+		if done {
+			break
+		}
+		// Check for shutdown between batches
+		select {
+		case <-ctx.Done():
+			return runActionReturn
+		case <-w.stopCh:
+			return runActionReturn
+		default:
+		}
+	}
+
+	return runActionContinue
+}
+
+// tailSyncBatch processes a single batch of post-completion records.
+// Returns the number of records synced and whether we've reached the end
+// (fewer than batchSize records found, or an error occurred).
+func (w *Worker) tailSyncBatch(ctx context.Context) (synced int64, done bool) {
+	// Get current migration state to find the watermark
+	state, err := w.stateManager.GetState()
+	if err != nil {
+		w.logger.Warn("tail sync: failed to get migration state", logger.Error(err))
+		return 0, true
+	}
+
+	// Query legacy for records beyond the last migrated ID
+	filters := datastore.NewDetectionFilters().
+		WithMinID(state.LastMigratedID).
+		WithLimit(w.batchSize)
+
+	results, _, err := w.legacy.Search(ctx, filters)
+	if err != nil {
+		w.logger.Warn("tail sync: failed to query legacy records", logger.Error(err))
+		return 0, true
+	}
+
+	if len(results) == 0 {
+		return 0, true
+	}
+
+	// Migrate each new record to v2
+	var lastID uint
+	for _, result := range results {
+		if err := w.migrateRecord(ctx, result); err != nil {
+			w.logger.Warn("tail sync: failed to migrate record",
+				logger.Uint64("id", uint64(result.ID)),
+				logger.Error(err))
+			// Track as dirty for retry
+			if addErr := w.stateManager.AddDirtyID(result.ID); addErr != nil {
+				w.logger.Error("tail sync: failed to track dirty ID",
+					logger.Uint64("id", uint64(result.ID)),
+					logger.Error(addErr))
+			}
+			continue
+		}
+		synced++
+		if result.ID > lastID {
+			lastID = result.ID
+		}
+	}
+
+	// Update the watermark so we don't re-process these records
+	if lastID > 0 {
+		if err := w.stateManager.IncrementProgress(lastID, synced); err != nil {
+			w.logger.Warn("tail sync: failed to update progress", logger.Error(err))
+		}
+	}
+
+	// If we got fewer than batchSize results, we've reached the end
+	return synced, len(results) < w.batchSize
 }
 
 // handleMigratingState processes a batch of records.

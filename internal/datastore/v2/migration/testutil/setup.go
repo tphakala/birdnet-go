@@ -95,8 +95,12 @@ func SetupIntegrationTest(t *testing.T) *TestContext {
 	// Create migration worker (uses auxiliary migrator)
 	ctx.createWorker(t)
 
-	// Register cleanup
+	// Register cleanup — stop worker before closing databases to prevent
+	// goroutine leaks from tail sync running after COMPLETED state.
 	t.Cleanup(func() {
+		if ctx.Worker != nil {
+			ctx.Worker.Stop()
+		}
 		if ctx.cleanup != nil {
 			ctx.cleanup()
 		}

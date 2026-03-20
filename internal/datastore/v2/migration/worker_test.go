@@ -125,8 +125,8 @@ func TestWorker_HandlesCutoverStateDirectly(t *testing.T) {
 	ctx := t.Context()
 	action := w.handleCutoverState(ctx)
 
-	// Should return runActionReturn (worker should stop)
-	assert.Equal(t, runActionReturn, action)
+	// Should return runActionContinue to enter tail sync mode (issue #2442)
+	assert.Equal(t, runActionContinue, action)
 
 	// State should now be completed
 	state, err = sm.GetState()
@@ -134,7 +134,7 @@ func TestWorker_HandlesCutoverStateDirectly(t *testing.T) {
 	assert.Equal(t, entities.MigrationStatusCompleted, state.State)
 }
 
-func TestWorker_ExitsWhenAlreadyCompleted(t *testing.T) {
+func TestWorker_TailSyncStopsWithoutLegacyRepo(t *testing.T) {
 	sm, cleanup := setupWorkerTest(t)
 	defer cleanup()
 
@@ -146,7 +146,8 @@ func TestWorker_ExitsWhenAlreadyCompleted(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusCompleted, state.State)
 
-	// Create a minimal worker
+	// Create a minimal worker with no legacy repository.
+	// When legacy is nil, tail sync returns immediately (nothing to sync).
 	w := &Worker{
 		stateManager:    sm,
 		logger:          testLogger(),
@@ -157,11 +158,11 @@ func TestWorker_ExitsWhenAlreadyCompleted(t *testing.T) {
 		rateSamples:     make([]rateSample, DefaultRateWindowSize),
 	}
 
-	// Call runIteration - should detect completed state and return
+	// Call runIteration - should enter tail sync, find no legacy repo, and return
 	ctx := t.Context()
 	action := w.runIteration(ctx)
 
-	// Should return runActionReturn (worker should stop)
+	// Without a legacy repository, tail sync returns runActionReturn
 	assert.Equal(t, runActionReturn, action)
 
 	// State should still be completed (no changes)
@@ -188,12 +189,12 @@ func TestWorker_CutoverStateInRunIteration(t *testing.T) {
 		rateSamples:     make([]rateSample, DefaultRateWindowSize),
 	}
 
-	// Call runIteration - should handle cutover state
+	// Call runIteration - should handle cutover state and enter tail sync mode
 	ctx := t.Context()
 	action := w.runIteration(ctx)
 
-	// Should return runActionReturn (worker should stop after completing)
-	assert.Equal(t, runActionReturn, action)
+	// Should return runActionContinue (worker enters tail sync mode after completing)
+	assert.Equal(t, runActionContinue, action)
 
 	// State should now be completed
 	state, err := sm.GetState()
@@ -265,8 +266,8 @@ func TestWorker_RespondsToStopDuringCutoverBackoff(t *testing.T) {
 	// Wait a bit and verify it completed (since Complete() succeeds)
 	wg.Wait()
 
-	// Should have returned runActionReturn
-	assert.Equal(t, int64(runActionReturn), actionResult.Load())
+	// Should have returned runActionContinue (entering tail sync mode)
+	assert.Equal(t, int64(runActionContinue), actionResult.Load())
 
 	// State should be completed
 	state, err := sm.GetState()
@@ -298,9 +299,9 @@ func TestWorker_CutoverHandlerRetriesOnError(t *testing.T) {
 		rateSamples:     make([]rateSample, DefaultRateWindowSize),
 	}
 
-	// handleCutoverState should succeed on first try
+	// handleCutoverState should succeed on first try and enter tail sync mode
 	action := w.handleCutoverState(ctx)
-	assert.Equal(t, runActionReturn, action)
+	assert.Equal(t, runActionContinue, action)
 
 	// Verify completed
 	state, err := sm.GetState()
@@ -332,12 +333,11 @@ func TestWorker_CutoverBackoffRespondsToContextCancel(t *testing.T) {
 		rateSamples:     make([]rateSample, DefaultRateWindowSize),
 	}
 
-	// Since Complete() will succeed, we can't test the backoff path easily
-	// Instead, let's verify the happy path works correctly
+	// Since Complete() will succeed, verify the happy path
 	action := w.handleCutoverState(ctx)
 	cancel() // Clean up
 
-	assert.Equal(t, runActionReturn, action)
+	assert.Equal(t, runActionContinue, action)
 }
 
 // mockFailingStateManager wraps StateManager to simulate failures.
@@ -377,21 +377,21 @@ func TestWorker_SwitchStatementCoverage(t *testing.T) {
 		checkState     entities.MigrationStatus
 	}{
 		{
-			name: "cutover state triggers handleCutoverState",
+			name: "cutover state triggers handleCutoverState and enters tail sync",
 			setupState: func(t *testing.T, sm *datastoreV2.StateManager) {
 				t.Helper()
 				transitionToCutover(t, sm)
 			},
-			expectedAction: runActionReturn,
+			expectedAction: runActionContinue,
 			checkState:     entities.MigrationStatusCompleted,
 		},
 		{
-			name: "completed state exits immediately",
+			name: "completed state enters tail sync (returns when no legacy repo)",
 			setupState: func(t *testing.T, sm *datastoreV2.StateManager) {
 				t.Helper()
 				transitionToCompleted(t, sm)
 			},
-			expectedAction: runActionReturn,
+			expectedAction: runActionReturn, // No legacy repo → tail sync stops
 			checkState:     entities.MigrationStatusCompleted,
 		},
 		{
