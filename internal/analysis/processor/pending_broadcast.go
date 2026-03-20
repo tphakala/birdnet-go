@@ -36,7 +36,7 @@ type SSEPendingDetection struct {
 }
 
 // sortPendingSnapshot sorts a pending detection snapshot by FirstDetected
-// (oldest first), with species name as tie-breaker for determinism.
+// (oldest first), with species name and source ID as tie-breakers for determinism.
 // This ordering is required by pendingSnapshotChanged which does index-based comparison.
 func sortPendingSnapshot(s []SSEPendingDetection) {
 	slices.SortFunc(s, func(a, b SSEPendingDetection) int {
@@ -46,10 +46,16 @@ func sortPendingSnapshot(s []SSEPendingDetection) {
 			}
 			return 1
 		}
-		if a.Species < b.Species {
+		if a.Species != b.Species {
+			if a.Species < b.Species {
+				return -1
+			}
+			return 1
+		}
+		if a.SourceID < b.SourceID {
 			return -1
 		}
-		if a.Species > b.Species {
+		if a.SourceID > b.SourceID {
 			return 1
 		}
 		return 0
