@@ -38,6 +38,10 @@
     isActive?: boolean;
     /** Additional CSS classes for the container */
     className?: string;
+    /** Detection labels to render on the spectrogram */
+    overlayLabels?: Array<{ text: string; birthTime: number; ySlot: number }>;
+    /** Font size for overlay labels in CSS pixels (default: 11) */
+    overlayFontSize?: number;
   }
 
   let {
@@ -50,9 +54,12 @@
     scrollSpeed = 60,
     isActive = false,
     className = '',
+    overlayLabels = [],
+    overlayFontSize = 11,
   }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
+  let overlayCanvasEl: HTMLCanvasElement | undefined = $state();
   let containerEl: HTMLDivElement | undefined = $state();
   // CSS pixel dimensions (from ResizeObserver)
   let cssWidth = $state(800);
@@ -92,15 +99,13 @@
   let colorLUT = $derived(COLOR_MAPS[colorMap] ?? COLOR_MAPS[DEFAULT_COLOR_MAP]);
 
   // Internal timestampToX for future use (not exported — Svelte 5 limitation)
+  // eslint-disable-next-line no-unused-vars
   function timestampToX(eventTime: number): number {
     const elapsed = (performance.now() - startTime) / 1000;
     const eventAge = elapsed - (eventTime - startTime / 1000);
     const x = cssWidth - eventAge * scrollSpeed;
     return x >= 0 ? x : -1;
   }
-
-  // Suppress unused function warning — timestampToX will be used by DetectionOverlay
-  void timestampToX;
 
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
@@ -171,6 +176,10 @@
           if (ctx) {
             ctx.drawImage(tempCanvas, 0, 0, oldW, oldH, 0, 0, newW, newH);
           }
+          if (overlayCanvasEl) {
+            overlayCanvasEl.width = newW;
+            overlayCanvasEl.height = newH;
+          }
           logger.debug('Canvas resized with content preserved', { oldW, oldH, newW, newH });
           return;
         }
@@ -182,6 +191,10 @@
     // Fallback: simple resize (clears canvas)
     canvasEl.width = newW;
     canvasEl.height = newH;
+    if (overlayCanvasEl) {
+      overlayCanvasEl.width = newW;
+      overlayCanvasEl.height = newH;
+    }
   });
 
   // Main animation loop
@@ -237,6 +250,40 @@
         ctx.putImageData(imgData, w - pixelsToScroll, 0);
       }
 
+      // --- Overlay detection labels on separate canvas (avoids self-blit smearing) ---
+      if (overlayCanvasEl && overlayLabels.length > 0) {
+        const olCtx = overlayCanvasEl.getContext('2d');
+        if (olCtx) {
+          olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
+          const fontSize = overlayFontSize * dpr;
+          olCtx.font = `bold ${fontSize}px sans-serif`;
+          olCtx.fillStyle = '#ffffff';
+          olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+          olCtx.shadowBlur = 3 * dpr;
+          olCtx.shadowOffsetX = 1 * dpr;
+          olCtx.shadowOffsetY = 1 * dpr;
+          olCtx.textBaseline = 'middle';
+
+          const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+
+          for (const label of overlayLabels) {
+            const labelAge = (now - label.birthTime) / 1000;
+            const x = deviceWidth - labelAge * deviceScrollSpeed;
+
+            if (x < -200 * dpr || x > deviceWidth) continue;
+
+            const slotHeight = deviceHeight / (maxSlots + 1);
+            const y = slotHeight * (1 + (label.ySlot % maxSlots));
+
+            olCtx.fillText(label.text, x, y);
+          }
+        }
+      } else if (overlayCanvasEl) {
+        // Clear overlay when no labels
+        const olCtx = overlayCanvasEl.getContext('2d');
+        olCtx?.clearRect(0, 0, deviceWidth, deviceHeight);
+      }
+
       frameId = requestAnimationFrame(loop);
     };
 
@@ -247,4 +294,10 @@
 
 <div bind:this={containerEl} class="relative overflow-hidden bg-black {className}">
   <canvas bind:this={canvasEl} style:width="100%" style:height="100%"></canvas>
+  <canvas
+    bind:this={overlayCanvasEl}
+    style:width="100%"
+    style:height="100%"
+    class="pointer-events-none absolute inset-0"
+  ></canvas>
 </div>
