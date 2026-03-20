@@ -33,6 +33,7 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
+    getRepeatLabels,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -457,9 +458,11 @@
         const curr = data as PendingDetection[];
         const newDetections = diffPendingSnapshot(prevSnapshot, curr, sourceId);
 
+        const nowUnix = Date.now() / 1000;
+
         for (const det of newDetections) {
-          if (shouldDedup(det.species, det.firstDetected, lastSeenSpecies)) continue;
-          lastSeenSpecies.set(det.species, det.firstDetected);
+          if (shouldDedup(det.species, nowUnix, lastSeenSpecies)) continue;
+          lastSeenSpecies.set(det.species, nowUnix);
           const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
           slotCounter = next;
           labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
@@ -686,14 +689,32 @@
         epochOffsetCalibrated = true;
       }
 
-      if (labelQueue.length === 0) return;
       const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
       const now = globalThis.performance.now();
-      const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
-      if (promoted.length > 0) {
-        labelQueue = remaining;
-        overlayLabels = [...overlayLabels, ...promoted];
+
+      // Promote queued labels when playhead catches up
+      if (labelQueue.length > 0) {
+        const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
+        if (promoted.length > 0) {
+          labelQueue = remaining;
+          overlayLabels = [...overlayLabels, ...promoted];
+        }
       }
+
+      // Generate repeat labels for species still actively detected
+      const repeats = getRepeatLabels(
+        prevSnapshot,
+        activeSourceId ?? '',
+        lastSeenSpecies,
+        wallClockAtPlayhead
+      );
+      for (const rep of repeats) {
+        lastSeenSpecies.set(rep.species, wallClockAtPlayhead);
+        const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
+        slotCounter = next;
+        overlayLabels = [...overlayLabels, { text: rep.species, birthTime: now, ySlot: slot }];
+      }
+
       // Prune labels older than 60 seconds
       const cutoff = now - 60000;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
