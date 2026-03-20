@@ -268,16 +268,6 @@
 
       // --- Overlay detection labels on separate canvas (avoids self-blit smearing) ---
       if (olCtx && overlayLabels.length > 0) {
-        if (!overlayHadContent) {
-          console.warn('[overlay] canvas: rendering labels', {
-            count: overlayLabels.length,
-            canvasW: overlayCanvasEl!.width,
-            canvasH: overlayCanvasEl!.height,
-            deviceW: deviceWidth,
-            deviceH: deviceHeight,
-            fontSize,
-          });
-        }
         olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
 
         // Re-apply styles every frame (canvas state can be lost on resize)
@@ -301,17 +291,6 @@
           const y = slotHeight * (1 + (label.ySlot % maxSlots));
 
           olCtx.fillText(label.text, x, y);
-
-          if (!overlayHadContent) {
-            console.warn('[overlay] drew label', {
-              text: label.text,
-              x,
-              y,
-              labelAge: labelAge.toFixed(2),
-              deviceWidth,
-              deviceHeight,
-            });
-          }
         }
         overlayHadContent = true;
       } else if (olCtx && overlayHadContent) {

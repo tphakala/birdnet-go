@@ -172,12 +172,6 @@
       activeStreamToken = data.stream_token;
       if (data.stream_epoch) {
         streamEpochMs = new Date(data.stream_epoch).getTime();
-        console.warn('[overlay] LiveStream streamEpochMs set', {
-          streamEpochMs,
-          raw: data.stream_epoch,
-        });
-      } else {
-        console.warn('[overlay] LiveStream NO stream_epoch in response', data);
       }
       const hlsUrl = buildAppUrl(data.playlist_url);
 
@@ -508,12 +502,7 @@
 
   // Promote queued detection labels when playhead catches up
   $effect(() => {
-    console.warn('[overlay] LiveStream promotion guard', {
-      hasAudio: !!audioElement,
-      streamEpochMs,
-    });
     if (!audioElement || !streamEpochMs) return;
-    console.warn('[overlay] LiveStream promotion effect STARTED');
 
     const interval = globalThis.setInterval(() => {
       if (!audioElement || !streamEpochMs) return;
