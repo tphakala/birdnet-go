@@ -42,12 +42,11 @@ func errorNotificationHook(ee any) {
 	errMsg := enhancedErr.Error()
 
 	// Check burst tracker before creating notification.
-	action := globalBurstTracker.Record(component, category, errMsg)
+	action, summary := globalBurstTracker.Record(component, category, errMsg)
 	switch action {
 	case BurstActionAllow:
 		_, _ = service.CreateErrorNotification(enhancedErr)
 	case BurstActionSummary:
-		summary := globalBurstTracker.GetSummary(component, category)
 		if summary != nil {
 			createBurstSummaryNotification(service, summary, priority)
 		}

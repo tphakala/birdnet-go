@@ -598,9 +598,16 @@ func getContentType(path string) string {
 func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, string, error)) error {
 	f, effectivePath, err := opener()
 	if err != nil {
-		GetLogger().Error("Error opening file via opener",
-			logger.String("path", effectivePath),
-			logger.Error(err))
+		// File-not-found is expected during the race window between detection
+		// DB commit and audio export completion — log at debug, not error.
+		if stdErrors.Is(err, fs.ErrNotExist) {
+			GetLogger().Debug("File not found via opener",
+				logger.String("path", effectivePath))
+		} else {
+			GetLogger().Error("Error opening file via opener",
+				logger.String("path", effectivePath),
+				logger.Error(err))
+		}
 		return mapOpenErrorToHTTP(err, effectivePath)
 	}
 	defer func() {

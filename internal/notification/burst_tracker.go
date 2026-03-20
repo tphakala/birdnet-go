@@ -57,8 +57,11 @@ func NewErrorBurstTracker(threshold int, window time.Duration) *ErrorBurstTracke
 	}
 }
 
-// Record records an error occurrence and returns the action the caller should take.
-func (t *ErrorBurstTracker) Record(component, category, errMsg string) BurstAction {
+// Record records an error occurrence and returns the action the caller should
+// take. When the action is BurstActionSummary, the returned *BurstSummary is
+// a snapshot captured atomically under the same lock, avoiding a TOCTOU race
+// where the window could expire between Record and a separate GetSummary call.
+func (t *ErrorBurstTracker) Record(component, category, errMsg string) (BurstAction, *BurstSummary) {
 	key := component + ":" + category
 
 	t.mu.Lock()
@@ -75,41 +78,27 @@ func (t *ErrorBurstTracker) Record(component, category, errMsg string) BurstActi
 			lastSeen:  now,
 			sample:    errMsg,
 		}
-		return BurstActionAllow
+		return BurstActionAllow, nil
 	}
 
 	bucket.count++
 	bucket.lastSeen = now
 
 	if bucket.count <= t.threshold {
-		return BurstActionAllow
+		return BurstActionAllow, nil
 	}
 
 	if !bucket.notified {
 		bucket.notified = true
-		return BurstActionSummary
+		summary := &BurstSummary{
+			Component:   component,
+			Category:    category,
+			Count:       bucket.count,
+			SampleError: bucket.sample,
+			WindowMin:   int(t.window.Minutes()),
+		}
+		return BurstActionSummary, summary
 	}
 
-	return BurstActionSuppress
-}
-
-// GetSummary returns burst information for rendering a summary notification.
-func (t *ErrorBurstTracker) GetSummary(component, category string) *BurstSummary {
-	key := component + ":" + category
-
-	t.mu.Lock()
-	defer t.mu.Unlock()
-
-	bucket, exists := t.buckets[key]
-	if !exists {
-		return nil
-	}
-
-	return &BurstSummary{
-		Component:   component,
-		Category:    category,
-		Count:       bucket.count,
-		SampleError: bucket.sample,
-		WindowMin:   int(t.window.Minutes()),
-	}
+	return BurstActionSuppress, nil
 }

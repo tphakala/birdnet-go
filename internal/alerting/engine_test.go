@@ -272,7 +272,7 @@ func TestEngine_CooldownExpires(t *testing.T) {
 
 	// Manually expire cooldown by setting it in the past
 	engine.cooldownsMu.Lock()
-	engine.cooldowns[1] = time.Now().Add(-2 * time.Second)
+	engine.cooldowns["1"] = time.Now().Add(-2 * time.Second)
 	engine.cooldownsMu.Unlock()
 
 	engine.HandleEvent(event)
