@@ -97,37 +97,37 @@ func getNotificationPriority(category, explicitPriority string) Priority {
 	// Fall back to category-based priority
 	switch category {
 	case string(errors.CategoryModelInit), string(errors.CategoryModelLoad):
-		return PriorityCritical
+		return PriorityCritical // App cannot function without models
 	case string(errors.CategoryDatabase):
-		return PriorityCritical
+		return PriorityCritical // Data integrity at risk
 	case string(errors.CategoryAudioAnalysis), string(errors.CategoryWorker):
-		return PriorityCritical
+		return PriorityCritical // Core functionality failures
 	case string(errors.CategorySystem):
-		return PriorityHigh
+		return PriorityHigh // System resources issues
 	case string(errors.CategoryConfiguration):
-		return PriorityHigh
+		return PriorityHigh // May prevent proper operation
 	case string(errors.CategoryImageProvider), string(errors.CategoryImageFetch):
-		return PriorityLow
+		return PriorityLow // Most image issues are expected (missing Wikipedia pages)
 	case string(errors.CategoryMQTTConnection), string(errors.CategoryMQTTAuth):
-		return PriorityHigh
+		return PriorityHigh // Connection/auth failures need immediate attention
 	case string(errors.CategoryJobQueue), string(errors.CategoryBuffer):
-		return PriorityHigh
+		return PriorityHigh // May impact processing pipeline
 	case string(errors.CategoryCommandExecution):
-		return PriorityHigh
+		return PriorityHigh // User-configured actions failing
 	case string(errors.CategoryNetwork), string(errors.CategoryRTSP):
-		return PriorityMedium
+		return PriorityMedium // Often transient
 	case string(errors.CategoryFileIO), string(errors.CategoryAudio), string(errors.CategoryAudioSource):
-		return PriorityMedium
+		return PriorityMedium // Usually recoverable
 	case string(errors.CategoryThreshold), string(errors.CategorySpeciesTracking):
-		return PriorityMedium
+		return PriorityMedium // Important but not critical
 	case string(errors.CategoryTimeout), string(errors.CategoryRetry):
-		return PriorityLow
+		return PriorityLow // Transient issues - don't bother users with these
 	case string(errors.CategoryCancellation), string(errors.CategoryBroadcast), string(errors.CategoryIntegration):
-		return PriorityMedium
+		return PriorityMedium // General operational issues
 	case string(errors.CategoryValidation), string(errors.CategoryNotFound):
-		return PriorityLow
+		return PriorityLow // User input issues / expected lookup misses
 	case string(errors.CategorySoundLevel), string(errors.CategoryEventTracking):
-		return PriorityLow
+		return PriorityLow // Monitoring/tracking issues
 	default:
 		return PriorityMedium
 	}

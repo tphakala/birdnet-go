@@ -670,6 +670,56 @@ func TestEngine_NoEscalationSteps_LegacyBehavior(t *testing.T) {
 	assert.Equal(t, 3, fireCount, "without escalation steps, all events should fire")
 }
 
+func TestEngine_EscalationSteps_WithSustainedCondition(t *testing.T) {
+	// Exercises the combined sustained-metric + escalation path (DurationSec > 0),
+	// which is the production configuration for the "Low disk space" rule.
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     0,
+		EscalationSteps: []float64{85, 90, 95, 99},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 60, SortOrder: 0},
+		},
+	}
+
+	var fired []float64
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, e *AlertEvent) {
+		fired = append(fired, e.Properties[PropertyValue].(float64))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	now := time.Now()
+	emit := func(value float64, t time.Time) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+			Timestamp:  t,
+		})
+	}
+
+	// Sustain 86% for >60 seconds — should fire once (step 85)
+	for i := range 3 {
+		emit(86, now.Add(time.Duration(i)*30*time.Second))
+	}
+	assert.Equal(t, []float64{86}, fired, "sustained breach should fire once")
+
+	// Continue at 86% — suppressed (still step 85)
+	emit(86, now.Add(120*time.Second))
+	assert.Equal(t, []float64{86}, fired, "same step sustained should be suppressed")
+
+	// Jump to 91% sustained — should fire (step 90)
+	for i := range 3 {
+		emit(91, now.Add(150*time.Second+time.Duration(i)*30*time.Second))
+	}
+	assert.Equal(t, []float64{86, 91}, fired, "higher step sustained should fire")
+}
+
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
 	// Two rules targeting the same metric — metric sample should be recorded once per event.
 	rule1 := entities.AlertRule{

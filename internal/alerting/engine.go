@@ -169,15 +169,14 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 
 	key := escalationKey(rule.ID, event.MetricName, event.Properties)
 
-	e.escalationsMu.RLock()
+	// Single write lock for atomic check-and-update to avoid TOCTOU race
+	// where two goroutines both pass the read check and both fire.
+	e.escalationsMu.Lock()
 	lastStep, exists := e.escalations[key]
-	e.escalationsMu.RUnlock()
-
 	if exists && lastStep >= currentStep {
+		e.escalationsMu.Unlock()
 		return true, nil
 	}
-
-	e.escalationsMu.Lock()
 	e.escalations[key] = currentStep
 	e.escalationsMu.Unlock()
 

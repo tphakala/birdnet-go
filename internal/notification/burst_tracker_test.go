@@ -2,6 +2,7 @@ package notification
 
 import (
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -40,16 +41,18 @@ func TestBurstTracker_SuppressAfterSummary(t *testing.T) {
 }
 
 func TestBurstTracker_WindowReset(t *testing.T) {
-	bt := NewErrorBurstTracker(3, 100*time.Millisecond)
-	for range 4 {
-		bt.Record("securefs", "file-io", "error")
-	}
-	// Summary was sent. Wait for window to expire.
-	time.Sleep(150 * time.Millisecond)
+	synctest.Test(t, func(_ *testing.T) {
+		bt := NewErrorBurstTracker(3, 5*time.Minute)
+		for range 4 {
+			bt.Record("securefs", "file-io", "error")
+		}
+		// Advance past the 5-minute window using synctest's fake clock.
+		time.Sleep(6 * time.Minute)
 
-	// After window expires, next error should be allowed again.
-	action := bt.Record("securefs", "file-io", "new error")
-	assert.Equal(t, BurstActionAllow, action)
+		// After window expires, next error should be allowed again.
+		action := bt.Record("securefs", "file-io", "new error")
+		assert.Equal(t, BurstActionAllow, action)
+	})
 }
 
 func TestBurstTracker_DifferentKeysIndependent(t *testing.T) {
