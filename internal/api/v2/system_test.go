@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/restart"
 )
 
 // setupSystemTestEnvironment creates a test environment for system API tests
@@ -923,4 +924,54 @@ func TestGetNetworkInterfaces(t *testing.T) {
 		assert.False(t, seen[iface.Address], "duplicate address: %s", iface.Address)
 		seen[iface.Address] = true
 	}
+}
+
+// TestGetRestartStatus tests the GetRestartStatus endpoint with no pending restart.
+func TestGetRestartStatus(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "restart-status")
+
+	e, controller := setupSystemTestEnvironment(t)
+	restart.Reset()
+	t.Cleanup(restart.Reset)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/restart-status", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/system/restart-status")
+
+	require.NoError(t, controller.GetRestartStatus(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result RestartStatus
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.True(t, result.BinaryRestartAvailable)
+	assert.False(t, result.RestartRequired)
+	assert.Empty(t, result.RestartReasons)
+}
+
+// TestGetRestartStatusWithPendingRestart tests the endpoint when a restart is pending.
+func TestGetRestartStatusWithPendingRestart(t *testing.T) {
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "restart-status")
+
+	e, controller := setupSystemTestEnvironment(t)
+	restart.Reset()
+	t.Cleanup(restart.Reset)
+
+	restart.MarkRestartRequired("Port changed")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/restart-status", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetRestartStatus(c))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var result RestartStatus
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+	assert.True(t, result.RestartRequired)
+	assert.Equal(t, []string{"Port changed"}, result.RestartReasons)
 }

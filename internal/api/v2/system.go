@@ -29,6 +29,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -140,6 +141,14 @@ type SystemTemperature struct {
 	IsAvailable   bool    `json:"is_available"`             // True if temperature reading is available and valid
 	SensorDetails string  `json:"sensor_details,omitempty"` // Details about the sensor used or why it's not available
 	Message       string  `json:"message,omitempty"`        // Overall status message
+}
+
+// RestartStatus represents the restart availability and pending state.
+type RestartStatus struct {
+	BinaryRestartAvailable    bool     `json:"binary_restart_available"`
+	ContainerRestartAvailable bool     `json:"container_restart_available"`
+	RestartRequired           bool     `json:"restart_required"`
+	RestartReasons            []string `json:"restart_reasons"`
 }
 
 // Use monotonic clock for start time
@@ -361,6 +370,24 @@ func (c *Controller) GetNetworkInterfaces(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]any{"interfaces": interfaces})
 }
 
+// GetRestartStatus handles GET /api/v2/system/restart-status
+func (c *Controller) GetRestartStatus(ctx echo.Context) error {
+	envType, _ := sysinfo.GetEnvironment()
+
+	status := RestartStatus{
+		BinaryRestartAvailable:    true,
+		ContainerRestartAvailable: isContainerEnvironment(envType),
+		RestartRequired:           restart.IsRestartRequired(),
+		RestartReasons:            restart.GetRestartReasons(),
+	}
+
+	if status.RestartReasons == nil {
+		status.RestartReasons = []string{}
+	}
+
+	return ctx.JSON(http.StatusOK, status)
+}
+
 // Initialize system routes
 func (c *Controller) initSystemRoutes() {
 	c.logInfoIfEnabled("Initializing system routes")
@@ -393,6 +420,7 @@ func (c *Controller) initSystemRoutes() {
 	protectedGroup.GET("/database/v2/stats", c.GetV2DatabaseStats)
 	protectedGroup.POST("/database/backup", c.DownloadDatabaseBackup)
 	protectedGroup.GET("/network-interfaces", c.GetNetworkInterfaces)
+	protectedGroup.GET("/restart-status", c.GetRestartStatus)
 
 	// Audio device routes (all protected)
 	audioGroup := protectedGroup.Group("/audio")
