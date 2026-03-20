@@ -13,6 +13,8 @@ export interface PendingDetection {
   status: PendingDetectionStatus;
   /** Unix timestamp (seconds) when species was first detected */
   firstDetected: number;
+  /** Unix timestamp (seconds) of the most recent inference hit for this species */
+  lastUpdated?: number;
   /** Audio source display name */
   source: string;
   /** Raw source ID for filtering detections by active stream */
