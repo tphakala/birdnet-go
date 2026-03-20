@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -101,7 +102,7 @@ type Controller struct {
 
 	// Insights fields (initialized lazily in initInsightsRoutes)
 	insightsRepo  repository.InsightsRepository
-	commonNameMap map[string]string // scientific name → common name, cached at init
+	commonNameMap atomic.Value // stores map[string]string; scientific name → common name
 
 	// Audio processing fields
 	processingCache     *processingCache

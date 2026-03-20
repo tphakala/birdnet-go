@@ -168,7 +168,15 @@ func buildCommonNameMap(labels []string) map[string]string {
 // UpdateCommonNameMap rebuilds the cached common name map from updated BirdNET labels.
 // Called after locale or model changes to keep insights endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.commonNameMap = buildCommonNameMap(labels)
+	c.commonNameMap.Store(buildCommonNameMap(labels))
+}
+
+// loadCommonNameMap returns the current common name map. Always returns a non-nil map.
+func (c *Controller) loadCommonNameMap() map[string]string {
+	if m, ok := c.commonNameMap.Load().(map[string]string); ok && m != nil {
+		return m
+	}
+	return make(map[string]string)
 }
 
 // resolveCommonName looks up the common name for a scientific name.
@@ -302,7 +310,7 @@ func (c *Controller) initInsightsRoutes() {
 
 	// Build common name map once and cache on Controller
 	if c.Settings != nil {
-		c.commonNameMap = buildCommonNameMap(c.Settings.BirdNET.Labels)
+		c.commonNameMap.Store(buildCommonNameMap(c.Settings.BirdNET.Labels))
 	}
 
 	insightsGroup := c.Group.Group("/insights")
@@ -344,7 +352,7 @@ func (c *Controller) getExpectedTodayImpl(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to query expected species", http.StatusInternalServerError)
 	}
 
-	nameMap := c.commonNameMap
+	nameMap := c.loadCommonNameMap()
 
 	yearSet := make(map[int]struct{})
 	for _, tr := range yearRanges {
@@ -458,7 +466,7 @@ func (c *Controller) getPhantomSpeciesImpl(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to query phantom species", http.StatusInternalServerError)
 	}
 
-	nameMap := c.commonNameMap
+	nameMap := c.loadCommonNameMap()
 
 	species := make([]PhantomSpeciesItem, 0, len(results))
 	for _, r := range results {
@@ -529,7 +537,7 @@ func (c *Controller) getDawnChorusImpl(ctx echo.Context) error {
 		}
 	}
 
-	nameMap := c.commonNameMap
+	nameMap := c.loadCommonNameMap()
 
 	items := make([]DawnChorusItem, 0, len(speciesMap))
 	for _, sd := range speciesMap {
@@ -584,7 +592,7 @@ func (c *Controller) getMigrationImpl(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to query gone quiet species", http.StatusInternalServerError)
 	}
 
-	nameMap := c.commonNameMap
+	nameMap := c.loadCommonNameMap()
 
 	arrivalItems := make([]NewArrivalItem, 0, len(arrivals))
 	for _, a := range arrivals {

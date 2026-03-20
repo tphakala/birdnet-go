@@ -64,11 +64,11 @@ func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Ec
 			},
 		},
 		insightsRepo: mock,
-		commonNameMap: buildCommonNameMap([]string{
-			"Turdus merula_Eurasian Blackbird",
-			"Parus major_Great Tit",
-		}),
 	}
+	controller.commonNameMap.Store(buildCommonNameMap([]string{
+		"Turdus merula_Eurasian Blackbird",
+		"Parus major_Great Tit",
+	}))
 	return e, controller
 }
 
