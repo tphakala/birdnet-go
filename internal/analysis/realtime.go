@@ -176,10 +176,15 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Print system details and configuration
 	printSystemDetails(settings)
 
+	// Check for unmigrated legacy records from a potential hard crash during tail sync.
+	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
+	// has unmigrated records that the worker needs to sync.
+	datastoreLog := logger.Global().Module("datastore")
+	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
+
 	// Check for and perform database consolidation if needed (SQLite only)
-	// This moves the v2 database from migration path to configured path after migration completes
-	if settings.Output.SQLite.Enabled {
-		datastoreLog := logger.Global().Module("datastore")
+	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
+	if settings.Output.SQLite.Enabled && !hasUnmigrated {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
 			datastoreLog.Error("database consolidation failed", logger.Error(err))
@@ -195,8 +200,17 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
 
-	// Log startup mode detection - use datastore module for database mode messages
-	datastoreLog := logger.Global().Module("datastore")
+	// Override v2-only mode when unmigrated legacy records were found. This forces
+	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
+	// Consolidation will complete on the next clean restart.
+	if hasUnmigrated && v2OnlyMode {
+		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
+			logger.String("operation", "startup_reconciliation"))
+		v2OnlyMode = false
+		startupState.LegacyRequired = true
+	}
+
+	// Log startup mode detection
 	switch {
 	case v2OnlyMode:
 		datastoreLog.Info("migration completed, starting in enhanced database mode",

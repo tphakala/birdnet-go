@@ -10,9 +10,12 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -365,6 +368,126 @@ func (m *mockFailingStateManager) GetCompleteCalls() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.completeCalls
+}
+
+func TestWorker_TailSyncBatchAdvancesLastIDOnFailure(t *testing.T) {
+	// Verify that tailSyncBatch advances LastMigratedID even when migration
+	// fails for individual records. Failed records are tracked as dirty IDs.
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	transitionToCompleted(t, sm)
+
+	// Set LastMigratedID to 5
+	require.NoError(t, sm.IncrementProgress(5, 5))
+
+	// Create mock legacy repo returning 3 records (IDs 6, 7, 8)
+	mockLegacy := mocks.NewMockDetectionRepository(t)
+	mockLegacy.EXPECT().
+		Search(mock.Anything, mock.Anything).
+		Return([]*detection.Result{
+			{ID: 6}, {ID: 7}, {ID: 8},
+		}, int64(3), nil).
+		Once()
+
+	w := &Worker{
+		stateManager:    sm,
+		legacy:          mockLegacy,
+		modelRepo:       &failingModelRepo{},
+		logger:          testLogger(),
+		batchSize:       DefaultBatchSize,
+		pauseCh:         make(chan struct{}),
+		resumeCh:        make(chan struct{}),
+		stopCh:          make(chan struct{}),
+		maxConsecErrors: DefaultMaxConsecutiveErrors,
+		rateSamples:     make([]rateSample, DefaultRateWindowSize),
+	}
+
+	// tailSyncBatch should process all records, fail migration for each
+	// (since v2Detection is nil), but still advance LastMigratedID
+	synced, done := w.tailSyncBatch(t.Context())
+
+	// All records should have failed migration
+	assert.Equal(t, int64(0), synced, "no records should have been successfully migrated")
+	assert.True(t, done, "should be done (fewer than batchSize records)")
+
+	// But LastMigratedID should have advanced to 8 (the highest ID seen)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, uint(8), state.LastMigratedID,
+		"LastMigratedID should advance past failed records")
+
+	// Verify dirty IDs were tracked
+	dirtyCount, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(3), dirtyCount, "all 3 failed records should be dirty IDs")
+}
+
+func TestWorker_TailSyncRetriesDirtyIDs(t *testing.T) {
+	// Verify that dirty IDs persist correctly and can be retrieved for retry.
+	// The full retry flow requires a legacy repo; this test verifies the
+	// dirty ID tracking that enables the retry mechanism.
+	sm, cleanup := setupWorkerTest(t)
+	defer cleanup()
+
+	transitionToCompleted(t, sm)
+
+	// Add dirty IDs manually (simulating tail sync failures)
+	require.NoError(t, sm.AddDirtyID(42))
+	require.NoError(t, sm.AddDirtyID(43))
+
+	// Verify dirty IDs exist and are retrievable
+	count, err := sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(2), count, "should have 2 dirty IDs")
+
+	// Verify dirty IDs can be fetched in batches for retry
+	ids, err := sm.GetDirtyIDsBatch(100)
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []uint{42, 43}, ids, "should retrieve all dirty IDs")
+
+	// Verify removal after successful retry
+	require.NoError(t, sm.RemoveDirtyID(42))
+	count, err = sm.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), count, "should have 1 dirty ID after removal")
+}
+
+// failingModelRepo implements repository.ModelRepository and always returns
+// errors. Used to make migrateRecord fail cleanly (without panicking on nil)
+// so that tailSyncBatch exercises its dirty ID tracking path.
+type failingModelRepo struct{}
+
+func (f *failingModelRepo) GetOrCreate(_ context.Context, _, _, _ string, _ entities.ModelType, _ *string) (*entities.AIModel, error) {
+	return nil, errors.New("model repo unavailable in test")
+}
+
+func (f *failingModelRepo) GetByID(_ context.Context, _ uint) (*entities.AIModel, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *failingModelRepo) GetByNameVersionVariant(_ context.Context, _, _, _ string) (*entities.AIModel, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *failingModelRepo) GetAll(_ context.Context) ([]*entities.AIModel, error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *failingModelRepo) Count(_ context.Context) (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
+func (f *failingModelRepo) CountLabels(_ context.Context, _ uint) (int64, error) {
+	return 0, errors.New("not implemented")
+}
+
+func (f *failingModelRepo) Delete(_ context.Context, _ uint) error {
+	return errors.New("not implemented")
+}
+
+func (f *failingModelRepo) Exists(_ context.Context, _ uint) (bool, error) {
+	return false, errors.New("not implemented")
 }
 
 func TestWorker_SwitchStatementCoverage(t *testing.T) {

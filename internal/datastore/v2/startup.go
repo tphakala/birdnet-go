@@ -388,6 +388,180 @@ func ShouldSkipLegacyDatabase(settings *conf.Settings) bool {
 	return !state.LegacyRequired && state.MigrationStatus == entities.MigrationStatusCompleted
 }
 
+// HasUnmigratedLegacyRecords checks whether legacy records exist beyond the last
+// migrated ID after migration completed. This detects data loss from hard crashes
+// (kill -9, power loss, OOM) during the tail sync window.
+//
+// When unmigrated records are found, the caller should:
+//  1. Skip database consolidation (keep files in place)
+//  2. Override v2-only mode so the worker can tail-sync the stragglers
+//
+// Best-effort: returns false on any error to avoid blocking startup.
+func HasUnmigratedLegacyRecords(settings *conf.Settings, log logger.Logger) bool {
+	if settings.Output.MySQL.Enabled {
+		return hasUnmigratedLegacyMySQL(settings, log)
+	}
+	if settings.Output.SQLite.Enabled {
+		return hasUnmigratedLegacySQLite(settings, log)
+	}
+	return false
+}
+
+// hasUnmigratedLegacySQLite checks for unmigrated records in a SQLite legacy database.
+func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool {
+	configuredPath := settings.Output.SQLite.Path
+	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
+
+	// Both databases must exist for there to be stragglers
+	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
+		return false
+	}
+	if _, err := os.Stat(configuredPath); os.IsNotExist(err) {
+		return false
+	}
+
+	// Open v2 migration database read-only to get LastMigratedID
+	v2DSN := v2MigrationPath + "?mode=ro"
+	v2DB, err := gorm.Open(sqlite.Open(v2DSN), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		log.Warn("reconciliation: failed to open v2 migration database", logger.Error(err))
+		return false
+	}
+	v2SQL, err := v2DB.DB()
+	if err != nil {
+		log.Warn("reconciliation: failed to get v2 underlying DB", logger.Error(err))
+		return false
+	}
+	defer func() { _ = v2SQL.Close() }()
+
+	// Resolve table name (migration_states or migration_state for pre-PR #2165)
+	migrationTable := resolveSQLiteTableName(v2DB, "migration_states", "migration_state")
+	if migrationTable == "" {
+		return false
+	}
+
+	var state entities.MigrationState
+	if err := v2DB.Table(migrationTable).First(&state).Error; err != nil {
+		log.Warn("reconciliation: failed to read migration state", logger.Error(err))
+		return false
+	}
+
+	// Only relevant when migration is completed
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// Open legacy database read-only to count records beyond the watermark
+	legacyDSN := configuredPath + "?mode=ro"
+	legacyDB, err := gorm.Open(sqlite.Open(legacyDSN), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		log.Warn("reconciliation: failed to open legacy database", logger.Error(err))
+		return false
+	}
+	legacySQL, err := legacyDB.DB()
+	if err != nil {
+		log.Warn("reconciliation: failed to get legacy underlying DB", logger.Error(err))
+		return false
+	}
+	defer func() { _ = legacySQL.Close() }()
+
+	// Count legacy notes beyond the last migrated ID
+	var count int64
+	if err := legacyDB.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).Scan(&count).Error; err != nil {
+		log.Warn("reconciliation: failed to count unmigrated legacy records", logger.Error(err))
+		return false
+	}
+
+	if count > 0 {
+		log.Warn("found unmigrated legacy records after potential crash recovery",
+			logger.Int64("count", count),
+			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)))
+		return true
+	}
+
+	return false
+}
+
+// hasUnmigratedLegacyMySQL checks for unmigrated records in a MySQL legacy database.
+func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
+	cfg := mysql.Config{
+		User:   settings.Output.MySQL.Username,
+		Passwd: settings.Output.MySQL.Password,
+		Net:    "tcp",
+		Addr:   fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		DBName: settings.Output.MySQL.Database,
+		Params: map[string]string{
+			"charset":      "utf8mb4",
+			"parseTime":    "True",
+			"loc":          "Local",
+			"timeout":      dbStartupTimeout,
+			"readTimeout":  dbStartupTimeout,
+			"writeTimeout": dbStartupTimeout,
+		},
+	}
+	dsn := cfg.FormatDSN()
+
+	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+	})
+	if err != nil {
+		log.Warn("reconciliation: failed to open MySQL database", logger.Error(err))
+		return false
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Warn("reconciliation: failed to get MySQL underlying DB", logger.Error(err))
+		return false
+	}
+	defer func() { _ = sqlDB.Close() }()
+
+	// Check if v2 migration state table exists (try both plural and singular names)
+	tableNameNew := v2TablePrefix + "migration_states"
+	tableNameOld := v2TablePrefix + "migration_state"
+	var v2MigrationTableName string
+	if err := db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
+		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error; err != nil || v2MigrationTableName == "" {
+		return false
+	}
+
+	var state entities.MigrationState
+	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
+		log.Warn("reconciliation: failed to read MySQL migration state", logger.Error(err))
+		return false
+	}
+
+	if state.State != entities.MigrationStatusCompleted {
+		return false
+	}
+
+	// Check if legacy notes table exists
+	var legacyCount int64
+	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
+		settings.Output.MySQL.Database).Scan(&legacyCount).Error; err != nil || legacyCount == 0 {
+		return false
+	}
+
+	// Count legacy notes beyond the last migrated ID
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM notes WHERE id > ?", state.LastMigratedID).Scan(&count).Error; err != nil {
+		log.Warn("reconciliation: failed to count unmigrated MySQL legacy records", logger.Error(err))
+		return false
+	}
+
+	if count > 0 {
+		log.Warn("found unmigrated legacy records after potential crash recovery (MySQL)",
+			logger.Int64("count", count),
+			logger.Uint64("last_migrated_id", uint64(state.LastMigratedID)))
+		return true
+	}
+
+	return false
+}
+
 // CheckSQLiteHasV2Schema checks if a SQLite database at the given path is a fully initialized v2 database.
 // This is used to distinguish between a legacy database and a fresh v2 database.
 // Returns true only if the database has:

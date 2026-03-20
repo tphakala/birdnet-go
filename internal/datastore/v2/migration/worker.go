@@ -925,6 +925,17 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 		}
 	}
 
+	// Retry any dirty IDs accumulated during tail sync. processDirtyIDs is
+	// a no-op when no dirty IDs exist (empty query returns immediately).
+	if caught, err := w.processDirtyIDs(ctx); err != nil {
+		w.logger.Warn("tail sync: dirty ID retry interrupted",
+			logger.Int64("recovered_before_error", caught),
+			logger.Error(err))
+	} else if caught > 0 {
+		w.logger.Info("tail sync: recovered dirty IDs",
+			logger.Int64("count", caught))
+	}
+
 	return runActionContinue
 }
 
@@ -954,9 +965,14 @@ func (w *Worker) tailSyncBatch(ctx context.Context) (synced int64, done bool) {
 		return 0, true
 	}
 
-	// Migrate each new record to v2
+	// Migrate each new record to v2. Track lastID for all records (not just
+	// successful ones) so LastMigratedID advances past failures. Failed records
+	// are tracked as dirty IDs for retry via processDirtyIDs.
 	var lastID uint
 	for _, result := range results {
+		if result.ID > lastID {
+			lastID = result.ID
+		}
 		if err := w.migrateRecord(ctx, result); err != nil {
 			w.logger.Warn("tail sync: failed to migrate record",
 				logger.Uint64("id", uint64(result.ID)),
@@ -970,9 +986,6 @@ func (w *Worker) tailSyncBatch(ctx context.Context) (synced int64, done bool) {
 			continue
 		}
 		synced++
-		if result.ID > lastID {
-			lastID = result.ID
-		}
 	}
 
 	// Update the watermark so we don't re-process these records
