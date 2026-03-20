@@ -1215,6 +1215,10 @@ export const settingsActions = {
 
       await settingsAPI.save(coercedFormData);
 
+      // Refresh restart-required status from backend after save
+      const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
+      await fetchRestartStatus();
+
       // Check if UI locale changed and apply it
       const newLocale = currentState.formData.realtime?.dashboard?.locale;
       if (newLocale) {

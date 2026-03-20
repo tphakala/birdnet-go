@@ -183,14 +183,10 @@ func (c *Controller) RebuildFilter(ctx echo.Context) error {
 		"Received request to rebuild species filter", "Filter rebuild signal sent")
 }
 
-// RestartServer handles POST /api/v2/control/restart-server
-// Triggers a graceful binary restart.
-func (c *Controller) RestartServer(ctx echo.Context) error {
-	c.logInfoIfEnabled("Received request to restart server",
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("ip", ctx.RealIP()),
-	)
-
+// handleRestartRequest is the shared logic for restart endpoints.
+// It checks the shutdown requester, applies the CAS flag via setFlag,
+// and schedules an async shutdown after the HTTP response is sent.
+func (c *Controller) handleRestartRequest(ctx echo.Context, action string, setFlag func() bool, successMessage string) error {
 	if c.shutdownRequester == nil {
 		err := fmt.Errorf("shutdown requester not initialized")
 		return c.HandleError(ctx, err,
@@ -198,17 +194,17 @@ func (c *Controller) RestartServer(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 
-	if !restart.SetBinaryRestart() {
+	if !setFlag() {
 		return ctx.JSON(http.StatusConflict, ControlResult{
 			Success:   false,
 			Message:   "A restart is already in progress",
-			Action:    ActionRestartServer,
+			Action:    action,
 			Timestamp: time.Now(),
 		})
 	}
 
-	c.logInfoIfEnabled("Binary restart requested",
-		logger.String("action", ActionRestartServer),
+	c.logInfoIfEnabled(successMessage,
+		logger.String("action", action),
 		logger.String("ip", ctx.RealIP()),
 	)
 
@@ -220,10 +216,21 @@ func (c *Controller) RestartServer(ctx echo.Context) error {
 
 	return ctx.JSON(http.StatusOK, ControlResult{
 		Success:   true,
-		Message:   "Server restart initiated",
-		Action:    ActionRestartServer,
+		Message:   successMessage,
+		Action:    action,
 		Timestamp: time.Now(),
 	})
+}
+
+// RestartServer handles POST /api/v2/control/restart-server
+// Triggers a graceful binary restart.
+func (c *Controller) RestartServer(ctx echo.Context) error {
+	c.logInfoIfEnabled("Received request to restart server",
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()),
+	)
+
+	return c.handleRestartRequest(ctx, ActionRestartServer, restart.SetBinaryRestart, "Server restart initiated")
 }
 
 // RestartContainer handles POST /api/v2/control/restart-container
@@ -242,39 +249,7 @@ func (c *Controller) RestartContainer(ctx echo.Context) error {
 			http.StatusBadRequest)
 	}
 
-	if c.shutdownRequester == nil {
-		err := fmt.Errorf("shutdown requester not initialized")
-		return c.HandleError(ctx, err,
-			"Restart not available",
-			http.StatusInternalServerError)
-	}
-
-	if !restart.SetContainerRestart() {
-		return ctx.JSON(http.StatusConflict, ControlResult{
-			Success:   false,
-			Message:   "A restart is already in progress",
-			Action:    ActionRestartContainer,
-			Timestamp: time.Now(),
-		})
-	}
-
-	c.logInfoIfEnabled("Container restart requested",
-		logger.String("action", ActionRestartContainer),
-		logger.String("ip", ctx.RealIP()),
-	)
-
-	// Schedule shutdown after response is sent (500ms to ensure HTTP flush)
-	go func() {
-		time.Sleep(500 * time.Millisecond)
-		c.shutdownRequester.RequestShutdown()
-	}()
-
-	return ctx.JSON(http.StatusOK, ControlResult{
-		Success:   true,
-		Message:   "Container restart initiated",
-		Action:    ActionRestartContainer,
-		Timestamp: time.Now(),
-	})
+	return c.handleRestartRequest(ctx, ActionRestartContainer, restart.SetContainerRestart, "Container restart initiated")
 }
 
 // isContainerEnvironment checks if the given environment type is a container.

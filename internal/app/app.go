@@ -46,6 +46,8 @@ func New() *App {
 	}
 }
 
+// globalApp provides access to the App instance for the restart wiring path
+// (API controller → App.RequestShutdown). Avoid using for other purposes.
 var globalApp atomic.Pointer[App]
 
 // SetGlobal stores the app instance for global access (e.g., by API handlers).
