@@ -35,6 +35,7 @@ describe('connectionState', () => {
       // Module may not be loaded
     }
     vi.useRealTimers();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
