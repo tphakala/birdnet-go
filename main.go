@@ -92,7 +92,9 @@ func mainWithExitCode() int {
 	}
 
 	// Apply taxonomy synonym overrides from config.
-	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, settings.BirdNET.Labels)
+	// Pass nil for knownLabels: BirdNET labels are not yet loaded at this stage.
+	// Validation only runs via the API settings endpoint where labels are populated.
+	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, nil)
 
 	// Set runtime values
 	settings.Version = version

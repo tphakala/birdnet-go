@@ -1739,7 +1739,7 @@
                 </div>
                 <button
                   type="button"
-                  class="p-1 rounded-md text-muted hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100"
+                  class="p-1 rounded-md text-muted hover:text-[var(--color-error)] hover:bg-[var(--color-error)]/10 transition-colors opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
                   aria-label="{t('settings.species.remove')} {oldName}"
                   onclick={() => removeSynonym(oldName)}
                   disabled={store.isLoading || store.isSaving}
