@@ -1,3 +1,6 @@
+// Package restart provides concurrency-safe coordination for application restarts.
+// It supports two restart modes (binary re-exec and container exit) and tracks
+// human-readable reasons for why a restart is required.
 package restart
 
 import (

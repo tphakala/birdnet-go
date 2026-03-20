@@ -55,6 +55,7 @@ func TestMarkRestartRequiredMultiple(t *testing.T) {
 }
 
 func TestResetClearsReasons(t *testing.T) {
+	t.Cleanup(Reset)
 	MarkRestartRequired("Something")
 	Reset()
 	assert.False(t, IsRestartRequired())

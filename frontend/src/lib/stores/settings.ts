@@ -1215,9 +1215,15 @@ export const settingsActions = {
 
       await settingsAPI.save(coercedFormData);
 
-      // Refresh restart-required status from backend after save
-      const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
-      await fetchRestartStatus();
+      // Refresh restart-required status from backend after save.
+      // Isolated try-catch: failure here must not mask a successful settings save.
+      try {
+        const { fetchRestartStatus } = await import('$lib/stores/restart.svelte');
+        await fetchRestartStatus();
+      } catch {
+        // Non-critical: restart status refresh failed, but settings were saved.
+        // The banner may show stale state until next page load.
+      }
 
       // Check if UI locale changed and apply it
       const newLocale = currentState.formData.realtime?.dashboard?.locale;

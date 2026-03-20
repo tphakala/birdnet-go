@@ -36,7 +36,6 @@
   <div
     class="flex items-center gap-3 px-4 py-3 text-sm bg-[var(--color-info)]/10 border-b border-[var(--color-info)]/30"
     role="status"
-    aria-live="polite"
   >
     <div class="loading loading-spinner loading-sm text-[var(--color-info)]"></div>
     <span>{t('restart.inProgress')}</span>
