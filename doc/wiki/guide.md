@@ -452,13 +452,13 @@ By default, BirdNET-Go looks for `config.yaml` in the [default configuration loc
 
 ```bash
 # Use a specific config file
-birdnet realtime --config /path/to/my-config.yaml
+birdnet serve --config /path/to/my-config.yaml
 
 # Short form
-birdnet realtime -c /path/to/my-config.yaml
+birdnet serve -c /path/to/my-config.yaml
 
 # Equals syntax
-birdnet realtime --config=/path/to/my-config.yaml
+birdnet serve --config=/path/to/my-config.yaml
 ```
 
 This is useful for:
