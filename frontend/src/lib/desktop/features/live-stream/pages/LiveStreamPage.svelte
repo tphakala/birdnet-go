@@ -467,7 +467,7 @@
           slotCounter = next;
           labelQueue.push({
             text: det.species,
-            firstDetected: det.audioCapturedAt ?? det.firstDetected,
+            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - 1.5,
             ySlot: slot,
           });
         }
