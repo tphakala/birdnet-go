@@ -1650,8 +1650,12 @@ func initViper() error {
 				ConfigPath = os.Args[i+1]
 				break
 			}
-			if strings.HasPrefix(arg, "--config=") {
-				ConfigPath = strings.TrimPrefix(arg, "--config=")
+			if val, found := strings.CutPrefix(arg, "--config="); found {
+				ConfigPath = val
+				break
+			}
+			if val, found := strings.CutPrefix(arg, "-c="); found {
+				ConfigPath = val
 				break
 			}
 		}
