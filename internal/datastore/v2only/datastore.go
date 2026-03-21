@@ -550,7 +550,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// DIRECT DB WRITE: We use tx.Create directly instead of ds.detection.Save()
 	// to ensure both detection and predictions are in the same transaction.
 	// The repository doesn't currently support transaction injection.
-	return ds.manager.DB().WithContext(txCtx).Transaction(func(tx *gorm.DB) error {
+	if err := ds.manager.DB().WithContext(txCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(det).Error; err != nil {
 			return fmt.Errorf("failed to save detection: %w", err)
 		}
@@ -565,7 +565,16 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Propagate database-assigned ID back to the caller's Note.
+	// Without this, detection_repository.Save() reads note.ID=0 and
+	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
+	note.ID = det.ID
+
+	return nil
 }
 
 // buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
