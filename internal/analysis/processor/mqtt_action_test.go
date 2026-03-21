@@ -9,6 +9,7 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -286,13 +287,15 @@ func TestMqttAction_Execute_SourceID(t *testing.T) {
 		"sourceId should match AudioSource.ID for HA filtering")
 }
 
-// TestMqttAction_Execute_NotConnected verifies that MqttAction returns error
-// when not connected.
-func TestMqttAction_Execute_NotConnected(t *testing.T) {
+// TestMqttAction_Execute_TransientError_NonFatal verifies that transient connection
+// errors (EOF, not connected) are absorbed by MqttAction and do NOT fail the action.
+// This is the key behavioral change for GitHub #2397 — the detection is safe in the
+// database, so a missed MQTT notification is not data loss.
+func TestMqttAction_Execute_TransientError_NonFatal(t *testing.T) {
 	t.Parallel()
 
 	mockClient := NewMockMQTTClient()
-	mockClient.SetConnected(false)
+	mockClient.SetPublishError(fmt.Errorf("not connected to MQTT broker"))
 
 	settings := &conf.Settings{
 		Debug: true,
@@ -313,9 +316,36 @@ func TestMqttAction_Execute_NotConnected(t *testing.T) {
 		DetectionCtx: detectionCtx,
 	}
 
+	// Transient connection errors should return nil (non-fatal)
 	err := action.Execute(t.Context(), nil)
-	require.Error(t, err, "Should return error when not connected")
-	assert.Contains(t, err.Error(), "MQTT client not connected", "Error should indicate connection issue")
+	require.NoError(t, err, "Transient connection error should be non-fatal (detection is safe in DB)")
+}
+
+// TestMqttAction_Execute_EOFError_NonFatal verifies that EOF errors during publish
+// are treated as transient and do not fail the action (GitHub #2397).
+func TestMqttAction_Execute_EOFError_NonFatal(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	mockClient.SetPublishError(fmt.Errorf("connection lost: EOF"))
+
+	settings := &conf.Settings{
+		Debug: true,
+	}
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockClient,
+		EventTracker: eventTracker,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err, "EOF error should be non-fatal (GitHub #2397)")
 }
 
 // TestMqttAction_Execute_PublishesToConfiguredTopic verifies that the message

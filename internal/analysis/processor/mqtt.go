@@ -46,16 +46,17 @@ func (p *Processor) DisconnectMQTTClient() {
 	}
 }
 
-// PublishMQTT safely publishes a message using the MQTT client if available
+// PublishMQTT safely publishes a message using the MQTT client if available.
+// Does NOT pre-check IsConnected() to avoid TOCTOU race (GitHub #2397).
 func (p *Processor) PublishMQTT(ctx context.Context, topic, payload string) error {
 	p.mqttMutex.RLock()
 	client := p.MqttClient
 	p.mqttMutex.RUnlock()
 
-	if client != nil && client.IsConnected() {
+	if client != nil {
 		return client.Publish(ctx, topic, payload)
 	}
-	return errors.Newf("MQTT client not available or not connected").
+	return errors.Newf("MQTT client not available").
 		Component("analysis.processor").
 		Category(errors.CategoryMQTTPublish).
 		Context("operation", "publish_mqtt").

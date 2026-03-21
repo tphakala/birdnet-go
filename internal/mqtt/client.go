@@ -5,6 +5,8 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	stderrors "errors"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -22,6 +24,10 @@ import (
 )
 
 const (
+	// publishRetryDelay is the wait time before retrying a publish after a transient
+	// connection error. This gives the Paho auto-reconnect time to re-establish.
+	publishRetryDelay = 500 * time.Millisecond
+
 	// defaultQoS is the default Quality of Service level for MQTT messages
 	defaultQoS = 1 // QoS 1 ensures at least once delivery
 )
@@ -336,8 +342,11 @@ func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, r
 }
 
 // publishInternal is the common implementation for Publish and PublishWithRetain.
+// It attempts the publish without a pre-check on IsConnected() to avoid the TOCTOU
+// race (GitHub #2397 Layer 3). If the publish fails with a transient connection error,
+// it waits briefly for the auto-reconnect and retries once.
 func (c *client) publishInternal(ctx context.Context, topic, payload string, retain bool) error {
-	// Check context before acquiring lock
+	// Check context before proceeding
 	if err := ctx.Err(); err != nil {
 		GetLogger().Warn("Publish context already cancelled",
 			logger.String("topic", topic),
@@ -345,11 +354,16 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 		return err
 	}
 
-	c.mu.Lock()
-	if c.internalClient == nil || !c.internalClient.IsConnected() {
-		c.mu.Unlock()
-		GetLogger().Warn("Publish failed: client is not connected")
-		enhancedErr := errors.Newf("not connected to MQTT broker").
+	// Get client reference under lock, but do NOT check IsConnected().
+	// The check-then-use pattern is the core of the TOCTOU race (GitHub #2397).
+	// Instead, attempt the publish and handle errors.
+	c.mu.RLock()
+	clientToPublish := c.internalClient
+	c.mu.RUnlock()
+
+	if clientToPublish == nil {
+		GetLogger().Warn("Publish failed: no MQTT client initialized")
+		return errors.Newf("not connected to MQTT broker").
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
 			Context("broker", c.config.Broker).
@@ -357,10 +371,7 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 			Context("topic", topic).
 			Context("operation", "publish_not_connected").
 			Build()
-		return enhancedErr
 	}
-	clientToPublish := c.internalClient
-	c.mu.Unlock()
 
 	log := GetLogger().With(
 		logger.String("topic", topic),
@@ -372,18 +383,53 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 	log.Debug("Attempting to publish message",
 		logger.Int("payload_size", len(payload)))
 
-	token := clientToPublish.Publish(topic, defaultQoS, retain, payload)
+	// First attempt
+	err := c.attemptPublish(ctx, clientToPublish, topic, payload, retain, log)
+	if err == nil {
+		return nil
+	}
+
+	// If transient connection error, wait briefly for auto-reconnect and retry once.
+	// The Paho client has built-in auto-reconnect; 500ms is usually enough.
+	if isTransientConnectionError(err) {
+		log.Debug("Transient connection error, waiting for auto-reconnect before retry",
+			logger.Error(err))
+
+		select {
+		case <-time.After(publishRetryDelay):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+
+		// Get potentially reconnected client
+		c.mu.RLock()
+		retryClient := c.internalClient
+		c.mu.RUnlock()
+
+		if retryClient != nil && retryClient.IsConnected() {
+			retryErr := c.attemptPublish(ctx, retryClient, topic, payload, retain, log)
+			if retryErr == nil {
+				log.Debug("Publish succeeded on retry after reconnect")
+				return nil
+			}
+		}
+	}
+
+	return err
+}
+
+// attemptPublish performs a single publish attempt using the given paho client.
+func (c *client) attemptPublish(ctx context.Context, mqttClient mqtt.Client, topic, payload string, retain bool, log logger.Logger) error {
+	token := mqttClient.Publish(topic, defaultQoS, retain, payload)
 
 	if !token.WaitTimeout(c.config.PublishTimeout) {
 		log.Error("MQTT publish timed out",
 			logger.Duration("timeout", c.config.PublishTimeout))
 		if ctxErr := ctx.Err(); ctxErr != nil {
-			log.Error("Context was cancelled during publish wait",
-				logger.Error(ctxErr))
 			return ctxErr
 		}
 		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_timeout")
-		enhancedErr := errors.Newf("publish timeout after %v", c.config.PublishTimeout).
+		return errors.Newf("publish timeout after %v", c.config.PublishTimeout).
 			Component("mqtt").
 			Category(errors.CategoryMQTTPublish).
 			Context("broker", c.config.Broker).
@@ -393,14 +439,13 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 			Context("payload_size", len(payload)).
 			Context("operation", "publish_timeout").
 			Build()
-		return enhancedErr
 	}
 
 	if publishErr := token.Error(); publishErr != nil {
-		log.Error("MQTT publish failed",
+		log.Warn("MQTT publish attempt failed",
 			logger.Error(publishErr))
 		c.metrics.IncrementErrorsWithCategory("mqtt-publish", "publish_error")
-		enhancedErr := errors.New(publishErr).
+		return errors.New(publishErr).
 			Component("mqtt").
 			Category(errors.CategoryMQTTPublish).
 			Context("broker", c.config.Broker).
@@ -411,13 +456,28 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 			Context("retain", retain).
 			Context("operation", "publish_error").
 			Build()
-		return enhancedErr
 	}
 
 	log.Debug("Publish completed successfully")
 	c.metrics.IncrementMessagesDelivered()
 	c.metrics.ObserveMessageSize(float64(len(payload)))
 	return nil
+}
+
+// isTransientConnectionError checks if an error is a transient MQTT connection issue
+// that may resolve after the auto-reconnect timer fires.
+func isTransientConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if stderrors.Is(err, io.EOF) || stderrors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "eof") ||
+		strings.Contains(msg, "not connected") ||
+		strings.Contains(msg, "connection lost") ||
+		strings.Contains(msg, "connection reset")
 }
 
 // IsConnected returns true if the client is currently connected to the MQTT broker.

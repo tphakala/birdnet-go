@@ -261,6 +261,22 @@ func isEOFError(err error) bool {
 	return strings.Contains(strings.ToLower(err.Error()), "eof")
 }
 
+// isTransientMQTTError checks if an error is a transient MQTT connection issue
+// (EOF, not connected, connection lost). These are expected during the TOCTOU race
+// window (GitHub #2397) and should not fail the CompositeAction.
+func isTransientMQTTError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if isEOFError(err) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "not connected") ||
+		strings.Contains(msg, "connection lost") ||
+		strings.Contains(msg, "connection reset")
+}
+
 // shouldSuppressNewSpeciesNotification checks if a new species notification should be suppressed.
 // Returns true if notification should be suppressed, along with the notification time.
 func (a *DatabaseAction) shouldSuppressNewSpeciesNotification() (suppress bool, notificationTime time.Time) {

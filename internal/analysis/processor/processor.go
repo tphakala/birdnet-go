@@ -1546,11 +1546,13 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		}
 	}
 
-	// Create MQTT action if enabled and client is available
-	// NOTE: MqttAction must be created before the CompositeAction to be included in the sequence
+	// Create MQTT action if enabled and client reference exists.
+	// NOTE: We intentionally do NOT check IsConnected() here. The connection state
+	// at action-creation time is stale by the time the action executes from the job queue
+	// (TOCTOU Layer 1, GitHub #2397). The publish path handles disconnected state gracefully.
 	if p.Settings.Realtime.MQTT.Enabled {
 		mqttClient := p.GetMQTTClient()
-		if mqttClient != nil && mqttClient.IsConnected() {
+		if mqttClient != nil {
 			// Create MQTT retry config from settings
 			mqttRetryConfig := jobqueue.RetryConfig{
 				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,

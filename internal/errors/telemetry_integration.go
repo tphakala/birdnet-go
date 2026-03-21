@@ -179,7 +179,7 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 
 	// Filter out network infrastructure errors (user's network/DNS issues)
 	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
-	case CategoryNetwork, CategoryMQTTConnection, CategoryRTSP, CategoryHTTP:
+	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:
 		for _, pattern := range networkNoisePatterns {
 			if strings.Contains(errorMsg, pattern) {
 				return false
