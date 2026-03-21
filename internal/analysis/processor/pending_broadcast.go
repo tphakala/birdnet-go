@@ -2,6 +2,7 @@ package processor
 
 import (
 	"slices"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -25,16 +26,26 @@ const (
 // SSEPendingDetection is the lightweight DTO sent over SSE for pending detections.
 // It contains only the fields needed for the "currently hearing" dashboard card.
 type SSEPendingDetection struct {
-	Species         string                 `json:"species"`         // Common name
-	ScientificName  string                 `json:"scientificName"`  // Scientific name
-	Thumbnail       string                 `json:"thumbnail"`       // Bird image URL
-	Status          PendingDetectionStatus `json:"status"`          // "active", "approved", "rejected"
-	FirstDetected   int64                  `json:"firstDetected"`   // Unix timestamp (seconds)
-	AudioCapturedAt int64                  `json:"audioCapturedAt"` // Unix timestamp of audio capture start
-	LastUpdated     int64                  `json:"lastUpdated"`     // Unix seconds — most recent inference hit
-	Source          string                 `json:"source"`          // Source display name
-	SourceID        string                 `json:"sourceID"`        // Raw source ID for client-side filtering
-	HitCount        int                    `json:"hitCount"`        // Number of inference hits accumulated
+	Species         string                 `json:"species"`                   // Common name
+	ScientificName  string                 `json:"scientificName"`            // Scientific name
+	Thumbnail       string                 `json:"thumbnail"`                 // Bird image URL
+	Status          PendingDetectionStatus `json:"status"`                    // "active", "approved", "rejected"
+	FirstDetected   int64                  `json:"firstDetected"`             // Unix timestamp (seconds)
+	AudioCapturedAt int64                  `json:"audioCapturedAt,omitempty"` // Unix seconds when audio was captured (omitted if unavailable)
+	LastUpdated     int64                  `json:"lastUpdated"`               // Unix seconds — most recent inference hit
+	Source          string                 `json:"source"`                    // Source display name
+	SourceID        string                 `json:"sourceID"`                  // Raw source ID for client-side filtering
+	HitCount        int                    `json:"hitCount"`                  // Number of inference hits accumulated
+}
+
+// unixOrZero returns t.Unix() if t is non-zero, or 0 otherwise.
+// Go's zero time.Time{}.Unix() returns -62135596800 (year 0001), which would
+// confuse frontend consumers expecting 0 or omission for "not available".
+func unixOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
 }
 
 // sortPendingSnapshot sorts a pending detection snapshot by FirstDetected
@@ -96,7 +107,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			Thumbnail:       p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
 			Status:          PendingStatusActive,
 			FirstDetected:   item.CreatedAt.Unix(),
-			AudioCapturedAt: item.AudioCapturedAt.Unix(),
+			AudioCapturedAt: unixOrZero(item.AudioCapturedAt),
 			LastUpdated:     item.LastUpdated.Unix(),
 			Source:          p.getDisplayNameForSource(item.Source),
 			SourceID:        item.Source,
@@ -156,15 +167,16 @@ func (p *Processor) broadcastPendingSnapshot(snapshot []SSEPendingDetection) {
 // for a detection that has been flushed (approved or rejected).
 func (p *Processor) buildFlushNotification(item *PendingDetection, status PendingDetectionStatus) SSEPendingDetection {
 	return SSEPendingDetection{
-		Species:        item.Detection.Result.Species.CommonName,
-		ScientificName: item.Detection.Result.Species.ScientificName,
-		Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
-		Status:         status,
-		FirstDetected:  item.CreatedAt.Unix(),
-		LastUpdated:    item.LastUpdated.Unix(),
-		Source:         p.getDisplayNameForSource(item.Source),
-		SourceID:       item.Source,
-		HitCount:       item.Count,
+		Species:         item.Detection.Result.Species.CommonName,
+		ScientificName:  item.Detection.Result.Species.ScientificName,
+		Thumbnail:       p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
+		Status:          status,
+		FirstDetected:   item.CreatedAt.Unix(),
+		AudioCapturedAt: unixOrZero(item.AudioCapturedAt),
+		LastUpdated:     item.LastUpdated.Unix(),
+		Source:          p.getDisplayNameForSource(item.Source),
+		SourceID:        item.Source,
+		HitCount:        item.Count,
 	}
 }
 

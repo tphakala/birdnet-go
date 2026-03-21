@@ -135,7 +135,7 @@ type PendingDetection struct {
 	Source          string     // Audio source of the detection, RTSP URL or audio card name
 	FirstDetected   time.Time  // Back-dated time for audio clip extraction (startTime from analysis buffer)
 	CreatedAt       time.Time  // Real wall-clock time when detection was first created (for display)
-	AudioCapturedAt time.Time  // Wall-clock time when the source audio chunk was captured (for spectrogram overlay)
+	AudioCapturedAt time.Time  // Wall-clock time when the most recent audio chunk was captured (updated on each hit; for spectrogram overlay)
 	LastUpdated     time.Time  // Last time this detection was updated
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
 	Count           int        // Number of times this detection has been updated
