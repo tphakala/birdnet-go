@@ -130,9 +130,21 @@ describe('promoteFromQueue', () => {
     const { promoted, remaining } = promoteFromQueue(queue, 105, 50000);
     expect(promoted).toHaveLength(1);
     expect(promoted[0].text).toBe('Blue Tit');
-    expect(promoted[0].birthTime).toBe(50000);
+    // birthTime is back-dated by (wallClockAtPlayhead - firstDetected) = (105 - 100) = 5s = 5000ms
+    expect(promoted[0].birthTime).toBe(50000 - 5000);
+    expect(promoted[0].firstDetected).toBe(100);
+    expect(promoted[0].promotionDelta).toBe(5);
     expect(remaining).toHaveLength(1);
     expect(remaining[0].text).toBe('Great Tit');
+  });
+
+  it('promotes with exact birthTime when playhead equals firstDetected', () => {
+    const queue: QueuedLabel[] = [{ text: 'Blue Tit', firstDetected: 100, ySlot: 0 }];
+    const { promoted } = promoteFromQueue(queue, 100, 50000);
+    expect(promoted).toHaveLength(1);
+    // No back-dating when playhead == firstDetected
+    expect(promoted[0].birthTime).toBe(50000);
+    expect(promoted[0].promotionDelta).toBe(0);
   });
 
   it('promotes nothing when playhead is behind all labels', () => {

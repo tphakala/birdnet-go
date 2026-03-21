@@ -40,6 +40,10 @@
   const logger = loggers.audio;
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
+  /** How often (ms) to poll for label promotion and pruning */
+  const LABEL_POLL_INTERVAL_MS = 200;
+  /** Maximum label age (ms) before pruning from overlay */
+  const LABEL_MAX_AGE_MS = 60000;
 
   const sessionId = generateSessionId();
 
@@ -70,15 +74,14 @@
 
   // Detection overlay state
   let showDetectionLabels = $state(true);
+  let debugOverlay = $state(false);
   let overlayLabels = $state<OverlayLabel[]>([]);
   let labelQueue: QueuedLabel[] = [];
   let prevSnapshot: PendingDetection[] = [];
   let lastSeenSpecies = new Map<string, number>();
   let slotCounter = 0;
-  let streamEpochMs = $state(0);
-  let epochOffset = 0;
-  let epochOffsetCalibrated = false;
   let detectionEventSource: ReconnectingEventSource | null = null;
+  let currentWallClockAtPlayhead = $state(0);
   const MAX_OVERLAY_SLOTS = 7;
 
   // Internal state
@@ -174,7 +177,6 @@
         stream_token: string;
         playlist_url: string;
         playlist_ready: boolean;
-        stream_epoch?: string;
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
@@ -184,9 +186,6 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
-      if (data.stream_epoch) {
-        streamEpochMs = new Date(data.stream_epoch).getTime();
-      }
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       // Create audio element
@@ -512,9 +511,7 @@
 
     stopHeartbeat();
     disconnectDetectionStream();
-    streamEpochMs = 0;
-    epochOffset = 0;
-    epochOffsetCalibrated = false;
+    currentWallClockAtPlayhead = 0;
     spectro.disconnect();
 
     if (hls) {
@@ -592,6 +589,23 @@
     };
     document.addEventListener('fullscreenchange', handler);
     return () => document.removeEventListener('fullscreenchange', handler);
+  });
+
+  // Toggle debug overlay with D key
+  $effect(() => {
+    const handler = (e: KeyboardEvent) => {
+      // Ignore if any modifier key is held (browser shortcuts like Ctrl+D)
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'd' || e.key === 'D') {
+        // Ignore if typing in an input/textarea
+        const tag = (e.target as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        debugOverlay = !debugOverlay;
+        logger.info('Debug overlay', { enabled: debugOverlay });
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
   });
 
   // No auto-start — browsers block AudioContext and audio.play() without a
@@ -674,27 +688,27 @@
 
   // Promote queued detection labels when playhead catches up
   $effect(() => {
-    if (!audioElement || !streamEpochMs) return;
+    if (!audioElement || !hls) return;
 
     const interval = globalThis.setInterval(() => {
-      if (!audioElement || !streamEpochMs) return;
+      if (!audioElement || !hls) return;
 
-      // Calibrate epoch offset once when playback begins.
-      // streamEpoch is set at stream creation (before FFmpeg starts), so
-      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
-      // startup delay. hls.latency bridges this gap.
-      if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
-        const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
-        const latency = hls ? hls.latency : 6;
-        epochOffset = Date.now() / 1000 - latency - rawWallClock;
-        epochOffsetCalibrated = true;
+      const now = globalThis.performance.now();
+      const nowUnix = Date.now() / 1000;
+
+      // Get wall-clock time at playhead from HLS program date time tags.
+      // FFmpeg embeds #EXT-X-PROGRAM-DATE-TIME in the playlist; hls.js
+      // interpolates the exact Date for the current playback position.
+      const playingDate = hls.playingDate;
+      const wallClockAtPlayhead = playingDate ? playingDate.getTime() / 1000 : 0;
+
+      // Update reactive state for debug display in SpectrogramCanvas
+      if (wallClockAtPlayhead > 0) {
+        currentWallClockAtPlayhead = wallClockAtPlayhead;
       }
 
-      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
-      const now = globalThis.performance.now();
-
-      // Promote queued labels when playhead catches up
-      if (labelQueue.length > 0) {
+      // Promote queued labels when playhead is available
+      if (wallClockAtPlayhead > 0 && labelQueue.length > 0) {
         const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
         if (promoted.length > 0) {
           labelQueue = remaining;
@@ -705,31 +719,37 @@
       // Generate repeat labels for species still actively detected.
       // Use wall-clock time (not playhead time) for dedup tracking so it stays
       // consistent with the SSE handler which also uses Date.now().
-      const nowUnix = Date.now() / 1000;
       const repeats = getRepeatLabels(prevSnapshot, activeSourceId ?? '', lastSeenSpecies, nowUnix);
       if (repeats.length > 0) {
-        const newLabels: Array<{ text: string; birthTime: number; ySlot: number }> = [];
+        const newLabels: OverlayLabel[] = [];
         for (const rep of repeats) {
           lastSeenSpecies.set(rep.species, nowUnix);
           const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
           slotCounter = next;
-          newLabels.push({ text: rep.species, birthTime: now, ySlot: slot });
+          newLabels.push({
+            text: rep.species,
+            birthTime: now,
+            ySlot: slot,
+            firstDetected: rep.firstDetected,
+            promotionDelta: 0, // Repeat labels are created at current time, no delay
+          });
         }
         overlayLabels = [...overlayLabels, ...newLabels];
       }
 
-      // Prune labels older than 60 seconds
-      const cutoff = now - 60000;
+      // Prune labels older than LABEL_MAX_AGE_MS — runs regardless of playingDate
+      // availability so labels don't freeze on screen during buffer stalls
+      const cutoff = now - LABEL_MAX_AGE_MS;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
 
-      // Prune stale dedup entries (older than 10s in media time — generous
-      // buffer beyond the 6s dedup window in shouldDedup)
+      // Prune stale dedup entries using client wall-clock time (consistent
+      // with SSE handler which also uses Date.now() for dedup tracking)
       for (const [species, time] of lastSeenSpecies) {
-        if (wallClockAtPlayhead - time > STALE_DEDUP_PRUNE_SECONDS) {
+        if (nowUnix - time > STALE_DEDUP_PRUNE_SECONDS) {
           lastSeenSpecies.delete(species);
         }
       }
-    }, 200);
+    }, LABEL_POLL_INTERVAL_MS);
 
     return () => globalThis.clearInterval(interval);
   });
@@ -826,6 +846,8 @@
           {colorMap}
           isActive={spectro.isActive}
           overlayLabels={showDetectionLabels ? overlayLabels : []}
+          debug={debugOverlay}
+          wallClockAtPlayhead={currentWallClockAtPlayhead}
           className="h-full w-full"
         />
       {:else}

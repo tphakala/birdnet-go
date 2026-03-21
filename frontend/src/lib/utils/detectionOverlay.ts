@@ -16,6 +16,8 @@ export interface OverlayLabel {
   text: string;
   birthTime: number; // performance.now() when promoted
   ySlot: number;
+  firstDetected?: number; // Unix seconds — original detection time (for debug display)
+  promotionDelta?: number; // seconds — frozen offset at promotion (wallClock - firstDetected)
 }
 
 /** Minimal pending detection shape for diffing. */
@@ -88,10 +90,15 @@ export function promoteFromQueue(
 
   for (const label of queue) {
     if (wallClockAtPlayheadUnix >= label.firstDetected) {
+      // Back-date birthTime so the label appears at the waterfall position
+      // corresponding to firstDetected, not at the right edge.
+      const ageOffsetSec = Math.max(0, wallClockAtPlayheadUnix - label.firstDetected);
       promoted.push({
         text: label.text,
-        birthTime: performanceNow,
+        birthTime: performanceNow - ageOffsetSec * 1000,
         ySlot: label.ySlot,
+        firstDetected: label.firstDetected,
+        promotionDelta: ageOffsetSec,
       });
     } else {
       remaining.push(label);

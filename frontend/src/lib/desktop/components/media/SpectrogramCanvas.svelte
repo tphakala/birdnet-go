@@ -18,6 +18,8 @@
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.audio;
+  /** Interval between debug time markers on the waterfall (seconds) */
+  const DEBUG_MARKER_INTERVAL_SEC = 5;
 
   interface Props {
     /** AnalyserNode to read frequency data from */
@@ -39,9 +41,19 @@
     /** Additional CSS classes for the container */
     className?: string;
     /** Detection labels to render on the spectrogram */
-    overlayLabels?: Array<{ text: string; birthTime: number; ySlot: number }>;
+    overlayLabels?: Array<{
+      text: string;
+      birthTime: number;
+      ySlot: number;
+      firstDetected?: number;
+      promotionDelta?: number;
+    }>;
     /** Font size for overlay labels in CSS pixels (default: 11) */
     overlayFontSize?: number;
+    /** Enable debug overlay: time markers + label timestamps */
+    debug?: boolean;
+    /** Current wall-clock time at playhead (Unix seconds) — used for debug time markers */
+    wallClockAtPlayhead?: number;
   }
 
   let {
@@ -56,6 +68,8 @@
     className = '',
     overlayLabels = [],
     overlayFontSize = 11,
+    debug = false,
+    wallClockAtPlayhead = 0,
   }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -222,6 +236,31 @@
     // Convert CSS px/s to device px/s
     const deviceScrollSpeed = scrollSpeed * dpr;
 
+    // Debug overlay: cache formatted time strings to avoid toLocaleTimeString() per frame.
+    // toLocaleTimeString invokes the Intl API which is expensive at 60fps.
+    const timeFormatCache = new Map<number, string>();
+    let lastCacheClearSec = 0;
+    function formatTimeCached(unixSeconds: number): string {
+      const intSec = Math.floor(unixSeconds);
+      let str = timeFormatCache.get(intSec);
+      if (str === undefined) {
+        str = new Date(intSec * 1000).toLocaleTimeString('en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        timeFormatCache.set(intSec, str);
+      }
+      // Evict old entries every 30 seconds to prevent unbounded growth
+      if (intSec - lastCacheClearSec > 30) {
+        for (const key of timeFormatCache.keys()) {
+          if (key < intSec - 120) timeFormatCache.delete(key);
+        }
+        lastCacheClearSec = intSec;
+      }
+      return str;
+    }
+
     const loop = () => {
       const now = performance.now();
       const deltaTime = (now - lastFrameTime) / 1000;
@@ -262,31 +301,110 @@
         ctx.putImageData(imgData, w - pixelsToScroll, 0);
       }
 
-      // --- Overlay detection labels on separate canvas (avoids self-blit smearing) ---
-      if (olCtx && overlayLabels.length > 0) {
+      // --- Overlay: detection labels + debug time markers ---
+      const hasOverlayContent = overlayLabels.length > 0 || debug;
+
+      if (olCtx && hasOverlayContent) {
         olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
 
-        // Re-apply styles every frame (canvas state can be lost on resize)
-        olCtx.font = `bold ${fontSize}px sans-serif`;
-        olCtx.fillStyle = '#ffffff';
-        olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
-        olCtx.shadowBlur = 3 * dpr;
-        olCtx.shadowOffsetX = 1 * dpr;
-        olCtx.shadowOffsetY = 1 * dpr;
-        olCtx.textBaseline = 'middle';
+        // --- Debug time markers: vertical lines every 5s with HH:MM:SS ---
+        if (debug && wallClockAtPlayhead > 0) {
+          const debugFontSize = Math.round(9 * dpr);
+          const visibleSeconds = deviceWidth / deviceScrollSpeed;
 
-        const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+          // Draw markers from right edge backwards
+          // Right edge = wallClockAtPlayhead, left edge = wallClockAtPlayhead - visibleSeconds
+          const rightEdgeTime = wallClockAtPlayhead;
+          // Find the nearest 5-second boundary at or before the right edge
+          const firstMarker =
+            Math.floor(rightEdgeTime / DEBUG_MARKER_INTERVAL_SEC) * DEBUG_MARKER_INTERVAL_SEC;
 
-        for (const label of overlayLabels) {
-          const labelAge = (now - label.birthTime) / 1000;
-          const x = deviceWidth - labelAge * deviceScrollSpeed;
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.shadowOffsetX = 0;
+          olCtx.shadowOffsetY = 0;
 
-          if (x < -200 * dpr || x > deviceWidth) continue;
+          for (
+            let t = firstMarker;
+            t > rightEdgeTime - visibleSeconds - DEBUG_MARKER_INTERVAL_SEC;
+            t -= DEBUG_MARKER_INTERVAL_SEC
+          ) {
+            const ageSeconds = rightEdgeTime - t;
+            const x = deviceWidth - ageSeconds * deviceScrollSpeed;
+            if (x < 0 || x > deviceWidth) continue;
 
-          const slotHeight = deviceHeight / (maxSlots + 1);
-          const y = slotHeight * (1 + (label.ySlot % maxSlots));
+            // Vertical dashed line
+            olCtx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
+            olCtx.lineWidth = 1 * dpr;
+            olCtx.setLineDash([4 * dpr, 4 * dpr]);
+            olCtx.beginPath();
+            olCtx.moveTo(x, 0);
+            olCtx.lineTo(x, deviceHeight);
+            olCtx.stroke();
+            olCtx.setLineDash([]);
 
-          olCtx.fillText(label.text, x, y);
+            // Time label at bottom
+            const timeStr = formatTimeCached(t);
+            olCtx.font = `${debugFontSize}px monospace`;
+            olCtx.fillStyle = 'rgba(255, 255, 0, 0.8)';
+            olCtx.textBaseline = 'bottom';
+            olCtx.fillText(timeStr, x + 2 * dpr, deviceHeight - 2 * dpr);
+          }
+
+          // Debug info panel (top-left corner)
+          olCtx.font = `${debugFontSize}px monospace`;
+          olCtx.fillStyle = 'rgba(255, 255, 0, 0.9)';
+          olCtx.textBaseline = 'top';
+          const playheadStr = formatTimeCached(wallClockAtPlayhead);
+          const nowStr = formatTimeCached(Date.now() / 1000);
+          const hlsDelay = (Date.now() / 1000 - wallClockAtPlayhead).toFixed(1);
+          olCtx.fillText(`playhead: ${playheadStr}`, 4 * dpr, 4 * dpr);
+          olCtx.fillText(
+            `wall: ${nowStr}  HLS lag: ${hlsDelay}s`,
+            4 * dpr,
+            4 * dpr + debugFontSize + 2 * dpr
+          );
+          olCtx.fillText(
+            `queue: ${overlayLabels.length} labels`,
+            4 * dpr,
+            4 * dpr + (debugFontSize + 2 * dpr) * 2
+          );
+
+          olCtx.restore();
+        }
+
+        // --- Detection labels ---
+        if (overlayLabels.length > 0) {
+          // Re-apply styles every frame (canvas state can be lost on resize)
+          olCtx.font = `bold ${fontSize}px sans-serif`;
+          olCtx.fillStyle = '#ffffff';
+          olCtx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+          olCtx.shadowBlur = 3 * dpr;
+          olCtx.shadowOffsetX = 1 * dpr;
+          olCtx.shadowOffsetY = 1 * dpr;
+          olCtx.textBaseline = 'middle';
+
+          const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+
+          for (const label of overlayLabels) {
+            const labelAge = (now - label.birthTime) / 1000;
+            const x = deviceWidth - labelAge * deviceScrollSpeed;
+
+            if (x < -200 * dpr || x > deviceWidth) continue;
+
+            const slotHeight = deviceHeight / (maxSlots + 1);
+            const y = slotHeight * (1 + (label.ySlot % maxSlots));
+
+            if (debug && label.firstDetected) {
+              // Debug: show species name + firstDetected time + frozen promotion offset
+              const detStr = formatTimeCached(label.firstDetected);
+              const delta = label.promotionDelta?.toFixed(1) ?? '?';
+              olCtx.fillText(`${label.text} [${detStr} \u0394${delta}s]`, x, y);
+            } else {
+              olCtx.fillText(label.text, x, y);
+            }
+          }
         }
         overlayHadContent = true;
       } else if (olCtx && overlayHadContent) {
