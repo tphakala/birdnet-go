@@ -1692,20 +1692,24 @@ func initViper() error {
 	// Read configuration file
 	err := viper.ReadInConfig()
 	if err != nil {
+		// When an explicit config path was given, any read error is fatal —
+		// don't fall back to creating a default config elsewhere.
+		if effectiveConfigPath != "" {
+			return errors.New(err).
+				Category(errors.CategoryConfiguration).
+				Context("operation", "read-config-file").
+				Context("config_path", effectiveConfigPath).
+				Build()
+		}
+
+		// For default path search: ConfigFileNotFoundError means no config
+		// exists yet, so create one with defaults.
 		var configFileNotFoundError viper.ConfigFileNotFoundError
 		if errors.As(err, &configFileNotFoundError) {
-			if effectiveConfigPath != "" {
-				// Explicit config path was given but file doesn't exist — error, don't auto-create
-				return errors.New(err).
-					Category(errors.CategoryConfiguration).
-					Context("operation", "read-config-file").
-					Context("config_path", effectiveConfigPath).
-					Build()
-			}
-			// Config file not found, create config with defaults
 			return createDefaultConfig()
 		}
-		// Report critical config file read errors
+
+		// Other errors (parse failures, permission issues) are fatal.
 		return errors.New(err).
 			Category(errors.CategoryFileIO).
 			Context("operation", "read-config-file").
