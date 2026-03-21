@@ -4202,7 +4202,8 @@
       "nameRequired": "Rule name is required",
       "typesRequired": "Object type and trigger type are required",
       "duplicateName": "A rule with this name already exists",
-      "invalidJSON": "Invalid JSON"
+      "invalidJSON": "Invalid JSON",
+      "invalidEscalation": "Escalation steps are invalid"
     },
     "detection": {
       "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"

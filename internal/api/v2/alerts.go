@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"slices"
 	"strconv"
@@ -73,6 +74,9 @@ func validateEscalationSteps(steps []float64) error {
 	}
 	seen := make(map[float64]struct{}, len(steps))
 	for _, v := range steps {
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return fmt.Errorf("escalation_steps must contain finite numbers, got %g", v)
+		}
 		if v < 0 {
 			return fmt.Errorf("escalation_steps must not contain negative values, got %g", v)
 		}

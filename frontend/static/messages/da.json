@@ -4197,7 +4197,8 @@
       "nameRequired": "Regelnavn er påkrævet",
       "typesRequired": "Objekttype og udløsertype er påkrævet",
       "duplicateName": "En regel med dette navn findes allerede",
-      "invalidJSON": "Ugyldig JSON"
+      "invalidJSON": "Ugyldig JSON",
+      "invalidEscalation": "Eskaleringstrinnene er ugyldige"
     },
     "detection": {
       "invalidDate": "Ugyldigt {paramName}-format, brug ÅÅÅÅ-MM-DD"

@@ -4197,7 +4197,8 @@
       "nameRequired": "Noteikuma nosaukums ir obligāts",
       "typesRequired": "Objekta veids un aktivizēšanas veids ir obligāti",
       "duplicateName": "Noteikums ar šādu nosaukumu jau pastāv",
-      "invalidJSON": "Nederīgs JSON"
+      "invalidJSON": "Nederīgs JSON",
+      "invalidEscalation": "Eskalācijas soļi nav derīgi"
     },
     "detection": {
       "invalidDate": "Nederīgs {paramName} formāts, izmantojiet YYYY-MM-DD"

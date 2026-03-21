@@ -4033,7 +4033,8 @@
       "nameRequired": "Názov pravidla je povinný",
       "typesRequired": "Typ objektu a typ spúšťača sú povinné",
       "duplicateName": "Pravidlo s týmto názvom už existuje",
-      "invalidJSON": "Neplatný JSON"
+      "invalidJSON": "Neplatný JSON",
+      "invalidEscalation": "Eskalačné kroky sú neplatné"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"

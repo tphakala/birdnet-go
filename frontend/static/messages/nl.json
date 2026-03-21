@@ -4202,7 +4202,8 @@
       "nameRequired": "Regelnaam is vereist",
       "typesRequired": "Objecttype en triggertype zijn vereist",
       "duplicateName": "Er bestaat al een regel met deze naam",
-      "invalidJSON": "Ongeldige JSON"
+      "invalidJSON": "Ongeldige JSON",
+      "invalidEscalation": "Escalatiestappen zijn ongeldig"
     },
     "detection": {
       "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"

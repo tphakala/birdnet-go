@@ -4202,7 +4202,8 @@
       "nameRequired": "Regelname ist erforderlich",
       "typesRequired": "Objekttyp und Auslösertyp sind erforderlich",
       "duplicateName": "Eine Regel mit diesem Namen existiert bereits",
-      "invalidJSON": "Ungültiges JSON"
+      "invalidJSON": "Ungültiges JSON",
+      "invalidEscalation": "Eskalationsstufen sind ungültig"
     },
     "detection": {
       "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"

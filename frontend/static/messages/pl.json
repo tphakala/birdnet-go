@@ -4202,7 +4202,8 @@
       "nameRequired": "Nazwa reguły jest wymagana",
       "typesRequired": "Typ obiektu i typ wyzwalacza są wymagane",
       "duplicateName": "Reguła o tej nazwie już istnieje",
-      "invalidJSON": "Nieprawidłowy JSON"
+      "invalidJSON": "Nieprawidłowy JSON",
+      "invalidEscalation": "Kroki eskalacji są nieprawidłowe"
     },
     "detection": {
       "invalidDate": "Nieprawidłowy format {paramName}, użyj RRRR-MM-DD"

@@ -3999,7 +3999,8 @@
       "nameRequired": "Il nome della regola è obbligatorio",
       "typesRequired": "Il tipo di oggetto e il tipo di attivazione sono obbligatori",
       "duplicateName": "Esiste già una regola con questo nome",
-      "invalidJSON": "JSON non valido"
+      "invalidJSON": "JSON non valido",
+      "invalidEscalation": "I passaggi di escalation non sono validi"
     },
     "detection": {
       "invalidDate": "Formato {paramName} non valido, usare AAAA-MM-GG"

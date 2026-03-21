@@ -1,6 +1,7 @@
 package api
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -34,6 +35,21 @@ func TestValidateEscalationSteps(t *testing.T) {
 			wantErr: "must not contain duplicates, got 85 twice",
 		},
 		{
+			name:    "NaN is rejected",
+			steps:   []float64{85, math.NaN(), 95},
+			wantErr: "must contain finite numbers",
+		},
+		{
+			name:    "positive Inf is rejected",
+			steps:   []float64{85, math.Inf(1)},
+			wantErr: "must contain finite numbers",
+		},
+		{
+			name:    "negative Inf is rejected",
+			steps:   []float64{math.Inf(-1), 90},
+			wantErr: "must contain finite numbers",
+		},
+		{
 			name:       "single step is valid",
 			steps:      []float64{90},
 			wantSorted: []float64{90},
@@ -59,7 +75,7 @@ func TestValidateEscalationSteps(t *testing.T) {
 			wantSorted: []float64{85.5, 90.1, 99.5},
 		},
 		{
-			name:    "negative zero and positive zero are duplicates",
+			name:    "duplicate zeros rejected",
 			steps:   []float64{0, 85, 0},
 			wantErr: "must not contain duplicates, got 0 twice",
 		},
