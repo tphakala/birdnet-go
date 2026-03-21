@@ -25,6 +25,7 @@ interface PendingEntry {
   species: string;
   sourceID: string;
   firstDetected: number;
+  audioCapturedAt?: number;
   lastUpdated?: number;
   status: 'active' | 'approved' | 'rejected';
   hitCount?: number;

@@ -13,6 +13,8 @@ export interface PendingDetection {
   status: PendingDetectionStatus;
   /** Unix timestamp (seconds) when species was first detected */
   firstDetected: number;
+  /** Unix timestamp (seconds) when the source audio chunk was captured (for spectrogram overlay alignment) */
+  audioCapturedAt?: number;
   /** Unix timestamp (seconds) of the most recent inference hit for this species */
   lastUpdated?: number;
   /** Audio source display name */
