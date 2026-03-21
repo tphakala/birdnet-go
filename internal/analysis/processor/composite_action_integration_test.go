@@ -152,6 +152,163 @@ func TestCompositeAction_DatabaseToMQTT_IDPropagation(t *testing.T) {
 		"MQTT payload should contain database ID")
 }
 
+// TestCompositeAction_RepoPath_DatabaseToMQTT_IDPropagation verifies that the
+// detection ID flows correctly when using the DetectionRepository path (production).
+// This mirrors TestCompositeAction_DatabaseToMQTT_IDPropagation but sets the Repo
+// field on DatabaseAction, which is how the Processor configures it in production.
+// The legacy tests only exercise the Ds (legacy) path — this test ensures the Repo
+// path also propagates the ID through DetectionContext to MQTT.
+func TestCompositeAction_RepoPath_DatabaseToMQTT_IDPropagation(t *testing.T) {
+	t.Parallel()
+
+	// Setup shared components
+	mockDs := NewActionMockDatastore()
+	mockMqtt := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	// Create a real DetectionRepository wrapping the mock datastore,
+	// matching the production setup in processor.go line 381
+	repo := datastore.NewDetectionRepository(mockDs, nil)
+
+	// Create shared DetectionContext
+	detectionCtx := &DetectionContext{}
+
+	det := testDetection()
+
+	// Create DatabaseAction with BOTH Ds and Repo set (production configuration).
+	// When Repo is non-nil, the Repo path is taken (lines 89-103 of actions_database.go).
+	dbAction := &DatabaseAction{
+		Settings:     settings,
+		Ds:           mockDs, // Legacy fallback (not used when Repo is set)
+		Repo:         repo,   // Production path — DetectionRepository
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	mqttAction := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockMqtt,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	// Create CompositeAction: Database first, then MQTT
+	composite := &CompositeAction{
+		Actions:     []Action{dbAction, mqttAction},
+		Description: "Repo path: Database save then MQTT publish",
+	}
+
+	// Execute
+	err := composite.Execute(t.Context(), det)
+	require.NoError(t, err)
+
+	// Verify database saved with assigned ID
+	savedNote := mockDs.GetLastSavedNote()
+	require.NotNil(t, savedNote)
+	assert.Equal(t, uint(1), savedNote.ID, "First save should get ID 1")
+
+	// Verify DetectionContext was updated with the database ID
+	assert.Equal(t, uint64(1), detectionCtx.NoteID.Load(),
+		"DetectionContext should contain database ID from Repo path")
+
+	// Verify MQTT payload contains the database ID
+	payload := mockMqtt.GetPublishedPayload()
+	require.NotEmpty(t, payload)
+
+	var jsonMap map[string]any
+	err = json.Unmarshal([]byte(payload), &jsonMap)
+	require.NoError(t, err)
+
+	detectionID, ok := jsonMap["detectionId"].(float64)
+	require.True(t, ok, "detectionId should be present in MQTT payload")
+	assert.InDelta(t, float64(1), detectionID, 0.001,
+		"MQTT payload should contain database ID from Repo path")
+
+	// Also verify the embedded Note.ID in the JSON payload
+	noteID, ok := jsonMap["ID"].(float64)
+	require.True(t, ok, "Note ID should be present in MQTT payload")
+	assert.InDelta(t, float64(1), noteID, 0.001,
+		"Embedded Note.ID should match database ID")
+}
+
+// TestCompositeAction_RepoPath_MultipleDetections verifies that multiple
+// detections get unique sequential IDs when using the Repo path (production).
+func TestCompositeAction_RepoPath_MultipleDetections(t *testing.T) {
+	t.Parallel()
+
+	mockDs := NewActionMockDatastore()
+	mockMqtt := NewMockMQTTClient()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	// Create a real DetectionRepository wrapping the mock datastore
+	repo := datastore.NewDetectionRepository(mockDs, nil)
+
+	species := []struct {
+		common     string
+		scientific string
+	}{
+		{"Eurasian Pygmy Owl", "Glaucidium passerinum"},
+		{"Great Tit", "Parus major"},
+		{"Eurasian Blue Tit", "Cyanistes caeruleus"},
+	}
+
+	for i, s := range species {
+		detectionCtx := &DetectionContext{} // Fresh context per detection
+		det := testDetectionWithSpecies(s.common, s.scientific, 0.95)
+
+		dbAction := &DatabaseAction{
+			Settings:     settings,
+			Ds:           mockDs,
+			Repo:         repo, // Production path
+			Result:       det.Result,
+			Results:      det.Results,
+			EventTracker: eventTracker,
+			DetectionCtx: detectionCtx,
+		}
+
+		mqttAction := &MqttAction{
+			Settings:     settings,
+			Result:       det.Result,
+			MqttClient:   mockMqtt,
+			EventTracker: eventTracker,
+			DetectionCtx: detectionCtx,
+		}
+
+		composite := &CompositeAction{
+			Actions:     []Action{dbAction, mqttAction},
+			Description: "Repo path: multi-detection test",
+		}
+
+		err := composite.Execute(t.Context(), det)
+		require.NoError(t, err, "Detection %d (%s) should succeed", i, s.common)
+
+		// Verify DetectionContext has the correct ID
+		expectedID := uint64(i + 1)
+		assert.Equal(t, expectedID, detectionCtx.NoteID.Load(),
+			"Detection %d should have ID %d", i, expectedID)
+
+		// Verify MQTT payload
+		payload := mockMqtt.GetPublishedPayload()
+		require.NotEmpty(t, payload)
+
+		var jsonMap map[string]any
+		err = json.Unmarshal([]byte(payload), &jsonMap)
+		require.NoError(t, err)
+
+		detectionID, ok := jsonMap["detectionId"].(float64)
+		require.True(t, ok)
+		assert.InDelta(t, float64(expectedID), detectionID, 0.001,
+			"MQTT detection %d should have ID %d", i, expectedID)
+	}
+}
+
 // TestCompositeAction_FullPipeline_DatabaseMQTTSSE verifies the complete
 // detection pipeline with all three actions.
 func TestCompositeAction_FullPipeline_DatabaseMQTTSSE(t *testing.T) {

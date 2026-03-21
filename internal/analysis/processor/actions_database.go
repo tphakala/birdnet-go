@@ -100,7 +100,17 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 				logger.String("operation", "database_save_repository"))
 			return err
 		}
-		// Note: a.Result.ID is updated by Repo.Save()
+		// Repo.Save() updates a.Result.ID internally via result.ID = note.ID.
+		// Defensive check: warn if ID is unexpectedly 0 after a successful save.
+		// This aids diagnosis of GitHub #2453 (MQTT detectionId always 0).
+		if a.Result.ID == 0 {
+			GetLogger().Warn("Detection ID is 0 after successful Repo.Save(), downstream actions will not have a valid ID",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.String("operation", "database_save_id_check"))
+		}
 	} else {
 		// Legacy path: Use datastore.Interface directly
 		// Convert Result to Note for GORM persistence
