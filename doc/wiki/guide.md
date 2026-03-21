@@ -448,7 +448,7 @@ Many configuration options can be overridden via command-line flags (e.g., `--th
 
 #### Using a Custom Configuration File
 
-By default, BirdNET-Go looks for `config.yaml` in the [standard configuration directory](#configuration-file-locations) for your operating system. You can override this with the `--config` or `-c` flag to use a configuration file at any path:
+By default, BirdNET-Go looks for `config.yaml` in the [default configuration locations](#configuration-file-locations) for your operating system. You can override this with the `--config` or `-c` flag to use a configuration file at any path:
 
 ```bash
 # Use a specific config file
