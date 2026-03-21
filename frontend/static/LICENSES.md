@@ -149,7 +149,7 @@ Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.18.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.19.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -304,7 +304,7 @@ Source: Apache-2.0
 
 ### github.com/prometheus/procfs
 
-License: https://github.com/prometheus/procfs/blob/v0.20.0/LICENSE
+License: https://github.com/prometheus/procfs/blob/v0.20.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/sagikazarmark/locafero
@@ -434,22 +434,22 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 
-License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.65.0/instrumentation/net/http/otelhttp/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.67.0/instrumentation/net/http/otelhttp/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.41.0/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/v1.42.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/metric
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.41.0/metric/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/metric/v1.42.0/metric/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel/trace
 
-License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.41.0/trace/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go/blob/trace/v1.42.0/trace/LICENSE
 Source: Apache-2.0
 
 ### go.uber.org/goleak
@@ -459,7 +459,7 @@ Source: MIT
 
 ### go.yaml.in/yaml/v2
 
-License: https://github.com/yaml/go-yaml/blob/v2.4.3/LICENSE
+License: https://github.com/yaml/go-yaml/blob/v2.4.4/LICENSE
 Source: Apache-2.0
 
 ### go.yaml.in/yaml/v3
@@ -514,7 +514,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/84a4fc48630c/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/d00831a3d3e7/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
