@@ -135,6 +135,7 @@ type PendingDetection struct {
 	Source          string     // Audio source of the detection, RTSP URL or audio card name
 	FirstDetected   time.Time  // Back-dated time for audio clip extraction (startTime from analysis buffer)
 	CreatedAt       time.Time  // Real wall-clock time when detection was first created (for display)
+	AudioCapturedAt time.Time  // Wall-clock time when the source audio chunk was captured (for spectrogram overlay)
 	LastUpdated     time.Time  // Last time this detection was updated
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
 	Count           int        // Number of times this detection has been updated
@@ -564,6 +565,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 			// Update the existing detection if it's already in pendingDetections map
 			oldConfidence := existing.Confidence
 			existing.LastUpdated = now
+			existing.AudioCapturedAt = item.AudioCapturedAt
 			if confidence > existing.Confidence {
 				existing.Detection = det
 				existing.Confidence = confidence
@@ -588,12 +590,13 @@ func (p *Processor) processDetections(item birdnet.Results) {
 				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
 			p.pendingDetections[mapKey] = PendingDetection{
-				Detection:     det,
-				Confidence:    confidence,
-				Source:        item.Source.ID,
-				FirstDetected: item.StartTime,
-				CreatedAt:     now,
-				LastUpdated:   item.StartTime,
+				Detection:       det,
+				Confidence:      confidence,
+				Source:          item.Source.ID,
+				FirstDetected:   item.StartTime,
+				CreatedAt:       now,
+				AudioCapturedAt: item.AudioCapturedAt,
+				LastUpdated:     item.StartTime,
 				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
 				FlushDeadline: now.Add(detectionWindow),
