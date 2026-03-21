@@ -74,6 +74,7 @@ func initialize() error {
 
 // defineGlobalFlags defines flags that are global to the command line interface
 func setupFlags(rootCmd *cobra.Command, settings *conf.Settings) error {
+	rootCmd.PersistentFlags().StringVarP(&conf.ConfigPath, "config", "c", conf.ConfigPath, "Path to config file (default: ~/.config/birdnet-go/config.yaml)")
 	rootCmd.PersistentFlags().BoolVarP(&settings.Debug, "debug", "d", viper.GetBool("debug"), "Enable debug output")
 	rootCmd.PersistentFlags().StringVar(&settings.BirdNET.Locale, "locale", viper.GetString("birdnet.locale"), "Set the locale for labels. Accepts full name or 2-letter code.")
 	rootCmd.PersistentFlags().IntVarP(&settings.BirdNET.Threads, "threads", "j", viper.GetInt("birdnet.threads"), "Number of CPU threads to use for analysis (default 0 which is all CPUs)")
