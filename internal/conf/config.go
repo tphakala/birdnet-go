@@ -1647,21 +1647,30 @@ func initViper() error {
 	// before main parses args). Use a local variable to avoid mutating
 	// package-global state from the fallback parser.
 	effectiveConfigPath := ConfigPath
-	if effectiveConfigPath == "" {
+	configFlagPresent := ConfigPath != ""
+	if !configFlagPresent {
 		for i, arg := range os.Args {
 			if (arg == "--config" || arg == "-c") && i+1 < len(os.Args) {
+				configFlagPresent = true
 				effectiveConfigPath = os.Args[i+1]
 				break
 			}
 			if val, found := strings.CutPrefix(arg, "--config="); found {
+				configFlagPresent = true
 				effectiveConfigPath = val
 				break
 			}
 			if val, found := strings.CutPrefix(arg, "-c="); found {
+				configFlagPresent = true
 				effectiveConfigPath = val
 				break
 			}
 		}
+	}
+
+	// Reject empty config path when the flag was explicitly provided
+	if configFlagPresent && effectiveConfigPath == "" {
+		return fmt.Errorf("--config flag requires a non-empty file path")
 	}
 
 	// If a custom config path was specified via --config, use it directly
