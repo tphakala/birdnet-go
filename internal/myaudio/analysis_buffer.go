@@ -631,6 +631,11 @@ func AnalysisBufferMonitor(_ *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan
 					m.RecordAnalysisBufferPoll(sourceID, "data_available")
 				}
 
+				// Record the wall-clock time when this 3-second audio chunk became available.
+				// This is the accurate timestamp for spectrogram overlay alignment — it represents
+				// when the audio was captured, regardless of capture backend (FFmpeg or malgo).
+				audioCapturedAt := time.Now()
+
 				// Calculate the offset dynamically to pick up runtime configuration changes
 				// This includes the configured pre-capture duration plus an additional detection offset to
 				// account for BirdNET prediction delay
@@ -638,7 +643,7 @@ func AnalysisBufferMonitor(_ *sync.WaitGroup, bn *birdnet.BirdNET, quitChan chan
 				startTime := time.Now().Add(-beginTimeOffset)
 				processingStart := time.Now()
 
-				err := ProcessData(bn, data, startTime, sourceID)
+				err := ProcessData(bn, data, startTime, audioCapturedAt, sourceID)
 
 				if m := getAnalysisMetrics(); m != nil {
 					processingDuration := time.Since(processingStart).Seconds()

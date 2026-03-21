@@ -140,7 +140,7 @@ func ReturnFloat32Buffer(buffer []float32) {
 
 // processData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source string) error {
+func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt time.Time, source string) error {
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
@@ -268,11 +268,12 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime time.Time, source s
 
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := birdnet.Results{
-		StartTime:   startTime,
-		ElapsedTime: elapsedTime,
-		PCMdata:     data,
-		Results:     results,
-		Source:      audioSource,
+		StartTime:       startTime,
+		AudioCapturedAt: audioCapturedAt,
+		ElapsedTime:     elapsedTime,
+		PCMdata:         data,
+		Results:         results,
+		Source:          audioSource,
 	}
 
 	// Send the results to the queue
