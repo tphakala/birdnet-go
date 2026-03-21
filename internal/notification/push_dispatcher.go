@@ -207,17 +207,13 @@ func warnIfLocalhostWithExternalWebhooks(pd *pushDispatcher, settings *conf.Sett
 // startDispatcherIfNeeded starts the dispatcher if it's enabled and has providers.
 func startDispatcherIfNeeded(pd *pushDispatcher) error {
 	if !pd.enabled {
-		if pd.log != nil {
-			pd.log.Info("push dispatcher not started: disabled",
-				logger.String("operation", "start_dispatcher"))
-		}
+		pd.log.Info("push dispatcher not started: disabled",
+			logger.String("operation", "start_dispatcher"))
 		return nil
 	}
 	if len(pd.providers) == 0 {
-		if pd.log != nil {
-			pd.log.Info("push dispatcher not started: no providers configured",
-				logger.String("operation", "start_dispatcher"))
-		}
+		pd.log.Info("push dispatcher not started: no providers configured",
+			logger.String("operation", "start_dispatcher"))
 		return nil
 	}
 	if err := pd.start(); err != nil {
@@ -322,15 +318,13 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 	for i := range d.providers {
 		ep := &d.providers[i]
 		if !d.shouldDispatchToProvider(ep, notif) {
-			if d.log != nil {
-				d.log.Debug("provider filtered out for notification",
-					logger.String("operation", "dispatch"),
-					logger.String("provider", ep.name),
-					logger.String("notification_id", notif.ID),
-					logger.String("type", string(notif.Type)),
-					logger.Bool("enabled", ep.prov.IsEnabled()),
-					logger.Bool("supports_type", ep.prov.SupportsType(notif.Type)))
-			}
+			d.log.Debug("provider filtered out for notification",
+				logger.String("operation", "dispatch"),
+				logger.String("provider", ep.name),
+				logger.String("notification_id", notif.ID),
+				logger.String("type", string(notif.Type)),
+				logger.Bool("enabled", ep.prov.IsEnabled()),
+				logger.Bool("supports_type", ep.prov.SupportsType(notif.Type)))
 			continue
 		}
 
@@ -339,17 +333,15 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 		}
 
 		matchedCount++
-		if d.log != nil {
-			d.log.Debug("dispatching notification to provider",
-				logger.String("operation", "dispatch"),
-				logger.String("provider", ep.name),
-				logger.String("notification_id", notif.ID),
-				logger.String("type", string(notif.Type)))
-		}
+		d.log.Debug("dispatching notification to provider",
+			logger.String("operation", "dispatch"),
+			logger.String("provider", ep.name),
+			logger.String("notification_id", notif.ID),
+			logger.String("type", string(notif.Type)))
 		d.spawnDispatchGoroutine(ctx, ep, notif)
 	}
 
-	if matchedCount == 0 && d.log != nil {
+	if matchedCount == 0 {
 		d.log.Info("no providers matched notification",
 			logger.String("operation", "dispatch"),
 			logger.String("notification_id", notif.ID),
@@ -362,22 +354,18 @@ func (d *pushDispatcher) dispatch(ctx context.Context, notif *Notification) {
 // shouldDispatchToProvider checks if notification should be dispatched to provider.
 func (d *pushDispatcher) shouldDispatchToProvider(ep *enhancedProvider, notif *Notification) bool {
 	if !ep.prov.IsEnabled() {
-		if d.log != nil {
-			d.log.Debug("provider disabled, skipping",
-				logger.String("operation", "should_dispatch"),
-				logger.String("provider", ep.name),
-				logger.String("notification_id", notif.ID))
-		}
+		d.log.Debug("provider disabled, skipping",
+			logger.String("operation", "should_dispatch"),
+			logger.String("provider", ep.name),
+			logger.String("notification_id", notif.ID))
 		return false
 	}
 	if !ep.prov.SupportsType(notif.Type) {
-		if d.log != nil {
-			d.log.Debug("provider does not support notification type",
-				logger.String("operation", "should_dispatch"),
-				logger.String("provider", ep.name),
-				logger.String("notification_type", string(notif.Type)),
-				logger.String("notification_id", notif.ID))
-		}
+		d.log.Debug("provider does not support notification type",
+			logger.String("operation", "should_dispatch"),
+			logger.String("provider", ep.name),
+			logger.String("notification_type", string(notif.Type)),
+			logger.String("notification_id", notif.ID))
 		return false
 	}
 	return d.matchesFilter(ep, notif)
@@ -395,12 +383,10 @@ func (d *pushDispatcher) acquireSemaphoreSlot(ctx context.Context, ep *enhancedP
 	cancel()
 
 	if err != nil {
-		if d.log != nil {
-			d.log.Warn("dispatch queue full, dropping notification",
-				logger.String("provider", ep.name),
-				logger.String("notification_id", notif.ID),
-				logger.Error(err))
-		}
+		d.log.Warn("dispatch queue full, dropping notification",
+			logger.String("provider", ep.name),
+			logger.String("notification_id", notif.ID),
+			logger.Error(err))
 		if d.metrics != nil {
 			d.metrics.RecordFilterRejection(ep.name, "queue_full")
 		}
@@ -423,12 +409,10 @@ func (d *pushDispatcher) recoverFromDispatchPanic(provider *enhancedProvider, no
 		d.concurrencySem.Release(1)
 	}
 	if r := recover(); r != nil {
-		if d.log != nil {
-			d.log.Error("panic in dispatch goroutine",
-				logger.String("provider", provider.name),
-				logger.String("notification_id", notif.ID),
-				logger.Any("panic", r))
-		}
+		d.log.Error("panic in dispatch goroutine",
+			logger.String("provider", provider.name),
+			logger.String("notification_id", notif.ID),
+			logger.Any("panic", r))
 	}
 }
 
@@ -470,11 +454,9 @@ func (d *pushDispatcher) dispatchEnhanced(ctx context.Context, notif *Notificati
 func (d *pushDispatcher) checkRateLimit(ep *enhancedProvider, notif *Notification) bool {
 	// Use per-provider rate limiter for isolation
 	if ep.rateLimiter != nil && !ep.rateLimiter.Allow() {
-		if d.log != nil {
-			d.log.Warn("notification rate limited",
-				logger.String("provider", ep.name),
-				logger.String("notification_id", notif.ID))
-		}
+		d.log.Warn("notification rate limited",
+			logger.String("provider", ep.name),
+			logger.String("notification_id", notif.ID))
 		if d.metrics != nil {
 			d.metrics.RecordFilterRejection(ep.name, "rate_limited")
 		}
@@ -603,13 +585,11 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 	}
 
 	if !retryable || attempts > d.maxRetries {
-		if d.log != nil {
-			d.log.Error("push send failed",
-				logger.String("provider", providerName),
-				logger.Int("attempts", attempts),
-				logger.Error(err),
-				logger.Bool("retryable", retryable))
-		}
+		d.log.Error("push send failed",
+			logger.String("provider", providerName),
+			logger.Int("attempts", attempts),
+			logger.Error(err),
+			logger.Bool("retryable", retryable))
 		return false
 	}
 

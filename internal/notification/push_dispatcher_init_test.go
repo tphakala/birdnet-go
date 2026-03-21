@@ -3,14 +3,21 @@ package notification
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	logger "github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/semaphore"
 )
+
+// testNopLogger returns a logger that discards all output, for use in tests.
+func testNopLogger() logger.Logger {
+	return logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
+}
 
 // TestCalculateMaxConcurrentJobs tests concurrent job calculation
 func TestCalculateMaxConcurrentJobs(t *testing.T) {
@@ -276,7 +283,7 @@ func TestPushDispatcher_shouldRetry(t *testing.T) {
 
 			d := &pushDispatcher{
 				maxRetries: tt.maxRetries,
-				log:        nil, // Suppress logs in tests
+				log:        testNopLogger(),
 			}
 
 			result := d.shouldRetry(tt.err, tt.attempts, "test-provider")
@@ -294,6 +301,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 
 		d := &pushDispatcher{
 			concurrencySem: nil,
+			log:            testNopLogger(),
 		}
 
 		ep := &enhancedProvider{name: "test"}
@@ -308,6 +316,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 
 		d := &pushDispatcher{
 			concurrencySem: semaphore.NewWeighted(10),
+			log:            testNopLogger(),
 		}
 
 		ep := &enhancedProvider{name: "test"}
@@ -332,6 +341,7 @@ func TestPushDispatcher_acquireSemaphoreSlot(t *testing.T) {
 
 		d := &pushDispatcher{
 			concurrencySem: sem,
+			log:            testNopLogger(),
 		}
 
 		ep := &enhancedProvider{name: "test"}
@@ -360,6 +370,7 @@ func TestPushDispatcher_recoverFromDispatchPanic(t *testing.T) {
 
 		d := &pushDispatcher{
 			concurrencySem: sem,
+			log:            testNopLogger(),
 		}
 
 		ep := &enhancedProvider{name: "test"}
@@ -379,6 +390,7 @@ func TestPushDispatcher_recoverFromDispatchPanic(t *testing.T) {
 
 		d := &pushDispatcher{
 			concurrencySem: nil,
+			log:            testNopLogger(),
 		}
 
 		ep := &enhancedProvider{name: "test"}
@@ -455,7 +467,7 @@ func TestPushDispatcher_shouldDispatchToProvider(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			d := &pushDispatcher{}
+			d := &pushDispatcher{log: testNopLogger()}
 
 			ep := &enhancedProvider{
 				prov:   tt.provider,
@@ -476,7 +488,7 @@ func TestPushDispatcher_checkRateLimit(t *testing.T) {
 	t.Run("no_rate_limiter", func(t *testing.T) {
 		t.Parallel()
 
-		d := &pushDispatcher{}
+		d := &pushDispatcher{log: testNopLogger()}
 		ep := &enhancedProvider{
 			name:        "test",
 			rateLimiter: nil,
@@ -495,7 +507,7 @@ func TestPushDispatcher_checkRateLimit(t *testing.T) {
 			BurstSize:         10,
 		})
 
-		d := &pushDispatcher{}
+		d := &pushDispatcher{log: testNopLogger()}
 		ep := &enhancedProvider{
 			name:        "test",
 			rateLimiter: rl,
@@ -515,7 +527,7 @@ func TestPushDispatcher_checkRateLimit(t *testing.T) {
 			BurstSize:         1,
 		})
 
-		d := &pushDispatcher{}
+		d := &pushDispatcher{log: testNopLogger()}
 		ep := &enhancedProvider{
 			name:        "test",
 			rateLimiter: rl,
@@ -541,6 +553,7 @@ func TestStartDispatcherIfNeeded(t *testing.T) {
 
 		pd := &pushDispatcher{
 			enabled: false,
+			log:     testNopLogger(),
 		}
 
 		err := startDispatcherIfNeeded(pd)
@@ -553,6 +566,7 @@ func TestStartDispatcherIfNeeded(t *testing.T) {
 		pd := &pushDispatcher{
 			enabled:   true,
 			providers: []enhancedProvider{},
+			log:       testNopLogger(),
 		}
 
 		err := startDispatcherIfNeeded(pd)
@@ -693,6 +707,7 @@ func TestRegisterProvidersWithHealthChecker(t *testing.T) {
 
 		pd := &pushDispatcher{
 			healthChecker: nil,
+			log:           testNopLogger(),
 			providers: []enhancedProvider{
 				{name: "test"},
 			},
@@ -711,6 +726,7 @@ func TestRegisterProvidersWithHealthChecker(t *testing.T) {
 
 		pd := &pushDispatcher{
 			healthChecker: hc,
+			log:           testNopLogger(),
 			providers: []enhancedProvider{
 				{
 					prov: &fakeProvider{name: "provider1", enabled: true},
