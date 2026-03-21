@@ -72,6 +72,14 @@ const (
 	PropertyPath           = "path"
 	PropertyBroker         = "broker"
 	PropertyThresholdStep  = "threshold_step"
+
+	// Properties for detection event metadata passthrough.
+	// These are not used for condition evaluation but carry data
+	// needed by the notification adapter for webhook template enrichment.
+	PropertyEventMetadata      = "event_metadata"
+	PropertyEventTimestamp     = "event_timestamp"
+	PropertyDaysSinceFirstSeen = "days_since_first_seen"
+	PropertyIsNewSpecies       = "is_new_species"
 )
 
 // Action targets identify where notifications are sent.

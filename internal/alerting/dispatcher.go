@@ -14,14 +14,19 @@ import (
 // The notifType parameter allows the dispatcher to specify the correct
 // notification type (e.g., TypeDetection for bird detections, TypeWarning
 // for system alerts) so push providers can filter appropriately.
+//
+// The eventProps parameter carries event-specific properties (species name,
+// confidence, raw event metadata, etc.) that the adapter uses to enrich
+// notifications with template metadata (bg_image_url, bg_confidence_percent, etc.)
+// for webhook templates.
 type NotificationCreator interface {
-	CreateAndBroadcast(notifType notification.Type, title, message string) error
-	CreateAndBroadcastWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any) error
+	CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error
+	CreateAndBroadcastWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 	// CreateAndBroadcastTest creates a bell notification marked as a test so
 	// that push providers (Telegram, Shoutrrr, etc.) skip it.
-	CreateAndBroadcastTest(notifType notification.Type, title, message string) error
+	CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error
 	// CreateAndBroadcastTestWithKeys is the i18n-aware variant of CreateAndBroadcastTest.
-	CreateAndBroadcastTestWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any) error
+	CreateAndBroadcastTestWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
 }
 
 // ActionDispatcher routes alert rule actions to the notification bell
@@ -90,11 +95,11 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 		var err error
 		if isTest {
 			err = d.notifCreator.CreateAndBroadcastTestWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams,
+				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		} else {
 			err = d.notifCreator.CreateAndBroadcastWithKeys(
-				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams,
+				notifType, title, fallbackMsg, titleKey, titleParams, msgKey, msgParams, event.Properties,
 			)
 		}
 		if err != nil {
@@ -108,9 +113,9 @@ func (d *ActionDispatcher) dispatchBell(title, message string, rule *entities.Al
 
 	var err error
 	if isTest {
-		err = d.notifCreator.CreateAndBroadcastTest(notifType, title, message)
+		err = d.notifCreator.CreateAndBroadcastTest(notifType, title, message, event.Properties)
 	} else {
-		err = d.notifCreator.CreateAndBroadcast(notifType, title, message)
+		err = d.notifCreator.CreateAndBroadcast(notifType, title, message, event.Properties)
 	}
 	if err != nil {
 		d.log.Error("failed to create bell notification",

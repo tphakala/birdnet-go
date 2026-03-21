@@ -16,6 +16,7 @@ type mockNotifCreator struct {
 	calls []struct {
 		notifType      notification.Type
 		title, message string
+		eventProps     map[string]any
 	}
 	keyCalls []struct {
 		notifType                notification.Type
@@ -23,10 +24,12 @@ type mockNotifCreator struct {
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
+		eventProps               map[string]any
 	}
 	testCalls []struct {
 		notifType      notification.Type
 		title, message string
+		eventProps     map[string]any
 	}
 	testKeyCalls []struct {
 		notifType                notification.Type
@@ -34,20 +37,22 @@ type mockNotifCreator struct {
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
+		eventProps               map[string]any
 	}
 }
 
-func (m *mockNotifCreator) CreateAndBroadcast(notifType notification.Type, title, message string) error {
+func (m *mockNotifCreator) CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error {
 	m.calls = append(m.calls, struct {
 		notifType      notification.Type
 		title, message string
-	}{notifType, title, message})
+		eventProps     map[string]any
+	}{notifType, title, message, eventProps})
 	return nil
 }
 
 func (m *mockNotifCreator) CreateAndBroadcastWithKeys(
 	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
-	messageKey string, messageParams map[string]any,
+	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	m.keyCalls = append(m.keyCalls, struct {
 		notifType                notification.Type
@@ -55,21 +60,23 @@ func (m *mockNotifCreator) CreateAndBroadcastWithKeys(
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
-	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams})
+		eventProps               map[string]any
+	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
 	return nil
 }
 
-func (m *mockNotifCreator) CreateAndBroadcastTest(notifType notification.Type, title, message string) error {
+func (m *mockNotifCreator) CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error {
 	m.testCalls = append(m.testCalls, struct {
 		notifType      notification.Type
 		title, message string
-	}{notifType, title, message})
+		eventProps     map[string]any
+	}{notifType, title, message, eventProps})
 	return nil
 }
 
 func (m *mockNotifCreator) CreateAndBroadcastTestWithKeys(
 	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
-	messageKey string, messageParams map[string]any,
+	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	m.testKeyCalls = append(m.testKeyCalls, struct {
 		notifType                notification.Type
@@ -77,7 +84,8 @@ func (m *mockNotifCreator) CreateAndBroadcastTestWithKeys(
 		titleParams              map[string]any
 		messageKey               string
 		messageParams            map[string]any
-	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams})
+		eventProps               map[string]any
+	}{notifType, title, message, titleKey, titleParams, messageKey, messageParams, eventProps})
 	return nil
 }
 
@@ -550,6 +558,86 @@ func TestMetricMessage_NoThresholdStep_UsesCondition(t *testing.T) {
 	assert.Equal(t, MsgAlertMetricExceeded, key)
 	assert.Equal(t, "85", params["threshold"])
 	assert.Equal(t, "Current value: 87% (threshold: 85%)", fallback)
+}
+
+func TestDispatcher_DetectionEvent_PassesEventProps(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:   1,
+		Name: "Bird Alert",
+		Actions: []entities.AlertAction{
+			{Target: TargetBell, TemplateTitle: "New bird!", TemplateMessage: "{{species_name}} detected"},
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionNewSpecies,
+		Properties: map[string]any{
+			PropertySpeciesName:        "Eurasian Blue Tit",
+			PropertyScientificName:     "Cyanistes caeruleus",
+			PropertyConfidence:         0.95,
+			PropertyLocation:           "backyard",
+			PropertyEventTimestamp:     time.Date(2026, 3, 21, 10, 30, 0, 0, time.UTC),
+			PropertyDaysSinceFirstSeen: 0,
+			PropertyIsNewSpecies:       true,
+			PropertyEventMetadata: map[string]any{
+				"note_id":   uint(42),
+				"latitude":  60.1699,
+				"longitude": 24.9384,
+				"image_url": "https://example.com/bird.jpg",
+			},
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.calls, 1)
+	call := mock.calls[0]
+	assert.Equal(t, notification.TypeDetection, call.notifType)
+	// Verify event properties are passed through
+	assert.Equal(t, "Eurasian Blue Tit", call.eventProps[PropertySpeciesName])
+	assert.InDelta(t, 0.95, call.eventProps[PropertyConfidence], 1e-9)
+	assert.Equal(t, "backyard", call.eventProps[PropertyLocation])
+	// Verify raw metadata is included
+	rawMeta, ok := call.eventProps[PropertyEventMetadata].(map[string]any)
+	require.True(t, ok, "event_metadata should be present in event props")
+	assert.Equal(t, uint(42), rawMeta["note_id"])
+	assert.Equal(t, "https://example.com/bird.jpg", rawMeta["image_url"])
+}
+
+func TestDispatcher_DefaultTemplate_PassesEventProps(t *testing.T) {
+	mock := &mockNotifCreator{}
+	dispatcher := NewActionDispatcher(mock, dispatchTestLogger(), nil)
+
+	rule := &entities.AlertRule{
+		ID:      1,
+		Name:    "Species Alert",
+		NameKey: RuleKeyNewSpeciesName,
+		Actions: []entities.AlertAction{
+			{Target: TargetBell}, // no custom template
+		},
+	}
+	event := &AlertEvent{
+		ObjectType: ObjectTypeDetection,
+		EventName:  EventDetectionNewSpecies,
+		Properties: map[string]any{
+			PropertySpeciesName:    "Eurasian Blue Tit",
+			PropertyScientificName: "Cyanistes caeruleus",
+			PropertyConfidence:     0.92,
+		},
+		Timestamp: time.Now(),
+	}
+
+	dispatcher.Dispatch(rule, event)
+
+	require.Len(t, mock.keyCalls, 1)
+	call := mock.keyCalls[0]
+	// Verify event properties are passed through for default template path too
+	assert.Equal(t, "Eurasian Blue Tit", call.eventProps[PropertySpeciesName])
+	assert.InDelta(t, 0.92, call.eventProps[PropertyConfidence], 1e-9)
 }
 
 func TestDispatchTest_DefaultTemplate_UsesTestKeysMethod(t *testing.T) {

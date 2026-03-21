@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // initMockRepo implements repository.AlertRuleRepository for initialization tests.
@@ -170,4 +171,87 @@ func TestSeedDefaultRules_MigratesEscalationSteps(t *testing.T) {
 		}
 	}
 	t.Fatal("low disk rule not found after seeding")
+}
+
+func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
+	props := map[string]any{
+		PropertySpeciesName:        "Eurasian Blue Tit",
+		PropertyScientificName:     "Cyanistes caeruleus",
+		PropertyConfidence:         0.95,
+		PropertyLocation:           "backyard",
+		PropertyIsNewSpecies:       true,
+		PropertyDaysSinceFirstSeen: 0,
+		PropertyEventTimestamp:     time.Date(2026, 3, 21, 10, 30, 0, 0, time.UTC),
+		PropertyEventMetadata: map[string]any{
+			"note_id":    uint(42),
+			"latitude":   60.1699,
+			"longitude":  24.9384,
+			"image_url":  "https://example.com/bird.jpg",
+			"begin_time": time.Date(2026, 3, 21, 10, 30, 0, 0, time.UTC),
+		},
+	}
+
+	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "Title", "Message")
+	enriched := enrichFromEventProps(notif, notification.TypeDetection, props)
+
+	// Verify top-level metadata
+	assert.Equal(t, "Eurasian Blue Tit", enriched.Metadata["species"])
+	assert.Equal(t, "Cyanistes caeruleus", enriched.Metadata["scientific_name"])
+	assert.InDelta(t, 0.95, enriched.Metadata["confidence"], 1e-9)
+	assert.Equal(t, "backyard", enriched.Metadata["location"])
+	assert.Equal(t, true, enriched.Metadata["is_new_species"])
+	assert.Equal(t, 0, enriched.Metadata["days_since_first_seen"])
+
+	// Verify bg_* template data fields
+	assert.Equal(t, "95", enriched.Metadata["bg_confidence_percent"])
+	assert.InDelta(t, 60.1699, enriched.Metadata["bg_latitude"], 1e-9)
+	assert.InDelta(t, 24.9384, enriched.Metadata["bg_longitude"], 1e-9)
+	assert.Equal(t, "https://example.com/bird.jpg", enriched.Metadata["bg_image_url"])
+	assert.Equal(t, "42", enriched.Metadata["bg_detection_id"])
+	assert.Contains(t, enriched.Metadata["bg_detection_url"], "/ui/detections/42")
+	assert.NotEmpty(t, enriched.Metadata["bg_detection_time"])
+	assert.NotEmpty(t, enriched.Metadata["bg_detection_date"])
+
+	// Verify note_id passthrough
+	assert.Equal(t, uint(42), enriched.Metadata["note_id"])
+
+	// Verify component
+	assert.Equal(t, "detection", enriched.Component)
+}
+
+func TestEnrichFromEventProps_NonDetectionUnchanged(t *testing.T) {
+	props := map[string]any{
+		PropertyStreamName: "backyard-cam",
+		PropertyError:      "connection timeout",
+	}
+
+	notif := notification.NewNotification(notification.TypeWarning, notification.PriorityHigh, "Stream Down", "Error occurred")
+	enriched := enrichFromEventProps(notif, notification.TypeWarning, props)
+
+	// Non-detection notifications should not get detection metadata
+	assert.Empty(t, enriched.Metadata, "non-detection notification should not have metadata added")
+}
+
+func TestEnrichFromEventProps_NilProps(t *testing.T) {
+	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "Title", "Message")
+	enriched := enrichFromEventProps(notif, notification.TypeDetection, nil)
+
+	// Nil props should return notification unchanged
+	assert.Empty(t, enriched.Metadata)
+}
+
+func TestEnrichFromEventProps_FallbackImageURL(t *testing.T) {
+	props := map[string]any{
+		PropertySpeciesName:    "Eurasian Blue Tit",
+		PropertyScientificName: "Cyanistes caeruleus",
+		PropertyConfidence:     0.9,
+		// No event_metadata with image_url — should fall back to proxy URL
+	}
+
+	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "Title", "Message")
+	enriched := enrichFromEventProps(notif, notification.TypeDetection, props)
+
+	// Should use the proxy URL with encoded scientific name
+	assert.Contains(t, enriched.Metadata["bg_image_url"], "/api/v2/media/species-image")
+	assert.Contains(t, enriched.Metadata["bg_image_url"], "Cyanistes+caeruleus")
 }

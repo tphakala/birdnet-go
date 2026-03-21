@@ -40,15 +40,29 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		eventName = EventDetectionNewSpecies
 	}
 
+	properties := map[string]any{
+		PropertySpeciesName:    event.GetSpeciesName(),
+		PropertyScientificName: event.GetScientificName(),
+		PropertyConfidence:     event.GetConfidence(),
+		PropertyLocation:       event.GetLocation(),
+		// Additional fields for notification metadata enrichment.
+		// These are not used for condition evaluation but are passed through
+		// to the notification adapter so webhook templates can reference them.
+		PropertyEventTimestamp:     event.GetTimestamp(),
+		PropertyDaysSinceFirstSeen: event.GetDaysSinceFirstSeen(),
+		PropertyIsNewSpecies:       event.IsNewSpecies(),
+	}
+
+	// Pass through raw event metadata (note_id, latitude, longitude, image_url, begin_time)
+	// so the notification adapter can build full template data.
+	if meta := event.GetMetadata(); len(meta) > 0 {
+		properties[PropertyEventMetadata] = meta
+	}
+
 	TryPublish(&AlertEvent{
 		ObjectType: ObjectTypeDetection,
 		EventName:  eventName,
-		Properties: map[string]any{
-			PropertySpeciesName:    event.GetSpeciesName(),
-			PropertyScientificName: event.GetScientificName(),
-			PropertyConfidence:     event.GetConfidence(),
-			PropertyLocation:       event.GetLocation(),
-		},
+		Properties: properties,
 	})
 
 	return nil

@@ -2,6 +2,9 @@ package alerting
 
 import (
 	"context"
+	"fmt"
+	"net/url"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -15,18 +18,19 @@ import (
 // alerting and notification subsystems.
 type notificationAdapter struct{}
 
-func (a *notificationAdapter) CreateAndBroadcast(notifType notification.Type, title, message string) error {
+func (a *notificationAdapter) CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error {
 	svc := notification.GetService()
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	_, err := svc.Create(notifType, notification.PriorityHigh, title, message)
-	return err
+	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
+	notif = enrichFromEventProps(notif, notifType, eventProps)
+	return svc.CreateWithMetadata(notif)
 }
 
 func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
-	messageKey string, messageParams map[string]any,
+	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	svc := notification.GetService()
 	if svc == nil {
@@ -37,22 +41,24 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)
 	}
+	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
 }
 
-func (a *notificationAdapter) CreateAndBroadcastTest(notifType notification.Type, title, message string) error {
+func (a *notificationAdapter) CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error {
 	svc := notification.GetService()
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
 		WithMetadata(notification.MetadataKeyIsAlertRuleTest, true)
+	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
 }
 
 func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
 	notifType notification.Type, title, message, titleKey string, titleParams map[string]any,
-	messageKey string, messageParams map[string]any,
+	messageKey string, messageParams map[string]any, eventProps map[string]any,
 ) error {
 	svc := notification.GetService()
 	if svc == nil {
@@ -64,7 +70,169 @@ func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)
 	}
+	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
+}
+
+// enrichFromEventProps adds detection metadata to a notification when the event
+// is a detection. This enables webhook templates to reference fields like
+// bg_image_url, bg_confidence_percent, bg_detection_time, etc.
+//
+// For non-detection notifications, the notification is returned unchanged.
+func enrichFromEventProps(notif *notification.Notification, notifType notification.Type, props map[string]any) *notification.Notification {
+	if notifType != notification.TypeDetection || len(props) == 0 {
+		return notif
+	}
+
+	// Add top-level metadata fields matching detection_consumer.go behavior
+	if species, ok := props[PropertySpeciesName].(string); ok {
+		notif = notif.WithMetadata("species", species)
+	}
+	if sciName, ok := props[PropertyScientificName].(string); ok {
+		notif = notif.WithMetadata("scientific_name", sciName)
+	}
+	if confVal, ok := props[PropertyConfidence]; ok {
+		notif = notif.WithMetadata("confidence", confVal)
+	}
+	if location, ok := props[PropertyLocation].(string); ok {
+		notif = notif.WithMetadata("location", location)
+	}
+	if isNew, ok := props[PropertyIsNewSpecies].(bool); ok {
+		notif = notif.WithMetadata("is_new_species", isNew)
+	}
+	if days, ok := props[PropertyDaysSinceFirstSeen].(int); ok {
+		notif = notif.WithMetadata("days_since_first_seen", days)
+	}
+
+	// Build TemplateData for bg_* metadata fields
+	templateData := buildTemplateDataFromProps(props)
+	if templateData != nil {
+		notif = notification.EnrichWithTemplateData(notif, templateData)
+	}
+
+	notif = notif.WithComponent("detection").
+		WithExpiry(notification.DefaultDetectionExpiry)
+
+	// Pass through note_id from raw event metadata
+	if rawMeta, ok := props[PropertyEventMetadata].(map[string]any); ok {
+		if noteID, ok := rawMeta["note_id"]; ok {
+			notif = notif.WithMetadata("note_id", noteID)
+		}
+	}
+
+	return notif
+}
+
+// buildTemplateDataFromProps constructs a notification.TemplateData from alert
+// event properties. This mirrors the logic in detection_consumer.go's
+// createTemplateData but works from the flat property map rather than a
+// DetectionEvent interface.
+func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData {
+	settings := conf.GetSettings()
+
+	baseURL := "http://localhost"
+	timeAs24h := true
+	if settings != nil {
+		baseURL = settings.Security.GetBaseURL(settings.WebServer.Port)
+		if baseURL == "" {
+			baseURL = "http://localhost"
+		}
+		timeAs24h = settings.Main.TimeAs24h
+	}
+
+	// Extract raw event metadata
+	rawMeta, _ := props[PropertyEventMetadata].(map[string]any)
+
+	// Determine timestamp
+	var beginTime time.Time
+	if rawMeta != nil {
+		if bt, ok := rawMeta["begin_time"].(time.Time); ok {
+			beginTime = bt
+		}
+	}
+	if beginTime.IsZero() {
+		if ts, ok := props[PropertyEventTimestamp].(time.Time); ok {
+			beginTime = ts
+		}
+	}
+	if beginTime.IsZero() {
+		beginTime = time.Now()
+	}
+
+	detectionTime := beginTime.Format(time.TimeOnly)
+	detectionDate := beginTime.Format(time.DateOnly)
+	if !timeAs24h {
+		detectionTime = beginTime.Format("3:04:05 PM")
+	}
+
+	// Confidence
+	var confidence float64
+	if c, ok := props[PropertyConfidence]; ok {
+		if f, err := toFloat64(c); err == nil {
+			confidence = f
+		}
+	}
+	confidencePercent := fmt.Sprintf("%.0f", confidence*notification.PercentMultiplier)
+
+	// Location data from raw metadata
+	var latitude, longitude float64
+	if rawMeta != nil {
+		if lat, ok := rawMeta["latitude"].(float64); ok {
+			latitude = lat
+		}
+		if lon, ok := rawMeta["longitude"].(float64); ok {
+			longitude = lon
+		}
+	}
+
+	location, _ := props[PropertyLocation].(string)
+
+	// Note ID for detection URL
+	var noteID string
+	if rawMeta != nil {
+		if id, ok := rawMeta["note_id"].(uint); ok {
+			noteID = fmt.Sprintf("%d", id)
+		}
+	}
+
+	detectionPath := "/ui/detections"
+	if noteID != "" {
+		detectionPath = fmt.Sprintf("/ui/detections/%s", noteID)
+	}
+	detectionURL := baseURL + detectionPath
+
+	// Image URL
+	scientificName, _ := props[PropertyScientificName].(string)
+	var imageURL string
+	if rawMeta != nil {
+		if imgURL, ok := rawMeta["image_url"].(string); ok && imgURL != "" {
+			imageURL = imgURL
+		}
+	}
+	if imageURL == "" && scientificName != "" {
+		encodedName := url.QueryEscape(scientificName)
+		imageURL = fmt.Sprintf("%s/api/v2/media/species-image?scientific_name=%s", baseURL, encodedName)
+	}
+
+	commonName, _ := props[PropertySpeciesName].(string)
+	daysSinceFirstSeen, _ := props[PropertyDaysSinceFirstSeen].(int)
+
+	return &notification.TemplateData{
+		CommonName:         commonName,
+		ScientificName:     scientificName,
+		Confidence:         confidence,
+		ConfidencePercent:  confidencePercent,
+		DetectionTime:      detectionTime,
+		DetectionDate:      detectionDate,
+		Latitude:           latitude,
+		Longitude:          longitude,
+		Location:           location,
+		DetectionID:        noteID,
+		DetectionPath:      detectionPath,
+		DetectionURL:       detectionURL,
+		ImageURL:           imageURL,
+		DaysSinceFirstSeen: daysSinceFirstSeen,
+	}
 }
 
 // Initialize creates and starts the alerting engine.
