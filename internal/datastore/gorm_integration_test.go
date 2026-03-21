@@ -581,13 +581,18 @@ func TestDataStore_Save_SetsNoteID(t *testing.T) {
 	}
 }
 
-// TestDetectionRepository_Save_PropagatesID verifies the full chain:
-// detection.Result → NoteFromResult → DataStore.Save → result.ID = note.ID.
-// This is the exact code path used in production (Repo path in DatabaseAction).
+// TestDetectionRepository_Save_PropagatesID verifies the full chain that
+// detectionRepository.Save() performs with a real SQLite database:
+//  1. NoteFromResult(result) — creates Note from domain Result
+//  2. DataStore.Save(&note, results) — GORM inserts and sets note.ID
+//  3. result.ID = note.ID — propagates the GORM-assigned ID back
 //
-// Context: GitHub issue #2453 — MQTT detectionId is always 0. The production code
-// uses DetectionRepository.Save() (Repo path), but integration tests only exercised
-// the legacy DataStore.Save() path where ID sync was explicit.
+// This tests each step individually against real GORM+SQLite to catch any
+// driver-level ID assignment issues. The Repo-path integration tests in
+// composite_action_integration_test.go exercise the full DetectionRepository
+// via NewDetectionRepository wrapping a mock datastore.
+//
+// Context: GitHub issue #2453 — MQTT detectionId is always 0.
 func TestDetectionRepository_Save_PropagatesID(t *testing.T) {
 	t.Parallel()
 
@@ -599,10 +604,6 @@ func TestDetectionRepository_Save_PropagatesID(t *testing.T) {
 
 	ds := &DataStore{DB: db}
 
-	// Simulate what detectionRepository.Save() does internally:
-	// 1. NoteFromResult(result) — creates Note from Result
-	// 2. r.store.Save(&note, results) — GORM inserts and sets note.ID
-	// 3. result.ID = note.ID — propagates ID back to Result
 	species := []struct {
 		common     string
 		scientific string
@@ -631,22 +632,23 @@ func TestDetectionRepository_Save_PropagatesID(t *testing.T) {
 			Confidence: 0.95,
 		}
 
-		// This is exactly what detectionRepository.Save() does
+		// Step 1: NoteFromResult (same as detectionRepository.Save line 41)
 		note := NoteFromResult(result)
 		additionalResults := []detection.AdditionalResult{
 			{Species: detection.Species{ScientificName: s.scientific, CommonName: s.common}, Confidence: 0.85},
 		}
 		legacyResults := AdditionalResultsToDatastoreResults(additionalResults)
 
+		// Step 2: DataStore.Save — GORM Create sets note.ID
 		err := ds.Save(&note, legacyResults)
 		require.NoError(t, err, "Save detection %d (%s) should succeed", i, s.common)
 
-		// This is the critical line from detectionRepository.Save() line 52
+		// Step 3: Propagate ID back (same as detectionRepository.Save line 52)
 		result.ID = note.ID
 
 		expectedID := uint(i + 1)
 		assert.Equal(t, expectedID, note.ID,
-			"Detection %d: note.ID should be %d after Save", i, expectedID)
+			"Detection %d: note.ID should be %d after GORM Create", i, expectedID)
 		assert.Equal(t, expectedID, result.ID,
 			"Detection %d: result.ID should be %d after propagation", i, expectedID)
 	}
