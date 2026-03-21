@@ -389,29 +389,34 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 		return nil
 	}
 
-	// If transient connection error, wait briefly for auto-reconnect and retry once.
-	// The Paho client has built-in auto-reconnect; 500ms is usually enough.
+	// If transient connection error, wait for auto-reconnect and retry once.
+	// Use the configured ReconnectDelay (default 1s) as minimum wait, since that's
+	// when the reconnect timer fires. Fall back to publishRetryDelay if shorter.
 	if isTransientConnectionError(err) {
+		retryWait := max(publishRetryDelay, c.config.ReconnectDelay)
 		log.Debug("Transient connection error, waiting for auto-reconnect before retry",
-			logger.Error(err))
+			logger.Error(err),
+			logger.Duration("retry_wait", retryWait))
 
 		select {
-		case <-time.After(publishRetryDelay):
+		case <-time.After(retryWait):
 		case <-ctx.Done():
 			return ctx.Err()
 		}
 
-		// Get potentially reconnected client
+		// Get potentially reconnected client and retry regardless of IsConnected()
+		// state — let attemptPublish determine the actual outcome.
 		c.mu.RLock()
 		retryClient := c.internalClient
 		c.mu.RUnlock()
 
-		if retryClient != nil && retryClient.IsConnected() {
+		if retryClient != nil {
 			retryErr := c.attemptPublish(ctx, retryClient, topic, payload, retain, log)
 			if retryErr == nil {
 				log.Debug("Publish succeeded on retry after reconnect")
 				return nil
 			}
+			return retryErr // Return retry outcome, not the original error
 		}
 	}
 
