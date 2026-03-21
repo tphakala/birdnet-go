@@ -234,7 +234,7 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	for i := range rules {
 		rule := &rules[i]
 		cdKey := cooldownKey(rule, event)
-		if e.ruleMatches(rule, event) && !e.isInCooldown(cdKey, rule.CooldownSec) {
+		if e.ruleMatches(rule, event) && e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
 			// Check escalation suppression for metric rules with steps.
 			if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
 				suppress, props := e.shouldSuppressEscalation(rule, event)
@@ -248,10 +248,10 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 					Properties: props,
 					Timestamp:  event.Timestamp,
 				}
-				e.fireRule(rule, augmentedEvent, cdKey)
+				e.fireRule(rule, augmentedEvent)
 				continue
 			}
-			e.fireRule(rule, event, cdKey)
+			e.fireRule(rule, event)
 		}
 	}
 }
@@ -304,21 +304,29 @@ func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *Alert
 	return true
 }
 
-func (e *Engine) isInCooldown(key string, cooldownSec int) bool {
+// tryAcquireCooldown atomically checks whether key is in cooldown and, if not,
+// records the current time so subsequent calls observe the cooldown. This avoids
+// the TOCTOU race where a separate read-lock check + write-lock set would let
+// two concurrent callers both pass the check before either writes.
+func (e *Engine) tryAcquireCooldown(key string, cooldownSec int) (acquired bool) {
 	if cooldownSec <= 0 {
-		return false
+		return true // no cooldown configured — always allow
 	}
-	e.cooldownsMu.RLock()
+	cooldownDuration := time.Duration(cooldownSec) * time.Second
+
+	e.cooldownsMu.Lock()
 	lastFired, exists := e.cooldowns[key]
-	e.cooldownsMu.RUnlock()
-	if !exists {
-		return false
+	if exists && time.Since(lastFired) < cooldownDuration {
+		e.cooldownsMu.Unlock()
+		return false // still in cooldown
 	}
-	return time.Since(lastFired) < time.Duration(cooldownSec)*time.Second
+	e.cooldowns[key] = time.Now()
+	e.cooldownsMu.Unlock()
+	return true
 }
 
-func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent, cdKey string) {
-	e.fireRuleInternal(rule, event, e.actionFunc, cdKey)
+func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
+	e.fireRuleInternal(rule, event, e.actionFunc)
 }
 
 // TestFireRule fires a rule's actions directly, bypassing condition evaluation
@@ -337,19 +345,12 @@ func (e *Engine) TestFireRule(rule *entities.AlertRule) {
 	if actionFn == nil {
 		actionFn = e.actionFunc
 	}
-	cdKey := cooldownKey(rule, event)
-	e.fireRuleInternal(rule, event, actionFn, cdKey)
+	e.fireRuleInternal(rule, event, actionFn)
 }
 
-// fireRuleInternal contains the shared logic for firing a rule: recording
-// cooldown, persisting history, and dispatching the provided action function.
-func (e *Engine) fireRuleInternal(rule *entities.AlertRule, event *AlertEvent, actionFn ActionFunc, cdKey string) {
-	// Record cooldown using the key from the caller (includes metric instance
-	// for per-path cooldowns on metric rules).
-	e.cooldownsMu.Lock()
-	e.cooldowns[cdKey] = time.Now()
-	e.cooldownsMu.Unlock()
-
+// fireRuleInternal contains the shared logic for firing a rule: persisting
+// history and dispatching the provided action function.
+func (e *Engine) fireRuleInternal(rule *entities.AlertRule, event *AlertEvent, actionFn ActionFunc) {
 	// Record history
 	eventJSON, err := json.Marshal(event.Properties)
 	if err != nil {

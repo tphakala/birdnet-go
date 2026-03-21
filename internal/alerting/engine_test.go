@@ -720,6 +720,51 @@ func TestEngine_EscalationSteps_WithSustainedCondition(t *testing.T) {
 	assert.Equal(t, []float64{86, 91}, fired, "higher step sustained should fire")
 }
 
+func TestEngine_CooldownAtomicUnderConcurrency(t *testing.T) {
+	// Verifies that concurrent HandleEvent calls for the same event+rule
+	// only fire once when a cooldown is set (no TOCTOU race).
+	rule := entities.AlertRule{
+		ID:          1,
+		Enabled:     true,
+		ObjectType:  ObjectTypeStream,
+		TriggerType: TriggerTypeEvent,
+		EventName:   EventStreamDisconnected,
+		CooldownSec: 300,
+	}
+	repo := newMockRepo(rule)
+
+	var fireCount int64
+	var mu sync.Mutex
+	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
+		mu.Lock()
+		fireCount++
+		mu.Unlock()
+	}, testLogger(), nil)
+
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	const goroutines = 50
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+	for range goroutines {
+		go func() {
+			defer wg.Done()
+			engine.HandleEvent(&AlertEvent{
+				ObjectType: ObjectTypeStream,
+				EventName:  EventStreamDisconnected,
+				Properties: map[string]any{},
+				Timestamp:  time.Now(),
+			})
+		}()
+	}
+	wg.Wait()
+
+	mu.Lock()
+	count := fireCount
+	mu.Unlock()
+	assert.Equal(t, int64(1), count, "concurrent calls should fire exactly once with cooldown")
+}
+
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
 	// Two rules targeting the same metric — metric sample should be recorded once per event.
 	rule1 := entities.AlertRule{
