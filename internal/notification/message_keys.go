@@ -80,14 +80,15 @@ const (
 	MsgErrAuthSessionError        = "errors.auth.sessionError"
 
 	// Alert CRUD errors
-	MsgErrAlertV2Required    = "errors.alert.v2Required"
-	MsgErrAlertInvalidID     = "errors.alert.invalidID"
-	MsgErrAlertNotFound      = "errors.alert.notFound"
-	MsgErrAlertInvalidBody   = "errors.alert.invalidBody"
-	MsgErrAlertNameRequired  = "errors.alert.nameRequired"
-	MsgErrAlertTypesRequired = "errors.alert.typesRequired"
-	MsgErrAlertDuplicateName = "errors.alert.duplicateName"
-	MsgErrAlertInvalidJSON   = "errors.alert.invalidJSON"
+	MsgErrAlertV2Required        = "errors.alert.v2Required"
+	MsgErrAlertInvalidID         = "errors.alert.invalidID"
+	MsgErrAlertNotFound          = "errors.alert.notFound"
+	MsgErrAlertInvalidBody       = "errors.alert.invalidBody"
+	MsgErrAlertNameRequired      = "errors.alert.nameRequired"
+	MsgErrAlertTypesRequired     = "errors.alert.typesRequired"
+	MsgErrAlertDuplicateName     = "errors.alert.duplicateName"
+	MsgErrAlertInvalidJSON       = "errors.alert.invalidJSON"
+	MsgErrAlertInvalidEscalation = "errors.alert.invalidEscalation"
 
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"

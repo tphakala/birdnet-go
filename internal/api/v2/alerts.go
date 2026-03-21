@@ -2,7 +2,9 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/labstack/echo/v4"
@@ -59,6 +61,30 @@ func (c *Controller) initAlertRoutes() {
 	protected.DELETE("/history", c.ClearAlertHistory)
 }
 
+// validateEscalationSteps checks that escalation steps (when provided) contain no
+// empty slices, no negative values, and no duplicates. Valid steps are sorted ascending
+// in place for consistent display in the UI.
+func validateEscalationSteps(steps []float64) error {
+	if steps == nil {
+		return nil // nil means "no escalation"
+	}
+	if len(steps) == 0 {
+		return fmt.Errorf("escalation_steps must be nil (no escalation) or a non-empty array")
+	}
+	seen := make(map[float64]struct{}, len(steps))
+	for _, v := range steps {
+		if v < 0 {
+			return fmt.Errorf("escalation_steps must not contain negative values, got %g", v)
+		}
+		if _, dup := seen[v]; dup {
+			return fmt.Errorf("escalation_steps must not contain duplicates, got %g twice", v)
+		}
+		seen[v] = struct{}{}
+	}
+	slices.Sort(steps)
+	return nil
+}
+
 // bindAndValidateAlertRule binds and validates the alert rule from the request body.
 // On validation failure, it writes the error response and returns nil with the written error.
 // Callers should check: if rule == nil { return err }
@@ -72,6 +98,9 @@ func (c *Controller) bindAndValidateAlertRule(ctx echo.Context) (*entities.Alert
 	}
 	if rule.ObjectType == "" || rule.TriggerType == "" {
 		return nil, c.HandleErrorWithKey(ctx, nil, "Object type and trigger type are required", http.StatusBadRequest, notification.MsgErrAlertTypesRequired, nil)
+	}
+	if err := validateEscalationSteps(rule.EscalationSteps); err != nil {
+		return nil, c.HandleErrorWithKey(ctx, err, err.Error(), http.StatusBadRequest, notification.MsgErrAlertInvalidEscalation, nil)
 	}
 	return &rule, nil
 }
@@ -435,6 +464,12 @@ func (c *Controller) ImportAlertRules(ctx echo.Context) error {
 		for j := range rule.Actions {
 			rule.Actions[j].ID = 0
 			rule.Actions[j].RuleID = 0
+		}
+
+		if err := validateEscalationSteps(rule.EscalationSteps); err != nil {
+			c.logErrorIfEnabled("skipping imported rule with invalid escalation steps",
+				logger.String("name", rule.Name), logger.Error(err))
+			continue
 		}
 
 		if err := c.alertRuleRepo.CreateRule(reqCtx, rule); err != nil {
