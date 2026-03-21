@@ -130,6 +130,7 @@ func TestMqttAction_Execute_UsesDetectionContextID(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -178,6 +179,7 @@ func TestMqttAction_Execute_PayloadContainsAllFields(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -256,6 +258,7 @@ func TestMqttAction_Execute_SourceID(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -300,6 +303,7 @@ func TestMqttAction_Execute_TransientError_NonFatal(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -332,6 +336,7 @@ func TestMqttAction_Execute_EOFError_NonFatal(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -357,6 +362,7 @@ func TestMqttAction_Execute_PublishesToConfiguredTopic(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "homeassistant/sensor/birdnet/state"
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -389,6 +395,7 @@ func TestMqttAction_Execute_WithoutDetectionContext(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -426,6 +433,7 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 	settings := &conf.Settings{
 		Debug: true,
 	}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "" // Empty topic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -445,4 +453,30 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 	err := action.Execute(t.Context(), nil)
 	require.Error(t, err, "Should return error for empty topic")
 	assert.Contains(t, err.Error(), "MQTT topic is not specified", "Error should mention topic")
+}
+
+// TestMqttAction_Execute_DisabledAfterCreation verifies that MqttAction exits
+// silently when MQTT is disabled via settings after the action was created.
+// This supports hot-reload: disabling MQTT in the UI takes effect immediately.
+func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = false // Disabled after action creation
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+	det := testDetection()
+
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockClient,
+		EventTracker: eventTracker,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err, "Should silently return nil when MQTT is disabled")
+	assert.Equal(t, 0, mockClient.GetPublishCalls(), "Should not attempt publish when disabled")
 }

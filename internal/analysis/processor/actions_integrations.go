@@ -159,6 +159,13 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 		return nil
 	}
 
+	// Early check if MQTT is still enabled in settings.
+	// Supports hot-reload: disabling MQTT in the UI takes effect immediately,
+	// even for actions already queued. Matches BirdWeatherAction pattern.
+	if !a.Settings.Realtime.MQTT.Enabled {
+		return nil
+	}
+
 	// Validate MQTT settings
 	if a.Settings.Realtime.MQTT.Topic == "" {
 		return errors.Newf("MQTT topic is not specified").

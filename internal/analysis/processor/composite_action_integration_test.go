@@ -97,6 +97,7 @@ func TestCompositeAction_DatabaseToMQTT_IDPropagation(t *testing.T) {
 	mockDs := NewActionMockDatastore()
 	mockMqtt := NewMockMQTTClient()
 	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 	eventTracker := NewEventTracker(testEventTrackerInterval)
 
@@ -165,6 +166,7 @@ func TestCompositeAction_RepoPath_DatabaseToMQTT_IDPropagation(t *testing.T) {
 	mockDs := NewActionMockDatastore()
 	mockMqtt := NewMockMQTTClient()
 	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 	eventTracker := NewEventTracker(testEventTrackerInterval)
 
@@ -244,6 +246,7 @@ func TestCompositeAction_RepoPath_MultipleDetections(t *testing.T) {
 	mockDs := NewActionMockDatastore()
 	mockMqtt := NewMockMQTTClient()
 	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 	eventTracker := NewEventTracker(testEventTrackerInterval)
 
@@ -319,6 +322,7 @@ func TestCompositeAction_FullPipeline_DatabaseMQTTSSE(t *testing.T) {
 	mockMqtt := NewMockMQTTClient()
 	mockSSE := NewMockSSEBroadcaster()
 	settings := &conf.Settings{Debug: true}
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 	eventTracker := NewEventTracker(testEventTrackerInterval)
 
