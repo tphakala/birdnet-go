@@ -437,6 +437,7 @@ birdnet [command] [flags]
 
 Many configuration options can be overridden via command-line flags (e.g., `--threshold 0.7`, `--locale fr`). Run `birdnet [command] --help` to see all available flags for a specific command. Some common global flags include:
 
+- `-c, --config`: Path to a custom configuration file (overrides default location).
 - `-d, --debug`: Enable debug output.
 - `-s, --sensitivity`: Set sigmoid sensitivity (0.0 to 1.5).
 - `-t, --threshold`: Set confidence threshold (0.1 to 1.0).
@@ -444,6 +445,29 @@ Many configuration options can be overridden via command-line flags (e.g., `--th
 - `--locale`: Set language for labels (e.g., `en-us`, `de`).
 - `--latitude`, `--longitude`: Set location coordinates.
 - `--overlap`: Set analysis overlap (0.0 to 2.9).
+
+#### Using a Custom Configuration File
+
+By default, BirdNET-Go looks for `config.yaml` in the [standard configuration directory](#configuration-file-locations) for your operating system. You can override this with the `--config` or `-c` flag to use a configuration file at any path:
+
+```bash
+# Use a specific config file
+birdnet realtime --config /path/to/my-config.yaml
+
+# Short form
+birdnet realtime -c /path/to/my-config.yaml
+
+# Equals syntax
+birdnet realtime --config=/path/to/my-config.yaml
+```
+
+This is useful for:
+
+- **Running multiple instances** with different configurations (e.g., different audio sources or detection thresholds) on the same host.
+- **Container deployments** where the config file is mounted at a non-standard path.
+- **Testing** with scenario-specific configurations.
+
+> **Note:** If the specified config file does not exist, BirdNET-Go will exit with an error rather than creating a default configuration at that path.
 
 ### Supported Languages for Species Labels
 
