@@ -81,7 +81,7 @@
     ]
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.41.0",
+    "@ast-grep/cli": "^0.42.0",
     "@axe-core/playwright": "^4.11.1",
     "@eslint/js": "^9.39.2",
     "@formatjs/icu-messageformat-parser": "^3.5.1",
