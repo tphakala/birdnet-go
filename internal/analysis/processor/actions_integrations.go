@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -219,8 +220,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		sanitizedErr := privacy.WrapError(err)
-		isEOFErr := isEOFError(err)
-		isConnErr := isTransientMQTTError(err)
+		isConnErr := mqtt.IsTransientConnectionError(err)
 
 		if isConnErr {
 			// Transient connection error — detection is safe in DB, downgrade to warning.
@@ -234,7 +234,6 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 				logger.String("species", a.Result.Species.CommonName),
 				logger.Float64("confidence", a.Result.Confidence),
 				logger.String("topic", a.Settings.Realtime.MQTT.Topic),
-				logger.Bool("is_eof_error", isEOFErr),
 				logger.String("operation", "mqtt_publish_transient_skip"))
 			return nil // Non-fatal: don't fail the CompositeAction
 		}
@@ -250,19 +249,16 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			logger.String("clip_name", a.Result.ClipName),
 			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
-			logger.Bool("is_eof_error", isEOFErr),
 			logger.String("operation", "mqtt_publish"))
 
-		if !isEOFErr {
-			alerting.TryPublish(&alerting.AlertEvent{
-				ObjectType: alerting.ObjectTypeIntegration,
-				EventName:  alerting.EventMQTTPublishFailed,
-				Properties: map[string]any{
-					alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
-					alerting.PropertyError:  sanitizedErr.Error(),
-				},
-			})
-		}
+		alerting.TryPublish(&alerting.AlertEvent{
+			ObjectType: alerting.ObjectTypeIntegration,
+			EventName:  alerting.EventMQTTPublishFailed,
+			Properties: map[string]any{
+				alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+				alerting.PropertyError:  sanitizedErr.Error(),
+			},
+		})
 
 		return errors.New(err).
 			Component("analysis.processor").
@@ -274,7 +270,6 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			Context("clip_name", a.Result.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true).
-			Context("is_eof_error", isEOFErr).
 			Build()
 	}
 

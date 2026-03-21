@@ -5,16 +5,13 @@ package processor
 
 import (
 	"context"
-	"io"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -246,35 +243,6 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	}
 
 	return nil
-}
-
-// isEOFError checks if an error is an EOF error using both precise matching and string fallback
-func isEOFError(err error) bool {
-	if err == nil {
-		return false
-	}
-	// Check for specific EOF errors first
-	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
-		return true
-	}
-	// Fall back to string matching for wrapped or custom EOF errors
-	return strings.Contains(strings.ToLower(err.Error()), "eof")
-}
-
-// isTransientMQTTError checks if an error is a transient MQTT connection issue
-// (EOF, not connected, connection lost). These are expected during the TOCTOU race
-// window (GitHub #2397) and should not fail the CompositeAction.
-func isTransientMQTTError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if isEOFError(err) {
-		return true
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "not connected") ||
-		strings.Contains(msg, "connection lost") ||
-		strings.Contains(msg, "connection reset")
 }
 
 // shouldSuppressNewSpeciesNotification checks if a new species notification should be suppressed.
