@@ -8,12 +8,13 @@ import (
 
 // Results represents the data structure for storing BirdNET inference results
 type Results struct {
-	StartTime   time.Time             // Time when the analysis started
-	PCMdata     []byte                // Raw PCM audio data
-	Results     []datastore.Results   // Slice of analysis results
-	ElapsedTime time.Duration         // Time taken for analysis
-	ClipName    string                // Name of the audio clip
-	Source      datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
+	StartTime       time.Time             // Time when the analysis started (back-dated for clip export)
+	AudioCapturedAt time.Time             // Wall-clock time when the 3s audio chunk was ready for analysis
+	PCMdata         []byte                // Raw PCM audio data
+	Results         []datastore.Results   // Slice of analysis results
+	ElapsedTime     time.Duration         // Time taken for analysis
+	ClipName        string                // Name of the audio clip
+	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 }
 
 // Default buffer size for the results queue
@@ -32,10 +33,11 @@ var ResultsQueue = make(chan Results, DefaultQueueSize)
 func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, avoid warning about heavy parameters
 	// Create a new Results struct with simple field copies
 	newCopy := Results{
-		StartTime:   r.StartTime,
-		ElapsedTime: r.ElapsedTime,
-		ClipName:    r.ClipName,
-		Source:      r.Source,
+		StartTime:       r.StartTime,
+		AudioCapturedAt: r.AudioCapturedAt,
+		ElapsedTime:     r.ElapsedTime,
+		ClipName:        r.ClipName,
+		Source:          r.Source,
 	}
 
 	// Deep copy PCMdata
