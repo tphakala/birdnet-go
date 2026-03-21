@@ -35,7 +35,6 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
-    getRepeatLabels,
     STALE_DEDUP_PRUNE_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
@@ -391,7 +390,7 @@
 
   // Diff incoming pending detections and queue new labels.
   // Always update prevSnapshot — even when pendingDetections is empty — so
-  // getRepeatLabels doesn't see stale species after detections stop.
+  // stale species are cleared after detections stop.
   $effect(() => {
     if (!activeSourceId) return;
     if (pendingDetections.length > 0) {
@@ -436,22 +435,6 @@
           labelQueue = remaining;
           overlayLabels = [...overlayLabels, ...promoted];
         }
-      }
-
-      // Generate repeat labels for species still actively detected.
-      // Use wall-clock time (not playhead time) for dedup tracking so it stays
-      // consistent with the pending diff $effect which also uses Date.now().
-      const nowUnix = Date.now() / 1000;
-      const repeats = getRepeatLabels(prevSnapshot, activeSourceId ?? '', lastSeenSpecies, nowUnix);
-      if (repeats.length > 0) {
-        const newLabels: Array<{ text: string; birthTime: number; ySlot: number }> = [];
-        for (const rep of repeats) {
-          lastSeenSpecies.set(rep.species, nowUnix);
-          const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
-          slotCounter = next;
-          newLabels.push({ text: rep.species, birthTime: now, ySlot: slot });
-        }
-        overlayLabels = [...overlayLabels, ...newLabels];
       }
 
       // Prune labels older than 60 seconds

@@ -32,7 +32,6 @@ interface PendingEntry {
 }
 
 const DEDUP_INTERVAL_SECONDS = 6;
-const STALE_THRESHOLD_SECONDS = 6;
 
 /** How long (seconds) to keep a species in the dedup map after last label.
  *  Generous buffer beyond DEDUP_INTERVAL_SECONDS to avoid premature cleanup. */
@@ -115,39 +114,4 @@ export function promoteFromQueue(
 export function nextYSlot(counter: number, maxSlots: number): { slot: number; next: number } {
   const slot = counter % maxSlots;
   return { slot, next: counter + 1 };
-}
-
-/**
- * Generate repeat labels for species that are still actively detected.
- * A repeat label is emitted when:
- * 1. The species already has a previous label (exists in lastLabelledMap)
- * 2. More than DEDUP_INTERVAL_SECONDS have elapsed since the last label
- * 3. The species is still fresh (lastUpdated within STALE_THRESHOLD_SECONDS of nowUnix)
- *
- * Returns entries that should get new labels. The caller must update lastLabelledMap.
- */
-export function getRepeatLabels(
-  activePending: PendingEntry[],
-  activeSourceID: string,
-  lastLabelledMap: Map<string, number>,
-  nowUnix: number
-): PendingEntry[] {
-  const results: PendingEntry[] = [];
-
-  for (const entry of activePending) {
-    if (entry.sourceID !== activeSourceID || entry.status === 'rejected') continue;
-
-    const lastLabelTime = lastLabelledMap.get(entry.species);
-    if (lastLabelTime === undefined) continue; // No initial label yet — skip repeats
-
-    const lastUpdated = entry.lastUpdated ?? entry.firstDetected;
-    const isFresh = nowUnix - lastUpdated < STALE_THRESHOLD_SECONDS;
-    const intervalElapsed = nowUnix - lastLabelTime >= DEDUP_INTERVAL_SECONDS;
-
-    if (isFresh && intervalElapsed) {
-      results.push(entry);
-    }
-  }
-
-  return results;
 }

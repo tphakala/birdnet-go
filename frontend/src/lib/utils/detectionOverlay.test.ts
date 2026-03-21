@@ -4,7 +4,6 @@ import {
   shouldDedup,
   promoteFromQueue,
   nextYSlot,
-  getRepeatLabels,
   type QueuedLabel,
 } from './detectionOverlay';
 
@@ -160,98 +159,5 @@ describe('nextYSlot', () => {
     expect(nextYSlot(0, 4)).toEqual({ slot: 0, next: 1 });
     expect(nextYSlot(1, 4)).toEqual({ slot: 1, next: 2 });
     expect(nextYSlot(4, 4)).toEqual({ slot: 0, next: 5 });
-  });
-});
-
-describe('getRepeatLabels', () => {
-  it('emits repeat label when species active for >6s since last label', () => {
-    const lastLabelled = new Map([['Blue Tit', 100]]);
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src1',
-        firstDetected: 95,
-        lastUpdated: 106,
-        status: 'active' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(1);
-    expect(repeats[0].species).toBe('Blue Tit');
-  });
-
-  it('does not emit when <6s since last label', () => {
-    const lastLabelled = new Map([['Blue Tit', 103]]);
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src1',
-        firstDetected: 95,
-        lastUpdated: 106,
-        status: 'active' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(0);
-  });
-
-  it('does not emit when species has no previous label', () => {
-    const lastLabelled = new Map<string, number>();
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src1',
-        firstDetected: 95,
-        lastUpdated: 106,
-        status: 'active' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(0);
-  });
-
-  it('does not emit for stale species (lastUpdated older than nowUnix - 6)', () => {
-    const lastLabelled = new Map([['Blue Tit', 90]]);
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src1',
-        firstDetected: 85,
-        lastUpdated: 92,
-        status: 'active' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(0);
-  });
-
-  it('filters by sourceID', () => {
-    const lastLabelled = new Map([['Blue Tit', 100]]);
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src2',
-        firstDetected: 95,
-        lastUpdated: 106,
-        status: 'active' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(0);
-  });
-
-  it('ignores rejected species', () => {
-    const lastLabelled = new Map([['Blue Tit', 100]]);
-    const activePending = [
-      {
-        species: 'Blue Tit',
-        sourceID: 'src1',
-        firstDetected: 95,
-        lastUpdated: 106,
-        status: 'rejected' as const,
-      },
-    ];
-    const repeats = getRepeatLabels(activePending, 'src1', lastLabelled, 107);
-    expect(repeats).toHaveLength(0);
   });
 });

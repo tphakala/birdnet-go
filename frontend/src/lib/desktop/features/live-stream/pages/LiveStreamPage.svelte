@@ -33,7 +33,6 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
-    getRepeatLabels,
     STALE_DEDUP_PRUNE_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
@@ -718,27 +717,6 @@
           labelQueue = remaining;
           overlayLabels = [...overlayLabels, ...promoted];
         }
-      }
-
-      // Generate repeat labels for species still actively detected.
-      // Use wall-clock time (not playhead time) for dedup tracking so it stays
-      // consistent with the SSE handler which also uses Date.now().
-      const repeats = getRepeatLabels(prevSnapshot, activeSourceId ?? '', lastSeenSpecies, nowUnix);
-      if (repeats.length > 0) {
-        const newLabels: OverlayLabel[] = [];
-        for (const rep of repeats) {
-          lastSeenSpecies.set(rep.species, nowUnix);
-          const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
-          slotCounter = next;
-          newLabels.push({
-            text: rep.species,
-            birthTime: now,
-            ySlot: slot,
-            firstDetected: rep.firstDetected,
-            promotionDelta: 0, // Repeat labels are created at current time, no delay
-          });
-        }
-        overlayLabels = [...overlayLabels, ...newLabels];
       }
 
       // Prune labels older than LABEL_MAX_AGE_MS — runs regardless of playingDate
