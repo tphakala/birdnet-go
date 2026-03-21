@@ -463,7 +463,7 @@ func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
 
 	mockClient := NewMockMQTTClient()
 	settings := &conf.Settings{}
-	settings.Realtime.MQTT.Enabled = false // Disabled after action creation
+	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = testMQTTTopic
 
 	eventTracker := NewEventTracker(testEventTrackerInterval)
@@ -475,6 +475,9 @@ func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
 		MqttClient:   mockClient,
 		EventTracker: eventTracker,
 	}
+
+	// Simulate runtime hot-reload toggle after action creation.
+	settings.Realtime.MQTT.Enabled = false
 
 	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "Should silently return nil when MQTT is disabled")
