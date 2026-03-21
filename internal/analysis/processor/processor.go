@@ -1332,15 +1332,16 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 			item := p.pendingDetections[key]
 			if item.Count >= threshold {
 				broadcastSnapshot = append(broadcastSnapshot, SSEPendingDetection{
-					Species:        item.Detection.Result.Species.CommonName,
-					ScientificName: item.Detection.Result.Species.ScientificName,
-					Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
-					Status:         PendingStatusActive,
-					FirstDetected:  item.CreatedAt.Unix(),
-					LastUpdated:    item.LastUpdated.Unix(),
-					Source:         p.getDisplayNameForSource(item.Source),
-					SourceID:       item.Source,
-					HitCount:       item.Count,
+					Species:         item.Detection.Result.Species.CommonName,
+					ScientificName:  item.Detection.Result.Species.ScientificName,
+					Thumbnail:       p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
+					Status:          PendingStatusActive,
+					FirstDetected:   item.CreatedAt.Unix(),
+					AudioCapturedAt: unixOrZero(item.AudioCapturedAt),
+					LastUpdated:     item.LastUpdated.Unix(),
+					Source:          p.getDisplayNameForSource(item.Source),
+					SourceID:        item.Source,
+					HitCount:        item.Count,
 				})
 			}
 		}

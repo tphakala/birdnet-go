@@ -401,7 +401,11 @@
         lastSeenSpecies.set(det.species, nowUnix);
         const { slot, next } = nextYSlot(slotCounter, MAX_OVERLAY_SLOTS);
         slotCounter = next;
-        labelQueue.push({ text: det.species, firstDetected: det.firstDetected, ySlot: slot });
+        labelQueue.push({
+          text: det.species,
+          firstDetected: det.audioCapturedAt ?? det.firstDetected,
+          ySlot: slot,
+        });
       }
     }
     prevSnapshot = [...pendingDetections];
