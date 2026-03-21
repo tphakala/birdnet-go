@@ -174,6 +174,7 @@ func TestSeedDefaultRules_MigratesEscalationSteps(t *testing.T) {
 }
 
 func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
+	t.Parallel()
 	props := map[string]any{
 		PropertySpeciesName:        "Eurasian Blue Tit",
 		PropertyScientificName:     "Cyanistes caeruleus",
@@ -220,6 +221,7 @@ func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
 }
 
 func TestEnrichFromEventProps_NonDetectionUnchanged(t *testing.T) {
+	t.Parallel()
 	props := map[string]any{
 		PropertyStreamName: "backyard-cam",
 		PropertyError:      "connection timeout",
@@ -233,6 +235,7 @@ func TestEnrichFromEventProps_NonDetectionUnchanged(t *testing.T) {
 }
 
 func TestEnrichFromEventProps_NilProps(t *testing.T) {
+	t.Parallel()
 	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "Title", "Message")
 	enriched := enrichFromEventProps(notif, notification.TypeDetection, nil)
 
@@ -241,6 +244,7 @@ func TestEnrichFromEventProps_NilProps(t *testing.T) {
 }
 
 func TestEnrichFromEventProps_FallbackImageURL(t *testing.T) {
+	t.Parallel()
 	props := map[string]any{
 		PropertySpeciesName:    "Eurasian Blue Tit",
 		PropertyScientificName: "Cyanistes caeruleus",
