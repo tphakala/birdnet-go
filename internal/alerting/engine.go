@@ -233,24 +233,37 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	// Phase 2: Evaluate rules.
 	for i := range rules {
 		rule := &rules[i]
+		if !e.ruleMatches(rule, event) {
+			continue
+		}
+
 		cdKey := cooldownKey(rule, event)
-		if e.ruleMatches(rule, event) && e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
-			// Check escalation suppression for metric rules with steps.
-			if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
-				suppress, props := e.shouldSuppressEscalation(rule, event)
-				if suppress {
-					continue
-				}
-				augmentedEvent := &AlertEvent{
-					ObjectType: event.ObjectType,
-					EventName:  event.EventName,
-					MetricName: event.MetricName,
-					Properties: props,
-					Timestamp:  event.Timestamp,
-				}
-				e.fireRule(rule, augmentedEvent)
+
+		// Metric rules with escalation steps: check escalation BEFORE
+		// acquiring cooldown so a suppressed step doesn't consume the
+		// cooldown and block a later, legitimate escalated alert.
+		// The escalation path has its own atomic protection via
+		// shouldSuppressEscalation.
+		if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
+			suppress, props := e.shouldSuppressEscalation(rule, event)
+			if suppress {
 				continue
 			}
+			if !e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
+				continue
+			}
+			augmentedEvent := &AlertEvent{
+				ObjectType: event.ObjectType,
+				EventName:  event.EventName,
+				MetricName: event.MetricName,
+				Properties: props,
+				Timestamp:  event.Timestamp,
+			}
+			e.fireRule(rule, augmentedEvent)
+			continue
+		}
+
+		if e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
 			e.fireRule(rule, event)
 		}
 	}
@@ -315,13 +328,13 @@ func (e *Engine) tryAcquireCooldown(key string, cooldownSec int) (acquired bool)
 	cooldownDuration := time.Duration(cooldownSec) * time.Second
 
 	e.cooldownsMu.Lock()
+	defer e.cooldownsMu.Unlock()
+
 	lastFired, exists := e.cooldowns[key]
 	if exists && time.Since(lastFired) < cooldownDuration {
-		e.cooldownsMu.Unlock()
 		return false // still in cooldown
 	}
 	e.cooldowns[key] = time.Now()
-	e.cooldownsMu.Unlock()
 	return true
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -595,6 +596,63 @@ func TestEngine_EscalationSteps_ResetOnRecovery(t *testing.T) {
 	assert.Equal(t, 2, fireCount, "re-breach after recovery should fire")
 }
 
+func TestEngine_EscalationWithCooldown_SuppressedStepDoesNotConsumeCooldown(t *testing.T) {
+	// Verifies that a suppressed escalation step does not start a new cooldown.
+	// Scenario: after cooldown expires, a same-step event is suppressed by
+	// escalation. Without the fix, tryAcquireCooldown would consume the cooldown
+	// before shouldSuppressEscalation runs, blocking a subsequent legitimate
+	// escalated alert that arrives immediately after.
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     300, // 5-minute cooldown
+		EscalationSteps: []float64{85, 90, 95},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0},
+		},
+	}
+
+	var fired []float64
+	repo := newMockRepo(rule)
+	engine := NewEngine(repo, func(_ *entities.AlertRule, e *AlertEvent) {
+		fired = append(fired, e.Properties[PropertyValue].(float64))
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	emit := func(value float64) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+			Timestamp:  time.Now(),
+		})
+	}
+
+	// Step 85 fires, cooldown starts.
+	emit(86)
+	assert.Equal(t, []float64{86}, fired)
+
+	// Expire cooldown manually.
+	engine.cooldownsMu.Lock()
+	for k := range engine.cooldowns {
+		engine.cooldowns[k] = time.Now().Add(-10 * time.Minute)
+	}
+	engine.cooldownsMu.Unlock()
+
+	// Same step (87% → still step 85) — suppressed by escalation.
+	// Must NOT start a new cooldown.
+	emit(87)
+	assert.Equal(t, []float64{86}, fired, "same step should be suppressed")
+
+	// Higher step (91% → step 90) arrives immediately after.
+	// Should fire because the suppressed event must not have consumed cooldown.
+	emit(91)
+	assert.Equal(t, []float64{86, 91}, fired, "escalated step should not be blocked by suppressed step's cooldown")
+}
+
 func TestEngine_EscalationSteps_MultiplePathsIndependent(t *testing.T) {
 	rule := entities.AlertRule{
 		ID:              1,
@@ -733,12 +791,9 @@ func TestEngine_CooldownAtomicUnderConcurrency(t *testing.T) {
 	}
 	repo := newMockRepo(rule)
 
-	var fireCount int64
-	var mu sync.Mutex
+	var fireCount atomic.Int64
 	engine := NewEngine(repo, func(_ *entities.AlertRule, _ *AlertEvent) {
-		mu.Lock()
-		fireCount++
-		mu.Unlock()
+		fireCount.Add(1)
 	}, testLogger(), nil)
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
@@ -759,10 +814,7 @@ func TestEngine_CooldownAtomicUnderConcurrency(t *testing.T) {
 	}
 	wg.Wait()
 
-	mu.Lock()
-	count := fireCount
-	mu.Unlock()
-	assert.Equal(t, int64(1), count, "concurrent calls should fire exactly once with cooldown")
+	assert.Equal(t, int64(1), fireCount.Load(), "concurrent calls should fire exactly once with cooldown")
 }
 
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
