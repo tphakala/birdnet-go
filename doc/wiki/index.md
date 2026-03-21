@@ -31,6 +31,8 @@ Welcome to the BirdNET-Go documentation. This index will help you navigate throu
 
 ## Integration & Security
 
+- [Push Notifications](guide.md#push-notifications) - Discord, Telegram, Slack, and 20+ services
+- [Discord Setup Guide](guide.md#discord-setup-guide) - Step-by-step Discord webhook configuration with rich embeds
 - [MQTT Integration](BirdNET‐Go-Guide#integration-options) - Connecting to IoT systems
 - [BirdWeather API](BirdNET‐Go-Guide#integration-options) - Sharing data with BirdWeather.com
 - [Authentication](cloudflare_tunnel_guide.md#enabling-authentication) - Securing your BirdNET-Go instance
