@@ -392,7 +392,7 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 	// If transient connection error, wait for auto-reconnect and retry once.
 	// Use the configured ReconnectDelay (default 1s) as minimum wait, since that's
 	// when the reconnect timer fires. Fall back to publishRetryDelay if shorter.
-	if isTransientConnectionError(err) {
+	if IsTransientConnectionError(err) {
 		retryWait := max(publishRetryDelay, c.config.ReconnectDelay)
 		log.Debug("Transient connection error, waiting for auto-reconnect before retry",
 			logger.Error(err),
@@ -469,9 +469,9 @@ func (c *client) attemptPublish(ctx context.Context, mqttClient mqtt.Client, top
 	return nil
 }
 
-// isTransientConnectionError checks if an error is a transient MQTT connection issue
+// IsTransientConnectionError checks if an error is a transient MQTT connection issue
 // that may resolve after the auto-reconnect timer fires.
-func isTransientConnectionError(err error) bool {
+func IsTransientConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
