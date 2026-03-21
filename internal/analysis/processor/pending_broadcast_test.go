@@ -453,6 +453,39 @@ func TestSnapshotVisiblePending_IncludesLastUpdated(t *testing.T) {
 		"SSE LastUpdated should reflect the most recent inference hit time")
 }
 
+func TestSnapshotVisiblePending_IncludesAudioCapturedAt(t *testing.T) {
+	t.Parallel()
+
+	captureTime := time.Date(2026, 3, 21, 12, 0, 0, 0, time.UTC)
+	p := &Processor{
+		Settings: &conf.Settings{},
+		pendingDetections: map[string]PendingDetection{
+			"src1:robin": {
+				Detection: Detections{
+					Result: detection.Result{
+						Species: detection.Species{
+							CommonName:     "Robin",
+							ScientificName: "Erithacus rubecula",
+						},
+					},
+				},
+				CreatedAt:       captureTime.Add(2 * time.Second),
+				AudioCapturedAt: captureTime,
+				LastUpdated:     captureTime.Add(1 * time.Second),
+				Source:          "src1",
+				Count:           5,
+			},
+		},
+	}
+
+	snapshot := p.SnapshotVisiblePending(2)
+	require.Len(t, snapshot, 1)
+	assert.Equal(t, captureTime.Unix(), snapshot[0].AudioCapturedAt)
+	// Verify existing fields unchanged
+	assert.Equal(t, captureTime.Add(2*time.Second).Unix(), snapshot[0].FirstDetected)
+	assert.Equal(t, captureTime.Add(1*time.Second).Unix(), snapshot[0].LastUpdated)
+}
+
 func TestBuildFlushNotification_IncludesLastUpdated(t *testing.T) {
 	t.Parallel()
 

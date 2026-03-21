@@ -25,15 +25,16 @@ const (
 // SSEPendingDetection is the lightweight DTO sent over SSE for pending detections.
 // It contains only the fields needed for the "currently hearing" dashboard card.
 type SSEPendingDetection struct {
-	Species        string                 `json:"species"`        // Common name
-	ScientificName string                 `json:"scientificName"` // Scientific name
-	Thumbnail      string                 `json:"thumbnail"`      // Bird image URL
-	Status         PendingDetectionStatus `json:"status"`         // "active", "approved", "rejected"
-	FirstDetected  int64                  `json:"firstDetected"`  // Unix timestamp (seconds)
-	LastUpdated    int64                  `json:"lastUpdated"`    // Unix seconds — most recent inference hit
-	Source         string                 `json:"source"`         // Source display name
-	SourceID       string                 `json:"sourceID"`       // Raw source ID for client-side filtering
-	HitCount       int                    `json:"hitCount"`       // Number of inference hits accumulated
+	Species         string                 `json:"species"`         // Common name
+	ScientificName  string                 `json:"scientificName"`  // Scientific name
+	Thumbnail       string                 `json:"thumbnail"`       // Bird image URL
+	Status          PendingDetectionStatus `json:"status"`          // "active", "approved", "rejected"
+	FirstDetected   int64                  `json:"firstDetected"`   // Unix timestamp (seconds)
+	AudioCapturedAt int64                  `json:"audioCapturedAt"` // Unix timestamp of audio capture start
+	LastUpdated     int64                  `json:"lastUpdated"`     // Unix seconds — most recent inference hit
+	Source          string                 `json:"source"`          // Source display name
+	SourceID        string                 `json:"sourceID"`        // Raw source ID for client-side filtering
+	HitCount        int                    `json:"hitCount"`        // Number of inference hits accumulated
 }
 
 // sortPendingSnapshot sorts a pending detection snapshot by FirstDetected
@@ -90,15 +91,16 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			continue
 		}
 		result = append(result, SSEPendingDetection{
-			Species:        item.Detection.Result.Species.CommonName,
-			ScientificName: item.Detection.Result.Species.ScientificName,
-			Thumbnail:      p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
-			Status:         PendingStatusActive,
-			FirstDetected:  item.CreatedAt.Unix(),
-			LastUpdated:    item.LastUpdated.Unix(),
-			Source:         p.getDisplayNameForSource(item.Source),
-			SourceID:       item.Source,
-			HitCount:       item.Count,
+			Species:         item.Detection.Result.Species.CommonName,
+			ScientificName:  item.Detection.Result.Species.ScientificName,
+			Thumbnail:       p.getThumbnailURL(item.Detection.Result.Species.ScientificName),
+			Status:          PendingStatusActive,
+			FirstDetected:   item.CreatedAt.Unix(),
+			AudioCapturedAt: item.AudioCapturedAt.Unix(),
+			LastUpdated:     item.LastUpdated.Unix(),
+			Source:          p.getDisplayNameForSource(item.Source),
+			SourceID:        item.Source,
+			HitCount:        item.Count,
 		})
 	}
 	p.pendingMutex.RUnlock()
