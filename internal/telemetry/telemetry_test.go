@@ -519,7 +519,7 @@ func TestCaptureMessageDeferred_Cap(t *testing.T) {
 }
 
 func TestCaptureError_NilError(t *testing.T) {
-	t.Parallel()
+	// Not parallel — mutates package-level state (EnableTestMode)
 
 	// Enable test mode so telemetry functions don't skip
 	EnableTestMode()
