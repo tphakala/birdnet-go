@@ -82,6 +82,10 @@ func ClampFloat64Slice(samples []float64) {
 // Empty/short input handling: Returns an empty slice (not nil) if input has fewer than 2 bytes.
 // This allows safe iteration over the result without nil checks.
 //
+// Odd-length input: If the input has an odd number of bytes, the trailing byte is
+// silently ignored (PCM16 requires 2 bytes per sample). A debug log could be added
+// at the call site if callers want to detect this condition.
+//
 // Note: Uses pcm16ScaleFactor (32768.0) as divisor to map the full int16 range [-32768, 32767]
 // to [-1.0, ~0.99997]. This ensures -32768 maps exactly to -1.0.
 // See Float64ToBytesPCM16 for the inverse operation.
@@ -89,9 +93,12 @@ func BytesToFloat64PCM16(samples []byte) []float64 {
 	if len(samples) < 2 {
 		return []float64{}
 	}
-	sampleCount := len(samples) / 2
+	// Truncate to an even number of bytes so a trailing odd byte is
+	// never passed to the inner loop. PCM16 requires 2 bytes per sample.
+	evenLen := len(samples) &^ 1
+	sampleCount := evenLen / 2
 	floatSamples := make([]float64, sampleCount)
-	BytesToFloat64PCM16Into(floatSamples, samples)
+	BytesToFloat64PCM16Into(floatSamples, samples[:evenLen])
 	return floatSamples
 }
 

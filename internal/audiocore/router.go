@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -23,6 +24,10 @@ const (
 	// errorLogInterval controls how often consumer write errors are logged.
 	errorLogInterval = 100
 )
+
+// drainerStopTimeout is the maximum time to wait for a drainer goroutine
+// to exit after its done channel has been closed.
+const drainerStopTimeout = 5 * time.Second
 
 // Route holds the state for a single consumer subscription.
 type Route struct {
@@ -50,6 +55,11 @@ type Route struct {
 
 	// done is closed to signal the drainer goroutine to exit.
 	done chan struct{}
+
+	// stopped is closed by the drainer goroutine when it exits. Callers
+	// must wait on this channel after closing done before touching the
+	// resampler or consumer to avoid a data race.
+	stopped chan struct{}
 }
 
 // RouteInfo is the read-only snapshot returned by Routes().
@@ -118,6 +128,7 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		sourceSampleRate: sourceSampleRate,
 		inbox:            make(chan AudioFrame, routeInboxCapacity),
 		done:             make(chan struct{}),
+		stopped:          make(chan struct{}),
 	}
 
 	// Create a resampler when the source and consumer rates differ.
@@ -168,11 +179,7 @@ func (r *AudioRouter) RemoveRoute(sourceID, consumerID string) {
 	r.mu.Unlock()
 
 	if removed != nil {
-		close(removed.done)
-		if removed.resampler != nil {
-			_ = removed.resampler.Close()
-		}
-		_ = removed.Consumer.Close()
+		r.stopRoute(removed)
 		r.log.Info("route removed",
 			logger.String("source_id", sourceID),
 			logger.String("consumer_id", consumerID))
@@ -188,11 +195,7 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 	r.mu.Unlock()
 
 	for _, rt := range routes {
-		close(rt.done)
-		if rt.resampler != nil {
-			_ = rt.resampler.Close()
-		}
-		_ = rt.Consumer.Close()
+		r.stopRoute(rt)
 	}
 
 	if len(routes) > 0 {
@@ -274,13 +277,31 @@ func (r *AudioRouter) Close() {
 
 	for _, routes := range allRoutes {
 		for _, rt := range routes {
-			close(rt.done)
-			if rt.resampler != nil {
-				_ = rt.resampler.Close()
-			}
-			_ = rt.Consumer.Close()
+			r.stopRoute(rt)
 		}
 	}
+}
+
+// stopRoute signals the drainer goroutine to exit, waits for it to finish
+// (with a timeout), and then closes the resampler and consumer. This ordering
+// ensures the drainer is no longer using the resampler or consumer before they
+// are closed.
+func (r *AudioRouter) stopRoute(route *Route) {
+	close(route.done)
+
+	select {
+	case <-route.stopped:
+		// Drainer exited cleanly.
+	case <-time.After(drainerStopTimeout):
+		r.log.Warn("drainer goroutine did not exit in time",
+			logger.String("source_id", route.SourceID),
+			logger.String("consumer_id", route.Consumer.ID()))
+	}
+
+	if route.resampler != nil {
+		_ = route.resampler.Close()
+	}
+	_ = route.Consumer.Close()
 }
 
 // drainRoute reads frames from the route's inbox and delivers them to the
@@ -288,6 +309,7 @@ func (r *AudioRouter) Close() {
 // the consumer's sample rate before delivery. It exits when the route's done
 // channel is closed or the router's context is cancelled.
 func (r *AudioRouter) drainRoute(route *Route) {
+	defer close(route.stopped)
 	for {
 		select {
 		case frame := <-route.inbox:

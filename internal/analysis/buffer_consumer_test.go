@@ -98,15 +98,32 @@ func TestBufferConsumer_WritesToBothBuffers(t *testing.T) {
 	err = consumer.Write(frame)
 	require.NoError(t, err)
 
-	// Verify analysis buffer received data by checking it has content.
+	// Verify analysis buffer received data by reading it back.
 	ab, abErr := mgr.AnalysisBuffer(sourceID)
 	require.NoError(t, abErr)
-	assert.NotNil(t, ab)
+	require.NotNil(t, ab)
+
+	// Write enough data to fill the analysis buffer's readSize so we can read back.
+	// The buffer was allocated with readSize=48000, so write enough to satisfy that.
+	bigFrame := audiocore.AudioFrame{
+		SourceID:   sourceID,
+		SourceName: "Test Source",
+		Data:       make([]byte, 48000),
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	require.NoError(t, consumer.Write(bigFrame))
+
+	data, readErr := ab.Read()
+	require.NoError(t, readErr)
+	assert.NotNil(t, data, "analysis buffer should return data after sufficient writes")
 
 	// Verify capture buffer received data by checking start time is set.
 	cb, cbErr := mgr.CaptureBuffer(sourceID)
 	require.NoError(t, cbErr)
-	assert.NotNil(t, cb)
+	require.NotNil(t, cb)
 	assert.False(t, cb.StartTime().IsZero(), "capture buffer should have a start time after write")
 }
 

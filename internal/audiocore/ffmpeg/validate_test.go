@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // makeTestWAVWithSize creates a minimal, well-formed WAV file of the requested byte size.
@@ -144,9 +145,11 @@ func TestValidateFile_ValidWAV(t *testing.T) {
 
 	result, err := ffmpeg.ValidateFile(ctx, p)
 	if err != nil {
-		// ffprobe may not be available even if ffmpeg is — skip gracefully.
-		t.Logf("ValidateFile returned error (possibly no ffprobe): %v", err)
-		return
+		// Only skip when ffprobe is genuinely missing; other errors are real failures.
+		if result != nil && result.Error != nil && errors.Is(result.Error, ffmpeg.ErrFFprobeNotAvailable) {
+			t.Skip("ffprobe not available, skipping full validation test")
+		}
+		t.Fatalf("ValidateFile returned unexpected error: %v", err)
 	}
 	require.NotNil(t, result)
 	// The file must be marked valid if ffprobe succeeded.

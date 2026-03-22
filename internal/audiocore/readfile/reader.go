@@ -133,7 +133,12 @@ func GetTotalChunks(sampleRate, totalSamples int, overlap float64) int {
 	}
 
 	// Calculate total chunks including partial chunks, rounding up.
-	return (totalSamples - chunkSamples + stepSamples + (stepSamples - 1)) / stepSamples
+	// Guard against negative results when totalSamples < chunkSamples.
+	result := (totalSamples - chunkSamples + stepSamples + (stepSamples - 1)) / stepSamples
+	if result <= 0 {
+		return 0
+	}
+	return result
 }
 
 // getAudioDivisor returns the divisor used to normalise integer PCM samples to

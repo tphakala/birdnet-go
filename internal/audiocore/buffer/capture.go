@@ -20,6 +20,7 @@ const captureBufferAlignment = 2048
 type CaptureBuffer struct {
 	data           []byte
 	writeIndex     int
+	writtenBytes   int // total bytes written (capped at bufferSize)
 	sampleRate     int
 	bytesPerSample int
 	bufferSize     int
@@ -75,6 +76,11 @@ func NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sourceID 
 	rawSize := durationSeconds * sampleRate * bytesPerSample
 	alignedSize := ((rawSize + captureBufferAlignment - 1) / captureBufferAlignment) * captureBufferAlignment
 
+	// Note: bufferDuration is based on the requested durationSeconds, not the
+	// aligned buffer size. The alignment rounding adds at most
+	// captureBufferAlignment-1 bytes (~21 ms at 48 kHz/16-bit), which is
+	// negligible for timestamp calculations and avoids drift from accumulating
+	// rounding errors.
 	return &CaptureBuffer{
 		data:           make([]byte, alignedSize),
 		sampleRate:     sampleRate,
@@ -121,6 +127,10 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 		copy(cb.data[0:], data[remaining:])
 	}
 	cb.writeIndex = (cb.writeIndex + dataLen) % cb.bufferSize
+	cb.writtenBytes += dataLen
+	if cb.writtenBytes > cb.bufferSize {
+		cb.writtenBytes = cb.bufferSize
+	}
 
 	// If the write pointer wrapped (or reached zero), the oldest data was
 	// overwritten.  Slide the logical start time back by a full buffer
@@ -243,6 +253,19 @@ func (cb *CaptureBuffer) StartTime() time.Time {
 	return cb.startTime
 }
 
+// WrittenBytes returns the total number of bytes written to the buffer,
+// capped at the buffer size. Before the buffer has been completely filled,
+// reads from unfilled regions will contain zeroes. Callers can compare
+// WrittenBytes against the buffer size to determine if the buffer has been
+// fully populated.
+//
+// WrittenBytes is safe for concurrent use.
+func (cb *CaptureBuffer) WrittenBytes() int {
+	cb.lock.Lock()
+	defer cb.lock.Unlock()
+	return cb.writtenBytes
+}
+
 // Reset clears the buffer state and marks it as uninitialized. After Reset,
 // the next Write call will re-establish the start time. Reset is safe for
 // concurrent use.
@@ -254,6 +277,7 @@ func (cb *CaptureBuffer) Reset() {
 		cb.data[i] = 0
 	}
 	cb.writeIndex = 0
+	cb.writtenBytes = 0
 	cb.initialized = false
 	cb.wrapped = false
 	cb.startTime = time.Time{}

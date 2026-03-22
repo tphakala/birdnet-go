@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -243,17 +245,29 @@ func buildExportAudioFilter(opts *ExportOptions) string {
 	return ""
 }
 
+// parseBitrateKbps extracts the numeric portion of a bitrate string like "192k"
+// and returns it as an integer (kbps). Returns 0 if the string cannot be parsed.
+func parseBitrateKbps(bitrate string) int {
+	s := strings.TrimSuffix(strings.ToLower(bitrate), "k")
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 // getMaxBitrate limits the bitrate to the maximum allowed by the format.
-// Bitrate strings are compared lexicographically, which works for "128k", "192k", etc.
-// because the numeric portion is zero-padded implicitly by the consistent "k" suffix.
+// Bitrate strings are parsed numerically so that e.g. "64k" is correctly
+// recognised as less than "256k".
 func getMaxBitrate(format, requestedBitrate string) string {
+	requested := parseBitrateKbps(requestedBitrate)
 	switch format {
 	case FormatOpus:
-		if requestedBitrate > "256k" {
+		if requested > 256 {
 			return "256k"
 		}
 	case FormatMP3:
-		if requestedBitrate > "320k" {
+		if requested > 320 {
 			return "320k"
 		}
 	}

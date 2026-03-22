@@ -42,6 +42,24 @@ func NewSoundLevelConsumer(id string, proc *soundlevel.Processor, sampleRate, bi
 			Build()
 	}
 
+	if sampleRate <= 0 {
+		return nil, nil, errors.Newf("invalid sample rate: %d, must be greater than 0", sampleRate).
+			Component("analysis.sound_level_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_sound_level_consumer").
+			Context("sample_rate", sampleRate).
+			Build()
+	}
+
+	if channels <= 0 {
+		return nil, nil, errors.Newf("invalid channel count: %d, must be greater than 0", channels).
+			Component("analysis.sound_level_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_sound_level_consumer").
+			Context("channels", channels).
+			Build()
+	}
+
 	if bitDepth != 16 {
 		return nil, nil, errors.Newf("unsupported bit depth %d: SoundLevelConsumer requires 16-bit PCM", bitDepth).
 			Component("analysis.sound_level_consumer").

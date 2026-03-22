@@ -105,11 +105,12 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 	safeStr := sanitizeConn(connStr, cfg.Type)
 
 	r.mu.Lock()
-	defer r.mu.Unlock()
 
 	// Deduplication: return existing source for the same connection string.
 	if existingID, ok := r.connectionMap[connStr]; ok {
-		return r.sources[existingID], nil
+		existing := r.sources[existingID]
+		r.mu.Unlock()
+		return existing, nil
 	}
 
 	// Determine ID.
@@ -140,6 +141,9 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 
 	r.sources[id] = src
 	r.connectionMap[connStr] = id
+	snapshot := r.copySource(src)
+
+	r.mu.Unlock()
 
 	r.log.Info("registered audio source",
 		logger.String("id", id),
@@ -147,7 +151,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		logger.String("safe", safeStr),
 		logger.String("type", cfg.Type.String()))
 
-	r.notify(SourceEvent{Type: SourceAdded, SourceID: id, Source: r.copySource(src)})
+	r.notify(SourceEvent{Type: SourceAdded, SourceID: id, Source: snapshot})
 	return src, nil
 }
 

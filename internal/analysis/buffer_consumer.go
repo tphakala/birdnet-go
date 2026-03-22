@@ -119,6 +119,10 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 			logger.String("operation", "buffer_consumer_write"))
 	}
 
+	// Design: Write intentionally returns nil even when individual buffer
+	// writes fail. A missing or errored buffer should not crash the audio
+	// pipeline — the AudioConsumer contract expects Write to be resilient.
+	// Failures are logged above so operators can diagnose issues.
 	return nil
 }
 

@@ -77,6 +77,16 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 			Context("overlap_size", overlapSize).
 			Build()
 	}
+	if capacity < readSize {
+		return nil, errors.Newf("capacity %d must be >= read size %d", capacity, readSize).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_analysis_buffer").
+			Context("source_id", sourceID).
+			Context("capacity", capacity).
+			Context("read_size", readSize).
+			Build()
+	}
 	if sourceID == "" {
 		return nil, errors.Newf("source ID must not be empty").
 			Component("audiocore").
