@@ -1100,7 +1100,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 // initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
 // This creates the StateManager and Worker instances needed for the migration API.
 // The function handles state recovery on restart and resumes migration if it was in progress.
-func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) error {
+func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) (datastoreV2.Manager, error) {
 	log := GetLogger()
 
 	// Get the database directory from the legacy database path
@@ -1110,18 +1110,19 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		dataDir = datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
 	case settings.Output.MySQL.Enabled:
 		// MySQL uses v2_ prefixed tables in the same database
-		return initializeMySQLMigrationInfrastructure(settings, ds, log)
+		mgr, err := initializeMySQLMigrationInfrastructure(settings, ds, log)
+		return mgr, err
 	default:
 		log.Debug("no database configured, skipping migration infrastructure",
 			logger.String("operation", "initialize_migration_infrastructure"))
-		return nil
+		return nil, nil //nolint:nilnil // nil manager is valid when no database is configured
 	}
 
 	// Check if dataDir is empty (in-memory database)
 	if dataDir == "" {
 		log.Debug("in-memory database detected, skipping migration infrastructure",
 			logger.String("operation", "initialize_migration_infrastructure"))
-		return nil
+		return nil, nil //nolint:nilnil // nil manager is valid for in-memory databases
 	}
 
 	// Create v2 database manager
@@ -1132,7 +1133,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		Logger:         log,
 	})
 	if err != nil {
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "create_v2_database_manager").
@@ -1146,7 +1147,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "initialize_v2_database").
@@ -1166,17 +1167,17 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return err
+		return nil, err
 	}
 
-	return nil
+	return v2Manager, nil
 }
 
 // initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
 // Unlike SQLite which uses a separate file, MySQL shares the same database.
 // V2 tables use the v2_ prefix to avoid collisions with legacy auxiliary tables
 // (e.g., dynamic_thresholds, image_caches) that share the same base names.
-func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) error {
+func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) (datastoreV2.Manager, error) {
 	// Create v2 MySQL manager with v2_ prefix to avoid collisions with legacy
 	// auxiliary tables that share the same base names. TableName() methods have
 	// been removed so NamingStrategy.TablePrefix now takes effect.
@@ -1190,7 +1191,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		Debug:       settings.Debug,
 	})
 	if err != nil {
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "create_mysql_v2_manager").
@@ -1204,7 +1205,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "initialize_mysql_v2_schema").
@@ -1226,10 +1227,10 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return err
+		return nil, err
 	}
 
-	return nil
+	return v2Manager, nil
 }
 
 // initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.

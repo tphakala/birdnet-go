@@ -218,12 +218,16 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	// Initialize v2 migration infrastructure only if not in enhanced database mode
 	// In enhanced database mode, migration is already complete - no need for migration infrastructure
 	if !d.v2OnlyMode {
-		// This sets up the StateManager and Worker for the database migration API
-		if err := initializeMigrationInfrastructure(settings, d.dataStore); err != nil {
+		// This sets up the StateManager and Worker for the database migration API.
+		// Store the returned manager so Stop() can close the v2 database connection.
+		migrationManager, err := initializeMigrationInfrastructure(settings, d.dataStore)
+		if err != nil {
 			// Migration infrastructure is optional - log warning but continue
 			GetLogger().Warn("migration infrastructure initialization failed",
 				logger.Error(err),
 				logger.String("operation", "initialize_migration_infrastructure"))
+		} else {
+			d.v2Manager = migrationManager
 		}
 	} else {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
