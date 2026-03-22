@@ -21,10 +21,9 @@ const (
 	// defaultShutdownTimeout is the total shutdown budget (9s for Docker's 10s default).
 	defaultShutdownTimeout = 9 * time.Second
 	// networkTierBudget is the timeout for stopping network services.
-	// NOTE: In PR 1, all services (including the legacy wrapper) are TierNetwork
-	// and receive the full budget. When core services are extracted in follow-up
-	// PRs, this will be reduced to 6s and coreTierBudget will become 3s.
-	networkTierBudget = 9 * time.Second
+	// DatabaseService now uses TierCore with its own 3s budget, so network
+	// services get 6s. Total: 6s + 3s = 9s (within Docker's 10s default).
+	networkTierBudget = 6 * time.Second
 	// coreTierBudget is the guaranteed timeout for stopping core data services.
 	// This uses a fresh context (not derived from the network tier) to guarantee
 	// data safety even if network shutdown consumes its full budget.
