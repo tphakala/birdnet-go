@@ -166,13 +166,14 @@
     const EBIRD_ERROR_KEY = 'ebird-api-key-required';
     const ebirdEnabled = settings.ebird?.enabled ?? false;
     const ebirdApiKey = settings.ebird?.apiKey?.trim() ?? '';
+    const needsError = ebirdEnabled && !ebirdApiKey;
 
-    // Filter out previous eBird errors, then add back if still invalid
-    let currentErrors = $settingsValidationErrors.filter(e => e !== EBIRD_ERROR_KEY);
-    if (ebirdEnabled && !ebirdApiKey) {
-      currentErrors = [...currentErrors, EBIRD_ERROR_KEY];
-    }
-    settingsValidationErrors.set(currentErrors);
+    // Use .update() to avoid reading the store inside this effect,
+    // which would create an infinite reactive loop (read → write → re-trigger)
+    settingsValidationErrors.update(errors => {
+      const filtered = errors.filter(e => e !== EBIRD_ERROR_KEY);
+      return needsError ? [...filtered, EBIRD_ERROR_KEY] : filtered;
+    });
 
     return () => {
       // Clear only eBird validation errors when leaving this page
