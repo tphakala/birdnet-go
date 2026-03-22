@@ -153,7 +153,9 @@ export function getLogger(category: string): Logger {
       // Old: logger.error('message', error, 'extra', 'data')
       // New: logger.error('message', error, context, throttleKey)
 
-      // If called with console.error style (3+ arguments where the third is not an object context)
+      // Console-style: 3+ args where the third is not a structured context object.
+      // Uses > 2 (not > 1 like warn()) so that 2-arg calls logger.error('msg', error)
+      // reach the structured path where Sentry capture lives.
       if (
         args.length > 2 &&
         (typeof args[2] === 'string' ||

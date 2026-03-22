@@ -276,6 +276,7 @@ export async function initApp(): Promise<boolean> {
       // Initialize frontend Sentry when telemetry is enabled
       const sentryConfig = config.sentry;
       sentryEnabled = false;
+      setSentryCaptureError(null); // Clear any stale hook from previous init
       if (sentryConfig?.enabled && sentryConfig.dsn) {
         sentryEnabled = true;
         import('$lib/telemetry/sentry')
@@ -289,6 +290,7 @@ export async function initApp(): Promise<boolean> {
             logger.info('Frontend Sentry initialized');
           })
           .catch(err => {
+            setSentryCaptureError(null);
             logger.warn('Failed to initialize Sentry', err);
           });
       }
