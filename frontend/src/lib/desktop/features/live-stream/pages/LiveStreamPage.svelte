@@ -534,6 +534,7 @@
 
     activeStreamToken = null;
     activeSourceId = null;
+    isConnecting = false;
     isStreaming = false;
   }
 
