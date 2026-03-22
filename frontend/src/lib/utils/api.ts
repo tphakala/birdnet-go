@@ -12,6 +12,7 @@
 import { loggers } from '$lib/utils/logger';
 import {
   getCsrfToken as getAppStateCsrfToken,
+  isSentryEnabled,
   refreshCsrfToken,
 } from '$lib/stores/appState.svelte';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -24,6 +25,29 @@ const logger = loggers.api;
 const MAX_REQUEST_SIZE = 10 * 1024 * 1024; // 10MB
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
+
+// Lazy Sentry capture — only loaded when telemetry is enabled.
+// Uses ApiErrorLike interface to avoid coupling to the ApiError class.
+type ApiErrorLike = { message: string; status: number; isNetworkError: boolean };
+let _captureApiError: ((error: ApiErrorLike, context?: Record<string, string>) => void) | null =
+  null;
+let _captureAttempted = false;
+
+async function getSentryCaptureApiError(): Promise<typeof _captureApiError> {
+  // Check opt-in state first — if disabled (or not yet initialized), return null
+  // without caching the failure, so we can retry after initApp() completes.
+  if (!isSentryEnabled()) return null;
+
+  if (_captureAttempted) return _captureApiError;
+  _captureAttempted = true;
+  try {
+    const mod = await import('$lib/telemetry/sentry');
+    _captureApiError = mod.captureApiError;
+  } catch {
+    // Sentry not available — import failed
+  }
+  return _captureApiError;
+}
 
 /**
  * Custom error class for API errors with secure messaging
@@ -388,6 +412,21 @@ export async function fetchWithCSRF<T = unknown>(
     return result;
   } catch (error) {
     clearTimeout(timeoutId);
+
+    // Fire-and-forget Sentry capture — never blocks error flow
+    const method = finalOptions.method ?? 'GET';
+    if (error instanceof ApiError) {
+      getSentryCaptureApiError().then(capture => {
+        capture?.(error, { endpoint: url, method });
+      });
+    } else if (error instanceof Error && error.name !== 'AbortError') {
+      getSentryCaptureApiError().then(capture => {
+        capture?.(
+          { message: error.message, status: 0, isNetworkError: true },
+          { endpoint: url, method }
+        );
+      });
+    }
 
     if (error instanceof ApiError) {
       // Re-throw API errors as-is (they already have secure messages)
