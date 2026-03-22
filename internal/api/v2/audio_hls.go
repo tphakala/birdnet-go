@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -110,9 +111,9 @@ type HLSStreamInfo struct {
 	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
 	// which is ~1.5s before audio data actually arrives. This offset is computed
 	// once from the first playlist and applied when serving all subsequent playlists.
-	pdtOffset     time.Duration // Correction to add to FFmpeg's PDT values
-	pdtOffsetOnce sync.Once     // Ensures offset is computed exactly once
-	firstDataTime time.Time     // Wall-clock time when first audio data was written to FIFO
+	pdtOffset         time.Duration // Correction to add to FFmpeg's PDT values
+	pdtOffsetComputed atomic.Bool   // True once pdtOffset has been successfully computed
+	firstDataTime     atomic.Int64  // Wall-clock time (UnixNano) when first audio data was written to FIFO
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -638,38 +639,38 @@ func (c *Controller) ServeHLSPlaylist(ctx echo.Context) error {
 }
 
 // correctPlaylistPDT adjusts PROGRAM_DATE_TIME tags in the playlist to compensate
-// for FFmpeg's process startup delay. On the first call, it parses the first PDT
-// value from the playlist and computes the offset between FFmpeg's epoch and the
-// actual wall-clock time when audio data first arrived at the FIFO. This offset
-// is then applied to all PDT tags in every subsequent playlist serve.
+// for FFmpeg's process startup delay. On the first successful parse, it computes
+// the offset between FFmpeg's clock and wall time, then applies it to all PDT tags.
 func (c *Controller) correctPlaylistPDT(stream *HLSStreamInfo, playlist string) string {
 	// If we don't know when first audio data arrived, return unmodified
-	if stream.firstDataTime.IsZero() {
+	if stream.firstDataTime.Load() == 0 {
 		return playlist
 	}
 
 	// Compute the PDT offset once from the first playlist that has PDT tags.
-	// FFmpeg sets PROGRAM_DATE_TIME from av_gettime() at HLS muxer init, which
-	// doesn't align with wall-clock time due to process startup delay and audio
-	// buffering. We calibrate by comparing the latest segment's end-time in HLS
-	// to the current wall clock at the moment we first serve a playlist.
-	stream.pdtOffsetOnce.Do(func() {
+	// Uses atomic.Bool instead of sync.Once so we can retry if the first
+	// playlist has no segments yet (FFmpeg may not have written PDT tags).
+	if !stream.pdtOffsetComputed.Load() {
 		segments := parsePlaylistSegments(playlist)
 		if len(segments) == 0 {
-			return
+			return playlist
 		}
 		// The last segment's end-time (PDT + duration) should approximately
 		// equal "now" minus a small serving delay. Any difference is the offset.
 		last := segments[len(segments)-1]
 		hlsNow := last.pdt.Add(time.Duration(last.duration * float64(time.Second)))
 		wallNow := time.Now()
-		stream.pdtOffset = wallNow.Sub(hlsNow)
-		GetLogger().Info("HLS PDT correction computed",
-			logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
-			logger.String("hls_head", hlsNow.UTC().Format(time.RFC3339Nano)),
-			logger.String("wall_clock", wallNow.UTC().Format(time.RFC3339Nano)),
-			logger.String("correction", stream.pdtOffset.String()))
-	})
+		offset := wallNow.Sub(hlsNow)
+		// Only the first goroutine to succeed sets the offset
+		if stream.pdtOffsetComputed.CompareAndSwap(false, true) {
+			stream.pdtOffset = offset
+			GetLogger().Info("HLS PDT correction computed",
+				logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
+				logger.String("hls_head", hlsNow.UTC().Format(time.RFC3339Nano)),
+				logger.String("wall_clock", wallNow.UTC().Format(time.RFC3339Nano)),
+				logger.String("correction", stream.pdtOffset.String()))
+		}
+	}
 
 	// No correction needed (zero offset or failed to parse)
 	if stream.pdtOffset == 0 {
@@ -718,8 +719,9 @@ func parsePlaylistSegments(playlist string) []hlsSegment {
 		switch {
 		case strings.HasPrefix(line, "#EXTINF:"):
 			durStr, _ := strings.CutPrefix(line, "#EXTINF:")
-			durStr = strings.TrimRight(durStr, ",")
-			if d, err := strconv.ParseFloat(durStr, 64); err == nil {
+			// Handle optional title: #EXTINF:<duration>,[<title>]
+			durStr, _, _ = strings.Cut(durStr, ",")
+			if d, err := strconv.ParseFloat(strings.TrimSpace(durStr), 64); err == nil {
 				curDur = d
 				hasDur = true
 			}
@@ -1672,7 +1674,7 @@ func (c *Controller) runAudioFeedLoop(ctx context.Context, sourceID string, stre
 			}
 
 			if !dataWritten {
-				stream.firstDataTime = writeStart
+				stream.firstDataTime.Store(writeStart.UnixNano())
 				GetLogger().Debug("First audio data written", logger.String("source_id", sanitizedID),
 					logger.String("first_data_time", writeStart.UTC().Format(time.RFC3339Nano)))
 				dataWritten = true
