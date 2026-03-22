@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -105,6 +106,14 @@ type HLSStreamInfo struct {
 	ctx          context.Context    // Stream lifecycle context
 	cancel       context.CancelFunc // Cancel function for cleanup
 	streamEpoch  time.Time          // Wall-clock time corresponding to HLS stream position 0
+
+	// pdtOffset corrects FFmpeg's PROGRAM_DATE_TIME timestamps to align with
+	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
+	// which is ~1.5s before audio data actually arrives. This offset is computed
+	// once from the first playlist and applied when serving all subsequent playlists.
+	pdtOffset         atomic.Int64 // Correction (nanoseconds) to add to FFmpeg's PDT values
+	pdtOffsetComputed atomic.Bool  // True once pdtOffset has been successfully computed
+	firstDataTime     atomic.Int64 // Wall-clock time (UnixNano) when first audio data was written to FIFO
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -608,14 +617,164 @@ func (c *Controller) ServeHLSPlaylist(ctx echo.Context) error {
 	c.checkSegmentFreshness(stream.OutputDir, sourceID)
 
 	serveStart := time.Now()
-	err = secFS.ServeFile(ctx, stream.PlaylistPath)
+
+	// Read playlist and apply PDT correction if first audio data time is known.
+	// FFmpeg sets PROGRAM_DATE_TIME at process init (~1.5s before audio arrives),
+	// so we shift all PDT values forward by the measured offset.
+	data, err := secFS.ReadFile(stream.PlaylistPath)
+	if err != nil {
+		return c.HandleError(ctx, err, "Failed to read playlist", http.StatusInternalServerError)
+	}
+
+	corrected := c.correctPlaylistPDT(stream, string(data))
+
 	serveDuration := time.Since(serveStart)
 	if serveDuration > hlsServeSlowThreshold {
-		GetLogger().Warn("Slow playlist serve (disk read + network write)",
+		GetLogger().Warn("Slow playlist serve (disk read + PDT correction + network write)",
 			logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
 			logger.String("serve_duration", serveDuration.String()))
 	}
-	return err
+
+	return ctx.String(http.StatusOK, corrected)
+}
+
+// correctPlaylistPDT adjusts PROGRAM_DATE_TIME tags in the playlist to compensate
+// for FFmpeg's process startup delay. On the first successful parse, it computes
+// the offset between FFmpeg's clock and wall time, then applies it to all PDT tags.
+func (c *Controller) correctPlaylistPDT(stream *HLSStreamInfo, playlist string) string {
+	// If we don't know when first audio data arrived, return unmodified
+	if stream.firstDataTime.Load() == 0 {
+		return playlist
+	}
+
+	// Compute the PDT offset once from the first playlist that has PDT tags.
+	// Uses atomic.Bool instead of sync.Once so we can retry if the first
+	// playlist has no segments yet (FFmpeg may not have written PDT tags).
+	if !stream.pdtOffsetComputed.Load() {
+		segments := parsePlaylistSegments(playlist)
+		if len(segments) == 0 {
+			return playlist
+		}
+		// The last segment's end-time (PDT + duration) should approximately
+		// equal "now" minus a small serving delay. Any difference is the offset.
+		last := segments[len(segments)-1]
+		hlsNow := last.pdt.Add(time.Duration(last.duration * float64(time.Second)))
+		wallNow := time.Now()
+		offset := wallNow.Sub(hlsNow)
+		// Only the first goroutine to succeed sets the offset
+		if stream.pdtOffsetComputed.CompareAndSwap(false, true) {
+			stream.pdtOffset.Store(int64(offset))
+			GetLogger().Info("HLS PDT correction computed",
+				logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
+				logger.String("hls_head", hlsNow.UTC().Format(time.RFC3339Nano)),
+				logger.String("wall_clock", wallNow.UTC().Format(time.RFC3339Nano)),
+				logger.String("correction", offset.String()))
+		}
+	}
+
+	// No correction needed (zero offset or failed to parse)
+	correction := time.Duration(stream.pdtOffset.Load())
+	if correction == 0 {
+		return playlist
+	}
+
+	// Rewrite all PROGRAM_DATE_TIME tags with the correction
+	return rewritePDTTags(playlist, correction)
+}
+
+// hlsSegment holds a parsed segment from an HLS playlist.
+type hlsSegment struct {
+	pdt      time.Time
+	duration float64
+}
+
+// pdtLayouts lists time formats FFmpeg may use for PROGRAM_DATE_TIME.
+var pdtLayouts = []string{
+	"2006-01-02T15:04:05.000-0700",
+	"2006-01-02T15:04:05.000000-0700",
+	"2006-01-02T15:04:05-0700",
+	time.RFC3339,
+	time.RFC3339Nano,
+}
+
+// parsePDT parses a PROGRAM_DATE_TIME string using known FFmpeg formats.
+func parsePDT(s string) time.Time {
+	s = strings.TrimSpace(s)
+	for _, layout := range pdtLayouts {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t
+		}
+	}
+	return time.Time{}
+}
+
+// parsePlaylistSegments extracts all segments with PDT and duration from a playlist.
+func parsePlaylistSegments(playlist string) []hlsSegment {
+	var segments []hlsSegment
+	var curDur float64
+	var curPDT time.Time
+	hasDur := false
+
+	for line := range strings.Lines(playlist) {
+		line = strings.TrimSpace(line)
+		switch {
+		case strings.HasPrefix(line, "#EXTINF:"):
+			durStr, _ := strings.CutPrefix(line, "#EXTINF:")
+			// Handle optional title: #EXTINF:<duration>,[<title>]
+			durStr, _, _ = strings.Cut(durStr, ",")
+			if d, err := strconv.ParseFloat(strings.TrimSpace(durStr), 64); err == nil {
+				curDur = d
+				hasDur = true
+			}
+		case strings.HasPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"):
+			if val, ok := strings.CutPrefix(line, "#EXT-X-PROGRAM-DATE-TIME:"); ok {
+				curPDT = parsePDT(val)
+			}
+		case line != "" && !strings.HasPrefix(line, "#"):
+			// Segment URI — flush
+			if hasDur && !curPDT.IsZero() {
+				segments = append(segments, hlsSegment{pdt: curPDT, duration: curDur})
+			}
+			curDur = 0
+			curPDT = time.Time{}
+			hasDur = false
+		}
+	}
+	return segments
+}
+
+// rewritePDTTags shifts all EXT-X-PROGRAM-DATE-TIME values by the given offset.
+func rewritePDTTags(playlist string, offset time.Duration) string {
+	const prefix = "#EXT-X-PROGRAM-DATE-TIME:"
+	var result strings.Builder
+	result.Grow(len(playlist) + 64)
+
+	lines := strings.Split(playlist, "\n")
+	for i, line := range lines {
+		if dtStr, ok := strings.CutPrefix(line, prefix); ok {
+			dtStr = strings.TrimSpace(dtStr)
+			corrected := false
+			for _, layout := range pdtLayouts {
+				t, err := time.Parse(layout, dtStr)
+				if err != nil {
+					continue
+				}
+				result.WriteString(prefix)
+				result.WriteString(t.Add(offset).Format(layout))
+				corrected = true
+				break
+			}
+			if !corrected {
+				result.WriteString(line)
+			}
+		} else {
+			result.WriteString(line)
+		}
+		if i < len(lines)-1 {
+			result.WriteByte('\n')
+		}
+	}
+	return result.String()
 }
 
 // ServeHLSContent serves HLS segment files
@@ -974,9 +1133,27 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		}
 	}
 
+	// On non-Windows platforms, prepare the audio feed BEFORE starting FFmpeg.
+	// This registers the audio callback and opens the FIFO so that audio data
+	// starts buffering in the channel immediately. When FFmpeg starts (below),
+	// its PROGRAM_DATE_TIME epoch aligns closely with the already-buffered audio,
+	// minimizing the PDT-to-wall-clock offset.
+	var feedResources *audioFeedResources
+	if runtime.GOOS != OSWindows {
+		var prepErr error
+		feedResources, prepErr = c.prepareAudioFeed(sourceID, pipeName)
+		if prepErr != nil {
+			streamCancel()
+			return nil, fmt.Errorf("failed to prepare audio feed: %w", prepErr)
+		}
+	}
+
 	// Setup FFmpeg logging and start the process
 	logFile, err := c.setupFFmpegLogging(secFS, cmd, hlsBaseDir, outputDir)
 	if err != nil {
+		if feedResources != nil {
+			feedResources.cleanup()
+		}
 		streamCancel()
 		return nil, err
 	}
@@ -1002,12 +1179,14 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 	// Initialize activity
 	c.updateHLSActivity(sourceID, "", "stream_creation")
 
-	// Start audio feed (non-Windows platforms).
+	// Start audio feed loop (non-Windows platforms).
+	// The audio callback and FIFO were already prepared above, so the feed
+	// goroutine starts writing buffered audio to FFmpeg immediately.
 	// If the feed goroutine exits abnormally (not due to context cancellation),
 	// cancel the stream context to trigger cleanup via the context goroutine below.
 	if runtime.GOOS != OSWindows {
 		go func() {
-			c.feedAudioToFFmpeg(stream.ctx, sourceID, stream.FifoPipe)
+			c.runAudioFeedLoop(stream.ctx, sourceID, stream, feedResources)
 			if stream.ctx.Err() == nil {
 				GetLogger().Warn("Audio feed exited unexpectedly, cancelling stream",
 					logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
@@ -1335,27 +1514,44 @@ func writeToFIFO(ctx context.Context, fifo *os.File, data []byte) error {
 	}
 }
 
-// feedAudioToFFmpeg feeds audio data to FFmpeg via FIFO (Unix platforms)
-func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath string) {
+// audioFeedResources holds the pre-initialized resources needed by the audio
+// feed loop. Created by prepareAudioFeed before FFmpeg starts so that the audio
+// callback is already registered and the FIFO is open when FFmpeg captures its
+// PROGRAM_DATE_TIME epoch.
+type audioFeedResources struct {
+	audioChan chan []byte        // Buffered channel receiving audio chunks from the broadcast callback
+	fifo      *os.File           // FIFO pipe opened for writing to FFmpeg
+	secFS     *securefs.SecureFS // Secure filesystem (must be closed when done)
+	cleanup   func()             // Releases all resources (unregisters callback, closes FIFO and secFS)
+}
+
+// prepareAudioFeed initialises the audio callback and opens the FIFO pipe.
+// It must be called BEFORE FFmpeg starts so that audio data begins buffering
+// in the channel immediately. The returned resources are consumed by
+// runAudioFeedLoop, which should be started as a goroutine after cmd.Start().
+func (c *Controller) prepareAudioFeed(sourceID, pipePath string) (*audioFeedResources, error) {
 	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
-	GetLogger().Debug("Starting audio feed", logger.String("source_id", sanitizedID), logger.String("pipe_path", pipePath))
+	GetLogger().Debug("Preparing audio feed", logger.String("source_id", sanitizedID), logger.String("pipe_path", pipePath))
 
 	hlsBaseDir, err := conf.GetHLSDirectory()
 	if err != nil {
-		GetLogger().Error("Error getting HLS directory", logger.Error(err))
-		return
+		return nil, fmt.Errorf("error getting HLS directory: %w", err)
 	}
 
 	secFS, err := securefs.New(hlsBaseDir)
 	if err != nil {
-		GetLogger().Error("Error creating secure filesystem", logger.Error(err))
-		return
+		return nil, fmt.Errorf("error creating secure filesystem: %w", err)
 	}
-	defer func() {
-		if err := secFS.Close(); err != nil {
-			GetLogger().Error("Failed to close secure filesystem", logger.Error(err))
+
+	// Register the audio callback first so audio chunks start buffering
+	// in the channel while we open the FIFO and before FFmpeg starts.
+	audioChan, callbackCleanup, err := c.setupAudioCallback(sourceID)
+	if err != nil {
+		if closeErr := secFS.Close(); closeErr != nil {
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 		}
-	}()
+		return nil, fmt.Errorf("error setting up audio callback: %w", err)
+	}
 
 	// Open FIFO with O_RDWR to prevent blocking on open() if FFmpeg hasn't started
 	// or crashes before opening the read end. This is a well-known POSIX pattern:
@@ -1364,24 +1560,41 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 	// and the goroutine responds to ctx.Done() via the select loop.
 	fifo, err := secFS.OpenFile(pipePath, os.O_RDWR, 0)
 	if err != nil {
-		GetLogger().Error("Error opening pipe", logger.Error(err))
-		return
-	}
-	defer func() {
-		if err := fifo.Close(); err != nil {
-			GetLogger().Error("Failed to close FIFO", logger.Error(err))
+		callbackCleanup()
+		if closeErr := secFS.Close(); closeErr != nil {
+			GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
 		}
-	}()
-
-	// Setup audio callback
-	audioChan, cleanup, err := c.setupAudioCallback(sourceID)
-	if err != nil {
-		GetLogger().Error("Error setting up audio callback", logger.Error(err))
-		return
+		return nil, fmt.Errorf("error opening pipe: %w", err)
 	}
-	defer cleanup()
 
-	GetLogger().Debug("Audio feed ready", logger.String("source_id", sanitizedID))
+	res := &audioFeedResources{
+		audioChan: audioChan,
+		fifo:      fifo,
+		secFS:     secFS,
+		cleanup: func() {
+			callbackCleanup()
+			if closeErr := fifo.Close(); closeErr != nil {
+				GetLogger().Error("Failed to close FIFO", logger.Error(closeErr))
+			}
+			if closeErr := secFS.Close(); closeErr != nil {
+				GetLogger().Error("Failed to close secure filesystem", logger.Error(closeErr))
+			}
+		},
+	}
+
+	GetLogger().Debug("Audio feed prepared, callback registered and FIFO open",
+		logger.String("source_id", sanitizedID))
+	return res, nil
+}
+
+// runAudioFeedLoop reads audio data from the pre-registered callback channel
+// and writes it to the FIFO pipe. It takes ownership of the audioFeedResources
+// and releases them on exit. Must be called as a goroutine after FFmpeg starts.
+func (c *Controller) runAudioFeedLoop(ctx context.Context, sourceID string, stream *HLSStreamInfo, res *audioFeedResources) {
+	defer res.cleanup()
+
+	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
+	GetLogger().Debug("Audio feed loop starting", logger.String("source_id", sanitizedID))
 
 	dataWritten := false
 	var totalWrites int64
@@ -1404,14 +1617,14 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 			GetLogger().Debug("Audio feed stopped due to context cancellation",
 				logger.String("source_id", sanitizedID))
 			return
-		case data, ok := <-audioChan:
+		case data, ok := <-res.audioChan:
 			if !ok {
 				GetLogger().Debug("Audio channel closed", logger.String("source_id", sanitizedID))
 				return
 			}
 
 			writeStart := time.Now()
-			if err := writeToFIFO(ctx, fifo, data); err != nil {
+			if err := writeToFIFO(ctx, res.fifo, data); err != nil {
 				if ctx.Err() != nil {
 					GetLogger().Debug("Audio feed stopped due to context cancellation", logger.String("source_id", sanitizedID))
 				} else {
@@ -1444,7 +1657,9 @@ func (c *Controller) feedAudioToFFmpeg(ctx context.Context, sourceID, pipePath s
 			}
 
 			if !dataWritten {
-				GetLogger().Debug("First audio data written", logger.String("source_id", sanitizedID))
+				stream.firstDataTime.Store(writeStart.UnixNano())
+				GetLogger().Debug("First audio data written", logger.String("source_id", sanitizedID),
+					logger.String("first_data_time", writeStart.UTC().Format(time.RFC3339Nano)))
 				dataWritten = true
 			}
 		}
