@@ -7,6 +7,8 @@ vi.unmock('$lib/utils/logger');
 let mockCsrfToken = '';
 vi.mock('$lib/stores/appState.svelte', () => ({
   getCsrfToken: () => mockCsrfToken,
+  isSentryEnabled: () => false,
+  refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
 
 import { getCsrfToken, fetchWithCSRF, api } from './api';
