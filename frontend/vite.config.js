@@ -75,6 +75,7 @@ export default defineConfig({
     },
   },
   build: {
+    sourcemap: 'hidden', // Generate .map files for Sentry, no sourceMappingURL in bundles
     outDir: 'dist',
     chunkSizeWarningLimit: 1000,
     emptyOutDir: true,
