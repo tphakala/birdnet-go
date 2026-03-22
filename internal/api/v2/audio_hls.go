@@ -111,9 +111,9 @@ type HLSStreamInfo struct {
 	// wall-clock time. FFmpeg sets the PDT epoch at process init (av_gettime),
 	// which is ~1.5s before audio data actually arrives. This offset is computed
 	// once from the first playlist and applied when serving all subsequent playlists.
-	pdtOffset         time.Duration // Correction to add to FFmpeg's PDT values
-	pdtOffsetComputed atomic.Bool   // True once pdtOffset has been successfully computed
-	firstDataTime     atomic.Int64  // Wall-clock time (UnixNano) when first audio data was written to FIFO
+	pdtOffset         atomic.Int64 // Correction (nanoseconds) to add to FFmpeg's PDT values
+	pdtOffsetComputed atomic.Bool  // True once pdtOffset has been successfully computed
+	firstDataTime     atomic.Int64 // Wall-clock time (UnixNano) when first audio data was written to FIFO
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -663,22 +663,23 @@ func (c *Controller) correctPlaylistPDT(stream *HLSStreamInfo, playlist string) 
 		offset := wallNow.Sub(hlsNow)
 		// Only the first goroutine to succeed sets the offset
 		if stream.pdtOffsetComputed.CompareAndSwap(false, true) {
-			stream.pdtOffset = offset
+			stream.pdtOffset.Store(int64(offset))
 			GetLogger().Info("HLS PDT correction computed",
 				logger.String("source_id", privacy.SanitizeRTSPUrl(stream.SourceID)),
 				logger.String("hls_head", hlsNow.UTC().Format(time.RFC3339Nano)),
 				logger.String("wall_clock", wallNow.UTC().Format(time.RFC3339Nano)),
-				logger.String("correction", stream.pdtOffset.String()))
+				logger.String("correction", offset.String()))
 		}
 	}
 
 	// No correction needed (zero offset or failed to parse)
-	if stream.pdtOffset == 0 {
+	correction := time.Duration(stream.pdtOffset.Load())
+	if correction == 0 {
 		return playlist
 	}
 
 	// Rewrite all PROGRAM_DATE_TIME tags with the correction
-	return rewritePDTTags(playlist, stream.pdtOffset)
+	return rewritePDTTags(playlist, correction)
 }
 
 // hlsSegment holds a parsed segment from an HLS playlist.
@@ -746,51 +747,33 @@ func parsePlaylistSegments(playlist string) []hlsSegment {
 func rewritePDTTags(playlist string, offset time.Duration) string {
 	const prefix = "#EXT-X-PROGRAM-DATE-TIME:"
 	var result strings.Builder
-	result.Grow(len(playlist) + 64) // slight overalloc for longer timestamps
+	result.Grow(len(playlist) + 64)
 
-	remaining := playlist
-	for {
-		idx := strings.Index(remaining, prefix)
-		if idx < 0 {
-			result.WriteString(remaining)
-			break
-		}
-
-		// Write everything before this tag
-		result.WriteString(remaining[:idx+len(prefix)])
-		remaining = remaining[idx+len(prefix):]
-
-		// Find end of line
-		eol := strings.IndexByte(remaining, '\n')
-		if eol < 0 {
-			result.WriteString(remaining)
-			break
-		}
-
-		dtStr := strings.TrimSpace(remaining[:eol])
-		corrected := false
-
-		// Try to parse, apply offset, and reformat
-		for _, layout := range pdtLayouts {
-			t, err := time.Parse(layout, dtStr)
-			if err != nil {
-				continue
+	lines := strings.Split(playlist, "\n")
+	for i, line := range lines {
+		if dtStr, ok := strings.CutPrefix(line, prefix); ok {
+			dtStr = strings.TrimSpace(dtStr)
+			corrected := false
+			for _, layout := range pdtLayouts {
+				t, err := time.Parse(layout, dtStr)
+				if err != nil {
+					continue
+				}
+				result.WriteString(prefix)
+				result.WriteString(t.Add(offset).Format(layout))
+				corrected = true
+				break
 			}
-			adjusted := t.Add(offset)
-			result.WriteString(adjusted.Format(layout))
+			if !corrected {
+				result.WriteString(line)
+			}
+		} else {
+			result.WriteString(line)
+		}
+		if i < len(lines)-1 {
 			result.WriteByte('\n')
-			corrected = true
-			break
 		}
-
-		if !corrected {
-			// Couldn't parse — pass through unchanged
-			result.WriteString(remaining[:eol+1])
-		}
-
-		remaining = remaining[eol+1:]
 	}
-
 	return result.String()
 }
 
