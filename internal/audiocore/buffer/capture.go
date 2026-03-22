@@ -26,6 +26,7 @@ type CaptureBuffer struct {
 	bufferDuration time.Duration
 	startTime      time.Time
 	initialized    bool
+	wrapped        bool // true after the write pointer has wrapped at least once
 	lock           sync.Mutex
 	source         string
 }
@@ -126,6 +127,7 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 	// duration so that timestamp-to-byte offset calculations stay consistent.
 	if cb.writeIndex <= prevIndex && dataLen > 0 {
 		cb.startTime = time.Now().Add(-cb.bufferDuration)
+		cb.wrapped = true
 	}
 
 	return nil
@@ -192,10 +194,20 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 
 	// Convert time offsets to byte indices.  Calculate via sample indices
 	// first to guarantee PCM alignment (important for 16-bit audio).
+	//
+	// Before wrap-around, data starts at byte 0 and the offset is trivial.
+	// After wrap-around, the oldest data lives at writeIndex (not at 0),
+	// because startTime is reset to time.Now()-bufferDuration.  An offset
+	// of 0 from startTime therefore maps to writeIndex.
 	startSample := int(startOffset.Seconds() * float64(cb.sampleRate))
 	endSample := int(endOffset.Seconds() * float64(cb.sampleRate))
-	startIdx := (startSample * cb.bytesPerSample) % cb.bufferSize
-	endIdx := (endSample * cb.bytesPerSample) % cb.bufferSize
+
+	baseOffset := 0
+	if cb.wrapped {
+		baseOffset = cb.writeIndex
+	}
+	startIdx := (baseOffset + startSample*cb.bytesPerSample) % cb.bufferSize
+	endIdx := (baseOffset + endSample*cb.bytesPerSample) % cb.bufferSize
 
 	return cb.extractSegment(startIdx, endIdx), nil
 }
@@ -243,5 +255,6 @@ func (cb *CaptureBuffer) Reset() {
 	}
 	cb.writeIndex = 0
 	cb.initialized = false
+	cb.wrapped = false
 	cb.startTime = time.Time{}
 }

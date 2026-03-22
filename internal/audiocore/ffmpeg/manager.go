@@ -49,6 +49,8 @@ type Manager struct {
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
 	wg        sync.WaitGroup
+	onFrame   FrameCallback
+	onFrameMu sync.RWMutex
 	onReset   func(sourceID string)
 	onResetMu sync.RWMutex
 	logger    logger.Logger
@@ -61,12 +63,16 @@ type Manager struct {
 
 // NewManager creates a new Manager.
 //
+// onFrame is invoked for each chunk of audio data received from any managed
+// stream, allowing the caller to route data into analysis buffers. It may be nil,
+// but a nil callback means all audio data will be silently discarded.
+//
 // onReset is called after a stream starts (or is restarted by the watchdog),
 // allowing the analysis layer to ensure a buffer monitor is running for the
 // given sourceID. It may be nil.
 //
 // log is used for structured logging. If nil, the audiocore module logger is used.
-func NewManager(ctx context.Context, onReset func(sourceID string), log logger.Logger) *Manager {
+func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger) *Manager {
 	if log == nil {
 		log = audiocore.GetLogger()
 	}
@@ -75,10 +81,20 @@ func NewManager(ctx context.Context, onReset func(sourceID string), log logger.L
 		streams:        make(map[string]*Stream),
 		ctx:            mgrCtx,
 		cancel:         cancel,
+		onFrame:        onFrame,
 		onReset:        onReset,
 		logger:         log,
 		lastForceReset: make(map[string]time.Time),
 	}
+}
+
+// SetOnFrame registers a callback invoked for each chunk of audio data
+// received from any managed stream. Thread-safe — can be called while the
+// manager is running.
+func (m *Manager) SetOnFrame(fn FrameCallback) {
+	m.onFrameMu.Lock()
+	defer m.onFrameMu.Unlock()
+	m.onFrame = fn
 }
 
 // SetOnStreamReset registers a callback invoked after a stream starts or is
@@ -92,8 +108,8 @@ func (m *Manager) SetOnStreamReset(fn func(sourceID string)) {
 
 // StartStream starts a new FFmpeg stream using the given config.
 // cfg.SourceID is used as the map key; it must be non-empty and unique.
-// The per-stream onFrame callback is provided through cfg — callers must set
-// cfg before calling StartStream.
+// The per-stream onFrame callback is taken from the manager's onFrame field,
+// which is set via the constructor or SetOnFrame.
 func (m *Manager) StartStream(cfg *StreamConfig) error {
 	if cfg.SourceID == "" {
 		return errors.Newf("sourceID must not be empty").
@@ -116,7 +132,7 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 			Build()
 	}
 
-	stream := NewStream(cfg, nil, m.notifyReset, m.metrics)
+	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics)
 	m.streams[cfg.SourceID] = stream
 
 	m.wg.Go(func() {
@@ -139,6 +155,17 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 	}
 
 	return nil
+}
+
+// dispatchFrame is the per-stream onFrame callback. It forwards the audio data
+// to the manager-level onFrame callback registered via SetOnFrame or the constructor.
+func (m *Manager) dispatchFrame(sourceID string, data []byte) {
+	m.onFrameMu.RLock()
+	cb := m.onFrame
+	m.onFrameMu.RUnlock()
+	if cb != nil {
+		cb(sourceID, data)
+	}
 }
 
 // notifyReset is the per-stream onReset callback. It forwards the sourceID to the

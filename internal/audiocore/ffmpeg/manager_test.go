@@ -31,7 +31,7 @@ func newTestManagerConfig(sourceID, url string) *StreamConfig {
 // newTestManager creates a Manager with t.Context() and no-op callbacks.
 func newTestManager(t *testing.T) *Manager {
 	t.Helper()
-	return NewManager(t.Context(), nil, nil)
+	return NewManager(t.Context(), nil, nil, nil)
 }
 
 // TestManager_StartStopStream verifies that a stream can be started, appears in
@@ -256,7 +256,7 @@ func TestManager_WatchdogForceReset(t *testing.T) {
 		var resetCalls atomic.Int64
 		var lastResetID atomic.Value
 
-		mgr := NewManager(t.Context(), func(sourceID string) {
+		mgr := NewManager(t.Context(), nil, func(sourceID string) {
 			resetCalls.Add(1)
 			lastResetID.Store(sourceID)
 		}, nil)
