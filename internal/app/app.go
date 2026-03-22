@@ -130,9 +130,8 @@ func (a *App) shutdownRange(ctx context.Context, services []Service) {
 	}
 }
 
-// Wait blocks until a shutdown signal (SIGINT, SIGTERM) is received or the
-// legacy service exits (e.g., startup failure inside the blocking function),
-// then performs graceful shutdown.
+// Wait blocks until a shutdown signal (SIGINT, SIGTERM) is received or a
+// programmatic shutdown is requested, then performs graceful shutdown.
 func (a *App) Wait() error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -140,31 +139,10 @@ func (a *App) Wait() error {
 
 	log := getLogger()
 
-	// Find legacy service error channel (if any) for early-exit detection.
-	// If RealtimeAnalysis fails during init (e.g., database open error),
-	// it returns an error into ErrChan — we must detect that instead of
-	// hanging forever waiting for a signal that will never come.
-	// NOTE: Only monitors the first LegacyService. Multiple legacy services
-	// are not expected, but if needed this should be extended to select on all.
-	var legacyErrChan <-chan error
-	for _, svc := range a.services {
-		if ls, ok := svc.(*LegacyService); ok {
-			legacyErrChan = ls.ErrChan()
-			break
-		}
-	}
-
-	// Select on signal and legacy error channels. A nil legacyErrChan
-	// blocks forever in select, so the branch is effectively ignored.
-	var legacyErr error
 	select {
 	case sig := <-sigChan:
 		log.Info("received shutdown signal",
 			logger.String("signal", sig.String()),
-			logger.String("operation", "graceful_shutdown"))
-	case legacyErr = <-legacyErrChan:
-		log.Info("legacy service exited",
-			logger.Error(legacyErr),
 			logger.String("operation", "graceful_shutdown"))
 	case <-a.shutdownCh:
 		log.Info("programmatic shutdown requested",
@@ -173,10 +151,7 @@ func (a *App) Wait() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
 	defer cancel()
-	shutdownErr := a.Shutdown(ctx)
-
-	// Join both errors — errors.Join returns nil if both are nil
-	return errors.Join(legacyErr, shutdownErr)
+	return a.Shutdown(ctx)
 }
 
 // groupByTier splits services into network and core tiers, each in reverse registration order.

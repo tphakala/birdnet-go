@@ -275,6 +275,7 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	// Wait for goroutines with context deadline.
 	log.Info("waiting for goroutines to finish",
 		logger.String("operation", "shutdown_wait_goroutines"))
+	waitStart := time.Now()
 	waitDone := make(chan struct{})
 	go func() {
 		p.wg.Wait()
@@ -284,10 +285,11 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	select {
 	case <-waitDone:
 		log.Info("all goroutines finished",
+			logger.Duration("elapsed", time.Since(waitStart)),
 			logger.String("operation", "shutdown_goroutines_done"))
 	case <-ctx.Done():
 		log.Warn("goroutine wait timed out",
-			logger.Duration("timeout", time.Since(time.Now())),
+			logger.Duration("elapsed", time.Since(waitStart)),
 			logger.String("operation", "shutdown_wait_goroutines"))
 	}
 

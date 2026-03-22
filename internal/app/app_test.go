@@ -258,31 +258,6 @@ func TestApp_ShutdownContinuesOnError(t *testing.T) {
 	assert.Equal(t, []string{"stop:err-svc", "stop:db"}, order)
 }
 
-func TestApp_Wait_LegacyEarlyExit(t *testing.T) {
-	t.Parallel()
-
-	a := New()
-	a.Register(NewLegacyService("failing", func(quit <-chan struct{}) error {
-		// Simulate init failure — return immediately without waiting for quit
-		return fmt.Errorf("database open failed")
-	}))
-
-	require.NoError(t, a.Start(t.Context()))
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- a.Wait()
-	}()
-
-	select {
-	case err := <-errCh:
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "database open failed")
-	case <-time.After(5 * time.Second):
-		t.Fatal("Wait() did not return after legacy service early exit")
-	}
-}
-
 func TestApp_Wait_ShutdownOnSignal(t *testing.T) {
 	t.Parallel()
 	var order []string
