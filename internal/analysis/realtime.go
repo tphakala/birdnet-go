@@ -5,19 +5,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 
 	"github.com/shirou/gopsutil/v3/host"
-	"github.com/tphakala/birdnet-go/internal/alerting"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
-	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -34,26 +29,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
-	"github.com/tphakala/birdnet-go/internal/security"
-	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
-	"github.com/tphakala/birdnet-go/internal/weather"
 )
-
-// Constants for system operations
-const (
-	// shutdownTimeout is the maximum time allowed for graceful shutdown (9s for Docker's 10s default)
-	shutdownTimeout = 9 * time.Second
-)
-
-// audioLevelChan is a channel to send audio level updates
-var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
-
-// soundLevelChan is a channel to send sound level updates
-var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
 
 // AudioDemuxManager manages the lifecycle of audio demultiplexing goroutines
 type AudioDemuxManager struct {
@@ -94,906 +72,7 @@ func (m *AudioDemuxManager) Done() {
 	m.wg.Done()
 }
 
-// Global audio demux manager instance
-var audioDemuxManager = NewAudioDemuxManager()
-
-// v2DatabaseManager holds the v2 database manager for shutdown cleanup.
-// This is set by initializeMigrationInfrastructure and cleared on shutdown.
-var v2DatabaseManager datastoreV2.Manager
-var v2DatabaseManagerMu sync.Mutex
-
-// GetV2DatabaseManager returns the v2 database manager.
-// Returns nil if the migration infrastructure is not initialized.
-func GetV2DatabaseManager() datastoreV2.Manager {
-	v2DatabaseManagerMu.Lock()
-	defer v2DatabaseManagerMu.Unlock()
-	return v2DatabaseManager
-}
-
-// RealtimeAnalysis is the backward-compatible entry point.
-// New code should use RealtimeAnalysisWithQuit via the App lifecycle.
-//
-//nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func RealtimeAnalysis(settings *conf.Settings) error {
-	quitChan := make(chan struct{})
-	monitorShutdownSignals(quitChan)
-	return realtimeAnalysisInternal(settings, quitChan)
-}
-
-// RealtimeAnalysisWithQuit runs the analysis loop with an externally controlled quit channel.
-// The caller is responsible for signal handling and closing the quit channel.
-func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{}) error {
-	// Convert read-only channel to bidirectional for internal use.
-	// The done channel prevents a goroutine leak if realtimeAnalysisInternal
-	// returns early (e.g., init failure) before quit is closed.
-	quitChan := make(chan struct{})
-	done := make(chan struct{})
-	go func() {
-		select {
-		case <-quit:
-			close(quitChan)
-		case <-done:
-		}
-	}()
-	defer close(done)
-	return realtimeAnalysisInternal(settings, quitChan)
-}
-
-// realtimeAnalysisInternal is the main orchestration function that coordinates
-// multiple subsystems during startup and shutdown.
-//
-//nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) error {
-	// Initialize BirdNET interpreter
-	if err := initializeBirdNET(settings); err != nil {
-		// Model initialization failures are not retryable because they indicate:
-		// - Missing or corrupted model files
-		// - Insufficient system resources (memory, GPU)
-		// - Incompatible TensorFlow runtime
-		// These require manual intervention to resolve
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategoryModelInit).
-			Context("operation", "initialize_birdnet").
-			Context("model_path", settings.BirdNET.ModelPath).
-			Context("label_path", settings.BirdNET.LabelPath).
-			Context("overlap", settings.BirdNET.Overlap).
-			Context("retryable", false). // Model initialization failure is not retryable
-			Build()
-	}
-
-	// Clean up any leftover HLS streaming files from previous runs
-	if err := cleanupHLSStreamingFiles(); err != nil {
-		logHLSCleanup(err)
-	} else {
-		logHLSCleanup(nil)
-	}
-
-	// Initialize occurrence monitor to filter out repeated observations.
-	// TODO FIXME
-	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
-
-	// Print system details and configuration
-	printSystemDetails(settings)
-
-	// Check for unmigrated legacy records from a potential hard crash during tail sync.
-	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
-	// has unmigrated records that the worker needs to sync.
-	datastoreLog := logger.Global().Module("datastore")
-	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
-
-	// Check for and perform database consolidation if needed (SQLite only)
-	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
-	if settings.Output.SQLite.Enabled && !hasUnmigrated {
-		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
-		if err != nil {
-			datastoreLog.Error("database consolidation failed", logger.Error(err))
-			// Continue with normal startup - consolidation can be retried
-		} else if consolidated {
-			datastoreLog.Info("database consolidation completed, continuing startup")
-		}
-	} else if hasUnmigrated {
-		datastoreLog.Info("deferring database consolidation until unmigrated records are synced")
-	}
-
-	// Check migration state before initializing database
-	// This allows us to skip the legacy database when migration is complete
-	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
-	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
-	freshInstall := startupState.FreshInstall
-
-	// Override v2-only mode when unmigrated legacy records were found. This forces
-	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
-	// Consolidation will complete on the next clean restart.
-	if hasUnmigrated && v2OnlyMode {
-		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
-			logger.String("operation", "startup_reconciliation"))
-		v2OnlyMode = false
-		startupState.LegacyRequired = true
-	}
-
-	// Log startup mode detection
-	switch {
-	case v2OnlyMode:
-		datastoreLog.Info("migration completed, starting in enhanced database mode",
-			logger.String("migration_status", string(startupState.MigrationStatus)),
-			logger.String("operation", "startup_mode_check"))
-	case freshInstall:
-		GetLogger().Info("fresh installation detected, initializing v2 schema",
-			logger.String("database_path", settings.Output.SQLite.Path),
-			logger.String("operation", "startup_mode_check"))
-	default:
-		GetLogger().Debug("migration state check completed",
-			logger.String("migration_status", string(startupState.MigrationStatus)),
-			logger.Bool("v2_available", startupState.V2Available),
-			logger.Bool("legacy_required", startupState.LegacyRequired),
-			logger.String("operation", "startup_mode_check"))
-	}
-
-	// Initialize database access based on startup state
-	var dataStore datastore.Interface
-	var v2OnlyDatastore *v2only.Datastore
-
-	switch {
-	case v2OnlyMode:
-		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
-		var err error
-		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
-		if err != nil {
-			// Enhanced database mode failed, fall back to legacy startup
-			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
-				logger.Error(err),
-				logger.String("operation", "initialize_enhanced_database_mode"))
-			dataStore = datastore.New(settings)
-			v2OnlyMode = false
-		} else {
-			dataStore = v2OnlyDatastore
-			// Set global enhanced database flag
-			datastoreV2.SetEnhancedDatabaseMode()
-			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
-			// Set the v2 database manager for API access
-			v2DatabaseManagerMu.Lock()
-			v2DatabaseManager = v2OnlyDatastore.Manager()
-			v2DatabaseManagerMu.Unlock()
-		}
-
-	case freshInstall:
-		// Fresh install: create at configured path with v2 schema
-		// Load eBird taxonomy for species code lookups in analytics endpoints.
-		_, freshSciIndex, _ := birdnet.LoadTaxonomyData("")
-		var err error
-		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
-		if err != nil {
-			// Fresh install failed, fall back to legacy mode
-			GetLogger().Warn("fresh install failed, falling back to legacy mode",
-				logger.Error(err),
-				logger.String("operation", "initialize_fresh_install"))
-			dataStore = datastore.New(settings)
-		} else {
-			dataStore = v2OnlyDatastore
-			// Fresh install is now effectively v2-only mode
-			v2OnlyMode = true
-			// Set global enhanced database flag
-			datastoreV2.SetEnhancedDatabaseMode()
-			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
-			// Set the v2 database manager for API access
-			v2DatabaseManagerMu.Lock()
-			v2DatabaseManager = v2OnlyDatastore.Manager()
-			v2DatabaseManagerMu.Unlock()
-		}
-
-	default:
-		// Legacy mode: use legacy datastore
-		dataStore = datastore.New(settings)
-	}
-
-	// Initialize the control channel for restart control.
-	controlChan := make(chan string, 1)
-	// Initialize the restart channel for capture restart control.
-	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
-
-	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
-
-	// Initialize audio sources
-	sources, err := initializeAudioSources(settings)
-	if err != nil {
-		// Non-fatal error, continue with available sources
-		GetLogger().Warn("audio source initialization warning",
-			logger.Error(err),
-			logger.String("operation", "initialize_audio_sources"))
-	}
-
-	// Queue is now initialized at package level in birdnet package
-	// Resize the queue based on processing needs
-	// TODO: Make this configurable via settings
-	const defaultQueueSize = 5
-	birdnet.ResizeQueue(defaultQueueSize)
-
-	// Initialize Prometheus metrics manager
-	metrics, err := initializeMetrics()
-	if err != nil {
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategorySystem).
-			Context("operation", "initialize_metrics").
-			Build()
-	}
-
-	// Update BirdNET model loaded metric now that metrics are available
-	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
-
-	// Connect metrics to datastore before opening
-	dataStore.SetMetrics(metrics.Datastore)
-	dataStore.SetSunCalcMetrics(metrics.SunCalc)
-
-	// Only validate disk space and open for legacy mode (v2-only mode already opened)
-	if !v2OnlyMode {
-		// Validate disk space before attempting to open the database
-		// This prevents startup failures due to insufficient disk space
-		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
-		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
-			return err
-		}
-
-		// Open a connection to the database and handle possible errors.
-		if err := dataStore.Open(); err != nil {
-			return err // Return error to stop execution if database connection fails.
-		}
-	}
-	// Ensure the database connection is closed when the function returns.
-	defer closeDataStore(dataStore)
-
-	// Set datastore schema version as a Sentry tag for telemetry
-	telemetry.SetDatastoreSchemaTag(dataStore.SchemaVersion())
-
-	// Note: datastore monitoring is automatically started when the database is opened
-
-	// Initialize bird image cache if needed
-	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
-
-	// Initialize processor with analysis logger for hierarchical logging
-	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
-
-	// Initialize Backup system using centralized logger
-	backupLog := logger.Global().Module("backup")
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLog)
-	if err != nil {
-		// Log the specific error from initialization
-		backupLog.Error("Failed to initialize backup system", logger.Error(err))
-		// Don't make this fatal - continue without backup system
-		GetLogger().Warn("backup system initialization failed",
-			logger.Error(err),
-			logger.String("operation", "backup_system_init"))
-	} else {
-		// Store backup manager and scheduler in the processor for access by control monitor
-		proc.SetBackupManager(backupManager)
-		proc.SetBackupScheduler(backupScheduler)
-	}
-
-	// Initialize async services (event bus, notification workers, telemetry workers)
-	if err := telemetry.InitializeAsyncSystems(); err != nil {
-		GetLogger().Error("failed to initialize critical async services",
-			logger.Error(err),
-			logger.String("operation", "initialize_async_systems"))
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategorySystem).
-			Context("operation", "initialize_async_systems").
-			Build()
-	}
-
-	// Initialize system monitor if monitoring is enabled
-	systemMonitor := initializeSystemMonitor(settings)
-
-	// Initialize v2 migration infrastructure only if not in enhanced database mode
-	// In enhanced database mode, migration is already complete - no need for migration infrastructure
-	if !v2OnlyMode {
-		// This sets up the StateManager and Worker for the database migration API
-		if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
-			// Migration infrastructure is optional - log warning but continue
-			GetLogger().Warn("migration infrastructure initialization failed",
-				logger.Error(err),
-				logger.String("operation", "initialize_migration_infrastructure"))
-		}
-	} else {
-		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
-			logger.String("operation", "initialize_migration_infrastructure"))
-	}
-	// Ensure v2 database is closed on shutdown (handles nil case gracefully).
-	// In v2-only mode, the v2only.Datastore wraps the same manager, so closeDataStore
-	// handles everything via v2only.Datastore.Close(). Only register this defer in
-	// legacy/migration mode where the v2 database is a separate resource.
-	if !v2OnlyMode {
-		defer closeV2Database()
-	}
-
-	// Initialize and start the HTTP server
-	GetLogger().Info("starting HTTP server")
-	oauth2Server := security.NewOAuth2Server()
-	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
-	proc.SetSunCalc(sunCalc)
-	apiServer, err := api.New(
-		settings,
-		api.WithDataStore(dataStore),
-		api.WithBirdImageCache(birdImageCache),
-		api.WithProcessor(proc),
-		api.WithMetrics(metrics),
-		api.WithControlChannel(controlChan),
-		api.WithAudioLevelChannel(audioLevelChan),
-		api.WithOAuth2Server(oauth2Server),
-		api.WithSunCalc(sunCalc),
-		api.WithV2Manager(GetV2DatabaseManager()),
-	)
-	if err != nil {
-		return errors.New(err).
-			Component("analysis").
-			Category(errors.CategorySystem).
-			Context("operation", "create_http_server").
-			Build()
-	}
-	apiServer.Start()
-
-	// Initialize the wait group to wait for all goroutines to finish
-	var wg sync.WaitGroup
-
-	// Initialize the buffer manager
-	bufferManager := MustNewBufferManager(bn, quitChan, &wg)
-
-	// Start buffer monitors for each audio source only if we have active sources
-	if len(settings.Realtime.RTSP.Streams) > 0 || settings.Realtime.Audio.Source != "" {
-		if err := bufferManager.UpdateMonitors(sources); err != nil {
-			// Use structured logging to improve error visibility and triage
-			// Extract error details from the enhanced error if available
-			errorStr := err.Error()
-			GetLogger().Warn("buffer monitor setup completed with errors",
-				logger.String("error", errorStr),
-				logger.Int("source_count", len(sources)),
-				logger.Any("sources", sources),
-				logger.String("component", "analysis.realtime"),
-				logger.String("operation", "buffer_monitor_setup"))
-			// Note: We continue execution as buffer monitoring errors are not critical for startup
-		}
-	} else {
-		GetLogger().Warn("starting without active audio sources",
-			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
-			logger.String("audio_source", settings.Realtime.Audio.Source),
-			logger.String("operation", "startup_audio_check"))
-	}
-
-	// Register watchdog reset callback so analysis monitors are recreated
-	// when the watchdog force-resets a stuck stream. Without this, the monitor
-	// for the old source ID exits (buffer removed) and no new monitor starts,
-	// leaving the stream connected but detection silent (#2374).
-	myaudio.SetOnStreamReset(func(newSourceID string) {
-		if err := bufferManager.AddMonitor(newSourceID); err != nil {
-			GetLogger().Warn("failed to add monitor after watchdog stream reset",
-				logger.String("source_id", newSourceID),
-				logger.Error(err),
-				logger.String("operation", "watchdog_add_monitor"))
-		} else {
-			GetLogger().Info("started analysis monitor after watchdog stream reset",
-				logger.String("source_id", newSourceID),
-				logger.String("operation", "watchdog_add_monitor"))
-		}
-	})
-
-	// Register sound level processors before starting audio capture to avoid
-	// a race where audio chunks arrive before processors are registered (issue #2152).
-	// The control monitor will handle re-registration on hot reloads.
-	if settings.Realtime.Audio.SoundLevel.Enabled {
-		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
-			GetLogger().Warn("early sound level processor registration completed with errors",
-				logger.Error(err),
-				logger.String("operation", "early_sound_level_registration"))
-		}
-	}
-
-	// start audio capture
-	unifiedAudioChan := startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
-	myaudio.SetCurrentAudioChan(unifiedAudioChan)
-
-	// Initialize quiet hours scheduler for stream and sound card management
-	quietHoursScheduler := myaudio.NewQuietHoursScheduler(sunCalc, controlChan)
-	myaudio.SetGlobalScheduler(quietHoursScheduler)
-	quietHoursScheduler.Start()
-	defer quietHoursScheduler.Stop()
-
-	// Publish application started alert event
-	alerting.TryPublish(&alerting.AlertEvent{
-		ObjectType: alerting.ObjectTypeApplication,
-		EventName:  alerting.EventApplicationStarted,
-		Properties: map[string]any{},
-	})
-
-	// Sound level monitoring is now managed by the control monitor for hot reload support.
-	// The control monitor will start sound level monitoring if enabled in settings.
-
-	// RTSP health monitoring is now built into the FFmpeg manager
-	if len(settings.Realtime.RTSP.Streams) > 0 {
-		GetLogger().Info("RTSP streams will be monitored by FFmpeg manager",
-			logger.Int("stream_count", len(settings.Realtime.RTSP.Streams)),
-			logger.String("operation", "rtsp_monitoring_setup"))
-	}
-
-	// start cleanup of clips
-	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
-		startClipCleanupMonitor(&wg, quitChan, dataStore)
-	}
-
-	// start weather polling
-	if settings.Realtime.Weather.Provider != "none" {
-		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
-	}
-
-	// Telemetry endpoint initialization is handled by control monitor for hot reload support.
-	// Unlike other services that start directly here, telemetry is managed by the control monitor
-	// to allow users to dynamically enable/disable metrics and change the listen address without
-	// restarting the application. The control monitor will start the endpoint if enabled.
-
-	// Wire app shutdown requester into API controller for restart endpoints
-	if appInstance := app.GetGlobal(); appInstance != nil {
-		apiServer.APIController().SetShutdownRequester(appInstance)
-	}
-
-	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)
-
-	// Track the HTTP server, system monitor and control monitor for clean shutdown
-	httpServerRef := apiServer
-	systemMonitorRef := systemMonitor
-	ctrlMonitorRef := ctrlMonitor
-
-	// loop to monitor quit and restart channels
-	for {
-		select {
-		case <-quitChan:
-			log := GetLogger()
-
-			// Publish application stopped alert event
-			alerting.TryPublish(&alerting.AlertEvent{
-				ObjectType: alerting.ObjectTypeApplication,
-				EventName:  alerting.EventApplicationStopped,
-				Properties: map[string]any{},
-			})
-
-			log.Info("initiating graceful shutdown sequence",
-				logger.Float64("shutdown_timeout_seconds", shutdownTimeout.Seconds()),
-				logger.String("operation", "graceful_shutdown"))
-			shutdownStart := time.Now()
-
-			// Stop migration worker FIRST - before any other shutdown steps
-			// This ensures the worker stops even if later steps timeout
-			log.Info("stopping migration worker early in shutdown",
-				logger.String("operation", "shutdown_migration_worker_early"))
-			apiv2.StopMigrationWorker()
-
-			// Create context with timeout for the entire shutdown process
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-
-			// Execute shutdown with context
-			shutdownComplete := make(chan struct{})
-			go func() {
-				defer close(shutdownComplete)
-
-				// Step 1: Signal shutdown started (but don't close controlChan yet)
-				log.Info("shutdown step 1: beginning shutdown sequence",
-					logger.Int("step", 1),
-					logger.String("operation", "shutdown_begin"))
-
-				// Check context cancellation between steps
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 1",
-						logger.Int("step", 1),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 2: Stop control monitor
-				if ctrlMonitorRef != nil {
-					log.Info("shutdown step 2: stopping control monitor",
-						logger.Int("step", 2),
-						logger.String("operation", "shutdown_control_monitor"))
-					ctrlMonitorRef.Stop()
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 2",
-						logger.Int("step", 2),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 3: Stop analysis buffer monitors
-				log.Info("shutdown step 3: stopping analysis buffer monitors",
-					logger.Int("step", 3),
-					logger.String("operation", "shutdown_buffer_monitors"))
-				bufferManager.RemoveAllMonitors()
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 3",
-						logger.Int("step", 3),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 4: Clean up HLS resources asynchronously with timeout
-				log.Info("shutdown step 4: cleaning up HLS resources",
-					logger.Int("step", 4),
-					logger.String("operation", "shutdown_hls_cleanup"))
-				cleanupHLSWithTimeout(ctx)
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 4",
-						logger.Int("step", 4),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 5: Shutdown HTTP server
-				if httpServerRef != nil {
-					log.Info("shutdown step 5: shutting down HTTP server",
-						logger.Int("step", 5),
-						logger.String("operation", "shutdown_http_server"))
-					if err := httpServerRef.ShutdownWithContext(ctx); err != nil {
-						log.Warn("error shutting down HTTP server",
-							logger.Error(err),
-							logger.Int("step", 5),
-							logger.String("operation", "shutdown_http_server"))
-					}
-				}
-
-				// Step 6: Close controlChan to signal goroutines selecting on it to stop
-				log.Info("shutdown step 6: closing control channel after producers shutdown",
-					logger.Int("step", 6),
-					logger.String("operation", "close_control_channel"))
-				close(controlChan)
-
-				// Step 7: Shutdown FFmpegManager — cancels manager context (stops monitoring/watchdog),
-				// stops any remaining streams. RTSP goroutines may have already stopped
-				// their streams via quitChan; StopStream is safe to call twice.
-				log.Info("shutdown step 7: shutting down FFmpeg manager",
-					logger.Int("step", 7),
-					logger.String("operation", "shutdown_ffmpeg_manager"))
-				myaudio.ShutdownFFmpegManagerWithContext(ctx)
-
-				// Step 8: Wait for all goroutines (with context deadline).
-				// No early return between steps 7-9 — steps 8 and 9 handle
-				// expired contexts internally, and step 9 must always run so
-				// the processor's cancel functions fire (workerCancel, flusherCancel).
-				log.Info("shutdown step 8: waiting for goroutines to finish",
-					logger.Int("step", 8),
-					logger.String("operation", "shutdown_wait_goroutines"))
-
-				wgDone := make(chan struct{})
-				go func() {
-					wg.Wait()
-					close(wgDone)
-				}()
-
-				select {
-				case <-wgDone:
-					log.Info("all goroutines finished",
-						logger.Int("step", 8),
-						logger.String("operation", "shutdown_goroutines_done"))
-				case <-ctx.Done():
-					log.Warn("timed out waiting for goroutines",
-						logger.Int("step", 8),
-						logger.String("operation", "shutdown_goroutines_timeout"))
-				}
-
-				// Step 9: Shutdown processor (MQTT, job queue, thresholds).
-				// Always called even if context is expired — ShutdownWithContext
-				// fires cancel functions unconditionally and handles expired
-				// contexts gracefully (skips non-critical cleanup).
-				log.Info("shutdown step 9: shutting down processor",
-					logger.Int("step", 9),
-					logger.String("operation", "shutdown_processor"))
-				if err := proc.ShutdownWithContext(ctx); err != nil {
-					log.Warn("processor shutdown error",
-						logger.Error(err),
-						logger.Int("step", 9),
-						logger.String("operation", "shutdown_processor"))
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 9",
-						logger.Int("step", 9),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 10: Stop system monitor
-				if systemMonitorRef != nil {
-					log.Info("shutdown step 10: stopping system monitor",
-						logger.Int("step", 10),
-						logger.String("operation", "shutdown_system_monitor"))
-					systemMonitorRef.Stop()
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 10",
-						logger.Int("step", 10),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 11: Stop notification service
-				if notification.IsInitialized() {
-					log.Info("shutdown step 11: stopping notification service",
-						logger.Int("step", 11),
-						logger.String("operation", "shutdown_notification_service"))
-					if service := notification.GetService(); service != nil {
-						service.Stop()
-					}
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 11",
-						logger.Int("step", 11),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 12: Delete BirdNET interpreter
-				log.Info("shutdown step 12: cleaning up BirdNET interpreter",
-					logger.Int("step", 12),
-					logger.String("operation", "shutdown_birdnet_cleanup"))
-				bn.Delete()
-
-				// Step 13: Stop migration worker (before closing databases)
-				log.Info("shutdown step 13: stopping migration worker",
-					logger.Int("step", 13),
-					logger.String("operation", "shutdown_migration_worker"))
-				apiv2.StopMigrationWorker()
-
-				// Step 14: Close v2 database (before legacy database closes via deferred closeDataStore).
-				// In v2-only mode, the v2only.Datastore wraps the same manager — closing is
-				// handled by the deferred closeDataStore call to avoid double-close errors.
-				if !v2OnlyMode {
-					log.Info("shutdown step 14: closing v2 database",
-						logger.Int("step", 14),
-						logger.String("operation", "shutdown_v2_database"))
-					closeV2Database()
-				}
-
-				log.Info("graceful shutdown completed",
-					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
-					logger.String("operation", "shutdown_complete"))
-			}()
-
-			// Wait for shutdown to complete or context timeout
-			select {
-			case <-shutdownComplete:
-				// Shutdown completed successfully
-				cancel()
-				return nil
-			case <-ctx.Done():
-				GetLogger().Warn("shutdown timeout exceeded, forcing exit",
-					logger.Float64("timeout_seconds", shutdownTimeout.Seconds()),
-					logger.String("operation", "shutdown_forced_exit"))
-				// Ensure migration worker is stopped on timeout
-				apiv2.StopMigrationWorker()
-				cancel()
-				// Give the shutdown goroutine a brief grace period to exit.
-				// With the timeout-aware wg.Wait(), it should exit quickly
-				// after context cancellation. But if it doesn't, don't block
-				// forever — let deferred cleanup handle the rest.
-				select {
-				case <-shutdownComplete:
-					// Goroutine exited cleanly
-				case <-time.After(500 * time.Millisecond):
-					GetLogger().Warn("shutdown goroutine did not exit within grace period",
-						logger.String("operation", "shutdown_forced_exit"))
-				}
-				return nil
-			}
-
-		case <-restartChan:
-			// Handle the restart signal.
-			GetLogger().Info("restarting audio capture",
-				logger.String("operation", "restart_audio_capture"))
-			unifiedAudioChan = startAudioCapture(&wg, settings, quitChan, restartChan, audioLevelChan, soundLevelChan)
-			myaudio.SetCurrentAudioChan(unifiedAudioChan)
-		}
-	}
-}
-
-// startAudioCapture initializes and starts the audio capture routine in a new goroutine.
-func startAudioCapture(wg *sync.WaitGroup, settings *conf.Settings, quitChan, restartChan chan struct{}, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData) chan myaudio.UnifiedAudioData {
-	// Stop previous demultiplexing goroutine if it exists
-	audioDemuxManager.Stop()
-
-	// Start new demux goroutine
-	doneChan := audioDemuxManager.Start()
-
-	// Create a unified audio channel
-	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
-	go func() {
-		defer audioDemuxManager.Done()
-
-		// Convert unified audio data back to separate channels for existing handlers
-		for {
-			select {
-			case <-doneChan:
-				// Exit when signaled
-				return
-			case <-quitChan:
-				// Exit when quit signal received
-				return
-			case unifiedData, ok := <-unifiedAudioChan:
-				if !ok {
-					// Channel closed, exit
-					return
-				}
-
-				// Send audio level data to existing audio level channel with safety check
-				select {
-				case <-doneChan:
-					return
-				case <-quitChan:
-					return
-				case audioLevelChan <- unifiedData.AudioLevel:
-				default:
-					// Channel full, drop data
-				}
-
-				// Send sound level data to existing sound level channel if present
-				if unifiedData.SoundLevel != nil {
-					select {
-					case <-doneChan:
-						return
-					case <-quitChan:
-						return
-					case soundLevelChan <- *unifiedData.SoundLevel:
-					default:
-						// Channel full, drop data
-					}
-				}
-			}
-		}
-	}()
-
-	// waitgroup is managed within CaptureAudio
-	go myaudio.CaptureAudio(settings, wg, quitChan, restartChan, unifiedAudioChan)
-
-	return unifiedAudioChan
-}
-
-// startClipCleanupMonitor initializes and starts the clip cleanup monitoring routine in a new goroutine.
-func startClipCleanupMonitor(wg *sync.WaitGroup, quitChan chan struct{}, dataStore datastore.Interface) {
-	wg.Go(func() {
-		clipCleanupMonitor(quitChan, dataStore)
-	})
-}
-
-// startWeatherPolling initializes and starts the weather polling routine in a new goroutine.
-func startWeatherPolling(wg *sync.WaitGroup, settings *conf.Settings, dataStore datastore.Interface, metrics *observability.Metrics, quitChan chan struct{}) {
-	// Create new weather service
-	weatherService, err := weather.NewService(settings, dataStore, metrics.Weather)
-	if err != nil {
-		GetLogger().Error("failed to initialize weather service",
-			logger.Error(err),
-			logger.String("operation", "initialize_weather_service"))
-		return
-	}
-
-	wg.Go(func() {
-		weatherService.StartPolling(quitChan)
-	})
-}
-
-// monitorShutdownSignals listens for shutdown signals (SIGINT, SIGTERM) and triggers the application shutdown process.
-func monitorShutdownSignals(quitChan chan struct{}) {
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		// Register to receive both SIGINT (Ctrl+C) and SIGTERM (Docker/systemd stop)
-		signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-		defer signal.Stop(sigChan) // Stop signal delivery when done to prevent leaks
-
-		sig := <-sigChan // Block until a signal is received
-
-		GetLogger().Info("received shutdown signal",
-			logger.String("signal", sig.String()),
-			logger.String("operation", "shutdown_signal_received"))
-		close(quitChan) // Close the quit channel to signal other goroutines to stop
-	}()
-}
-
-// closeDataStore attempts to close the database connection and logs the result.
-func closeDataStore(store datastore.Interface) {
-	log := GetLogger()
-	// If this is an SQLite store, perform WAL checkpoint before closing
-	if sqliteStore, ok := store.(*datastore.SQLiteStore); ok {
-		log.Info("performing SQLite WAL checkpoint",
-			logger.String("operation", "wal_checkpoint_before_shutdown"))
-		if err := sqliteStore.CheckpointWAL(); err != nil {
-			// Enhanced error handling - check for specific error conditions
-			errStr := err.Error()
-			if strings.Contains(errStr, "database is closed") || strings.Contains(errStr, "nil pointer") {
-				// Database is likely already closed or connection is nil
-				log.Warn("database already closed during WAL checkpoint",
-					logger.String("operation", "wal_checkpoint"),
-					logger.String("error_type", "database_closed"))
-			} else {
-				// Other checkpoint failures - log but continue with shutdown
-				log.Warn("WAL checkpoint failed",
-					logger.Error(err),
-					logger.String("operation", "wal_checkpoint"),
-					logger.Bool("continuing_shutdown", true))
-			}
-		}
-	}
-
-	// Close the database connection
-	if err := store.Close(); err != nil {
-		log.Error("failed to close database",
-			logger.Error(err),
-			logger.String("operation", "close_database"))
-	} else {
-		log.Info("successfully closed database",
-			logger.String("operation", "close_database"))
-	}
-}
-
-// closeV2Database closes the v2 database with proper WAL checkpoint.
-func closeV2Database() {
-	v2DatabaseManagerMu.Lock()
-	manager := v2DatabaseManager
-	v2DatabaseManager = nil
-	v2DatabaseManagerMu.Unlock()
-
-	if manager == nil {
-		return
-	}
-
-	log := GetLogger()
-
-	// Determine database type for logging
-	dbType := "SQLite"
-	if manager.IsMySQL() {
-		dbType = "MySQL"
-	}
-
-	// Perform WAL checkpoint before closing (SQLite only, no-op for MySQL)
-	if !manager.IsMySQL() {
-		log.Info("performing v2 SQLite WAL checkpoint",
-			logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
-
-		if err := manager.CheckpointWAL(); err != nil {
-			log.Warn("v2 WAL checkpoint failed",
-				logger.Error(err),
-				logger.String("operation", "v2_wal_checkpoint"))
-		}
-	}
-
-	// Close the database
-	log.Info("closing v2 database",
-		logger.String("type", dbType),
-		logger.String("path", manager.Path()),
-		logger.String("operation", "v2_database_close"))
-
-	if err := manager.Close(); err != nil {
-		log.Error("failed to close v2 database",
-			logger.Error(err),
-			logger.String("type", dbType),
-			logger.String("operation", "v2_database_close"))
-	} else {
-		log.Info("v2 database closed successfully",
-			logger.String("type", dbType),
-			logger.String("path", manager.Path()))
-	}
-}
-
-// ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
+// clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
 // It also performs periodic cleanup of log deduplicator states to prevent memory growth.
 func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 	// Get configurable cleanup check interval, with fallback to default
@@ -1434,13 +513,6 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 	return defaultCache
 }
 
-// startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
-	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics, quietHoursScheduler)
-	ctrlMonitor.Start()
-	return ctrlMonitor
-}
-
 // initializeBuffers handles initialization of all audio-related buffers
 func initializeBuffers(sources []string) error {
 	var initErrors []string
@@ -1695,8 +767,8 @@ func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
 	return systemMonitor
 }
 
-// initializeMetrics initializes the Prometheus metrics manager
-func initializeMetrics() (*observability.Metrics, error) {
+// InitializeMetrics initializes the Prometheus metrics manager.
+func InitializeMetrics() (*observability.Metrics, error) {
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return nil, errors.New(err).
@@ -1801,8 +873,8 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	return sources, nil
 }
 
-// printSystemDetails prints system information and analyzer configuration
-func printSystemDetails(settings *conf.Settings) {
+// PrintSystemDetails prints system information and analyzer configuration.
+func PrintSystemDetails(settings *conf.Settings) {
 	log := GetLogger()
 
 	// Get system details with gopsutil
@@ -1983,12 +1055,6 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			Build()
 	}
 
-	// Store manager for shutdown cleanup - only after successful worker creation
-	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = cfg.manager
-	v2DatabaseManagerMu.Unlock()
-
 	// Inject dependencies into the API layer
 	apiv2.SetMigrationDependencies(stateManager, worker)
 	apiv2.SetMigrationTelemetry(migrationTelemetry)
@@ -2034,7 +1100,7 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 // initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
 // This creates the StateManager and Worker instances needed for the migration API.
 // The function handles state recovery on restart and resumes migration if it was in progress.
-func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) error {
+func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface) (datastoreV2.Manager, error) {
 	log := GetLogger()
 
 	// Get the database directory from the legacy database path
@@ -2044,18 +1110,19 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		dataDir = datastoreV2.GetDataDirFromLegacyPath(settings.Output.SQLite.Path)
 	case settings.Output.MySQL.Enabled:
 		// MySQL uses v2_ prefixed tables in the same database
-		return initializeMySQLMigrationInfrastructure(settings, ds, log)
+		mgr, err := initializeMySQLMigrationInfrastructure(settings, ds, log)
+		return mgr, err
 	default:
 		log.Debug("no database configured, skipping migration infrastructure",
 			logger.String("operation", "initialize_migration_infrastructure"))
-		return nil
+		return nil, nil //nolint:nilnil // nil manager is valid when no database is configured
 	}
 
 	// Check if dataDir is empty (in-memory database)
 	if dataDir == "" {
 		log.Debug("in-memory database detected, skipping migration infrastructure",
 			logger.String("operation", "initialize_migration_infrastructure"))
-		return nil
+		return nil, nil //nolint:nilnil // nil manager is valid for in-memory databases
 	}
 
 	// Create v2 database manager
@@ -2066,7 +1133,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		Logger:         log,
 	})
 	if err != nil {
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "create_v2_database_manager").
@@ -2080,7 +1147,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "initialize_v2_database").
@@ -2100,17 +1167,17 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_migration_infrastructure"))
 		}
-		return err
+		return nil, err
 	}
 
-	return nil
+	return v2Manager, nil
 }
 
 // initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
 // Unlike SQLite which uses a separate file, MySQL shares the same database.
 // V2 tables use the v2_ prefix to avoid collisions with legacy auxiliary tables
 // (e.g., dynamic_thresholds, image_caches) that share the same base names.
-func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) error {
+func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastore.Interface, log logger.Logger) (datastoreV2.Manager, error) {
 	// Create v2 MySQL manager with v2_ prefix to avoid collisions with legacy
 	// auxiliary tables that share the same base names. TableName() methods have
 	// been removed so NamingStrategy.TablePrefix now takes effect.
@@ -2124,7 +1191,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		Debug:       settings.Debug,
 	})
 	if err != nil {
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "create_mysql_v2_manager").
@@ -2138,7 +1205,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return errors.New(err).
+		return nil, errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryDatabase).
 			Context("operation", "initialize_mysql_v2_schema").
@@ -2160,10 +1227,10 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 				logger.Error(closeErr),
 				logger.String("operation", "initialize_mysql_migration"))
 		}
-		return err
+		return nil, err
 	}
 
-	return nil
+	return v2Manager, nil
 }
 
 // initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.
@@ -2297,11 +1364,6 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 			Context("operation", "create_v2_only_datastore").
 			Build()
 	}
-
-	// Store manager for shutdown cleanup
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = v2Manager
-	v2DatabaseManagerMu.Unlock()
 
 	log.Info("enhanced database mode initialized successfully",
 		logger.String("operation", "initialize_enhanced_database_mode"))

@@ -23,12 +23,26 @@ This command initializes all subsystems (audio capture, BirdNET model,
 web interface, database) and runs until interrupted.
 
 The "realtime" command is an alias for backward compatibility.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Print system details early, before any service starts.
+			analysis.PrintSystemDetails(settings)
+
+			// Initialize metrics before services that depend on them.
+			metrics, err := analysis.InitializeMetrics()
+			if err != nil {
+				return err
+			}
+
+			// Create services. Registration order determines start order;
+			// shutdown happens in reverse within each tier.
+			bnAnalyzer := analysis.NewBirdNETAnalyzer(settings)
+			dbService := analysis.NewDatabaseService(settings, metrics)
+			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics)
+			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService)
+
 			application := app.New()
 			app.SetGlobal(application)
-			application.Register(app.NewLegacyService("birdnet-go", func(quit <-chan struct{}) error {
-				return analysis.RealtimeAnalysisWithQuit(settings, quit)
-			}))
+			application.Register(bnAnalyzer, dbService, apiService, audioService)
 
 			if err := application.Start(cmd.Context()); err != nil {
 				return err

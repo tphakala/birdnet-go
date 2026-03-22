@@ -21,10 +21,9 @@ const (
 	// defaultShutdownTimeout is the total shutdown budget (9s for Docker's 10s default).
 	defaultShutdownTimeout = 9 * time.Second
 	// networkTierBudget is the timeout for stopping network services.
-	// NOTE: In PR 1, all services (including the legacy wrapper) are TierNetwork
-	// and receive the full budget. When core services are extracted in follow-up
-	// PRs, this will be reduced to 6s and coreTierBudget will become 3s.
-	networkTierBudget = 9 * time.Second
+	// DatabaseService now uses TierCore with its own 3s budget, so network
+	// services get 6s. Total: 6s + 3s = 9s (within Docker's 10s default).
+	networkTierBudget = 6 * time.Second
 	// coreTierBudget is the guaranteed timeout for stopping core data services.
 	// This uses a fresh context (not derived from the network tier) to guarantee
 	// data safety even if network shutdown consumes its full budget.
@@ -131,9 +130,8 @@ func (a *App) shutdownRange(ctx context.Context, services []Service) {
 	}
 }
 
-// Wait blocks until a shutdown signal (SIGINT, SIGTERM) is received or the
-// legacy service exits (e.g., startup failure inside the blocking function),
-// then performs graceful shutdown.
+// Wait blocks until a shutdown signal (SIGINT, SIGTERM) is received or a
+// programmatic shutdown is requested, then performs graceful shutdown.
 func (a *App) Wait() error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -141,31 +139,10 @@ func (a *App) Wait() error {
 
 	log := getLogger()
 
-	// Find legacy service error channel (if any) for early-exit detection.
-	// If RealtimeAnalysis fails during init (e.g., database open error),
-	// it returns an error into ErrChan — we must detect that instead of
-	// hanging forever waiting for a signal that will never come.
-	// NOTE: Only monitors the first LegacyService. Multiple legacy services
-	// are not expected, but if needed this should be extended to select on all.
-	var legacyErrChan <-chan error
-	for _, svc := range a.services {
-		if ls, ok := svc.(*LegacyService); ok {
-			legacyErrChan = ls.ErrChan()
-			break
-		}
-	}
-
-	// Select on signal and legacy error channels. A nil legacyErrChan
-	// blocks forever in select, so the branch is effectively ignored.
-	var legacyErr error
 	select {
 	case sig := <-sigChan:
 		log.Info("received shutdown signal",
 			logger.String("signal", sig.String()),
-			logger.String("operation", "graceful_shutdown"))
-	case legacyErr = <-legacyErrChan:
-		log.Info("legacy service exited",
-			logger.Error(legacyErr),
 			logger.String("operation", "graceful_shutdown"))
 	case <-a.shutdownCh:
 		log.Info("programmatic shutdown requested",
@@ -174,10 +151,7 @@ func (a *App) Wait() error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultShutdownTimeout)
 	defer cancel()
-	shutdownErr := a.Shutdown(ctx)
-
-	// Join both errors — errors.Join returns nil if both are nil
-	return errors.Join(legacyErr, shutdownErr)
+	return a.Shutdown(ctx)
 }
 
 // groupByTier splits services into network and core tiers, each in reverse registration order.

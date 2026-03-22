@@ -13,50 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestMonitorShutdownSignals tests that shutdown signals are properly handled
-func TestMonitorShutdownSignals(t *testing.T) {
-	tests := []struct {
-		name   string
-		signal syscall.Signal
-	}{
-		{
-			name:   "SIGINT signal triggers shutdown",
-			signal: syscall.SIGINT,
-		},
-		{
-			name:   "SIGTERM signal triggers shutdown",
-			signal: syscall.SIGTERM,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create quit channel
-			quitChan := make(chan struct{})
-
-			// Start monitoring in a goroutine
-			monitorShutdownSignals(quitChan)
-
-			// Give the monitor time to set up
-			time.Sleep(10 * time.Millisecond)
-
-			// Send signal to self
-			proc, err := os.FindProcess(os.Getpid())
-			require.NoError(t, err)
-			err = proc.Signal(tt.signal)
-			require.NoError(t, err)
-
-			// Wait for quit channel to close with timeout
-			select {
-			case <-quitChan:
-				// Success - channel was closed
-			case <-time.After(1 * time.Second):
-				require.Fail(t, "Timeout waiting for quit channel to close")
-			}
-		})
-	}
-}
-
 // TestCleanupHLSWithTimeout tests HLS cleanup timeout behavior
 func TestCleanupHLSWithTimeout(t *testing.T) {
 	t.Run("cleanup with context timeout", func(t *testing.T) {
@@ -170,12 +126,6 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 
 		assert.Equal(t, context.DeadlineExceeded, ctx.Err(), "Context should have timed out")
 	})
-}
-
-// TestShutdownConstants verifies shutdown timeout constant is properly defined
-func TestShutdownConstants(t *testing.T) {
-	// Verify the shutdown timeout is set to 9 seconds
-	assert.Equal(t, 9*time.Second, shutdownTimeout, "Shutdown timeout should be 9 seconds")
 }
 
 // Helper function to test signal handling without actually sending signals to the process
