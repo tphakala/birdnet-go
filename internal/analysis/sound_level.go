@@ -12,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -43,14 +44,14 @@ func getSoundLevelLogger() logger.Logger {
 // sanitizeSoundLevelData replaces non-finite float values (Inf, -Inf, NaN) with valid placeholders
 // and polishes the data to ensure JSON marshaling succeeds. This prevents errors when publishing
 // to MQTT, SSE, or other systems that require valid JSON.
-func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData {
+func sanitizeSoundLevelData(data soundlevel.SoundLevelData) soundlevel.SoundLevelData {
 	// Create a copy to avoid modifying the original
-	sanitized := myaudio.SoundLevelData{
+	sanitized := soundlevel.SoundLevelData{
 		Timestamp:   data.Timestamp,
 		Source:      stringOrDefault(data.Source, "unknown"),
 		Name:        stringOrDefault(data.Name, "unknown"),
 		Duration:    data.Duration,
-		OctaveBands: make(map[string]myaudio.OctaveBandData),
+		OctaveBands: make(map[string]soundlevel.OctaveBandData),
 	}
 
 	// Ensure duration is valid
@@ -61,7 +62,7 @@ func sanitizeSoundLevelData(data myaudio.SoundLevelData) myaudio.SoundLevelData 
 	// Sanitize and polish each octave band
 	for key, band := range data.OctaveBands {
 		// Round all dB values to 2 decimal places for cleaner output
-		sanitizedBand := myaudio.OctaveBandData{
+		sanitizedBand := soundlevel.OctaveBandData{
 			CenterFreq:  band.CenterFreq,
 			Min:         roundToDecimalPlaces(sanitizeFloat64(band.Min, -100.0), 2),
 			Max:         roundToDecimalPlaces(sanitizeFloat64(band.Max, -100.0), 2),
@@ -157,7 +158,7 @@ func normalizeBandKey(key string) string {
 }
 
 // validateSoundLevelData validates sound level data before publishing
-func validateSoundLevelData(data *myaudio.SoundLevelData) error {
+func validateSoundLevelData(data *soundlevel.SoundLevelData) error {
 	// Common sound data context for error reporting
 	soundDataCtx := map[string]any{
 		"source": data.Source,
@@ -281,7 +282,7 @@ type CompactBandData struct {
 }
 
 // toCompactFormat converts sound level data to compact format for MQTT
-func toCompactFormat(data myaudio.SoundLevelData, nodeName string) CompactSoundLevelData {
+func toCompactFormat(data soundlevel.SoundLevelData, nodeName string) CompactSoundLevelData {
 	compact := CompactSoundLevelData{
 		TS:    data.Timestamp.Format(time.RFC3339),
 		Node:  nodeName,
@@ -305,7 +306,7 @@ func toCompactFormat(data myaudio.SoundLevelData, nodeName string) CompactSoundL
 }
 
 // startSoundLevelMQTTPublisher starts a goroutine to consume sound level data and publish to MQTT
-func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
+func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan soundlevel.SoundLevelData) {
 	wg.Go(func() {
 
 		for {
@@ -342,7 +343,7 @@ func startSoundLevelMQTTPublisher(wg *sync.WaitGroup, quitChan <-chan struct{}, 
 }
 
 // publishSoundLevelToMQTT publishes sound level data to MQTT
-func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.Processor) error {
+func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processor.Processor) error {
 	// Get current settings to determine MQTT topic
 	settings := conf.Setting()
 	if !settings.Realtime.MQTT.Enabled {
@@ -451,7 +452,7 @@ func publishSoundLevelToMQTT(soundData myaudio.SoundLevelData, proc *processor.P
 }
 
 // startSoundLevelPublishers starts all sound level publishers with the given done channel
-func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller) {
+func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc *processor.Processor, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller) {
 	settings := conf.Setting()
 
 	// Create a merged quit channel that responds to both the done channel and global quit
@@ -478,7 +479,7 @@ func startSoundLevelPublishers(wg *sync.WaitGroup, doneChan chan struct{}, proc 
 }
 
 // startSoundLevelMQTTPublisherWithDone starts MQTT publisher with a custom done channel
-func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan myaudio.SoundLevelData) {
+func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan struct{}, proc *processor.Processor, soundLevelChan <-chan soundlevel.SoundLevelData) {
 	wg.Go(func() {
 		getSoundLevelLogger().Info("Started sound level MQTT publisher")
 
@@ -515,7 +516,7 @@ func startSoundLevelMQTTPublisherWithDone(wg *sync.WaitGroup, doneChan <-chan st
 
 // startSoundLevelSSEPublisherWithDone starts SSE publisher with a custom done channel
 // This is a compatibility wrapper that converts done channel to context for the refactored function
-func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *apiv2.Controller, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, apiController *apiv2.Controller, soundLevelChan chan soundlevel.SoundLevelData) {
 	// Create context that gets canceled when done channel is closed
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -533,7 +534,7 @@ func startSoundLevelSSEPublisherWithDone(wg *sync.WaitGroup, doneChan chan struc
 }
 
 // broadcastSoundLevelSSE broadcasts sound level data via SSE with error handling and metrics
-func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.SoundLevelData) error {
+func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData soundlevel.SoundLevelData) error {
 	// Validate data before broadcasting
 	if err := validateSoundLevelData(&soundData); err != nil {
 		// Log validation error if debug enabled
@@ -549,7 +550,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 	// Sanitize data before broadcasting
 	sanitizedData := sanitizeSoundLevelData(soundData)
 
-	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
+	if err := apiController.BroadcastSoundLevel(fromSoundLevelPtr(sanitizedData)); err != nil {
 		// Record error metric
 		if m := getSoundLevelMetrics(apiController); m != nil {
 			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
@@ -585,7 +586,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData myaudio.S
 }
 
 // startSoundLevelMetricsPublisherWithDone starts metrics publisher with a custom done channel
-func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metricsInstance *observability.Metrics, soundLevelChan chan myaudio.SoundLevelData) {
+func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan struct{}, metricsInstance *observability.Metrics, soundLevelChan chan soundlevel.SoundLevelData) {
 	lg := getSoundLevelLogger()
 	wg.Go(func() {
 		lg.Info("started sound level metrics publisher")

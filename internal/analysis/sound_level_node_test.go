@@ -7,19 +7,19 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 )
 
 // TestCompactSoundLevelData_IncludesNodeName tests that the node name is included in MQTT messages
 func TestCompactSoundLevelData_IncludesNodeName(t *testing.T) {
 	// Test data
 	nodeName := "BirdNET-Go-TestNode"
-	soundData := myaudio.SoundLevelData{
+	soundData := soundlevel.SoundLevelData{
 		Timestamp: time.Now(),
 		Source:    "test-source",
 		Name:      "Test Audio Source",
 		Duration:  10,
-		OctaveBands: map[string]myaudio.OctaveBandData{
+		OctaveBands: map[string]soundlevel.OctaveBandData{
 			"125_Hz": {
 				CenterFreq:  125,
 				Min:         -60.5,
@@ -66,12 +66,12 @@ func TestCompactSoundLevelData_IncludesNodeName(t *testing.T) {
 
 // TestCompactSoundLevelData_EmptyNodeName tests handling of empty node name
 func TestCompactSoundLevelData_EmptyNodeName(t *testing.T) {
-	soundData := myaudio.SoundLevelData{
+	soundData := soundlevel.SoundLevelData{
 		Timestamp: time.Now(),
 		Source:    "test-source",
 		Name:      "Test Audio Source",
 		Duration:  10,
-		OctaveBands: map[string]myaudio.OctaveBandData{
+		OctaveBands: map[string]soundlevel.OctaveBandData{
 			"500_Hz": {
 				CenterFreq:  500,
 				Min:         -50.0,

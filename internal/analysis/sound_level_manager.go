@@ -6,6 +6,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -18,14 +19,14 @@ type SoundLevelManager struct {
 	isRunning      bool
 	doneChan       chan struct{}
 	wg             sync.WaitGroup
-	soundLevelChan chan myaudio.SoundLevelData
+	soundLevelChan chan soundlevel.SoundLevelData
 	proc           *processor.Processor
 	apiController  *apiv2.Controller
 	metrics        *observability.Metrics
 }
 
 // NewSoundLevelManager creates a new sound level manager
-func NewSoundLevelManager(soundLevelChan chan myaudio.SoundLevelData, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *SoundLevelManager {
+func NewSoundLevelManager(soundLevelChan chan soundlevel.SoundLevelData, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics) *SoundLevelManager {
 	return &SoundLevelManager{
 		soundLevelChan: soundLevelChan,
 		proc:           proc,

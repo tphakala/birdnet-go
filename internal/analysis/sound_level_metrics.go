@@ -4,9 +4,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -17,7 +17,7 @@ func getMetricsLogger() logger.Logger {
 }
 
 // updateSoundLevelMetrics updates Prometheus metrics with sound level data
-func updateSoundLevelMetrics(soundData myaudio.SoundLevelData, metrics *observability.Metrics) {
+func updateSoundLevelMetrics(soundData soundlevel.SoundLevelData, metrics *observability.Metrics) {
 	if metrics.SoundLevel == nil {
 		return
 	}
