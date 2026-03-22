@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 // ffmpegTimeoutFlag is the FFmpeg flag name for connection timeout used in tests.
@@ -1062,23 +1063,30 @@ func TestStream_ErrorContextNilSafe(t *testing.T) {
 func TestStream_OnFrameCallback(t *testing.T) {
 	t.Parallel()
 
-	var receivedSourceID string
-	var receivedData []byte
+	var receivedFrame audiocore.AudioFrame
 
 	cfg := newTestConfig()
-	stream := NewStream(&cfg, func(sourceID string, data []byte) {
-		receivedSourceID = sourceID
-		receivedData = make([]byte, len(data))
-		copy(receivedData, data)
+	stream := NewStream(&cfg, func(frame audiocore.AudioFrame) {
+		receivedFrame = frame
 	}, nil, nil)
 
 	assert.NotNil(t, stream)
 	assert.NotNil(t, stream.onFrame)
 
-	// Simulate onFrame call.
-	stream.onFrame("test-source-1", []byte{1, 2, 3})
-	assert.Equal(t, "test-source-1", receivedSourceID)
-	assert.Equal(t, []byte{1, 2, 3}, receivedData)
+	// Simulate onFrame call with a fully populated frame.
+	testFrame := audiocore.AudioFrame{
+		SourceID:   "test-source-1",
+		SourceName: "Test Source",
+		Data:       []byte{1, 2, 3},
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+	stream.onFrame(testFrame)
+	assert.Equal(t, "test-source-1", receivedFrame.SourceID)
+	assert.Equal(t, "Test Source", receivedFrame.SourceName)
+	assert.Equal(t, []byte{1, 2, 3}, receivedFrame.Data)
+	assert.Equal(t, 48000, receivedFrame.SampleRate)
 }
 
 func TestStream_OnResetCallback(t *testing.T) {

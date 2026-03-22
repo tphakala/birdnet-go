@@ -401,7 +401,7 @@ type Stream struct {
 	config StreamConfig
 
 	// Callbacks.
-	onFrame func(sourceID string, data []byte)
+	onFrame func(frame audiocore.AudioFrame)
 	onReset func(sourceID string)
 
 	// Optional metrics.
@@ -482,9 +482,10 @@ type Stream struct {
 }
 
 // NewStream creates a new FFmpeg stream handler.
-// The onFrame callback is invoked for each chunk of audio data read from FFmpeg.
+// The onFrame callback is invoked for each chunk of audio data read from FFmpeg
+// with a fully populated AudioFrame including source metadata.
 // The onReset callback is invoked when the stream restarts, allowing consumers to reset state.
-func NewStream(cfg *StreamConfig, onFrame func(sourceID string, data []byte), onReset func(sourceID string), metrics audiocore.StreamMetrics) *Stream {
+func NewStream(cfg *StreamConfig, onFrame func(frame audiocore.AudioFrame), onReset func(sourceID string), metrics audiocore.StreamMetrics) *Stream {
 	return &Stream{
 		config:           *cfg,
 		onFrame:          onFrame,
@@ -940,9 +941,20 @@ func (s *Stream) processAudio() error {
 
 			s.conditionalFailureReset(totalReceived)
 
-			// Invoke onFrame callback instead of writing to global buffers.
+			// Invoke onFrame callback with a fully populated AudioFrame.
 			if s.onFrame != nil {
-				s.onFrame(s.config.SourceID, buf[:n])
+				// Copy the data out of the read buffer before dispatching.
+				data := make([]byte, n)
+				copy(data, buf[:n])
+				s.onFrame(audiocore.AudioFrame{
+					SourceID:   s.config.SourceID,
+					SourceName: s.config.SourceName,
+					Data:       data,
+					SampleRate: s.config.SampleRate,
+					BitDepth:   s.config.BitDepth,
+					Channels:   s.config.Channels,
+					Timestamp:  time.Now(),
+				})
 			}
 
 			// Update metrics if available.

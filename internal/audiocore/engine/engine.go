@@ -102,11 +102,8 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 
 	router := audiocore.NewAudioRouter(log)
 	bufMgr := buffer.NewManager(log)
-	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(sourceID string, data []byte) {
-		router.Dispatch(audiocore.AudioFrame{
-			SourceID: sourceID,
-			Data:     data,
-		})
+	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
+		router.Dispatch(frame)
 	}, nil, log)
 	deviceMgr := audiocore.NewDeviceManager(router, log)
 

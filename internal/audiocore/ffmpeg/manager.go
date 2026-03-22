@@ -37,7 +37,10 @@ const (
 
 // FrameCallback is invoked for each chunk of audio data received from a stream.
 // sourceID identifies the stream and data contains the raw audio bytes.
-type FrameCallback func(sourceID string, data []byte)
+// FrameCallback is invoked by a Stream for every chunk of audio data received.
+// The AudioFrame is fully populated with source metadata (ID, name, sample rate,
+// bit depth, channels, timestamp).
+type FrameCallback func(frame audiocore.AudioFrame)
 
 // Manager orchestrates multiple FFmpeg streams.
 // It maintains a map of sourceID → *Stream, provides Start/Stop/Restart
@@ -157,14 +160,14 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 	return nil
 }
 
-// dispatchFrame is the per-stream onFrame callback. It forwards the audio data
-// to the manager-level onFrame callback registered via SetOnFrame or the constructor.
-func (m *Manager) dispatchFrame(sourceID string, data []byte) {
+// dispatchFrame is the per-stream onFrame callback. It forwards a fully-populated
+// AudioFrame to the manager-level onFrame callback.
+func (m *Manager) dispatchFrame(frame audiocore.AudioFrame) { //nolint:gocritic // hugeParam: matches AudioDispatcher/FrameCallback contract
 	m.onFrameMu.RLock()
 	cb := m.onFrame
 	m.onFrameMu.RUnlock()
 	if cb != nil {
-		cb(sourceID, data)
+		cb(frame)
 	}
 }
 
