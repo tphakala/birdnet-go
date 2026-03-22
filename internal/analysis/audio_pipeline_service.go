@@ -147,7 +147,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 				logger.String("error", errorStr),
 				logger.Int("source_count", len(sources)),
 				logger.Any("sources", sources),
-				logger.String("component", "analysis.realtime"),
+				logger.String("component", "analysis.audio_pipeline"),
 				logger.String("operation", "buffer_monitor_setup"))
 		}
 	} else {
@@ -599,7 +599,7 @@ func initializeBuffers(sources []string) error {
 		// - Permission issues accessing audio devices
 		// Context includes buffer parameters to aid in troubleshooting memory issues
 		return errors.Newf("buffer initialization errors: %s", strings.Join(initErrors, "; ")).
-			Component("analysis.realtime").
+			Component("analysis.audio_pipeline").
 			Category(errors.CategoryBuffer).
 			Context("operation", "initialize_buffers").
 			Context("error_count", len(initErrors)).
@@ -650,7 +650,7 @@ func cleanupHLSStreamingFiles() error {
 	hlsDir, err := conf.GetHLSDirectory()
 	if err != nil {
 		return errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.audio_pipeline").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "get_hls_directory").
 			Build()
@@ -663,7 +663,7 @@ func cleanupHLSStreamingFiles() error {
 		return nil
 	} else if err != nil {
 		return errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.audio_pipeline").
 			Category(errors.CategoryFileIO).
 			Context("operation", "check_hls_directory").
 			Context("hls_dir", hlsDir).
@@ -674,7 +674,7 @@ func cleanupHLSStreamingFiles() error {
 	entries, err := os.ReadDir(hlsDir)
 	if err != nil {
 		return errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.audio_pipeline").
 			Category(errors.CategoryFileIO).
 			Context("operation", "read_hls_directory").
 			Context("hls_dir", hlsDir).
@@ -706,7 +706,7 @@ func cleanupHLSStreamingFiles() error {
 	// Return a combined error if any cleanup operations failed
 	if len(cleanupErrors) > 0 {
 		return errors.Newf("failed to remove some HLS stream directories: %s", strings.Join(cleanupErrors, "; ")).
-			Component("analysis.realtime").
+			Component("analysis.audio_pipeline").
 			Category(errors.CategoryFileIO).
 			Context("operation", "cleanup_hls_directories").
 			Context("hls_dir", hlsDir).
