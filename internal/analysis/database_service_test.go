@@ -65,6 +65,9 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	svc := NewDatabaseService(settings, metrics)
 	err = svc.Start(t.Context())
 	require.NoError(t, err, "Start() should succeed for fresh install")
+	t.Cleanup(func() {
+		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
+	})
 
 	// DataStore should be set after Start.
 	assert.NotNil(t, svc.DataStore(), "DataStore() should not be nil after Start()")
@@ -72,8 +75,4 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	// Fresh install goes to v2-only mode.
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
-
-	// Stop should not error.
-	err = svc.Stop(t.Context())
-	assert.NoError(t, err, "Stop() should succeed")
 }

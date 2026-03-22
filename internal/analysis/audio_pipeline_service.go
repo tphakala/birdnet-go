@@ -38,6 +38,7 @@ type AudioPipelineService struct {
 	soundLevelChan      chan myaudio.SoundLevelData
 	restartChan         chan struct{}
 	done                chan struct{}
+	doneOnce            sync.Once
 	wg                  sync.WaitGroup
 }
 
@@ -188,6 +189,8 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	}
 
 	// Start clip cleanup monitor.
+	// Uses conf.Setting() instead of local settings for hot-reload support —
+	// retention policy can be changed at runtime via the web UI.
 	if conf.Setting().Realtime.Audio.Export.Retention.Policy != policyNone {
 		p.wg.Go(func() {
 			clipCleanupMonitor(p.done, dataStore)
@@ -268,9 +271,12 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	}
 
 	// Close done channel to signal restart loop and clip cleanup goroutines.
-	if p.done != nil {
-		close(p.done)
-	}
+	// Protected by sync.Once to prevent panic on double-close.
+	p.doneOnce.Do(func() {
+		if p.done != nil {
+			close(p.done)
+		}
+	})
 
 	// Wait for goroutines with context deadline.
 	log.Info("waiting for goroutines to finish",
