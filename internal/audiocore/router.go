@@ -291,17 +291,18 @@ func (r *AudioRouter) stopRoute(route *Route) {
 
 	select {
 	case <-route.stopped:
-		// Drainer exited cleanly.
+		// Drainer exited cleanly — safe to close resources.
+		if route.resampler != nil {
+			_ = route.resampler.Close()
+		}
+		_ = route.Consumer.Close()
 	case <-time.After(drainerStopTimeout):
-		r.log.Warn("drainer goroutine did not exit in time",
+		// Drainer is leaked and may still reference the resampler/consumer.
+		// Do NOT close them — leave for GC to reclaim.
+		r.log.Warn("drainer goroutine did not exit in time, leaking resources",
 			logger.String("source_id", route.SourceID),
 			logger.String("consumer_id", route.Consumer.ID()))
 	}
-
-	if route.resampler != nil {
-		_ = route.resampler.Close()
-	}
-	_ = route.Consumer.Close()
 }
 
 // drainRoute reads frames from the route's inbox and delivers them to the

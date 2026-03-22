@@ -114,6 +114,13 @@ func (m *Manager) SetOnStreamReset(fn func(sourceID string)) {
 // The per-stream onFrame callback is taken from the manager's onFrame field,
 // which is set via the constructor or SetOnFrame.
 func (m *Manager) StartStream(cfg *StreamConfig) error {
+	if cfg == nil {
+		return errors.Newf("StreamConfig must not be nil").
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-manager").
+			Context("operation", "start_stream").
+			Build()
+	}
 	if cfg.SourceID == "" {
 		return errors.Newf("sourceID must not be empty").
 			Category(errors.CategoryValidation).
@@ -122,10 +129,12 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 			Build()
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	// Hold the lock only for the map check and insertion.
+	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics)
 
+	m.mu.Lock()
 	if _, exists := m.streams[cfg.SourceID]; exists {
+		m.mu.Unlock()
 		return errors.Newf("stream already exists for sourceID: %s", cfg.SourceID).
 			Category(errors.CategoryValidation).
 			Component("ffmpeg-manager").
@@ -134,10 +143,10 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 			Context("url", privacy.SanitizeStreamUrl(cfg.URL)).
 			Build()
 	}
-
-	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics)
 	m.streams[cfg.SourceID] = stream
+	m.mu.Unlock()
 
+	// Launch goroutine and notify callback outside the lock.
 	m.wg.Go(func() {
 		stream.Run(m.ctx)
 	})
@@ -185,7 +194,6 @@ func (m *Manager) notifyReset(sourceID string) {
 // StopStream stops the stream identified by sourceID and removes it from the map.
 func (m *Manager) StopStream(sourceID string) error {
 	m.mu.Lock()
-
 	stream, exists := m.streams[sourceID]
 	if !exists {
 		activeCount := len(m.streams)
@@ -198,12 +206,11 @@ func (m *Manager) StopStream(sourceID string) error {
 			Context("active_streams", activeCount).
 			Build()
 	}
-
-	stream.Stop()
 	delete(m.streams, sourceID)
-
-	// Release the lock before any blocking operations.
 	m.mu.Unlock()
+
+	// Stop the stream outside the lock — Stop() can block.
+	stream.Stop()
 
 	// Clean up watchdog tracking.
 	m.lastForceResetMu.Lock()
@@ -250,6 +257,13 @@ func (m *Manager) RestartStream(sourceID string) error {
 // using the provided config. The sourceID in cfg must match the one supplied as
 // the first argument.
 func (m *Manager) ReconfigureStream(sourceID string, cfg *StreamConfig) error {
+	if cfg == nil {
+		return errors.Newf("StreamConfig must not be nil").
+			Category(errors.CategoryValidation).
+			Component("ffmpeg-manager").
+			Context("operation", "reconfigure_stream").
+			Build()
+	}
 	if sourceID != cfg.SourceID {
 		return errors.Newf("sourceID mismatch: argument %q != cfg.SourceID %q", sourceID, cfg.SourceID).
 			Category(errors.CategoryValidation).
@@ -496,7 +510,15 @@ func (m *Manager) checkForStuckStreams() {
 		}
 
 		// Brief delay between stop and start to allow OS resources to be released.
-		time.Sleep(managerStopStartDelay)
+		// Use select so shutdown can cancel the wait.
+		timer := time.NewTimer(managerStopStartDelay)
+		select {
+		case <-timer.C:
+			// Delay elapsed, proceed with restart.
+		case <-m.ctx.Done():
+			timer.Stop()
+			return
+		}
 
 		if err := m.StartStream(&cfgCopy); err != nil {
 			m.logger.Error("watchdog: failed to restart stuck stream",

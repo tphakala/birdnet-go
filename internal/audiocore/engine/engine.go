@@ -318,8 +318,8 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Channels:   newCfg.Channels,
 		}
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
-			e.bufferMgr.DeallocateSource(sourceID)
-			_ = e.registry.Unregister(sourceID)
+			// Source stays registered — mark it as errored so callers can see the failure.
+			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return fmt.Errorf("restart stream for %s: %w", sourceID, err)
 		}
 	} else if newType == audiocore.SourceTypeAudioCard {
@@ -329,8 +329,8 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 			Channels:   newCfg.Channels,
 		}
 		if err := e.deviceMgr.StartCapture(sourceID, newCfg.ConnectionString, devCfg); err != nil {
-			e.bufferMgr.DeallocateSource(sourceID)
-			_ = e.registry.Unregister(sourceID)
+			// Source stays registered — mark it as errored so callers can see the failure.
+			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
 			return fmt.Errorf("restart device capture for %s: %w", sourceID, err)
 		}
 	}
