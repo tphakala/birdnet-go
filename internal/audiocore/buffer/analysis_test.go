@@ -89,6 +89,16 @@ func TestAnalysisBuffer_Overwrite(t *testing.T) {
 	assert.True(t, overwriteSeen, "expected overwrite to be recorded after filling buffer")
 }
 
+// TestAnalysisBuffer_ReadSizeLessThanOverlapSize verifies that the constructor
+// rejects readSize < overlapSize with a validation error.
+func TestAnalysisBuffer_ReadSizeLessThanOverlapSize(t *testing.T) {
+	t.Parallel()
+
+	_, err := buffer.NewAnalysisBuffer(4096, 1024, 512, "test-source", newTestLogger())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read size 512 must be >= overlap size 1024")
+}
+
 // TestAnalysisBuffer_OverlapRead verifies that consecutive reads include the
 // correct overlap from the previous read.
 func TestAnalysisBuffer_OverlapRead(t *testing.T) {

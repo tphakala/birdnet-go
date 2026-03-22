@@ -67,6 +67,16 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 			Context("source_id", sourceID).
 			Build()
 	}
+	if readSize < overlapSize {
+		return nil, errors.Newf("read size %d must be >= overlap size %d", readSize, overlapSize).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_analysis_buffer").
+			Context("source_id", sourceID).
+			Context("read_size", readSize).
+			Context("overlap_size", overlapSize).
+			Build()
+	}
 	if sourceID == "" {
 		return nil, errors.Newf("source ID must not be empty").
 			Component("audiocore").
@@ -175,15 +185,17 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 
 	// Advance the overlap cursor: save the last overlapSize bytes of fresh data.
 	if ab.overlapSize > 0 {
+		if ab.prevData == nil {
+			ab.prevData = make([]byte, ab.overlapSize)
+		}
 		if n >= ab.overlapSize {
-			if ab.prevData == nil {
-				ab.prevData = make([]byte, ab.overlapSize)
-			}
 			copy(ab.prevData, fresh[n-ab.overlapSize:n])
 		} else {
-			// Less data than overlap — save what we have.
-			ab.prevData = make([]byte, n)
-			copy(ab.prevData, fresh[:n])
+			// Fewer fresh bytes than overlap — zero-pad the beginning,
+			// place available data at the end so the overlap slice
+			// always has exactly overlapSize length.
+			clear(ab.prevData)
+			copy(ab.prevData[ab.overlapSize-n:], fresh[:n])
 		}
 	}
 

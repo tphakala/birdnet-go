@@ -206,15 +206,19 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 // If a consumer's inbox is full, the frame is dropped and the route's drop
 // counter is incremented. Dispatch never blocks.
 //
+// The read lock is held for the entire iteration to prevent RemoveRoute from
+// mutating the slice (swap-remove) while Dispatch is reading it. This is safe
+// because the loop body only performs non-blocking channel sends and atomic
+// operations, so the lock cannot cause deadlocks.
+//
 // Note: because Dispatch takes a read lock while RemoveRoute takes a write
 // lock, a small number of in-flight frames may be lost during route removal.
 // This is expected behaviour and not a bug.
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
-	routes := r.routes[frame.SourceID]
-	r.mu.RUnlock()
+	defer r.mu.RUnlock()
 
-	for _, rt := range routes {
+	for _, rt := range r.routes[frame.SourceID] {
 		select {
 		case rt.inbox <- frame:
 			// Frame enqueued successfully.
