@@ -443,6 +443,43 @@ func TestApplyStacktracePrivacyFilters_FatalLevel(t *testing.T) {
 	assert.NotNil(t, event.Exception[0].Stacktrace, "fatal-level events should retain stacktraces")
 }
 
+func TestCaptureMessageDeferred_Cap(t *testing.T) {
+	// Not parallel — mutates package-level state
+
+	EnableTestMode()
+	t.Cleanup(func() {
+		DisableTestMode()
+		deferredMutex.Lock()
+		deferredMessages = nil
+		sentryInitialized = false
+		deferredOverflowLogged = false
+		deferredMutex.Unlock()
+	})
+
+	// Reset state so messages are deferred (not sent immediately)
+	deferredMutex.Lock()
+	deferredMessages = nil
+	sentryInitialized = false
+	deferredOverflowLogged = false
+	deferredMutex.Unlock()
+
+	// Queue more than maxDeferredMessages
+	for i := range maxDeferredMessages + 50 {
+		CaptureMessageDeferred(
+			fmt.Sprintf("msg-%d", i),
+			sentry.LevelWarning,
+			"test",
+		)
+	}
+
+	deferredMutex.Lock()
+	count := len(deferredMessages)
+	deferredMutex.Unlock()
+
+	assert.Equal(t, maxDeferredMessages, count,
+		"deferred queue should be capped at maxDeferredMessages")
+}
+
 func TestCaptureError_NilError(t *testing.T) {
 	t.Parallel()
 
