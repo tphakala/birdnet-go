@@ -44,7 +44,8 @@ async function getSentryCaptureApiError(): Promise<typeof _captureApiError> {
     const mod = await import('$lib/telemetry/sentry');
     _captureApiError = mod.captureApiError;
   } catch {
-    // Sentry not available — import failed
+    // Sentry not available — allow retry on later errors
+    _captureAttempted = false;
   }
   return _captureApiError;
 }
@@ -419,13 +420,18 @@ export async function fetchWithCSRF<T = unknown>(
       getSentryCaptureApiError().then(capture => {
         capture?.(error, { endpoint: url, method });
       });
-    } else if (error instanceof Error && error.name !== 'AbortError') {
-      getSentryCaptureApiError().then(capture => {
-        capture?.(
-          { message: error.message, status: 0, isNetworkError: true },
-          { endpoint: url, method }
-        );
-      });
+    } else if (error instanceof Error) {
+      // Skip caller-initiated cancellation (expected flow), capture everything else
+      // including internal timeouts (AbortError from our timeout, not caller's signal)
+      const isCallerAbort = error.name === 'AbortError' && options.signal?.aborted;
+      if (!isCallerAbort) {
+        getSentryCaptureApiError().then(capture => {
+          capture?.(
+            { message: error.message, status: 0, isNetworkError: true },
+            { endpoint: url, method }
+          );
+        });
+      }
     }
 
     if (error instanceof ApiError) {

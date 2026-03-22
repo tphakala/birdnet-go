@@ -275,6 +275,7 @@ export async function initApp(): Promise<boolean> {
 
       // Initialize frontend Sentry when telemetry is enabled
       const sentryConfig = config.sentry;
+      sentryEnabled = false;
       if (sentryConfig?.enabled && sentryConfig.dsn) {
         sentryEnabled = true;
         import('$lib/telemetry/sentry')

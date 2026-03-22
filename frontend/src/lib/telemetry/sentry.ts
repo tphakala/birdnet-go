@@ -55,8 +55,8 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 
   Sentry.withScope(scope => {
-    (scope as { setLevel: (level: string) => void }).setLevel(severity);
-    (scope as { setTag: (key: string, value: string) => void }).setTag('error.type', 'api');
+    scope.setLevel(severity);
+    scope.setTag('error.type', 'api');
 
     if (context) {
       // Scrub endpoint URL to path only
@@ -69,20 +69,14 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
           scrubbed.endpoint = '[scrubbed]';
         }
       }
-      (scope as { setContext: (key: string, value: Record<string, string>) => void }).setContext(
-        'api',
-        scrubbed
-      );
+      scope.setContext('api', scrubbed);
     }
 
     if (error.status) {
-      (scope as { setTag: (key: string, value: string) => void }).setTag(
-        'http.status_code',
-        String(error.status)
-      );
+      scope.setTag('http.status_code', String(error.status));
     }
     if (error.isNetworkError) {
-      (scope as { setTag: (key: string, value: string) => void }).setTag('error.network', 'true');
+      scope.setTag('error.network', 'true');
     }
 
     Sentry.captureException(error);
@@ -99,14 +93,19 @@ function beforeSend(event: Sentry.ErrorEvent, _hint: Sentry.EventHint): Sentry.E
   // 2. Strip server name
   delete event.server_name;
 
-  // 3. Scrub main event URL — remove query params and hash
-  if (event.request?.url) {
-    try {
-      const url = new URL(event.request.url, globalThis.location.origin);
-      event.request.url = url.pathname;
-    } catch {
-      event.request.url = '[scrubbed]';
+  // 3. Scrub main event request — remove query params, headers, cookies, body
+  if (event.request) {
+    if (event.request.url) {
+      try {
+        const url = new URL(event.request.url, globalThis.location.origin);
+        event.request.url = url.pathname;
+      } catch {
+        event.request.url = '[scrubbed]';
+      }
     }
+    delete event.request.data;
+    delete event.request.cookies;
+    delete event.request.headers;
   }
 
   // 4. Scrub breadcrumb URLs and bodies
