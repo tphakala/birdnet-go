@@ -217,6 +217,65 @@ func TestRouter_DuplicateRouteError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrRouteExists)
 }
 
+// TestRouter_DispatchWithResampling verifies that when a consumer's sample rate
+// differs from the source rate, the router resamples the frame before delivery.
+// The consumer should receive a frame with the consumer's sample rate and
+// resampled data (approximately 2/3 the length for a 48kHz→32kHz conversion).
+func TestRouter_DispatchWithResampling(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger())
+	t.Cleanup(func() { router.Close() })
+
+	// Consumer expects 32kHz; source produces 48kHz.
+	consumer := newMockConsumer("consumer-resampled")
+	consumer.sampleRate = 32000
+
+	// Add route with source at 48kHz.
+	err := router.AddRoute("src-resample", consumer, 48000)
+	require.NoError(t, err)
+
+	// Build a 48kHz frame with 4800 samples (100 ms of 16-bit PCM, 9600 bytes).
+	// This matches the minimum size used in the resample package tests to stay
+	// within the ±5% resampler tolerance window.
+	// Expected output ≈ 3200 samples (2/3 of 4800), allowing ±5% tolerance.
+	const inputSamples = 4800
+	const bytesPerSample = 2
+	inputData := make([]byte, inputSamples*bytesPerSample)
+	// Fill with a simple ramp pattern so the resampler has non-trivial input.
+	for i := range inputSamples {
+		v := int16((i % 65536) - 32768) //nolint:gosec // G115: intentional narrowing for test data
+		inputData[i*bytesPerSample] = byte(v)
+		inputData[i*bytesPerSample+1] = byte(v >> 8)
+	}
+
+	frame := AudioFrame{
+		SourceID:   "src-resample",
+		SourceName: "Resample Test Source",
+		Data:       inputData,
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	router.Dispatch(frame)
+
+	select {
+	case received := <-consumer.frames:
+		assert.Equal(t, "src-resample", received.SourceID, "SourceID should be preserved")
+		assert.Equal(t, "Resample Test Source", received.SourceName, "SourceName should be preserved")
+		assert.Equal(t, 32000, received.SampleRate, "consumer should receive frame at its own sample rate")
+		// Resampled data should be approximately 2/3 of the input length.
+		// Allow ±5% tolerance to match the resampler package's own tolerance.
+		expectedSamples := inputSamples * 32000 / 48000
+		tolerance := float64(expectedSamples) * 0.05
+		outputSamples := len(received.Data) / bytesPerSample
+		assert.InDelta(t, expectedSamples, outputSamples, tolerance,
+			"resampled sample count should be approximately 2/3 of input")
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for resampled frame delivery")
+	}
+}
+
 // TestRouter_ConcurrentDispatch verifies that concurrent dispatch from
 // multiple goroutines does not trigger data races (run with -race).
 func TestRouter_ConcurrentDispatch(t *testing.T) {

@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -32,8 +33,11 @@ type Route struct {
 	Consumer AudioConsumer
 
 	// sourceSampleRate is the sample rate of the source producing frames.
-	// Stored for future resampler integration (Task 20).
 	sourceSampleRate int
+
+	// resampler converts source-rate PCM to the consumer's expected rate.
+	// Nil when no rate conversion is required.
+	resampler *resample.Resampler
 
 	// inbox is the bounded channel between Dispatch and the drainer goroutine.
 	inbox chan AudioFrame
@@ -93,8 +97,9 @@ func NewAudioRouter(log logger.Logger) *AudioRouter {
 
 // AddRoute registers a consumer for the given source. A per-route drainer
 // goroutine is started immediately. Returns ErrRouteExists if a consumer with
-// the same ID is already registered for this source. The sourceSampleRate is
-// stored for future resampler integration.
+// the same ID is already registered for this source. When sourceSampleRate
+// differs from the consumer's SampleRate, a resampler is created automatically
+// so the consumer receives frames at its expected rate.
 func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -113,6 +118,15 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		sourceSampleRate: sourceSampleRate,
 		inbox:            make(chan AudioFrame, routeInboxCapacity),
 		done:             make(chan struct{}),
+	}
+
+	// Create a resampler when the source and consumer rates differ.
+	if sourceSampleRate != consumer.SampleRate() {
+		rs, err := resample.NewResampler(sourceSampleRate, consumer.SampleRate())
+		if err != nil {
+			return fmt.Errorf("create resampler for source=%s consumer=%s: %w", sourceID, consumer.ID(), err)
+		}
+		route.resampler = rs
 	}
 
 	r.routes[sourceID] = append(r.routes[sourceID], route)
@@ -155,6 +169,9 @@ func (r *AudioRouter) RemoveRoute(sourceID, consumerID string) {
 
 	if removed != nil {
 		close(removed.done)
+		if removed.resampler != nil {
+			_ = removed.resampler.Close()
+		}
 		_ = removed.Consumer.Close()
 		r.log.Info("route removed",
 			logger.String("source_id", sourceID),
@@ -172,6 +189,9 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 
 	for _, rt := range routes {
 		close(rt.done)
+		if rt.resampler != nil {
+			_ = rt.resampler.Close()
+		}
 		_ = rt.Consumer.Close()
 	}
 
@@ -245,18 +265,49 @@ func (r *AudioRouter) Close() {
 	for _, routes := range allRoutes {
 		for _, rt := range routes {
 			close(rt.done)
+			if rt.resampler != nil {
+				_ = rt.resampler.Close()
+			}
 			_ = rt.Consumer.Close()
 		}
 	}
 }
 
 // drainRoute reads frames from the route's inbox and delivers them to the
-// consumer. It exits when the route's done channel is closed or the router's
-// context is cancelled.
+// consumer. When the route has a resampler, the frame data is converted to
+// the consumer's sample rate before delivery. It exits when the route's done
+// channel is closed or the router's context is cancelled.
 func (r *AudioRouter) drainRoute(route *Route) {
 	for {
 		select {
 		case frame := <-route.inbox:
+			// Apply per-route resampling when rates differ.
+			if route.resampler != nil {
+				resampled, err := route.resampler.ResampleInto(frame.Data)
+				if err != nil {
+					errCount := route.errors.Add(1)
+					if errCount%errorLogInterval == 1 {
+						r.log.Warn("resampler error",
+							logger.String("source_id", route.SourceID),
+							logger.String("consumer_id", route.Consumer.ID()),
+							logger.Int64("total_errors", errCount))
+					}
+					continue
+				}
+				// Copy resampled bytes: the Resampler reuses its internal buffer,
+				// so we must not hand the slice to the consumer directly.
+				out := make([]byte, len(resampled))
+				copy(out, resampled)
+				frame = AudioFrame{
+					SourceID:   frame.SourceID,
+					SourceName: frame.SourceName,
+					Data:       out,
+					SampleRate: route.Consumer.SampleRate(),
+					BitDepth:   frame.BitDepth,
+					Channels:   frame.Channels,
+					Timestamp:  frame.Timestamp,
+				}
+			}
 			if err := route.Consumer.Write(frame); err != nil {
 				errCount := route.errors.Add(1)
 				if errCount%errorLogInterval == 1 {
