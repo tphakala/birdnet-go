@@ -34,6 +34,7 @@
     promoteFromQueue,
     nextYSlot,
     STALE_DEDUP_PRUNE_SECONDS,
+    LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -466,7 +467,7 @@
           slotCounter = next;
           labelQueue.push({
             text: det.species,
-            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - 1.5,
+            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
             ySlot: slot,
           });
         }
@@ -689,21 +690,28 @@
     return () => globalThis.clearInterval(interval);
   });
 
-  // Promote queued detection labels when playhead catches up
+  // Promote queued detection labels when playhead catches up.
+  // Prefers hls.playingDate (accurate), falls back to seekable-based
+  // estimate for native HLS (Safari/iOS).
   $effect(() => {
-    if (!audioElement || !hls) return;
+    if (!audioElement) return;
 
     const interval = globalThis.setInterval(() => {
-      if (!audioElement || !hls) return;
+      if (!audioElement) return;
 
       const now = globalThis.performance.now();
       const nowUnix = Date.now() / 1000;
 
-      // Get wall-clock time at playhead from HLS program date time tags.
-      // FFmpeg embeds #EXT-X-PROGRAM-DATE-TIME in the playlist; hls.js
-      // interpolates the exact Date for the current playback position.
-      const playingDate = hls.playingDate;
-      const wallClockAtPlayhead = playingDate ? playingDate.getTime() / 1000 : 0;
+      // Compute wall-clock at playhead: prefer hls.playingDate (accurate),
+      // fall back to seekable-based estimate for native HLS (Safari/iOS).
+      let wallClockAtPlayhead = 0;
+      if (hls?.playingDate) {
+        wallClockAtPlayhead = hls.playingDate.getTime() / 1000;
+      } else if (audioElement.currentTime > 0 && audioElement.seekable.length > 0) {
+        const liveEdge = audioElement.seekable.end(audioElement.seekable.length - 1);
+        const liveLagSeconds = Math.max(0, liveEdge - audioElement.currentTime);
+        wallClockAtPlayhead = nowUnix - liveLagSeconds;
+      }
 
       // Update reactive state for debug display in SpectrogramCanvas
       if (wallClockAtPlayhead > 0) {
@@ -794,6 +802,9 @@
         onclick={toggleFullscreen}
         class="inline-flex items-center justify-center rounded-lg p-1.5 text-[var(--color-base-content)]/70 transition-colors hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)]"
         aria-label={isFullscreen
+          ? t('spectrogram.page.exitFullscreen')
+          : t('spectrogram.page.enterFullscreen')}
+        title={isFullscreen
           ? t('spectrogram.page.exitFullscreen')
           : t('spectrogram.page.enterFullscreen')}
       >

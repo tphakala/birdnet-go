@@ -82,6 +82,8 @@
 
   const MAX_FREQ = 24000;
   const MAX_GAIN_DB = 24;
+  const SLIDER_CLASSES =
+    'h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]';
 
   function handleMinFreqChange(e: Event) {
     const value = parseInt((e.target as HTMLInputElement).value);
@@ -109,7 +111,7 @@
 <div class="flex flex-wrap items-center gap-3 text-sm">
   <!-- Frequency range -->
   <div class="flex items-center gap-2">
-    <label for="spectrogram-freq-min" class="text-base-content/70 whitespace-nowrap">
+    <label for="spectrogram-freq-min" class="text-[var(--color-base-content)]/70 whitespace-nowrap">
       {t('spectrogram.controls.frequencyRange')}
     </label>
     <input
@@ -120,10 +122,12 @@
       step="500"
       value={frequencyRange[0]}
       oninput={handleMinFreqChange}
-      class="range range-xs w-20"
+      class={SLIDER_CLASSES}
       aria-label={t('spectrogram.controls.frequencyRangeMin')}
+      aria-describedby="spectrogram-freq-readout"
+      title={t('spectrogram.controls.frequencyRangeMin')}
     />
-    <span class="text-base-content/50 tabular-nums">
+    <span id="spectrogram-freq-readout" class="text-[var(--color-base-content)]/50 tabular-nums">
       {(frequencyRange[0] / 1000).toFixed(1)}&ndash;{(frequencyRange[1] / 1000).toFixed(1)} kHz
     </span>
     <input
@@ -134,14 +138,16 @@
       step="500"
       value={frequencyRange[1]}
       oninput={handleMaxFreqChange}
-      class="range range-xs w-20"
+      class={SLIDER_CLASSES}
       aria-label={t('spectrogram.controls.frequencyRangeMax')}
+      aria-describedby="spectrogram-freq-readout"
+      title={t('spectrogram.controls.frequencyRangeMax')}
     />
   </div>
 
   <!-- Color map -->
   <div class="flex items-center gap-2">
-    <span class="text-base-content/70 whitespace-nowrap">
+    <span class="text-[var(--color-base-content)]/70 whitespace-nowrap">
       {t('spectrogram.controls.colorMap')}
     </span>
     <SelectDropdown
@@ -179,7 +185,7 @@
   <!-- Gain (hidden in compact mode) -->
   {#if !compact}
     <div class="flex items-center gap-2">
-      <label for="spectrogram-gain" class="text-base-content/70 whitespace-nowrap">
+      <label for="spectrogram-gain" class="text-[var(--color-base-content)]/70 whitespace-nowrap">
         {t('spectrogram.controls.gain')}
       </label>
       <input
@@ -190,9 +196,13 @@
         step="1"
         value={gainDb}
         oninput={handleGainChange}
-        class="range range-xs w-20"
+        class={SLIDER_CLASSES}
+        aria-describedby="spectrogram-gain-readout"
+        title={t('spectrogram.controls.gain')}
       />
-      <span class="text-base-content/50 tabular-nums">{gainDb} dB</span>
+      <span id="spectrogram-gain-readout" class="text-[var(--color-base-content)]/50 tabular-nums"
+        >{gainDb} dB</span
+      >
     </div>
   {/if}
 
@@ -200,8 +210,11 @@
   <button
     type="button"
     onclick={onAudioOutputToggle}
-    class="btn btn-ghost btn-xs"
+    class="rounded p-1.5 transition-colors {audioOutput
+      ? 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+      : 'bg-[var(--color-error)]/20 text-[var(--color-error)]'}"
     aria-label={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
+    title={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
   >
     {#if audioOutput}
       <Volume2 class="size-4" />
