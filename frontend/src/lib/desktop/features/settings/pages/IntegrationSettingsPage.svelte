@@ -169,10 +169,17 @@
     const needsError = ebirdEnabled && !ebirdApiKey;
 
     // Use .update() to avoid reading the store inside this effect,
-    // which would create an infinite reactive loop (read → write → re-trigger)
+    // which would create an infinite reactive loop (read → write → re-trigger).
+    // Return the original array reference when unchanged to skip subscriber notifications.
     settingsValidationErrors.update(errors => {
-      const filtered = errors.filter(e => e !== EBIRD_ERROR_KEY);
-      return needsError ? [...filtered, EBIRD_ERROR_KEY] : filtered;
+      const hasError = errors.includes(EBIRD_ERROR_KEY);
+      if (needsError && !hasError) {
+        return [...errors, EBIRD_ERROR_KEY];
+      }
+      if (!needsError && hasError) {
+        return errors.filter(e => e !== EBIRD_ERROR_KEY);
+      }
+      return errors;
     });
 
     return () => {
