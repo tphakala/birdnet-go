@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -441,7 +442,7 @@ func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath strin
 
 		// Use the provided context for the fallback export operation
 		log.Debug("Starting fallback FLAC export with fixed gain", logger.Float64("gain_db", gainValue))
-		buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+		buffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
 		if err != nil {
 			log.Error("Fallback FLAC export with fixed gain failed",
 				logger.Float64("gain_db", gainValue),
@@ -497,7 +498,7 @@ func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath strin
 	}
 
 	// Use the provided context for the final encoding operation
-	buffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+	buffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
 	if err != nil {
 		log.Error("FFmpeg FLAC encoding with gain adjustment failed",
 			logger.Float64("gain_db", gainNeeded),

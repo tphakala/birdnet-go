@@ -17,10 +17,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -462,7 +462,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 	soxBinary := g.settings.Realtime.Audio.SoxPath
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	if err := myaudio.ValidateFFmpegPath(ffmpegBinary); err != nil {
+	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
 		return errors.Newf("invalid FFmpeg path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
@@ -691,7 +691,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
 	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
-	if err := myaudio.ValidateFFmpegPath(ffmpegBinary); err != nil {
+	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
 		return errors.Newf("invalid FFmpeg path: %s", err).
 			Component("spectrogram").
 			Category(errors.CategoryConfiguration).
