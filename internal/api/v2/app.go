@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // App config endpoint constants
@@ -40,6 +41,15 @@ type AppConfigResponse struct {
 	FreshInstall    bool                  `json:"freshInstall"`              // true when this is a brand-new installation
 	NewVersion      bool                  `json:"newVersion"`                // true when the app was upgraded since last dismiss
 	PreviousVersion string                `json:"previousVersion,omitempty"` // last version the user acknowledged
+	Sentry          *SentryFrontendConfig `json:"sentry,omitempty"`          // frontend telemetry config (only when enabled)
+}
+
+// SentryFrontendConfig exposes telemetry configuration to the frontend.
+// Only included in AppConfigResponse when telemetry is enabled.
+type SentryFrontendConfig struct {
+	Enabled  bool   `json:"enabled"`
+	DSN      string `json:"dsn"`
+	SystemID string `json:"systemId"`
 }
 
 // SecurityConfigDTO represents the security configuration for the frontend.
@@ -160,6 +170,15 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 	// Include dashboard layout for guest/pre-auth rendering if configured
 	if len(c.Settings.Realtime.Dashboard.Layout.Elements) > 0 {
 		response.Layout = &c.Settings.Realtime.Dashboard.Layout
+	}
+
+	// Include Sentry frontend config when telemetry is enabled
+	if c.Settings.Sentry.Enabled {
+		response.Sentry = &SentryFrontendConfig{
+			Enabled:  true,
+			DSN:      telemetry.GetFrontendDSN(),
+			SystemID: c.Settings.SystemID,
+		}
 	}
 
 	c.logDebugIfEnabled("Serving app config",

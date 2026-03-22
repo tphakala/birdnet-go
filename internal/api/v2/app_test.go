@@ -1387,3 +1387,57 @@ func TestGetAppConfig_LiveSpectrogramField(t *testing.T) {
 		})
 	}
 }
+
+// TestGetAppConfig_SentryConfigWhenEnabled tests that Sentry config is included when telemetry is enabled.
+func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
+	t.Parallel()
+
+	_, controller := setupAppConfigTest(t, nil)
+
+	// Enable Sentry in settings
+	controller.Settings.Sentry.Enabled = true
+	controller.Settings.SystemID = "test-system-id-123"
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.GetAppConfig(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	require.NotNil(t, response.Sentry, "Sentry config should be present when enabled")
+	assert.True(t, response.Sentry.Enabled)
+	assert.NotEmpty(t, response.Sentry.DSN, "DSN should not be empty")
+	assert.Equal(t, "test-system-id-123", response.Sentry.SystemID)
+}
+
+// TestGetAppConfig_SentryConfigWhenDisabled tests that Sentry config is omitted when telemetry is disabled.
+func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
+	t.Parallel()
+
+	_, controller := setupAppConfigTest(t, nil)
+
+	// Sentry disabled (default)
+	controller.Settings.Sentry.Enabled = false
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.GetAppConfig(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Nil(t, response.Sentry, "Sentry config should be nil when disabled")
+}
