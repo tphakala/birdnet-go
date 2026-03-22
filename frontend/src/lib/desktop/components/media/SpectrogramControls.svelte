@@ -82,6 +82,8 @@
 
   const MAX_FREQ = 24000;
   const MAX_GAIN_DB = 24;
+  const SLIDER_CLASSES =
+    'h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]';
 
   function handleMinFreqChange(e: Event) {
     const value = parseInt((e.target as HTMLInputElement).value);
@@ -120,7 +122,7 @@
       step="500"
       value={frequencyRange[0]}
       oninput={handleMinFreqChange}
-      class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
+      class={SLIDER_CLASSES}
       aria-label={t('spectrogram.controls.frequencyRangeMin')}
       aria-describedby="spectrogram-freq-readout"
       title={t('spectrogram.controls.frequencyRangeMin')}
@@ -136,7 +138,7 @@
       step="500"
       value={frequencyRange[1]}
       oninput={handleMaxFreqChange}
-      class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
+      class={SLIDER_CLASSES}
       aria-label={t('spectrogram.controls.frequencyRangeMax')}
       aria-describedby="spectrogram-freq-readout"
       title={t('spectrogram.controls.frequencyRangeMax')}
@@ -194,7 +196,7 @@
         step="1"
         value={gainDb}
         oninput={handleGainChange}
-        class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
+        class={SLIDER_CLASSES}
         aria-describedby="spectrogram-gain-readout"
         title={t('spectrogram.controls.gain')}
       />

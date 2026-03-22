@@ -420,13 +420,14 @@
       const nowUnix = Date.now() / 1000;
 
       // Compute wall-clock at playhead: prefer hls.playingDate (accurate),
-      // fall back to client wall-clock for native HLS (approximate but
-      // ensures labels still appear on Safari/iOS).
+      // fall back to seekable-based estimate for native HLS (Safari/iOS).
       let wallClockAtPlayhead = 0;
       if (hls?.playingDate) {
         wallClockAtPlayhead = hls.playingDate.getTime() / 1000;
-      } else if (audioElement.currentTime > 0) {
-        wallClockAtPlayhead = nowUnix;
+      } else if (audioElement.currentTime > 0 && audioElement.seekable.length > 0) {
+        const liveEdge = audioElement.seekable.end(audioElement.seekable.length - 1);
+        const liveLagSeconds = Math.max(0, liveEdge - audioElement.currentTime);
+        wallClockAtPlayhead = nowUnix - liveLagSeconds;
       }
 
       // Promote queued labels when playhead is available
