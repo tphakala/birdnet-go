@@ -7,6 +7,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -282,4 +283,94 @@ func (s *APIServerService) AudioLevelChan() chan myaudio.AudioLevelData {
 // SunCalc returns the sunrise/sunset calculator, or nil if not yet started.
 func (s *APIServerService) SunCalc() *suncalc.SunCalc {
 	return s.sunCalc
+}
+
+// initializeBackupSystem sets up the backup manager and scheduler.
+func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*backup.Manager, *backup.Scheduler, error) {
+	backupLog.Info("Initializing backup system...")
+
+	stateManager, err := backup.NewStateManager(backupLog)
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_state_manager").
+			Build()
+	}
+
+	// Use settings.Version for the app version
+	backupManager, err := backup.NewManager(settings, backupLog, stateManager, settings.Version)
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_manager").
+			Build()
+	}
+	backupScheduler, err := backup.NewScheduler(backupManager, backupLog, stateManager)
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("analysis.realtime").
+			Category(errors.CategorySystem).
+			Context("operation", "initialize_backup_scheduler").
+			Build()
+	}
+
+	// Load schedule for backupScheduler if backup is enabled
+	switch {
+	case settings.Backup.Enabled && len(settings.Backup.Schedules) > 0:
+		backupLog.Info("Loading backup schedule from configuration")
+		if err := backupScheduler.LoadFromConfig(&settings.Backup); err != nil {
+			// Log the error but don't necessarily stop initialization
+			backupLog.Error("Failed to load backup schedule from config", logger.Error(err))
+		}
+	case settings.Backup.Enabled:
+		// This case is reached if backup is enabled but no schedules are defined.
+		backupLog.Info("Backup enabled, but no schedules configured.")
+	default:
+		// This case is reached if backup is disabled.
+		backupLog.Info("Backup system is disabled.")
+	}
+
+	// Start backupManager and backupScheduler if backup is enabled
+	if settings.Backup.Enabled {
+		backupLog.Info("Starting backup manager")
+		if err := backupManager.Start(); err != nil {
+			// Log the error but don't necessarily stop initialization
+			backupLog.Error("Failed to start backup manager", logger.Error(err))
+		}
+		backupLog.Info("Starting backup scheduler")
+		backupScheduler.Start() // Start the scheduler
+	}
+
+	backupLog.Info("Backup system initialized.")
+	return backupManager, backupScheduler, nil
+}
+
+// initializeSystemMonitor initializes and starts the system resource monitor if enabled
+func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
+	GetLogger().Info("initializeSystemMonitor called",
+		logger.Bool("monitoring_enabled", settings.Realtime.Monitoring.Enabled),
+		logger.Int("check_interval", settings.Realtime.Monitoring.CheckInterval),
+	)
+
+	if !settings.Realtime.Monitoring.Enabled {
+		GetLogger().Warn("System monitoring is disabled in settings")
+		return nil
+	}
+
+	GetLogger().Info("Creating system monitor instance")
+	systemMonitor := monitor.NewSystemMonitor(settings)
+	if systemMonitor == nil {
+		GetLogger().Error("Failed to create system monitor instance")
+		return nil
+	}
+
+	GetLogger().Info("Starting system monitor")
+	systemMonitor.Start()
+
+	GetLogger().Info("System resource monitoring initialized",
+		logger.String("component", "monitor"),
+		logger.Int("interval", settings.Realtime.Monitoring.CheckInterval))
+	return systemMonitor
 }
