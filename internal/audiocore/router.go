@@ -205,6 +205,10 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 // Dispatch sends a frame to every consumer registered for the frame's source.
 // If a consumer's inbox is full, the frame is dropped and the route's drop
 // counter is incremented. Dispatch never blocks.
+//
+// Note: because Dispatch takes a read lock while RemoveRoute takes a write
+// lock, a small number of in-flight frames may be lost during route removal.
+// This is expected behaviour and not a bug.
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
 	routes := r.routes[frame.SourceID]
@@ -253,7 +257,9 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 }
 
 // Close stops all drainer goroutines and closes every registered consumer.
-// It is safe to call Close multiple times.
+// It is safe to call Close multiple times: context.CancelFunc is idempotent,
+// and the map is atomically swapped under the lock so subsequent calls see an
+// empty map and close no done channels.
 func (r *AudioRouter) Close() {
 	r.cancel()
 

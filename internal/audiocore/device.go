@@ -6,10 +6,15 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// deviceShutdownTimeout is the maximum time to wait for a capture goroutine
+// to finish after its context has been cancelled.
+const deviceShutdownTimeout = 5 * time.Second
 
 // DeviceInfo describes an enumerated audio capture device.
 type DeviceInfo struct {
@@ -48,6 +53,10 @@ type ActiveDevice struct {
 
 	// cancel stops the capture goroutine for this device.
 	cancel context.CancelFunc
+
+	// done is closed by the capture goroutine when it exits.
+	// StopCapture and Close wait on this channel to ensure graceful shutdown.
+	done chan struct{}
 }
 
 // ErrDeviceAlreadyActive is returned when StartCapture is called with a
@@ -116,13 +125,14 @@ func (dm *DeviceManager) StartCapture(sourceID, deviceID string, cfg DeviceConfi
 		cancel:   cancel,
 	}
 
-	info, err := startCapture(ctx, sourceID, deviceID, cfg, dm.dispatcher, dm.log)
+	info, done, err := startCapture(ctx, sourceID, deviceID, cfg, dm.dispatcher, dm.log)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("start capture for source %s: %w", sourceID, err)
 	}
 
 	ad.Info = info
+	ad.done = done
 	dm.active[sourceID] = ad
 
 	dm.log.Info("capture started",
@@ -133,7 +143,8 @@ func (dm *DeviceManager) StartCapture(sourceID, deviceID string, cfg DeviceConfi
 	return nil
 }
 
-// StopCapture stops the active capture session for the given sourceID.
+// StopCapture stops the active capture session for the given sourceID and
+// waits for the capture goroutine to finish (with a timeout).
 // Returns ErrDeviceNotActive when no session is running for that ID.
 func (dm *DeviceManager) StopCapture(sourceID string) error {
 	dm.mu.Lock()
@@ -146,6 +157,7 @@ func (dm *DeviceManager) StopCapture(sourceID string) error {
 	dm.mu.Unlock()
 
 	ad.cancel()
+	waitForDone(ad.done, deviceShutdownTimeout, dm.log, sourceID)
 
 	dm.log.Info("capture stopped",
 		logger.String("source_id", sourceID),
@@ -183,8 +195,10 @@ func (dm *DeviceManager) ActiveDevices() map[string]DeviceInfo {
 	return result
 }
 
-// Close stops all active capture sessions and releases manager resources.
-// It is safe to call Close multiple times.
+// Close stops all active capture sessions and waits for their goroutines to
+// finish before returning. It is safe to call Close multiple times: calling
+// cancel() on an already-cancelled context is a no-op, and swapping the map
+// under the lock prevents double-close of done channels.
 func (dm *DeviceManager) Close() error {
 	dm.mu.Lock()
 	active := dm.active
@@ -193,10 +207,26 @@ func (dm *DeviceManager) Close() error {
 
 	for _, ad := range active {
 		ad.cancel()
+		waitForDone(ad.done, deviceShutdownTimeout, dm.log, ad.sourceID)
 		dm.log.Info("capture stopped on close",
 			logger.String("source_id", ad.sourceID),
 			logger.String("device", ad.Info.Name))
 	}
 
 	return nil
+}
+
+// waitForDone blocks until the done channel is closed or the timeout expires.
+// A nil done channel is treated as already closed (returns immediately).
+func waitForDone(done chan struct{}, timeout time.Duration, log logger.Logger, sourceID string) {
+	if done == nil {
+		return
+	}
+	select {
+	case <-done:
+	case <-time.After(timeout):
+		log.Warn("capture goroutine did not exit in time",
+			logger.String("source_id", sourceID),
+			logger.Duration("timeout", timeout))
+	}
 }

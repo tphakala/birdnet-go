@@ -114,7 +114,8 @@ func matchesDevice(decodedID string, info *malgo.DeviceInfo, deviceID string) bo
 
 // startCapture locates the requested device, initialises a malgo context and
 // device, and starts the capture goroutine. It returns the DeviceInfo for the
-// selected device and registers the goroutine's lifetime with ctx.
+// selected device and a done channel that is closed when the capture goroutine
+// exits.
 //
 // The capture goroutine will be stopped when ctx is cancelled.
 func startCapture(
@@ -124,19 +125,19 @@ func startCapture(
 	cfg DeviceConfig,
 	dispatcher AudioDispatcher,
 	log logger.Logger,
-) (DeviceInfo, error) {
+) (DeviceInfo, chan struct{}, error) {
 
 	backend := platformBackend()
 
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return DeviceInfo{}, fmt.Errorf("audio context init failed: %w", err)
+		return DeviceInfo{}, nil, fmt.Errorf("audio context init failed: %w", err)
 	}
 
 	infos, err := malgoCtx.Devices(malgo.Capture)
 	if err != nil {
 		_ = malgoCtx.Uninit()
-		return DeviceInfo{}, fmt.Errorf("enumerate capture devices: %w", err)
+		return DeviceInfo{}, nil, fmt.Errorf("enumerate capture devices: %w", err)
 	}
 
 	// Find the device matching deviceID.
@@ -160,7 +161,7 @@ func startCapture(
 
 	if selectedInfo == nil {
 		_ = malgoCtx.Uninit()
-		return DeviceInfo{}, fmt.Errorf("no device found matching %q", deviceID)
+		return DeviceInfo{}, nil, fmt.Errorf("no device found matching %q", deviceID)
 	}
 
 	deviceCfg := malgo.DefaultDeviceConfig(malgo.Capture)
@@ -200,7 +201,7 @@ func startCapture(
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
 	if err != nil {
 		_ = malgoCtx.Uninit()
-		return DeviceInfo{}, fmt.Errorf("device init failed for %q: %w", selectedDevInfo.Name, err)
+		return DeviceInfo{}, nil, fmt.Errorf("device init failed for %q: %w", selectedDevInfo.Name, err)
 	}
 
 	// Capture the actual format reported by the device after init.
@@ -209,7 +210,7 @@ func startCapture(
 	if err = captureDevice.Start(); err != nil {
 		captureDevice.Uninit()
 		_ = malgoCtx.Uninit()
-		return DeviceInfo{}, fmt.Errorf("device start failed for %q: %w", selectedDevInfo.Name, err)
+		return DeviceInfo{}, nil, fmt.Errorf("device start failed for %q: %w", selectedDevInfo.Name, err)
 	}
 
 	log.Info("malgo capture device started",
@@ -218,8 +219,20 @@ func startCapture(
 		logger.Int("sample_rate", cfg.SampleRate),
 		logger.Int("channels", cfg.Channels))
 
+	// done is closed when the capture goroutine exits, allowing callers to
+	// wait for graceful device teardown.
+	done := make(chan struct{})
+
 	// Background goroutine that owns device and context lifetime.
 	go func() {
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				log.Error("panic in capture goroutine",
+					logger.String("source_id", sourceID),
+					logger.Any("panic", r))
+			}
+		}()
 		defer func() {
 			_ = captureDevice.Stop()
 			captureDevice.Uninit()
@@ -232,7 +245,7 @@ func startCapture(
 		<-ctx.Done()
 	}()
 
-	return selectedDevInfo, nil
+	return selectedDevInfo, done, nil
 }
 
 // formatBitDepth returns the bit depth implied by the malgo format type,

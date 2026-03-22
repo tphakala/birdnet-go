@@ -243,11 +243,22 @@ func (r *SourceRegistry) AddListener(l SourceEventListener) {
 
 // notify delivers the event to all registered listeners. It is called without
 // the sources mutex held, so listeners may safely call back into the registry.
+// Each listener call is wrapped in a recover so a panicking listener does not
+// crash the goroutine that triggered the notification.
 func (r *SourceRegistry) notify(e SourceEvent) {
 	r.listenerMu.RLock()
 	defer r.listenerMu.RUnlock()
 	for _, l := range r.listeners {
-		l(e)
+		func() {
+			defer func() {
+				if p := recover(); p != nil {
+					r.log.Error("source event listener panicked",
+						logger.Any("panic", p),
+						logger.String("source_id", e.SourceID))
+				}
+			}()
+			l(e)
+		}()
 	}
 }
 
