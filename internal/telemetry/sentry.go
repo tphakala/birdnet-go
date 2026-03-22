@@ -29,6 +29,16 @@ const (
 // Defined at package level to avoid duplication across initialization functions
 const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
 
+// sentryFrontendDSN is the Sentry DSN for the BirdNET-Go frontend.
+// Currently points to the same project as the backend. To separate,
+// create a new Sentry project and update this constant.
+const sentryFrontendDSN = sentryDSN
+
+// GetFrontendDSN returns the Sentry DSN for frontend error tracking.
+func GetFrontendDSN() string {
+	return sentryFrontendDSN
+}
+
 // DeferredMessage represents a message that was captured before Sentry initialization
 type DeferredMessage struct {
 	Message   string
