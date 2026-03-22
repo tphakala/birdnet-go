@@ -43,6 +43,10 @@
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
   const SOURCE_DISCOVERY_TIMEOUT = 5000;
+  /** How often (ms) to poll for label promotion and pruning */
+  const LABEL_POLL_INTERVAL_MS = 200;
+  /** Maximum label age (ms) before pruning from overlay */
+  const LABEL_MAX_AGE_MS = 60000;
 
   const sessionId = generateSessionId();
 
@@ -87,9 +91,6 @@
   let prevSnapshot: PendingDetection[] = [];
   let lastSeenSpecies = new Map<string, number>();
   let slotCounter = 0;
-  let streamEpochMs = $state(0);
-  let epochOffset = 0;
-  let epochOffsetCalibrated = false;
   const MAX_OVERLAY_SLOTS = 4;
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
@@ -202,7 +203,6 @@
         stream_token: string;
         playlist_url: string;
         playlist_ready: boolean;
-        stream_epoch?: string;
       }>(`/api/v2/streams/hls/${encodedSourceId}/start`, {
         method: 'POST',
         signal,
@@ -212,9 +212,6 @@
       if (signal.aborted) return;
 
       activeStreamToken = data.stream_token;
-      if (data.stream_epoch) {
-        streamEpochMs = new Date(data.stream_epoch).getTime();
-      }
       const hlsUrl = buildAppUrl(data.playlist_url);
 
       audioElement = new globalThis.Audio();
@@ -363,9 +360,6 @@
     prevSnapshot = [];
     lastSeenSpecies.clear();
     slotCounter = 0;
-    streamEpochMs = 0;
-    epochOffset = 0;
-    epochOffsetCalibrated = false;
 
     isActive = false;
     isConnecting = false;
@@ -403,7 +397,7 @@
         slotCounter = next;
         labelQueue.push({
           text: det.species,
-          firstDetected: det.audioCapturedAt ?? det.firstDetected,
+          firstDetected: (det.audioCapturedAt ?? det.firstDetected) - 1.5,
           ySlot: slot,
         });
       }
@@ -411,29 +405,23 @@
     prevSnapshot = [...pendingDetections];
   });
 
-  // Promote queued detection labels when playhead catches up
+  // Promote queued detection labels when playhead catches up.
+  // Uses hls.playingDate — the wall-clock time interpolated from
+  // #EXT-X-PROGRAM-DATE-TIME tags embedded in the HLS playlist by FFmpeg.
   $effect(() => {
-    if (!audioElement || !streamEpochMs) return;
+    if (!audioElement || !hls) return;
 
     const interval = globalThis.setInterval(() => {
-      if (!audioElement || !streamEpochMs) return;
+      if (!audioElement || !hls) return;
 
-      // Calibrate epoch offset once when playback begins.
-      // streamEpoch is set at stream creation (before FFmpeg starts), so
-      // streamEpoch + currentTime lags behind real wall-clock by the FFmpeg
-      // startup delay. hls.latency bridges this gap.
-      if (!epochOffsetCalibrated && audioElement.currentTime > 0) {
-        const rawWallClock = streamEpochMs / 1000 + audioElement.currentTime;
-        const latency = hls ? hls.latency : 6;
-        epochOffset = Date.now() / 1000 - latency - rawWallClock;
-        epochOffsetCalibrated = true;
-      }
-
-      const wallClockAtPlayhead = streamEpochMs / 1000 + audioElement.currentTime + epochOffset;
       const now = globalThis.performance.now();
+      const nowUnix = Date.now() / 1000;
 
-      // Promote queued labels
-      if (labelQueue.length > 0) {
+      const playingDate = hls.playingDate;
+      const wallClockAtPlayhead = playingDate ? playingDate.getTime() / 1000 : 0;
+
+      // Promote queued labels when playhead is available
+      if (wallClockAtPlayhead > 0 && labelQueue.length > 0) {
         const { promoted, remaining } = promoteFromQueue(labelQueue, wallClockAtPlayhead, now);
         if (promoted.length > 0) {
           labelQueue = remaining;
@@ -441,17 +429,17 @@
         }
       }
 
-      // Prune labels older than 60 seconds
-      const cutoff = now - 60000;
+      // Prune labels older than LABEL_MAX_AGE_MS
+      const cutoff = now - LABEL_MAX_AGE_MS;
       overlayLabels = overlayLabels.filter(l => l.birthTime >= cutoff);
 
       // Prune stale dedup entries
       for (const [species, time] of lastSeenSpecies) {
-        if (wallClockAtPlayhead - time > STALE_DEDUP_PRUNE_SECONDS) {
+        if (nowUnix - time > STALE_DEDUP_PRUNE_SECONDS) {
           lastSeenSpecies.delete(species);
         }
       }
-    }, 200);
+    }, LABEL_POLL_INTERVAL_MS);
 
     return () => globalThis.clearInterval(interval);
   });
@@ -514,6 +502,7 @@
             onclick={stop}
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
             aria-label={t('media.audio.stop')}
+            title={t('media.audio.stop')}
           >
             <Square class="size-4" />
           </button>
@@ -523,6 +512,7 @@
             class="rounded p-1 transition-colors hover:bg-[var(--color-base-200)]"
             disabled={isConnecting}
             aria-label={t('media.audio.play')}
+            title={t('media.audio.play')}
           >
             <Play class="size-4" />
           </button>

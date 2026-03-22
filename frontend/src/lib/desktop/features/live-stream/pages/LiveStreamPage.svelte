@@ -796,6 +796,9 @@
         aria-label={isFullscreen
           ? t('spectrogram.page.exitFullscreen')
           : t('spectrogram.page.enterFullscreen')}
+        title={isFullscreen
+          ? t('spectrogram.page.exitFullscreen')
+          : t('spectrogram.page.enterFullscreen')}
       >
         {#if isFullscreen}
           <Minimize class="size-4" />
