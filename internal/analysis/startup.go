@@ -15,7 +15,7 @@ func InitializeMetrics() (*observability.Metrics, error) {
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return nil, errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.startup").
 			Category(errors.CategorySystem).
 			Context("operation", "initialize_metrics").
 			Build()

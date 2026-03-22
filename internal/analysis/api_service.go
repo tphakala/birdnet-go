@@ -292,7 +292,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*
 	stateManager, err := backup.NewStateManager(backupLog)
 	if err != nil {
 		return nil, nil, errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.api_service").
 			Category(errors.CategorySystem).
 			Context("operation", "initialize_backup_state_manager").
 			Build()
@@ -302,7 +302,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*
 	backupManager, err := backup.NewManager(settings, backupLog, stateManager, settings.Version)
 	if err != nil {
 		return nil, nil, errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.api_service").
 			Category(errors.CategorySystem).
 			Context("operation", "initialize_backup_manager").
 			Build()
@@ -310,7 +310,7 @@ func initializeBackupSystem(settings *conf.Settings, backupLog logger.Logger) (*
 	backupScheduler, err := backup.NewScheduler(backupManager, backupLog, stateManager)
 	if err != nil {
 		return nil, nil, errors.New(err).
-			Component("analysis.realtime").
+			Component("analysis.api_service").
 			Category(errors.CategorySystem).
 			Context("operation", "initialize_backup_scheduler").
 			Build()
