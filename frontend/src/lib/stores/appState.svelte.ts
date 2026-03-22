@@ -79,6 +79,11 @@ interface AppConfigResponse {
       grid?: Record<string, unknown>;
     }[];
   };
+  sentry?: {
+    enabled: boolean;
+    dsn: string;
+    systemId: string;
+  };
 }
 
 /**
@@ -151,6 +156,14 @@ const DEFAULT_STATE: AppState = {
  * This is a reactive object that can be imported and used directly in components.
  */
 export const appState: AppState = $state({ ...DEFAULT_STATE });
+
+/** Whether frontend telemetry is enabled (set during initApp). */
+let sentryEnabled = false;
+
+/** Synchronous check for whether frontend telemetry is enabled. */
+export function isSentryEnabled(): boolean {
+  return sentryEnabled;
+}
 
 /**
  * Whether the current user has access to live audio features.
@@ -258,6 +271,24 @@ export async function initApp(): Promise<boolean> {
       }
       if (config.logoStyle === 'gradient' || config.logoStyle === 'solid') {
         logoStyle.setStyle(config.logoStyle);
+      }
+
+      // Initialize frontend Sentry when telemetry is enabled
+      const sentryConfig = config.sentry;
+      if (sentryConfig?.enabled && sentryConfig.dsn) {
+        sentryEnabled = true;
+        import('$lib/telemetry/sentry')
+          .then(({ initSentry }) => {
+            initSentry({
+              dsn: sentryConfig.dsn,
+              systemId: sentryConfig.systemId,
+              version: config.version,
+            });
+            logger.info('Frontend Sentry initialized');
+          })
+          .catch(err => {
+            logger.warn('Failed to initialize Sentry', err);
+          });
       }
 
       appState.initialized = true;
