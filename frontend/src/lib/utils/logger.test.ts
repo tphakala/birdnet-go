@@ -1,9 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Unmock the logger module for its own tests
 vi.unmock('$lib/utils/logger');
 
-import { getLogger, loggers } from './logger';
+import { getLogger, loggers, setSentryCaptureError } from './logger';
 
 describe('Logger', () => {
   let consoleLogSpy: ReturnType<typeof vi.spyOn>;
@@ -81,7 +81,16 @@ describe('Logger', () => {
 
       logger.error('Network error occurred', errorObj);
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith('[test]', 'Network error occurred', errorObj);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        '[test]',
+        'Network error occurred',
+        errorObj,
+        expect.objectContaining({
+          message: 'Network error occurred',
+          category: 'test',
+          timestamp: expect.any(String),
+        })
+      );
     });
 
     it('should handle error message only', () => {
@@ -156,5 +165,60 @@ describe('Logger', () => {
       logger.debug('Multiple', 'arguments', obj, arr);
       expect(consoleLogSpy).toHaveBeenCalledWith('[test]', 'Multiple', 'arguments', obj, arr);
     });
+  });
+});
+
+describe('logger Sentry integration', () => {
+  const mockCapture = vi.fn();
+  let logger: ReturnType<typeof getLogger>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    logger = getLogger('test-category');
+  });
+
+  afterEach(() => {
+    setSentryCaptureError(null);
+  });
+
+  it('calls Sentry captureError when wired and error is Error instance', () => {
+    setSentryCaptureError(mockCapture);
+    const error = new Error('test error');
+
+    logger.error('something failed', error);
+
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith(error, { category: 'test-category' });
+  });
+
+  it('does not call Sentry when not wired', () => {
+    const error = new Error('test error');
+    logger.error('something failed', error);
+
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('does not call Sentry for non-Error second argument', () => {
+    setSentryCaptureError(mockCapture);
+    logger.error('something failed', { details: 'context object' });
+
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('does not call Sentry after disconnecting with null', () => {
+    setSentryCaptureError(mockCapture);
+    setSentryCaptureError(null);
+    const error = new Error('test error');
+
+    logger.error('something failed', error);
+
+    expect(mockCapture).not.toHaveBeenCalled();
+  });
+
+  it('does not call Sentry for console-style multi-arg calls', () => {
+    setSentryCaptureError(mockCapture);
+    logger.error('failed', new Error('err'), 'extra info');
+
+    expect(mockCapture).not.toHaveBeenCalled();
   });
 });

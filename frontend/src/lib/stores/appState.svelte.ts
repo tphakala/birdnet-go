@@ -23,7 +23,7 @@
  *   const token = getCsrfToken();
  */
 import type { AuthConfig } from '../../app.d';
-import { getLogger } from '../utils/logger';
+import { getLogger, setSentryCaptureError } from '../utils/logger';
 import { buildAppUrl, setBasePath } from '../utils/urlHelpers';
 import { scheme } from './scheme';
 import { logoStyle } from './logoStyle';
@@ -279,12 +279,13 @@ export async function initApp(): Promise<boolean> {
       if (sentryConfig?.enabled && sentryConfig.dsn) {
         sentryEnabled = true;
         import('$lib/telemetry/sentry')
-          .then(({ initSentry }) => {
+          .then(({ initSentry, captureError }) => {
             initSentry({
               dsn: sentryConfig.dsn,
               systemId: sentryConfig.systemId,
               version: config.version,
             });
+            setSentryCaptureError(captureError);
             logger.info('Frontend Sentry initialized');
           })
           .catch(err => {
