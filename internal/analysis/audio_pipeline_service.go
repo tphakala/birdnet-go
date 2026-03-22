@@ -64,6 +64,17 @@ func (p *AudioPipelineService) Name() string {
 //
 //nolint:gocognit // Orchestration function that coordinates multiple subsystems during startup.
 func (p *AudioPipelineService) Start(_ context.Context) error {
+	// If Start fails after creating resources, clean up to prevent leaks.
+	// The App framework only calls Stop() on services that started successfully,
+	// so the failing service must clean up after itself.
+	startSucceeded := false
+	defer func() {
+		if !startSucceeded {
+			// Best-effort cleanup. Stop is safe on a partially initialized service.
+			_ = p.Stop(context.Background())
+		}
+	}()
+
 	// Fail fast: verify dependencies are initialized by upstream services.
 	if p.dbService == nil || p.dbService.DataStore() == nil {
 		return errors.Newf("audio-pipeline requires an initialized datastore; database service must be started first").
@@ -221,6 +232,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 		}
 	})
 
+	startSucceeded = true
 	return nil
 }
 
