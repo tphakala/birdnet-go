@@ -3,3 +3,5 @@ Dockerfile
 .gitignore
 .git
 .github
+.task
+.claude
