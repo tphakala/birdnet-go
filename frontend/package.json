@@ -127,6 +127,7 @@
   "dependencies": {
     "@bybas/weather-icons": "^2.0.0",
     "@lucide/svelte": "^0.577.0",
+    "@sentry/browser": "^10.45.0",
     "@types/d3": "^7.4.3",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
