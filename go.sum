@@ -298,6 +298,8 @@ github.com/tklauser/numcpus v0.11.0 h1:nSTwhKH5e1dMNsCdVBukSZrURJRoHbSEQjdEbY+9R
 github.com/tklauser/numcpus v0.11.0/go.mod h1:z+LwcLq54uWZTX0u/bGobaV34u6V7KNlTZejzM6/3MQ=
 github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3 h1:hD7Uw+Js4mZXlfLYnMoxRnHSczcq8JZWvb1nJn9ZZLY=
 github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3/go.mod h1:YEoLmuRHr0LG0zHpCWVkdGi4EqeiULta/nNCFntKMuc=
+github.com/tphakala/go-audio-resampler v1.2.0 h1:AeNmdDtAJU0yHkKID7YoUdS2K5ZMNtwbjbDh1hHCMww=
+github.com/tphakala/go-audio-resampler v1.2.0/go.mod h1:2jZ7uTFDvnfMZiDkXS1lF/Z7KmsF2tqsNuL/NyceJ2o=
 github.com/tphakala/go-tflite v0.2.1 h1:YAFeFmxzppj1kGSB6TJFcTzbvAWY4REZbuNK9NNq7o4=
 github.com/tphakala/go-tflite v0.2.1/go.mod h1:CswKd8GY0zI1dD0hHNHZoLrN4rUrwTQBwWZ1cM09hHQ=
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a h1:BBvsu7Mes8McH6ikyagnU9y2N8hjoDxvDNCl162hwdA=
@@ -384,6 +386,8 @@ golang.org/x/tools v0.42.0 h1:uNgphsn75Tdz5Ji2q36v/nsFSfR/9BRFvqhGBaJGd5k=
 golang.org/x/tools v0.42.0/go.mod h1:Ma6lCIwGZvHK6XtgbswSoWroEkhugApmsXyrUmBhfr0=
 gonum.org/v1/gonum v0.16.0 h1:5+ul4Swaf3ESvrOnidPp4GZbzf0mxVQpDCYUQE7OJfk=
 gonum.org/v1/gonum v0.16.0/go.mod h1:fef3am4MQ93R2HHpKnLk4/Tbh/s0+wqD5nfa6Pnwy4E=
+gonum.org/v1/gonum v0.17.0 h1:VbpOemQlsSMrYmn7T2OUvQ4dqxQXU+ouZFQsZOx50z4=
+gonum.org/v1/gonum v0.17.0/go.mod h1:El3tOrEuMpv2UdMrbNlKEh9vd86bmQ6vqIcDwxEOc1E=
 google.golang.org/api v0.272.0 h1:eLUQZGnAS3OHn31URRf9sAmRk3w2JjMx37d2k8AjJmA=
 google.golang.org/api v0.272.0/go.mod h1:wKjowi5LNJc5qarNvDCvNQBn3rVK8nSy6jg2SwRwzIA=
 google.golang.org/genproto v0.0.0-20260217215200-42d3e9bedb6d h1:vsOm753cOAMkt76efriTCDKjpCbK18XGHMJHo0JUKhc=
