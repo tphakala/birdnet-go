@@ -17,7 +17,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
-	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -34,23 +33,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
-	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
-	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
-	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"github.com/tphakala/birdnet-go/internal/weather"
 )
-
-// Constants for system operations
-const (
-	// shutdownTimeout is the maximum time allowed for graceful shutdown (9s for Docker's 10s default)
-	shutdownTimeout = 9 * time.Second
-)
-
-// audioLevelChan is a channel to send audio level updates
-var audioLevelChan = make(chan myaudio.AudioLevelData, 100)
 
 // soundLevelChan is a channel to send sound level updates
 var soundLevelChan = make(chan myaudio.SoundLevelData, 100)
@@ -99,10 +86,14 @@ var audioDemuxManager = NewAudioDemuxManager()
 
 // RealtimeAnalysisWithQuit runs the analysis loop with an externally controlled quit channel.
 // The caller is responsible for signal handling and closing the quit channel.
-// Database and BirdNET resources are owned by their respective services and passed in.
+// Database, BirdNET, and API server resources are owned by their respective services and passed in.
 func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{},
 	dataStore datastore.Interface, v2Manager datastoreV2.Manager, v2OnlyMode bool,
-	bn *birdnet.BirdNET, metrics *observability.Metrics) error {
+	bn *birdnet.BirdNET, metrics *observability.Metrics,
+	proc *processor.Processor, controlChan chan string,
+	audioLevelChan chan myaudio.AudioLevelData,
+	apiController *apiv2.Controller,
+	sunCalc *suncalc.SunCalc) error {
 	// Convert read-only channel to bidirectional for internal use.
 	// The done channel prevents a goroutine leak if realtimeAnalysisInternal
 	// returns early (e.g., init failure) before quit is closed.
@@ -116,7 +107,8 @@ func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{},
 		}
 	}()
 	defer close(done)
-	return realtimeAnalysisInternal(settings, quitChan, dataStore, v2Manager, v2OnlyMode, bn, metrics)
+	return realtimeAnalysisInternal(settings, quitChan, dataStore, v2Manager, v2OnlyMode, bn, metrics,
+		proc, controlChan, audioLevelChan, apiController, sunCalc)
 }
 
 // realtimeAnalysisInternal is the main orchestration function that coordinates
@@ -125,7 +117,11 @@ func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{},
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
 func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 	dataStore datastore.Interface, v2Manager datastoreV2.Manager, v2OnlyMode bool,
-	bn *birdnet.BirdNET, metrics *observability.Metrics) error {
+	bn *birdnet.BirdNET, metrics *observability.Metrics,
+	proc *processor.Processor, controlChan chan string,
+	audioLevelChan chan myaudio.AudioLevelData,
+	apiController *apiv2.Controller,
+	sunCalc *suncalc.SunCalc) error {
 
 	// Clean up any leftover HLS streaming files from previous runs
 	if err := cleanupHLSStreamingFiles(); err != nil {
@@ -138,15 +134,8 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 	// TODO FIXME
 	//ctx.OccurrenceMonitor = conf.NewOccurrenceMonitor(time.Duration(ctx.Settings.Realtime.Interval) * time.Second)
 
-	// Print system details and configuration
-	printSystemDetails(settings)
-
-	// Initialize the control channel for restart control.
-	controlChan := make(chan string, 1)
 	// Initialize the restart channel for capture restart control.
 	restartChan := make(chan struct{}, 10) // Increased buffer to prevent dropped restart signals
-
-	// audioLevelChan and soundLevelChan are already initialized as global variables at package level
 
 	// Initialize audio sources
 	sources, err := initializeAudioSources(settings)
@@ -162,74 +151,6 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 	// TODO: Make this configurable via settings
 	const defaultQueueSize = 5
 	birdnet.ResizeQueue(defaultQueueSize)
-
-	// Update BirdNET model loaded metric now that metrics are available
-	UpdateBirdNETModelLoadedMetric(metrics.BirdNET, bn)
-
-	// Note: datastore monitoring is automatically started when the database is opened
-
-	// Initialize bird image cache if needed
-	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
-
-	// Initialize processor with analysis logger for hierarchical logging
-	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
-
-	// Initialize Backup system using centralized logger
-	backupLog := logger.Global().Module("backup")
-	backupManager, backupScheduler, err := initializeBackupSystem(settings, backupLog)
-	if err != nil {
-		// Log the specific error from initialization
-		backupLog.Error("Failed to initialize backup system", logger.Error(err))
-		// Don't make this fatal - continue without backup system
-		GetLogger().Warn("backup system initialization failed",
-			logger.Error(err),
-			logger.String("operation", "backup_system_init"))
-	} else {
-		// Store backup manager and scheduler in the processor for access by control monitor
-		proc.SetBackupManager(backupManager)
-		proc.SetBackupScheduler(backupScheduler)
-	}
-
-	// Initialize async services (event bus, notification workers, telemetry workers)
-	if err := telemetry.InitializeAsyncSystems(); err != nil {
-		GetLogger().Error("failed to initialize critical async services",
-			logger.Error(err),
-			logger.String("operation", "initialize_async_systems"))
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategorySystem).
-			Context("operation", "initialize_async_systems").
-			Build()
-	}
-
-	// Initialize system monitor if monitoring is enabled
-	systemMonitor := initializeSystemMonitor(settings)
-
-	// Initialize and start the HTTP server
-	GetLogger().Info("starting HTTP server")
-	oauth2Server := security.NewOAuth2Server()
-	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
-	proc.SetSunCalc(sunCalc)
-	apiServer, err := api.New(
-		settings,
-		api.WithDataStore(dataStore),
-		api.WithBirdImageCache(birdImageCache),
-		api.WithProcessor(proc),
-		api.WithMetrics(metrics),
-		api.WithControlChannel(controlChan),
-		api.WithAudioLevelChannel(audioLevelChan),
-		api.WithOAuth2Server(oauth2Server),
-		api.WithSunCalc(sunCalc),
-		api.WithV2Manager(v2Manager),
-	)
-	if err != nil {
-		return errors.New(err).
-			Component("analysis").
-			Category(errors.CategorySystem).
-			Context("operation", "create_http_server").
-			Build()
-	}
-	apiServer.Start()
 
 	// Initialize the wait group to wait for all goroutines to finish
 	var wg sync.WaitGroup
@@ -328,17 +249,10 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 	// to allow users to dynamically enable/disable metrics and change the listen address without
 	// restarting the application. The control monitor will start the endpoint if enabled.
 
-	// Wire app shutdown requester into API controller for restart endpoints
-	if appInstance := app.GetGlobal(); appInstance != nil {
-		apiServer.APIController().SetShutdownRequester(appInstance)
-	}
-
 	// start control monitor for hot reloads
-	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, apiServer.APIController(), metrics, quietHoursScheduler)
+	ctrlMonitor := startControlMonitor(&wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, apiController, metrics, quietHoursScheduler)
 
-	// Track the HTTP server, system monitor and control monitor for clean shutdown
-	httpServerRef := apiServer
-	systemMonitorRef := systemMonitor
+	// Track the control monitor for clean shutdown
 	ctrlMonitorRef := ctrlMonitor
 
 	// loop to monitor quit and restart channels
@@ -354,226 +268,44 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 				Properties: map[string]any{},
 			})
 
-			log.Info("initiating graceful shutdown sequence",
-				logger.Float64("shutdown_timeout_seconds", shutdownTimeout.Seconds()),
+			log.Info("initiating audio pipeline shutdown",
 				logger.String("operation", "graceful_shutdown"))
-			shutdownStart := time.Now()
 
-			// Stop migration worker FIRST - before any other shutdown steps
-			// This ensures the worker stops even if later steps timeout
-			log.Info("stopping migration worker early in shutdown",
-				logger.String("operation", "shutdown_migration_worker_early"))
-			apiv2.StopMigrationWorker()
-
-			// Create context with timeout for the entire shutdown process
-			ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-
-			// Execute shutdown with context
-			shutdownComplete := make(chan struct{})
-			go func() {
-				defer close(shutdownComplete)
-
-				// Step 1: Signal shutdown started (but don't close controlChan yet)
-				log.Info("shutdown step 1: beginning shutdown sequence",
-					logger.Int("step", 1),
-					logger.String("operation", "shutdown_begin"))
-
-				// Check context cancellation between steps
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 1",
-						logger.Int("step", 1),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 2: Stop control monitor
-				if ctrlMonitorRef != nil {
-					log.Info("shutdown step 2: stopping control monitor",
-						logger.Int("step", 2),
-						logger.String("operation", "shutdown_control_monitor"))
-					ctrlMonitorRef.Stop()
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 2",
-						logger.Int("step", 2),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 3: Stop analysis buffer monitors
-				log.Info("shutdown step 3: stopping analysis buffer monitors",
-					logger.Int("step", 3),
-					logger.String("operation", "shutdown_buffer_monitors"))
-				bufferManager.RemoveAllMonitors()
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 3",
-						logger.Int("step", 3),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 4: Clean up HLS resources asynchronously with timeout
-				log.Info("shutdown step 4: cleaning up HLS resources",
-					logger.Int("step", 4),
-					logger.String("operation", "shutdown_hls_cleanup"))
-				cleanupHLSWithTimeout(ctx)
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 4",
-						logger.Int("step", 4),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 5: Shutdown HTTP server
-				if httpServerRef != nil {
-					log.Info("shutdown step 5: shutting down HTTP server",
-						logger.Int("step", 5),
-						logger.String("operation", "shutdown_http_server"))
-					if err := httpServerRef.ShutdownWithContext(ctx); err != nil {
-						log.Warn("error shutting down HTTP server",
-							logger.Error(err),
-							logger.Int("step", 5),
-							logger.String("operation", "shutdown_http_server"))
-					}
-				}
-
-				// Step 6: Close controlChan to signal goroutines selecting on it to stop
-				log.Info("shutdown step 6: closing control channel after producers shutdown",
-					logger.Int("step", 6),
-					logger.String("operation", "close_control_channel"))
-				close(controlChan)
-
-				// Step 7: Shutdown FFmpegManager — cancels manager context (stops monitoring/watchdog),
-				// stops any remaining streams. RTSP goroutines may have already stopped
-				// their streams via quitChan; StopStream is safe to call twice.
-				log.Info("shutdown step 7: shutting down FFmpeg manager",
-					logger.Int("step", 7),
-					logger.String("operation", "shutdown_ffmpeg_manager"))
-				myaudio.ShutdownFFmpegManagerWithContext(ctx)
-
-				// Step 8: Wait for all goroutines (with context deadline).
-				// No early return between steps 7-9 — steps 8 and 9 handle
-				// expired contexts internally, and step 9 must always run so
-				// the processor's cancel functions fire (workerCancel, flusherCancel).
-				log.Info("shutdown step 8: waiting for goroutines to finish",
-					logger.Int("step", 8),
-					logger.String("operation", "shutdown_wait_goroutines"))
-
-				wgDone := make(chan struct{})
-				go func() {
-					wg.Wait()
-					close(wgDone)
-				}()
-
-				select {
-				case <-wgDone:
-					log.Info("all goroutines finished",
-						logger.Int("step", 8),
-						logger.String("operation", "shutdown_goroutines_done"))
-				case <-ctx.Done():
-					log.Warn("timed out waiting for goroutines",
-						logger.Int("step", 8),
-						logger.String("operation", "shutdown_goroutines_timeout"))
-				}
-
-				// Step 9: Shutdown processor (MQTT, job queue, thresholds).
-				// Always called even if context is expired — ShutdownWithContext
-				// fires cancel functions unconditionally and handles expired
-				// contexts gracefully (skips non-critical cleanup).
-				log.Info("shutdown step 9: shutting down processor",
-					logger.Int("step", 9),
-					logger.String("operation", "shutdown_processor"))
-				if err := proc.ShutdownWithContext(ctx); err != nil {
-					log.Warn("processor shutdown error",
-						logger.Error(err),
-						logger.Int("step", 9),
-						logger.String("operation", "shutdown_processor"))
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 9",
-						logger.Int("step", 9),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 10: Stop system monitor
-				if systemMonitorRef != nil {
-					log.Info("shutdown step 10: stopping system monitor",
-						logger.Int("step", 10),
-						logger.String("operation", "shutdown_system_monitor"))
-					systemMonitorRef.Stop()
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 10",
-						logger.Int("step", 10),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Step 11: Stop notification service
-				if notification.IsInitialized() {
-					log.Info("shutdown step 11: stopping notification service",
-						logger.Int("step", 11),
-						logger.String("operation", "shutdown_notification_service"))
-					if service := notification.GetService(); service != nil {
-						service.Stop()
-					}
-				}
-
-				if ctx.Err() != nil {
-					log.Warn("shutdown context cancelled after step 11",
-						logger.Int("step", 11),
-						logger.Error(ctx.Err()),
-						logger.String("operation", "shutdown_timeout"))
-					return
-				}
-
-				// Steps 12-14 (BirdNET cleanup, migration worker, v2 database close)
-				// are now handled by BirdNETAnalyzer.Stop() and DatabaseService.Stop()
-				// via the App lifecycle manager.
-
-				log.Info("graceful shutdown completed",
-					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
-					logger.String("operation", "shutdown_complete"))
-			}()
-
-			// Wait for shutdown to complete or context timeout
-			select {
-			case <-shutdownComplete:
-				// Shutdown completed successfully
-				cancel()
-				return nil
-			case <-ctx.Done():
-				GetLogger().Warn("shutdown timeout exceeded, forcing exit",
-					logger.Float64("timeout_seconds", shutdownTimeout.Seconds()),
-					logger.String("operation", "shutdown_forced_exit"))
-				// Ensure migration worker is stopped on timeout
-				apiv2.StopMigrationWorker()
-				cancel()
-				// Give the shutdown goroutine a brief grace period to exit.
-				// With the timeout-aware wg.Wait(), it should exit quickly
-				// after context cancellation. But if it doesn't, don't block
-				// forever — let deferred cleanup handle the rest.
-				select {
-				case <-shutdownComplete:
-					// Goroutine exited cleanly
-				case <-time.After(500 * time.Millisecond):
-					GetLogger().Warn("shutdown goroutine did not exit within grace period",
-						logger.String("operation", "shutdown_forced_exit"))
-				}
-				return nil
+			// Stop control monitor
+			if ctrlMonitorRef != nil {
+				log.Info("stopping control monitor",
+					logger.String("operation", "shutdown_control_monitor"))
+				ctrlMonitorRef.Stop()
 			}
+
+			// Stop analysis buffer monitors
+			log.Info("stopping analysis buffer monitors",
+				logger.String("operation", "shutdown_buffer_monitors"))
+			bufferManager.RemoveAllMonitors()
+
+			// Clean up HLS resources
+			log.Info("cleaning up HLS resources",
+				logger.String("operation", "shutdown_hls_cleanup"))
+			cleanupHLSWithTimeout(context.Background())
+
+			// Shutdown FFmpegManager — cancels manager context (stops monitoring/watchdog),
+			// stops any remaining streams. RTSP goroutines may have already stopped
+			// their streams via quitChan; StopStream is safe to call twice.
+			log.Info("shutting down FFmpeg manager",
+				logger.String("operation", "shutdown_ffmpeg_manager"))
+			myaudio.ShutdownFFmpegManagerWithContext(context.Background())
+
+			// Wait for all goroutines to finish.
+			log.Info("waiting for goroutines to finish",
+				logger.String("operation", "shutdown_wait_goroutines"))
+			wg.Wait()
+			log.Info("all goroutines finished",
+				logger.String("operation", "shutdown_goroutines_done"))
+
+			// API server, processor, system monitor, and notification shutdown
+			// are handled by APIServerService.Stop() via the App lifecycle manager.
+
+			return nil
 
 		case <-restartChan:
 			// Handle the restart signal.
@@ -1128,7 +860,7 @@ func initBirdImageCache(ds datastore.Interface, metrics *observability.Metrics) 
 }
 
 // startControlMonitor handles various control signals for realtime analysis mode
-func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+func startControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
 	ctrlMonitor := NewControlMonitor(wg, controlChan, quitChan, restartChan, bufferManager, proc, audioLevelChan, soundLevelChan, apiController, metrics, quietHoursScheduler)
 	ctrlMonitor.Start()
 	return ctrlMonitor
@@ -1494,8 +1226,8 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 	return sources, nil
 }
 
-// printSystemDetails prints system information and analyzer configuration
-func printSystemDetails(settings *conf.Settings) {
+// PrintSystemDetails prints system information and analyzer configuration.
+func PrintSystemDetails(settings *conf.Settings) {
 	log := GetLogger()
 
 	// Get system details with gopsutil

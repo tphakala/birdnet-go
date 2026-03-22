@@ -27,6 +27,9 @@ The "realtime" command is an alias for backward compatibility.`,
 			application := app.New()
 			app.SetGlobal(application)
 
+			// Print system details early, before any service starts.
+			analysis.PrintSystemDetails(settings)
+
 			// Initialize metrics before services that depend on them.
 			metrics, err := analysis.InitializeMetrics()
 			if err != nil {
@@ -37,9 +40,10 @@ The "realtime" command is an alias for backward compatibility.`,
 			// shutdown happens in reverse within each tier.
 			birdnetAnalyzer := analysis.NewBirdNETAnalyzer(settings)
 			dbService := analysis.NewDatabaseService(settings, metrics)
+			apiService := analysis.NewAPIServerService(settings, birdnetAnalyzer, dbService, metrics)
 
 			// Register core services first (started before the legacy monolith).
-			application.Register(birdnetAnalyzer, dbService)
+			application.Register(birdnetAnalyzer, dbService, apiService)
 
 			// Register the legacy monolith which receives extracted resources.
 			application.Register(app.NewLegacyService("birdnet-go", func(quit <-chan struct{}) error {
@@ -47,6 +51,9 @@ The "realtime" command is an alias for backward compatibility.`,
 					settings, quit,
 					dbService.DataStore(), dbService.V2Manager(), dbService.IsV2OnlyMode(),
 					birdnetAnalyzer.BirdNET(), metrics,
+					apiService.Processor(), apiService.ControlChan(),
+					apiService.AudioLevelChan(), apiService.APIController(),
+					apiService.SunCalc(),
 				)
 			}))
 

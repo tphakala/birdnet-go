@@ -176,16 +176,7 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 		s.systemMonitor = nil
 	}
 
-	// Stop notification service.
-	if notification.IsInitialized() {
-		log.Info("stopping notification service",
-			logger.String("operation", "shutdown_notification_service"))
-		if service := notification.GetService(); service != nil {
-			service.Stop()
-		}
-	}
-
-	// Shutdown HTTP server.
+	// Shutdown HTTP server (drain in-flight requests before stopping processors).
 	if s.server != nil {
 		log.Info("shutting down HTTP server",
 			logger.String("operation", "shutdown_http_server"))
@@ -215,6 +206,21 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 				logger.String("operation", "shutdown_processor"))
 		}
 		s.proc = nil
+	}
+
+	// Stop notification service (after processor, which may send final notifications).
+	if notification.IsInitialized() {
+		log.Info("stopping notification service",
+			logger.String("operation", "shutdown_notification_service"))
+		if service := notification.GetService(); service != nil {
+			service.Stop()
+		}
+	}
+
+	// Close audio level channel for clean SSE client shutdown.
+	if s.audioLevelChan != nil {
+		close(s.audioLevelChan)
+		s.audioLevelChan = nil
 	}
 
 	return nil

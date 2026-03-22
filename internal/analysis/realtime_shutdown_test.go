@@ -172,12 +172,6 @@ func TestShutdownSequenceWithContext(t *testing.T) {
 	})
 }
 
-// TestShutdownConstants verifies shutdown timeout constant is properly defined
-func TestShutdownConstants(t *testing.T) {
-	// Verify the shutdown timeout is set to 9 seconds
-	assert.Equal(t, 9*time.Second, shutdownTimeout, "Shutdown timeout should be 9 seconds")
-}
-
 // Helper function to test signal handling without actually sending signals to the process
 func TestSignalNotification(t *testing.T) {
 	t.Run("signal channel receives notifications", func(t *testing.T) {
