@@ -419,6 +419,9 @@ func init() {
 	RegisterComponent("worker", "analysis.worker")
 	RegisterComponent("threshold", "analysis.threshold")
 	RegisterComponent("tracker", "analysis.tracker")
+
+	// audiocore package
+	RegisterComponent("audiocore", "audiocore")
 }
 
 // Helper functions for auto-detection and categorization
