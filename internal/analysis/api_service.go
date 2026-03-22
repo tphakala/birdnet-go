@@ -108,7 +108,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 	UpdateBirdNETModelLoadedMetric(s.metrics.BirdNET, bn)
 
 	// Initialize bird image cache.
-	s.birdImageCache = initializeBirdImageCacheIfNeeded(s.settings, dataStore, s.metrics)
+	s.birdImageCache = initBirdImageCache(s.settings, dataStore, s.metrics)
 
 	// Create SunCalc for sunrise/sunset calculations.
 	s.sunCalc = suncalc.NewSunCalc(s.settings.BirdNET.Latitude, s.settings.BirdNET.Longitude)
