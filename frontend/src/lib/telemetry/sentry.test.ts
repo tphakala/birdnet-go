@@ -53,6 +53,11 @@ describe('beforeSend privacy filtering', () => {
     beforeSend = vi.mocked(Sentry.init).mock.calls[0][0]?.beforeSend as BeforeSendFn;
   });
 
+  it('registers a beforeSend hook', () => {
+    expect(beforeSend).toBeDefined();
+    expect(beforeSend).toBeTypeOf('function');
+  });
+
   it('strips user data', () => {
     const event = { type: undefined, user: { ip_address: '1.2.3.4' } } as Sentry.ErrorEvent;
     const result = beforeSend?.(event, {} as Sentry.EventHint);
