@@ -81,20 +81,32 @@ jobs:
           PUPPETEER_SKIP_DOWNLOAD: true
           PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: true
 
+      - name: Upload source maps to Sentry
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: tphakala
+          SENTRY_PROJECT: birdnet-go
+        run: |
+          npx @sentry/cli sourcemaps upload \
+            --release "birdnet-go@${{ env.BUILD_VERSION }}" \
+            --url-prefix '~/ui/assets/' \
+            frontend/dist/
+
       - name: Create Release Artifacts
         run: |
           # Create artifacts directory
           mkdir -p artifacts
-          
+
           # Set binary name based on OS
           BINARY_NAME=birdnet-go
           if [ "${{ matrix.goos }}" = "windows" ]; then
             BINARY_NAME=birdnet-go.exe
           fi
-          
+
           # Copy binary
           cp bin/$BINARY_NAME artifacts/
-          
+
           # Copy required library files based on OS and architecture
           if [ "${{ matrix.goos }}" = "linux" ]; then
             if [ "${{ matrix.goarch }}" = "amd64" ]; then
@@ -107,7 +119,7 @@ jobs:
           elif [ "${{ matrix.goos }}" = "darwin" ]; then
             cp /opt/homebrew/lib/libtensorflowlite_c.dylib artifacts/
           fi
-          
+
           # Create tarball
           cd artifacts
           tar czf ../birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz *

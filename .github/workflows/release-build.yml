@@ -66,6 +66,24 @@ jobs:
           CGO_ENABLED: 1
           BUILD_VERSION: ${{ github.ref_name }}
 
+      - name: Setup Node.js for Sentry CLI
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+
+      - name: Upload source maps to Sentry
+        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: tphakala
+          SENTRY_PROJECT: birdnet-go
+        run: |
+          npx @sentry/cli sourcemaps upload \
+            --release "birdnet-go@${{ github.ref_name }}" \
+            --url-prefix '~/ui/assets/' \
+            frontend/dist/
+
       - name: Create Release Artifacts
         run: |
           # Create artifacts directory
