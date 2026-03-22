@@ -25,6 +25,9 @@ import (
 // audioPipelineServiceName is the service name used for logging and diagnostics.
 const audioPipelineServiceName = "audio-pipeline"
 
+// hlsCleanupTimeout is the maximum time allowed for HLS file cleanup during shutdown.
+const hlsCleanupTimeout = 2 * time.Second
+
 // policyNone is the sentinel value indicating no retention/provider policy is configured.
 const policyNone = "none"
 
@@ -619,8 +622,7 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 		cleanupDone <- cleanupHLSStreamingFiles()
 	}()
 
-	// Create a timeout context for cleanup operation (2 seconds max)
-	cleanupCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	cleanupCtx, cancel := context.WithTimeout(ctx, hlsCleanupTimeout)
 	defer cancel()
 
 	log := GetLogger()
@@ -633,7 +635,7 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 		}
 	case <-cleanupCtx.Done():
 		log.Warn("HLS cleanup timeout exceeded, continuing shutdown",
-			logger.Duration("timeout", 2*time.Second),
+			logger.Duration("timeout", hlsCleanupTimeout),
 			logger.String("operation", "cleanup_hls_files"))
 	}
 }
@@ -782,15 +784,20 @@ func initializeAudioSources(settings *conf.Settings) ([]string, error) {
 			// Register the audio device in the source registry and use its ID
 			// This ensures consistent UUID-based IDs like RTSP sources
 			registry := myaudio.GetRegistry()
-			source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
-				Type: myaudio.SourceTypeAudioCard,
-			})
-			if err != nil {
-				log.Warn("failed to register audio device source",
-					logger.String("source", settings.Realtime.Audio.Source),
-					logger.Error(err))
+			if registry == nil {
+				log.Warn("audio source registry not available, skipping audio device registration",
+					logger.String("source", settings.Realtime.Audio.Source))
 			} else {
-				sources = append(sources, source.ID)
+				source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
+					Type: myaudio.SourceTypeAudioCard,
+				})
+				if err != nil {
+					log.Warn("failed to register audio device source",
+						logger.String("source", settings.Realtime.Audio.Source),
+						logger.Error(err))
+				} else {
+					sources = append(sources, source.ID)
+				}
 			}
 		}
 

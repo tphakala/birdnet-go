@@ -355,22 +355,14 @@ func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
 	)
 
 	if !settings.Realtime.Monitoring.Enabled {
-		GetLogger().Warn("System monitoring is disabled in settings")
+		GetLogger().Info("system monitoring is disabled")
 		return nil
 	}
 
-	GetLogger().Info("Creating system monitor instance")
 	systemMonitor := monitor.NewSystemMonitor(settings)
-	if systemMonitor == nil {
-		GetLogger().Error("Failed to create system monitor instance")
-		return nil
-	}
-
-	GetLogger().Info("Starting system monitor")
 	systemMonitor.Start()
 
-	GetLogger().Info("System resource monitoring initialized",
-		logger.String("component", "monitor"),
+	GetLogger().Info("system resource monitoring initialized",
 		logger.Int("interval", settings.Realtime.Monitoring.CheckInterval))
 	return systemMonitor
 }

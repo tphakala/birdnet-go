@@ -30,25 +30,24 @@ func PrintSystemDetails(settings *conf.Settings) {
 	// Get system details with gopsutil
 	info, err := host.Info()
 	if err != nil {
-		log.Warn("Failed to retrieve host info", logger.Error(err))
+		log.Warn("failed to retrieve host info", logger.Error(err))
 	}
 
 	var hwModel string
-	// Print SBC hardware details
 	if conf.IsLinuxArm64() {
-		hwModel = conf.GetBoardModel()
-		// remove possible new line from hwModel
-		hwModel = strings.TrimSpace(hwModel)
+		hwModel = strings.TrimSpace(conf.GetBoardModel())
 	} else {
 		hwModel = "unknown"
 	}
 
-	// Log system details
-	log.Info("System details",
-		logger.String("os", info.OS),
-		logger.String("platform", info.Platform),
-		logger.String("platform_version", info.PlatformVersion),
-		logger.String("hardware", hwModel))
+	// Log system details (guard against nil info from host.Info failure)
+	if info != nil {
+		log.Info("system details",
+			logger.String("os", info.OS),
+			logger.String("platform", info.Platform),
+			logger.String("platform_version", info.PlatformVersion),
+			logger.String("hardware", hwModel))
+	}
 
 	// Log the start of BirdNET-Go Analyzer in realtime mode and its configurations.
 	log.Info("Starting analyzer in realtime mode",
