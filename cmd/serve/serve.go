@@ -24,9 +24,6 @@ web interface, database) and runs until interrupted.
 
 The "realtime" command is an alias for backward compatibility.`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			application := app.New()
-			app.SetGlobal(application)
-
 			// Print system details early, before any service starts.
 			analysis.PrintSystemDetails(settings)
 
@@ -38,24 +35,14 @@ The "realtime" command is an alias for backward compatibility.`,
 
 			// Create services. Registration order determines start order;
 			// shutdown happens in reverse within each tier.
-			birdnetAnalyzer := analysis.NewBirdNETAnalyzer(settings)
+			bnAnalyzer := analysis.NewBirdNETAnalyzer(settings)
 			dbService := analysis.NewDatabaseService(settings, metrics)
-			apiService := analysis.NewAPIServerService(settings, birdnetAnalyzer, dbService, metrics)
+			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics)
+			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService)
 
-			// Register core services first (started before the legacy monolith).
-			application.Register(birdnetAnalyzer, dbService, apiService)
-
-			// Register the legacy monolith which receives extracted resources.
-			application.Register(app.NewLegacyService("birdnet-go", func(quit <-chan struct{}) error {
-				return analysis.RealtimeAnalysisWithQuit(
-					settings, quit,
-					dbService.DataStore(), dbService.V2Manager(), dbService.IsV2OnlyMode(),
-					birdnetAnalyzer.BirdNET(), metrics,
-					apiService.Processor(), apiService.ControlChan(),
-					apiService.AudioLevelChan(), apiService.APIController(),
-					apiService.SunCalc(),
-				)
-			}))
+			application := app.New()
+			app.SetGlobal(application)
+			application.Register(bnAnalyzer, dbService, apiService, audioService)
 
 			if err := application.Start(cmd.Context()); err != nil {
 				return err
