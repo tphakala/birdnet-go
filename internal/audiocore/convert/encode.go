@@ -41,6 +41,15 @@ func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int)
 			Build()
 	}
 
+	if bitDepth != 16 {
+		return errors.Newf("unsupported bit depth %d: SavePCMDataToWAV requires 16-bit PCM", bitDepth).
+			Component("audiocore/convert").
+			Category(errors.CategoryValidation).
+			Context("operation", "save_pcm_to_wav").
+			Context("bit_depth", bitDepth).
+			Build()
+	}
+
 	bytesPerSample := bitDepth / 8
 	if len(pcmData)%bytesPerSample != 0 {
 		return errors.Newf("PCM data size (%d bytes) is not aligned with bit depth (%d bits, %d bytes per sample)", len(pcmData), bitDepth, bytesPerSample).

@@ -120,7 +120,7 @@ func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
 
 	if err := cmd.Run(); err != nil {
 		if ctx.Err() != nil {
-			if ctx.Err() == context.DeadlineExceeded {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 				if timeoutDuration > 0 {
 					return 0, errors.Newf("sox --info timed out after %v for file %s: %w", timeoutDuration, audioPath, ctx.Err()).
 						Component("audiocore").

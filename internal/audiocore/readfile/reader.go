@@ -20,6 +20,16 @@ const (
 	ExtFLAC = ".flac"
 )
 
+// Analysis chunk timing constants.
+const (
+	// chunkDurationSeconds is the duration in seconds of each analysis chunk.
+	chunkDurationSeconds = 3
+
+	// minChunkDurationSeconds is the minimum duration in seconds for the
+	// final chunk to be considered valid for analysis.
+	minChunkDurationSeconds = 1.5
+)
+
 // AudioInfo holds basic metadata about an audio file.
 type AudioInfo struct {
 	// SampleRate is the number of audio samples per second (Hz).

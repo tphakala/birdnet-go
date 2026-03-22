@@ -246,12 +246,18 @@ func TestSoundLevelProcessor_Reset(t *testing.T) {
 	assert.False(t, p.intervalBuffer.full)
 
 	// After reset a full interval should still produce data.
+	var postResetData *SoundLevelData
+	var postResetErr error
 	for range intervalSecs {
-		_, _ = p.ProcessSamples(oneSecond)
+		postResetData, postResetErr = p.ProcessSamples(oneSecond)
 	}
-	// Process one more second to ensure the interval triggers.
-	// (The loop above may have triggered on the last iteration.)
-	// Just check state is consistent by not panicking.
+	// The last iteration should have completed the interval.
+	if postResetData == nil {
+		// If not triggered yet, one more second will push it over.
+		postResetData, postResetErr = p.ProcessSamples(oneSecond)
+	}
+	require.NoError(t, postResetErr)
+	assert.NotNil(t, postResetData, "processor should produce data after reset and a full interval")
 }
 
 // TestSoundLevelProcessor_OctaveBandKeys verifies that expected band keys are

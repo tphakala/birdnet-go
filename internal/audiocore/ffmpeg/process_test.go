@@ -1,6 +1,7 @@
 package ffmpeg
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -26,17 +27,17 @@ func TestBuildFFmpegArgs_RTSP(t *testing.T) {
 	args := BuildFFmpegArgs(cfg, nil)
 
 	// RTSP transport flag must be present.
-	rtspIdx := indexOf(args, "-rtsp_transport")
+	rtspIdx := slices.Index(args, "-rtsp_transport")
 	require.NotEqual(t, -1, rtspIdx, "expected -rtsp_transport flag")
 	require.Less(t, rtspIdx+1, len(args), "-rtsp_transport must have a value")
 	assert.Equal(t, "tcp", args[rtspIdx+1])
 
 	// Default timeout must be present when no user timeout is supplied.
-	timeoutIdx := indexOf(args, "-timeout")
+	timeoutIdx := slices.Index(args, "-timeout")
 	require.NotEqual(t, -1, timeoutIdx, "expected -timeout flag")
 
 	// Input URL must be present.
-	iIdx := indexOf(args, "-i")
+	iIdx := slices.Index(args, "-i")
 	require.NotEqual(t, -1, iIdx, "expected -i flag")
 	require.Less(t, iIdx+1, len(args), "-i must have a value")
 	assert.Equal(t, cfg.URL, args[iIdx+1])
@@ -69,14 +70,15 @@ func TestBuildFFmpegArgs_HTTP(t *testing.T) {
 	args := BuildFFmpegArgs(cfg, nil)
 
 	// RTSP transport flag must NOT be present for HTTP sources.
-	assert.Equal(t, -1, indexOf(args, "-rtsp_transport"), "HTTP source must not include -rtsp_transport")
+	assert.Equal(t, -1, slices.Index(args, "-rtsp_transport"), "HTTP source must not include -rtsp_transport")
 
 	// Default timeout should still be present.
-	assert.NotEqual(t, -1, indexOf(args, "-timeout"), "expected -timeout flag")
+	assert.NotEqual(t, -1, slices.Index(args, "-timeout"), "expected -timeout flag")
 
 	// Input URL must be present.
-	iIdx := indexOf(args, "-i")
+	iIdx := slices.Index(args, "-i")
 	require.NotEqual(t, -1, iIdx, "expected -i flag")
+	require.Less(t, iIdx+1, len(args), "-i must have a value")
 	assert.Equal(t, cfg.URL, args[iIdx+1])
 
 	// Output must go to stdout pipe.
@@ -98,8 +100,9 @@ func TestBuildFFmpegArgs_CustomTimeout(t *testing.T) {
 	customParams := []string{"-timeout", "5000000"}
 	args := BuildFFmpegArgs(cfg, customParams)
 
-	timeoutIdx := indexOf(args, "-timeout")
+	timeoutIdx := slices.Index(args, "-timeout")
 	require.NotEqual(t, -1, timeoutIdx)
+	require.Less(t, timeoutIdx+1, len(args), "-timeout must have a value")
 	assert.Equal(t, "5000000", args[timeoutIdx+1])
 
 	// Must appear only once.
@@ -160,7 +163,7 @@ func TestBackoffCalculation(t *testing.T) {
 			assert.GreaterOrEqual(t, got, tt.wantMin,
 				"backoff must be at least the base duration")
 			assert.LessOrEqual(t, got, tt.wantMax,
-				"backoff must not exceed base + 20%% jitter ceiling")
+				"backoff must not exceed base + 20% jitter ceiling")
 		})
 	}
 }
@@ -176,14 +179,4 @@ func TestBackoffCalculation_ZeroRestarts(t *testing.T) {
 	// restart count 0: exponent clamped to 0, so backoff = base * 2^0 = base.
 	assert.GreaterOrEqual(t, got, base)
 	assert.LessOrEqual(t, got, base+base/5)
-}
-
-// indexOf returns the first index of target in slice, or -1 if not found.
-func indexOf(slice []string, target string) int {
-	for i, v := range slice {
-		if v == target {
-			return i
-		}
-	}
-	return -1
 }

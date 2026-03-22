@@ -1,7 +1,7 @@
 package audiocore
 
 // RouterMetrics tracks frame dispatch and drop counts for the audio frame router.
-// All methods are no-ops if the interface is nil.
+// Callers must check for nil before calling methods on this interface.
 type RouterMetrics interface {
 	// IncFramesDispatched increments the count of frames successfully dispatched for a source.
 	IncFramesDispatched(sourceID string)
@@ -14,7 +14,7 @@ type RouterMetrics interface {
 }
 
 // StreamMetrics tracks FFmpeg stream health and performance metrics.
-// All methods are no-ops if the interface is nil.
+// Callers must check for nil before calling methods on this interface.
 type StreamMetrics interface {
 	// IncStreamErrors increments the error count for a stream.
 	IncStreamErrors(sourceID string)
@@ -27,7 +27,7 @@ type StreamMetrics interface {
 }
 
 // BufferMetrics tracks buffer pool allocation, usage, and performance metrics.
-// All methods are no-ops if the interface is nil.
+// Callers must check for nil before calling methods on this interface.
 type BufferMetrics interface {
 	// RecordBufferOverrun records when a buffer cannot accommodate new frames.
 	RecordBufferOverrun(sourceID string)
@@ -40,7 +40,7 @@ type BufferMetrics interface {
 }
 
 // DeviceMetrics tracks audio device capture statistics and health.
-// All methods are no-ops if the interface is nil.
+// Callers must check for nil before calling methods on this interface.
 type DeviceMetrics interface {
 	// IncDeviceErrors increments the error count for a device.
 	IncDeviceErrors(deviceID string)

@@ -67,13 +67,23 @@ func ReadFLACBuffered(
 	doResample := decoder.SampleRate != targetSampleRate
 	sourceSampleRate := decoder.SampleRate
 
+	if doResample && resample == nil {
+		return errors.Newf("resampling required (%d Hz to %d Hz) but no resample function provided", sourceSampleRate, targetSampleRate).
+			Component("audiocore/readfile").
+			Category(errors.CategoryValidation).
+			Context("operation", "read_flac_buffered").
+			Context("source_rate", sourceSampleRate).
+			Context("target_rate", targetSampleRate).
+			Build()
+	}
+
 	divisor, err := getAudioDivisor(decoder.BitsPerSample)
 	if err != nil {
 		return err
 	}
 
-	step := int((3 - overlap) * float64(targetSampleRate))
-	minLenSamples := int(1.5 * float64(targetSampleRate))
+	step := int((chunkDurationSeconds - overlap) * float64(targetSampleRate))
+	minLenSamples := int(minChunkDurationSeconds * float64(targetSampleRate))
 	secondsSamples := chunkSize
 
 	var currentChunk []float32
@@ -88,7 +98,7 @@ func ReadFLACBuffered(
 
 		floatChunk := decodeFLACFrame(frame, decoder.BitsPerSample, decoder.NChannels, divisor)
 
-		if doResample && resample != nil {
+		if doResample {
 			floatChunk, err = resample(floatChunk, sourceSampleRate, targetSampleRate)
 			if err != nil {
 				return fmt.Errorf("error resampling audio: %w", err)
@@ -122,6 +132,11 @@ func decodeFLACFrame(frame []byte, bitsPerSample, nChannels int, divisor float32
 
 		for ch := range nChannels {
 			offset := i*frameStride + ch*bytesPerSample
+
+			// Guard against truncated frames.
+			if offset+bytesPerSample > len(frame) {
+				return result[:i]
+			}
 
 			var sample int32
 			switch bitsPerSample {

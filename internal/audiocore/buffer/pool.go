@@ -108,6 +108,9 @@ func (bp *BytePool) GetStats() BytePoolStats {
 // Clear replaces the internal sync.Pool with a fresh one, allowing all pooled
 // buffers to be garbage-collected. This is useful during shutdown or when
 // reconfiguring the pool size.
+//
+// SAFETY: Clear must only be called when no other goroutines are calling
+// Get or Put on this pool. Concurrent access during Clear is a data race.
 func (bp *BytePool) Clear() {
 	bp.pool = sync.Pool{
 		New: func() any {
@@ -166,7 +169,17 @@ func NewFloat32Pool(size int) (*Float32Pool, error) {
 // NewFloat32Pool.
 func (fp *Float32Pool) Get() []float32 {
 	fp.gets.Add(1)
-	return fp.pool.Get().([]float32) //nolint:forcetypeassert // pool.New always returns []float32
+	buf := fp.pool.Get().([]float32) //nolint:forcetypeassert // pool.New always returns []float32
+
+	if len(buf) == fp.size {
+		return buf
+	}
+
+	// Size mismatch — discard and allocate a fresh slice.
+	fp.discarded.Add(1)
+	fp.news.Add(1)
+
+	return make([]float32, fp.size)
 }
 
 // Put returns a float32 slice to the pool for future reuse.
@@ -200,6 +213,9 @@ func (fp *Float32Pool) GetStats() Float32PoolStats {
 
 // Clear replaces the internal sync.Pool with a fresh one, allowing all pooled
 // slices to be garbage-collected.
+//
+// SAFETY: Clear must only be called when no other goroutines are calling
+// Get or Put on this pool. Concurrent access during Clear is a data race.
 func (fp *Float32Pool) Clear() {
 	fp.pool = sync.Pool{
 		New: func() any {

@@ -9,6 +9,9 @@ import (
 
 // setupProcessGroup sets up a process group on Unix systems.
 func setupProcessGroup(cmd *exec.Cmd) {
+	if cmd == nil {
+		return
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Setpgid: true,
 	}

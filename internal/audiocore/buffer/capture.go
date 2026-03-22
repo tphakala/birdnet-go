@@ -104,14 +104,27 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 	}
 
 	prevIndex := cb.writeIndex
+	dataLen := len(data)
 
-	n := copy(cb.data[cb.writeIndex:], data)
-	cb.writeIndex = (cb.writeIndex + n) % cb.bufferSize
+	// If data is larger than the buffer, keep only the tail.
+	if dataLen > cb.bufferSize {
+		data = data[dataLen-cb.bufferSize:]
+		dataLen = cb.bufferSize
+	}
+
+	remaining := cb.bufferSize - cb.writeIndex
+	if dataLen <= remaining {
+		copy(cb.data[cb.writeIndex:], data)
+	} else {
+		copy(cb.data[cb.writeIndex:], data[:remaining])
+		copy(cb.data[0:], data[remaining:])
+	}
+	cb.writeIndex = (cb.writeIndex + dataLen) % cb.bufferSize
 
 	// If the write pointer wrapped (or reached zero), the oldest data was
 	// overwritten.  Slide the logical start time back by a full buffer
 	// duration so that timestamp-to-byte offset calculations stay consistent.
-	if cb.writeIndex <= prevIndex {
+	if cb.writeIndex <= prevIndex && dataLen > 0 {
 		cb.startTime = time.Now().Add(-cb.bufferDuration)
 	}
 

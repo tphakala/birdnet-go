@@ -42,18 +42,15 @@ func readWAVInfo(file *os.File) (AudioInfo, error) {
 			Build()
 	}
 
-	fileInfo, err := file.Stat()
+	duration, err := decoder.Duration()
 	if err != nil {
-		return AudioInfo{}, errors.New(err).
+		return AudioInfo{}, errors.Newf("unable to determine WAV duration: %w", err).
 			Component("audiocore/readfile").
 			Category(errors.CategoryFileIO).
 			Context("operation", "read_wav_info").
-			Context("file_operation", "stat").
 			Build()
 	}
-
-	bytesPerSample := int(decoder.BitDepth / 8)
-	totalSamples := int(fileInfo.Size()) / bytesPerSample / int(decoder.NumChans)
+	totalSamples := int(duration.Seconds() * float64(decoder.SampleRate))
 
 	return AudioInfo{
 		SampleRate:   int(decoder.SampleRate),
@@ -93,13 +90,23 @@ func ReadWAVBuffered(
 	doResample := decoder.SampleRate != uint32(targetSampleRate) //nolint:gosec // G115: targetSampleRate is a positive audio sample rate
 	sourceSampleRate := int(decoder.SampleRate)
 
+	if doResample && resample == nil {
+		return errors.Newf("resampling required (%d Hz to %d Hz) but no resample function provided", sourceSampleRate, targetSampleRate).
+			Component("audiocore/readfile").
+			Category(errors.CategoryValidation).
+			Context("operation", "read_wav_buffered").
+			Context("source_rate", sourceSampleRate).
+			Context("target_rate", targetSampleRate).
+			Build()
+	}
+
 	divisor, err := getAudioDivisor(int(decoder.BitDepth))
 	if err != nil {
 		return err
 	}
 
-	step := int((3 - overlap) * float64(targetSampleRate))
-	minLenSamples := int(1.5 * float64(targetSampleRate))
+	step := int((chunkDurationSeconds - overlap) * float64(targetSampleRate))
+	minLenSamples := int(minChunkDurationSeconds * float64(targetSampleRate))
 	secondsSamples := chunkSize
 
 	// Get file size to decide processing approach.
@@ -141,7 +148,7 @@ func ReadWAVBuffered(
 			floatChunk[i] = float32(sample) / divisor
 		}
 
-		if doResample && resample != nil {
+		if doResample {
 			floatChunk, err = resample(floatChunk, sourceSampleRate, targetSampleRate)
 			if err != nil {
 				return fmt.Errorf("error resampling audio: %w", err)
@@ -180,8 +187,8 @@ func readWAVDirectBytes(
 	bytesPerSample := int(decoder.BitDepth / 8)
 	bytesPerFrame := bytesPerSample * int(decoder.NumChans)
 
-	// Read raw blocks of 3 seconds each.
-	chunkSamples := int(decoder.SampleRate) * 3
+	// Read raw blocks of chunkDurationSeconds each.
+	chunkSamples := int(decoder.SampleRate) * chunkDurationSeconds
 	blockSize := chunkSamples * bytesPerFrame
 	buffer := make([]byte, blockSize)
 
@@ -205,7 +212,7 @@ func readWAVDirectBytes(
 			return fmt.Errorf("error converting PCM data: %w", err)
 		}
 
-		if doResample && resample != nil {
+		if doResample {
 			floatChunk, err = resample(floatChunk, sourceSampleRate, targetSampleRate)
 			if err != nil {
 				return fmt.Errorf("error resampling audio: %w", err)

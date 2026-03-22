@@ -169,7 +169,7 @@ func TestOverwriteTracker_RateCalculation(t *testing.T) {
 	}
 
 	rate := tracker.OverwriteRate()
-	assert.InDelta(t, 20.0, rate, 0.01, "overwrite rate should be approximately 20%%")
+	assert.InDelta(t, 20.0, rate, 0.01, "overwrite rate should be approximately 20%")
 
 	// After Reset, rate should be zero.
 	tracker.Reset()

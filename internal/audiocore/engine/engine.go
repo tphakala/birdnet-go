@@ -56,15 +56,19 @@ type Config struct {
 	Logger logger.Logger
 
 	// RouterMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
 
 	// StreamMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	StreamMetrics audiocore.StreamMetrics
 
 	// BufferMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	BufferMetrics audiocore.BufferMetrics
 
 	// DeviceMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	DeviceMetrics audiocore.DeviceMetrics
 }
 

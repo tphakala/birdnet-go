@@ -39,12 +39,11 @@ const (
 //
 // Resampler is not safe for concurrent use; callers must serialise calls.
 type Resampler struct {
-	fromRate  int
-	toRate    int
-	inner     *audioresampler.SimpleResampler
-	inFloats  []float64 // scratch buffer for PCM→float64 conversion
-	outFloats []float64 // scratch buffer returned by the inner resampler
-	outBuf    []byte    // pre-allocated output buffer, reused across calls
+	fromRate int
+	toRate   int
+	inner    *audioresampler.SimpleResampler
+	inFloats []float64 // scratch buffer for PCM→float64 conversion
+	outBuf   []byte    // pre-allocated output buffer, reused across calls
 }
 
 // NewResampler creates a Resampler that converts audio from fromRate to toRate.

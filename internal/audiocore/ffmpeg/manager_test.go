@@ -224,7 +224,9 @@ func TestManager_SetOnStreamReset(t *testing.T) {
 	// The callback must have been invoked with the correct sourceID.
 	stored := calledWith.Load()
 	require.NotNil(t, stored)
-	assert.Equal(t, "reset-src", stored.(string))
+	val, ok := stored.(string)
+	require.True(t, ok, "stored value should be a string")
+	assert.Equal(t, "reset-src", val)
 
 	// Clearing the callback must not panic on subsequent operations.
 	mgr.SetOnStreamReset(nil)

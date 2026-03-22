@@ -212,11 +212,9 @@ func TestSourceRegistry_ConcurrentAccess(t *testing.T) {
 
 	const goroutines = 20
 	var wg sync.WaitGroup
-	wg.Add(goroutines)
 
 	for i := range goroutines {
 		wg.Go(func() {
-			defer wg.Done()
 			conn := fmt.Sprintf("rtsp://cam%d.example.com/stream", i)
 			src, err := r.Register(&SourceConfig{ConnectionString: conn})
 			if err != nil {

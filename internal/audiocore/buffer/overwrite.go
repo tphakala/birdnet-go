@@ -82,7 +82,7 @@ func (t *OverwriteTracker) CheckAndNotify(sourceID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	if t.totalWrites < t.minWrites {
+	if t.totalWrites == 0 || t.totalWrites < t.minWrites {
 		return
 	}
 

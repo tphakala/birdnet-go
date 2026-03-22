@@ -42,6 +42,15 @@ func NewSoundLevelConsumer(id string, proc *soundlevel.Processor, sampleRate, bi
 			Build()
 	}
 
+	if bitDepth != 16 {
+		return nil, nil, errors.Newf("unsupported bit depth %d: SoundLevelConsumer requires 16-bit PCM", bitDepth).
+			Component("analysis.sound_level_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_sound_level_consumer").
+			Context("bit_depth", bitDepth).
+			Build()
+	}
+
 	ch := make(chan soundlevel.SoundLevelData, soundLevelChanSize)
 	return &SoundLevelConsumer{
 		id:        id,

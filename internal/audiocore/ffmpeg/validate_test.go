@@ -49,7 +49,6 @@ func makeTestWAVWithSize(t *testing.T, path string, size int64) {
 
 	f, err := os.Create(path) //nolint:gosec // G304: test fixture
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = f.Close() })
 
 	_, err = f.Write(wavHeader)
 	require.NoError(t, err)
@@ -58,6 +57,8 @@ func makeTestWAVWithSize(t *testing.T, path string, size int64) {
 		_, err = f.Write(make([]byte, dataSize))
 		require.NoError(t, err)
 	}
+
+	require.NoError(t, f.Close())
 }
 
 // TestQuickValidateFile verifies the quick (no-ffprobe) validation path.
