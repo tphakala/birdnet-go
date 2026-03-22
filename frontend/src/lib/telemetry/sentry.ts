@@ -103,7 +103,7 @@ function beforeSend(event: Sentry.ErrorEvent, _hint: Sentry.EventHint): Sentry.E
   if (event.request?.url) {
     try {
       const url = new URL(event.request.url, globalThis.location.origin);
-      event.request.url = url.origin + url.pathname;
+      event.request.url = url.pathname;
     } catch {
       event.request.url = '[scrubbed]';
     }

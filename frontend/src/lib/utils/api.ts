@@ -414,7 +414,7 @@ export async function fetchWithCSRF<T = unknown>(
     clearTimeout(timeoutId);
 
     // Fire-and-forget Sentry capture — never blocks error flow
-    const method = finalOptions.method ?? 'GET';
+    const method = (finalOptions.method ?? 'GET').toUpperCase();
     if (error instanceof ApiError) {
       getSentryCaptureApiError().then(capture => {
         capture?.(error, { endpoint: url, method });

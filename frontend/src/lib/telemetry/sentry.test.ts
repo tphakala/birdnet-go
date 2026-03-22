@@ -77,7 +77,7 @@ describe('beforeSend privacy filtering', () => {
       request: { url: 'https://birdnet.local/settings?apiKey=secret&token=abc' },
     } as Sentry.ErrorEvent;
     const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
-    expect(result.request?.url).toBe('https://birdnet.local/settings');
+    expect(result.request?.url).toBe('/settings');
   });
 
   it('scrubs breadcrumb fetch URLs to path only', () => {
