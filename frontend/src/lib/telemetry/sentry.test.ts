@@ -16,7 +16,7 @@ vi.mock('@sentry/browser', () => ({
 }));
 
 import * as Sentry from '@sentry/browser';
-import { initSentry, captureApiError } from './sentry';
+import { initSentry, captureApiError, captureError } from './sentry';
 
 describe('initSentry', () => {
   beforeEach(() => {
@@ -157,5 +157,45 @@ describe('captureApiError', () => {
     error.isNetworkError = true;
     captureApiError(error);
     expect(Sentry.withScope).toHaveBeenCalledOnce();
+  });
+});
+
+describe('captureError', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    initSentry({ dsn: 'https://test@sentry.io/123', systemId: 'sys-1', version: '1.0.0' });
+  });
+
+  it('captures Error with logger tag', () => {
+    const error = new Error('test error');
+    captureError(error, { category: 'ui' });
+
+    expect(Sentry.withScope).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it('sets logger.category tag from context', () => {
+    const error = new Error('test error');
+
+    const mockScope = {
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation(((callback: (scope: unknown) => void) => {
+      callback(mockScope);
+    }) as typeof Sentry.withScope);
+
+    captureError(error, { category: 'settings' });
+
+    expect(mockScope.setTag).toHaveBeenCalledWith('error.type', 'logger');
+    expect(mockScope.setTag).toHaveBeenCalledWith('logger.category', 'settings');
+  });
+
+  it('works without context', () => {
+    const error = new Error('bare error');
+
+    expect(() => captureError(error)).not.toThrow();
+    expect(Sentry.captureException).toHaveBeenCalledWith(error);
   });
 });
