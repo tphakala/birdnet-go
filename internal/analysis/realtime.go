@@ -97,32 +97,12 @@ func (m *AudioDemuxManager) Done() {
 // Global audio demux manager instance
 var audioDemuxManager = NewAudioDemuxManager()
 
-// v2DatabaseManager holds the v2 database manager for shutdown cleanup.
-// This is set by initializeMigrationInfrastructure and cleared on shutdown.
-var v2DatabaseManager datastoreV2.Manager
-var v2DatabaseManagerMu sync.Mutex
-
-// GetV2DatabaseManager returns the v2 database manager.
-// Returns nil if the migration infrastructure is not initialized.
-func GetV2DatabaseManager() datastoreV2.Manager {
-	v2DatabaseManagerMu.Lock()
-	defer v2DatabaseManagerMu.Unlock()
-	return v2DatabaseManager
-}
-
-// RealtimeAnalysis is the backward-compatible entry point.
-// New code should use RealtimeAnalysisWithQuit via the App lifecycle.
-//
-//nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func RealtimeAnalysis(settings *conf.Settings) error {
-	quitChan := make(chan struct{})
-	monitorShutdownSignals(quitChan)
-	return realtimeAnalysisInternal(settings, quitChan)
-}
-
 // RealtimeAnalysisWithQuit runs the analysis loop with an externally controlled quit channel.
 // The caller is responsible for signal handling and closing the quit channel.
-func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{}) error {
+// Database and BirdNET resources are owned by their respective services and passed in.
+func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{},
+	dataStore datastore.Interface, v2Manager datastoreV2.Manager, v2OnlyMode bool,
+	bn *birdnet.BirdNET, metrics *observability.Metrics) error {
 	// Convert read-only channel to bidirectional for internal use.
 	// The done channel prevents a goroutine leak if realtimeAnalysisInternal
 	// returns early (e.g., init failure) before quit is closed.
@@ -136,31 +116,16 @@ func RealtimeAnalysisWithQuit(settings *conf.Settings, quit <-chan struct{}) err
 		}
 	}()
 	defer close(done)
-	return realtimeAnalysisInternal(settings, quitChan)
+	return realtimeAnalysisInternal(settings, quitChan, dataStore, v2Manager, v2OnlyMode, bn, metrics)
 }
 
 // realtimeAnalysisInternal is the main orchestration function that coordinates
 // multiple subsystems during startup and shutdown.
 //
 //nolint:gocognit,gocyclo // This is the main orchestration function that coordinates multiple subsystems during startup and shutdown
-func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) error {
-	// Initialize BirdNET interpreter
-	if err := initializeBirdNET(settings); err != nil {
-		// Model initialization failures are not retryable because they indicate:
-		// - Missing or corrupted model files
-		// - Insufficient system resources (memory, GPU)
-		// - Incompatible TensorFlow runtime
-		// These require manual intervention to resolve
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategoryModelInit).
-			Context("operation", "initialize_birdnet").
-			Context("model_path", settings.BirdNET.ModelPath).
-			Context("label_path", settings.BirdNET.LabelPath).
-			Context("overlap", settings.BirdNET.Overlap).
-			Context("retryable", false). // Model initialization failure is not retryable
-			Build()
-	}
+func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
+	dataStore datastore.Interface, v2Manager datastoreV2.Manager, v2OnlyMode bool,
+	bn *birdnet.BirdNET, metrics *observability.Metrics) error {
 
 	// Clean up any leftover HLS streaming files from previous runs
 	if err := cleanupHLSStreamingFiles(); err != nil {
@@ -175,119 +140,6 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 
 	// Print system details and configuration
 	printSystemDetails(settings)
-
-	// Check for unmigrated legacy records from a potential hard crash during tail sync.
-	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
-	// has unmigrated records that the worker needs to sync.
-	datastoreLog := logger.Global().Module("datastore")
-	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
-
-	// Check for and perform database consolidation if needed (SQLite only)
-	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
-	if settings.Output.SQLite.Enabled && !hasUnmigrated {
-		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
-		if err != nil {
-			datastoreLog.Error("database consolidation failed", logger.Error(err))
-			// Continue with normal startup - consolidation can be retried
-		} else if consolidated {
-			datastoreLog.Info("database consolidation completed, continuing startup")
-		}
-	} else if hasUnmigrated {
-		datastoreLog.Info("deferring database consolidation until unmigrated records are synced")
-	}
-
-	// Check migration state before initializing database
-	// This allows us to skip the legacy database when migration is complete
-	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
-	v2OnlyMode := startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
-	freshInstall := startupState.FreshInstall
-
-	// Override v2-only mode when unmigrated legacy records were found. This forces
-	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
-	// Consolidation will complete on the next clean restart.
-	if hasUnmigrated && v2OnlyMode {
-		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
-			logger.String("operation", "startup_reconciliation"))
-		v2OnlyMode = false
-		startupState.LegacyRequired = true
-	}
-
-	// Log startup mode detection
-	switch {
-	case v2OnlyMode:
-		datastoreLog.Info("migration completed, starting in enhanced database mode",
-			logger.String("migration_status", string(startupState.MigrationStatus)),
-			logger.String("operation", "startup_mode_check"))
-	case freshInstall:
-		GetLogger().Info("fresh installation detected, initializing v2 schema",
-			logger.String("database_path", settings.Output.SQLite.Path),
-			logger.String("operation", "startup_mode_check"))
-	default:
-		GetLogger().Debug("migration state check completed",
-			logger.String("migration_status", string(startupState.MigrationStatus)),
-			logger.Bool("v2_available", startupState.V2Available),
-			logger.Bool("legacy_required", startupState.LegacyRequired),
-			logger.String("operation", "startup_mode_check"))
-	}
-
-	// Initialize database access based on startup state
-	var dataStore datastore.Interface
-	var v2OnlyDatastore *v2only.Datastore
-
-	switch {
-	case v2OnlyMode:
-		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
-		var err error
-		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
-		if err != nil {
-			// Enhanced database mode failed, fall back to legacy startup
-			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
-				logger.Error(err),
-				logger.String("operation", "initialize_enhanced_database_mode"))
-			dataStore = datastore.New(settings)
-			v2OnlyMode = false
-		} else {
-			dataStore = v2OnlyDatastore
-			// Set global enhanced database flag
-			datastoreV2.SetEnhancedDatabaseMode()
-			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
-			// Set the v2 database manager for API access
-			v2DatabaseManagerMu.Lock()
-			v2DatabaseManager = v2OnlyDatastore.Manager()
-			v2DatabaseManagerMu.Unlock()
-		}
-
-	case freshInstall:
-		// Fresh install: create at configured path with v2 schema
-		// Load eBird taxonomy for species code lookups in analytics endpoints.
-		_, freshSciIndex, _ := birdnet.LoadTaxonomyData("")
-		var err error
-		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
-		if err != nil {
-			// Fresh install failed, fall back to legacy mode
-			GetLogger().Warn("fresh install failed, falling back to legacy mode",
-				logger.Error(err),
-				logger.String("operation", "initialize_fresh_install"))
-			dataStore = datastore.New(settings)
-		} else {
-			dataStore = v2OnlyDatastore
-			// Fresh install is now effectively v2-only mode
-			v2OnlyMode = true
-			// Set global enhanced database flag
-			datastoreV2.SetEnhancedDatabaseMode()
-			// Notify the API layer that we're in v2-only mode
-			apiv2.SetV2OnlyMode()
-			// Set the v2 database manager for API access
-			v2DatabaseManagerMu.Lock()
-			v2DatabaseManager = v2OnlyDatastore.Manager()
-			v2DatabaseManagerMu.Unlock()
-		}
-
-	default:
-		// Legacy mode: use legacy datastore
-		dataStore = datastore.New(settings)
-	}
 
 	// Initialize the control channel for restart control.
 	controlChan := make(chan string, 1)
@@ -311,42 +163,8 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	const defaultQueueSize = 5
 	birdnet.ResizeQueue(defaultQueueSize)
 
-	// Initialize Prometheus metrics manager
-	metrics, err := initializeMetrics()
-	if err != nil {
-		return errors.New(err).
-			Component("analysis.realtime").
-			Category(errors.CategorySystem).
-			Context("operation", "initialize_metrics").
-			Build()
-	}
-
 	// Update BirdNET model loaded metric now that metrics are available
-	UpdateBirdNETModelLoadedMetric(metrics.BirdNET)
-
-	// Connect metrics to datastore before opening
-	dataStore.SetMetrics(metrics.Datastore)
-	dataStore.SetSunCalcMetrics(metrics.SunCalc)
-
-	// Only validate disk space and open for legacy mode (v2-only mode already opened)
-	if !v2OnlyMode {
-		// Validate disk space before attempting to open the database
-		// This prevents startup failures due to insufficient disk space
-		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
-		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
-			return err
-		}
-
-		// Open a connection to the database and handle possible errors.
-		if err := dataStore.Open(); err != nil {
-			return err // Return error to stop execution if database connection fails.
-		}
-	}
-	// Ensure the database connection is closed when the function returns.
-	defer closeDataStore(dataStore)
-
-	// Set datastore schema version as a Sentry tag for telemetry
-	telemetry.SetDatastoreSchemaTag(dataStore.SchemaVersion())
+	UpdateBirdNETModelLoadedMetric(metrics.BirdNET, bn)
 
 	// Note: datastore monitoring is automatically started when the database is opened
 
@@ -387,28 +205,6 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Initialize system monitor if monitoring is enabled
 	systemMonitor := initializeSystemMonitor(settings)
 
-	// Initialize v2 migration infrastructure only if not in enhanced database mode
-	// In enhanced database mode, migration is already complete - no need for migration infrastructure
-	if !v2OnlyMode {
-		// This sets up the StateManager and Worker for the database migration API
-		if err := initializeMigrationInfrastructure(settings, dataStore); err != nil {
-			// Migration infrastructure is optional - log warning but continue
-			GetLogger().Warn("migration infrastructure initialization failed",
-				logger.Error(err),
-				logger.String("operation", "initialize_migration_infrastructure"))
-		}
-	} else {
-		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
-			logger.String("operation", "initialize_migration_infrastructure"))
-	}
-	// Ensure v2 database is closed on shutdown (handles nil case gracefully).
-	// In v2-only mode, the v2only.Datastore wraps the same manager, so closeDataStore
-	// handles everything via v2only.Datastore.Close(). Only register this defer in
-	// legacy/migration mode where the v2 database is a separate resource.
-	if !v2OnlyMode {
-		defer closeV2Database()
-	}
-
 	// Initialize and start the HTTP server
 	GetLogger().Info("starting HTTP server")
 	oauth2Server := security.NewOAuth2Server()
@@ -424,7 +220,7 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 		api.WithAudioLevelChannel(audioLevelChan),
 		api.WithOAuth2Server(oauth2Server),
 		api.WithSunCalc(sunCalc),
-		api.WithV2Manager(GetV2DatabaseManager()),
+		api.WithV2Manager(v2Manager),
 	)
 	if err != nil {
 		return errors.New(err).
@@ -743,27 +539,9 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 					return
 				}
 
-				// Step 12: Delete BirdNET interpreter
-				log.Info("shutdown step 12: cleaning up BirdNET interpreter",
-					logger.Int("step", 12),
-					logger.String("operation", "shutdown_birdnet_cleanup"))
-				bn.Delete()
-
-				// Step 13: Stop migration worker (before closing databases)
-				log.Info("shutdown step 13: stopping migration worker",
-					logger.Int("step", 13),
-					logger.String("operation", "shutdown_migration_worker"))
-				apiv2.StopMigrationWorker()
-
-				// Step 14: Close v2 database (before legacy database closes via deferred closeDataStore).
-				// In v2-only mode, the v2only.Datastore wraps the same manager — closing is
-				// handled by the deferred closeDataStore call to avoid double-close errors.
-				if !v2OnlyMode {
-					log.Info("shutdown step 14: closing v2 database",
-						logger.Int("step", 14),
-						logger.String("operation", "shutdown_v2_database"))
-					closeV2Database()
-				}
+				// Steps 12-14 (BirdNET cleanup, migration worker, v2 database close)
+				// are now handled by BirdNETAnalyzer.Stop() and DatabaseService.Stop()
+				// via the App lifecycle manager.
 
 				log.Info("graceful shutdown completed",
 					logger.Int64("duration_ms", time.Since(shutdownStart).Milliseconds()),
@@ -906,91 +684,6 @@ func monitorShutdownSignals(quitChan chan struct{}) {
 			logger.String("operation", "shutdown_signal_received"))
 		close(quitChan) // Close the quit channel to signal other goroutines to stop
 	}()
-}
-
-// closeDataStore attempts to close the database connection and logs the result.
-func closeDataStore(store datastore.Interface) {
-	log := GetLogger()
-	// If this is an SQLite store, perform WAL checkpoint before closing
-	if sqliteStore, ok := store.(*datastore.SQLiteStore); ok {
-		log.Info("performing SQLite WAL checkpoint",
-			logger.String("operation", "wal_checkpoint_before_shutdown"))
-		if err := sqliteStore.CheckpointWAL(); err != nil {
-			// Enhanced error handling - check for specific error conditions
-			errStr := err.Error()
-			if strings.Contains(errStr, "database is closed") || strings.Contains(errStr, "nil pointer") {
-				// Database is likely already closed or connection is nil
-				log.Warn("database already closed during WAL checkpoint",
-					logger.String("operation", "wal_checkpoint"),
-					logger.String("error_type", "database_closed"))
-			} else {
-				// Other checkpoint failures - log but continue with shutdown
-				log.Warn("WAL checkpoint failed",
-					logger.Error(err),
-					logger.String("operation", "wal_checkpoint"),
-					logger.Bool("continuing_shutdown", true))
-			}
-		}
-	}
-
-	// Close the database connection
-	if err := store.Close(); err != nil {
-		log.Error("failed to close database",
-			logger.Error(err),
-			logger.String("operation", "close_database"))
-	} else {
-		log.Info("successfully closed database",
-			logger.String("operation", "close_database"))
-	}
-}
-
-// closeV2Database closes the v2 database with proper WAL checkpoint.
-func closeV2Database() {
-	v2DatabaseManagerMu.Lock()
-	manager := v2DatabaseManager
-	v2DatabaseManager = nil
-	v2DatabaseManagerMu.Unlock()
-
-	if manager == nil {
-		return
-	}
-
-	log := GetLogger()
-
-	// Determine database type for logging
-	dbType := "SQLite"
-	if manager.IsMySQL() {
-		dbType = "MySQL"
-	}
-
-	// Perform WAL checkpoint before closing (SQLite only, no-op for MySQL)
-	if !manager.IsMySQL() {
-		log.Info("performing v2 SQLite WAL checkpoint",
-			logger.String("operation", "v2_wal_checkpoint_before_shutdown"))
-
-		if err := manager.CheckpointWAL(); err != nil {
-			log.Warn("v2 WAL checkpoint failed",
-				logger.Error(err),
-				logger.String("operation", "v2_wal_checkpoint"))
-		}
-	}
-
-	// Close the database
-	log.Info("closing v2 database",
-		logger.String("type", dbType),
-		logger.String("path", manager.Path()),
-		logger.String("operation", "v2_database_close"))
-
-	if err := manager.Close(); err != nil {
-		log.Error("failed to close v2 database",
-			logger.Error(err),
-			logger.String("type", dbType),
-			logger.String("operation", "v2_database_close"))
-	} else {
-		log.Info("v2 database closed successfully",
-			logger.String("type", dbType),
-			logger.String("path", manager.Path()))
-	}
 }
 
 // ClipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
@@ -1695,8 +1388,8 @@ func initializeSystemMonitor(settings *conf.Settings) *monitor.SystemMonitor {
 	return systemMonitor
 }
 
-// initializeMetrics initializes the Prometheus metrics manager
-func initializeMetrics() (*observability.Metrics, error) {
+// InitializeMetrics initializes the Prometheus metrics manager.
+func InitializeMetrics() (*observability.Metrics, error) {
 	metrics, err := observability.NewMetrics()
 	if err != nil {
 		return nil, errors.New(err).
@@ -1982,12 +1675,6 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			Context("operation", "create_migration_worker").
 			Build()
 	}
-
-	// Store manager for shutdown cleanup - only after successful worker creation
-	// to prevent GetV2DatabaseManager() from returning a partially initialized manager
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = cfg.manager
-	v2DatabaseManagerMu.Unlock()
 
 	// Inject dependencies into the API layer
 	apiv2.SetMigrationDependencies(stateManager, worker)
@@ -2297,11 +1984,6 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 			Context("operation", "create_v2_only_datastore").
 			Build()
 	}
-
-	// Store manager for shutdown cleanup
-	v2DatabaseManagerMu.Lock()
-	v2DatabaseManager = v2Manager
-	v2DatabaseManagerMu.Unlock()
 
 	log.Info("enhanced database mode initialized successfully",
 		logger.String("operation", "initialize_enhanced_database_mode"))

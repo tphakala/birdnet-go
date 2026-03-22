@@ -6,11 +6,15 @@ import (
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // databaseServiceName is the service name used for logging and diagnostics.
@@ -62,8 +66,158 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 }
 
 // Start initializes and opens the database connections.
-// This is a placeholder that will be filled when code is extracted from the monolith.
+// It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
+// Migration infrastructure is initialized when not in v2-only mode.
+//
+//nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
+	settings := d.settings
+
+	// Check for unmigrated legacy records from a potential hard crash during tail sync.
+	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
+	// has unmigrated records that the worker needs to sync.
+	datastoreLog := logger.Global().Module("datastore")
+	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
+
+	// Check for and perform database consolidation if needed (SQLite only)
+	// Skip consolidation when unmigrated records found — let the worker tail-sync them first
+	if settings.Output.SQLite.Enabled && !hasUnmigrated {
+		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
+		if err != nil {
+			datastoreLog.Error("database consolidation failed", logger.Error(err))
+			// Continue with normal startup - consolidation can be retried
+		} else if consolidated {
+			datastoreLog.Info("database consolidation completed, continuing startup")
+		}
+	} else if hasUnmigrated {
+		datastoreLog.Info("deferring database consolidation until unmigrated records are synced")
+	}
+
+	// Check migration state before initializing database
+	// This allows us to skip the legacy database when migration is complete
+	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
+	d.v2OnlyMode = startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
+	freshInstall := startupState.FreshInstall
+
+	// Override v2-only mode when unmigrated legacy records were found. This forces
+	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
+	// Consolidation will complete on the next clean restart.
+	if hasUnmigrated && d.v2OnlyMode {
+		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
+			logger.String("operation", "startup_reconciliation"))
+		d.v2OnlyMode = false
+		startupState.LegacyRequired = true
+	}
+
+	// Log startup mode detection
+	switch {
+	case d.v2OnlyMode:
+		datastoreLog.Info("migration completed, starting in enhanced database mode",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.String("operation", "startup_mode_check"))
+	case freshInstall:
+		GetLogger().Info("fresh installation detected, initializing v2 schema",
+			logger.String("database_path", settings.Output.SQLite.Path),
+			logger.String("operation", "startup_mode_check"))
+	default:
+		GetLogger().Debug("migration state check completed",
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.Bool("v2_available", startupState.V2Available),
+			logger.Bool("legacy_required", startupState.LegacyRequired),
+			logger.String("operation", "startup_mode_check"))
+	}
+
+	// Initialize database access based on startup state
+	var v2OnlyDatastore *v2only.Datastore
+
+	switch {
+	case d.v2OnlyMode:
+		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
+		var err error
+		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
+		if err != nil {
+			// Enhanced database mode failed, fall back to legacy startup
+			datastoreLog.Warn("enhanced database mode initialization failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_enhanced_database_mode"))
+			d.dataStore = datastore.New(settings)
+			d.v2OnlyMode = false
+		} else {
+			d.dataStore = v2OnlyDatastore
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager
+			d.v2Manager = v2OnlyDatastore.Manager()
+		}
+
+	case freshInstall:
+		// Fresh install: create at configured path with v2 schema
+		// Load eBird taxonomy for species code lookups in analytics endpoints.
+		_, freshSciIndex, _ := birdnet.LoadTaxonomyData("")
+		var err error
+		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
+		if err != nil {
+			// Fresh install failed, fall back to legacy mode
+			GetLogger().Warn("fresh install failed, falling back to legacy mode",
+				logger.Error(err),
+				logger.String("operation", "initialize_fresh_install"))
+			d.dataStore = datastore.New(settings)
+		} else {
+			d.dataStore = v2OnlyDatastore
+			// Fresh install is now effectively v2-only mode
+			d.v2OnlyMode = true
+			// Set global enhanced database flag
+			datastoreV2.SetEnhancedDatabaseMode()
+			// Notify the API layer that we're in v2-only mode
+			apiv2.SetV2OnlyMode()
+			// Set the v2 database manager
+			d.v2Manager = v2OnlyDatastore.Manager()
+		}
+
+	default:
+		// Legacy mode: use legacy datastore
+		d.dataStore = datastore.New(settings)
+	}
+
+	// Connect metrics to datastore before opening
+	d.dataStore.SetMetrics(d.metrics.Datastore)
+	d.dataStore.SetSunCalcMetrics(d.metrics.SunCalc)
+
+	// Only validate disk space and open for legacy mode (v2-only mode already opened)
+	if !d.v2OnlyMode {
+		// Validate disk space before attempting to open the database
+		// This prevents startup failures due to insufficient disk space
+		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
+		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			return err
+		}
+
+		// Open a connection to the database and handle possible errors.
+		if err := d.dataStore.Open(); err != nil {
+			return err // Return error to stop execution if database connection fails.
+		}
+	}
+
+	// Set datastore schema version as a Sentry tag for telemetry
+	telemetry.SetDatastoreSchemaTag(d.dataStore.SchemaVersion())
+
+	// Initialize v2 migration infrastructure only if not in enhanced database mode
+	// In enhanced database mode, migration is already complete - no need for migration infrastructure
+	if !d.v2OnlyMode {
+		// This sets up the StateManager and Worker for the database migration API
+		if err := initializeMigrationInfrastructure(settings, d.dataStore); err != nil {
+			// Migration infrastructure is optional - log warning but continue
+			GetLogger().Warn("migration infrastructure initialization failed",
+				logger.Error(err),
+				logger.String("operation", "initialize_migration_infrastructure"))
+		}
+	} else {
+		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
+			logger.String("operation", "initialize_migration_infrastructure"))
+	}
+
 	return nil
 }
 
