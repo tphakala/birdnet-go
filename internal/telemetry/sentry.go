@@ -110,6 +110,11 @@ func InitSentry(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
+		// Drain deferred messages — Sentry will never initialize
+		deferredMutex.Lock()
+		deferredMessages = nil
+		sentryInitialized = true
+		deferredMutex.Unlock()
 		return nil
 	}
 
