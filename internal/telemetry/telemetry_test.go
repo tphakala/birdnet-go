@@ -443,6 +443,21 @@ func TestApplyStacktracePrivacyFilters_FatalLevel(t *testing.T) {
 	assert.NotNil(t, event.Exception[0].Stacktrace, "fatal-level events should retain stacktraces")
 }
 
+func TestCaptureError_NilError(t *testing.T) {
+	t.Parallel()
+
+	// Enable test mode so telemetry functions don't skip
+	EnableTestMode()
+	t.Cleanup(func() {
+		DisableTestMode()
+	})
+
+	// CaptureError with nil should not panic
+	assert.NotPanics(t, func() {
+		CaptureError(nil, "test-component")
+	}, "CaptureError should not panic on nil error")
+}
+
 func TestCaptureMessage_InfoLevelFiltered(t *testing.T) {
 	t.Parallel()
 	// Info and debug-level messages should be silently dropped.

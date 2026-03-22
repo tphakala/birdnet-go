@@ -665,6 +665,12 @@ func normalizeDirectCaptureErrorType(scrubbedMsg string) string {
 
 // CaptureError captures an error with privacy-compliant context
 func CaptureError(err error, component string) {
+	if err == nil {
+		GetLogger().Warn("CaptureError called with nil error",
+			logger.String("component", component))
+		return
+	}
+
 	if shouldSkipTelemetry() {
 		return
 	}
