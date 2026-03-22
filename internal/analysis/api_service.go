@@ -63,6 +63,28 @@ func (s *APIServerService) Name() string {
 //
 //nolint:gocognit // Orchestration function that initializes multiple subsystems in sequence.
 func (s *APIServerService) Start(_ context.Context) error {
+	// If Start fails after creating resources, clean up to prevent leaks.
+	// The App framework only calls Stop() on services that started successfully,
+	// so the failing service must clean up after itself.
+	startSucceeded := false
+	defer func() {
+		if !startSucceeded {
+			// Best-effort cleanup of partially initialized resources.
+			if s.systemMonitor != nil {
+				s.systemMonitor.Stop()
+				s.systemMonitor = nil
+			}
+			if s.server != nil {
+				_ = s.server.ShutdownWithContext(context.Background())
+				s.server = nil
+			}
+			if s.proc != nil {
+				_ = s.proc.ShutdownWithContext(context.Background())
+				s.proc = nil
+			}
+		}
+	}()
+
 	// Fail fast: verify dependencies are initialized by upstream services.
 	if s.dbService == nil || s.dbService.DataStore() == nil {
 		return errors.Newf("api-server requires an initialized datastore; database service must be started first").
@@ -160,6 +182,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 		s.server.APIController().SetShutdownRequester(appInstance)
 	}
 
+	startSucceeded = true
 	return nil
 }
 

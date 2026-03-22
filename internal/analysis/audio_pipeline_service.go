@@ -278,6 +278,13 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 		}
 	})
 
+	// Stop the audio demux manager explicitly. The demux goroutine is tracked by
+	// demuxMgr (not p.wg), so we must wait for it here to prevent writes to the
+	// already-closed audioLevelChan owned by APIServerService.
+	if p.demuxMgr != nil {
+		p.demuxMgr.Stop()
+	}
+
 	// Wait for goroutines with context deadline.
 	log.Info("waiting for goroutines to finish",
 		logger.String("operation", "shutdown_wait_goroutines"))

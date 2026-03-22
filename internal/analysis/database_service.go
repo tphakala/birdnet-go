@@ -73,6 +73,18 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 func (d *DatabaseService) Start(_ context.Context) error {
 	settings := d.settings
 
+	// If Start fails after opening the database, clean up to prevent resource leaks.
+	// The App framework only calls Stop() on services that started successfully ([:i]),
+	// so the failing service must clean up after itself.
+	startSucceeded := false
+	defer func() {
+		if !startSucceeded {
+			log := GetLogger()
+			d.closeV2Database(log)
+			d.closeDataStore(log)
+		}
+	}()
+
 	// Check for unmigrated legacy records from a potential hard crash during tail sync.
 	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
 	// has unmigrated records that the worker needs to sync.
@@ -218,6 +230,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
 
+	startSucceeded = true
 	return nil
 }
 
