@@ -30,7 +30,7 @@ describe('initSentry', () => {
     const config = vi.mocked(Sentry.init).mock.calls[0][0];
     expect(config).toMatchObject({
       dsn: 'https://test@sentry.io/123',
-      release: '1.0.0',
+      release: 'birdnet-go@1.0.0',
       environment: 'production',
       sampleRate: 1.0,
       tracesSampleRate: 0,

@@ -29,7 +29,7 @@ interface ApiErrorLike {
 export function initSentry(config: SentryConfig): void {
   Sentry.init({
     dsn: config.dsn,
-    release: config.version,
+    release: `birdnet-go@${config.version}`,
     environment: 'production',
     sampleRate: 1.0,
     tracesSampleRate: 0,
