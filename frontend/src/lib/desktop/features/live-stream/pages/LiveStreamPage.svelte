@@ -34,6 +34,7 @@
     promoteFromQueue,
     nextYSlot,
     STALE_DEDUP_PRUNE_SECONDS,
+    LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -466,7 +467,7 @@
           slotCounter = next;
           labelQueue.push({
             text: det.species,
-            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - 1.5,
+            firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
             ySlot: slot,
           });
         }

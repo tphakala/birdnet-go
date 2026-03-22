@@ -122,9 +122,10 @@
       oninput={handleMinFreqChange}
       class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
       aria-label={t('spectrogram.controls.frequencyRangeMin')}
+      aria-describedby="spectrogram-freq-readout"
       title={t('spectrogram.controls.frequencyRangeMin')}
     />
-    <span class="text-[var(--color-base-content)]/50 tabular-nums">
+    <span id="spectrogram-freq-readout" class="text-[var(--color-base-content)]/50 tabular-nums">
       {(frequencyRange[0] / 1000).toFixed(1)}&ndash;{(frequencyRange[1] / 1000).toFixed(1)} kHz
     </span>
     <input
@@ -137,6 +138,7 @@
       oninput={handleMaxFreqChange}
       class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
       aria-label={t('spectrogram.controls.frequencyRangeMax')}
+      aria-describedby="spectrogram-freq-readout"
       title={t('spectrogram.controls.frequencyRangeMax')}
     />
   </div>
@@ -193,10 +195,12 @@
         value={gainDb}
         oninput={handleGainChange}
         class="h-2 w-20 cursor-pointer appearance-none rounded-lg bg-[var(--color-base-300)] accent-[var(--color-primary)]"
-        aria-label={t('spectrogram.controls.gain')}
+        aria-describedby="spectrogram-gain-readout"
         title={t('spectrogram.controls.gain')}
       />
-      <span class="text-[var(--color-base-content)]/50 tabular-nums">{gainDb} dB</span>
+      <span id="spectrogram-gain-readout" class="text-[var(--color-base-content)]/50 tabular-nums"
+        >{gainDb} dB</span
+      >
     </div>
   {/if}
 

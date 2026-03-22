@@ -36,6 +36,7 @@
     promoteFromQueue,
     nextYSlot,
     STALE_DEDUP_PRUNE_SECONDS,
+    LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
 
   const logger = loggers.audio;
@@ -397,7 +398,7 @@
         slotCounter = next;
         labelQueue.push({
           text: det.species,
-          firstDetected: (det.audioCapturedAt ?? det.firstDetected) - 1.5,
+          firstDetected: (det.audioCapturedAt ?? det.firstDetected) - LABEL_LEAD_IN_SECONDS,
           ySlot: slot,
         });
       }
@@ -406,19 +407,27 @@
   });
 
   // Promote queued detection labels when playhead catches up.
-  // Uses hls.playingDate — the wall-clock time interpolated from
-  // #EXT-X-PROGRAM-DATE-TIME tags embedded in the HLS playlist by FFmpeg.
+  // Prefers hls.playingDate (wall-clock time interpolated from
+  // #EXT-X-PROGRAM-DATE-TIME tags). Falls back to client wall-clock
+  // for native HLS (Safari/iOS) where hls.js is not used.
   $effect(() => {
-    if (!audioElement || !hls) return;
+    if (!audioElement) return;
 
     const interval = globalThis.setInterval(() => {
-      if (!audioElement || !hls) return;
+      if (!audioElement) return;
 
       const now = globalThis.performance.now();
       const nowUnix = Date.now() / 1000;
 
-      const playingDate = hls.playingDate;
-      const wallClockAtPlayhead = playingDate ? playingDate.getTime() / 1000 : 0;
+      // Compute wall-clock at playhead: prefer hls.playingDate (accurate),
+      // fall back to client wall-clock for native HLS (approximate but
+      // ensures labels still appear on Safari/iOS).
+      let wallClockAtPlayhead = 0;
+      if (hls?.playingDate) {
+        wallClockAtPlayhead = hls.playingDate.getTime() / 1000;
+      } else if (audioElement.currentTime > 0) {
+        wallClockAtPlayhead = nowUnix;
+      }
 
       // Promote queued labels when playhead is available
       if (wallClockAtPlayhead > 0 && labelQueue.length > 0) {

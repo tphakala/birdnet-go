@@ -37,6 +37,11 @@ const DEDUP_INTERVAL_SECONDS = 6;
  *  Generous buffer beyond DEDUP_INTERVAL_SECONDS to avoid premature cleanup. */
 export const STALE_DEDUP_PRUNE_SECONDS = 10;
 
+/** Seconds to subtract from firstDetected when queuing a label.
+ *  Compensates for the delay between audio capture and detection arrival,
+ *  so the label appears closer to the actual sound on the waterfall. */
+export const LABEL_LEAD_IN_SECONDS = 1.5;
+
 /**
  * Diff two pending snapshots, returning species with new activity for a given source.
  * Returns species that are newly appeared OR have an increased hitCount (new inference hit).
