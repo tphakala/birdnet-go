@@ -235,12 +235,12 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{},
 	}
 
 	// start cleanup of clips
-	if conf.Setting().Realtime.Audio.Export.Retention.Policy != "none" {
+	if conf.Setting().Realtime.Audio.Export.Retention.Policy != policyNone {
 		startClipCleanupMonitor(&wg, quitChan, dataStore)
 	}
 
 	// start weather polling
-	if settings.Realtime.Weather.Provider != "none" {
+	if settings.Realtime.Weather.Provider != policyNone {
 		startWeatherPolling(&wg, settings, dataStore, metrics, quitChan)
 	}
 
