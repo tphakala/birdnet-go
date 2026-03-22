@@ -222,7 +222,8 @@ function validateAndSanitizeBody(body: unknown): string | FormData | undefined {
     for (const [, value] of body) {
       if (typeof value === 'string') {
         totalSize += value.length;
-      } else if (value instanceof File) {
+      } else if (value instanceof Blob) {
+        // Blob covers both Blob and File (File extends Blob)
         totalSize += value.size;
       }
     }
