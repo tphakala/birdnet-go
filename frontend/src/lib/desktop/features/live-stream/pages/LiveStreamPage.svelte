@@ -33,6 +33,7 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
+    computeWallClockAtPlayhead,
     STALE_DEDUP_PRUNE_SECONDS,
     LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
@@ -327,6 +328,10 @@
             spectro.disconnect();
             return;
           }
+          startHeartbeat(activeStreamToken!);
+          if (activeSourceId) {
+            connectDetectionStream(activeSourceId);
+          }
           isStreaming = true;
           isConnecting = false;
         });
@@ -341,8 +346,7 @@
               buffered: describeBuffered(audioElement),
               currentTime: audioElement?.currentTime?.toFixed(3),
             });
-            isStreaming = false;
-            isConnecting = false;
+            stopStream();
           } else {
             // Non-fatal errors — log for debugging buffer issues
             const info: Record<string, unknown> = {
@@ -394,6 +398,10 @@
           spectro.disconnect();
           return;
         }
+        startHeartbeat(activeStreamToken!);
+        if (activeSourceId) {
+          connectDetectionStream(activeSourceId);
+        }
         isStreaming = true;
         isConnecting = false;
       } else {
@@ -404,11 +412,6 @@
 
       // Guard: abort may have fired during async setup
       if (signal.aborted) return;
-
-      startHeartbeat(activeStreamToken!);
-      if (activeSourceId) {
-        connectDetectionStream(activeSourceId);
-      }
     } catch (error) {
       if (signal.aborted) return;
       connectionError = t('spectrogram.error.connectionFailed');
@@ -702,16 +705,11 @@
       const now = globalThis.performance.now();
       const nowUnix = Date.now() / 1000;
 
-      // Compute wall-clock at playhead: prefer hls.playingDate (accurate),
-      // fall back to seekable-based estimate for native HLS (Safari/iOS).
-      let wallClockAtPlayhead = 0;
-      if (hls?.playingDate) {
-        wallClockAtPlayhead = hls.playingDate.getTime() / 1000;
-      } else if (audioElement.currentTime > 0 && audioElement.seekable.length > 0) {
-        const liveEdge = audioElement.seekable.end(audioElement.seekable.length - 1);
-        const liveLagSeconds = Math.max(0, liveEdge - audioElement.currentTime);
-        wallClockAtPlayhead = nowUnix - liveLagSeconds;
-      }
+      const wallClockAtPlayhead = computeWallClockAtPlayhead(
+        audioElement,
+        hls?.playingDate ?? null,
+        nowUnix
+      );
 
       // Update reactive state for debug display in SpectrogramCanvas
       if (wallClockAtPlayhead > 0) {

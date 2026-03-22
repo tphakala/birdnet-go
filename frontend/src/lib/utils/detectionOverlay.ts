@@ -114,6 +114,28 @@ export function promoteFromQueue(
 }
 
 /**
+ * Compute the wall-clock time (Unix seconds) at the current playhead position.
+ * Prefers hls.playingDate (accurate, interpolated from #EXT-X-PROGRAM-DATE-TIME).
+ * Falls back to seekable-based live lag estimate for native HLS (Safari/iOS).
+ * Returns 0 if playhead time is unavailable.
+ */
+export function computeWallClockAtPlayhead(
+  audioElement: HTMLAudioElement,
+  hlsPlayingDate: Date | null,
+  nowUnix: number
+): number {
+  if (hlsPlayingDate) {
+    return hlsPlayingDate.getTime() / 1000;
+  }
+  if (audioElement.currentTime > 0 && audioElement.seekable.length > 0) {
+    const liveEdge = audioElement.seekable.end(audioElement.seekable.length - 1);
+    const liveLagSeconds = Math.max(0, liveEdge - audioElement.currentTime);
+    return nowUnix - liveLagSeconds;
+  }
+  return 0;
+}
+
+/**
  * Assign the next available Y slot, cycling through maxSlots.
  */
 export function nextYSlot(counter: number, maxSlots: number): { slot: number; next: number } {

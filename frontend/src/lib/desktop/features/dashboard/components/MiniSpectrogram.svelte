@@ -35,6 +35,7 @@
     shouldDedup,
     promoteFromQueue,
     nextYSlot,
+    computeWallClockAtPlayhead,
     STALE_DEDUP_PRUNE_SECONDS,
     LABEL_LEAD_IN_SECONDS,
   } from '$lib/utils/detectionOverlay';
@@ -419,16 +420,11 @@
       const now = globalThis.performance.now();
       const nowUnix = Date.now() / 1000;
 
-      // Compute wall-clock at playhead: prefer hls.playingDate (accurate),
-      // fall back to seekable-based estimate for native HLS (Safari/iOS).
-      let wallClockAtPlayhead = 0;
-      if (hls?.playingDate) {
-        wallClockAtPlayhead = hls.playingDate.getTime() / 1000;
-      } else if (audioElement.currentTime > 0 && audioElement.seekable.length > 0) {
-        const liveEdge = audioElement.seekable.end(audioElement.seekable.length - 1);
-        const liveLagSeconds = Math.max(0, liveEdge - audioElement.currentTime);
-        wallClockAtPlayhead = nowUnix - liveLagSeconds;
-      }
+      const wallClockAtPlayhead = computeWallClockAtPlayhead(
+        audioElement,
+        hls?.playingDate ?? null,
+        nowUnix
+      );
 
       // Promote queued labels when playhead is available
       if (wallClockAtPlayhead > 0 && labelQueue.length > 0) {
