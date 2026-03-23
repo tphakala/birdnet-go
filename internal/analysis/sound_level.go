@@ -550,7 +550,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData soundleve
 	// Sanitize data before broadcasting
 	sanitizedData := sanitizeSoundLevelData(soundData)
 
-	if err := apiController.BroadcastSoundLevel(fromSoundLevelPtr(sanitizedData)); err != nil {
+	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 		// Record error metric
 		if m := getSoundLevelMetrics(apiController); m != nil {
 			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
