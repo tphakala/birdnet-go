@@ -82,11 +82,18 @@ func (fp *Float32Pool) Put(buf []float32) {
 
 // GetStats returns current pool statistics.
 func (fp *Float32Pool) GetStats() Float32PoolStats {
-	gets := fp.gets.Load()
+	// Load news before gets so that a concurrent miss between the two loads
+	// cannot produce news > gets (which would wrap the unsigned subtraction).
 	news := fp.news.Load()
+	gets := fp.gets.Load()
+
+	hits := uint64(0)
+	if gets >= news {
+		hits = gets - news
+	}
 
 	return Float32PoolStats{
-		Hits:      gets - news,
+		Hits:      hits,
 		Misses:    news,
 		Discarded: fp.discarded.Load(),
 	}
