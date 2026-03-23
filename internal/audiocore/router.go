@@ -111,6 +111,11 @@ func NewAudioRouter(log logger.Logger) *AudioRouter {
 // differs from the consumer's SampleRate, a resampler is created automatically
 // so the consumer receives frames at its expected rate.
 func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int) error {
+	// Reject routes after the router has been closed.
+	if r.ctx.Err() != nil {
+		return fmt.Errorf("router is closed: %w", r.ctx.Err())
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
