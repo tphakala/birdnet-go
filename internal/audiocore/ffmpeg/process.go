@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -218,6 +220,27 @@ func parseLoudnessJSON(stderr string) (*LoudnessStats, error) {
 	}
 
 	return &stats, nil
+}
+
+// AnalyzePCMLoudness analyzes the loudness of raw PCM audio data using FFmpeg's
+// loudnorm filter. It writes pcmData to a temporary WAV file, runs loudness
+// analysis via AnalyzeFileLoudness, and cleans up the temp file.
+// sampleRate and bitDepth describe the PCM encoding (e.g. 48000, 16).
+func AnalyzePCMLoudness(ctx context.Context, pcmData []byte, ffmpegPath string, sampleRate, bitDepth int) (*LoudnessStats, error) {
+	if len(pcmData) == 0 {
+		return nil, fmt.Errorf("empty PCM data provided for loudness analysis")
+	}
+
+	// Write PCM to a temporary WAV file so AnalyzeFileLoudness can process it.
+	tempDir := os.TempDir()
+	wavPath := filepath.Join(tempDir, fmt.Sprintf("birdnet-loudness-%d.wav", time.Now().UnixNano()))
+	defer os.Remove(wavPath) //nolint:errcheck // best-effort cleanup
+
+	if err := convert.SavePCMDataToWAV(wavPath, pcmData, sampleRate, bitDepth); err != nil {
+		return nil, fmt.Errorf("failed to write temp WAV for loudness analysis: %w", err)
+	}
+
+	return AnalyzeFileLoudness(ctx, wavPath, ffmpegPath, AudioFilters{}, nil)
 }
 
 // processingTimeout is the maximum time allowed for the entire processing operation
