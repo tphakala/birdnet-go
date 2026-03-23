@@ -991,7 +991,6 @@ func (s *Stream) processAudio() error {
 	}
 }
 
-// handleReadError processes an error returned by the reader goroutine.
 // readStdout is the body of the dedicated reader goroutine launched by
 // processAudio. It allocates a single buffer and copies data before sending
 // to avoid retaining references to a shared backing array. It exits when
@@ -1020,6 +1019,7 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 	}
 }
 
+// handleReadError processes an error returned by the reader goroutine.
 // It distinguishes quick-exit scenarios from normal EOF/cancel and general errors.
 func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 	if time.Since(startTime) < processQuickExitTime {

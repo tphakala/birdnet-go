@@ -22,13 +22,10 @@ const osWindows = "windows"
 // =============================================================================
 
 // createTestScript creates a temporary executable shell script with the given content.
-// Uses t.TempDir() for automatic cleanup. Explicitly syncs the file to disk before
-// closing to prevent ETXTBSY ("text file busy") races where the kernel still holds
-// a write reference when exec is called immediately after.
-//
-// After closing, the function verifies the file is stat-able as a final check
-// that the kernel has finished processing the file descriptor operations.
-// This prevents ETXTBSY errors on CI runners with slow I/O subsystems.
+// Uses t.TempDir() for automatic cleanup. Writes to a .tmp file first, then uses
+// os.Rename to atomically place the script at its final path. This avoids ETXTBSY
+// ("text file busy") on Linux CI runners with overlayfs, where the kernel may
+// retain an internal write reference after Close, causing exec to fail.
 func createTestScript(t *testing.T, name, content string) string {
 	t.Helper()
 	dir := t.TempDir()
