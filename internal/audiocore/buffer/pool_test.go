@@ -2,6 +2,7 @@
 package buffer_test
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -185,4 +186,91 @@ func TestBytePool_Clear(t *testing.T) {
 
 	buf2 := pool.Get()
 	assert.Len(t, buf2, size)
+}
+
+// TestBytePool_ClearConcurrent verifies that concurrent Get, Put, and Clear
+// calls do not race. This test exercises the mutex protection added to Clear.
+// The -race detector will flag any data race if the mutex is missing.
+func TestBytePool_ClearConcurrent(t *testing.T) {
+	t.Parallel()
+
+	const (
+		size       = 256
+		goroutines = 10
+		iterations = 100
+	)
+
+	pool, err := buffer.NewBytePool(size)
+	require.NoError(t, err)
+
+	// Collect buffer sizes from goroutines to verify in the main goroutine.
+	results := make(chan int, goroutines*iterations)
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				buf := pool.Get()
+				results <- len(buf)
+				pool.Put(buf)
+			}
+		})
+	}
+
+	// Concurrently clear the pool while Get/Put are running.
+	wg.Go(func() {
+		for range iterations {
+			pool.Clear()
+		}
+	})
+
+	wg.Wait()
+	close(results)
+
+	for bufLen := range results {
+		assert.Equal(t, size, bufLen, "all buffers must have correct size")
+	}
+}
+
+// TestFloat32Pool_ClearConcurrent verifies that concurrent Get, Put, and Clear
+// calls on Float32Pool do not race.
+func TestFloat32Pool_ClearConcurrent(t *testing.T) {
+	t.Parallel()
+
+	const (
+		size       = 128
+		goroutines = 10
+		iterations = 100
+	)
+
+	pool, err := buffer.NewFloat32Pool(size)
+	require.NoError(t, err)
+
+	// Collect slice lengths from goroutines to verify in the main goroutine.
+	results := make(chan int, goroutines*iterations)
+
+	var wg sync.WaitGroup
+	for range goroutines {
+		wg.Go(func() {
+			for range iterations {
+				buf := pool.Get()
+				results <- len(buf)
+				pool.Put(buf)
+			}
+		})
+	}
+
+	// Concurrently clear the pool while Get/Put are running.
+	wg.Go(func() {
+		for range iterations {
+			pool.Clear()
+		}
+	})
+
+	wg.Wait()
+	close(results)
+
+	for bufLen := range results {
+		assert.Equal(t, size, bufLen, "all slices must have correct size")
+	}
 }

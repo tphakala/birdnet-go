@@ -12,24 +12,35 @@ import (
 // to ensure PCM sample boundaries are always respected.
 const captureBufferAlignment = 2048
 
+// ErrInsufficientData is returned by ReadSegment when the requested time range
+// extends beyond the data that has actually been written to the buffer. This
+// happens when the buffer has not yet been fully populated and the caller
+// requests a segment from the unfilled region.
+var ErrInsufficientData = errors.NewStd("requested segment exceeds written data")
+
 // CaptureBuffer is a circular byte buffer for storing PCM audio data with
-// wall-clock timestamp tracking. Audio is written continuously; callers read
-// back an arbitrary time window using ReadSegment.
+// monotonic sample-counter-based offset tracking. Audio is written
+// continuously; callers read back an arbitrary time window using ReadSegment.
+//
+// Internally, byte offsets are derived from a monotonically increasing
+// totalBytesWritten counter rather than wall-clock timestamps. Wall-clock
+// time (startTime) is recorded on the first Write for external API use only.
 //
 // All exported methods are safe for concurrent use.
 type CaptureBuffer struct {
-	data           []byte
-	writeIndex     int
-	writtenBytes   int // total bytes written (capped at bufferSize)
-	sampleRate     int
-	bytesPerSample int
-	bufferSize     int
-	bufferDuration time.Duration
-	startTime      time.Time
-	initialized    bool
-	wrapped        bool // true after the write pointer has wrapped at least once
-	lock           sync.Mutex
-	source         string
+	data              []byte
+	writeIndex        int
+	writtenBytes      int   // total bytes currently in the buffer (capped at bufferSize)
+	totalBytesWritten int64 // monotonic counter of all bytes ever written
+	sampleRate        int
+	bytesPerSample    int
+	bufferSize        int
+	bufferDuration    time.Duration
+	startTime         time.Time // wall-clock anchor for external APIs
+	initialized       bool
+	wrapped           bool // true after the write pointer has wrapped at least once
+	lock              sync.Mutex
+	source            string
 }
 
 // NewCaptureBuffer creates a CaptureBuffer that holds durationSeconds of PCM
@@ -91,10 +102,9 @@ func NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample int, sourceID 
 	}, nil
 }
 
-// Write appends PCM data to the circular buffer. The first call initialises
-// the wall-clock start time. When the write pointer wraps around the buffer
-// end, the start time is adjusted to reflect that the oldest data has been
-// overwritten.
+// Write appends PCM data to the circular buffer. The first call records a
+// wall-clock anchor time for external APIs. The monotonic totalBytesWritten
+// counter is always advanced, providing jitter-free byte offset calculations.
 //
 // Empty data is silently ignored. Write is safe for concurrent use.
 func (cb *CaptureBuffer) Write(data []byte) error {
@@ -127,14 +137,17 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 		copy(cb.data[0:], data[remaining:])
 	}
 	cb.writeIndex = (cb.writeIndex + dataLen) % cb.bufferSize
+	cb.totalBytesWritten += int64(dataLen)
 	cb.writtenBytes += dataLen
 	if cb.writtenBytes > cb.bufferSize {
 		cb.writtenBytes = cb.bufferSize
 	}
 
-	// If the write pointer wrapped (or reached zero), the oldest data was
-	// overwritten.  Slide the logical start time back by a full buffer
-	// duration so that timestamp-to-byte offset calculations stay consistent.
+	// When the write pointer wraps (crosses zero), the oldest data has been
+	// overwritten. Slide the wall-clock anchor so that external callers see
+	// a valid [startTime, startTime+bufferDuration] window. The internal
+	// byte offset calculation uses totalBytesWritten, so this adjustment
+	// only affects the external API boundary checks.
 	if cb.writeIndex <= prevIndex && dataLen > 0 {
 		cb.startTime = time.Now().Add(-cb.bufferDuration)
 		cb.wrapped = true
@@ -146,6 +159,13 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 // ReadSegment extracts the audio data between startTime and endTime from the
 // circular buffer. Both times are expressed as wall-clock times that fall
 // within the range [cb.startTime, cb.startTime+bufferDuration].
+//
+// Internally, time offsets are converted to byte positions using the monotonic
+// sample counter (totalBytesWritten) rather than wall-clock arithmetic, which
+// eliminates jitter from scheduling delays and system clock adjustments.
+//
+// Returns ErrInsufficientData if the requested range extends beyond the data
+// that has actually been written (e.g. before the buffer is fully populated).
 //
 // IMPORTANT: ReadSegment does NOT wait for future data. The caller is
 // responsible for ensuring that endTime is in the past before calling.
@@ -202,22 +222,39 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 			Build()
 	}
 
-	// Convert time offsets to byte indices.  Calculate via sample indices
-	// first to guarantee PCM alignment (important for 16-bit audio).
-	//
-	// Before wrap-around, data starts at byte 0 and the offset is trivial.
-	// After wrap-around, the oldest data lives at writeIndex (not at 0),
-	// because startTime is reset to time.Now()-bufferDuration.  An offset
-	// of 0 from startTime therefore maps to writeIndex.
+	// Convert time offsets to byte positions using sample counts for PCM
+	// alignment (important for 16-bit audio).
 	startSample := int(startOffset.Seconds() * float64(cb.sampleRate))
 	endSample := int(endOffset.Seconds() * float64(cb.sampleRate))
+	startByteOffset := startSample * cb.bytesPerSample
+	endByteOffset := endSample * cb.bytesPerSample
 
+	// Validate that the requested range falls within actually-written data.
+	// Before the buffer is fully populated, regions beyond writtenBytes
+	// contain zero-filled memory which would produce silent audio.
+	if endByteOffset > cb.writtenBytes {
+		return nil, errors.New(ErrInsufficientData).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "capture_buffer_read_segment").
+			Context("source", cb.source).
+			Context("requested_end_byte", endByteOffset).
+			Context("written_bytes", cb.writtenBytes).
+			Build()
+	}
+
+	// Derive the circular-buffer base offset from the monotonic byte
+	// counter. The logical window (duration * sampleRate * bytesPerSample)
+	// may be smaller than bufferSize due to alignment padding. Using
+	// logicalWindowBytes ensures the base offset points to the oldest
+	// valid sample, not into alignment padding bytes.
+	logicalWindowBytes := min(cb.writtenBytes, int(cb.bufferDuration.Seconds())*cb.sampleRate*cb.bytesPerSample)
 	baseOffset := 0
 	if cb.wrapped {
-		baseOffset = cb.writeIndex
+		baseOffset = int((cb.totalBytesWritten - int64(logicalWindowBytes)) % int64(cb.bufferSize))
 	}
-	startIdx := (baseOffset + startSample*cb.bytesPerSample) % cb.bufferSize
-	endIdx := (baseOffset + endSample*cb.bytesPerSample) % cb.bufferSize
+	startIdx := (baseOffset + startByteOffset) % cb.bufferSize
+	endIdx := (baseOffset + endByteOffset) % cb.bufferSize
 
 	return cb.extractSegment(startIdx, endIdx), nil
 }
@@ -266,9 +303,21 @@ func (cb *CaptureBuffer) WrittenBytes() int {
 	return cb.writtenBytes
 }
 
+// TotalBytesWritten returns the monotonically increasing count of all bytes
+// ever written to the buffer. Unlike WrittenBytes (which is capped at buffer
+// size), this counter never decreases and is used internally for jitter-free
+// byte offset calculations.
+//
+// TotalBytesWritten is safe for concurrent use.
+func (cb *CaptureBuffer) TotalBytesWritten() int64 {
+	cb.lock.Lock()
+	defer cb.lock.Unlock()
+	return cb.totalBytesWritten
+}
+
 // Reset clears the buffer state and marks it as uninitialized. After Reset,
-// the next Write call will re-establish the start time. Reset is safe for
-// concurrent use.
+// the next Write call will re-establish the start time and counters. Reset is
+// safe for concurrent use.
 func (cb *CaptureBuffer) Reset() {
 	cb.lock.Lock()
 	defer cb.lock.Unlock()
@@ -278,6 +327,7 @@ func (cb *CaptureBuffer) Reset() {
 	}
 	cb.writeIndex = 0
 	cb.writtenBytes = 0
+	cb.totalBytesWritten = 0
 	cb.initialized = false
 	cb.wrapped = false
 	cb.startTime = time.Time{}
