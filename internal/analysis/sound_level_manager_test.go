@@ -7,13 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 )
 
 // TestSoundLevelManagerBasicLifecycle tests basic lifecycle without dependencies on global settings
 func TestSoundLevelManagerBasicLifecycle(t *testing.T) {
 	// Create manager with channel
-	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	soundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
 
 	// Initially should not be running
@@ -29,7 +29,7 @@ func TestSoundLevelManagerBasicLifecycle(t *testing.T) {
 
 // TestSoundLevelManagerConcurrentState tests concurrent access to manager state
 func TestSoundLevelManagerConcurrentState(t *testing.T) {
-	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	soundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
 
 	var wg sync.WaitGroup
@@ -68,16 +68,16 @@ func TestSoundLevelManagerConcurrentState(t *testing.T) {
 
 // TestSoundLevelManagerChannelCommunication tests basic channel functionality
 func TestSoundLevelManagerChannelCommunication(t *testing.T) {
-	soundLevelChan := make(chan myaudio.SoundLevelData, 1)
+	soundLevelChan := make(chan soundlevel.SoundLevelData, 1)
 	_ = NewSoundLevelManager(soundLevelChan, nil, nil, nil)
 
 	// Test that we can send data through the channel
-	testData := myaudio.SoundLevelData{
+	testData := soundlevel.SoundLevelData{
 		Timestamp: time.Now(),
 		Source:    "test",
 		Name:      "test-source",
 		Duration:  10,
-		OctaveBands: map[string]myaudio.OctaveBandData{
+		OctaveBands: map[string]soundlevel.OctaveBandData{
 			"1.0_kHz": {
 				CenterFreq:  1000,
 				Min:         -40.0,
@@ -114,7 +114,7 @@ func TestHotReloadIntegrationBasic(t *testing.T) {
 	// This test demonstrates the hot reload pattern without dependencies
 
 	// 1. Create components
-	soundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	soundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
 
 	// 2. Simulate configuration change and restart

@@ -11,6 +11,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -31,7 +33,7 @@ type ControlMonitor struct {
 	bufferManager  *BufferManager
 	proc           *processor.Processor
 	audioLevelChan chan myaudio.AudioLevelData
-	soundLevelChan chan myaudio.SoundLevelData
+	soundLevelChan chan soundlevel.SoundLevelData
 	bn             *birdnet.BirdNET
 	apiController  *apiv2.Controller
 
@@ -56,7 +58,7 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan myaudio.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                  wg,
 		controlChan:         controlChan,
@@ -197,11 +199,11 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureSpeciesTracking()
 	case "reconfigure_push_notifications":
 		cm.handleReconfigurePushNotifications()
-	case myaudio.SignalReconfigureQuietHours:
+	case schedule.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
-	case myaudio.SignalQuietHoursStopSoundCard:
+	case schedule.SignalQuietHoursStopSoundCard:
 		cm.handleQuietHoursStopSoundCard()
-	case myaudio.SignalQuietHoursStartSoundCard:
+	case schedule.SignalQuietHoursStartSoundCard:
 		cm.handleQuietHoursStartSoundCard()
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
@@ -409,7 +411,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 				// Send sound level data to existing sound level channel if present
 				if unifiedData.SoundLevel != nil {
 					select {
-					case cm.soundLevelChan <- *unifiedData.SoundLevel:
+					case cm.soundLevelChan <- toSoundLevel(*unifiedData.SoundLevel):
 					default:
 						// Channel full, drop data
 					}

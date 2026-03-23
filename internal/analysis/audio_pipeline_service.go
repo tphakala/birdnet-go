@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
@@ -45,7 +45,7 @@ type AudioPipelineService struct {
 	demuxMgr            *AudioDemuxManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *myaudio.QuietHoursScheduler
-	soundLevelChan      chan myaudio.SoundLevelData
+	soundLevelChan      chan soundlevel.SoundLevelData
 	restartChan         chan struct{}
 	done                chan struct{}
 	doneOnce            sync.Once
@@ -121,7 +121,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	}
 
 	// Initialize channels.
-	p.soundLevelChan = make(chan myaudio.SoundLevelData, 100)
+	p.soundLevelChan = make(chan soundlevel.SoundLevelData, 100)
 	p.restartChan = make(chan struct{}, 10)
 	p.done = make(chan struct{})
 
@@ -134,9 +134,12 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			logger.String("operation", "initialize_audio_sources"))
 	}
 
-	// Resize BirdNET queue based on processing needs.
-	const defaultQueueSize = 5
-	birdnet.ResizeQueue(defaultQueueSize)
+	// NOTE: Previously called birdnet.ResizeQueue(5) here, but this caused a race
+	// condition: the detection processor goroutine (started by APIServerService)
+	// ranges over birdnet.ResultsQueue, and ResizeQueue closes the old channel
+	// and creates a new one. The processor's range loop exits on the closed
+	// channel, killing the detection pipeline. The default queue size of 100 is
+	// fine — shrinking to 5 added unnecessary backpressure with no benefit.
 
 	// Initialize the buffer manager.
 	quitChan := p.done // buffer manager uses this to know when to stop
@@ -376,7 +379,7 @@ func (p *AudioPipelineService) startAudioCapture() chan myaudio.UnifiedAudioData
 						return
 					case <-p.done:
 						return
-					case p.soundLevelChan <- *unifiedData.SoundLevel:
+					case p.soundLevelChan <- toSoundLevel(*unifiedData.SoundLevel):
 					default:
 						// Channel full, drop data.
 					}

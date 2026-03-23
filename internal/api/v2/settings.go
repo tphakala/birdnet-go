@@ -16,10 +16,10 @@ import (
 	"unicode/utf8"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -1554,7 +1554,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, "info", toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, "info", toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, "info", toastDurationMedium},
-	{"Quiet hours", myaudio.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
+	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", "info", toastDurationShort},
 	{"Web server", "", webserverSettingsChanged, "Web server settings changed. Restart required to apply.", notification.MsgSettingsWebserverRestart, "warning", toastDurationExtended},
 }
 

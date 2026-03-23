@@ -1,0 +1,370 @@
+// Package engine provides the AudioEngine orchestrator that coordinates all
+// audio subsystems: source registry, audio router, FFmpeg stream manager,
+// device manager, buffer manager, and quiet hours scheduler.
+package engine
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+// isStreamType reports whether the source type uses FFmpeg for capture.
+func isStreamType(t audiocore.SourceType) bool {
+	switch t {
+	case audiocore.SourceTypeRTSP, audiocore.SourceTypeHTTP, audiocore.SourceTypeHLS,
+		audiocore.SourceTypeRTMP, audiocore.SourceTypeUDP:
+		return true
+	default:
+		return false
+	}
+}
+
+// Default buffer parameters used when allocating analysis and capture buffers.
+// These match the values used by the existing BirdNET analysis pipeline.
+const (
+	// defaultAnalysisCapacity is the ring buffer size in bytes.
+	// 288000 bytes = 3 seconds of 16-bit 48 kHz mono audio.
+	defaultAnalysisCapacity = 288000
+
+	// defaultAnalysisOverlap is the overlap in bytes between consecutive reads.
+	// 144000 bytes = 1.5 seconds of 16-bit 48 kHz mono audio.
+	defaultAnalysisOverlap = 144000
+
+	// defaultAnalysisReadSize is the number of fresh bytes per read.
+	// 144000 bytes = 1.5 seconds of 16-bit 48 kHz mono audio.
+	defaultAnalysisReadSize = 144000
+
+	// defaultCaptureDuration is the capture buffer duration in seconds.
+	defaultCaptureDuration = 15
+
+	// defaultBytesPerSample is the default PCM bytes per sample (16-bit).
+	defaultBytesPerSample = 2
+
+	// defaultSampleRate is used when a source config has no sample rate set.
+	defaultSampleRate = 48000
+)
+
+// Config holds the configuration needed to create an AudioEngine.
+type Config struct {
+	// Logger is the structured logger for engine operations.
+	Logger logger.Logger
+
+	// RouterMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	RouterMetrics audiocore.RouterMetrics
+
+	// StreamMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	StreamMetrics audiocore.StreamMetrics
+
+	// BufferMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	BufferMetrics audiocore.BufferMetrics
+
+	// DeviceMetrics is optional; nil-safe.
+	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
+	DeviceMetrics audiocore.DeviceMetrics
+}
+
+// AudioEngine coordinates all audio subsystems: source registry, audio router,
+// FFmpeg stream manager, device manager, buffer manager, and quiet hours
+// scheduler. It provides a single point of control for adding, removing, and
+// reconfiguring audio sources.
+type AudioEngine struct {
+	registry  *audiocore.SourceRegistry
+	router    *audiocore.AudioRouter
+	ffmpegMgr *ffmpeg.Manager
+	deviceMgr *audiocore.DeviceManager
+	bufferMgr *buffer.Manager
+	scheduler *schedule.QuietHoursScheduler
+	logger    logger.Logger
+	ctx       context.Context
+	cancel    context.CancelCauseFunc
+}
+
+// New creates an AudioEngine with all subsystems initialised.
+// The provided context controls the engine's lifetime; cancelling it stops
+// all subsystems. The scheduler parameter may be nil if quiet hours are not
+// configured.
+func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursScheduler) *AudioEngine {
+	log := cfg.Logger
+	if log == nil {
+		log = audiocore.GetLogger()
+	}
+
+	engineCtx, cancel := context.WithCancelCause(ctx)
+
+	router := audiocore.NewAudioRouter(log)
+	bufMgr := buffer.NewManager(log)
+	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
+		router.Dispatch(frame)
+	}, nil, log)
+	deviceMgr := audiocore.NewDeviceManager(router, log)
+
+	return &AudioEngine{
+		registry:  audiocore.NewSourceRegistry(log),
+		router:    router,
+		ffmpegMgr: ffmpegMgr,
+		deviceMgr: deviceMgr,
+		bufferMgr: bufMgr,
+		scheduler: scheduler,
+		logger:    log.With(logger.String("component", "audio_engine")),
+		ctx:       engineCtx,
+		cancel:    cancel,
+	}
+}
+
+// Registry returns the source registry.
+func (e *AudioEngine) Registry() *audiocore.SourceRegistry {
+	return e.registry
+}
+
+// Router returns the audio router.
+func (e *AudioEngine) Router() *audiocore.AudioRouter {
+	return e.router
+}
+
+// BufferManager returns the buffer manager.
+func (e *AudioEngine) BufferManager() *buffer.Manager {
+	return e.bufferMgr
+}
+
+// FFmpegManager returns the FFmpeg stream manager.
+func (e *AudioEngine) FFmpegManager() *ffmpeg.Manager {
+	return e.ffmpegMgr
+}
+
+// DeviceManager returns the device manager.
+func (e *AudioEngine) DeviceManager() *audiocore.DeviceManager {
+	return e.deviceMgr
+}
+
+// Scheduler returns the quiet hours scheduler, which may be nil.
+func (e *AudioEngine) Scheduler() *schedule.QuietHoursScheduler {
+	return e.scheduler
+}
+
+// AddSource registers a new audio source and allocates its buffers.
+// For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
+// is started. For audio card sources, the device manager begins capture.
+// File-type sources are registered but no long-running capture is started.
+func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
+	// 1. Register the source.
+	src, err := e.registry.Register(cfg)
+	if err != nil {
+		return fmt.Errorf("register source %s: %w", cfg.ID, err)
+	}
+
+	sourceID := src.ID
+
+	// 2. Allocate analysis buffer.
+	if err := e.bufferMgr.AllocateAnalysis(
+		sourceID,
+		defaultAnalysisCapacity,
+		defaultAnalysisOverlap,
+		defaultAnalysisReadSize,
+	); err != nil {
+		return fmt.Errorf("allocate analysis buffer for %s: %w", sourceID, err)
+	}
+
+	// 3. Allocate capture buffer.
+	sampleRate := cfg.SampleRate
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+	if err := e.bufferMgr.AllocateCapture(
+		sourceID,
+		defaultCaptureDuration,
+		sampleRate,
+		defaultBytesPerSample,
+	); err != nil {
+		// Roll back analysis buffer on failure.
+		e.bufferMgr.DeallocateSource(sourceID)
+		return fmt.Errorf("allocate capture buffer for %s: %w", sourceID, err)
+	}
+
+	// 4. Start capture based on source type.
+	if isStreamType(cfg.Type) {
+		streamCfg := &ffmpeg.StreamConfig{
+			SourceID:   sourceID,
+			SourceName: src.DisplayName,
+			URL:        cfg.ConnectionString,
+			Type:       string(cfg.Type),
+			SampleRate: sampleRate,
+			BitDepth:   cfg.BitDepth,
+			Channels:   cfg.Channels,
+		}
+		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+			e.bufferMgr.DeallocateSource(sourceID)
+			_ = e.registry.Unregister(sourceID)
+			return fmt.Errorf("start stream for %s: %w", sourceID, err)
+		}
+	} else if cfg.Type == audiocore.SourceTypeAudioCard {
+		devCfg := audiocore.DeviceConfig{
+			SampleRate: sampleRate,
+			BitDepth:   cfg.BitDepth,
+			Channels:   cfg.Channels,
+		}
+		if err := e.deviceMgr.StartCapture(sourceID, cfg.ConnectionString, devCfg); err != nil {
+			e.bufferMgr.DeallocateSource(sourceID)
+			_ = e.registry.Unregister(sourceID)
+			return fmt.Errorf("start device capture for %s: %w", sourceID, err)
+		}
+	}
+	// File-type sources: registered + buffers allocated, but no long-running capture.
+
+	e.logger.Info("source added",
+		logger.String("source_id", sourceID),
+		logger.String("type", cfg.Type.String()))
+
+	return nil
+}
+
+// RemoveSource stops capture, removes all routes, deallocates buffers, and
+// unregisters the source identified by sourceID.
+func (e *AudioEngine) RemoveSource(sourceID string) error {
+	src, ok := e.registry.Get(sourceID)
+	if !ok {
+		return fmt.Errorf("remove source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
+	}
+
+	// 1. Stop capture.
+	if isStreamType(src.Type) {
+		// StopStream returns an error if not found, which is safe to ignore
+		// since the stream may not have been started.
+		_ = e.ffmpegMgr.StopStream(sourceID)
+	} else if src.Type == audiocore.SourceTypeAudioCard {
+		_ = e.deviceMgr.StopCapture(sourceID)
+	}
+
+	// 2. Remove all routes for this source.
+	e.router.RemoveAllRoutes(sourceID)
+
+	// 3. Deallocate buffers.
+	e.bufferMgr.DeallocateSource(sourceID)
+
+	// 4. Unregister.
+	if err := e.registry.Unregister(sourceID); err != nil {
+		return fmt.Errorf("unregister source %s: %w", sourceID, err)
+	}
+
+	e.logger.Info("source removed",
+		logger.String("source_id", sourceID))
+
+	return nil
+}
+
+// ReconfigureSource stops the existing capture for sourceID, reallocates
+// buffers with the new configuration, and restarts capture.
+func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.SourceConfig) error {
+	src, ok := e.registry.Get(sourceID)
+	if !ok {
+		return fmt.Errorf("reconfigure source: %w: %s", audiocore.ErrSourceNotFound, sourceID)
+	}
+
+	// 1. Stop existing capture.
+	if isStreamType(src.Type) {
+		_ = e.ffmpegMgr.StopStream(sourceID)
+	} else if src.Type == audiocore.SourceTypeAudioCard {
+		_ = e.deviceMgr.StopCapture(sourceID)
+	}
+
+	// 2. Deallocate old buffers.
+	e.bufferMgr.DeallocateSource(sourceID)
+
+	// 3. Allocate new buffers.
+	sampleRate := newCfg.SampleRate
+	if sampleRate <= 0 {
+		sampleRate = defaultSampleRate
+	}
+	if err := e.bufferMgr.AllocateAnalysis(
+		sourceID,
+		defaultAnalysisCapacity,
+		defaultAnalysisOverlap,
+		defaultAnalysisReadSize,
+	); err != nil {
+		return fmt.Errorf("reallocate analysis buffer for %s: %w", sourceID, err)
+	}
+	if err := e.bufferMgr.AllocateCapture(
+		sourceID,
+		defaultCaptureDuration,
+		sampleRate,
+		defaultBytesPerSample,
+	); err != nil {
+		e.bufferMgr.DeallocateSource(sourceID)
+		return fmt.Errorf("reallocate capture buffer for %s: %w", sourceID, err)
+	}
+
+	// 4. Restart capture with new config.
+	newType := newCfg.Type
+	if newType == "" || newType == audiocore.SourceTypeUnknown {
+		newType = src.Type
+	}
+
+	if isStreamType(newType) {
+		streamCfg := &ffmpeg.StreamConfig{
+			SourceID:   sourceID,
+			SourceName: src.DisplayName,
+			URL:        newCfg.ConnectionString,
+			Type:       string(newType),
+			SampleRate: sampleRate,
+			BitDepth:   newCfg.BitDepth,
+			Channels:   newCfg.Channels,
+		}
+		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
+			// Source stays registered — mark it as errored so callers can see the failure.
+			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
+			return fmt.Errorf("restart stream for %s: %w", sourceID, err)
+		}
+	} else if newType == audiocore.SourceTypeAudioCard {
+		devCfg := audiocore.DeviceConfig{
+			SampleRate: sampleRate,
+			BitDepth:   newCfg.BitDepth,
+			Channels:   newCfg.Channels,
+		}
+		if err := e.deviceMgr.StartCapture(sourceID, newCfg.ConnectionString, devCfg); err != nil {
+			// Source stays registered — mark it as errored so callers can see the failure.
+			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
+			return fmt.Errorf("restart device capture for %s: %w", sourceID, err)
+		}
+	}
+
+	e.logger.Info("source reconfigured",
+		logger.String("source_id", sourceID),
+		logger.String("type", newType.String()))
+
+	return nil
+}
+
+// Stop gracefully shuts down all subsystems: FFmpeg manager, device manager,
+// audio router, and quiet hours scheduler. It should be called once when the
+// application is shutting down.
+func (e *AudioEngine) Stop() {
+	e.cancel(fmt.Errorf("AudioEngine: stop requested"))
+
+	// Shut down FFmpeg streams.
+	if err := e.ffmpegMgr.Shutdown(); err != nil {
+		e.logger.Warn("ffmpeg manager shutdown error", logger.Error(err))
+	}
+
+	// Stop all device captures.
+	if err := e.deviceMgr.Close(); err != nil {
+		e.logger.Warn("device manager close error", logger.Error(err))
+	}
+
+	// Close the router (stops all drainer goroutines).
+	e.router.Close()
+
+	// Stop the scheduler if present.
+	if e.scheduler != nil {
+		e.scheduler.Stop()
+	}
+
+	e.logger.Info("audio engine stopped")
+}

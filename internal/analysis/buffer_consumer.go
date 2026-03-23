@@ -1,0 +1,224 @@
+package analysis
+
+import (
+	"encoding/binary"
+	"math"
+	"sync/atomic"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+// BufferConsumer implements audiocore.AudioConsumer and writes each incoming
+// AudioFrame's PCM data to both the analysis buffer and the capture buffer
+// for the frame's source. It acts as the bridge between the audiocore routing
+// layer and the buffer.Manager that feeds the BirdNET analysis pipeline.
+type BufferConsumer struct {
+	id        string
+	bufferMgr *buffer.Manager
+	rate      int
+	depth     int
+	channels  int
+	closed    atomic.Bool
+}
+
+// NewBufferConsumer creates a BufferConsumer that writes audio frames to the
+// analysis and capture buffers managed by bufferMgr. The consumer expects
+// frames with the given sample rate, bit depth, and channel count.
+//
+// Returns an error if bufferMgr is nil or if the audio parameters are invalid.
+func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDepth, channels int) (*BufferConsumer, error) {
+	if bufferMgr == nil {
+		return nil, errors.Newf("buffer manager must not be nil").
+			Component("analysis.buffer_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_consumer").
+			Build()
+	}
+	if sampleRate <= 0 {
+		return nil, errors.Newf("invalid sample rate: %d", sampleRate).
+			Component("analysis.buffer_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_consumer").
+			Build()
+	}
+	if bitDepth <= 0 {
+		return nil, errors.Newf("invalid bit depth: %d", bitDepth).
+			Component("analysis.buffer_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_consumer").
+			Build()
+	}
+	if channels <= 0 {
+		return nil, errors.Newf("invalid channel count: %d", channels).
+			Component("analysis.buffer_consumer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_consumer").
+			Build()
+	}
+
+	return &BufferConsumer{
+		id:        id,
+		bufferMgr: bufferMgr,
+		rate:      sampleRate,
+		depth:     bitDepth,
+		channels:  channels,
+	}, nil
+}
+
+// ID returns the unique identifier for this consumer.
+func (c *BufferConsumer) ID() string { return c.id }
+
+// SampleRate returns the expected sample rate in Hz.
+func (c *BufferConsumer) SampleRate() int { return c.rate }
+
+// BitDepth returns the expected bit depth.
+func (c *BufferConsumer) BitDepth() int { return c.depth }
+
+// Channels returns the expected channel count.
+func (c *BufferConsumer) Channels() int { return c.channels }
+
+// Write delivers an audio frame to both the analysis buffer and capture buffer
+// for the frame's source. If either buffer is not found the missing write is
+// logged and skipped; the other buffer is still written. Returns an error only
+// when the consumer has been closed.
+func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	if c.closed.Load() {
+		return audiocore.ErrConsumerClosed
+	}
+
+	sourceID := frame.SourceID
+
+	// Write to analysis buffer.
+	ab, err := c.bufferMgr.AnalysisBuffer(sourceID)
+	if err != nil {
+		GetLogger().Warn("analysis buffer not found for source",
+			logger.String("source_id", sourceID),
+			logger.String("consumer_id", c.id),
+			logger.String("operation", "buffer_consumer_write"))
+	} else if writeErr := ab.Write(frame.Data); writeErr != nil {
+		GetLogger().Warn("failed to write to analysis buffer",
+			logger.String("source_id", sourceID),
+			logger.Error(writeErr),
+			logger.String("operation", "buffer_consumer_write"))
+	}
+
+	// Write to capture buffer.
+	cb, err := c.bufferMgr.CaptureBuffer(sourceID)
+	if err != nil {
+		GetLogger().Warn("capture buffer not found for source",
+			logger.String("source_id", sourceID),
+			logger.String("consumer_id", c.id),
+			logger.String("operation", "buffer_consumer_write"))
+	} else if writeErr := cb.Write(frame.Data); writeErr != nil {
+		GetLogger().Warn("failed to write to capture buffer",
+			logger.String("source_id", sourceID),
+			logger.Error(writeErr),
+			logger.String("operation", "buffer_consumer_write"))
+	}
+
+	// Design: Write intentionally returns nil even when individual buffer
+	// writes fail. A missing or errored buffer should not crash the audio
+	// pipeline — the AudioConsumer contract expects Write to be resilient.
+	// Failures are logged above so operators can diagnose issues.
+	return nil
+}
+
+// Close marks the consumer as closed. Subsequent Write calls return
+// audiocore.ErrConsumerClosed.
+func (c *BufferConsumer) Close() error {
+	c.closed.Store(true)
+	return nil
+}
+
+// AudioLevelData holds audio level data computed from PCM frames.
+type AudioLevelData struct {
+	Level    int    `json:"level"`    // 0-100
+	Clipping bool   `json:"clipping"` // true if clipping is detected
+	Source   string `json:"source"`   // Source identifier
+	Name     string `json:"name"`     // Human-readable name of the source
+}
+
+// Audio level scaling constants.
+const (
+	// audioLevelDBFloor is the noise floor in dB used for scaling.
+	audioLevelDBFloor = -60.0
+
+	// audioLevelDBRange is the dynamic range mapped to 0-100.
+	audioLevelDBRange = 50.0
+
+	// audioLevelClippingMin is the minimum level assigned when clipping is detected.
+	audioLevelClippingMin = 95.0
+
+	// pcm16Max is the maximum value for signed 16-bit PCM.
+	pcm16Max = 32768.0
+
+	// pcm16ClipPositive is the positive clipping threshold for 16-bit PCM.
+	pcm16ClipPositive int16 = 32767
+
+	// pcm16ClipNegative is the negative clipping threshold for 16-bit PCM.
+	pcm16ClipNegative int16 = -32768
+)
+
+// calculateAudioLevel computes the RMS audio level (0-100) from 16-bit PCM
+// samples and detects clipping. This mirrors the legacy implementation in
+// internal/myaudio/capture.go.
+func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
+	if len(samples) == 0 {
+		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
+	}
+
+	// Truncate to an even number of bytes for 16-bit samples.
+	if len(samples)%2 != 0 {
+		samples = samples[:len(samples)-1]
+	}
+
+	sampleCount := len(samples) / 2
+	if sampleCount == 0 {
+		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
+	}
+
+	var sum float64
+	isClipping := false
+
+	for i := 0; i < len(samples); i += 2 {
+		if i+1 >= len(samples) {
+			break
+		}
+		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2])) //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
+		sampleAbs := math.Abs(float64(sample))
+		sum += sampleAbs * sampleAbs
+
+		if sample == pcm16ClipPositive || sample == pcm16ClipNegative {
+			isClipping = true
+		}
+	}
+
+	// RMS → dB → scaled 0-100.
+	rms := math.Sqrt(sum / float64(sampleCount))
+	db := 20 * math.Log10(rms/pcm16Max)
+	scaledLevel := (db - audioLevelDBFloor) * (100.0 / audioLevelDBRange)
+
+	if isClipping {
+		scaledLevel = math.Max(scaledLevel, audioLevelClippingMin)
+	}
+
+	// Clamp to [0, 100].
+	if scaledLevel < 0 {
+		scaledLevel = 0
+	} else if scaledLevel > 100 {
+		scaledLevel = 100
+	}
+
+	return AudioLevelData{
+		Level:    int(scaledLevel),
+		Clipping: isClipping,
+		Source:   source,
+		Name:     name,
+	}
+}
+
+// Compile-time interface check.
+var _ audiocore.AudioConsumer = (*BufferConsumer)(nil)

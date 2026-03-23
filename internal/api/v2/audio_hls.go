@@ -25,6 +25,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -1097,7 +1098,7 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	ffmpegPath := c.Settings.Realtime.Audio.FfmpegPath
-	if err := myaudio.ValidateFFmpegPath(ffmpegPath); err != nil {
+	if err := ffmpeg.ValidateFFmpegPath(ffmpegPath); err != nil {
 		streamCancel()
 		return nil, fmt.Errorf("invalid FFmpeg path: %w", err)
 	}

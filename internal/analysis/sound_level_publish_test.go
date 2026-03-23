@@ -12,9 +12,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // Test constant for MQTT topic testing.
@@ -26,18 +26,18 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		soundData   myaudio.SoundLevelData
+		soundData   soundlevel.SoundLevelData
 		shouldError bool
 		checkJSON   func(t *testing.T, jsonData []byte)
 	}{
 		{
 			name: "normal values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -60.5,
@@ -62,12 +62,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "positive infinity values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        math.Inf(1),
@@ -80,12 +80,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "negative infinity values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        math.Inf(-1),
@@ -98,12 +98,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "NaN values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        math.NaN(),
@@ -116,12 +116,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "mixed valid and invalid values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -60.5,
@@ -140,12 +140,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "empty octave bands",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp:   time.Now(),
 				Source:      "test",
 				Name:        "test-device",
 				Duration:    10,
-				OctaveBands: map[string]myaudio.OctaveBandData{},
+				OctaveBands: map[string]soundlevel.OctaveBandData{},
 			},
 			shouldError: false,
 			checkJSON: func(t *testing.T, jsonData []byte) {
@@ -160,12 +160,12 @@ func TestSoundLevelJSONMarshaling(t *testing.T) {
 		},
 		{
 			name: "very large negative values",
-			soundData: myaudio.SoundLevelData{
+			soundData: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "test-device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -200.0,
@@ -217,17 +217,17 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		input    myaudio.SoundLevelData
-		expected myaudio.SoundLevelData
+		input    soundlevel.SoundLevelData
+		expected soundlevel.SoundLevelData
 	}{
 		{
 			name: "normal values unchanged",
-			input: myaudio.SoundLevelData{
+			input: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -60.5,
@@ -236,11 +236,11 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 					},
 				},
 			},
-			expected: myaudio.SoundLevelData{
+			expected: soundlevel.SoundLevelData{
 				Source:   "test",
 				Name:     "device",
 				Duration: 10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -60.5,
@@ -252,12 +252,12 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 		},
 		{
 			name: "positive infinity replaced",
-			input: myaudio.SoundLevelData{
+			input: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        math.Inf(1),
@@ -266,11 +266,11 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 					},
 				},
 			},
-			expected: myaudio.SoundLevelData{
+			expected: soundlevel.SoundLevelData{
 				Source:   "test",
 				Name:     "device",
 				Duration: 10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -100.0,
@@ -282,12 +282,12 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 		},
 		{
 			name: "NaN values replaced",
-			input: myaudio.SoundLevelData{
+			input: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        math.NaN(),
@@ -296,11 +296,11 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 					},
 				},
 			},
-			expected: myaudio.SoundLevelData{
+			expected: soundlevel.SoundLevelData{
 				Source:   "test",
 				Name:     "device",
 				Duration: 10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -100.0,
@@ -312,12 +312,12 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 		},
 		{
 			name: "mixed values partially replaced",
-			input: myaudio.SoundLevelData{
+			input: soundlevel.SoundLevelData{
 				Timestamp: time.Now(),
 				Source:    "test",
 				Name:      "device",
 				Duration:  10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -60.5,
@@ -332,11 +332,11 @@ func TestSanitizeSoundLevelData(t *testing.T) {
 					},
 				},
 			},
-			expected: myaudio.SoundLevelData{
+			expected: soundlevel.SoundLevelData{
 				Source:   "test",
 				Name:     "device",
 				Duration: 10,
-				OctaveBands: map[string]myaudio.OctaveBandData{
+				OctaveBands: map[string]soundlevel.OctaveBandData{
 					"1000_Hz": {
 						CenterFreq: 1000,
 						Min:        -100.0,
@@ -390,16 +390,16 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 	t.Parallel()
 
 	// Create test channel
-	testChan := make(chan myaudio.SoundLevelData, 10)
+	testChan := make(chan soundlevel.SoundLevelData, 10)
 
 	// Test data with edge cases
-	testData := []myaudio.SoundLevelData{
+	testData := []soundlevel.SoundLevelData{
 		{
 			Timestamp: time.Now(),
 			Source:    "test1",
 			Name:      "device1",
 			Duration:  10,
-			OctaveBands: map[string]myaudio.OctaveBandData{
+			OctaveBands: map[string]soundlevel.OctaveBandData{
 				"1000_Hz": {
 					CenterFreq: 1000,
 					Min:        -60.5,
@@ -413,7 +413,7 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 			Source:    "test2",
 			Name:      "device2",
 			Duration:  10,
-			OctaveBands: map[string]myaudio.OctaveBandData{
+			OctaveBands: map[string]soundlevel.OctaveBandData{
 				"2000_Hz": {
 					CenterFreq: 2000,
 					Min:        -200.0, // Very low value
@@ -433,7 +433,7 @@ func TestSoundLevelChannelFlow(t *testing.T) {
 	}()
 
 	// Consumer
-	received := make([]myaudio.SoundLevelData, 0)
+	received := make([]soundlevel.SoundLevelData, 0)
 	for data := range testChan {
 		received = append(received, data)
 	}
@@ -450,9 +450,9 @@ func TestConcurrentPublishers(t *testing.T) {
 	t.Parallel()
 
 	// Create separate channels for each publisher to ensure all receive messages
-	mqttChan := make(chan myaudio.SoundLevelData, 100)
-	sseChan := make(chan myaudio.SoundLevelData, 100)
-	metricsChan := make(chan myaudio.SoundLevelData, 100)
+	mqttChan := make(chan soundlevel.SoundLevelData, 100)
+	sseChan := make(chan soundlevel.SoundLevelData, 100)
+	metricsChan := make(chan soundlevel.SoundLevelData, 100)
 	quitChan := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -517,12 +517,12 @@ func TestConcurrentPublishers(t *testing.T) {
 	// Send test data to all channels
 	numMessages := 50
 	for i := range numMessages {
-		data := myaudio.SoundLevelData{
+		data := soundlevel.SoundLevelData{
 			Timestamp: time.Now(),
 			Source:    fmt.Sprintf("test-%d", i),
 			Name:      "device",
 			Duration:  10,
-			OctaveBands: map[string]myaudio.OctaveBandData{
+			OctaveBands: map[string]soundlevel.OctaveBandData{
 				"1000_Hz": {
 					CenterFreq: 1000,
 					Min:        -60.5,
@@ -656,7 +656,7 @@ func TestSoundLevelPublishIntervalSimulation(t *testing.T) {
 			t.Parallel()
 
 			// Create channels for test
-			dataChan := make(chan myaudio.SoundLevelData, 100)
+			dataChan := make(chan soundlevel.SoundLevelData, 100)
 			publishChan := make(chan time.Time, 10)
 			stopChan := make(chan struct{})
 
@@ -689,12 +689,12 @@ func TestSoundLevelPublishIntervalSimulation(t *testing.T) {
 					select {
 					case <-intervalTicker.C:
 						// Send sound level data when interval completes
-						soundData := myaudio.SoundLevelData{
+						soundData := soundlevel.SoundLevelData{
 							Timestamp: time.Now(),
 							Source:    "test-source",
 							Name:      fmt.Sprintf("test-device-%d", tt.interval),
 							Duration:  tt.interval,
-							OctaveBands: map[string]myaudio.OctaveBandData{
+							OctaveBands: map[string]soundlevel.OctaveBandData{
 								"1.0_kHz": {
 									CenterFreq: 1000,
 									Min:        -60.0 + float64(bandNumber%10),
@@ -767,8 +767,8 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 	t.Parallel()
 
 	// Create test channels
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
-	publishedData := make(chan myaudio.SoundLevelData, 10)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 100)
+	publishedData := make(chan soundlevel.SoundLevelData, 10)
 	stopChan := make(chan struct{})
 
 	// Create mock processor that captures published data
@@ -780,7 +780,7 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 		}
 
 		// Convert back to regular format for verification
-		soundData := myaudio.SoundLevelData{
+		soundData := soundlevel.SoundLevelData{
 			Source:   compactData.Src,
 			Name:     compactData.Name,
 			Duration: compactData.Dur,
@@ -825,12 +825,12 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 
 	// Test: Verify data is published immediately when received from soundLevelChan
 	// In the actual system, data is only sent to soundLevelChan when an interval completes
-	testData := myaudio.SoundLevelData{
+	testData := soundlevel.SoundLevelData{
 		Timestamp: time.Now(),
 		Source:    "test-source",
 		Name:      "test-device",
 		Duration:  5,
-		OctaveBands: map[string]myaudio.OctaveBandData{
+		OctaveBands: map[string]soundlevel.OctaveBandData{
 			"1.0_kHz": {CenterFreq: 1000, Min: -60, Max: -40, Mean: -50},
 		},
 	}
@@ -849,12 +849,12 @@ func TestSoundLevelPublishIntervalBoundaries(t *testing.T) {
 
 	// Test multiple publishes in sequence
 	for i := range 3 {
-		sequenceData := myaudio.SoundLevelData{
+		sequenceData := soundlevel.SoundLevelData{
 			Timestamp: time.Now(),
 			Source:    fmt.Sprintf("sequence-source-%d", i),
 			Name:      fmt.Sprintf("sequence-device-%d", i),
 			Duration:  10,
-			OctaveBands: map[string]myaudio.OctaveBandData{
+			OctaveBands: map[string]soundlevel.OctaveBandData{
 				"2.0_kHz": {CenterFreq: 2000, Min: -65, Max: -45, Mean: -55},
 			},
 		}
@@ -882,7 +882,7 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 	t.Parallel()
 
 	// Create channels
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	publishTimes := make(chan time.Time, 10)
 	stopChan := make(chan struct{})
 
@@ -929,12 +929,12 @@ func TestSoundLevelPublishIntervalChange(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				soundData := myaudio.SoundLevelData{
+				soundData := soundlevel.SoundLevelData{
 					Timestamp: time.Now(),
 					Source:    "interval-test",
 					Name:      fmt.Sprintf("device-%d", counter),
 					Duration:  initialInterval,
-					OctaveBands: map[string]myaudio.OctaveBandData{
+					OctaveBands: map[string]soundlevel.OctaveBandData{
 						"2.0_kHz": {
 							CenterFreq: 2000,
 							Min:        -65.0,
@@ -983,7 +983,7 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 	t.Parallel()
 
 	// Create channels
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	publishedPayloads := make(chan string, 20)
 	stopChan := make(chan struct{})
 
@@ -1011,12 +1011,12 @@ func TestSoundLevelPublishMultipleIntervals(t *testing.T) {
 		for {
 			select {
 			case <-ticker.C:
-				soundData := myaudio.SoundLevelData{
+				soundData := soundlevel.SoundLevelData{
 					Timestamp: time.Now(),
 					Source:    "sequence-test",
 					Name:      fmt.Sprintf("seq-%d", sequenceNum),
 					Duration:  interval,
-					OctaveBands: map[string]myaudio.OctaveBandData{
+					OctaveBands: map[string]soundlevel.OctaveBandData{
 						"4.0_kHz": {
 							CenterFreq: 4000,
 							Min:        -70.0 + float64(sequenceNum%10),
@@ -1136,7 +1136,7 @@ func TestMQTTPublishIntervalValidation(t *testing.T) {
 func runMQTTIntervalTest(t *testing.T, tt mqttIntervalTest) {
 	t.Helper()
 	// Create test infrastructure
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 100)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 100)
 	publishEvents := make(chan publishEvent, 20)
 	stopChan := make(chan struct{})
 	var wg sync.WaitGroup
@@ -1176,7 +1176,7 @@ func createMockProcessorWithEvents(publishEvents chan publishEvent) *processor.P
 
 // startMQTTPublisher starts the MQTT publisher goroutine
 func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{},
-	testSoundLevelChan chan myaudio.SoundLevelData, mockProc *processor.Processor) {
+	testSoundLevelChan chan soundlevel.SoundLevelData, mockProc *processor.Processor) {
 	t.Helper()
 	wg.Go(func() {
 		for {
@@ -1191,7 +1191,7 @@ func startMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan chan struct{}
 }
 
 // publishSoundLevelData publishes sound level data via mock MQTT
-func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockProc *processor.Processor) {
+func publishSoundLevelData(t *testing.T, soundData soundlevel.SoundLevelData, mockProc *processor.Processor) {
 	t.Helper()
 	ctx := t.Context()
 	topic := testMQTTTopic
@@ -1206,7 +1206,7 @@ func publishSoundLevelData(t *testing.T, soundData myaudio.SoundLevelData, mockP
 }
 
 // convertToCompactFormat converts sound level data to compact format
-func convertToCompactFormat(soundData myaudio.SoundLevelData) CompactSoundLevelData {
+func convertToCompactFormat(soundData soundlevel.SoundLevelData) CompactSoundLevelData {
 	compactData := CompactSoundLevelData{
 		TS:    soundData.Timestamp.Format(time.RFC3339),
 		Src:   soundData.Source,
@@ -1229,7 +1229,7 @@ func convertToCompactFormat(soundData myaudio.SoundLevelData) CompactSoundLevelD
 
 // startSoundLevelDataGenerator starts generating sound level data at intervals
 func startSoundLevelDataGenerator(t *testing.T, interval int, stopChan chan struct{},
-	testSoundLevelChan chan myaudio.SoundLevelData, testStartTime time.Time) {
+	testSoundLevelChan chan soundlevel.SoundLevelData, testStartTime time.Time) {
 	t.Helper()
 	go func() {
 		intervalTicker := time.NewTicker(time.Duration(interval) * time.Second)
@@ -1253,13 +1253,13 @@ func startSoundLevelDataGenerator(t *testing.T, interval int, stopChan chan stru
 }
 
 // createTestSoundLevelData creates test sound level data
-func createTestSoundLevelData(interval int) myaudio.SoundLevelData {
-	return myaudio.SoundLevelData{
+func createTestSoundLevelData(interval int) soundlevel.SoundLevelData {
+	return soundlevel.SoundLevelData{
 		Timestamp: time.Now(),
 		Source:    "test-device",
 		Name:      fmt.Sprintf("device-%ds", interval),
 		Duration:  interval,
-		OctaveBands: map[string]myaudio.OctaveBandData{
+		OctaveBands: map[string]soundlevel.OctaveBandData{
 			"1.0_kHz": {
 				CenterFreq: 1000,
 				Min:        -65.0,
@@ -1278,7 +1278,7 @@ func createTestSoundLevelData(interval int) myaudio.SoundLevelData {
 
 // startMockMQTTPublisher starts a goroutine that publishes MQTT messages for test data
 func startMockMQTTPublisher(t *testing.T, wg *sync.WaitGroup, stopChan <-chan struct{},
-	testSoundLevelChan <-chan myaudio.SoundLevelData, mockProc *processor.Processor) {
+	testSoundLevelChan <-chan soundlevel.SoundLevelData, mockProc *processor.Processor) {
 	t.Helper()
 	wg.Go(func() {
 		for {
@@ -1386,7 +1386,7 @@ func TestMQTTPublishIntervalWithNoData(t *testing.T) {
 	t.Parallel()
 
 	// Create channels
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 10)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 10)
 	publishEvents := make(chan publishEvent, 10)
 	stopChan := make(chan struct{})
 
@@ -1449,7 +1449,7 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 	t.Parallel()
 
 	// Create channels
-	testSoundLevelChan := make(chan myaudio.SoundLevelData, 10)
+	testSoundLevelChan := make(chan soundlevel.SoundLevelData, 10)
 	publishAttempts := make(chan publishEvent, 10)
 	stopChan := make(chan struct{})
 
@@ -1493,12 +1493,12 @@ func TestMQTTPublishIntervalWithErrors(t *testing.T) {
 
 	// Send test data
 	for i := range expectedAttempts {
-		soundData := myaudio.SoundLevelData{
+		soundData := soundlevel.SoundLevelData{
 			Timestamp: time.Now(),
 			Source:    "error-test",
 			Name:      fmt.Sprintf("device-%d", i),
 			Duration:  10,
-			OctaveBands: map[string]myaudio.OctaveBandData{
+			OctaveBands: map[string]soundlevel.OctaveBandData{
 				"1.0_kHz": {
 					CenterFreq: 1000,
 					Min:        -60.0,
