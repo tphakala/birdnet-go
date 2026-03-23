@@ -13,10 +13,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // Test constants
@@ -84,8 +84,8 @@ func createTestFLACData(t *testing.T) []byte {
 		"-f", "flac",
 	}
 
-	// Use the myaudio package to create FLAC data
-	flacBuffer, err := myaudio.ExportAudioWithCustomFFmpegArgsContext(ctx, pcmData, ffmpegPath, customArgs)
+	// Use audiocore/ffmpeg to create FLAC data
+	flacBuffer, err := ffmpeg.ExportAudioToBuffer(ctx, pcmData, ffmpegPath, conf.SampleRate, conf.NumChannels, conf.BitDepth, customArgs)
 	require.NoError(t, err, "Failed to create test FLAC data")
 
 	return flacBuffer.Bytes()

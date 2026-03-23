@@ -17,6 +17,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -1020,7 +1021,7 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 	timestamp := t.Format("20060102T150405Z")
 	year := t.Format("2006")
 	month := t.Format("01")
-	fileType := myaudio.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
+	fileType := convert.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
 
 	var filename string
 	if durationSeconds > 0 {
