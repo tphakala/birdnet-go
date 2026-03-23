@@ -454,17 +454,9 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	// Initialize species tracker if enabled
 	p.NewSpeciesTracker = initSpeciesTracker(settings, ds)
 
-	// Start the detection processor
-	p.startDetectionProcessor()
-
-	// Start the worker pool for action processing
-	p.startWorkerPool()
-
-	// Create context for pending detections flusher
-	p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
-
-	// Start the held detection flusher
-	p.pendingDetectionsFlusher()
+	// NOTE: Background goroutines (detection processor, worker pool, flusher)
+	// are NOT started here. Call Start() after wiring BufferMgr and Registry
+	// to avoid a race where detections arrive before the buffer manager is set.
 
 	// Initialize BirdWeather client if enabled
 	p.initBirdWeatherClient(settings)
@@ -515,7 +507,19 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 	return p
 }
 
-// Start goroutine to process detections from the queue
+// Start launches the background goroutines that process detections.
+// It must be called AFTER BufferMgr and Registry are wired — otherwise
+// detections arrive before the buffer manager is available and audio
+// clip export silently fails.
+func (p *Processor) Start() {
+	p.startDetectionProcessor()
+	p.startWorkerPool()
+
+	p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
+	p.pendingDetectionsFlusher()
+}
+
+// startDetectionProcessor starts the goroutine that processes detections from the queue.
 func (p *Processor) startDetectionProcessor() {
 	// Add structured logging for detection processor startup
 	GetLogger().Info("Starting detection processor",

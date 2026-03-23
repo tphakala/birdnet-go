@@ -139,10 +139,13 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	quitChan := p.done // buffer manager uses this to know when to stop
 	p.bufferMgr = MustNewBufferManager(bn, p.engine.BufferManager(), quitChan, &p.wg)
 
-	// Inject the buffer manager into the processor for audio clip extraction.
+	// Inject the buffer manager and registry into the processor, then start
+	// its background goroutines. This order is critical: BufferMgr and Registry
+	// must be set BEFORE Start() so detections can access capture buffers.
 	proc := p.apiService.Processor()
 	proc.BufferMgr = p.engine.BufferManager()
 	proc.SetRegistry(p.engine.Registry())
+	proc.Start()
 
 	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
