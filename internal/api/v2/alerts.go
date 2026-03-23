@@ -21,9 +21,10 @@ import (
 const maxHistoryLimit = 200
 
 // initAlertRoutes registers alert rule API endpoints and starts the alerting engine.
-// Routes are always registered (handlers check v2 mode per-request), but the
-// alerting engine is only started when the v2 schema is active — preventing
-// background operations (rule seeding, history cleanup) against missing tables.
+// Routes are registered when V2Manager is available (handlers check v2 mode
+// per-request), but the alerting engine is only started when the v2 schema is
+// active — preventing background operations (rule seeding, history cleanup)
+// against missing tables.
 func (c *Controller) initAlertRoutes() {
 	if c.V2Manager == nil {
 		return
