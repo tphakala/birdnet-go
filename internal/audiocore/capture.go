@@ -281,7 +281,11 @@ func startCapture(
 		}()
 		defer func() {
 			// Device.Uninit() calls both ma_device_uninit and ma_free.
-			_ = captureDevice.Stop()
+			if err := captureDevice.Stop(); err != nil {
+				log.Error("failed to stop capture device",
+					logger.String("source_id", sourceID),
+					logger.Any("error", err))
+			}
 			captureDevice.Uninit()
 			// Context requires explicit two-step teardown.
 			uninitAndFreeContext(malgoCtx, log)
