@@ -114,8 +114,10 @@ func NewProcessor(source, name string, sampleRate, interval int) (*Processor, er
 	nyquistThreshold := nyquist * nyquistMarginFactor
 
 	for _, centerFreq := range octaveBandCenterFreqs {
-		// Skip bands whose centre frequency is at or above the safe Nyquist threshold.
-		if centerFreq >= nyquistThreshold {
+		// Skip bands whose upper edge is at or above the safe Nyquist threshold.
+		// For 1/3 octave bands the upper edge is centerFreq * 2^(1/6).
+		upperEdge := centerFreq * math.Pow(2, 1.0/6.0)
+		if upperEdge >= nyquistThreshold {
 			continue
 		}
 
