@@ -31,37 +31,3 @@ func toSoundLevel(src myaudio.SoundLevelData) soundlevel.SoundLevelData {
 		OctaveBands: bands,
 	}
 }
-
-// fromSoundLevel converts a soundlevel.SoundLevelData back to the myaudio
-// equivalent. This is a transitional helper for boundaries where downstream
-// code (e.g., the API v2 package) still expects myaudio types.
-//
-// TODO: Remove once downstream consumers (API v2, SSE) accept soundlevel types directly.
-func fromSoundLevel(src soundlevel.SoundLevelData) myaudio.SoundLevelData {
-	bands := make(map[string]myaudio.OctaveBandData, len(src.OctaveBands))
-	for k, v := range src.OctaveBands {
-		bands[k] = myaudio.OctaveBandData{
-			CenterFreq:  v.CenterFreq,
-			Min:         v.Min,
-			Max:         v.Max,
-			Mean:        v.Mean,
-			SampleCount: v.SampleCount,
-		}
-	}
-	return myaudio.SoundLevelData{
-		Timestamp:   src.Timestamp,
-		Source:      src.Source,
-		Name:        src.Name,
-		Duration:    src.Duration,
-		OctaveBands: bands,
-	}
-}
-
-// fromSoundLevelPtr is a convenience wrapper around fromSoundLevel that
-// returns a pointer, matching the signature expected by BroadcastSoundLevel.
-//
-// TODO: Remove together with fromSoundLevel when myaudio types are retired.
-func fromSoundLevelPtr(src soundlevel.SoundLevelData) *myaudio.SoundLevelData {
-	out := fromSoundLevel(src)
-	return &out
-}

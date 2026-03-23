@@ -20,13 +20,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -64,7 +64,7 @@ type Server struct {
 
 	// Channels
 	controlChan    chan string
-	audioLevelChan chan myaudio.AudioLevelData
+	audioLevelChan chan audiocore.AudioLevelData
 
 	// API controller
 	apiController *apiv2.Controller
@@ -154,7 +154,7 @@ func WithControlChannel(ch chan string) ServerOption {
 }
 
 // WithAudioLevelChannel sets the audio level channel for SSE streaming.
-func WithAudioLevelChannel(ch chan myaudio.AudioLevelData) ServerOption {
+func WithAudioLevelChannel(ch chan audiocore.AudioLevelData) ServerOption {
 	return func(s *Server) {
 		s.audioLevelChan = ch
 	}

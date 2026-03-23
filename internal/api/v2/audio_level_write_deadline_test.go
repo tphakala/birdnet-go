@@ -13,7 +13,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 // mockWriteDeadlineResponseWriter tracks whether SetWriteDeadline was called
@@ -70,7 +70,7 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		controller := &Controller{}
 
 		// Create test audio level data
-		levels := map[string]myaudio.AudioLevelData{
+		levels := map[string]audiocore.AudioLevelData{
 			"test_source": {
 				Level:  50,
 				Name:   "Test Source",
@@ -108,7 +108,7 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		ctx.Response().Writer = mockWriter
 
 		controller := &Controller{}
-		levels := map[string]myaudio.AudioLevelData{
+		levels := map[string]audiocore.AudioLevelData{
 			"test_source": {Level: 50, Name: "Test Source", Source: "test_source"},
 		}
 

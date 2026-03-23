@@ -12,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -550,7 +551,7 @@ func broadcastSoundLevelSSE(apiController *apiv2.Controller, soundData soundleve
 	// Sanitize data before broadcasting
 	sanitizedData := sanitizeSoundLevelData(soundData)
 
-	if err := apiController.BroadcastSoundLevel(fromSoundLevelPtr(sanitizedData)); err != nil {
+	if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 		// Record error metric
 		if m := getSoundLevelMetrics(apiController); m != nil {
 			m.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")
@@ -667,7 +668,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 		// Get or create the stream source in the registry
 		registry := myaudio.GetRegistry()
-		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name)
+		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.SourceType(audiocore.StreamTypeToSourceType(stream.Type)), stream.Name)
 		if audioSource == nil {
 			errs = append(errs, errors.Newf("failed to get/create stream source").
 				Component("realtime-analysis").

@@ -39,7 +39,7 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 				// Sanitize sound level data before SSE publishing
 				sanitizedData := sanitizeSoundLevelData(soundData)
 				// Publish sound level data via SSE
-				if err := apiController.BroadcastSoundLevel(fromSoundLevelPtr(sanitizedData)); err != nil {
+				if err := apiController.BroadcastSoundLevel(&sanitizedData); err != nil {
 					// Record error metric
 					if soundLevelMetrics := getSoundLevelMetrics(apiController); soundLevelMetrics != nil {
 						soundLevelMetrics.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "sse", "broadcast_error")

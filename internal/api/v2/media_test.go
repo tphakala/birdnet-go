@@ -18,9 +18,9 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
@@ -1335,7 +1335,7 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 
 	audioFilename := "encoding-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	tempFilePath := audioFilePath + myaudio.TempExt
+	tempFilePath := audioFilePath + ffmpeg.TempExt
 
 	// Create the temp file to simulate in-progress encoding
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)
@@ -1392,7 +1392,7 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 
 	audioFilename := "slow-encoding.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	tempFilePath := audioFilePath + myaudio.TempExt
+	tempFilePath := audioFilePath + ffmpeg.TempExt
 
 	// Create only the temp file — final file never appears
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)

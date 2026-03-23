@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -32,7 +33,7 @@ type ControlMonitor struct {
 	restartChan    chan struct{}
 	bufferManager  *BufferManager
 	proc           *processor.Processor
-	audioLevelChan chan myaudio.AudioLevelData
+	audioLevelChan chan audiocore.AudioLevelData
 	soundLevelChan chan soundlevel.SoundLevelData
 	bn             *birdnet.BirdNET
 	apiController  *apiv2.Controller
@@ -58,7 +59,7 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan myaudio.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                  wg,
 		controlChan:         controlChan,
@@ -403,7 +404,7 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 
 				// Send audio level data to existing audio level channel
 				select {
-				case cm.audioLevelChan <- unifiedData.AudioLevel:
+				case cm.audioLevelChan <- audiocore.AudioLevelData(unifiedData.AudioLevel):
 				default:
 					// Channel full, drop data
 				}

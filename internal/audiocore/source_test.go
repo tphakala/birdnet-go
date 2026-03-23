@@ -47,3 +47,26 @@ func TestAudioSource_SafeString(t *testing.T) {
 	}
 	assert.Equal(t, "rtsp://***@192.168.1.10/stream", source.String())
 }
+
+func TestStreamTypeToSourceType(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		input    string
+		expected SourceType
+	}{
+		{"rtsp", SourceTypeRTSP},
+		{"RTSP", SourceTypeRTSP},
+		{"http", SourceTypeHTTP},
+		{"hls", SourceTypeHLS},
+		{"rtmp", SourceTypeRTMP},
+		{"udp", SourceTypeUDP},
+		{"unknown", SourceTypeUnknown},
+		{"", SourceTypeUnknown},
+	}
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, StreamTypeToSourceType(tt.input))
+		})
+	}
+}
