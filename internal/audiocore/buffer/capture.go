@@ -197,28 +197,25 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 			Build()
 	}
 
+	// Clamp startTime to the oldest available data so that requests for
+	// audio slightly before the buffer window still return what we have
+	// rather than failing outright.
+	if startTime.Before(cb.startTime) {
+		startTime = cb.startTime
+	}
+
 	startOffset := startTime.Sub(cb.startTime)
 	endOffset := endTime.Sub(cb.startTime)
 
-	if startOffset < 0 {
-		return nil, errors.Newf("startTime is before the buffer's oldest data").
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "capture_buffer_read_segment").
-			Context("source", cb.source).
-			Context("start_time", startTime.Format(time.RFC3339Nano)).
-			Context("buffer_start_time", cb.startTime.Format(time.RFC3339Nano)).
-			Build()
-	}
-
-	if endOffset > cb.bufferDuration {
-		return nil, errors.Newf("endTime is beyond the buffer's current timeframe").
+	// Sanity: endOffset must be non-negative.
+	if endOffset < 0 {
+		return nil, errors.Newf("endTime is before the buffer's start time").
 			Component("audiocore").
 			Category(errors.CategoryValidation).
 			Context("operation", "capture_buffer_read_segment").
 			Context("source", cb.source).
 			Context("end_time", endTime.Format(time.RFC3339Nano)).
-			Context("buffer_end_time", cb.startTime.Add(cb.bufferDuration).Format(time.RFC3339Nano)).
+			Context("buffer_start_time", cb.startTime.Format(time.RFC3339Nano)).
 			Build()
 	}
 
