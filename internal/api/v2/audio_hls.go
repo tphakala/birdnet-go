@@ -1515,18 +1515,24 @@ func (h *hlsConsumer) Close() error {
 func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
 	audioChan = make(chan []byte, DefaultReadBufferSize)
 
-	consumerID := fmt.Sprintf("hls_%s_%s", sourceID, uuid.New().String()[:8])
+	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
+	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
+	sampleRate := hlsDefaultSampleRate
+	if c.Settings.WebServer.LiveStream.SampleRate > 0 {
+		sampleRate = c.Settings.WebServer.LiveStream.SampleRate
+	}
+
 	consumer := &hlsConsumer{
 		id:       consumerID,
 		sourceID: sourceID,
 		ch:       audioChan,
-		rate:     conf.SampleRate,
+		rate:     sampleRate,
 		depth:    conf.BitDepth,
 		channels: 1,
 	}
 
 	// Add route on the AudioRouter
-	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, conf.SampleRate); routeErr != nil {
+	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 

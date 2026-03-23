@@ -608,11 +608,16 @@ func determineEventType(prev, current streamHealthSnapshot) string {
 
 // processStreamHealthUpdates processes health updates for all active streams.
 func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	for rawURL, health := range healthData {
+	registry := c.engine.Registry()
+
+	for sourceID, health := range healthData {
 		currentSnapshot := createHealthSnapshot(health)
 
+		// Resolve the connection URL for SSE events (sourceID is an internal key, not a URL)
+		rawURL := c.resolveSourceURL(registry, sourceID)
+
 		// Check if this is a new stream or if something changed
-		previousSnapshot, exists := previousState[rawURL]
+		previousSnapshot, exists := previousState[sourceID]
 		if !exists {
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, "stream_added"); err != nil {
@@ -637,8 +642,8 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			}
 		}
 
-		// Update previous state
-		previousState[rawURL] = currentSnapshot
+		// Update previous state (keyed by sourceID for consistency with healthData)
+		previousState[sourceID] = currentSnapshot
 	}
 
 	return nil
@@ -646,18 +651,21 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 
 // processRemovedStreams checks for and processes streams that have been removed
 func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	for prevURL := range previousState {
-		if _, exists := healthData[prevURL]; exists {
+	registry := c.engine.Registry()
+
+	for prevSourceID := range previousState {
+		if _, exists := healthData[prevSourceID]; exists {
 			continue
 		}
 
-		// Stream was removed
-		sanitizedURL := privacy.SanitizeStreamUrl(prevURL)
+		// Stream was removed — resolve the connection URL for the SSE event
+		rawURL := c.resolveSourceURL(registry, prevSourceID)
+		sanitizedURL := privacy.SanitizeStreamUrl(rawURL)
 		emptyHealth := ffmpeg.StreamHealth{}
-		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+		response := convertStreamHealthToResponse(rawURL, &emptyHealth)
 
 		// Add stream name and type from config (may be empty if stream was removed from config)
-		info := c.getStreamInfo(prevURL)
+		info := c.getStreamInfo(rawURL)
 		response.Name = info.Name
 		response.Type = info.Type
 
@@ -670,7 +678,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 			return err
 		}
 
-		delete(previousState, prevURL)
+		delete(previousState, prevSourceID)
 
 		c.logInfoIfEnabled("Stream removed",
 			logger.String("url", sanitizedURL),

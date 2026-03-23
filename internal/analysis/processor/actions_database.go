@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Execute logs the note to the log file.
@@ -375,12 +376,13 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 // readCaptureSegment reads PCM data from the audiocore capture buffer.
 // startTime is the segment start, duration is in seconds.
 func (a *DatabaseAction) readCaptureSegment(sourceID string, startTime time.Time, duration int) ([]byte, error) {
+	safeSource := privacy.SanitizeStreamUrl(sourceID)
 	if a.processor == nil || a.processor.BufferMgr == nil {
-		return nil, fmt.Errorf("buffer manager not available for source %s", sourceID)
+		return nil, fmt.Errorf("buffer manager not available for source %s", safeSource)
 	}
 	cb, err := a.processor.BufferMgr.CaptureBuffer(sourceID)
 	if err != nil {
-		return nil, fmt.Errorf("no capture buffer for source %s: %w", sourceID, err)
+		return nil, fmt.Errorf("no capture buffer for source %s: %w", safeSource, err)
 	}
 	endTime := startTime.Add(time.Duration(duration) * time.Second)
 	return cb.ReadSegment(startTime, endTime)

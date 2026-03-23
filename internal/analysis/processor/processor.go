@@ -104,6 +104,8 @@ type Processor struct {
 	registryMu sync.RWMutex
 
 	// BufferMgr provides access to capture buffers for audio clip extraction.
+	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
+	// no synchronization needed for concurrent reads.
 	BufferMgr *buffer.Manager
 
 	// Backup system fields (optional)
@@ -876,14 +878,14 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 
 	// Try to get additional details from registry
 	// Use same lookup order as NewWithSpeciesInfo: connection string first, then ID
-	registry := myaudio.GetRegistry()
+	registry := p.Registry()
 	if registry != nil {
-		if existingSource, exists := registry.GetSourceByConnection(source.ID); exists {
+		if existingSource, exists := registry.GetByConnection(source.ID); exists {
 			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
 			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
-		} else if existingSource, exists := registry.GetSourceByID(source.ID); exists {
+		} else if existingSource, exists := registry.Get(source.ID); exists {
 			audioSource.ID = existingSource.ID
 			audioSource.SafeString = existingSource.SafeString
 			audioSource.DisplayName = existingSource.DisplayName
@@ -1808,15 +1810,15 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 // Falls back to sanitized source if lookup fails (prevents credential exposure)
 // TODO: Consider moving to AudioSource struct throughout the pipeline to eliminate this lookup
 func (p *Processor) getDisplayNameForSource(sourceID string) string {
-	registry := myaudio.GetRegistry()
+	registry := p.Registry()
 	if registry != nil {
 		// Try lookup by ID first
-		if source, exists := registry.GetSourceByID(sourceID); exists {
+		if source, exists := registry.Get(sourceID); exists {
 			return source.DisplayName
 		}
 
 		// Try lookup by connection string (handles legacy case)
-		if source, exists := registry.GetSourceByConnection(sourceID); exists {
+		if source, exists := registry.GetByConnection(sourceID); exists {
 			return source.DisplayName
 		}
 	}
