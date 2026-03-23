@@ -9,7 +9,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -51,9 +50,6 @@ func (m *SoundLevelManager) Start() error {
 		log.Debug("sound level monitoring is disabled")
 		return nil
 	}
-
-	// Update debug log levels
-	updateSoundLevelDebugSettings()
 
 	// Register sound level processors for all active sources
 	if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
@@ -133,15 +129,4 @@ func (m *SoundLevelManager) IsRunning() bool {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	return m.isRunning
-}
-
-// updateSoundLevelDebugSettings updates the debug log levels for sound level components
-func updateSoundLevelDebugSettings() {
-	settings := conf.Setting()
-
-	// Note: With the centralized logger, log levels are managed via configuration.
-	// Debug checks happen at call sites using conf.Setting().Realtime.Audio.SoundLevel.Debug
-
-	// Update the myaudio sound level logger
-	myaudio.UpdateSoundLevelDebugSetting(settings.Realtime.Audio.SoundLevel.Debug)
 }
