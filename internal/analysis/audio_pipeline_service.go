@@ -359,6 +359,10 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 		}
 		if src, ok := p.engine.Registry().GetByConnection(cfg.ConnectionString); ok {
 			sourceIDs = append(sourceIDs, src.ID)
+		} else {
+			log.Warn("source added but not found in registry by connection string",
+				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
+				logger.String("operation", operation))
 		}
 	}
 
