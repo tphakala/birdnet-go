@@ -5,6 +5,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -210,7 +211,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		}
 
 		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Result.AudioSource.ID, a.Result.BeginTime, captureLength)
+		pcmData, err := a.readCaptureSegment(a.Result.AudioSource.ID, a.Result.BeginTime, captureLength)
 		if err != nil {
 			handleAudioExportError(err,
 				logger.String("source", a.Result.AudioSource.SafeString),
@@ -369,6 +370,20 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 	if published := eventBus.TryPublishDetection(detectionEvent); published {
 		a.recordNotificationSent(notificationTime)
 	}
+}
+
+// readCaptureSegment reads PCM data from the audiocore capture buffer.
+// startTime is the segment start, duration is in seconds.
+func (a *DatabaseAction) readCaptureSegment(sourceID string, startTime time.Time, duration int) ([]byte, error) {
+	if a.processor == nil || a.processor.BufferMgr == nil {
+		return nil, fmt.Errorf("buffer manager not available for source %s", sourceID)
+	}
+	cb, err := a.processor.BufferMgr.CaptureBuffer(sourceID)
+	if err != nil {
+		return nil, fmt.Errorf("no capture buffer for source %s: %w", sourceID, err)
+	}
+	endTime := startTime.Add(time.Duration(duration) * time.Second)
+	return cb.ReadSegment(startTime, endTime)
 }
 
 // Execute saves the audio clip to a file

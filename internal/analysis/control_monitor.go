@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
@@ -20,9 +21,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // ControlMonitor handles control signals for realtime analysis mode
@@ -37,12 +38,7 @@ type ControlMonitor struct {
 	soundLevelChan chan soundlevel.SoundLevelData
 	bn             *birdnet.BirdNET
 	apiController  *apiv2.Controller
-
-	// Track unified audio channel and its done channel to prevent goroutine leaks
-	unifiedAudioChan     chan myaudio.UnifiedAudioData
-	unifiedAudioDoneChan chan struct{}
-	unifiedAudioMutex    sync.Mutex
-	unifiedAudioWg       sync.WaitGroup
+	engine         *engine.AudioEngine
 
 	// Sound level manager for lifecycle management
 	soundLevelManager *SoundLevelManager
@@ -59,7 +55,7 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                  wg,
 		controlChan:         controlChan,
@@ -73,6 +69,7 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 		apiController:       apiController,
 		metrics:             metrics,
 		quietHoursScheduler: quietHoursScheduler,
+		engine:              audioEngine,
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -316,115 +313,107 @@ func (cm *ControlMonitor) handleReconfigureMQTT() {
 	}
 }
 
-// handleReconfigureStreams reconfigures audio streams
+// handleReconfigureStreams reconfigures audio streams using the AudioEngine.
 func (cm *ControlMonitor) handleReconfigureStreams() {
 	GetLogger().Info("Reconfiguring audio streams")
 	settings := conf.Setting()
 
-	// Prepare the list of active sources (using source IDs, not raw URLs)
-	var sources []string
-	if len(settings.Realtime.RTSP.Streams) > 0 {
-		registry := myaudio.GetRegistry()
-		if registry != nil {
-			for i := range settings.Realtime.RTSP.Streams {
-				stream := &settings.Realtime.RTSP.Streams[i]
-				if streamSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name); streamSource != nil {
-					sources = append(sources, streamSource.ID)
-				} else {
-					GetLogger().Warn("Failed to get stream source ID from registry during reconfiguration",
-						logger.String("stream_name", stream.Name))
-				}
-			}
-		} else {
-			GetLogger().Warn("Registry not available during stream reconfiguration, skipping stream sources")
+	// Remove all existing sources from the engine.
+	for _, src := range cm.engine.Registry().List() {
+		if err := cm.engine.RemoveSource(src.ID); err != nil {
+			GetLogger().Warn("failed to remove source during reconfiguration",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
 		}
 	}
+
+	// Build new source configs and add them via the engine.
+	var sourceIDs []string
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
+		if stream.URL == "" {
+			continue
+		}
+		cfg := &audiocore.SourceConfig{
+			DisplayName:      stream.Name,
+			Type:             audiocore.StreamTypeToSourceType(stream.Type),
+			ConnectionString: stream.URL,
+			SampleRate:       conf.SampleRate,
+			BitDepth:         conf.BitDepth,
+			Channels:         1,
+		}
+		if err := cm.engine.AddSource(cfg); err != nil {
+			GetLogger().Warn("failed to add stream during reconfiguration",
+				logger.String("stream_name", stream.Name),
+				logger.String("url", privacy.SanitizeStreamUrl(stream.URL)),
+				logger.Error(err))
+			continue
+		}
+		if src, ok := cm.engine.Registry().GetByConnection(stream.URL); ok {
+			sourceIDs = append(sourceIDs, src.ID)
+		}
+	}
+
 	if settings.Realtime.Audio.Source != "" {
-		// Get the audio source from registry instead of hardcoded "malgo"
-		if registry := myaudio.GetRegistry(); registry != nil {
-			if audioSource := registry.GetOrCreateSource(settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard); audioSource != nil {
-				sources = append(sources, audioSource.ID)
-			} else {
-				GetLogger().Warn("Failed to get audio source from registry during stream reconfiguration")
-			}
-		} else {
-			GetLogger().Warn("Registry not available during stream reconfiguration, skipping audio source")
+		cfg := &audiocore.SourceConfig{
+			Type:             audiocore.SourceTypeAudioCard,
+			ConnectionString: settings.Realtime.Audio.Source,
+			SampleRate:       conf.SampleRate,
+			BitDepth:         conf.BitDepth,
+			Channels:         1,
+		}
+		if err := cm.engine.AddSource(cfg); err != nil {
+			GetLogger().Warn("failed to add audio device during reconfiguration",
+				logger.String("source", settings.Realtime.Audio.Source),
+				logger.Error(err))
+		} else if src, ok := cm.engine.Registry().GetByConnection(settings.Realtime.Audio.Source); ok {
+			sourceIDs = append(sourceIDs, src.ID)
 		}
 	}
 
-	// Update the analysis buffer monitors
-	if err := cm.bufferManager.UpdateMonitors(sources); err != nil {
-		GetLogger().Warn("Buffer monitor update completed with errors", logger.Error(err))
-		// Note: We continue execution as this is not critical for RTSP reconfiguration
-	}
+	// Re-register consumers on the router for new sources.
+	for _, sid := range sourceIDs {
+		// Buffer consumer.
+		bc, bcErr := NewBufferConsumer(
+			fmt.Sprintf("buffer_%s", sid),
+			cm.engine.BufferManager(),
+			conf.SampleRate, conf.BitDepth, 1,
+		)
+		if bcErr != nil {
+			GetLogger().Warn("failed to create buffer consumer during reconfiguration",
+				logger.String("source_id", sid),
+				logger.Error(bcErr))
+			continue
+		}
+		if routeErr := cm.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add buffer route during reconfiguration",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+		}
 
-	// Reconfigure RTSP streams with proper goroutine cleanup
-	cm.unifiedAudioMutex.Lock()
-
-	// Close previous goroutine if it exists
-	if cm.unifiedAudioDoneChan != nil {
-		close(cm.unifiedAudioDoneChan)
-		// Wait for the goroutine to fully exit using WaitGroup
-		cm.unifiedAudioMutex.Unlock()
-		cm.unifiedAudioWg.Wait()
-		cm.unifiedAudioMutex.Lock()
-	}
-
-	// Close previous channel if it exists
-	if cm.unifiedAudioChan != nil {
-		close(cm.unifiedAudioChan)
-	}
-
-	// Create new channels
-	cm.unifiedAudioChan = make(chan myaudio.UnifiedAudioData, 100)
-	cm.unifiedAudioDoneChan = make(chan struct{})
-
-	// Store references for cleanup
-	doneChan := cm.unifiedAudioDoneChan
-	unifiedChan := cm.unifiedAudioChan
-
-	// Add to WaitGroup before starting the goroutine
-	cm.unifiedAudioWg.Add(1)
-
-	cm.unifiedAudioMutex.Unlock()
-
-	go func() {
-		defer cm.unifiedAudioWg.Done()
-		// Convert unified audio data back to separate channels for existing handlers
-		for {
-			select {
-			case <-doneChan:
-				// Exit goroutine when done channel is closed
-				return
-			case unifiedData, ok := <-unifiedChan:
-				if !ok {
-					// Channel closed, exit goroutine
-					return
-				}
-
-				// Send audio level data to existing audio level channel
-				select {
-				case cm.audioLevelChan <- audiocore.AudioLevelData(unifiedData.AudioLevel):
-				default:
-					// Channel full, drop data
-				}
-
-				// Send sound level data to existing sound level channel if present
-				if unifiedData.SoundLevel != nil {
+		// Audio level consumer.
+		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
+		if routeErr := cm.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add audio level route during reconfiguration",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+		} else {
+			// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
+			cm.wg.Go(func() {
+				for lvl := range alcOutCh {
 					select {
-					case cm.soundLevelChan <- toSoundLevel(*unifiedData.SoundLevel):
+					case cm.audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
-						// Channel full, drop data
 					}
 				}
-			}
+			})
 		}
-	}()
+	}
 
-	myaudio.ReconfigureStreams(settings, cm.wg, cm.quitChan, cm.restartChan, cm.unifiedAudioChan)
-
-	// Update the package-level audio channel since it was recreated during reconfiguration
-	myaudio.SetCurrentAudioChan(cm.unifiedAudioChan)
+	// Update the analysis buffer monitors.
+	if err := cm.bufferManager.UpdateMonitors(sourceIDs); err != nil {
+		GetLogger().Warn("Buffer monitor update completed with errors", logger.Error(err))
+	}
 
 	// Re-evaluate quiet hours after stream reconfiguration to ensure
 	// newly added streams respect their quiet hours settings

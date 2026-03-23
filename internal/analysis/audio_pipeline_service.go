@@ -19,7 +19,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
@@ -46,7 +45,6 @@ type AudioPipelineService struct {
 	engine     *engine.AudioEngine
 
 	bufferMgr           *BufferManager
-	demuxMgr            *AudioDemuxManager
 	ctrlMonitor         *ControlMonitor
 	quietHoursScheduler *schedule.QuietHoursScheduler
 	soundLevelChan      chan soundlevel.SoundLevelData
@@ -130,15 +128,6 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	p.restartChan = make(chan struct{}, 10)
 	p.done = make(chan struct{})
 
-	// Initialize audio sources.
-	sources, err := initializeAudioSources(settings)
-	if err != nil {
-		// Non-fatal error, continue with available sources.
-		GetLogger().Warn("audio source initialization warning",
-			logger.Error(err),
-			logger.String("operation", "initialize_audio_sources"))
-	}
-
 	// NOTE: Previously called birdnet.ResizeQueue(5) here, but this caused a race
 	// condition: the detection processor goroutine (started by APIServerService)
 	// ranges over birdnet.ResultsQueue, and ResizeQueue closes the old channel
@@ -146,18 +135,83 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// channel, killing the detection pipeline. The default queue size of 100 is
 	// fine — shrinking to 5 added unnecessary backpressure with no benefit.
 
-	// Initialize the buffer manager.
+	// Initialize the buffer manager using the engine's buffer manager.
 	quitChan := p.done // buffer manager uses this to know when to stop
-	p.bufferMgr = MustNewBufferManager(bn, quitChan, &p.wg)
+	p.bufferMgr = MustNewBufferManager(bn, p.engine.BufferManager(), quitChan, &p.wg)
 
-	// Start buffer monitors for each audio source only if we have active sources.
-	if len(settings.Realtime.RTSP.Streams) > 0 || settings.Realtime.Audio.Source != "" {
-		if err := p.bufferMgr.UpdateMonitors(sources); err != nil {
-			errorStr := err.Error()
+	// Inject the buffer manager into the processor for audio clip extraction.
+	proc := p.apiService.Processor()
+	proc.BufferMgr = p.engine.BufferManager()
+	proc.SetRegistry(p.engine.Registry())
+
+	// Add audio sources via engine — this registers sources, allocates buffers,
+	// and starts capture (FFmpeg streams or device capture).
+	sourceConfigs := p.buildSourceConfigs()
+	var sourceIDs []string
+	for _, cfg := range sourceConfigs {
+		if addErr := p.engine.AddSource(cfg); addErr != nil {
+			GetLogger().Warn("failed to add audio source",
+				logger.String("source_id", cfg.ID),
+				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
+				logger.Error(addErr),
+				logger.String("operation", "add_audio_source"))
+			continue
+		}
+		// The source was registered; retrieve its ID from the registry.
+		if src, ok := p.engine.Registry().GetByConnection(cfg.ConnectionString); ok {
+			sourceIDs = append(sourceIDs, src.ID)
+		}
+	}
+
+	// Register a BufferConsumer on the router for each source so that audio
+	// frames flow into the analysis and capture buffers.
+	for _, sid := range sourceIDs {
+		bc, bcErr := NewBufferConsumer(
+			fmt.Sprintf("buffer_%s", sid),
+			p.engine.BufferManager(),
+			conf.SampleRate, conf.BitDepth, 1,
+		)
+		if bcErr != nil {
+			GetLogger().Warn("failed to create buffer consumer",
+				logger.String("source_id", sid),
+				logger.Error(bcErr))
+			continue
+		}
+		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add buffer route",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+		}
+	}
+
+	// Register an AudioLevelConsumer on the router for each source so that
+	// audio level data flows to the API SSE endpoint.
+	apiAudioLevelChan := p.apiService.AudioLevelChan()
+	for _, sid := range sourceIDs {
+		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
+		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add audio level route",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+			continue
+		}
+		// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
+		p.wg.Go(func() {
+			for lvl := range alcOutCh {
+				select {
+				case apiAudioLevelChan <- audiocore.AudioLevelData(lvl):
+				default:
+				}
+			}
+		})
+	}
+
+	// Start buffer monitors for each audio source.
+	if len(sourceIDs) > 0 {
+		if monErr := p.bufferMgr.UpdateMonitors(sourceIDs); monErr != nil {
 			GetLogger().Warn("buffer monitor setup completed with errors",
-				logger.String("error", errorStr),
-				logger.Int("source_count", len(sources)),
-				logger.Any("sources", sources),
+				logger.Error(monErr),
+				logger.Int("source_count", len(sourceIDs)),
 				logger.String("component", "analysis.audio_pipeline"),
 				logger.String("operation", "buffer_monitor_setup"))
 		}
@@ -182,21 +236,6 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 				logger.String("operation", "watchdog_add_monitor"))
 		}
 	})
-
-	// Register sound level processors before starting audio capture to avoid
-	// a race where audio chunks arrive before processors are registered.
-	if settings.Realtime.Audio.SoundLevel.Enabled {
-		if err := registerSoundLevelProcessorsForActiveSources(settings); err != nil {
-			GetLogger().Warn("early sound level processor registration completed with errors",
-				logger.Error(err),
-				logger.String("operation", "early_sound_level_registration"))
-		}
-	}
-
-	// Start audio capture.
-	p.demuxMgr = NewAudioDemuxManager()
-	unifiedAudioChan := p.startAudioCapture()
-	myaudio.SetCurrentAudioChan(unifiedAudioChan)
 
 	// Initialize quiet hours scheduler for stream and sound card management.
 	// Uses audiocore/schedule instead of myaudio — scheduler is independent of the audio capture pipeline.
@@ -236,10 +275,8 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	}
 
 	// Start control monitor for hot reloads.
-	proc := p.apiService.Processor()
-	audioLevelChan := p.apiService.AudioLevelChan()
 	apiController := p.apiService.APIController()
-	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, audioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler)
+	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine)
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -293,10 +330,7 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 		logger.String("operation", "shutdown_hls_cleanup"))
 	cleanupHLSWithTimeout(ctx)
 
-	// Shutdown FFmpeg manager.
-	log.Info("shutting down FFmpeg manager",
-		logger.String("operation", "shutdown_ffmpeg_manager"))
-	myaudio.ShutdownFFmpegManagerWithContext(ctx)
+	// NOTE: FFmpeg manager shutdown is handled by engine.Stop() in serve.go.
 
 	// Stop quiet hours scheduler.
 	if p.quietHoursScheduler != nil {
@@ -311,13 +345,6 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 			close(p.done)
 		}
 	})
-
-	// Stop the audio demux manager explicitly. The demux goroutine is tracked by
-	// demuxMgr (not p.wg), so we must wait for it here to prevent writes to the
-	// already-closed audioLevelChan owned by APIServerService.
-	if p.demuxMgr != nil {
-		p.demuxMgr.Stop()
-	}
 
 	// Wait for goroutines with context deadline.
 	log.Info("waiting for goroutines to finish",
@@ -343,72 +370,116 @@ func (p *AudioPipelineService) Stop(ctx context.Context) error {
 	return nil
 }
 
-// startAudioCapture initializes and starts the audio capture routine.
-// It uses the service's demux manager and fields instead of package-level globals.
-func (p *AudioPipelineService) startAudioCapture() chan myaudio.UnifiedAudioData {
-	// Stop previous demultiplexing goroutine if it exists.
-	p.demuxMgr.Stop()
-
-	// Start new demux goroutine.
-	doneChan := p.demuxMgr.Start()
-
-	// Create a unified audio channel.
-	unifiedAudioChan := make(chan myaudio.UnifiedAudioData, 100)
-	go func() {
-		defer p.demuxMgr.Done()
-
-		// Demultiplex unified audio data into separate channels.
-		for {
-			select {
-			case <-doneChan:
-				return
-			case <-p.done:
-				return
-			case unifiedData, ok := <-unifiedAudioChan:
-				if !ok {
-					return
-				}
-
-				// Send audio level data to the API service's channel.
-				audioLevelChan := p.apiService.AudioLevelChan()
-				select {
-				case <-doneChan:
-					return
-				case <-p.done:
-					return
-				case audioLevelChan <- audiocore.AudioLevelData(unifiedData.AudioLevel):
-				default:
-					// Channel full, drop data.
-				}
-
-				// Send sound level data to the service's channel if present.
-				if unifiedData.SoundLevel != nil {
-					select {
-					case <-doneChan:
-						return
-					case <-p.done:
-						return
-					case p.soundLevelChan <- toSoundLevel(*unifiedData.SoundLevel):
-					default:
-						// Channel full, drop data.
-					}
-				}
-			}
-		}
-	}()
-
-	// CaptureAudio manages its own waitgroup internally.
-	go myaudio.CaptureAudio(p.settings, &p.wg, p.done, p.restartChan, unifiedAudioChan)
-
-	return unifiedAudioChan
-}
-
-// restartAudioCapture restarts the audio capture, used by the restart loop.
+// restartAudioCapture restarts the audio capture by removing and re-adding
+// all sources via the AudioEngine.
 func (p *AudioPipelineService) restartAudioCapture() {
 	GetLogger().Info("restarting audio capture",
 		logger.String("operation", "restart_audio_capture"))
-	unifiedAudioChan := p.startAudioCapture()
-	myaudio.SetCurrentAudioChan(unifiedAudioChan)
+
+	// Remove all existing sources.
+	for _, src := range p.engine.Registry().List() {
+		if err := p.engine.RemoveSource(src.ID); err != nil {
+			GetLogger().Warn("failed to remove source during restart",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
+		}
+	}
+
+	// Re-add from current settings.
+	sourceConfigs := p.buildSourceConfigs()
+	var sourceIDs []string
+	for _, cfg := range sourceConfigs {
+		if err := p.engine.AddSource(cfg); err != nil {
+			GetLogger().Warn("failed to re-add source during restart",
+				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
+				logger.Error(err))
+			continue
+		}
+		if src, ok := p.engine.Registry().GetByConnection(cfg.ConnectionString); ok {
+			sourceIDs = append(sourceIDs, src.ID)
+		}
+	}
+
+	// Re-register consumers on the router.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	for _, sid := range sourceIDs {
+		// Buffer consumer.
+		bc, bcErr := NewBufferConsumer(
+			fmt.Sprintf("buffer_%s", sid),
+			p.engine.BufferManager(),
+			conf.SampleRate, conf.BitDepth, 1,
+		)
+		if bcErr != nil {
+			GetLogger().Warn("failed to create buffer consumer during restart",
+				logger.String("source_id", sid),
+				logger.Error(bcErr))
+			continue
+		}
+		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add buffer route during restart",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+		}
+
+		// Audio level consumer.
+		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
+		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
+			GetLogger().Warn("failed to add audio level route during restart",
+				logger.String("source_id", sid),
+				logger.Error(routeErr))
+		} else {
+			// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
+			p.wg.Go(func() {
+				for lvl := range alcOutCh {
+					select {
+					case audioLevelChan <- audiocore.AudioLevelData(lvl):
+					default:
+					}
+				}
+			})
+		}
+	}
+
+	// Update buffer monitors.
+	if err := p.bufferMgr.UpdateMonitors(sourceIDs); err != nil {
+		GetLogger().Warn("buffer monitor update failed during restart",
+			logger.Error(err))
+	}
+}
+
+// buildSourceConfigs constructs audiocore.SourceConfig entries from the current settings.
+func (p *AudioPipelineService) buildSourceConfigs() []*audiocore.SourceConfig {
+	settings := conf.Setting()
+	var configs []*audiocore.SourceConfig
+
+	// RTSP streams.
+	for i := range settings.Realtime.RTSP.Streams {
+		stream := &settings.Realtime.RTSP.Streams[i]
+		if stream.URL == "" {
+			continue
+		}
+		configs = append(configs, &audiocore.SourceConfig{
+			DisplayName:      stream.Name,
+			Type:             audiocore.StreamTypeToSourceType(stream.Type),
+			ConnectionString: stream.URL,
+			SampleRate:       conf.SampleRate,
+			BitDepth:         conf.BitDepth,
+			Channels:         1,
+		})
+	}
+
+	// Local audio card.
+	if settings.Realtime.Audio.Source != "" {
+		configs = append(configs, &audiocore.SourceConfig{
+			Type:             audiocore.SourceTypeAudioCard,
+			ConnectionString: settings.Realtime.Audio.Source,
+			SampleRate:       conf.SampleRate,
+			BitDepth:         conf.BitDepth,
+			Channels:         1,
+		})
+	}
+
+	return configs
 }
 
 // startWeatherPolling initializes and starts the weather polling routine.
@@ -424,45 +495,6 @@ func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metric
 	p.wg.Go(func() {
 		weatherService.StartPolling(p.done)
 	})
-}
-
-// AudioDemuxManager manages the lifecycle of audio demultiplexing goroutines
-type AudioDemuxManager struct {
-	doneChan chan struct{}
-	mutex    sync.Mutex
-	wg       sync.WaitGroup
-}
-
-// NewAudioDemuxManager creates a new AudioDemuxManager
-func NewAudioDemuxManager() *AudioDemuxManager {
-	return &AudioDemuxManager{}
-}
-
-// Stop signals the current demux goroutine to stop and waits for it to exit
-func (m *AudioDemuxManager) Stop() {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	if m.doneChan != nil {
-		close(m.doneChan)
-		m.wg.Wait() // Wait for goroutine to exit
-		m.doneChan = nil
-	}
-}
-
-// Start creates a new done channel and increments the wait group
-func (m *AudioDemuxManager) Start() chan struct{} {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
-
-	m.doneChan = make(chan struct{})
-	m.wg.Add(1)
-	return m.doneChan
-}
-
-// Done should be called when the goroutine exits
-func (m *AudioDemuxManager) Done() {
-	m.wg.Done()
 }
 
 // clipCleanupMonitor monitors the database and deletes clips that meet the retention policy.
@@ -575,53 +607,6 @@ func clipCleanupMonitor(quitChan chan struct{}, dataStore datastore.Interface) {
 			}
 		}
 	}
-}
-
-// initializeBuffers handles initialization of all audio-related buffers
-func initializeBuffers(sources []string) error {
-	var initErrors []string
-
-	// Initialize analysis buffers
-	const analysisBufferSize = conf.BufferSize * 6 // 6x buffer size to avoid underruns
-	if err := myaudio.InitAnalysisBuffers(analysisBufferSize, sources); err != nil {
-		initErrors = append(initErrors, fmt.Sprintf("failed to initialize analysis buffers: %v", err))
-	}
-
-	// Initialize capture buffers using default or extended capture buffer size.
-	// EffectiveCaptureBufferSeconds is a pure read-only method that returns the
-	// correct buffer size without mutating settings.
-	settings := conf.Setting()
-	preCapture := settings.Realtime.Audio.Export.PreCapture
-	captureBufferSize := settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(preCapture)
-	GetLogger().Info("initializeBuffers: requesting capture buffer allocation",
-		logger.Int("capture_buffer_size_seconds", captureBufferSize),
-		logger.Bool("extended_capture_enabled", settings.Realtime.ExtendedCapture.Enabled),
-		logger.Int("source_count", len(sources)),
-		logger.Any("sources", sources))
-	if err := myaudio.InitCaptureBuffers(captureBufferSize, conf.SampleRate, conf.BitDepth/8, sources); err != nil {
-		initErrors = append(initErrors, fmt.Sprintf("failed to initialize capture buffers: %v", err))
-	}
-
-	if len(initErrors) > 0 {
-		// Buffer initialization errors are aggregated to provide a complete picture
-		// of all failed sources. These are not retryable because they indicate:
-		// - Invalid audio source configuration (wrong device names, URLs)
-		// - System resource limitations (can't allocate buffer memory)
-		// - Permission issues accessing audio devices
-		// Context includes buffer parameters to aid in troubleshooting memory issues
-		return errors.Newf("buffer initialization errors: %s", strings.Join(initErrors, "; ")).
-			Component("analysis.audio_pipeline").
-			Category(errors.CategoryBuffer).
-			Context("operation", "initialize_buffers").
-			Context("error_count", len(initErrors)).
-			Context("source_count", len(sources)).
-			Context("analysis_buffer_size", analysisBufferSize).
-			Context("sample_rate", conf.SampleRate).
-			Context("retryable", false). // Buffer init failure is configuration/system issue
-			Build()
-	}
-
-	return nil
 }
 
 // cleanupHLSWithTimeout runs HLS cleanup asynchronously with a timeout to prevent blocking shutdown
@@ -738,90 +723,4 @@ func logHLSCleanup(err error) {
 		log.Info("cleaned up leftover HLS streaming files",
 			logger.String("operation", "cleanup_hls_files"))
 	}
-}
-
-// initializeAudioSources prepares and validates audio sources
-func initializeAudioSources(settings *conf.Settings) ([]string, error) {
-	log := GetLogger()
-	var sources []string
-	if len(settings.Realtime.RTSP.Streams) > 0 || settings.Realtime.Audio.Source != "" {
-		if len(settings.Realtime.RTSP.Streams) > 0 {
-			// Register RTSP sources in the registry and get their source IDs
-			registry := myaudio.GetRegistry()
-			if registry == nil {
-				return nil, errors.Newf("audio source registry not available").
-					Component("analysis").
-					Category(errors.CategorySystem).
-					Context("operation", "initialize_audio_sources").
-					Build()
-			}
-
-			var failedSources []string
-			for i := range settings.Realtime.RTSP.Streams {
-				stream := &settings.Realtime.RTSP.Streams[i]
-				if stream.URL == "" {
-					log.Warn("skipping stream with empty URL",
-						logger.String("stream_name", stream.Name))
-					continue
-				}
-
-				// Register the source with stream name as display name
-				source, err := registry.RegisterSource(stream.URL, myaudio.SourceConfig{
-					ID:          "", // Let registry generate UUID
-					DisplayName: stream.Name,
-					Type:        myaudio.StreamTypeToSourceType(stream.Type),
-				})
-				if err != nil {
-					safeURL := privacy.SanitizeStreamUrl(stream.URL)
-					log.Error("failed to register stream source",
-						logger.String("stream_name", stream.Name),
-						logger.String("stream_url", safeURL),
-						logger.Error(err))
-					failedSources = append(failedSources, stream.Name)
-					continue
-				}
-
-				sources = append(sources, source.ID)
-			}
-
-			// If some sources failed to register, log a summary
-			if len(failedSources) > 0 {
-				log.Warn("some stream sources failed to register",
-					logger.Int("failed_count", len(failedSources)),
-					logger.Int("total_count", len(settings.Realtime.RTSP.Streams)),
-					logger.Any("failed_sources", failedSources))
-			}
-		}
-		if settings.Realtime.Audio.Source != "" {
-			// Register the audio device in the source registry and use its ID
-			// This ensures consistent UUID-based IDs like RTSP sources
-			registry := myaudio.GetRegistry()
-			if registry == nil {
-				log.Warn("audio source registry not available, skipping audio device registration",
-					logger.String("source", settings.Realtime.Audio.Source))
-			} else {
-				source, err := registry.RegisterSource(settings.Realtime.Audio.Source, myaudio.SourceConfig{
-					Type: myaudio.SourceTypeAudioCard,
-				})
-				if err != nil {
-					log.Warn("failed to register audio device source",
-						logger.String("source", settings.Realtime.Audio.Source),
-						logger.Error(err))
-				} else {
-					sources = append(sources, source.ID)
-				}
-			}
-		}
-
-		// Initialize buffers for all audio sources
-		if err := initializeBuffers(sources); err != nil {
-			// If buffer initialization fails, log the error but continue
-			// Some sources might still work
-			log.Warn("error initializing buffers, some audio sources might not be available",
-				logger.Error(err))
-		}
-	} else {
-		log.Warn("starting without active audio sources, configure audio devices or RTSP streams through the web interface")
-	}
-	return sources, nil
 }

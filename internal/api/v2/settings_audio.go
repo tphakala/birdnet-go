@@ -6,7 +6,6 @@ import (
 	"reflect"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -37,11 +36,11 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // handleEqualizerChange updates the audio filter chain when equalizer settings change
-func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
-	registry := myaudio.GetRegistry()
-	if err := registry.UpdateAllFilterChains(settings); err != nil {
-		return fmt.Errorf("failed to update audio filter chains: %w", err)
-	}
+func (c *Controller) handleEqualizerChange(_ *conf.Settings) error {
+	// TODO: Equalizer filter chains need to be migrated to audiocore.
+	// The old myaudio.AudioSourceRegistry.UpdateAllFilterChains is no longer available.
+	// For now, this is a no-op; equalizer settings changes will take effect on restart.
+	c.Debug("Equalizer filter chain update is a no-op pending audiocore filter migration")
 	return nil
 }
 

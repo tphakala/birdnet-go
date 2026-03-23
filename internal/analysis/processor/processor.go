@@ -17,6 +17,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
@@ -96,6 +98,13 @@ type Processor struct {
 	pendingFlushNotifsMu    sync.Mutex                           // Mutex to protect pendingFlushNotifs
 	lastBroadcastSnapshot   []SSEPendingDetection                // Last broadcast snapshot for change detection
 	lastBroadcastSnapshotMu sync.Mutex                           // Mutex to protect lastBroadcastSnapshot
+
+	// SourceRegistry provides access to registered audio sources (injected via SetRegistry).
+	registry   *audiocore.SourceRegistry
+	registryMu sync.RWMutex
+
+	// BufferMgr provides access to capture buffers for audio clip extraction.
+	BufferMgr *buffer.Manager
 
 	// Backup system fields (optional)
 	backupManager   any // Use interface{} to avoid import cycle
