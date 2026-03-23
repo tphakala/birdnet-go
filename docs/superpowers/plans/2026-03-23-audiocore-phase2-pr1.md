@@ -379,7 +379,7 @@ Categorize remaining imports into:
 
 - [ ] **Step 2: Audit exported constants**
 
-Run: `grep -rn 'myaudio\.\(Format\|Err\|Min\|Max\|Float32\|Temp\)' internal/ --include="*.go" | grep -v myaudio/ | grep -v .clone/`
+Run: `grep -rn 'myaudio\.\(Format\|Err\|Min\|Max\|Float32\|Temp\)' internal/ --include="*.go" | grep -v myaudio/ | grep -v .claude/`
 
 If any constants are used externally, duplicate them in the appropriate audiocore package. Do NOT remove from myaudio.
 
