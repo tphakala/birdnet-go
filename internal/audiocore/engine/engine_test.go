@@ -1,12 +1,14 @@
 package engine
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // newTestEngine creates an AudioEngine with a test context for testing.
@@ -257,4 +259,31 @@ func TestEngine_ReconfigureSource_NotFound(t *testing.T) {
 	})
 	require.Error(t, err)
 	assert.ErrorIs(t, err, audiocore.ErrSourceNotFound)
+}
+
+// TestErrEngineStopped verifies that the sentinel error is set as the context
+// cancellation cause when Stop is called.
+func TestErrEngineStopped(t *testing.T) {
+	t.Parallel()
+	eng, _ := newTestEngine(t)
+
+	// Stop the engine — this cancels the context with ErrEngineStopped.
+	eng.Stop()
+
+	// The engine's context should be done.
+	require.Error(t, eng.ctx.Err(), "context should be cancelled after Stop")
+
+	// The cancellation cause should be the sentinel error.
+	cause := context.Cause(eng.ctx)
+	require.Error(t, cause)
+	assert.ErrorIs(t, cause, ErrEngineStopped)
+}
+
+// TestErrEngineStopped_IsSentinel verifies that ErrEngineStopped can be
+// detected with errors.Is and has a stable string representation.
+func TestErrEngineStopped_IsSentinel(t *testing.T) {
+	t.Parallel()
+
+	assert.True(t, errors.Is(ErrEngineStopped, ErrEngineStopped))
+	assert.Contains(t, ErrEngineStopped.Error(), "stop requested")
 }

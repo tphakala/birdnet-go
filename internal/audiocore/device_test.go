@@ -257,3 +257,41 @@ func TestDeviceManager_Close(t *testing.T) {
 	active := dm.ActiveDevices()
 	assert.Empty(t, active)
 }
+
+// TestIsDefaultDeviceToken verifies that the well-known default device
+// identifiers are recognised and arbitrary strings are rejected.
+func TestIsDefaultDeviceToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		deviceID string
+		want     bool
+	}{
+		{name: "sysdefault constant", deviceID: DeviceIDSysDefault, want: true},
+		{name: "default constant", deviceID: DeviceIDDefault, want: true},
+		{name: "literal sysdefault", deviceID: "sysdefault", want: true},
+		{name: "literal default", deviceID: "default", want: true},
+		{name: "empty string", deviceID: "", want: false},
+		{name: "arbitrary device id", deviceID: ":0,0", want: false},
+		{name: "device name substring", deviceID: "HDA Intel PCH", want: false},
+		{name: "case mismatch Default", deviceID: "Default", want: false},
+		{name: "case mismatch SysDefault", deviceID: "SysDefault", want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := isDefaultDeviceToken(tt.deviceID)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDeviceIDConstants verifies the constant values are the expected strings.
+func TestDeviceIDConstants(t *testing.T) {
+	t.Parallel()
+
+	assert.Equal(t, "sysdefault", DeviceIDSysDefault)
+	assert.Equal(t, "default", DeviceIDDefault)
+}
