@@ -143,6 +143,10 @@ func GetTotalChunks(sampleRate, totalSamples int, overlap float64) int {
 
 // getAudioDivisor returns the divisor used to normalise integer PCM samples to
 // the [-1.0, 1.0] float32 range for the given bit depth.
+//
+// Only 16-bit, 24-bit, and 32-bit integer PCM are supported. Other bit depths
+// (e.g., 8-bit unsigned, 32-bit float IEEE) return an explicit error rather
+// than silently producing incorrect normalisation values.
 func getAudioDivisor(bitDepth int) (float32, error) {
 	switch bitDepth {
 	case 16:

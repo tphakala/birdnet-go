@@ -6,14 +6,20 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // makeTime creates a time.Time on a fixed date for the given HH:MM string.
+// Panics on invalid input — intended for test constants only.
 func makeTime(hhmm string) time.Time {
 	ref := time.Date(2025, 6, 15, 0, 0, 0, 0, time.Local)
-	return parseHHMM(hhmm, ref)
+	t, err := parseHHMM(hhmm, ref)
+	if err != nil {
+		panic(fmt.Sprintf("makeTime(%q): %v", hhmm, err))
+	}
+	return t
 }
 
 // inactiveQuietWindow returns a 1-minute fixed quiet hours window guaranteed
@@ -141,12 +147,40 @@ func TestParseHHMM(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			result := parseHHMM(tt.input, ref)
+			result, err := parseHHMM(tt.input, ref)
+			require.NoError(t, err, "parseHHMM(%q) should not error", tt.input)
 			assert.Equal(t, tt.wantHour, result.Hour(), "hour mismatch for %q", tt.input)
 			assert.Equal(t, tt.wantMin, result.Minute(), "minute mismatch for %q", tt.input)
 			assert.Equal(t, ref.Year(), result.Year(), "year mismatch for %q", tt.input)
 			assert.Equal(t, ref.Month(), result.Month(), "month mismatch for %q", tt.input)
 			assert.Equal(t, ref.Day(), result.Day(), "day mismatch for %q", tt.input)
+		})
+	}
+}
+
+func TestParseHHMM_InvalidFormat(t *testing.T) {
+	t.Parallel()
+
+	ref := time.Date(2025, 6, 15, 0, 0, 0, 0, time.Local)
+
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{"empty string", ""},
+		{"missing colon", "2200"},
+		{"invalid hour", "25:00"},
+		{"invalid minute", "12:60"},
+		{"extra fields", "12:30:45"},
+		{"non-numeric", "ab:cd"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := parseHHMM(tt.input, ref)
+			assert.Error(t, err, "parseHHMM(%q) should return an error", tt.input)
 		})
 	}
 }

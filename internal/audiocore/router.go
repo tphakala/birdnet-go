@@ -110,6 +110,11 @@ func NewAudioRouter(log logger.Logger) *AudioRouter {
 // the same ID is already registered for this source. When sourceSampleRate
 // differs from the consumer's SampleRate, a resampler is created automatically
 // so the consumer receives frames at its expected rate.
+//
+// Consumer IDs must be globally unique across all sources. The router uses
+// the consumer ID for logging, metrics, and route lookup. Duplicate IDs on
+// different sources will not cause an error but may produce confusing log
+// output and make RemoveRoute ambiguous.
 func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int) error {
 	// Reject routes after the router has been closed.
 	if r.ctx.Err() != nil {

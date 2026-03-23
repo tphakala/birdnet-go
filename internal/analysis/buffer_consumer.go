@@ -15,6 +15,11 @@ import (
 // AudioFrame's PCM data to both the analysis buffer and the capture buffer
 // for the frame's source. It acts as the bridge between the audiocore routing
 // layer and the buffer.Manager that feeds the BirdNET analysis pipeline.
+//
+// PCM constraint: The BirdNET model expects 16-bit signed little-endian PCM.
+// Callers must ensure the router delivers frames with BitDepth=16. Higher
+// bit depths will be written to the buffers without conversion, which will
+// produce incorrect analysis results.
 type BufferConsumer struct {
 	id        string
 	bufferMgr *buffer.Manager
@@ -171,7 +176,12 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 	}
 
 	// Truncate to an even number of bytes for 16-bit samples.
+	// An odd byte count means the last byte has no pair and cannot form
+	// a valid 16-bit sample, so it is silently dropped.
 	if len(samples)%2 != 0 {
+		GetLogger().Debug("odd byte count in PCM data, truncating trailing byte",
+			logger.Int("original_len", len(samples)),
+			logger.String("source", source))
 		samples = samples[:len(samples)-1]
 	}
 

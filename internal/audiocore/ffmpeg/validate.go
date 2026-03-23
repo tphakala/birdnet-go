@@ -320,11 +320,8 @@ func QuickValidateFile(path string) (bool, error) {
 // isFileSizeStable checks if a file's size is stable (not being written).
 // It waits FileStabilityCheckDuration and then re-reads the size.
 func isFileSizeStable(ctx context.Context, path string, initialSize int64) bool {
-	ticker := time.NewTicker(FileStabilityCheckDuration)
-	defer ticker.Stop()
-
 	select {
-	case <-ticker.C:
+	case <-time.After(FileStabilityCheckDuration):
 		info, err := os.Stat(path)
 		if err != nil {
 			return false

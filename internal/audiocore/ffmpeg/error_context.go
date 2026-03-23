@@ -12,6 +12,29 @@ import (
 )
 
 // FFmpeg error type constants for categorizing error conditions.
+//
+// Error classification for retry and circuit breaker decisions:
+//
+// Transient errors (may recover on retry):
+//   - ErrTypeConnectionTimeout — host unreachable or slow network
+//   - ErrTypeNetworkUnreachable — network transition, interface coming up
+//   - ErrTypeRTSP503 — server overloaded, may recover
+//   - ErrTypeInvalidData — stream corruption, may be temporary
+//   - ErrTypeEOF — stream ended unexpectedly, may restart
+//
+// Permanent errors (require configuration fix, no retry):
+//   - ErrTypeRTSP404 — stream path does not exist
+//   - ErrTypeConnectionRefused — no server listening on port
+//   - ErrTypeAuthFailed — invalid credentials (401)
+//   - ErrTypeAuthForbidden — insufficient permissions (403)
+//   - ErrTypeNoRoute — routing table problem for specific host
+//   - ErrTypeOperationNotPermit — firewall/SELinux blocking
+//   - ErrTypeSSLError — certificate or TLS configuration issue
+//   - ErrTypeDNSResolutionFailed — hostname does not resolve
+//   - ErrTypeProtocolError — unsupported protocol in URL
+//
+// See ShouldOpenCircuit() and ShouldRestart() for how these classifications
+// drive circuit breaker and restart behaviour.
 const (
 	ErrTypeConnectionTimeout   = "connection_timeout"
 	ErrTypeNetworkUnreachable  = "network_unreachable"

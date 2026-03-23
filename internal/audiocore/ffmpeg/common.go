@@ -5,9 +5,9 @@ package ffmpeg
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -15,6 +15,12 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// rePathContamination matches URL-like path segments that indicate the FFmpeg
+// path has been contaminated by a reverse proxy or ingress prefix (e.g.,
+// "/api/", "/ingress/", "/proxy/", "/hassio/"). A valid FFmpeg binary path
+// should never contain these segments.
+var rePathContamination = regexp.MustCompile(`(?i)/(?:api|ingress|proxy|hassio)/`)
 
 // ValidateFFmpegPath checks if the FFmpeg path is valid for execution.
 // It rejects empty paths, relative paths, and paths that appear to be
@@ -39,8 +45,9 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 
 	// Reject paths contaminated by HTTP proxy/ingress prefixes.
 	// A valid FFmpeg binary path should be a clean filesystem path,
-	// not contain URL-like segments such as "/api/" or "/ingress/".
-	if strings.Contains(ffmpegPath, "/api/") || strings.Contains(ffmpegPath, "/ingress/") {
+	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
+	// or "/hassio/". Uses a case-insensitive regex for broader detection.
+	if rePathContamination.MatchString(ffmpegPath) {
 		return errors.Newf("FFmpeg path appears contaminated by proxy/ingress prefix: %s", ffmpegPath).
 			Component("audiocore").
 			Category(errors.CategoryValidation).
@@ -56,8 +63,8 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 // Returns sampleRateStr (e.g. "48000"), channelsStr (e.g. "1"), and formatStr (e.g. "s16le").
 // Supported bit depths: 16 → "s16le", 24 → "s24le", 32 → "s32le". Defaults to "s16le".
 func GetFFmpegFormat(sampleRate, numChannels, bitDepth int) (sampleRateStr, channelsStr, formatStr string) {
-	sampleRateStr = fmt.Sprintf("%d", sampleRate)
-	channelsStr = fmt.Sprintf("%d", numChannels)
+	sampleRateStr = strconv.Itoa(sampleRate)
+	channelsStr = strconv.Itoa(numChannels)
 
 	switch bitDepth {
 	case 16:

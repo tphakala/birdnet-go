@@ -9,6 +9,9 @@ import (
 // equivalent. This is a transitional helper used while the analysis package
 // migrates from myaudio types to audiocore types. The two structs are
 // structurally identical; this function copies fields one-to-one.
+//
+// TODO: Remove once the myaudio package is fully replaced by audiocore.
+// All callers should be migrated to use soundlevel.SoundLevelData directly.
 func toSoundLevel(src myaudio.SoundLevelData) soundlevel.SoundLevelData {
 	bands := make(map[string]soundlevel.OctaveBandData, len(src.OctaveBands))
 	for k, v := range src.OctaveBands {
@@ -32,6 +35,8 @@ func toSoundLevel(src myaudio.SoundLevelData) soundlevel.SoundLevelData {
 // fromSoundLevel converts a soundlevel.SoundLevelData back to the myaudio
 // equivalent. This is a transitional helper for boundaries where downstream
 // code (e.g., the API v2 package) still expects myaudio types.
+//
+// TODO: Remove once downstream consumers (API v2, SSE) accept soundlevel types directly.
 func fromSoundLevel(src soundlevel.SoundLevelData) myaudio.SoundLevelData {
 	bands := make(map[string]myaudio.OctaveBandData, len(src.OctaveBands))
 	for k, v := range src.OctaveBands {
@@ -54,6 +59,8 @@ func fromSoundLevel(src soundlevel.SoundLevelData) myaudio.SoundLevelData {
 
 // fromSoundLevelPtr is a convenience wrapper around fromSoundLevel that
 // returns a pointer, matching the signature expected by BroadcastSoundLevel.
+//
+// TODO: Remove together with fromSoundLevel when myaudio types are retired.
 func fromSoundLevelPtr(src soundlevel.SoundLevelData) *myaudio.SoundLevelData {
 	out := fromSoundLevel(src)
 	return &out
