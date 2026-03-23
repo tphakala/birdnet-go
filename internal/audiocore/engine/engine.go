@@ -62,6 +62,27 @@ type Config struct {
 	// Logger is the structured logger for engine operations.
 	Logger logger.Logger
 
+	// FFmpegPath is the absolute path to the FFmpeg binary.
+	// It is passed to StreamConfig when starting stream-type sources.
+	FFmpegPath string
+
+	// SoxPath is the absolute path to the SoX binary.
+	// Reserved for future use by audio processing subsystems.
+	SoxPath string
+
+	// Transport is the default RTSP transport protocol ("tcp" or "udp").
+	Transport string
+
+	// FFmpegParameters are additional FFmpeg command-line parameters
+	// applied to all stream sources.
+	FFmpegParameters []string
+
+	// LogLevel is the FFmpeg log level (e.g., "error", "warning").
+	LogLevel string
+
+	// Debug enables verbose debug logging for stream capture.
+	Debug bool
+
 	// RouterMetrics is optional; nil-safe.
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
@@ -93,6 +114,19 @@ type AudioEngine struct {
 	logger    logger.Logger
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
+
+	// ffmpegPath is the absolute path to the FFmpeg binary.
+	ffmpegPath string
+	// soxPath is the absolute path to the SoX binary.
+	soxPath string
+	// transport is the default RTSP transport protocol.
+	transport string
+	// ffmpegParameters are additional FFmpeg command-line parameters.
+	ffmpegParameters []string
+	// logLevel is the FFmpeg log level.
+	logLevel string
+	// debug enables verbose debug logging for stream capture.
+	debug bool
 }
 
 // New creates an AudioEngine with all subsystems initialised.
@@ -115,15 +149,21 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	deviceMgr := audiocore.NewDeviceManager(router, log)
 
 	return &AudioEngine{
-		registry:  audiocore.NewSourceRegistry(log),
-		router:    router,
-		ffmpegMgr: ffmpegMgr,
-		deviceMgr: deviceMgr,
-		bufferMgr: bufMgr,
-		scheduler: scheduler,
-		logger:    log.With(logger.String("component", "audio_engine")),
-		ctx:       engineCtx,
-		cancel:    cancel,
+		registry:         audiocore.NewSourceRegistry(log),
+		router:           router,
+		ffmpegMgr:        ffmpegMgr,
+		deviceMgr:        deviceMgr,
+		bufferMgr:        bufMgr,
+		scheduler:        scheduler,
+		logger:           log.With(logger.String("component", "audio_engine")),
+		ctx:              engineCtx,
+		cancel:           cancel,
+		ffmpegPath:       cfg.FFmpegPath,
+		soxPath:          cfg.SoxPath,
+		transport:        cfg.Transport,
+		ffmpegParameters: cfg.FFmpegParameters,
+		logLevel:         cfg.LogLevel,
+		debug:            cfg.Debug,
 	}
 }
 
@@ -206,13 +246,18 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	// 4. Start capture based on source type.
 	if isStreamType(cfg.Type) {
 		streamCfg := &ffmpeg.StreamConfig{
-			SourceID:   sourceID,
-			SourceName: src.DisplayName,
-			URL:        cfg.ConnectionString,
-			Type:       string(cfg.Type),
-			SampleRate: sampleRate,
-			BitDepth:   cfg.BitDepth,
-			Channels:   cfg.Channels,
+			SourceID:         sourceID,
+			SourceName:       src.DisplayName,
+			URL:              cfg.ConnectionString,
+			Type:             string(cfg.Type),
+			SampleRate:       sampleRate,
+			BitDepth:         cfg.BitDepth,
+			Channels:         cfg.Channels,
+			FFmpegPath:       e.ffmpegPath,
+			Transport:        e.transport,
+			FFmpegParameters: e.ffmpegParameters,
+			LogLevel:         e.logLevel,
+			Debug:            e.debug,
 		}
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
@@ -323,13 +368,18 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 
 	if isStreamType(newType) {
 		streamCfg := &ffmpeg.StreamConfig{
-			SourceID:   sourceID,
-			SourceName: src.DisplayName,
-			URL:        newCfg.ConnectionString,
-			Type:       string(newType),
-			SampleRate: sampleRate,
-			BitDepth:   newCfg.BitDepth,
-			Channels:   newCfg.Channels,
+			SourceID:         sourceID,
+			SourceName:       src.DisplayName,
+			URL:              newCfg.ConnectionString,
+			Type:             string(newType),
+			SampleRate:       sampleRate,
+			BitDepth:         newCfg.BitDepth,
+			Channels:         newCfg.Channels,
+			FFmpegPath:       e.ffmpegPath,
+			Transport:        e.transport,
+			FFmpegParameters: e.ffmpegParameters,
+			LogLevel:         e.logLevel,
+			Debug:            e.debug,
 		}
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
 			// Source stays registered — mark it as errored so callers can see the failure.

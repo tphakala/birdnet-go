@@ -38,7 +38,13 @@ The "realtime" command is an alias for backward compatibility.`,
 			// depends on SunCalc and ControlChan that are only available
 			// after APIServerService.Start(), so it is set later via
 			// AudioEngine.SetScheduler().
-			audioEngine := engine.New(cmd.Context(), &engine.Config{}, nil)
+			audioEngine := engine.New(cmd.Context(), &engine.Config{
+				FFmpegPath:       settings.Realtime.Audio.FfmpegPath,
+				SoxPath:          settings.Realtime.Audio.SoxPath,
+				Transport:        settings.Realtime.RTSP.Transport,
+				FFmpegParameters: settings.Realtime.RTSP.FFmpegParameters,
+				Debug:            settings.Debug,
+			}, nil)
 			defer audioEngine.Stop()
 
 			// Create services. Registration order determines start order;
