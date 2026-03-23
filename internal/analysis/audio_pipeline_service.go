@@ -422,6 +422,9 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 		})
 	}
 
+	// Register sound level consumers for 1/3 octave band analysis.
+	p.registerSoundLevelConsumers(sourceIDs, operation)
+
 	// Update buffer monitors for the new sources.
 	if len(sourceIDs) > 0 {
 		if monErr := p.bufferMgr.UpdateMonitors(sourceIDs); monErr != nil {
@@ -434,6 +437,63 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	}
 
 	return sourceIDs
+}
+
+// registerSoundLevelConsumers creates and registers a SoundLevelConsumer on the
+// AudioRouter for each source ID, bridging output to the pipeline's soundLevelChan.
+func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
+	log := GetLogger()
+	settings := conf.Setting()
+	slInterval := settings.Realtime.Audio.SoundLevel.Interval
+	if slInterval <= 0 {
+		slInterval = 10 // default 10-second aggregation window
+	}
+	for _, sid := range sourceIDs {
+		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
+		if slErr != nil {
+			log.Warn("failed to create sound level processor",
+				logger.String("source_id", sid),
+				logger.Error(slErr),
+				logger.String("operation", operation))
+			continue
+		}
+		slc, slOutCh, slcErr := NewSoundLevelConsumer("soundlevel_"+sid, slProc, conf.SampleRate, conf.BitDepth, 1)
+		if slcErr != nil {
+			log.Warn("failed to create sound level consumer",
+				logger.String("source_id", sid),
+				logger.Error(slcErr),
+				logger.String("operation", operation))
+			continue
+		}
+		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate); routeErr != nil {
+			log.Warn("failed to add sound level route",
+				logger.String("source_id", sid),
+				logger.Error(routeErr),
+				logger.String("operation", operation))
+			continue
+		}
+		// Bridge sound level data to the pipeline's sound level channel.
+		p.wg.Go(func() {
+			for {
+				select {
+				case data, ok := <-slOutCh:
+					if !ok {
+						return
+					}
+					select {
+					case p.soundLevelChan <- data:
+					default:
+					}
+				case <-p.done:
+					return
+				}
+			}
+		})
+		log.Debug("registered sound level consumer",
+			logger.String("source_id", sid),
+			logger.Int("interval_seconds", slInterval),
+			logger.String("operation", operation))
+	}
 }
 
 // buildSourceConfigs constructs audiocore.SourceConfig entries from the current settings.

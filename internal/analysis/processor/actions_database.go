@@ -211,6 +211,14 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		}
 
 		// export audio clip from capture buffer
+		GetLogger().Debug("Reading capture buffer for audio clip",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("source_id", a.Result.AudioSource.ID),
+			logger.Time("begin_time", a.Result.BeginTime),
+			logger.Int("duration_seconds", captureLength),
+			logger.Bool("buffer_mgr_available", a.processor != nil && a.processor.BufferMgr != nil),
+			logger.String("operation", "capture_buffer_read"))
 		pcmData, err := a.readCaptureSegment(a.Result.AudioSource.ID, a.Result.BeginTime, captureLength)
 		if err != nil {
 			handleAudioExportError(err,
@@ -218,6 +226,11 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 				logger.Time("begin_time", a.Result.BeginTime),
 				logger.Int("duration_seconds", captureLength))
 		} else {
+			GetLogger().Debug("Capture buffer read successful",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.Int("pcm_bytes", len(pcmData)),
+				logger.String("operation", "capture_buffer_read_success"))
 			// Create a SaveAudioAction and execute it
 			saveAudioAction := &SaveAudioAction{
 				Settings:      a.Settings,

@@ -512,6 +512,11 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 // detections arrive before the buffer manager is available and audio
 // clip export silently fails.
 func (p *Processor) Start() {
+	GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
+		logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
+		logger.Bool("registry_set", p.Registry() != nil),
+		logger.String("operation", "processor_start"))
+
 	p.startDetectionProcessor()
 	p.startWorkerPool()
 

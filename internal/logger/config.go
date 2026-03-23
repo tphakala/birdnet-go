@@ -152,5 +152,13 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	ensureModuleOutput(cfg, "spectrogram.prerenderer", DefaultSpectrogramLogPath) // Same file
 
 	// Action processing logs (command execution, database saves, notifications)
-	ensureModuleOutput(cfg, "analysis.processor", DefaultActionsLogPath)
+	// ConsoleAlso is true so errors are visible in container environments
+	// where only stdout is captured.
+	if _, exists := cfg.ModuleOutputs["analysis.processor"]; !exists {
+		cfg.ModuleOutputs["analysis.processor"] = ModuleOutput{
+			Enabled:     true,
+			FilePath:    DefaultActionsLogPath,
+			ConsoleAlso: true,
+		}
+	}
 }
