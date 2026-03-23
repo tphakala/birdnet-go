@@ -143,14 +143,14 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 		cb.writtenBytes = cb.bufferSize
 	}
 
-	// When the write pointer wraps (crosses zero), the oldest data has been
-	// overwritten. Slide the wall-clock anchor so that external callers see
-	// a valid [startTime, startTime+bufferDuration] window. The internal
-	// byte offset calculation uses totalBytesWritten, so this adjustment
-	// only affects the external API boundary checks.
+	// Once the buffer has filled (wrapped at least once), continuously
+	// update startTime to reflect the oldest data still in the ring.
+	// Before the first wrap, startTime stays at the initial Write() time.
 	if cb.writeIndex <= prevIndex && dataLen > 0 {
-		cb.startTime = time.Now().Add(-cb.bufferDuration)
 		cb.wrapped = true
+	}
+	if cb.wrapped {
+		cb.startTime = time.Now().Add(-cb.bufferDuration)
 	}
 
 	return nil
