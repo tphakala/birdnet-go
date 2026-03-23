@@ -15,7 +15,6 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // Audio level SSE configuration constants
@@ -365,18 +364,18 @@ func (c *Controller) isClientAuthenticated(ctx echo.Context) bool {
 }
 
 // createAudioLevelEntry creates an AudioLevelData entry for a source with appropriate display name.
-func createAudioLevelEntry(source *myaudio.AudioSource, displayName string) audiocore.AudioLevelData {
+func createAudioLevelEntry(sourceID, displayName string) audiocore.AudioLevelData {
 	return audiocore.AudioLevelData{
 		Level:  0,
 		Name:   displayName,
-		Source: source.ID,
+		Source: sourceID,
 	}
 }
 
 // initializeAudioLevels creates the initial levels map with configured sources
 func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
 	levels := make(map[string]audiocore.AudioLevelData)
-	registry := myaudio.GetRegistry()
+	registry := c.engine.Registry()
 	if registry == nil {
 		return levels
 	}
@@ -387,7 +386,7 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 		if !isAuthenticated {
 			displayName = audioSourceDefaultName
 		}
-		levels[source.ID] = createAudioLevelEntry(source, displayName)
+		levels[source.ID] = createAudioLevelEntry(source.ID, displayName)
 	}
 
 	// Add configured RTSP sources
@@ -397,19 +396,23 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 }
 
 // getAudioCardSource retrieves the audio card source from the registry if configured.
-func (c *Controller) getAudioCardSource(registry *myaudio.AudioSourceRegistry) *myaudio.AudioSource {
+func (c *Controller) getAudioCardSource(registry *audiocore.SourceRegistry) *audiocore.AudioSource {
 	if c.Settings.Realtime.Audio.Source == "" {
 		return nil
 	}
-	return registry.GetOrCreateSource(c.Settings.Realtime.Audio.Source, myaudio.SourceTypeAudioCard)
+	src, ok := registry.GetByConnection(c.Settings.Realtime.Audio.Source)
+	if !ok {
+		return nil
+	}
+	return src
 }
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
-func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
+func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
 	for i := range c.Settings.Realtime.RTSP.Streams {
 		stream := &c.Settings.Realtime.RTSP.Streams[i]
-		source := registry.GetOrCreateSource(stream.URL, myaudio.SourceType(audiocore.StreamTypeToSourceType(stream.Type)), stream.Name)
-		if source == nil {
+		source, ok := registry.GetByConnection(stream.URL)
+		if !ok {
 			continue
 		}
 		displayName := source.DisplayName
@@ -417,7 +420,7 @@ func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegis
 			displayName = fmt.Sprintf("camera-%d", i+1)
 			cacheStreamAnonymName(source.ID, displayName)
 		}
-		levels[source.ID] = createAudioLevelEntry(source, displayName)
+		levels[source.ID] = createAudioLevelEntry(source.ID, displayName)
 	}
 }
 
@@ -429,11 +432,11 @@ func (c *Controller) updateAudioLevel(
 	isAuthenticated bool,
 ) {
 	now := time.Now()
-	registry := myaudio.GetRegistry()
+	registry := c.engine.Registry()
 
 	// Determine display name based on authentication
 	if registry != nil {
-		if source, exists := registry.GetSourceByID(audioData.Source); exists {
+		if source, ok := registry.Get(audioData.Source); ok {
 			if isAuthenticated {
 				audioData.Name = source.DisplayName
 			} else {
@@ -461,12 +464,12 @@ func (c *Controller) updateAudioLevel(
 }
 
 // getAnonymizedSourceName returns an anonymized name for a source
-func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string {
+func (c *Controller) getAnonymizedSourceName(source *audiocore.AudioSource) string {
 	switch source.Type {
-	case myaudio.SourceTypeAudioCard:
+	case audiocore.SourceTypeAudioCard:
 		return audioSourceDefaultName
-	case myaudio.SourceTypeRTSP, myaudio.SourceTypeHTTP, myaudio.SourceTypeHLS,
-		myaudio.SourceTypeRTMP, myaudio.SourceTypeUDP:
+	case audiocore.SourceTypeRTSP, audiocore.SourceTypeHTTP, audiocore.SourceTypeHLS,
+		audiocore.SourceTypeRTMP, audiocore.SourceTypeUDP:
 		// All stream types use the same anonymization pattern
 		audioLevelMgr.streamAnonymMu.RLock()
 		if name, exists := audioLevelMgr.streamAnonymMap[source.ID]; exists {
@@ -480,7 +483,7 @@ func (c *Controller) getAnonymizedSourceName(source *myaudio.AudioSource) string
 			idPrefix = source.ID[:anonymizedIDPrefixLen]
 		}
 		return fmt.Sprintf("camera-%s", idPrefix)
-	case myaudio.SourceTypeFile:
+	case audiocore.SourceTypeFile:
 		return "file-source"
 	default:
 		return "unknown-source"

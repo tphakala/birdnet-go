@@ -2,11 +2,9 @@
 package api
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -37,11 +35,11 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // handleEqualizerChange updates the audio filter chain when equalizer settings change
-func (c *Controller) handleEqualizerChange(settings *conf.Settings) error {
-	registry := myaudio.GetRegistry()
-	if err := registry.UpdateAllFilterChains(settings); err != nil {
-		return fmt.Errorf("failed to update audio filter chains: %w", err)
-	}
+func (c *Controller) handleEqualizerChange(_ *conf.Settings) error {
+	// TODO: Equalizer filter chains need to be migrated to audiocore.
+	// The old myaudio.AudioSourceRegistry.UpdateAllFilterChains is no longer available.
+	// For now, this is a no-op; equalizer settings changes will take effect on restart.
+	c.Debug("Equalizer filter chain update is a no-op pending audiocore filter migration")
 	return nil
 }
 
@@ -111,17 +109,8 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 
 	// Check audio equalizer settings
 	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
-		c.Debug("Audio equalizer settings changed, updating filter chain")
-		// Handle audio equalizer changes synchronously as it returns an error
-		if err := c.handleEqualizerChange(currentSettings); err != nil {
-			// Send error toast
-			_ = c.SendToastWithKey("Failed to update audio equalizer settings", "error", toastDurationLong,
-				notification.MsgSettingsEqualizerFailed, nil)
-			return reconfigActions, fmt.Errorf("failed to update audio equalizer: %w", err)
-		}
-		// Send success toast
-		_ = c.SendToastWithKey("Audio equalizer settings updated", "success", toastDurationShort,
-			notification.MsgSettingsEqualizerUpdated, nil)
+		c.Debug("Audio equalizer settings changed; will take effect on restart (audiocore filter migration pending)")
+		_ = c.SendToast("Equalizer settings saved. Restart required to apply changes.", "warning", toastDurationExtended)
 	}
 
 	return reconfigActions, nil

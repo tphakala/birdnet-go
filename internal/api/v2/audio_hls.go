@@ -25,10 +25,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"golang.org/x/sync/singleflight"
@@ -322,8 +322,8 @@ func (c *Controller) StartHLSStream(ctx echo.Context) error {
 		logger.String("client_id", clientID),
 		logger.Bool("force_restart", forceRestart))
 
-	// Verify source exists
-	if !myaudio.HasCaptureBuffer(sourceID) {
+	// Verify source exists by checking for a capture buffer
+	if _, bufErr := c.engine.BufferManager().CaptureBuffer(sourceID); bufErr != nil {
 		return c.HandleError(ctx, nil, "Audio source not found", http.StatusNotFound)
 	}
 
@@ -1435,57 +1435,112 @@ func (c *Controller) setupFFmpegLogging(secFS *securefs.SecureFS, cmd *exec.Cmd,
 	return logFile, nil
 }
 
-// setupAudioCallback sets up the audio callback channel
+// hlsConsumer implements audiocore.AudioConsumer for HLS streaming.
+// It forwards audio frames to a channel for FFmpeg encoding.
+type hlsConsumer struct {
+	id       string
+	sourceID string
+	ch       chan []byte
+	rate     int
+	depth    int
+	channels int
+	closed   atomic.Bool
+
+	// Drop tracking for diagnostics
+	dropCount   int64
+	lastDropLog time.Time
+	dropMu      sync.Mutex
+}
+
+// ID returns the unique identifier for this consumer.
+func (h *hlsConsumer) ID() string { return h.id }
+
+// SampleRate returns the expected sample rate in Hz.
+func (h *hlsConsumer) SampleRate() int { return h.rate }
+
+// BitDepth returns the expected bit depth.
+func (h *hlsConsumer) BitDepth() int { return h.depth }
+
+// Channels returns the expected channel count.
+func (h *hlsConsumer) Channels() int { return h.channels }
+
+// Write delivers audio frame data to the HLS channel.
+func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	if h.closed.Load() {
+		return audiocore.ErrConsumerClosed
+	}
+
+	select {
+	case h.ch <- frame.Data:
+	default:
+		// Channel full, drop oldest to make room
+		dropped := false
+		select {
+		case <-h.ch:
+			dropped = true
+		default:
+		}
+		// Non-blocking send — drop if still full
+		select {
+		case h.ch <- frame.Data:
+		default:
+		}
+
+		if dropped {
+			h.dropMu.Lock()
+			h.dropCount++
+			now := time.Now()
+			if now.Sub(h.lastDropLog) >= hlsDropLogInterval {
+				sanitizedID := privacy.SanitizeRTSPUrl(h.sourceID)
+				GetLogger().Warn("HLS audio data dropped: channel full",
+					logger.String("source_id", sanitizedID),
+					logger.Int64("drops_since_last_log", h.dropCount),
+					logger.Int("channel_cap", DefaultReadBufferSize))
+				h.dropCount = 0
+				h.lastDropLog = now
+			}
+			h.dropMu.Unlock()
+		}
+	}
+	return nil
+}
+
+// Close marks the consumer as closed.
+func (h *hlsConsumer) Close() error {
+	h.closed.Store(true)
+	return nil
+}
+
+// setupAudioCallback sets up the audio callback channel using the AudioRouter.
 func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte, cleanup func(), err error) {
 	audioChan = make(chan []byte, DefaultReadBufferSize)
 
-	// Drop tracking for diagnostics
-	var dropCount int64
-	var lastDropLog time.Time
-	var dropMu sync.Mutex
-
-	sanitizedID := privacy.SanitizeRTSPUrl(sourceID)
-
-	callback := func(callbackSourceID string, data []byte) {
-		if callbackSourceID == sourceID {
-			select {
-			case audioChan <- data:
-			default:
-				// Channel full, drop oldest to make room
-				dropped := false
-				select {
-				case <-audioChan:
-					dropped = true // Old chunk discarded
-					audioChan <- data
-				default:
-					// Channel was drained between selects — no data lost,
-					// but new data also couldn't be pushed (rare race)
-				}
-
-				if dropped {
-					dropMu.Lock()
-					dropCount++
-					now := time.Now()
-					if now.Sub(lastDropLog) >= hlsDropLogInterval {
-						GetLogger().Warn("HLS audio data dropped: channel full",
-							logger.String("source_id", sanitizedID),
-							logger.Int64("drops_since_last_log", dropCount),
-							logger.Int("channel_cap", DefaultReadBufferSize))
-						dropCount = 0
-						lastDropLog = now
-					}
-					dropMu.Unlock()
-				}
-			}
-		}
+	consumerID := fmt.Sprintf("hls_%s_%s", privacy.SanitizeStreamUrl(sourceID), uuid.New().String()[:8])
+	// Use the configured live stream sample rate, falling back to the default HLS sample rate.
+	sampleRate := hlsDefaultSampleRate
+	if c.Settings.WebServer.LiveStream.SampleRate > 0 {
+		sampleRate = c.Settings.WebServer.LiveStream.SampleRate
 	}
 
-	myaudio.RegisterBroadcastCallback(sourceID, callback)
-	GetLogger().Debug("Registered audio callback", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
+	consumer := &hlsConsumer{
+		id:       consumerID,
+		sourceID: sourceID,
+		ch:       audioChan,
+		rate:     sampleRate,
+		depth:    conf.BitDepth,
+		channels: 1,
+	}
+
+	// Add route on the AudioRouter
+	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate); routeErr != nil {
+		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
+	}
+
+	GetLogger().Debug("Registered HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 
 	cleanup = func() {
-		myaudio.UnregisterBroadcastCallback(sourceID)
-		GetLogger().Debug("Unregistered audio callback", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)))
+		c.engine.Router().RemoveRoute(sourceID, consumerID)
+		GetLogger().Debug("Removed HLS audio route", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.String("consumer_id", consumerID))
 	}
 
 	return audioChan, cleanup, nil

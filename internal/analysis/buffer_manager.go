@@ -5,7 +5,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -13,11 +15,12 @@ import (
 
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
-	monitors sync.Map
-	bn       *birdnet.BirdNET
-	quitChan chan struct{}
-	wg       *sync.WaitGroup
-	logger   logger.Logger
+	monitors  sync.Map
+	bn        *birdnet.BirdNET
+	bufferMgr *buffer.Manager
+	quitChan  chan struct{}
+	wg        *sync.WaitGroup
+	logger    logger.Logger
 }
 
 // NewBufferManager creates a new buffer manager with validation.
@@ -27,16 +30,24 @@ type BufferManager struct {
 //
 // Parameters:
 //   - bn: BirdNET instance for audio analysis
+//   - bufMgr: AudioCore buffer manager for analysis buffer access
 //   - quitChan: Channel for coordinated shutdown signaling
 //   - wg: WaitGroup for goroutine lifecycle management
 //
 // Returns:
 //   - *BufferManager: New buffer manager instance
 //   - error: Validation error if any parameter is nil
-func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.WaitGroup) (*BufferManager, error) {
+func NewBufferManager(bn *birdnet.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) (*BufferManager, error) {
 	// Validate required parameters
 	if bn == nil {
 		return nil, errors.Newf("BirdNET instance cannot be nil").
+			Component("analysis.buffer").
+			Category(errors.CategoryValidation).
+			Context("operation", "new_buffer_manager").
+			Build()
+	}
+	if bufMgr == nil {
+		return nil, errors.Newf("buffer manager cannot be nil").
 			Component("analysis.buffer").
 			Category(errors.CategoryValidation).
 			Context("operation", "new_buffer_manager").
@@ -58,10 +69,11 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 	}
 
 	return &BufferManager{
-		bn:       bn,
-		quitChan: quitChan,
-		wg:       wg,
-		logger:   GetLogger(),
+		bn:        bn,
+		bufferMgr: bufMgr,
+		quitChan:  quitChan,
+		wg:        wg,
+		logger:    GetLogger(),
 	}, nil
 }
 
@@ -73,6 +85,7 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 //
 // Parameters:
 //   - bn: BirdNET instance for audio analysis
+//   - bufMgr: AudioCore buffer manager for analysis buffer access
 //   - quitChan: Channel for coordinated shutdown signaling
 //   - wg: WaitGroup for goroutine lifecycle management
 //
@@ -81,8 +94,8 @@ func NewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.Wait
 //
 // Panics:
 //   - If any parameter validation fails
-func MustNewBufferManager(bn *birdnet.BirdNET, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
-	bm, err := NewBufferManager(bn, quitChan, wg)
+func MustNewBufferManager(bn *birdnet.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
+	bm, err := NewBufferManager(bn, bufMgr, quitChan, wg)
 	if err != nil {
 		panic(fmt.Sprintf("MustNewBufferManager: %v", err))
 	}
@@ -152,8 +165,8 @@ func (m *BufferManager) AddMonitor(source string) error {
 			}
 		}()
 
-		// Run the monitor
-		myaudio.AnalysisBufferMonitor(m.wg, m.bn, monitorQuit, source)
+		// Run the monitor using audiocore buffer manager
+		m.analysisBufferMonitor(monitorQuit, source)
 	})
 
 	return nil
@@ -325,6 +338,60 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	}
 
 	return nil
+}
+
+// analysisBufferMonitor reads from the audiocore analysis buffer and feeds
+// audio chunks to the BirdNET analysis pipeline. It replaces the legacy
+// myaudio.AnalysisBufferMonitor.
+func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID string) {
+	// Import-free reference to myaudio.ProcessData via the analysis package.
+	// The function signature is: ProcessData(bn, data, startTime, audioCapturedAt, source) error.
+	const detectionOffset = 10 * time.Second
+	const pollInterval = 100 * time.Millisecond
+	// analysisWindowBytes is the expected size of a full analysis window
+	// returned by AnalysisBuffer.Read(): CaptureLength seconds of audio at
+	// SampleRate Hz, BitDepth bits, NumChannels channels.
+	const analysisWindowBytes = conf.SampleRate * conf.CaptureLength * conf.NumChannels * (conf.BitDepth / 8)
+
+	ticker := time.NewTicker(pollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-quitChan:
+			return
+		case <-ticker.C:
+			ab, err := m.bufferMgr.AnalysisBuffer(sourceID)
+			if err != nil {
+				// Buffer removed, exit gracefully
+				m.logger.Info("analysis buffer removed, stopping monitor",
+					logger.String("source_id", sourceID))
+				return
+			}
+			data, readErr := ab.Read()
+			if readErr != nil {
+				m.logger.Error("buffer read error",
+					logger.String("source_id", sourceID),
+					logger.Error(readErr))
+				time.Sleep(1 * time.Second)
+				continue
+			}
+
+			if len(data) == analysisWindowBytes {
+				audioCapturedAt := time.Now()
+
+				// Calculate the offset dynamically to pick up runtime configuration changes
+				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
+				startTime := time.Now().Add(-beginTimeOffset)
+
+				if processErr := myaudio.ProcessData(m.bn, data, startTime, audioCapturedAt, sourceID); processErr != nil {
+					m.logger.Error("error processing data",
+						logger.String("source_id", sourceID),
+						logger.Error(processErr))
+				}
+			}
+		}
+	}
 }
 
 // safeCloseChannel safely closes a channel with panic recovery

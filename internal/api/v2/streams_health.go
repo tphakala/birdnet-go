@@ -10,10 +10,10 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"golang.org/x/time/rate"
 )
@@ -145,6 +145,20 @@ func (c *Controller) initStreamHealthRoutes() {
 		middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
 
+// resolveSourceURL retrieves the raw connection URL for a sourceID from the registry.
+// Returns an empty string if the source is not found.
+func (c *Controller) resolveSourceURL(registry *audiocore.SourceRegistry, sourceID string) string {
+	if registry == nil {
+		return ""
+	}
+	src, ok := registry.Get(sourceID)
+	if !ok {
+		return ""
+	}
+	connStr, _ := src.GetConnectionString()
+	return connStr
+}
+
 // streamInfo holds name and type from stream config
 type streamInfo struct {
 	Name string
@@ -171,65 +185,6 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 	return streamInfo{}
 }
 
-// convertMyaudioHealth converts a myaudio.StreamHealth to ffmpeg.StreamHealth.
-// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
-func convertMyaudioHealth(mh *myaudio.StreamHealth) *ffmpeg.StreamHealth {
-	fh := &ffmpeg.StreamHealth{
-		IsHealthy:          mh.IsHealthy,
-		LastDataReceived:   mh.LastDataReceived,
-		RestartCount:       mh.RestartCount,
-		Error:              mh.Error,
-		TotalBytesReceived: mh.TotalBytesReceived,
-		BytesPerSecond:     mh.BytesPerSecond,
-		IsReceivingData:    mh.IsReceivingData,
-		ProcessState:       ffmpeg.ProcessState(mh.ProcessState),
-	}
-	for _, st := range mh.StateHistory {
-		fh.StateHistory = append(fh.StateHistory, ffmpeg.StateTransition{
-			From:      ffmpeg.ProcessState(st.From),
-			To:        ffmpeg.ProcessState(st.To),
-			Timestamp: st.Timestamp,
-			Reason:    st.Reason,
-		})
-	}
-	if mh.LastErrorContext != nil {
-		fh.LastErrorContext = convertMyaudioErrorContext(mh.LastErrorContext)
-	}
-	for _, ec := range mh.ErrorHistory {
-		fh.ErrorHistory = append(fh.ErrorHistory, convertMyaudioErrorContext(ec))
-	}
-	return fh
-}
-
-// convertHealthMap converts the full myaudio health map to ffmpeg types at the boundary.
-// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
-func convertHealthMap(src map[string]myaudio.StreamHealth) map[string]*ffmpeg.StreamHealth {
-	dst := make(map[string]*ffmpeg.StreamHealth, len(src))
-	for url := range src {
-		mh := src[url]
-		dst[url] = convertMyaudioHealth(&mh)
-	}
-	return dst
-}
-
-// convertMyaudioErrorContext converts a myaudio.ErrorContext to ffmpeg.ErrorContext.
-// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
-func convertMyaudioErrorContext(ec *myaudio.ErrorContext) *ffmpeg.ErrorContext {
-	return &ffmpeg.ErrorContext{
-		ErrorType:       ec.ErrorType,
-		PrimaryMessage:  ec.PrimaryMessage,
-		TargetHost:      ec.TargetHost,
-		TargetPort:      ec.TargetPort,
-		TimeoutDuration: ec.TimeoutDuration,
-		HTTPStatus:      ec.HTTPStatus,
-		RTSPMethod:      ec.RTSPMethod,
-		RawFFmpegOutput: ec.RawFFmpegOutput,
-		UserFacingMsg:   ec.UserFacingMsg,
-		TroubleShooting: ec.TroubleShooting,
-		Timestamp:       ec.Timestamp,
-	}
-}
-
 // GetAllStreamsHealth returns health information for all configured RTSP streams
 // @Summary Get health status of all RTSP streams
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
@@ -239,16 +194,20 @@ func convertMyaudioErrorContext(ec *myaudio.ErrorContext) *ffmpeg.ErrorContext {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
-	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetStreamHealth()
+	// Get health data from the FFmpeg manager (keyed by sourceID)
+	healthData := c.engine.FFmpegManager().AllStreamHealth()
+
+	// Look up the connection URL from the registry for each source
+	registry := c.engine.Registry()
 
 	// Convert to API response format
 	// Use a slice instead of map to avoid collisions when multiple URLs
 	// have the same sanitized form (differ only by credentials)
 	response := make([]StreamHealthResponse, 0, len(healthData))
-	for rawURL := range healthData {
-		mh := healthData[rawURL]
-		fh := convertMyaudioHealth(&mh)
+	for sourceID, fh := range healthData {
+		// Resolve raw URL from registry
+		rawURL := c.resolveSourceURL(registry, sourceID)
+
 		resp := convertStreamHealthToResponse(rawURL, fh)
 
 		// Add stream name and type from config
@@ -274,7 +233,7 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v2/streams/health/{url} [get]
 func (c *Controller) GetStreamHealth(ctx echo.Context) error {
-	// Get URL parameter (URL-encoded)
+	// Get URL parameter (URL-encoded) — may be a sourceID or a stream URL
 	encodedURL := ctx.Param("url")
 	if encodedURL == "" {
 		return c.HandleError(ctx, nil, "URL parameter is required", http.StatusBadRequest)
@@ -286,12 +245,30 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid URL encoding", http.StatusBadRequest)
 	}
 
-	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetStreamHealth()
+	// Try to find stream by sourceID first, then by connection URL
+	registry := c.engine.Registry()
+	ffmpegMgr := c.engine.FFmpegManager()
 
-	// Find the matching stream (case-sensitive exact match)
-	mh, exists := healthData[decodedURL]
-	if !exists {
+	// First: try direct sourceID lookup
+	fh, lookupErr := ffmpegMgr.StreamHealth(decodedURL)
+	var rawURL string
+
+	if lookupErr == nil {
+		// decodedURL is a sourceID; resolve actual connection URL
+		rawURL = c.resolveSourceURL(registry, decodedURL)
+		if rawURL == "" {
+			rawURL = decodedURL // fallback
+		}
+	} else {
+		// Second: try to find sourceID by connection URL
+		if src, found := registry.GetByConnection(decodedURL); found {
+			fh, lookupErr = ffmpegMgr.StreamHealth(src.ID)
+			rawURL = decodedURL
+		}
+	}
+
+	if lookupErr != nil {
+		healthData := ffmpegMgr.AllStreamHealth()
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
 			logger.String("requested_url", privacy.SanitizeStreamUrl(decodedURL)),
 			logger.Int("active_streams", len(healthData)))
@@ -299,11 +276,10 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	// Convert to API response format
-	fh := convertMyaudioHealth(&mh)
-	response := convertStreamHealthToResponse(decodedURL, fh)
+	response := convertStreamHealthToResponse(rawURL, fh)
 
 	// Add stream name and type from config
-	info := c.getStreamInfo(decodedURL)
+	info := c.getStreamInfo(rawURL)
 	response.Name = info.Name
 	response.Type = info.Type
 
@@ -319,8 +295,9 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Failure 500 {object} ErrorResponse "Internal server error"
 // @Router /api/v2/streams/status [get]
 func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
-	// Get health data from the FFmpeg manager
-	healthData := myaudio.GetStreamHealth()
+	// Get health data from the FFmpeg manager (keyed by sourceID)
+	healthData := c.engine.FFmpegManager().AllStreamHealth()
+	registry := c.engine.Registry()
 
 	// Build summary
 	summary := StreamsStatusSummaryResponse{
@@ -331,16 +308,16 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 		Timestamp:        time.Now(),
 	}
 
-	for rawURL := range healthData {
-		mh := healthData[rawURL]
-		fh := convertMyaudioHealth(&mh)
-
+	for sourceID, fh := range healthData {
 		// Count healthy/unhealthy
 		if fh.IsHealthy {
 			summary.HealthyStreams++
 		} else {
 			summary.UnhealthyStreams++
 		}
+
+		// Resolve raw URL from registry
+		rawURL := c.resolveSourceURL(registry, sourceID)
 
 		// Build brief summary for this stream
 		info := c.getStreamInfo(rawURL)
@@ -474,7 +451,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
 func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
-	healthData := convertHealthMap(myaudio.GetStreamHealth())
+	healthData := c.engine.FFmpegManager().AllStreamHealth()
 
 	if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
 		return err
@@ -486,9 +463,11 @@ func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, p
 // This enables real-time bandwidth and bytes display in the UI regardless of state changes.
 // Note: This sends a lightweight payload without history arrays to reduce bandwidth.
 func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
-	healthData := convertHealthMap(myaudio.GetStreamHealth())
+	healthData := c.engine.FFmpegManager().AllStreamHealth()
+	registry := c.engine.Registry()
 
-	for rawURL, fh := range healthData {
+	for sourceID, fh := range healthData {
+		rawURL := c.resolveSourceURL(registry, sourceID)
 		if err := c.sendStreamStatsUpdate(ctx, rawURL, fh); err != nil {
 			c.logDebugIfEnabled("Failed to send stats update, client disconnected",
 				logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
@@ -528,7 +507,7 @@ func (c *Controller) StreamHealthUpdates(ctx echo.Context) error {
 	}
 
 	// Pre-allocate state tracking based on initial stream count
-	previousState := make(map[string]streamHealthSnapshot, len(myaudio.GetStreamHealth()))
+	previousState := make(map[string]streamHealthSnapshot, len(c.engine.FFmpegManager().AllStreamHealth()))
 
 	ticker := time.NewTicker(streamHealthPollInterval)
 	defer ticker.Stop()
@@ -629,11 +608,16 @@ func determineEventType(prev, current streamHealthSnapshot) string {
 
 // processStreamHealthUpdates processes health updates for all active streams.
 func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	for rawURL, health := range healthData {
+	registry := c.engine.Registry()
+
+	for sourceID, health := range healthData {
 		currentSnapshot := createHealthSnapshot(health)
 
+		// Resolve the connection URL for SSE events (sourceID is an internal key, not a URL)
+		rawURL := c.resolveSourceURL(registry, sourceID)
+
 		// Check if this is a new stream or if something changed
-		previousSnapshot, exists := previousState[rawURL]
+		previousSnapshot, exists := previousState[sourceID]
 		if !exists {
 			// New stream detected
 			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, "stream_added"); err != nil {
@@ -658,8 +642,8 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 			}
 		}
 
-		// Update previous state
-		previousState[rawURL] = currentSnapshot
+		// Update previous state (keyed by sourceID for consistency with healthData)
+		previousState[sourceID] = currentSnapshot
 	}
 
 	return nil
@@ -667,18 +651,21 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 
 // processRemovedStreams checks for and processes streams that have been removed
 func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	for prevURL := range previousState {
-		if _, exists := healthData[prevURL]; exists {
+	registry := c.engine.Registry()
+
+	for prevSourceID := range previousState {
+		if _, exists := healthData[prevSourceID]; exists {
 			continue
 		}
 
-		// Stream was removed
-		sanitizedURL := privacy.SanitizeStreamUrl(prevURL)
+		// Stream was removed — resolve the connection URL for the SSE event
+		rawURL := c.resolveSourceURL(registry, prevSourceID)
+		sanitizedURL := privacy.SanitizeStreamUrl(rawURL)
 		emptyHealth := ffmpeg.StreamHealth{}
-		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
+		response := convertStreamHealthToResponse(rawURL, &emptyHealth)
 
 		// Add stream name and type from config (may be empty if stream was removed from config)
-		info := c.getStreamInfo(prevURL)
+		info := c.getStreamInfo(rawURL)
 		response.Name = info.Name
 		response.Type = info.Type
 
@@ -691,7 +678,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 			return err
 		}
 
-		delete(previousState, prevURL)
+		delete(previousState, prevSourceID)
 
 		c.logInfoIfEnabled("Stream removed",
 			logger.String("url", sanitizedURL),
