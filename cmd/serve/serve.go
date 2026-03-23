@@ -39,6 +39,7 @@ The "realtime" command is an alias for backward compatibility.`,
 			// after APIServerService.Start(), so it is set later via
 			// AudioEngine.SetScheduler().
 			audioEngine := engine.New(cmd.Context(), &engine.Config{}, nil)
+			defer audioEngine.Stop()
 
 			// Create services. Registration order determines start order;
 			// shutdown happens in reverse within each tier.
