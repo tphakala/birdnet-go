@@ -109,6 +109,8 @@ func (s *Stream) getTotalBytesReceivedForTest() int64 {
 }
 
 func (s *Stream) getStreamCreatedAtForTest() time.Time {
+	s.streamCreatedAtMu.RLock()
+	defer s.streamCreatedAtMu.RUnlock()
 	return s.streamCreatedAt
 }
 
@@ -915,7 +917,9 @@ func TestStream_ZeroTimeHandling(t *testing.T) {
 	assert.False(t, health.IsReceivingData)
 
 	// After grace period: still not healthy.
+	stream.streamCreatedAtMu.Lock()
 	stream.streamCreatedAt = time.Now().Add(-2 * defaultGracePeriod)
+	stream.streamCreatedAtMu.Unlock()
 	health = stream.GetHealth()
 	assert.True(t, health.LastDataReceived.IsZero())
 	assert.False(t, health.IsHealthy)
@@ -1476,7 +1480,9 @@ func TestStream_ResetDataTrackingRefreshesStreamCreatedAt(t *testing.T) {
 
 	// Backdate streamCreatedAt to simulate an old stream.
 	oldCreatedAt := time.Now().Add(-1 * time.Hour)
+	stream.streamCreatedAtMu.Lock()
 	stream.streamCreatedAt = oldCreatedAt
+	stream.streamCreatedAtMu.Unlock()
 
 	stream.resetDataTracking()
 

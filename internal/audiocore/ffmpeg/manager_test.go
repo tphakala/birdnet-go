@@ -269,7 +269,9 @@ func TestManager_WatchdogForceReset(t *testing.T) {
 		// Advance the stream creation time so the watchdog considers it stuck.
 		mgr.mu.Lock()
 		stream := mgr.streams[sourceID]
+		stream.streamCreatedAtMu.Lock()
 		stream.streamCreatedAt = time.Now().Add(-(managerMaxUnhealthyDuration + time.Minute))
+		stream.streamCreatedAtMu.Unlock()
 		// Set process state to stopped so IsRestarting() returns false.
 		stream.processStateMu.Lock()
 		stream.processState = StateStopped

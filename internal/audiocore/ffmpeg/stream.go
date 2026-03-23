@@ -461,7 +461,8 @@ type Stream struct {
 	dropLogMu       sync.Mutex
 
 	// Stream creation time for grace period calculation.
-	streamCreatedAt time.Time
+	streamCreatedAt   time.Time
+	streamCreatedAtMu sync.RWMutex
 
 	// Process state tracking.
 	processState     ProcessState
@@ -925,22 +926,14 @@ func (s *Stream) processAudio() error {
 	// loop handles a control signal.
 	readCh := make(chan readResult, 1)
 
+	// readerDone is closed when the main event loop exits to unblock the
+	// reader goroutine if readCh is full, preventing a goroutine leak.
+	readerDone := make(chan struct{})
+	defer close(readerDone)
+
 	// Launch a dedicated reader goroutine. It exits when stdout is closed
-	// (by cleanupProcess) or on a read error, which causes an EOF/error
-	// to be sent on readCh.
-	go func() {
-		for {
-			buf := make([]byte, ffmpegBufferSize)
-			n, err := stdout.Read(buf)
-			if n > 0 {
-				readCh <- readResult{data: buf[:n]}
-			}
-			if err != nil {
-				readCh <- readResult{err: err}
-				return
-			}
-		}
-	}()
+	// (by cleanupProcess), on a read error, or when readerDone is closed.
+	go s.readStdout(stdout, readCh, readerDone)
 
 	for {
 		if s.GetProcessState() == StateStopped {
@@ -999,6 +992,34 @@ func (s *Stream) processAudio() error {
 }
 
 // handleReadError processes an error returned by the reader goroutine.
+// readStdout is the body of the dedicated reader goroutine launched by
+// processAudio. It allocates a single buffer and copies data before sending
+// to avoid retaining references to a shared backing array. It exits when
+// stdout is closed (by cleanupProcess), on a read error, or when readerDone
+// is closed (main loop exited, preventing a goroutine leak).
+func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, readerDone <-chan struct{}) {
+	buf := make([]byte, ffmpegBufferSize)
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			dataCopy := make([]byte, n)
+			copy(dataCopy, buf[:n])
+			select {
+			case readCh <- readResult{data: dataCopy}:
+			case <-readerDone:
+				return
+			}
+		}
+		if err != nil {
+			select {
+			case readCh <- readResult{err: err}:
+			case <-readerDone:
+			}
+			return
+		}
+	}
+}
+
 // It distinguishes quick-exit scenarios from normal EOF/cancel and general errors.
 func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
 	if time.Since(startTime) < processQuickExitTime {
@@ -1560,7 +1581,9 @@ func (s *Stream) resetDataTracking() {
 	s.totalBytesReceived = 0
 	s.bytesReceivedMu.Unlock()
 
+	s.streamCreatedAtMu.Lock()
 	s.streamCreatedAt = time.Now()
+	s.streamCreatedAtMu.Unlock()
 }
 
 // logStreamHealth logs the current stream health status.
