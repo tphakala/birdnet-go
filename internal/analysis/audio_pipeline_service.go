@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -47,7 +48,7 @@ type AudioPipelineService struct {
 	bufferMgr           *BufferManager
 	demuxMgr            *AudioDemuxManager
 	ctrlMonitor         *ControlMonitor
-	quietHoursScheduler *myaudio.QuietHoursScheduler
+	quietHoursScheduler *schedule.QuietHoursScheduler
 	soundLevelChan      chan soundlevel.SoundLevelData
 	restartChan         chan struct{}
 	done                chan struct{}
@@ -198,8 +199,12 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	myaudio.SetCurrentAudioChan(unifiedAudioChan)
 
 	// Initialize quiet hours scheduler for stream and sound card management.
-	p.quietHoursScheduler = myaudio.NewQuietHoursScheduler(p.apiService.SunCalc(), p.apiService.ControlChan())
-	myaudio.SetGlobalScheduler(p.quietHoursScheduler)
+	// Uses audiocore/schedule instead of myaudio — scheduler is independent of the audio capture pipeline.
+	p.quietHoursScheduler = schedule.NewQuietHoursScheduler(schedule.QuietHoursConfig{
+		SunCalc:     p.apiService.SunCalc(),
+		ControlChan: p.apiService.ControlChan(),
+	})
+	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
 
 	// Publish application started alert event.
