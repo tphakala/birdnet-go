@@ -144,78 +144,11 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	proc.BufferMgr = p.engine.BufferManager()
 	proc.SetRegistry(p.engine.Registry())
 
-	// Add audio sources via engine — this registers sources, allocates buffers,
-	// and starts capture (FFmpeg streams or device capture).
-	sourceConfigs := p.buildSourceConfigs()
-	var sourceIDs []string
-	for _, cfg := range sourceConfigs {
-		if addErr := p.engine.AddSource(cfg); addErr != nil {
-			GetLogger().Warn("failed to add audio source",
-				logger.String("source_id", cfg.ID),
-				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
-				logger.Error(addErr),
-				logger.String("operation", "add_audio_source"))
-			continue
-		}
-		// The source was registered; retrieve its ID from the registry.
-		if src, ok := p.engine.Registry().GetByConnection(cfg.ConnectionString); ok {
-			sourceIDs = append(sourceIDs, src.ID)
-		}
-	}
-
-	// Register a BufferConsumer on the router for each source so that audio
-	// frames flow into the analysis and capture buffers.
-	for _, sid := range sourceIDs {
-		bc, bcErr := NewBufferConsumer(
-			fmt.Sprintf("buffer_%s", sid),
-			p.engine.BufferManager(),
-			conf.SampleRate, conf.BitDepth, 1,
-		)
-		if bcErr != nil {
-			GetLogger().Warn("failed to create buffer consumer",
-				logger.String("source_id", sid),
-				logger.Error(bcErr))
-			continue
-		}
-		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
-			GetLogger().Warn("failed to add buffer route",
-				logger.String("source_id", sid),
-				logger.Error(routeErr))
-		}
-	}
-
-	// Register an AudioLevelConsumer on the router for each source so that
-	// audio level data flows to the API SSE endpoint.
+	// Add audio sources, register consumers, and start buffer monitors.
 	apiAudioLevelChan := p.apiService.AudioLevelChan()
-	for _, sid := range sourceIDs {
-		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
-			GetLogger().Warn("failed to add audio level route",
-				logger.String("source_id", sid),
-				logger.Error(routeErr))
-			continue
-		}
-		// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
-		p.wg.Go(func() {
-			for lvl := range alcOutCh {
-				select {
-				case apiAudioLevelChan <- audiocore.AudioLevelData(lvl):
-				default:
-				}
-			}
-		})
-	}
+	sourceIDs := p.setupAudioSources(apiAudioLevelChan, "start")
 
-	// Start buffer monitors for each audio source.
-	if len(sourceIDs) > 0 {
-		if monErr := p.bufferMgr.UpdateMonitors(sourceIDs); monErr != nil {
-			GetLogger().Warn("buffer monitor setup completed with errors",
-				logger.Error(monErr),
-				logger.Int("source_count", len(sourceIDs)),
-				logger.String("component", "analysis.audio_pipeline"),
-				logger.String("operation", "buffer_monitor_setup"))
-		}
-	} else {
+	if len(sourceIDs) == 0 {
 		GetLogger().Warn("starting without active audio sources",
 			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
 			logger.String("audio_source", settings.Realtime.Audio.Source),
@@ -275,8 +208,14 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	}
 
 	// Start control monitor for hot reloads.
+	// The reconfigure callback removes all sources and re-adds them from current
+	// settings, sharing the same logic used by restartAudioCapture.
+	reconfigureFn := func() {
+		p.removeAllSources("reconfigure")
+		p.setupAudioSources(apiAudioLevelChan, "reconfigure")
+	}
 	apiController := p.apiService.APIController()
-	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine)
+	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn)
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -377,22 +316,45 @@ func (p *AudioPipelineService) restartAudioCapture() {
 		logger.String("operation", "restart_audio_capture"))
 
 	// Remove all existing sources.
+	p.removeAllSources("restart")
+
+	// Re-add sources, register consumers, and update buffer monitors.
+	audioLevelChan := p.apiService.AudioLevelChan()
+	p.setupAudioSources(audioLevelChan, "restart")
+}
+
+// removeAllSources removes all audio sources from the engine.
+// The operation parameter is used for log messages to distinguish callers.
+func (p *AudioPipelineService) removeAllSources(operation string) {
 	for _, src := range p.engine.Registry().List() {
 		if err := p.engine.RemoveSource(src.ID); err != nil {
-			GetLogger().Warn("failed to remove source during restart",
+			GetLogger().Warn("failed to remove source",
 				logger.String("source_id", src.ID),
-				logger.Error(err))
+				logger.Error(err),
+				logger.String("operation", operation))
 		}
 	}
+}
 
-	// Re-add from current settings.
+// setupAudioSources builds source configs from current settings, adds them to
+// the engine, registers buffer and audio level consumers on the router, and
+// updates buffer monitors. Returns the IDs of successfully added sources.
+// The audioLevelChan receives bridged audio level data for the API SSE endpoint.
+// The operation parameter is used in log messages to distinguish callers.
+func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.AudioLevelData, operation string) []string {
+	log := GetLogger()
+
+	// Add audio sources via engine — this registers sources, allocates buffers,
+	// and starts capture (FFmpeg streams or device capture).
 	sourceConfigs := p.buildSourceConfigs()
 	var sourceIDs []string
 	for _, cfg := range sourceConfigs {
-		if err := p.engine.AddSource(cfg); err != nil {
-			GetLogger().Warn("failed to re-add source during restart",
+		if addErr := p.engine.AddSource(cfg); addErr != nil {
+			log.Warn("failed to add audio source",
+				logger.String("source_id", cfg.ID),
 				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
-				logger.Error(err))
+				logger.Error(addErr),
+				logger.String("operation", operation))
 			continue
 		}
 		if src, ok := p.engine.Registry().GetByConnection(cfg.ConnectionString); ok {
@@ -400,51 +362,71 @@ func (p *AudioPipelineService) restartAudioCapture() {
 		}
 	}
 
-	// Re-register consumers on the router.
-	audioLevelChan := p.apiService.AudioLevelChan()
+	// Register a BufferConsumer on the router for each source so that audio
+	// frames flow into the analysis and capture buffers.
 	for _, sid := range sourceIDs {
-		// Buffer consumer.
 		bc, bcErr := NewBufferConsumer(
 			fmt.Sprintf("buffer_%s", sid),
 			p.engine.BufferManager(),
 			conf.SampleRate, conf.BitDepth, 1,
 		)
 		if bcErr != nil {
-			GetLogger().Warn("failed to create buffer consumer during restart",
+			log.Warn("failed to create buffer consumer",
 				logger.String("source_id", sid),
-				logger.Error(bcErr))
+				logger.Error(bcErr),
+				logger.String("operation", operation))
 			continue
 		}
 		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
-			GetLogger().Warn("failed to add buffer route during restart",
+			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid),
-				logger.Error(routeErr))
+				logger.Error(routeErr),
+				logger.String("operation", operation))
 		}
+	}
 
-		// Audio level consumer.
+	// Register an AudioLevelConsumer on the router for each source so that
+	// audio level data flows to the API SSE endpoint.
+	for _, sid := range sourceIDs {
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
 		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
-			GetLogger().Warn("failed to add audio level route during restart",
+			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid),
-				logger.Error(routeErr))
-		} else {
-			// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
-			p.wg.Go(func() {
-				for lvl := range alcOutCh {
+				logger.Error(routeErr),
+				logger.String("operation", operation))
+			continue
+		}
+		// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
+		p.wg.Go(func() {
+			for {
+				select {
+				case lvl, ok := <-alcOutCh:
+					if !ok {
+						return
+					}
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
 					}
+				case <-p.done:
+					return
 				}
-			})
+			}
+		})
+	}
+
+	// Update buffer monitors for the new sources.
+	if len(sourceIDs) > 0 {
+		if monErr := p.bufferMgr.UpdateMonitors(sourceIDs); monErr != nil {
+			log.Warn("buffer monitor update completed with errors",
+				logger.Error(monErr),
+				logger.Int("source_count", len(sourceIDs)),
+				logger.String("component", "analysis.audio_pipeline"),
+				logger.String("operation", operation))
 		}
 	}
 
-	// Update buffer monitors.
-	if err := p.bufferMgr.UpdateMonitors(sourceIDs); err != nil {
-		GetLogger().Warn("buffer monitor update failed during restart",
-			logger.Error(err))
-	}
+	return sourceIDs
 }
 
 // buildSourceConfigs constructs audiocore.SourceConfig entries from the current settings.

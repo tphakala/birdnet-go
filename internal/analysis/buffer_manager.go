@@ -348,7 +348,10 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 	// The function signature is: ProcessData(bn, data, startTime, audioCapturedAt, source) error.
 	const detectionOffset = 10 * time.Second
 	const pollInterval = 100 * time.Millisecond
-	const bufferSize = 288000 // conf.BufferSize = 3s of 48kHz 16-bit mono
+	// analysisWindowBytes is the expected size of a full analysis window
+	// returned by AnalysisBuffer.Read(): CaptureLength seconds of audio at
+	// SampleRate Hz, BitDepth bits, NumChannels channels.
+	const analysisWindowBytes = conf.SampleRate * conf.CaptureLength * conf.NumChannels * (conf.BitDepth / 8)
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -374,7 +377,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 				continue
 			}
 
-			if len(data) == bufferSize {
+			if len(data) == analysisWindowBytes {
 				audioCapturedAt := time.Now()
 
 				// Calculate the offset dynamically to pick up runtime configuration changes
