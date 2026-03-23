@@ -1,45 +1,19 @@
 package notification
 
 import (
-	"strings"
 	"text/template"
 	"time"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
+	"github.com/tphakala/birdnet-go/internal/templatefuncs"
 )
 
-// TemplateFuncs provides common template functions available to all notification templates.
-// This includes string manipulation functions that users expect from template systems
-// like Hugo/Helm but are not part of Go's text/template builtins.
-var TemplateFuncs = template.FuncMap{
-	"title":      cases.Title(language.English).String,
-	"upper":      strings.ToUpper,
-	"lower":      strings.ToLower,
-	"trim":       strings.TrimSpace,
-	"contains":   strings.Contains,
-	"replace":    strings.ReplaceAll,
-	"hasPrefix":  strings.HasPrefix,
-	"hasSuffix":  strings.HasSuffix,
-	"formatTime": formatTime,
-}
+// TemplateFuncs re-exports the shared template function map for use within the
+// notification package. All template creation sites should use this.
+var TemplateFuncs = templatefuncs.Funcs
 
-// formatTime formats a time value using the given Go layout string.
-// Accepts both time.Time and string (attempts to parse RFC3339).
-// Example usage in templates: {{formatTime .Timestamp "2006-01-02"}}
-func formatTime(t any, layout string) string {
-	switch v := t.(type) {
-	case time.Time:
-		return v.Format(layout)
-	case string:
-		parsed, err := time.Parse(time.RFC3339, v)
-		if err != nil {
-			return v // Return the original string if parsing fails
-		}
-		return parsed.Format(layout)
-	default:
-		return ""
-	}
+// newTemplateWithFuncs creates a new template with the shared functions registered.
+func newTemplateWithFuncs(name string) *template.Template {
+	return template.New(name).Funcs(TemplateFuncs)
 }
 
 // ToTemplateMap converts a Notification into a map for template execution.

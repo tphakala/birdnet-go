@@ -16,23 +16,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/templatefuncs"
 )
-
-// webhookTemplateFuncs mirrors the function names from notification.TemplateFuncs
-// for template parsing validation. We can't import notification (circular dep),
-// but template.Parse() only needs function names to be registered — implementations
-// are irrelevant since we never Execute() during validation.
-var webhookTemplateFuncs = template.FuncMap{
-	"title":      func(s string) string { return s },
-	"upper":      func(s string) string { return s },
-	"lower":      func(s string) string { return s },
-	"trim":       func(s string) string { return s },
-	"contains":   func(s, substr string) bool { return false },
-	"replace":    func(s, oldStr, newStr string) string { return s },
-	"hasPrefix":  func(s, prefix string) bool { return false },
-	"hasSuffix":  func(s, suffix string) bool { return false },
-	"formatTime": func(t any, layout string) string { return "" },
-}
 
 // MinSoundLevelInterval is the minimum sound level interval in seconds to prevent excessive CPU usage
 const MinSoundLevelInterval = 5
@@ -440,7 +425,7 @@ func ValidateWebhookProvider(p *PushProviderConfig) ValidationResult {
 	// so Parse() accepts templates using custom functions like "title" or "formatTime".
 	// We can't import notification here (circular dep), but Parse() only needs the names.
 	if p.Template != "" {
-		if _, err := template.New("validation").Funcs(webhookTemplateFuncs).Parse(p.Template); err != nil {
+		if _, err := template.New("validation").Funcs(templatefuncs.Funcs).Parse(p.Template); err != nil {
 			result.Valid = false
 			result.Errors = append(result.Errors,
 				fmt.Sprintf("webhook provider '%s': invalid template syntax: %v", p.Name, err))
