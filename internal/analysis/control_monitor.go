@@ -400,10 +400,18 @@ func (cm *ControlMonitor) handleReconfigureStreams() {
 		} else {
 			// Bridge local AudioLevelData to audiocore.AudioLevelData on the API channel.
 			cm.wg.Go(func() {
-				for lvl := range alcOutCh {
+				for {
 					select {
-					case cm.audioLevelChan <- audiocore.AudioLevelData(lvl):
-					default:
+					case lvl, ok := <-alcOutCh:
+						if !ok {
+							return
+						}
+						select {
+						case cm.audioLevelChan <- audiocore.AudioLevelData(lvl):
+						default:
+						}
+					case <-cm.quitChan:
+						return
 					}
 				}
 			})

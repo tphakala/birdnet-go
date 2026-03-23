@@ -2,7 +2,6 @@
 package api
 
 import (
-	"fmt"
 	"reflect"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -110,17 +109,8 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 
 	// Check audio equalizer settings
 	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
-		c.Debug("Audio equalizer settings changed, updating filter chain")
-		// Handle audio equalizer changes synchronously as it returns an error
-		if err := c.handleEqualizerChange(currentSettings); err != nil {
-			// Send error toast
-			_ = c.SendToastWithKey("Failed to update audio equalizer settings", "error", toastDurationLong,
-				notification.MsgSettingsEqualizerFailed, nil)
-			return reconfigActions, fmt.Errorf("failed to update audio equalizer: %w", err)
-		}
-		// Send success toast
-		_ = c.SendToastWithKey("Audio equalizer settings updated", "success", toastDurationShort,
-			notification.MsgSettingsEqualizerUpdated, nil)
+		c.Debug("Audio equalizer settings changed; will take effect on restart (audiocore filter migration pending)")
+		_ = c.SendToast("Equalizer settings saved. Restart required to apply changes.", "warning", toastDurationExtended)
 	}
 
 	return reconfigActions, nil

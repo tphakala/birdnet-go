@@ -693,6 +693,11 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 	for i := range settings.Realtime.RTSP.Streams {
 		stream := &settings.Realtime.RTSP.Streams[i]
 		myaudio.UnregisterSoundLevelProcessor(stream.URL)
-		LogSoundLevelProcessorUnregistered(stream.Name, "stream", "analysis.soundlevel")
+
+		displayName := stream.Name
+		if displayName == "" {
+			displayName = privacy.SanitizeStreamUrl(stream.URL)
+		}
+		LogSoundLevelProcessorUnregistered(displayName, "stream", "analysis.soundlevel")
 	}
 }

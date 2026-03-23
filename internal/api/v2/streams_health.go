@@ -251,9 +251,15 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 
 	// First: try direct sourceID lookup
 	fh, lookupErr := ffmpegMgr.StreamHealth(decodedURL)
-	rawURL := decodedURL
+	var rawURL string
 
-	if lookupErr != nil {
+	if lookupErr == nil {
+		// decodedURL is a sourceID; resolve actual connection URL
+		rawURL = c.resolveSourceURL(registry, decodedURL)
+		if rawURL == "" {
+			rawURL = decodedURL // fallback
+		}
+	} else {
 		// Second: try to find sourceID by connection URL
 		if src, found := registry.GetByConnection(decodedURL); found {
 			fh, lookupErr = ffmpegMgr.StreamHealth(src.ID)

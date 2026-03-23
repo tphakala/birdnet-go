@@ -1478,7 +1478,11 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 		select {
 		case <-h.ch:
 			dropped = true
-			h.ch <- frame.Data
+		default:
+		}
+		// Non-blocking send — drop if still full
+		select {
+		case h.ch <- frame.Data:
 		default:
 		}
 
