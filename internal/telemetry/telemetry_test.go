@@ -393,9 +393,9 @@ func TestApplyStacktracePrivacyFilters_ErrorLevel(t *testing.T) {
 				Frames: []sentry.Frame{
 					{
 						Function: "myFunc",
-						Module:   "github.com/tphakala/birdnet-go/internal/myaudio",
-						Filename: "internal/myaudio/ffmpeg_stream.go",
-						AbsPath:  "/home/user/birdnet-go/internal/myaudio/ffmpeg_stream.go",
+						Module:   "github.com/tphakala/birdnet-go/internal/audiocore",
+						Filename: "internal/audiocore/capture.go",
+						AbsPath:  "/home/user/birdnet-go/internal/audiocore/capture.go",
 						Lineno:   42,
 					},
 				},

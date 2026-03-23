@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -614,30 +613,19 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 	})
 }
 
-// registerSoundLevelProcessorsForActiveSources registers sound level processors for all active audio sources.
-// NOTE: Sound level processing still uses myaudio.RegisterSoundLevelProcessor internally
-// until the full sound level pipeline is migrated to audiocore consumers.
+// registerSoundLevelProcessorsForActiveSources logs sound level processor registrations
+// for all active audio sources. Sound level processing is now handled by
+// SoundLevelConsumer via the AudioRouter; the legacy myaudio registration
+// calls have been removed.
 func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error {
-	var errs []error
 	successCount := 0
 	totalSources := 0
 
 	// Register for audio device source if active
 	if settings.Realtime.Audio.Source != "" {
 		totalSources++
-		if err := myaudio.RegisterSoundLevelProcessor(settings.Realtime.Audio.Source, settings.Realtime.Audio.Source); err != nil {
-			errs = append(errs, errors.New(err).
-				Component("realtime-analysis").
-				Category(errors.CategorySystem).
-				Context("operation", "register_sound_level_processor").
-				Context("source_type", "audio_device").
-				Context("source", settings.Realtime.Audio.Source).
-				Build())
-			LogSoundLevelProcessorRegistrationFailed(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel", err)
-		} else {
-			successCount++
-			LogSoundLevelProcessorRegistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
-		}
+		successCount++
+		LogSoundLevelProcessorRegistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
 	}
 
 	// Register for each configured RTSP source
@@ -650,49 +638,28 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 			displayName = privacy.SanitizeStreamUrl(stream.URL)
 		}
 
-		if err := myaudio.RegisterSoundLevelProcessor(stream.URL, displayName); err != nil {
-			errs = append(errs, errors.New(err).
-				Component("realtime-analysis").
-				Category(errors.CategorySystem).
-				Context("operation", "register_sound_level_processor").
-				Context("stream_name", stream.Name).
-				Context("url", privacy.SanitizeStreamUrl(stream.URL)).
-				Build())
-			LogSoundLevelProcessorRegistrationFailed(displayName, stream.Type+"_stream", "analysis.soundlevel", err)
-		} else {
-			successCount++
-			LogSoundLevelProcessorRegistered(displayName, stream.Type+"_configured", "analysis.soundlevel")
-		}
+		successCount++
+		LogSoundLevelProcessorRegistered(displayName, stream.Type+"_configured", "analysis.soundlevel")
 	}
 
 	// Use structured logging for registration summary
-	LogSoundLevelRegistrationSummary(successCount, totalSources, 0, successCount > 0 && successCount < totalSources, errs)
+	LogSoundLevelRegistrationSummary(successCount, totalSources, 0, false, nil)
 
-	// Clear the soundLevelDisabled flag on active FFmpeg streams so they
-	// resume calling ProcessSoundLevelData after a successful re-registration
-	if successCount > 0 {
-		myaudio.ClearSoundLevelDisabledOnStreams()
-	}
-
-	// Return error only if we have complete failure
-	if successCount == 0 && len(errs) > 0 {
-		return errors.Join(errs...)
-	}
 	return nil
 }
 
-// unregisterAllSoundLevelProcessors unregisters all sound level processors
+// unregisterAllSoundLevelProcessors logs sound level processor unregistrations.
+// Sound level processing is now handled by SoundLevelConsumer via the AudioRouter;
+// the legacy myaudio unregistration calls have been removed.
 func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
-	// Unregister audio source
+	// Log audio source unregistration
 	if settings.Realtime.Audio.Source != "" {
-		myaudio.UnregisterSoundLevelProcessor(settings.Realtime.Audio.Source)
 		LogSoundLevelProcessorUnregistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
 	}
 
-	// Unregister all stream sources
+	// Log stream source unregistrations
 	for i := range settings.Realtime.RTSP.Streams {
 		stream := &settings.Realtime.RTSP.Streams[i]
-		myaudio.UnregisterSoundLevelProcessor(stream.URL)
 
 		displayName := stream.Name
 		if displayName == "" {

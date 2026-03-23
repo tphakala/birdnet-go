@@ -169,7 +169,7 @@ const (
 
 // calculateAudioLevel computes the RMS audio level (0-100) from 16-bit PCM
 // samples and detects clipping. This mirrors the legacy implementation in
-// internal/myaudio/capture.go.
+// internal/audiocore/capture.go.
 func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 	if len(samples) == 0 {
 		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}

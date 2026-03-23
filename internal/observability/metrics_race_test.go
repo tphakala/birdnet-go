@@ -80,17 +80,6 @@ func TestSetMetricsIdempotent(t *testing.T) {
 		t.Log("BirdNET SetMetrics is idempotent - second call ignored as expected")
 	}
 
-	// Test MyAudio metrics
-	if firstMetrics.MyAudio != nil && secondMetrics.MyAudio != nil {
-		// Set all MyAudio metrics with first instance
-		initializeMyAudioMetrics(firstMetrics.MyAudio)
-
-		// Try to set with second instance - should be ignored
-		initializeMyAudioMetrics(secondMetrics.MyAudio)
-
-		t.Log("MyAudio SetMetrics is idempotent - second call ignored as expected")
-	}
-
 	// Test concurrent SetMetrics calls
 	var wg sync.WaitGroup
 	const numGoroutines = 10
@@ -112,9 +101,6 @@ func TestSetMetricsIdempotent(t *testing.T) {
 			// Try to set metrics with this instance
 			if metricsInstances[idx].BirdNET != nil {
 				initializeTracing(metricsInstances[idx].BirdNET)
-			}
-			if metricsInstances[idx].MyAudio != nil {
-				initializeMyAudioMetrics(metricsInstances[idx].MyAudio)
 			}
 		}(i)
 	}

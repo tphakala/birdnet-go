@@ -11,7 +11,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -112,9 +111,6 @@ func NewMetrics() (*Metrics, error) {
 	// Initialize diskmanager with metrics
 	diskmanager.SetMetrics(diskManagerMetrics)
 
-	// Initialize myaudio with metrics
-	initializeMyAudioMetrics(myAudioMetrics)
-
 	return m, nil
 }
 
@@ -135,13 +131,4 @@ func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
 // initializeTracing sets up the birdnet tracing system with metrics
 func initializeTracing(birdnetMetrics *metrics.BirdNETMetrics) {
 	birdnet.SetMetrics(birdnetMetrics)
-}
-
-// initializeMyAudioMetrics sets up the myaudio buffer system with metrics
-func initializeMyAudioMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
-	myaudio.SetAnalysisMetrics(myAudioMetrics)
-	myaudio.SetCaptureMetrics(myAudioMetrics)
-	myaudio.SetFileMetrics(myAudioMetrics)
-	myaudio.SetProcessMetrics(myAudioMetrics)
-	myaudio.SetFilterMetrics(myAudioMetrics)
 }

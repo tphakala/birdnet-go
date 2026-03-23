@@ -465,7 +465,7 @@ func TestPublishDiscoveryMultipleSources(t *testing.T) {
 //
 // These tests verify that the sound level value template uses the correct
 // octave band key format. The keys must match what formatBandKey() produces
-// in internal/myaudio/soundlevel.go:
+// in internal/audiocore/soundlevel/soundlevel.go:
 //   - Frequencies < 1000 Hz: "%.1f_Hz" (e.g., "500.0_Hz")
 //   - Frequencies >= 1000 Hz: "%.1f_kHz" (e.g., "1.0_kHz" for 1000 Hz)
 //

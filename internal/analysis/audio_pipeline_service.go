@@ -171,7 +171,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	})
 
 	// Initialize quiet hours scheduler for stream and sound card management.
-	// Uses audiocore/schedule instead of myaudio — scheduler is independent of the audio capture pipeline.
+	// Uses audiocore/schedule — scheduler is independent of the audio capture pipeline.
 	p.quietHoursScheduler = schedule.NewQuietHoursScheduler(schedule.QuietHoursConfig{
 		SunCalc:     p.apiService.SunCalc(),
 		ControlChan: p.apiService.ControlChan(),

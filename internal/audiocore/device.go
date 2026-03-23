@@ -102,6 +102,14 @@ func (dm *DeviceManager) ListDevices() ([]DeviceInfo, error) {
 	return listDevices(dm.log)
 }
 
+// ListCaptureDevices enumerates available audio capture devices on the host
+// without requiring a DeviceManager instance. This is useful for API endpoints
+// that need to list devices independently of the capture lifecycle.
+func ListCaptureDevices() ([]DeviceInfo, error) {
+	log := logger.Global().Module("audiocore")
+	return listDevices(log)
+}
+
 // StartCapture begins audio capture from the device identified by deviceID,
 // dispatching AudioFrames tagged with sourceID to the manager's dispatcher.
 //

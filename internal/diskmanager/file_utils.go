@@ -19,8 +19,7 @@ import (
 
 // tempFileExt is the temporary file extension used during audio file creation.
 // Audio files are written with this suffix during recording and renamed upon
-// completion to ensure atomic file operations. This must match the TempExt
-// constant in the myaudio package.
+// completion to ensure atomic file operations.
 const tempFileExt = ".temp"
 
 // errUnrecognizedFilename is returned when a file's name does not match the
