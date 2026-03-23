@@ -157,6 +157,13 @@ func (e *AudioEngine) Scheduler() *schedule.QuietHoursScheduler {
 	return e.scheduler
 }
 
+// SetScheduler replaces the engine's quiet hours scheduler.
+// This supports deferred initialization when the scheduler depends on
+// resources (SunCalc, ControlChan) only available after service startup.
+func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
+	e.scheduler = s
+}
+
 // AddSource registers a new audio source and allocates its buffers.
 // For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
 // is started. For audio card sources, the device manager begins capture.
