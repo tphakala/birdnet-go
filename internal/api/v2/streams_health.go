@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -170,6 +171,65 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 	return streamInfo{}
 }
 
+// convertMyaudioHealth converts a myaudio.StreamHealth to ffmpeg.StreamHealth.
+// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
+func convertMyaudioHealth(mh *myaudio.StreamHealth) *ffmpeg.StreamHealth {
+	fh := &ffmpeg.StreamHealth{
+		IsHealthy:          mh.IsHealthy,
+		LastDataReceived:   mh.LastDataReceived,
+		RestartCount:       mh.RestartCount,
+		Error:              mh.Error,
+		TotalBytesReceived: mh.TotalBytesReceived,
+		BytesPerSecond:     mh.BytesPerSecond,
+		IsReceivingData:    mh.IsReceivingData,
+		ProcessState:       ffmpeg.ProcessState(mh.ProcessState),
+	}
+	for _, st := range mh.StateHistory {
+		fh.StateHistory = append(fh.StateHistory, ffmpeg.StateTransition{
+			From:      ffmpeg.ProcessState(st.From),
+			To:        ffmpeg.ProcessState(st.To),
+			Timestamp: st.Timestamp,
+			Reason:    st.Reason,
+		})
+	}
+	if mh.LastErrorContext != nil {
+		fh.LastErrorContext = convertMyaudioErrorContext(mh.LastErrorContext)
+	}
+	for _, ec := range mh.ErrorHistory {
+		fh.ErrorHistory = append(fh.ErrorHistory, convertMyaudioErrorContext(ec))
+	}
+	return fh
+}
+
+// convertHealthMap converts the full myaudio health map to ffmpeg types at the boundary.
+// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
+func convertHealthMap(src map[string]myaudio.StreamHealth) map[string]*ffmpeg.StreamHealth {
+	dst := make(map[string]*ffmpeg.StreamHealth, len(src))
+	for url := range src {
+		mh := src[url]
+		dst[url] = convertMyaudioHealth(&mh)
+	}
+	return dst
+}
+
+// convertMyaudioErrorContext converts a myaudio.ErrorContext to ffmpeg.ErrorContext.
+// Transitional helper — removed in PR 3 when GetStreamHealth() returns ffmpeg types directly.
+func convertMyaudioErrorContext(ec *myaudio.ErrorContext) *ffmpeg.ErrorContext {
+	return &ffmpeg.ErrorContext{
+		ErrorType:       ec.ErrorType,
+		PrimaryMessage:  ec.PrimaryMessage,
+		TargetHost:      ec.TargetHost,
+		TargetPort:      ec.TargetPort,
+		TimeoutDuration: ec.TimeoutDuration,
+		HTTPStatus:      ec.HTTPStatus,
+		RTSPMethod:      ec.RTSPMethod,
+		RawFFmpegOutput: ec.RawFFmpegOutput,
+		UserFacingMsg:   ec.UserFacingMsg,
+		TroubleShooting: ec.TroubleShooting,
+		Timestamp:       ec.Timestamp,
+	}
+}
+
 // GetAllStreamsHealth returns health information for all configured RTSP streams
 // @Summary Get health status of all RTSP streams
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
@@ -187,8 +247,9 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	// have the same sanitized form (differ only by credentials)
 	response := make([]StreamHealthResponse, 0, len(healthData))
 	for rawURL := range healthData {
-		health := healthData[rawURL]
-		resp := convertStreamHealthToResponse(rawURL, &health)
+		mh := healthData[rawURL]
+		fh := convertMyaudioHealth(&mh)
+		resp := convertStreamHealthToResponse(rawURL, fh)
 
 		// Add stream name and type from config
 		info := c.getStreamInfo(rawURL)
@@ -229,7 +290,7 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	healthData := myaudio.GetStreamHealth()
 
 	// Find the matching stream (case-sensitive exact match)
-	health, exists := healthData[decodedURL]
+	mh, exists := healthData[decodedURL]
 	if !exists {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Stream not found",
 			logger.String("requested_url", privacy.SanitizeStreamUrl(decodedURL)),
@@ -238,7 +299,8 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	// Convert to API response format
-	response := convertStreamHealthToResponse(decodedURL, &health)
+	fh := convertMyaudioHealth(&mh)
+	response := convertStreamHealthToResponse(decodedURL, fh)
 
 	// Add stream name and type from config
 	info := c.getStreamInfo(decodedURL)
@@ -270,9 +332,11 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 	}
 
 	for rawURL := range healthData {
-		health := healthData[rawURL]
+		mh := healthData[rawURL]
+		fh := convertMyaudioHealth(&mh)
+
 		// Count healthy/unhealthy
-		if health.IsHealthy {
+		if fh.IsHealthy {
 			summary.HealthyStreams++
 		} else {
 			summary.UnhealthyStreams++
@@ -284,19 +348,19 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 			Name:         info.Name,
 			Type:         info.Type,
 			URL:          privacy.SanitizeStreamUrl(rawURL),
-			IsHealthy:    health.IsHealthy,
-			ProcessState: health.ProcessState.String(),
+			IsHealthy:    fh.IsHealthy,
+			ProcessState: fh.ProcessState.String(),
 		}
 
 		// Add time since data if available
-		if !health.LastDataReceived.IsZero() {
-			timeSince := time.Since(health.LastDataReceived).Seconds()
+		if !fh.LastDataReceived.IsZero() {
+			timeSince := time.Since(fh.LastDataReceived).Seconds()
 			streamSummary.TimeSinceData = &timeSince
 		}
 
 		// Add last error type if available
-		if health.LastErrorContext != nil {
-			streamSummary.LastErrorType = health.LastErrorContext.ErrorType
+		if fh.LastErrorContext != nil {
+			streamSummary.LastErrorType = fh.LastErrorContext.ErrorType
 		}
 
 		summary.StreamsSummary = append(summary.StreamsSummary, streamSummary)
@@ -305,8 +369,8 @@ func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, summary)
 }
 
-// convertStreamHealthToResponse converts internal StreamHealth to API response format
-func convertStreamHealthToResponse(rawURL string, health *myaudio.StreamHealth) StreamHealthResponse {
+// convertStreamHealthToResponse converts internal StreamHealth to API response format.
+func convertStreamHealthToResponse(rawURL string, health *ffmpeg.StreamHealth) StreamHealthResponse {
 	response := StreamHealthResponse{
 		URL:                privacy.SanitizeStreamUrl(rawURL),
 		IsHealthy:          health.IsHealthy,
@@ -360,8 +424,8 @@ func convertStreamHealthToResponse(rawURL string, health *myaudio.StreamHealth) 
 	return response
 }
 
-// convertErrorContextToResponse converts internal ErrorContext to API response format
-func convertErrorContextToResponse(errCtx *myaudio.ErrorContext) *ErrorContextResponse {
+// convertErrorContextToResponse converts internal ErrorContext to API response format.
+func convertErrorContextToResponse(errCtx *ffmpeg.ErrorContext) *ErrorContextResponse {
 	if errCtx == nil {
 		return nil
 	}
@@ -410,7 +474,7 @@ func (c *Controller) handleStreamHealthHeartbeat(ctx echo.Context, clientID stri
 
 // handleStreamHealthPoll polls for stream health changes and processes updates.
 func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, previousState map[string]streamHealthSnapshot) error {
-	healthData := myaudio.GetStreamHealth()
+	healthData := convertHealthMap(myaudio.GetStreamHealth())
 
 	if err := c.processStreamHealthUpdates(ctx, clientID, healthData, previousState); err != nil {
 		return err
@@ -422,11 +486,10 @@ func (c *Controller) handleStreamHealthPoll(ctx echo.Context, clientID string, p
 // This enables real-time bandwidth and bytes display in the UI regardless of state changes.
 // Note: This sends a lightweight payload without history arrays to reduce bandwidth.
 func (c *Controller) handleStreamStatsUpdate(ctx echo.Context, clientID string) error {
-	healthData := myaudio.GetStreamHealth()
+	healthData := convertHealthMap(myaudio.GetStreamHealth())
 
-	for rawURL := range healthData {
-		health := healthData[rawURL]
-		if err := c.sendStreamStatsUpdate(ctx, rawURL, &health); err != nil {
+	for rawURL, fh := range healthData {
+		if err := c.sendStreamStatsUpdate(ctx, rawURL, fh); err != nil {
 			c.logDebugIfEnabled("Failed to send stats update, client disconnected",
 				logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 				logger.String("client_id", clientID),
@@ -511,8 +574,8 @@ type streamHealthSnapshot struct {
 	TotalBytesReceived int64
 }
 
-// createHealthSnapshot creates a snapshot of stream health for comparison
-func createHealthSnapshot(health *myaudio.StreamHealth) streamHealthSnapshot {
+// createHealthSnapshot creates a snapshot of stream health for comparison.
+func createHealthSnapshot(health *ffmpeg.StreamHealth) streamHealthSnapshot {
 	snapshot := streamHealthSnapshot{
 		IsHealthy:          health.IsHealthy,
 		ProcessState:       health.ProcessState.String(),
@@ -564,17 +627,16 @@ func determineEventType(prev, current streamHealthSnapshot) string {
 	return "status_update"
 }
 
-// processStreamHealthUpdates processes health updates for all active streams
-func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]myaudio.StreamHealth, previousState map[string]streamHealthSnapshot) error {
-	for rawURL := range healthData {
-		health := healthData[rawURL]
-		currentSnapshot := createHealthSnapshot(&health)
+// processStreamHealthUpdates processes health updates for all active streams.
+func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
+	for rawURL, health := range healthData {
+		currentSnapshot := createHealthSnapshot(health)
 
 		// Check if this is a new stream or if something changed
 		previousSnapshot, exists := previousState[rawURL]
 		if !exists {
 			// New stream detected
-			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, "stream_added"); err != nil {
+			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, "stream_added"); err != nil {
 				c.logDebugIfEnabled("Failed to send stream_added event, client disconnected",
 					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("client_id", clientID),
@@ -584,7 +646,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 		} else if hasHealthChanged(previousSnapshot, currentSnapshot) {
 			// Stream health changed
 			eventType := determineEventType(previousSnapshot, currentSnapshot)
-			if err := c.sendStreamHealthUpdate(ctx, rawURL, &health, eventType); err != nil {
+			if err := c.sendStreamHealthUpdate(ctx, rawURL, health, eventType); err != nil {
 				c.logDebugIfEnabled("Failed to send health update, client disconnected",
 					logger.String("url", privacy.SanitizeStreamUrl(rawURL)),
 					logger.String("event_type", eventType),
@@ -604,7 +666,7 @@ func (c *Controller) processStreamHealthUpdates(ctx echo.Context, clientID strin
 }
 
 // processRemovedStreams checks for and processes streams that have been removed
-func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]myaudio.StreamHealth, previousState map[string]streamHealthSnapshot) error {
+func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, healthData map[string]*ffmpeg.StreamHealth, previousState map[string]streamHealthSnapshot) error {
 	for prevURL := range previousState {
 		if _, exists := healthData[prevURL]; exists {
 			continue
@@ -612,7 +674,7 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 
 		// Stream was removed
 		sanitizedURL := privacy.SanitizeStreamUrl(prevURL)
-		emptyHealth := myaudio.StreamHealth{}
+		emptyHealth := ffmpeg.StreamHealth{}
 		response := convertStreamHealthToResponse(prevURL, &emptyHealth)
 
 		// Add stream name and type from config (may be empty if stream was removed from config)
@@ -639,8 +701,8 @@ func (c *Controller) processRemovedStreams(ctx echo.Context, clientID string, he
 	return nil
 }
 
-// sendStreamHealthUpdate sends a stream health update via SSE
-func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth, eventType string) error {
+// sendStreamHealthUpdate sends a stream health update via SSE.
+func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth, eventType string) error {
 	response := convertStreamHealthToResponse(rawURL, health)
 
 	// Add stream name and type from config
@@ -669,7 +731,7 @@ func (c *Controller) sendStreamHealthUpdate(ctx echo.Context, rawURL string, hea
 // sendStreamStatsUpdate sends a lightweight stats-only update via SSE.
 // This excludes history arrays (ErrorHistory, StateHistory) to reduce bandwidth
 // for frequent periodic updates.
-func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *myaudio.StreamHealth) error {
+func (c *Controller) sendStreamStatsUpdate(ctx echo.Context, rawURL string, health *ffmpeg.StreamHealth) error {
 	// Build lightweight response with only essential stats fields
 	var timeSinceData *float64
 	if !health.LastDataReceived.IsZero() {

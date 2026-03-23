@@ -21,6 +21,7 @@ import (
 	mw "github.com/tphakala/birdnet-go/internal/api/middleware"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -61,6 +62,9 @@ type Server struct {
 	// Auth components (owned by server, injected into controllers)
 	authService    auth.Service
 	authMiddleware echo.MiddlewareFunc
+
+	// Audio engine (unified audio subsystem)
+	engine *engine.AudioEngine
 
 	// Channels
 	controlChan    chan string
@@ -164,6 +168,13 @@ func WithAudioLevelChannel(ch chan audiocore.AudioLevelData) ServerOption {
 func WithV2Manager(mgr datastoreV2.Manager) ServerOption {
 	return func(s *Server) {
 		s.v2Manager = mgr
+	}
+}
+
+// WithAudioEngine sets the AudioEngine for audio subsystem access.
+func WithAudioEngine(e *engine.AudioEngine) ServerOption {
+	return func(s *Server) {
+		s.engine = e
 	}
 }
 
@@ -319,6 +330,7 @@ func (s *Server) setupRoutes() error {
 		apiv2.WithAuthService(s.authService),
 		apiv2.WithV2Manager(s.v2Manager),
 		apiv2.WithMetricsStore(observability.NewMemoryStore(apiv2.MetricsHistoryMaxPoints)),
+		apiv2.WithAudioEngine(s.engine),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)

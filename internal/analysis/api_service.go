@@ -8,6 +8,7 @@ import (
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -32,6 +33,7 @@ type APIServerService struct {
 	bnAnalyzer *BirdNETAnalyzer
 	dbService  *DatabaseService
 	metrics    *observability.Metrics
+	engine     *engine.AudioEngine
 
 	server         *api.Server
 	proc           *processor.Processor
@@ -45,12 +47,13 @@ type APIServerService struct {
 
 // NewAPIServerService creates a new APIServerService with the given dependencies.
 // The service is not started; call Start() to initialize all subsystems.
-func NewAPIServerService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, metrics *observability.Metrics) *APIServerService {
+func NewAPIServerService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, metrics *observability.Metrics, audioEngine *engine.AudioEngine) *APIServerService {
 	return &APIServerService{
 		settings:   settings,
 		bnAnalyzer: bnAnalyzer,
 		dbService:  dbService,
 		metrics:    metrics,
+		engine:     audioEngine,
 	}
 }
 
@@ -167,6 +170,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 		api.WithOAuth2Server(s.oauth2Server),
 		api.WithSunCalc(s.sunCalc),
 		api.WithV2Manager(s.dbService.V2Manager()),
+		api.WithAudioEngine(s.engine),
 	)
 	if err != nil {
 		return errors.New(err).

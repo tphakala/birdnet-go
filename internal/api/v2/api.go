@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -92,6 +93,9 @@ type Controller struct {
 	// TODO: Consider moving to a dedicated audio manager
 	audioLevelChan chan audiocore.AudioLevelData
 
+	// engine provides access to the unified audio subsystem (sources, buffers, routing).
+	engine *engine.AudioEngine
+
 	// V2Manager provides access to the v2 normalized database for stats and backup
 	V2Manager datastoreV2.Manager
 
@@ -155,6 +159,13 @@ func WithMetricsStore(store observability.MetricsStore) Option {
 func WithV2Manager(mgr datastoreV2.Manager) Option {
 	return func(c *Controller) {
 		c.V2Manager = mgr
+	}
+}
+
+// WithAudioEngine sets the AudioEngine for audio subsystem access.
+func WithAudioEngine(e *engine.AudioEngine) Option {
+	return func(c *Controller) {
+		c.engine = e
 	}
 }
 

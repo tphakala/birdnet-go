@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/analysis"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -33,12 +34,18 @@ The "realtime" command is an alias for backward compatibility.`,
 				return err
 			}
 
+			// Create the AudioEngine with a nil scheduler; the scheduler
+			// depends on SunCalc and ControlChan that are only available
+			// after APIServerService.Start(), so it is set later via
+			// AudioEngine.SetScheduler().
+			audioEngine := engine.New(cmd.Context(), &engine.Config{}, nil)
+
 			// Create services. Registration order determines start order;
 			// shutdown happens in reverse within each tier.
 			bnAnalyzer := analysis.NewBirdNETAnalyzer(settings)
 			dbService := analysis.NewDatabaseService(settings, metrics)
-			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics)
-			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService)
+			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics, audioEngine)
+			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService, audioEngine)
 
 			application := app.New()
 			app.SetGlobal(application)

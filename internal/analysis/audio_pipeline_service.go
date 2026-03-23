@@ -11,6 +11,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -41,11 +43,12 @@ type AudioPipelineService struct {
 	bnAnalyzer *BirdNETAnalyzer
 	dbService  *DatabaseService
 	apiService *APIServerService
+	engine     *engine.AudioEngine
 
 	bufferMgr           *BufferManager
 	demuxMgr            *AudioDemuxManager
 	ctrlMonitor         *ControlMonitor
-	quietHoursScheduler *myaudio.QuietHoursScheduler
+	quietHoursScheduler *schedule.QuietHoursScheduler
 	soundLevelChan      chan soundlevel.SoundLevelData
 	restartChan         chan struct{}
 	done                chan struct{}
@@ -55,12 +58,13 @@ type AudioPipelineService struct {
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
 // The service is not started; call Start() to initialize the audio pipeline.
-func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, apiService *APIServerService) *AudioPipelineService {
+func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, apiService *APIServerService, audioEngine *engine.AudioEngine) *AudioPipelineService {
 	return &AudioPipelineService{
 		settings:   settings,
 		bnAnalyzer: bnAnalyzer,
 		dbService:  dbService,
 		apiService: apiService,
+		engine:     audioEngine,
 	}
 }
 
@@ -166,7 +170,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 
 	// Register watchdog reset callback so analysis monitors are recreated
 	// when the watchdog force-resets a stuck stream.
-	myaudio.SetOnStreamReset(func(newSourceID string) {
+	p.engine.FFmpegManager().SetOnStreamReset(func(newSourceID string) {
 		if err := p.bufferMgr.AddMonitor(newSourceID); err != nil {
 			GetLogger().Warn("failed to add monitor after watchdog stream reset",
 				logger.String("source_id", newSourceID),
@@ -195,8 +199,12 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	myaudio.SetCurrentAudioChan(unifiedAudioChan)
 
 	// Initialize quiet hours scheduler for stream and sound card management.
-	p.quietHoursScheduler = myaudio.NewQuietHoursScheduler(p.apiService.SunCalc(), p.apiService.ControlChan())
-	myaudio.SetGlobalScheduler(p.quietHoursScheduler)
+	// Uses audiocore/schedule instead of myaudio — scheduler is independent of the audio capture pipeline.
+	p.quietHoursScheduler = schedule.NewQuietHoursScheduler(schedule.QuietHoursConfig{
+		SunCalc:     p.apiService.SunCalc(),
+		ControlChan: p.apiService.ControlChan(),
+	})
+	p.engine.SetScheduler(p.quietHoursScheduler)
 	p.quietHoursScheduler.Start()
 
 	// Publish application started alert event.

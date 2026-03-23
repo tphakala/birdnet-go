@@ -55,11 +55,11 @@ type ControlMonitor struct {
 	metrics                *observability.Metrics
 
 	// Quiet hours scheduler for stream/soundcard lifecycle management
-	quietHoursScheduler *myaudio.QuietHoursScheduler
+	quietHoursScheduler *schedule.QuietHoursScheduler
 }
 
 // NewControlMonitor creates a new ControlMonitor instance
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *myaudio.QuietHoursScheduler) *ControlMonitor {
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler) *ControlMonitor {
 	cm := &ControlMonitor{
 		wg:                  wg,
 		controlChan:         controlChan,
