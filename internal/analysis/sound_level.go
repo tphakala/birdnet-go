@@ -12,6 +12,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -667,7 +668,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 
 		// Get or create the stream source in the registry
 		registry := myaudio.GetRegistry()
-		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name)
+		audioSource := registry.GetOrCreateSource(stream.URL, myaudio.SourceType(audiocore.StreamTypeToSourceType(stream.Type)), stream.Name)
 		if audioSource == nil {
 			errs = append(errs, errors.Newf("failed to get/create stream source").
 				Component("realtime-analysis").
