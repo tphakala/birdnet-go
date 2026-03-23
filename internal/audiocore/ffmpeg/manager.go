@@ -243,7 +243,7 @@ func (m *Manager) RestartStream(sourceID string) error {
 			Build()
 	}
 
-	stream.Restart(false)
+	stream.Restart(true)
 
 	m.logger.Info("restarted FFmpeg stream",
 		logger.String("source_id", sourceID),
