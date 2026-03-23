@@ -2,6 +2,7 @@
 package audiocore
 
 import (
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -152,6 +153,25 @@ func (s *AudioSource) SetConnectionString(cs string) {
 // ensuring that credentials are never inadvertently written to logs.
 func (s *AudioSource) String() string {
 	return s.SafeString
+}
+
+// StreamTypeToSourceType converts a stream type string (e.g., "rtsp", "http")
+// to the corresponding SourceType constant.
+func StreamTypeToSourceType(streamType string) SourceType {
+	switch strings.ToLower(streamType) {
+	case "rtsp":
+		return SourceTypeRTSP
+	case "http":
+		return SourceTypeHTTP
+	case "hls":
+		return SourceTypeHLS
+	case "rtmp":
+		return SourceTypeRTMP
+	case "udp":
+		return SourceTypeUDP
+	default:
+		return SourceTypeUnknown
+	}
 }
 
 // SourceConfig carries the parameters required to register a new audio source.
