@@ -6,6 +6,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
@@ -128,7 +129,7 @@ type AudioEngine struct {
 	ffmpegMgr *ffmpeg.Manager
 	deviceMgr *audiocore.DeviceManager
 	bufferMgr *buffer.Manager
-	scheduler *schedule.QuietHoursScheduler
+	scheduler atomic.Pointer[schedule.QuietHoursScheduler]
 	logger    logger.Logger
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
@@ -168,13 +169,12 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	}, nil, log)
 	deviceMgr := audiocore.NewDeviceManager(router, log)
 
-	return &AudioEngine{
+	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
 		router:               router,
 		ffmpegMgr:            ffmpegMgr,
 		deviceMgr:            deviceMgr,
 		bufferMgr:            bufMgr,
-		scheduler:            scheduler,
 		logger:               log.With(logger.String("component", "audio_engine")),
 		ctx:                  engineCtx,
 		cancel:               cancel,
@@ -186,6 +186,10 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
+	if scheduler != nil {
+		e.scheduler.Store(scheduler)
+	}
+	return e
 }
 
 // Registry returns the source registry.
@@ -215,14 +219,14 @@ func (e *AudioEngine) DeviceManager() *audiocore.DeviceManager {
 
 // Scheduler returns the quiet hours scheduler, which may be nil.
 func (e *AudioEngine) Scheduler() *schedule.QuietHoursScheduler {
-	return e.scheduler
+	return e.scheduler.Load()
 }
 
 // SetScheduler replaces the engine's quiet hours scheduler.
 // This supports deferred initialization when the scheduler depends on
 // resources (SunCalc, ControlChan) only available after service startup.
 func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
-	e.scheduler = s
+	e.scheduler.Store(s)
 }
 
 // AddSource registers a new audio source and allocates its buffers.
@@ -447,8 +451,8 @@ func (e *AudioEngine) Stop() {
 	e.router.Close()
 
 	// Stop the scheduler if present.
-	if e.scheduler != nil {
-		e.scheduler.Stop()
+	if sched := e.scheduler.Load(); sched != nil {
+		sched.Stop()
 	}
 
 	e.logger.Info("audio engine stopped")
