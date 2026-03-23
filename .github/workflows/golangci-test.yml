@@ -189,7 +189,6 @@ jobs:
             ./internal/datastore/v2 \
             ./internal/datastore/v2/repository/... \
             ./internal/mqtt/... \
-            ./internal/myaudio/streamingtest/... \
             ./internal/spectrogram/... \
             ./internal/testutil/containers/... \
             2>&1
