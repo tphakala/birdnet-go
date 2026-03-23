@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -367,7 +368,7 @@ func (p *AudioPipelineService) startAudioCapture() chan myaudio.UnifiedAudioData
 					return
 				case <-p.done:
 					return
-				case audioLevelChan <- unifiedData.AudioLevel:
+				case audioLevelChan <- audiocore.AudioLevelData(unifiedData.AudioLevel):
 				default:
 					// Channel full, drop data.
 				}

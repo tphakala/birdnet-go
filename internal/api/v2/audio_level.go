@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
@@ -46,8 +47,8 @@ const (
 // AudioLevelSSEData represents the audio level data sent via SSE
 // This matches the v1 format for frontend compatibility
 type AudioLevelSSEData struct {
-	Type   string                            `json:"type"`
-	Levels map[string]myaudio.AudioLevelData `json:"levels"`
+	Type   string                              `json:"type"`
+	Levels map[string]audiocore.AudioLevelData `json:"levels"`
 }
 
 // audioLevelManager manages audio level SSE connections and broadcasts
@@ -63,7 +64,7 @@ type audioLevelManager struct {
 	streamAnonymMu  sync.RWMutex
 
 	// Fan-out broadcaster for audio level data
-	subscribers   map[chan myaudio.AudioLevelData]struct{}
+	subscribers   map[chan audiocore.AudioLevelData]struct{}
 	subscribersMu sync.RWMutex
 
 	// Broadcaster lifecycle
@@ -78,7 +79,7 @@ const maxStreamAnonymMapSize = 100
 // TODO: Consider moving to Controller struct for better encapsulation
 var audioLevelMgr = &audioLevelManager{
 	streamAnonymMap: make(map[string]string),
-	subscribers:     make(map[chan myaudio.AudioLevelData]struct{}),
+	subscribers:     make(map[chan audiocore.AudioLevelData]struct{}),
 }
 
 // SetAudioLevelChan sets the audio level channel for the controller and starts
@@ -91,7 +92,7 @@ var audioLevelMgr = &audioLevelManager{
 // requests may result in data races.
 //
 // This connects the audio capture system to the SSE endpoint.
-func (c *Controller) SetAudioLevelChan(ch chan myaudio.AudioLevelData) {
+func (c *Controller) SetAudioLevelChan(ch chan audiocore.AudioLevelData) {
 	c.audioLevelChan = ch
 	c.logInfoIfEnabled("Audio level channel connected to API v2 controller")
 
@@ -105,7 +106,7 @@ func (c *Controller) SetAudioLevelChan(ch chan myaudio.AudioLevelData) {
 
 // runAudioLevelBroadcaster reads from the source channel and broadcasts to all subscribers.
 // This allows multiple SSE clients to receive the same audio level data.
-func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan myaudio.AudioLevelData) {
+func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan audiocore.AudioLevelData) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -141,8 +142,8 @@ func runAudioLevelBroadcaster(ctx context.Context, sourceChan chan myaudio.Audio
 // subscribeToAudioLevels creates a new subscriber channel and registers it.
 // The returned channel will receive audio level data from the broadcaster.
 // The caller MUST call unsubscribeFromAudioLevels when done.
-func subscribeToAudioLevels() chan myaudio.AudioLevelData {
-	ch := make(chan myaudio.AudioLevelData, audioLevelChannelBuffer)
+func subscribeToAudioLevels() chan audiocore.AudioLevelData {
+	ch := make(chan audiocore.AudioLevelData, audioLevelChannelBuffer)
 	audioLevelMgr.subscribersMu.Lock()
 	audioLevelMgr.subscribers[ch] = struct{}{}
 	audioLevelMgr.subscribersMu.Unlock()
@@ -151,7 +152,7 @@ func subscribeToAudioLevels() chan myaudio.AudioLevelData {
 
 // unsubscribeFromAudioLevels removes a subscriber channel from the broadcaster.
 // This should be called when an SSE client disconnects.
-func unsubscribeFromAudioLevels(ch chan myaudio.AudioLevelData) {
+func unsubscribeFromAudioLevels(ch chan audiocore.AudioLevelData) {
 	audioLevelMgr.subscribersMu.Lock()
 	delete(audioLevelMgr.subscribers, ch)
 	audioLevelMgr.subscribersMu.Unlock()
@@ -364,8 +365,8 @@ func (c *Controller) isClientAuthenticated(ctx echo.Context) bool {
 }
 
 // createAudioLevelEntry creates an AudioLevelData entry for a source with appropriate display name.
-func createAudioLevelEntry(source *myaudio.AudioSource, displayName string) myaudio.AudioLevelData {
-	return myaudio.AudioLevelData{
+func createAudioLevelEntry(source *myaudio.AudioSource, displayName string) audiocore.AudioLevelData {
+	return audiocore.AudioLevelData{
 		Level:  0,
 		Name:   displayName,
 		Source: source.ID,
@@ -373,8 +374,8 @@ func createAudioLevelEntry(source *myaudio.AudioSource, displayName string) myau
 }
 
 // initializeAudioLevels creates the initial levels map with configured sources
-func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]myaudio.AudioLevelData {
-	levels := make(map[string]myaudio.AudioLevelData)
+func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audiocore.AudioLevelData {
+	levels := make(map[string]audiocore.AudioLevelData)
 	registry := myaudio.GetRegistry()
 	if registry == nil {
 		return levels
@@ -404,10 +405,10 @@ func (c *Controller) getAudioCardSource(registry *myaudio.AudioSourceRegistry) *
 }
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
-func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]myaudio.AudioLevelData, isAuthenticated bool) {
+func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
 	for i := range c.Settings.Realtime.RTSP.Streams {
 		stream := &c.Settings.Realtime.RTSP.Streams[i]
-		source := registry.GetOrCreateSource(stream.URL, myaudio.StreamTypeToSourceType(stream.Type), stream.Name)
+		source := registry.GetOrCreateSource(stream.URL, myaudio.SourceType(audiocore.StreamTypeToSourceType(stream.Type)), stream.Name)
 		if source == nil {
 			continue
 		}
@@ -422,8 +423,8 @@ func (c *Controller) addStreamSourcesToLevels(registry *myaudio.AudioSourceRegis
 
 // updateAudioLevel processes incoming audio data and updates the levels map
 func (c *Controller) updateAudioLevel(
-	audioData myaudio.AudioLevelData,
-	levels map[string]myaudio.AudioLevelData,
+	audioData audiocore.AudioLevelData,
+	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
 	isAuthenticated bool,
 ) {
@@ -541,7 +542,7 @@ func (c *Controller) isSourceInactive(
 
 // checkSourceActivity checks all sources for inactivity
 func (c *Controller) checkSourceActivity(
-	levels map[string]myaudio.AudioLevelData,
+	levels map[string]audiocore.AudioLevelData,
 	lastUpdateTime, lastNonZeroTime map[string]time.Time,
 ) bool {
 	now := time.Now()
@@ -582,7 +583,7 @@ func (c *Controller) resetAudioLevelWriteDeadline(ctx echo.Context, operation st
 }
 
 // sendAudioLevelUpdate sends the current levels to the client
-func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]myaudio.AudioLevelData) error {
+func (c *Controller) sendAudioLevelUpdate(ctx echo.Context, levels map[string]audiocore.AudioLevelData) error {
 	message := AudioLevelSSEData{
 		Type:   "audio-level",
 		Levels: levels,

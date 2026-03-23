@@ -7,13 +7,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/backup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/security"
@@ -40,7 +40,7 @@ type APIServerService struct {
 	oauth2Server   *security.OAuth2Server
 	systemMonitor  *monitor.SystemMonitor
 	controlChan    chan string
-	audioLevelChan chan myaudio.AudioLevelData
+	audioLevelChan chan audiocore.AudioLevelData
 }
 
 // NewAPIServerService creates a new APIServerService with the given dependencies.
@@ -149,7 +149,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 
 	// Create channels.
 	s.controlChan = make(chan string, 1)
-	s.audioLevelChan = make(chan myaudio.AudioLevelData, 100)
+	s.audioLevelChan = make(chan audiocore.AudioLevelData, 100)
 
 	// Create OAuth2 server.
 	s.oauth2Server = security.NewOAuth2Server()
@@ -276,7 +276,7 @@ func (s *APIServerService) ControlChan() chan string {
 
 // AudioLevelChan returns the channel for audio level data updates,
 // or nil if not yet started.
-func (s *APIServerService) AudioLevelChan() chan myaudio.AudioLevelData {
+func (s *APIServerService) AudioLevelChan() chan audiocore.AudioLevelData {
 	return s.audioLevelChan
 }
 
