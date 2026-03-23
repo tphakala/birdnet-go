@@ -31,9 +31,16 @@ const osWindows = "windows"
 // This prevents ETXTBSY errors on CI runners with slow I/O subsystems.
 func createTestScript(t *testing.T, name, content string) string {
 	t.Helper()
-	scriptPath := filepath.Join(t.TempDir(), name)
+	dir := t.TempDir()
+	scriptPath := filepath.Join(dir, name)
 
-	f, err := os.OpenFile(scriptPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec // executable permission needed for test
+	// Write to a temporary name first, then rename to the target path.
+	// This avoids ETXTBSY (text file busy) on Linux CI runners where the
+	// kernel may retain an internal write reference after Close on overlayfs,
+	// causing exec to fail. The renamed file was never opened for writing at
+	// its final path, so exec succeeds immediately.
+	tmpPath := scriptPath + ".tmp"
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755) //nolint:gosec // executable permission needed for test
 	require.NoError(t, err)
 
 	_, err = f.WriteString(content)
@@ -42,15 +49,7 @@ func createTestScript(t *testing.T, name, content string) string {
 	require.NoError(t, f.Sync())
 	require.NoError(t, f.Close())
 
-	// Verify the file is fully committed to the filesystem. On some Linux
-	// systems (especially CI runners with overlayfs or slow storage), the
-	// kernel may still hold a write reference to the file even after
-	// Sync+Close return. Stat-ing the file and verifying the executable bit
-	// acts as a fence that ensures the file is ready for exec.
-	require.Eventually(t, func() bool {
-		info, statErr := os.Stat(scriptPath)
-		return statErr == nil && info.Mode()&0o111 != 0
-	}, 2*time.Second, 10*time.Millisecond, "script file should be stat-able and executable")
+	require.NoError(t, os.Rename(tmpPath, scriptPath))
 
 	return scriptPath
 }
