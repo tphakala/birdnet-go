@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -41,6 +42,7 @@ type AudioPipelineService struct {
 	bnAnalyzer *BirdNETAnalyzer
 	dbService  *DatabaseService
 	apiService *APIServerService
+	engine     *engine.AudioEngine
 
 	bufferMgr           *BufferManager
 	demuxMgr            *AudioDemuxManager
@@ -55,12 +57,13 @@ type AudioPipelineService struct {
 
 // NewAudioPipelineService creates a new AudioPipelineService with the given dependencies.
 // The service is not started; call Start() to initialize the audio pipeline.
-func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, apiService *APIServerService) *AudioPipelineService {
+func NewAudioPipelineService(settings *conf.Settings, bnAnalyzer *BirdNETAnalyzer, dbService *DatabaseService, apiService *APIServerService, audioEngine *engine.AudioEngine) *AudioPipelineService {
 	return &AudioPipelineService{
 		settings:   settings,
 		bnAnalyzer: bnAnalyzer,
 		dbService:  dbService,
 		apiService: apiService,
+		engine:     audioEngine,
 	}
 }
 

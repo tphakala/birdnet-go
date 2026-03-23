@@ -37,8 +37,8 @@ The "realtime" command is an alias for backward compatibility.`,
 			// shutdown happens in reverse within each tier.
 			bnAnalyzer := analysis.NewBirdNETAnalyzer(settings)
 			dbService := analysis.NewDatabaseService(settings, metrics)
-			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics)
-			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService)
+			apiService := analysis.NewAPIServerService(settings, bnAnalyzer, dbService, metrics, nil)
+			audioService := analysis.NewAudioPipelineService(settings, bnAnalyzer, dbService, apiService, nil)
 
 			application := app.New()
 			app.SetGlobal(application)
