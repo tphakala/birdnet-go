@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -370,7 +372,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 }
 
 // Execute saves the audio clip to a file
-func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
+func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// Get the full path by joining the export path with the relative clip name
 	outputPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.ClipName)
 
@@ -381,11 +383,29 @@ func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
 	}
 
 	if a.Settings.Realtime.Audio.Export.Type == "wav" {
-		if err := myaudio.SavePCMDataToWAV(outputPath, a.pcmData); err != nil {
+		if err := convert.SavePCMDataToWAV(outputPath, a.pcmData, conf.SampleRate, conf.BitDepth); err != nil {
 			return err
 		}
 	} else {
-		if err := myaudio.ExportAudioWithFFmpeg(a.pcmData, outputPath, &a.Settings.Realtime.Audio); err != nil {
+		exportSettings := &a.Settings.Realtime.Audio.Export
+		opts := &ffmpeg.ExportOptions{
+			PCMData:    a.pcmData,
+			OutputPath: outputPath,
+			Format:     exportSettings.Type,
+			Bitrate:    exportSettings.Bitrate,
+			SampleRate: conf.SampleRate,
+			Channels:   conf.NumChannels,
+			BitDepth:   conf.BitDepth,
+			FFmpegPath: a.Settings.Realtime.Audio.FfmpegPath,
+			GainDB:     exportSettings.Gain,
+			Normalization: ffmpeg.ExportNormalization{
+				Enabled:       exportSettings.Normalization.Enabled,
+				TargetLUFS:    exportSettings.Normalization.TargetLUFS,
+				TruePeak:      exportSettings.Normalization.TruePeak,
+				LoudnessRange: exportSettings.Normalization.LoudnessRange,
+			},
+		}
+		if err := ffmpeg.ExportAudio(ctx, opts); err != nil {
 			return err
 		}
 	}
