@@ -2,12 +2,15 @@ package convert
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -144,4 +147,94 @@ func byteSliceToInts(pcmData []byte) []int {
 	}
 
 	return samples
+}
+
+// EncodePCMtoWAVWithContext encodes PCM data in WAV format using context for cancellation/timeout.
+// The output uses the project-standard sample rate, bit depth, and channel count from conf.
+func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buffer, error) {
+	// Validate inputs
+	if ctx == nil {
+		return nil, errors.Newf("context parameter is nil").
+			Component("audiocore/convert").
+			Category(errors.CategoryValidation).
+			Context("operation", "encode_pcm_to_wav_context").
+			Build()
+	}
+
+	if len(pcmData) == 0 {
+		return nil, errors.Newf("PCM data is empty for WAV encoding").
+			Component("audiocore/convert").
+			Category(errors.CategoryValidation).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("data_size", 0).
+			Build()
+	}
+
+	// Constants for WAV format
+	const bitDepth = conf.BitDepth       // Bits per sample
+	const sampleRate = conf.SampleRate   // Sample rate
+	const numChannels = conf.NumChannels // Mono audio
+
+	// Calculating sizes and rates
+	byteRate := sampleRate * numChannels * (bitDepth / 8) // 48000 * 1 * 2 = 96000 bytes per second
+	blockAlign := numChannels * (bitDepth / 8)            // 1 * 2 = 2 bytes per frame
+	subChunk2Size := uint32(len(pcmData))                 //nolint:gosec // G115: PCM data length bounded by available memory
+	chunkSize := 36 + subChunk2Size                       // 36 is fixed size for header
+
+	// Initialize a buffer to build the WAV file
+	buffer := bytes.NewBuffer(nil)
+
+	// List of data elements to write sequentially to the buffer
+	elements := []any{
+		[]byte("RIFF"), chunkSize, []byte("WAVE"),
+		[]byte("fmt "), uint32(16), uint16(1), uint16(numChannels),
+		uint32(sampleRate), uint32(byteRate), uint16(blockAlign), uint16(bitDepth),
+		[]byte("data"), subChunk2Size,
+	}
+
+	// Check if context is done before proceeding
+	select {
+	case <-ctx.Done():
+		return nil, errors.New(ctx.Err()).
+			Component("audiocore/convert").
+			Category(errors.CategorySystem).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("stage", "context_check").
+			Build()
+	default:
+		// Continue with writing
+	}
+
+	// Sequential write operation handling errors
+	for _, elem := range elements {
+		if b, ok := elem.([]byte); ok {
+			// Ensure all byte slices are properly converted before writing
+			if _, err := buffer.Write(b); err != nil {
+				return nil, fmt.Errorf("failed to write byte slice to buffer: %w", err)
+			}
+		} else {
+			// Handle all other data types
+			if err := binary.Write(buffer, binary.LittleEndian, elem); err != nil {
+				return nil, errors.New(err).
+					Component("audiocore/convert").
+					Category(errors.CategorySystem).
+					Context("operation", "encode_pcm_to_wav_context").
+					Context("stage", "write_header_element").
+					Build()
+			}
+		}
+	}
+
+	// Write PCM data to buffer
+	if _, err := buffer.Write(pcmData); err != nil {
+		return nil, errors.New(err).
+			Component("audiocore/convert").
+			Category(errors.CategorySystem).
+			Context("operation", "encode_pcm_to_wav_context").
+			Context("stage", "write_pcm_data").
+			Context("pcm_data_size", len(pcmData)).
+			Build()
+	}
+
+	return buffer, nil
 }

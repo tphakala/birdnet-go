@@ -11,15 +11,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 func TestEncodePCMtoWAV_EmptyInput(t *testing.T) {
 	// Test with empty PCM data
 	emptyData := []byte{}
 	ctx := t.Context()
-	_, err := myaudio.EncodePCMtoWAVWithContext(ctx, emptyData)
+	_, err := convert.EncodePCMtoWAVWithContext(ctx, emptyData)
 
 	require.Error(t, err, "EncodePCMtoWAVWithContext should return an error with empty PCM data")
 	assert.Equal(t, "PCM data is empty for WAV encoding", err.Error())
@@ -39,7 +39,7 @@ func TestEncodePCMtoWAV_ValidInput(t *testing.T) {
 
 	// Encode to WAV
 	ctx := t.Context()
-	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
+	wavBuffer, err := convert.EncodePCMtoWAVWithContext(ctx, pcmData)
 
 	// Check for errors
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with valid input")
@@ -93,7 +93,7 @@ func TestEncodePCMtoWAV_SmallInput(t *testing.T) {
 	smallData := []byte{0x01, 0x02, 0x03, 0x04} // Just 4 bytes
 
 	ctx := t.Context()
-	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, smallData)
+	wavBuffer, err := convert.EncodePCMtoWAVWithContext(ctx, smallData)
 
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with small input")
 
@@ -119,7 +119,7 @@ func TestEncodePCMtoWAV_RecreateOriginalPCM(t *testing.T) {
 
 	// Encode to WAV
 	ctx := t.Context()
-	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, pcmData)
+	wavBuffer, err := convert.EncodePCMtoWAVWithContext(ctx, pcmData)
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed")
 
 	// Read the WAV file data
@@ -147,7 +147,7 @@ func TestEncodePCMtoWAV_LargeInput(t *testing.T) {
 	}
 
 	ctx := t.Context()
-	wavBuffer, err := myaudio.EncodePCMtoWAVWithContext(ctx, largeData)
+	wavBuffer, err := convert.EncodePCMtoWAVWithContext(ctx, largeData)
 	require.NoError(t, err, "EncodePCMtoWAVWithContext failed with large input")
 
 	// Check that the returned buffer size is correct (header + data)
@@ -171,7 +171,7 @@ func TestContextTimeout(t *testing.T) {
 	time.Sleep(5 * time.Millisecond)
 
 	// This should fail due to context cancellation
-	_, err := myaudio.EncodePCMtoWAVWithContext(ctx, largeData)
+	_, err := convert.EncodePCMtoWAVWithContext(ctx, largeData)
 	require.Error(t, err, "Expected context timeout error")
 	assert.ErrorIs(t, err, context.DeadlineExceeded, "Expected context.DeadlineExceeded error")
 }
