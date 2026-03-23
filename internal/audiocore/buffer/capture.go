@@ -244,12 +244,14 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 	}
 
 	// Derive the circular-buffer base offset from the monotonic byte
-	// counter. After wrap-around the oldest valid byte sits at writeIndex
-	// (which equals totalBytesWritten % bufferSize). Before wrap-around,
-	// data starts at byte 0.
+	// counter. The logical window (duration * sampleRate * bytesPerSample)
+	// may be smaller than bufferSize due to alignment padding. Using
+	// logicalWindowBytes ensures the base offset points to the oldest
+	// valid sample, not into alignment padding bytes.
+	logicalWindowBytes := min(cb.writtenBytes, int(cb.bufferDuration.Seconds())*cb.sampleRate*cb.bytesPerSample)
 	baseOffset := 0
 	if cb.wrapped {
-		baseOffset = int(cb.totalBytesWritten % int64(cb.bufferSize))
+		baseOffset = int((cb.totalBytesWritten - int64(logicalWindowBytes)) % int64(cb.bufferSize))
 	}
 	startIdx := (baseOffset + startByteOffset) % cb.bufferSize
 	endIdx := (baseOffset + endByteOffset) % cb.bufferSize

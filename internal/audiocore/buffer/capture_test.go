@@ -420,3 +420,57 @@ func TestCaptureBuffer_MonotonicBaseOffset(t *testing.T) {
 		}
 	}
 }
+
+// TestCaptureBuffer_AlignmentPaddedBaseOffset verifies that the base offset
+// calculation is correct when the backing buffer includes alignment padding.
+// With a sample rate that does NOT produce a buffer size evenly divisible by
+// captureBufferAlignment (2048), the buffer is rounded up, creating a gap
+// between the logical window and the physical buffer size. The baseOffset
+// must still point to the oldest valid sample, not into the padding region.
+func TestCaptureBuffer_AlignmentPaddedBaseOffset(t *testing.T) {
+	t.Parallel()
+
+	// 1000 Hz * 2 bytes/sample * 3 seconds = 6000 bytes.
+	// Aligned to 2048: ceil(6000/2048)*2048 = 3*2048 = 6144 bytes.
+	// Padding = 144 bytes, enough to verify the fix.
+	const (
+		durationSeconds = 3
+		sampleRate      = 1000
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample // 2000 bytes = 1 second
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "padded-source")
+	require.NoError(t, err)
+
+	// Write 6 distinguishable 1-second chunks into a 3-second buffer.
+	// After wrapping, only the last 3 chunks should remain: 0x44, 0x55, 0x66.
+	fills := []byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
+	for _, fill := range fills {
+		chunk := make([]byte, chunkSize)
+		for j := range chunk {
+			chunk[j] = fill
+		}
+		require.NoError(t, cb.Write(chunk))
+	}
+
+	bufStart := cb.StartTime()
+
+	// Read each 1-second window and verify the correct fill value.
+	expectedFills := []byte{0x44, 0x55, 0x66}
+	for i, expected := range expectedFills {
+		start := bufStart.Add(time.Duration(i) * time.Second)
+		end := bufStart.Add(time.Duration(i+1) * time.Second)
+
+		seg, err := cb.ReadSegment(start, end)
+		require.NoError(t, err, "second %d", i)
+		require.Len(t, seg, chunkSize, "second %d", i)
+
+		for j, b := range seg {
+			if b != expected {
+				t.Errorf("second %d, byte %d: got %#02x, want %#02x", i, j, b, expected)
+				break
+			}
+		}
+	}
+}
