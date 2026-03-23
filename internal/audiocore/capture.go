@@ -21,6 +21,22 @@ const (
 	captureOSDarwin  = "darwin"
 )
 
+// Device identifier tokens used to match platform default devices.
+// On Windows and macOS, these select the system default capture device
+// (IsDefault == 1). On Linux/ALSA, "sysdefault" and "default" are real
+// ALSA PCM device names resolved by the ALSA configuration, so they are
+// matched by substring against the device name or exact match against the
+// decoded device ID (handled by the general matching path).
+const (
+	// DeviceIDSysDefault is the ALSA pseudo-device that routes to the
+	// kernel-configured default sound card.
+	DeviceIDSysDefault = "sysdefault"
+
+	// DeviceIDDefault is the ALSA/PulseAudio default device, or the
+	// platform default on Windows (WASAPI) and macOS (CoreAudio).
+	DeviceIDDefault = "default"
+)
+
 // platformBackend returns the preferred malgo backend for the current OS.
 func platformBackend() malgo.Backend {
 	switch runtime.GOOS {
@@ -47,6 +63,11 @@ func hexToASCII(hexStr string) (string, error) {
 
 // listDevices enumerates capture devices on the host using malgo.
 // It skips null/discard devices and deduplicates by name (ALSA pseudo-devices).
+//
+// malgo cleanup: InitContext allocates a C ma_context via ma_malloc. The caller
+// must call Uninit() (ma_context_uninit) to release backend resources, then
+// Free() (ma_free) to release the C heap allocation. Device.Uninit() handles
+// both steps internally, but AllocatedContext requires the two-step teardown.
 func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 	backend := platformBackend()
 
@@ -55,9 +76,12 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 		return nil, fmt.Errorf("failed to initialize audio context: %w", err)
 	}
 	defer func() {
+		// Uninit releases backend resources (ALSA/WASAPI/CoreAudio handles).
 		if uninitErr := ctx.Uninit(); uninitErr != nil {
 			log.Error("failed to uninitialize audio context", logger.Error(uninitErr))
 		}
+		// Free releases the C heap memory allocated by ma_malloc in InitContext.
+		ctx.Free()
 	}()
 
 	infos, err := ctx.Devices(malgo.Capture)
@@ -98,24 +122,45 @@ func listDevices(log logger.Logger) ([]DeviceInfo, error) {
 	return devices, nil
 }
 
+// isDefaultDeviceToken reports whether deviceID is one of the well-known
+// tokens that refer to the platform's default audio device.
+func isDefaultDeviceToken(deviceID string) bool {
+	return deviceID == DeviceIDSysDefault || deviceID == DeviceIDDefault
+}
+
 // matchesDevice reports whether the device identified by (decodedID, info)
 // should be selected for the requested deviceID string.
 //
-// On Windows and macOS the "default"/"sysdefault" token selects the system
-// default device. Otherwise, either a substring of the name or an exact ID
-// match is accepted.
+// On Windows and macOS the DeviceIDDefault / DeviceIDSysDefault token selects
+// the system default device. Otherwise, either a substring of the name or an
+// exact ID match is accepted.
 func matchesDevice(decodedID string, info *malgo.DeviceInfo, deviceID string) bool {
 	if (runtime.GOOS == captureOSWindows || runtime.GOOS == captureOSDarwin) &&
-		(deviceID == "sysdefault" || deviceID == "default") {
+		isDefaultDeviceToken(deviceID) {
 		return info.IsDefault == 1
 	}
 	return decodedID == deviceID || strings.Contains(info.Name(), deviceID)
+}
+
+// uninitAndFreeContext performs the two-step malgo context teardown:
+// Uninit releases backend resources, Free releases the C heap allocation.
+// This must be called for every AllocatedContext returned by malgo.InitContext.
+func uninitAndFreeContext(ctx *malgo.AllocatedContext, log logger.Logger) {
+	if uninitErr := ctx.Uninit(); uninitErr != nil {
+		log.Error("failed to uninitialize malgo context", logger.Error(uninitErr))
+	}
+	ctx.Free()
 }
 
 // startCapture locates the requested device, initialises a malgo context and
 // device, and starts the capture goroutine. It returns the DeviceInfo for the
 // selected device and a done channel that is closed when the capture goroutine
 // exits.
+//
+// malgo cleanup strategy: Device.Uninit() calls both ma_device_uninit and
+// ma_free internally, so a single call suffices. AllocatedContext requires
+// Uninit() (ma_context_uninit) followed by Free() (ma_free) — see
+// uninitAndFreeContext.
 //
 // The capture goroutine will be stopped when ctx is cancelled.
 func startCapture(
@@ -136,7 +181,7 @@ func startCapture(
 
 	infos, err := malgoCtx.Devices(malgo.Capture)
 	if err != nil {
-		_ = malgoCtx.Uninit()
+		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, fmt.Errorf("enumerate capture devices: %w", err)
 	}
 
@@ -160,7 +205,7 @@ func startCapture(
 	}
 
 	if selectedInfo == nil {
-		_ = malgoCtx.Uninit()
+		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, fmt.Errorf("no device found matching %q", deviceID)
 	}
 
@@ -200,7 +245,7 @@ func startCapture(
 
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
 	if err != nil {
-		_ = malgoCtx.Uninit()
+		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, fmt.Errorf("device init failed for %q: %w", selectedDevInfo.Name, err)
 	}
 
@@ -208,8 +253,9 @@ func startCapture(
 	formatType = captureDevice.CaptureFormat()
 
 	if err = captureDevice.Start(); err != nil {
+		// Device.Uninit() handles both ma_device_uninit and ma_free internally.
 		captureDevice.Uninit()
-		_ = malgoCtx.Uninit()
+		uninitAndFreeContext(malgoCtx, log)
 		return DeviceInfo{}, nil, fmt.Errorf("device start failed for %q: %w", selectedDevInfo.Name, err)
 	}
 
@@ -234,9 +280,15 @@ func startCapture(
 			}
 		}()
 		defer func() {
-			_ = captureDevice.Stop()
+			// Device.Uninit() calls both ma_device_uninit and ma_free.
+			if err := captureDevice.Stop(); err != nil {
+				log.Error("failed to stop capture device",
+					logger.String("source_id", sourceID),
+					logger.Error(err))
+			}
 			captureDevice.Uninit()
-			_ = malgoCtx.Uninit()
+			// Context requires explicit two-step teardown.
+			uninitAndFreeContext(malgoCtx, log)
 			log.Info("malgo capture device stopped",
 				logger.String("source_id", sourceID),
 				logger.String("device", selectedDevInfo.Name))

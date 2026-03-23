@@ -11,8 +11,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// ErrEngineStopped is the cause passed to the engine's context cancellation
+// when Stop is called. Shutdown handlers can check for this sentinel to
+// distinguish a deliberate stop from other cancellation causes.
+var ErrEngineStopped = errors.Newf("AudioEngine: stop requested").
+	Component("audiocore").Category(errors.CategoryState).Build()
 
 // isStreamType reports whether the source type uses FFmpeg for capture.
 func isStreamType(t audiocore.SourceType) bool {
@@ -346,7 +353,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 // audio router, and quiet hours scheduler. It should be called once when the
 // application is shutting down.
 func (e *AudioEngine) Stop() {
-	e.cancel(fmt.Errorf("AudioEngine: stop requested"))
+	e.cancel(ErrEngineStopped)
 
 	// Shut down FFmpeg streams.
 	if err := e.ffmpegMgr.Shutdown(); err != nil {
