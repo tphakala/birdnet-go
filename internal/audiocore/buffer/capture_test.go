@@ -225,3 +225,198 @@ func TestCaptureBuffer_WriteEmpty(t *testing.T) {
 	err = cb.Write([]byte{})
 	assert.NoError(t, err, "writing empty data should not error")
 }
+
+// TestCaptureBuffer_TotalBytesWritten verifies that the monotonic byte counter
+// increases correctly and is not capped at buffer size.
+func TestCaptureBuffer_TotalBytesWritten(t *testing.T) {
+	t.Parallel()
+
+	const (
+		durationSeconds = 3
+		sampleRate      = 48000
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample // 1 second per chunk
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "counter-source")
+	require.NoError(t, err)
+
+	chunk := make([]byte, chunkSize)
+
+	// Write 6 seconds into a 3-second buffer.
+	for range 6 {
+		require.NoError(t, cb.Write(chunk))
+	}
+
+	// TotalBytesWritten should reflect all 6 chunks, not capped.
+	expectedTotal := int64(6 * chunkSize)
+	assert.Equal(t, expectedTotal, cb.TotalBytesWritten(),
+		"total bytes written must count all writes, not just buffered data")
+
+	// WrittenBytes should be capped at approximately the buffer size
+	// (the actual buffer is aligned up to a 2048-byte boundary).
+	rawBufferSize := durationSeconds * sampleRate * bytesPerSample
+	assert.LessOrEqual(t, cb.WrittenBytes(), rawBufferSize+2048,
+		"written bytes should be capped at approximately the buffer size")
+	assert.GreaterOrEqual(t, cb.WrittenBytes(), rawBufferSize,
+		"written bytes should be at least the raw buffer size")
+}
+
+// TestCaptureBuffer_TotalBytesWrittenResetsOnReset verifies that Reset zeroes
+// the monotonic counter.
+func TestCaptureBuffer_TotalBytesWrittenResetsOnReset(t *testing.T) {
+	t.Parallel()
+
+	const (
+		durationSeconds = 5
+		sampleRate      = 48000
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "reset-counter-source")
+	require.NoError(t, err)
+
+	chunk := make([]byte, chunkSize)
+	require.NoError(t, cb.Write(chunk))
+	require.NoError(t, cb.Write(chunk))
+	assert.Equal(t, int64(2*chunkSize), cb.TotalBytesWritten())
+
+	cb.Reset()
+	assert.Equal(t, int64(0), cb.TotalBytesWritten(),
+		"total bytes written must be zero after Reset")
+}
+
+// TestCaptureBuffer_ReadSegmentInsufficientData verifies that ReadSegment
+// returns ErrInsufficientData when requesting a segment from a region that
+// has not yet been written (partially filled buffer).
+func TestCaptureBuffer_ReadSegmentInsufficientData(t *testing.T) {
+	t.Parallel()
+
+	const (
+		durationSeconds = 10
+		sampleRate      = 48000
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample // 1 second per chunk
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "insufficient-source")
+	require.NoError(t, err)
+
+	// Write only 2 seconds into a 10-second buffer.
+	chunk := make([]byte, chunkSize)
+	for range 2 {
+		require.NoError(t, cb.Write(chunk))
+	}
+
+	bufStart := cb.StartTime()
+
+	// Request [0s, 2s] should succeed (exactly what was written).
+	seg, err := cb.ReadSegment(bufStart, bufStart.Add(2*time.Second))
+	require.NoError(t, err)
+	assert.Len(t, seg, 2*chunkSize)
+
+	// Request [0s, 5s] should fail: 5 seconds requested but only 2 written.
+	seg, err = cb.ReadSegment(bufStart, bufStart.Add(5*time.Second))
+	require.Error(t, err)
+	assert.Nil(t, seg)
+	assert.ErrorIs(t, err, buffer.ErrInsufficientData)
+}
+
+// TestCaptureBuffer_ReadSegmentFullBufferNoError verifies that reading from a
+// fully populated buffer does not trigger ErrInsufficientData.
+func TestCaptureBuffer_ReadSegmentFullBufferNoError(t *testing.T) {
+	t.Parallel()
+
+	const (
+		durationSeconds = 3
+		sampleRate      = 48000
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample // 1 second per chunk
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "full-buffer-source")
+	require.NoError(t, err)
+
+	chunk := make([]byte, chunkSize)
+	for i := range chunk {
+		chunk[i] = 0xCC
+	}
+
+	// Fill the buffer exactly (3 seconds into a 3-second buffer).
+	for range 3 {
+		require.NoError(t, cb.Write(chunk))
+	}
+
+	bufStart := cb.StartTime()
+	seg, err := cb.ReadSegment(bufStart, bufStart.Add(2*time.Second))
+	require.NoError(t, err, "reading from a fully populated buffer should succeed")
+	assert.Len(t, seg, 2*chunkSize)
+}
+
+// TestCaptureBuffer_MonotonicBaseOffset verifies that after wrapping, the base
+// offset derived from totalBytesWritten produces correct data extraction. This
+// tests the fix for wall-clock jitter in byte offset calculations.
+//
+// Uses a sample rate that produces chunk sizes evenly divisible by
+// captureBufferAlignment to avoid alignment-padding edge cases.
+func TestCaptureBuffer_MonotonicBaseOffset(t *testing.T) {
+	t.Parallel()
+
+	// 1024 Hz * 2 bytes/sample = 2048 bytes/sec, a multiple of the
+	// captureBufferAlignment constant, so no padding is added.
+	const (
+		durationSeconds = 3
+		sampleRate      = 1024
+		bytesPerSample  = 2
+		chunkSize       = sampleRate * bytesPerSample // 2048 bytes = 1 second
+	)
+
+	cb, err := buffer.NewCaptureBuffer(durationSeconds, sampleRate, bytesPerSample, "monotonic-source")
+	require.NoError(t, err)
+
+	// Write 6 distinguishable 1-second chunks into a 3-second buffer.
+	// After wrapping, only the last 3 chunks should remain: 0x44, 0x55, 0x66.
+	fills := []byte{0x11, 0x22, 0x33, 0x44, 0x55, 0x66}
+	for _, fill := range fills {
+		chunk := make([]byte, chunkSize)
+		for j := range chunk {
+			chunk[j] = fill
+		}
+		require.NoError(t, cb.Write(chunk))
+	}
+
+	// After 6 writes into a 3-second buffer, the buffer has wrapped twice.
+	// Use StartTime-anchored offsets to read the first second of valid data.
+	bufStart := cb.StartTime()
+	seg, err := cb.ReadSegment(bufStart, bufStart.Add(1*time.Second))
+	require.NoError(t, err)
+	require.Len(t, seg, chunkSize)
+
+	// The first second after wrap should contain 0x44 (chunk index 3).
+	for i, b := range seg {
+		if b != 0x44 {
+			t.Errorf("byte %d: got %#02x, want 0x44", i, b)
+			break
+		}
+	}
+
+	// The second and third seconds should be 0x55 and 0x66 respectively.
+	seg2, err := cb.ReadSegment(bufStart.Add(1*time.Second), bufStart.Add(2*time.Second))
+	require.NoError(t, err)
+	for i, b := range seg2 {
+		if b != 0x55 {
+			t.Errorf("second-second byte %d: got %#02x, want 0x55", i, b)
+			break
+		}
+	}
+
+	seg3, err := cb.ReadSegment(bufStart.Add(2*time.Second), bufStart.Add(3*time.Second))
+	require.NoError(t, err)
+	for i, b := range seg3 {
+		if b != 0x66 {
+			t.Errorf("third-second byte %d: got %#02x, want 0x66", i, b)
+			break
+		}
+	}
+}
