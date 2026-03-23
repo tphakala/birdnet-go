@@ -3755,7 +3755,8 @@
           "less_or_equal": "pienempi tai yhtä suuri"
         }
       },
-      "v2Required": "Hälytyssäännöt vaativat laajennetun tietokantaskeeman. Voit siirtää tietokantasi Järjestelmä-valikon Tietokanta-sivulta.",
+      "v2Required": "Hälytyssäännöt vaativat päivitetyn tietokantaskeeman. Voit päivittää tietokantasi",
+      "v2RequiredLink": "Järjestelmän tietokantasivulta.",
       "builtInRules": {
         "newSpecies": {
           "name": "Uusi laji havaittu",

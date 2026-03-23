@@ -3755,7 +3755,8 @@
           "less_or_equal": "menor o igual"
         }
       },
-      "v2Required": "Se requiere el esquema de base de datos mejorado para las reglas de alerta. Puede migrar su base de datos desde la página Base de datos en Sistema.",
+      "v2Required": "Las reglas de alerta requieren un esquema de base de datos actualizado. Puede actualizar su base de datos desde la",
+      "v2RequiredLink": "página de Base de datos del Sistema.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nueva especie detectada",

@@ -3782,7 +3782,8 @@
           "less_or_equal": "mindre end eller lig med"
         }
       },
-      "v2Required": "Det udvidede databaseskema er påkrævet for alarmregler. Du kan migrere din database fra Databasesiden under System.",
+      "v2Required": "Alarmregler kræver et opdateret databaseskema. Du kan opdatere din database fra",
+      "v2RequiredLink": "Systemets databaseside.",
       "builtInRules": {
         "newSpecies": {
           "name": "Ny art registreret",

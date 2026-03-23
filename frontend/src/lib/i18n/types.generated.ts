@@ -2652,6 +2652,7 @@ export type TranslationKey =
   | 'settings.alerts.schema.operators.greater_or_equal'
   | 'settings.alerts.schema.operators.less_or_equal'
   | 'settings.alerts.v2Required'
+  | 'settings.alerts.v2RequiredLink'
   | 'settings.alerts.builtInRules.newSpecies.name'
   | 'settings.alerts.builtInRules.newSpecies.description'
   | 'settings.alerts.builtInRules.streamDisconnected.name'

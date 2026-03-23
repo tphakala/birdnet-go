@@ -3755,7 +3755,8 @@
           "less_or_equal": "inférieur ou égal"
         }
       },
-      "v2Required": "Le schéma de base de données amélioré est requis pour les règles d'alerte. Vous pouvez migrer votre base de données depuis la page Base de données sous Système.",
+      "v2Required": "Les règles d'alerte nécessitent un schéma de base de données mis à jour. Vous pouvez mettre à jour votre base de données depuis la",
+      "v2RequiredLink": "page Base de données du Système.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nouvelle espèce détectée",

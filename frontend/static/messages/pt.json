@@ -3755,7 +3755,8 @@
           "less_or_equal": "menor ou igual"
         }
       },
-      "v2Required": "O esquema de banco de dados aprimorado é necessário para regras de alerta. Você pode migrar seu banco de dados na página Banco de dados em Sistema.",
+      "v2Required": "As regras de alerta requerem um esquema de banco de dados atualizado. Você pode atualizar seu banco de dados na",
+      "v2RequiredLink": "página de Banco de dados do Sistema.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nova espécie detetada",

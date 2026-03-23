@@ -3755,7 +3755,8 @@
           "less_or_equal": "mniejsze lub równe"
         }
       },
-      "v2Required": "Rozszerzony schemat bazy danych jest wymagany dla reguł alertów. Możesz przeprowadzić migrację bazy danych na stronie Baza danych w sekcji System.",
+      "v2Required": "Reguły alertów wymagają zaktualizowanego schematu bazy danych. Możesz zaktualizować bazę danych na",
+      "v2RequiredLink": "stronie Bazy danych w sekcji System.",
       "builtInRules": {
         "newSpecies": {
           "name": "Wykryto nowy gatunek",

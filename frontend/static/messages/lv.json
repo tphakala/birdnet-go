@@ -3782,7 +3782,8 @@
           "less_or_equal": "mazāks vai vienāds"
         }
       },
-      "v2Required": "Brīdinājumu noteikumiem nepieciešama uzlabotā datu bāzes shēma. Varat migrēt savu datu bāzi no datu bāzes lapas sadaļā Sistēma.",
+      "v2Required": "Brīdinājumu noteikumiem nepieciešama atjaunināta datu bāzes shēma. Varat atjaunināt savu datu bāzi no",
+      "v2RequiredLink": "Sistēmas datu bāzes lapas.",
       "builtInRules": {
         "newSpecies": {
           "name": "Jauna suga noteikta",

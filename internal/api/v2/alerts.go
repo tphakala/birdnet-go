@@ -21,24 +21,12 @@ import (
 const maxHistoryLimit = 200
 
 // initAlertRoutes registers alert rule API endpoints and starts the alerting engine.
+// Routes are always registered (handlers check v2 mode per-request), but the
+// alerting engine is only started when the v2 schema is active — preventing
+// background operations (rule seeding, history cleanup) against missing tables.
 func (c *Controller) initAlertRoutes() {
 	if c.V2Manager == nil {
 		return
-	}
-
-	// Initialize repository lazily from V2Manager
-	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB())
-
-	// Initialize the alerting engine — seeds default rules and starts event processing
-	alertTelemetry := alerting.NewAlertingTelemetry()
-	eventBus := alerting.NewAlertEventBus(alertTelemetry)
-	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger(), alertTelemetry)
-	if err != nil {
-		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
-		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
-		// Continue without engine — CRUD routes still work, but events won't fire
-	} else {
-		c.alertEngine = engine
 	}
 
 	alerts := c.Group.Group("/alerts")
@@ -60,6 +48,29 @@ func (c *Controller) initAlertRoutes() {
 	protected.POST("/rules/reset-defaults", c.ResetDefaultAlertRules)
 	protected.POST("/rules/import", c.ImportAlertRules)
 	protected.DELETE("/history", c.ClearAlertHistory)
+
+	// Only initialize the alerting engine when v2 schema is active.
+	// On legacy databases the alert tables do not exist, so starting the
+	// engine would fail during rule seeding and history cleanup.
+	if !datastoreV2.IsEnhancedDatabase() {
+		GetLogger().Info("alerting engine skipped: v2 database schema not active")
+		return
+	}
+
+	// Initialize repository lazily from V2Manager
+	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB())
+
+	// Initialize the alerting engine — seeds default rules and starts event processing
+	alertTelemetry := alerting.NewAlertingTelemetry()
+	eventBus := alerting.NewAlertEventBus(alertTelemetry)
+	engine, err := alerting.Initialize(c.alertRuleRepo, eventBus, GetLogger(), alertTelemetry)
+	if err != nil {
+		GetLogger().Error("failed to initialize alerting engine", logger.Error(err))
+		eventBus.Stop() // Stop the bus goroutine since Initialize didn't set it as global
+		// Continue without engine — CRUD routes still work, but events won't fire
+	} else {
+		c.alertEngine = engine
+	}
 }
 
 // validateEscalationSteps checks that escalation steps (when provided) contain no

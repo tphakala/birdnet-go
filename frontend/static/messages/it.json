@@ -3552,7 +3552,8 @@
           "less_or_equal": "minore o uguale"
         }
       },
-      "v2Required": "Lo schema del database avanzato è necessario per le regole di allerta. Puoi migrare il database dalla pagina Database sotto Sistema.",
+      "v2Required": "Le regole di allerta richiedono uno schema del database aggiornato. Puoi aggiornare il database dalla",
+      "v2RequiredLink": "pagina Database del Sistema.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nuova specie rilevata",

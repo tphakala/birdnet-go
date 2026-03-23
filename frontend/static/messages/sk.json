@@ -3586,7 +3586,8 @@
           "less_or_equal": "menšie alebo rovné"
         }
       },
-      "v2Required": "Pre pravidlá upozornení je potrebná rozšírená schéma databázy. Databázu môžete migrovať na stránke Databáza v sekcii Systém.",
+      "v2Required": "Pravidlá upozornení vyžadujú aktualizovanú schému databázy. Databázu môžete aktualizovať na",
+      "v2RequiredLink": "stránke Databáza v sekcii Systém.",
       "builtInRules": {
         "newSpecies": {
           "name": "Nový druh zistený",
