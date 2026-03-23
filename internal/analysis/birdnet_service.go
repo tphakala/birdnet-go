@@ -7,7 +7,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // birdNETAnalyzerName is the service name used for logging and diagnostics.
@@ -53,7 +52,7 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 			Build()
 	}
 
-	if err := myaudio.InitFloat32Pool(); err != nil {
+	if err := InitFloat32Pool(); err != nil {
 		bn.Delete()
 		return errors.New(err).
 			Component("analysis").

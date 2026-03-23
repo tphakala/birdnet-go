@@ -521,7 +521,7 @@ func (p *Processor) startDetectionProcessor() {
 	GetLogger().Info("Starting detection processor",
 		logger.String("operation", "detection_processor_startup"))
 	go func() {
-		// ResultsQueue is fed by myaudio.ProcessData()
+		// ResultsQueue is fed by analysis.ProcessData()
 		for item := range birdnet.ResultsQueue {
 			// Pass by value since we own the data (see queue.go ownership comment)
 			p.processDetections(item)

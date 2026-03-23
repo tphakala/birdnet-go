@@ -10,7 +10,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 )
 
 // BufferManager handles the lifecycle of analysis buffer monitors
@@ -341,11 +340,8 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 }
 
 // analysisBufferMonitor reads from the audiocore analysis buffer and feeds
-// audio chunks to the BirdNET analysis pipeline. It replaces the legacy
-// myaudio.AnalysisBufferMonitor.
+// audio chunks to the BirdNET analysis pipeline.
 func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID string) {
-	// Import-free reference to myaudio.ProcessData via the analysis package.
-	// The function signature is: ProcessData(bn, data, startTime, audioCapturedAt, source) error.
 	const detectionOffset = 10 * time.Second
 	const pollInterval = 100 * time.Millisecond
 	// analysisWindowBytes is the expected size of a full analysis window
@@ -384,7 +380,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 				startTime := time.Now().Add(-beginTimeOffset)
 
-				if processErr := myaudio.ProcessData(m.bn, data, startTime, audioCapturedAt, sourceID); processErr != nil {
+				if processErr := ProcessData(m.bn, data, startTime, audioCapturedAt, sourceID); processErr != nil {
 					m.logger.Error("error processing data",
 						logger.String("source_id", sourceID),
 						logger.Error(processErr))
