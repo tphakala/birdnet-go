@@ -421,9 +421,8 @@ func ValidateWebhookProvider(p *PushProviderConfig) ValidationResult {
 	}
 
 	// Validate custom template if specified.
-	// Register the same function names that notification.TemplateFuncs provides
-	// so Parse() accepts templates using custom functions like "title" or "formatTime".
-	// We can't import notification here (circular dep), but Parse() only needs the names.
+	// Use the shared templatefuncs.Funcs so Parse() accepts custom functions
+	// like "title" or "formatTime".
 	if p.Template != "" {
 		if _, err := template.New("validation").Funcs(templatefuncs.Funcs).Parse(p.Template); err != nil {
 			result.Valid = false
