@@ -17,11 +17,11 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"golang.org/x/sync/singleflight"
@@ -332,7 +332,7 @@ func parseRawParameter(rawParam string) bool {
 // temp file exists, the audio is still being written and the caller should
 // return 503 instead of 404.
 func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
-	tempPath := relClipPath + myaudio.TempExt
+	tempPath := relClipPath + ffmpeg.TempExt
 	info, err := c.SFS.StatRel(tempPath)
 	if err != nil {
 		return false
@@ -345,7 +345,7 @@ func (c *Controller) isAudioBeingEncoded(relClipPath string) bool {
 // Retry-After header, indicating that the audio file is still being encoded.
 func (c *Controller) handleAudioNotReady(ctx echo.Context) error {
 	ctx.Response().Header().Set("Retry-After", audioRetryAfterSeconds)
-	return c.HandleError(ctx, myaudio.ErrAudioFileNotReady,
+	return c.HandleError(ctx, ffmpeg.ErrAudioFileNotReady,
 		"Audio file is still being processed, please retry",
 		http.StatusServiceUnavailable)
 }
@@ -624,19 +624,19 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("end (%f) must be > start (%f)", req.End, req.Start),
 			"End time must be greater than start time", http.StatusBadRequest)
 	}
-	if req.End-req.Start > myaudio.MaxClipDurationSec {
-		return c.HandleError(ctx, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", req.End-req.Start, myaudio.MaxClipDurationSec),
+	if req.End-req.Start > ffmpeg.MaxClipDurationSec {
+		return c.HandleError(ctx, fmt.Errorf("clip duration (%.1fs) exceeds maximum (%ds)", req.End-req.Start, ffmpeg.MaxClipDurationSec),
 			"Clip duration too long", http.StatusBadRequest)
 	}
-	if !myaudio.IsSupportedClipFormat(req.Format) {
+	if !ffmpeg.IsSupportedClipFormat(req.Format) {
 		return c.HandleError(ctx, fmt.Errorf("unsupported format: %s", req.Format),
 			"Unsupported audio format", http.StatusBadRequest)
 	}
-	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !myaudio.IsValidGainDB(req.GainDB) {
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
 	}
@@ -681,9 +681,9 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	}
 
 	// Build filters from request (nil when no processing requested)
-	var filters *myaudio.AudioFilters
+	var filters *ffmpeg.AudioFilters
 	if req.Normalize || req.Denoise != "" || req.GainDB != 0 {
-		filters = &myaudio.AudioFilters{
+		filters = &ffmpeg.AudioFilters{
 			Normalize: req.Normalize,
 			Denoise:   req.Denoise,
 			GainDB:    req.GainDB,
@@ -691,7 +691,14 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	}
 
 	// Extract clip
-	buf, err := myaudio.ExtractAudioClip(ctx.Request().Context(), absolutePath, req.Start, req.End, req.Format, &c.Settings.Realtime.Audio, filters)
+	buf, err := ffmpeg.ExtractClip(ctx.Request().Context(), &ffmpeg.ClipOptions{
+		InputPath:  absolutePath,
+		Start:      req.Start,
+		End:        req.End,
+		Format:     req.Format,
+		Filters:    filters,
+		FFmpegPath: c.Settings.Realtime.Audio.FfmpegPath,
+	})
 	if err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
@@ -715,13 +722,13 @@ func clipMIMEType(format string) string {
 	switch format {
 	case "wav":
 		return MimeTypeWAV
-	case myaudio.FormatFLAC:
+	case ffmpeg.FormatFLAC:
 		return MimeTypeFLAC
-	case myaudio.FormatMP3:
+	case ffmpeg.FormatMP3:
 		return MimeTypeMP3
-	case myaudio.FormatAAC, myaudio.FormatALAC:
+	case ffmpeg.FormatAAC, ffmpeg.FormatALAC:
 		return MimeTypeM4A
-	case myaudio.FormatOpus:
+	case ffmpeg.FormatOpus:
 		return MimeTypeOGG
 	default:
 		return "application/octet-stream"
@@ -731,9 +738,9 @@ func clipMIMEType(format string) string {
 // clipFileExtension returns the file extension for a clip extraction format.
 func clipFileExtension(format string) string {
 	switch format {
-	case myaudio.FormatAAC, myaudio.FormatALAC:
+	case ffmpeg.FormatAAC, ffmpeg.FormatALAC:
 		return "m4a"
-	case myaudio.FormatOpus:
+	case ffmpeg.FormatOpus:
 		return "ogg"
 	default:
 		return format // wav, flac, mp3 use format name as extension
@@ -757,11 +764,11 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	}
 
 	// Validate denoise preset and gain range
-	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !myaudio.IsValidGainDB(req.GainDB) {
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
 	}
@@ -789,7 +796,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	}
 
 	// Check cache
-	filters := myaudio.AudioFilters{
+	filters := ffmpeg.AudioFilters{
 		Normalize: req.Normalize,
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
@@ -810,7 +817,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 			"Server busy, try again later", http.StatusServiceUnavailable)
 	}
 
-	buf, err := myaudio.ProcessAudioFile(ctx.Request().Context(), absolutePath,
+	buf, err := ffmpeg.ProcessAudioFile(ctx.Request().Context(), absolutePath,
 		c.Settings.Realtime.Audio.FfmpegPath, filters)
 	if err != nil {
 		if ctx.Request().Context().Err() != nil {
@@ -856,11 +863,11 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Validate inputs
-	if !myaudio.IsValidDenoisePreset(req.Denoise) {
+	if !ffmpeg.IsValidDenoisePreset(req.Denoise) {
 		return c.HandleError(ctx, fmt.Errorf("invalid denoise preset: %q", req.Denoise),
 			"Invalid denoise preset", http.StatusBadRequest)
 	}
-	if !myaudio.IsValidGainDB(req.GainDB) {
+	if !ffmpeg.IsValidGainDB(req.GainDB) {
 		return c.HandleError(ctx, fmt.Errorf("gain_db out of range: %f", req.GainDB),
 			"Gain must be between -60 and 60 dB", http.StatusBadRequest)
 	}
@@ -904,7 +911,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 
 	// Process audio directly to a temp file (not pipe) so WAV header is correct.
 	// ProcessAudioFile uses pipe:1 which produces broken WAV headers (size=INT32_MAX).
-	filters := myaudio.AudioFilters{
+	filters := ffmpeg.AudioFilters{
 		Normalize: req.Normalize,
 		Denoise:   req.Denoise,
 		GainDB:    req.GainDB,
@@ -917,7 +924,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	_ = tmpFile.Close()
 	defer func() { _ = os.Remove(tmpPath) }()
 
-	if err := myaudio.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
+	if err := ffmpeg.ProcessAudioToFile(ctx.Request().Context(), absolutePath,
 		c.Settings.Realtime.Audio.FfmpegPath, filters, tmpPath); err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil // Client disconnected
@@ -956,7 +963,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 // spectrogramHTTPError handles common spectrogram generation errors and converts them to appropriate HTTP responses
 func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 	switch {
-	case errors.Is(err, myaudio.ErrAudioFileNotReady) || errors.Is(err, myaudio.ErrAudioFileIncomplete):
+	case errors.Is(err, ffmpeg.ErrAudioFileNotReady) || errors.Is(err, ffmpeg.ErrAudioFileIncomplete):
 		// Audio file is not ready yet - client should retry
 		// Check if we have a dynamic retry duration from validation
 		var anr *AudioNotReadyError
@@ -1792,7 +1799,7 @@ var ffprobeCache = struct {
 }
 
 type validationCacheEntry struct {
-	result    *myaudio.AudioValidationResult
+	result    *ffmpeg.ValidationResult
 	timestamp time.Time
 	fileSize  int64
 	modTime   time.Time
@@ -1807,7 +1814,7 @@ type durationCacheEntry struct {
 
 // validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
 // It returns the validation result and any error encountered during validation.
-func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, spectrogramKey string) (*myaudio.AudioValidationResult, error) {
+func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, spectrogramKey string) (*ffmpeg.ValidationResult, error) {
 	// Check cache first
 	fileInfo, err := os.Stat(absAudioPath)
 	if err != nil {
@@ -1838,7 +1845,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 		logger.String("spectrogram_key", spectrogramKey))
 
 	validationStart := time.Now()
-	validationResult, err := myaudio.ValidateAudioFileWithRetry(ctx, absAudioPath)
+	validationResult, err := ffmpeg.ValidateFile(ctx, absAudioPath)
 	validationDuration := time.Since(validationStart)
 
 	if err != nil {
@@ -1861,7 +1868,7 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 			logger.String("spectrogram_key", spectrogramKey))
 		return nil, &AudioNotReadyError{
 			RetryAfter: spectrogramRetryDelay, // Default retry for validation errors
-			Err:        fmt.Errorf("%w: %w", myaudio.ErrAudioFileNotReady, err),
+			Err:        fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, err),
 		}
 	}
 
@@ -1891,12 +1898,12 @@ func (c *Controller) validateSpectrogramInputs(ctx context.Context, absAudioPath
 		if validationResult.Error != nil {
 			return validationResult, &AudioNotReadyError{
 				RetryAfter: validationResult.RetryAfter,
-				Err:        fmt.Errorf("%w: %w", myaudio.ErrAudioFileNotReady, validationResult.Error),
+				Err:        fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, validationResult.Error),
 			}
 		}
 		return validationResult, &AudioNotReadyError{
 			RetryAfter: validationResult.RetryAfter,
-			Err:        myaudio.ErrAudioFileNotReady,
+			Err:        ffmpeg.ErrAudioFileNotReady,
 		}
 	}
 
@@ -1993,7 +2000,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	durationCtx, cancel := context.WithTimeout(ctx, soxDurationTimeout)
 	defer cancel()
 
-	duration, err := myaudio.GetAudioDuration(durationCtx, audioPath)
+	duration, err := ffmpeg.GetAudioDuration(durationCtx, audioPath)
 	if err != nil {
 		getSpectrogramLogger().Warn("Failed to get audio duration with sox --info",
 			logger.Error(err),
