@@ -5,6 +5,7 @@ package ffmpeg
 import (
 	"fmt"
 	"os/exec"
+	"strconv"
 	"syscall"
 )
 
@@ -23,8 +24,12 @@ func killProcessGroup(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
-	if err := exec.Command("taskkill", "/F", "/T", "/PID", fmt.Sprint(cmd.Process.Pid)).Run(); err != nil { //nolint:gosec // G204: PID from a process we started
-		return cmd.Process.Kill()
+	taskkillErr := exec.Command("taskkill", "/F", "/T", "/PID", strconv.Itoa(cmd.Process.Pid)).Run() //nolint:gosec // G204: PID from a process we started
+	if taskkillErr != nil {
+		if killErr := cmd.Process.Kill(); killErr != nil {
+			return fmt.Errorf("taskkill failed: %w; fallback kill also failed: %v", taskkillErr, killErr)
+		}
+		return nil // fallback kill succeeded
 	}
 	return nil
 }

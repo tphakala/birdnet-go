@@ -7,6 +7,7 @@ package schedule
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -315,8 +316,21 @@ func (s *QuietHoursScheduler) isInQuietHours(qh *conf.QuietHoursConfig, now time
 
 	switch qh.Mode {
 	case conf.QuietHoursModeFixed:
-		startTime = parseHHMM(qh.StartTime, now)
-		endTime = parseHHMM(qh.EndTime, now)
+		var err error
+		startTime, err = parseHHMM(qh.StartTime, now)
+		if err != nil {
+			s.getLog().Warn("Invalid quiet hours start time",
+				logger.String("start_time", qh.StartTime),
+				logger.Error(err))
+			return false
+		}
+		endTime, err = parseHHMM(qh.EndTime, now)
+		if err != nil {
+			s.getLog().Warn("Invalid quiet hours end time",
+				logger.String("end_time", qh.EndTime),
+				logger.Error(err))
+			return false
+		}
 
 	case conf.QuietHoursModeSolar:
 		if s.sunCalc == nil {
@@ -339,17 +353,18 @@ func (s *QuietHoursScheduler) isInQuietHours(qh *conf.QuietHoursConfig, now time
 	return isTimeInWindow(now, startTime, endTime)
 }
 
-// parseHHMM parses a "HH:MM" string and returns a time.Time on the same date as reference.
-func parseHHMM(hhmm string, reference time.Time) time.Time {
+// parseHHMM parses a "HH:MM" string and returns a time.Time on the same date
+// as reference. Returns an error if the string is not valid HH:MM format.
+func parseHHMM(hhmm string, reference time.Time) (time.Time, error) {
 	parsed, err := time.Parse("15:04", hhmm)
 	if err != nil {
-		return reference // fallback; validation should have caught this
+		return time.Time{}, fmt.Errorf("invalid time format %q: expected HH:MM: %w", hhmm, err)
 	}
 	return time.Date(
 		reference.Year(), reference.Month(), reference.Day(),
 		parsed.Hour(), parsed.Minute(), 0, 0,
 		reference.Location(),
-	)
+	), nil
 }
 
 // getSolarEventTime returns the appropriate time from SunEventTimes based on event name.

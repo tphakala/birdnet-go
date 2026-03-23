@@ -1307,6 +1307,7 @@ func (s *Stream) cleanupProcess() {
 				logger.String("url", s.config.safeURL()),
 				logger.Int("pid", pid),
 				logger.Error(killErr),
+				logger.String("group_kill_error", err.Error()),
 				logger.String("component", "ffmpeg-stream"),
 				logger.String("operation", "cleanup_process_kill_direct"))
 		}

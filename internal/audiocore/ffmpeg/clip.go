@@ -86,7 +86,9 @@ func IsSupportedClipFormat(format string) bool {
 }
 
 // getFileExtension returns the appropriate file extension for a format.
-// AAC files use the .m4a container extension.
+// AAC audio uses the M4A container (MPEG-4 Part 14 audio-only profile)
+// rather than raw .aac, because M4A supports seeking and metadata that
+// raw AAC streams lack.
 func getFileExtension(format string) string {
 	if format == FormatAAC {
 		return "m4a"
@@ -289,7 +291,9 @@ func getOutputFormat(format string) string {
 	case FormatOpus:
 		return FormatOpus
 	case FormatAAC:
-		return "mp4" // AAC typically uses the MP4 container format.
+		// AAC is muxed into MP4 (produces .m4a files — the audio-only profile of MP4).
+		// Raw .aac lacks seeking and metadata support that MP4 provides.
+		return "mp4"
 	case FormatMP3:
 		return FormatMP3
 	default:

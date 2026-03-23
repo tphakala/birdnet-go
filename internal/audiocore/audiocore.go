@@ -13,6 +13,11 @@ import "time"
 
 // AudioFrame is the universal unit of audio data flowing through the system.
 // Data is read-only after creation — consumers must not modify it.
+//
+// TODO: Consider object pooling (sync.Pool) for AudioFrame if profiling shows
+// allocation pressure from high-frequency frame creation. The Data slice would
+// need careful lifetime management to avoid use-after-return races — frames
+// must not be returned to the pool until all consumers have finished reading.
 type AudioFrame struct {
 	// SourceID uniquely identifies the audio source that produced this frame.
 	SourceID string

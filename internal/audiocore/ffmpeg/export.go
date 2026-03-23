@@ -23,6 +23,18 @@ const TempExt = ".temp"
 // exportTimeout is the maximum time allowed for a single PCM-to-file export operation.
 const exportTimeout = 30 * time.Second
 
+// Format-specific maximum bitrate limits (kbps). Requested bitrates above
+// these values are clamped to prevent encoder errors or bloated output.
+const (
+	// maxBitrateOpusKbps is the maximum bitrate for Opus encoding.
+	// Opus specification caps useful bitrate at 256 kbps for stereo.
+	maxBitrateOpusKbps = 256
+
+	// maxBitrateMP3Kbps is the maximum bitrate for MP3 encoding.
+	// MPEG-1 Layer III maximum for 44.1/48 kHz stereo.
+	maxBitrateMP3Kbps = 320
+)
+
 // ExportOptions contains all parameters for exporting PCM audio to a file.
 type ExportOptions struct {
 	// PCMData is the raw PCM audio data to encode.
@@ -263,12 +275,12 @@ func getMaxBitrate(format, requestedBitrate string) string {
 	requested := parseBitrateKbps(requestedBitrate)
 	switch format {
 	case FormatOpus:
-		if requested > 256 {
-			return "256k"
+		if requested > maxBitrateOpusKbps {
+			return strconv.Itoa(maxBitrateOpusKbps) + "k"
 		}
 	case FormatMP3:
-		if requested > 320 {
-			return "320k"
+		if requested > maxBitrateMP3Kbps {
+			return strconv.Itoa(maxBitrateMP3Kbps) + "k"
 		}
 	}
 	return requestedBitrate

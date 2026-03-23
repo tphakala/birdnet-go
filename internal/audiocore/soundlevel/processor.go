@@ -7,7 +7,14 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// nyquistMarginFactor is the fraction of Nyquist below which octave bands are
+// included. Bands whose upper edge (centerFreq * 2^(1/6)) exceeds this
+// threshold are skipped because the biquad filter becomes unstable or
+// inaccurate near Nyquist.
+const nyquistMarginFactor = 0.95
 
 // Standard 1/3 octave band center frequencies (Hz) per ISO 266.
 var octaveBandCenterFreqs = []float64{
@@ -101,10 +108,16 @@ func NewProcessor(source, name string, sampleRate, interval int) (*Processor, er
 	}
 
 	nyquist := float64(sampleRate) / 2.0
+	// Apply a margin below Nyquist: the upper edge of each 1/3 octave band
+	// extends above the centre frequency, so bands whose upper edge approaches
+	// Nyquist produce unstable or inaccurate biquad coefficients.
+	nyquistThreshold := nyquist * nyquistMarginFactor
 
 	for _, centerFreq := range octaveBandCenterFreqs {
-		// Skip bands whose centre frequency is at or above Nyquist.
-		if centerFreq >= nyquist {
+		// Skip bands whose upper edge is at or above the safe Nyquist threshold.
+		// For 1/3 octave bands the upper edge is centerFreq * 2^(1/6).
+		upperEdge := centerFreq * math.Pow(2, 1.0/6.0)
+		if upperEdge >= nyquistThreshold {
 			continue
 		}
 
@@ -209,12 +222,20 @@ func newOctaveBandFilter(centerFreq, sampleRate float64) (*octaveBandFilter, err
 	return filter, nil
 }
 
+// maxFilterAmplitude is the safety threshold for biquad filter output.
+// Outputs exceeding this value indicate numerical instability (e.g.,
+// coefficient drift or extreme input), so the filter state is reset.
+const maxFilterAmplitude = 100.0
+
 // processAudioSample applies the biquad difference equation to a single sample.
 func (f *octaveBandFilter) processAudioSample(input float64) float64 {
 	output := f.b0*input + f.b1*f.x1 + f.b2*f.x2 - f.a1*f.y1 - f.a2*f.y2
 
-	const maxAmplitude = 100.0
-	if math.IsNaN(output) || math.IsInf(output, 0) || math.Abs(output) > maxAmplitude {
+	if math.IsNaN(output) || math.IsInf(output, 0) || math.Abs(output) > maxFilterAmplitude {
+		logger.Global().Module("soundlevel").Debug("filter state reset due to numerical instability",
+			logger.Float64("center_freq", f.centerFreq),
+			logger.Float64("output", output),
+			logger.Float64("input", input))
 		f.x1, f.x2, f.y1, f.y2 = 0, 0, 0, 0
 		output = input * 0.1
 	}

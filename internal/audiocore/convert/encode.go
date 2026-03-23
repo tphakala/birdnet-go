@@ -21,8 +21,13 @@ const (
 
 // SavePCMDataToWAV saves raw 16-bit PCM data as a WAV file at filePath.
 // sampleRate specifies the sample rate in Hz (e.g. 48000), and bitDepth specifies
-// the number of bits per sample (e.g. 16). The output is always mono.
+// the number of bits per sample (must be 16). The output is always mono.
 // Parent directories are created automatically if they do not exist.
+//
+// Limitation: Only 16-bit PCM is supported. The go-audio/wav encoder and
+// the byteSliceToInts helper both assume 2-byte little-endian samples.
+// TODO: Support 24-bit and 32-bit WAV encoding when go-audio adds multi-depth
+// IntBuffer support, or by writing the WAV header manually.
 func SavePCMDataToWAV(filePath string, pcmData []byte, sampleRate, bitDepth int) error {
 	if filePath == "" {
 		return errors.Newf("empty file path provided for WAV save operation").
