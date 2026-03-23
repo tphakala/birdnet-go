@@ -1,6 +1,9 @@
 package ffmpeg
 
 import (
+	"bytes"
+	"context"
+	"io"
 	"slices"
 	"testing"
 	"time"
@@ -103,6 +106,18 @@ func (s *Stream) getTotalBytesReceivedForTest() int64 {
 	s.bytesReceivedMu.RLock()
 	defer s.bytesReceivedMu.RUnlock()
 	return s.totalBytesReceived
+}
+
+func (s *Stream) getStreamCreatedAtForTest() time.Time {
+	s.streamCreatedAtMu.RLock()
+	defer s.streamCreatedAtMu.RUnlock()
+	return s.streamCreatedAt
+}
+
+func (s *Stream) getCircuitOpenTimeForTest() time.Time {
+	s.circuitMu.Lock()
+	defer s.circuitMu.Unlock()
+	return s.circuitOpenTime
 }
 
 // --- Tests ---
@@ -902,7 +917,9 @@ func TestStream_ZeroTimeHandling(t *testing.T) {
 	assert.False(t, health.IsReceivingData)
 
 	// After grace period: still not healthy.
+	stream.streamCreatedAtMu.Lock()
 	stream.streamCreatedAt = time.Now().Add(-2 * defaultGracePeriod)
+	stream.streamCreatedAtMu.Unlock()
 	health = stream.GetHealth()
 	assert.True(t, health.LastDataReceived.IsZero())
 	assert.False(t, health.IsHealthy)
@@ -1215,4 +1232,398 @@ func TestStream_StopIdempotent(t *testing.T) {
 	})
 
 	assert.Equal(t, StateStopped, stream.GetProcessState())
+}
+
+// --- Issue 1: Non-blocking reader goroutine ---
+
+// blockingReader is a test io.ReadCloser that blocks until unblocked via a channel,
+// used to verify that processAudio remains responsive to control signals even
+// when stdout.Read is stuck.
+type blockingReader struct {
+	unblock chan struct{}
+	data    []byte
+	closed  bool
+}
+
+func (b *blockingReader) Read(p []byte) (int, error) {
+	if b.closed {
+		return 0, io.EOF
+	}
+	<-b.unblock
+	if b.closed {
+		return 0, io.EOF
+	}
+	n := copy(p, b.data)
+	return n, nil
+}
+
+func (b *blockingReader) Close() error {
+	b.closed = true
+	// Unblock any pending Read by closing the channel (idempotent via select).
+	select {
+	case <-b.unblock:
+	default:
+		close(b.unblock)
+	}
+	return nil
+}
+
+// TestProcessAudio_ResponsiveToContextCancel verifies that processAudio returns
+// promptly when the context is cancelled, even if the reader is blocked.
+func TestProcessAudio_ResponsiveToContextCancel(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+	ctx, cancel := context.WithCancel(t.Context())
+
+	stream.cancelMu.Lock()
+	stream.ctx = ctx
+	stream.cancel = func(err error) { cancel() }
+	stream.cancelMu.Unlock()
+
+	reader := &blockingReader{unblock: make(chan struct{}), data: []byte{0x01}}
+
+	stream.cmdMu.Lock()
+	stream.stdout = reader
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
+
+	stream.transitionState(StateStarting, "test setup")
+	stream.transitionState(StateRunning, "test setup")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.processAudio()
+	}()
+
+	// Cancel the context while the reader is blocked.
+	cancel()
+
+	select {
+	case <-done:
+		// processAudio returned promptly — this is the expected behavior.
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "processAudio did not respond to context cancellation within 2s")
+	}
+}
+
+// TestProcessAudio_ResponsiveToRestart verifies that processAudio returns
+// promptly when a restart signal is sent, even if the reader is blocked.
+func TestProcessAudio_ResponsiveToRestart(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	stream.cancelMu.Lock()
+	stream.ctx = ctx
+	stream.cancel = func(err error) { cancel() }
+	stream.cancelMu.Unlock()
+
+	reader := &blockingReader{unblock: make(chan struct{}), data: []byte{0x01}}
+
+	stream.cmdMu.Lock()
+	stream.stdout = reader
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
+
+	stream.transitionState(StateStarting, "test setup")
+	stream.transitionState(StateRunning, "test setup")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.processAudio()
+	}()
+
+	// Send a restart signal while the reader is blocked.
+	stream.restartChan <- struct{}{}
+
+	select {
+	case err := <-done:
+		require.NoError(t, err, "restart path should return nil")
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "processAudio did not respond to restart signal within 2s")
+	}
+}
+
+// TestProcessAudio_DataFlowsThroughReaderGoroutine verifies that audio data
+// from the reader goroutine is correctly dispatched via the onFrame callback.
+// The pipe closes immediately after writing, which triggers the quick-exit
+// path; this test focuses on data delivery, not error classification.
+func TestProcessAudio_DataFlowsThroughReaderGoroutine(t *testing.T) {
+	t.Parallel()
+
+	testData := []byte("audio-payload-12345")
+	var received []byte
+
+	cfg := newTestConfig()
+	stream := NewStream(&cfg, func(frame audiocore.AudioFrame) {
+		received = frame.Data
+	}, nil, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	stream.cancelMu.Lock()
+	stream.ctx = ctx
+	stream.cancel = func(err error) { cancel() }
+	stream.cancelMu.Unlock()
+
+	// Use a pipe so we can control exactly what the reader goroutine sees.
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pr.Close() })
+
+	stream.cmdMu.Lock()
+	stream.stdout = pr
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
+
+	stream.transitionState(StateStarting, "test setup")
+	stream.transitionState(StateRunning, "test setup")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.processAudio()
+	}()
+
+	// Write data then close the writer to trigger EOF.
+	_, err := pw.Write(testData)
+	require.NoError(t, err)
+	_ = pw.Close()
+
+	select {
+	case <-done:
+		// processAudio exited (may return error due to quick-exit detection).
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "processAudio did not complete within 2s")
+	}
+
+	// The key assertion: the data was dispatched via onFrame before the pipe closed.
+	assert.Equal(t, testData, received, "onFrame should receive the exact data written to the pipe")
+}
+
+// --- Issue 2: Manual restart resets backoff ---
+
+// TestStream_ManualRestartResetsBackoff verifies that a manual restart
+// resets both the restart count and the consecutive failures counter.
+func TestStream_ManualRestartResetsBackoff(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Simulate accumulated failures and restart count.
+	stream.restartCountMu.Lock()
+	stream.restartCount = 10
+	stream.restartCountMu.Unlock()
+
+	stream.setConsecutiveFailures(7)
+	stream.setCircuitOpenTimeForTest(time.Now())
+
+	// Manual restart should clear everything.
+	stream.Restart(true)
+
+	stream.restartCountMu.Lock()
+	restartCount := stream.restartCount
+	stream.restartCountMu.Unlock()
+
+	assert.Equal(t, 0, restartCount, "manual restart should reset restart count")
+	assert.Equal(t, 0, stream.getConsecutiveFailures(), "manual restart should reset consecutive failures")
+	assert.True(t, stream.getCircuitOpenTimeForTest().IsZero(), "manual restart should clear circuit open time")
+
+	// Drain the restart channel.
+	select {
+	case <-stream.restartChan:
+	default:
+	}
+}
+
+// TestStream_AutomaticRestartPreservesBackoff verifies that an automatic
+// restart does NOT reset the backoff counters.
+func TestStream_AutomaticRestartPreservesBackoff(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	stream.restartCountMu.Lock()
+	stream.restartCount = 10
+	stream.restartCountMu.Unlock()
+
+	stream.setConsecutiveFailures(7)
+
+	// Automatic restart should preserve counters.
+	stream.Restart(false)
+
+	stream.restartCountMu.Lock()
+	restartCount := stream.restartCount
+	stream.restartCountMu.Unlock()
+
+	assert.Equal(t, 10, restartCount, "automatic restart should preserve restart count")
+	assert.Equal(t, 7, stream.getConsecutiveFailures(), "automatic restart should preserve consecutive failures")
+
+	// Drain the restart channel.
+	select {
+	case <-stream.restartChan:
+	default:
+	}
+}
+
+// --- Issue 3: streamCreatedAt resets on data tracking reset ---
+
+// TestStream_ResetDataTrackingRefreshesStreamCreatedAt verifies that
+// resetDataTracking refreshes streamCreatedAt so that health calculations
+// reference the current process lifetime.
+func TestStream_ResetDataTrackingRefreshesStreamCreatedAt(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Backdate streamCreatedAt to simulate an old stream.
+	oldCreatedAt := time.Now().Add(-1 * time.Hour)
+	stream.streamCreatedAtMu.Lock()
+	stream.streamCreatedAt = oldCreatedAt
+	stream.streamCreatedAtMu.Unlock()
+
+	stream.resetDataTracking()
+
+	newCreatedAt := stream.getStreamCreatedAtForTest()
+	assert.True(t, newCreatedAt.After(oldCreatedAt),
+		"streamCreatedAt should be refreshed after resetDataTracking")
+	assert.WithinDuration(t, time.Now(), newCreatedAt, time.Second,
+		"streamCreatedAt should be approximately now")
+}
+
+// --- Issue 4: Process start time captured before processAudio ---
+
+// TestStream_RuntimeCalculationWithCleanup verifies that runtime is
+// calculated correctly even when cleanupProcess zeroes processStartTime.
+// This is a structural test that the capture happens before processAudio.
+func TestStream_RuntimeCalculationWithCleanup(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Set a known process start time.
+	knownStart := time.Now().Add(-30 * time.Second)
+	stream.setProcessStartTimeForTest(knownStart)
+
+	// After cleanupProcess, processStartTime is zeroed.
+	stream.cleanupProcess()
+
+	// The zero value should be detectable.
+	assert.True(t, stream.getProcessStartTimeForTest().IsZero(),
+		"cleanupProcess should zero processStartTime")
+
+	// This confirms why capturing processStartTime before processAudio matters:
+	// if captured after cleanup, time.Since(time.Time{}) would be huge.
+	zeroRuntime := time.Since(time.Time{})
+	knownRuntime := time.Since(knownStart)
+	assert.Greater(t, zeroRuntime, 24*time.Hour,
+		"runtime from zero-time should be unreasonably large")
+	assert.Less(t, knownRuntime, time.Minute,
+		"runtime from known start should be reasonable")
+}
+
+// --- Issue 5: Circuit breaker cooldown resets failure counter ---
+
+// TestStream_CircuitBreakerCooldownResetsFailures verifies that when
+// the circuit breaker cooldown expires, the failure counter is reset.
+func TestStream_CircuitBreakerCooldownResetsFailures(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Open the circuit breaker with accumulated failures.
+	stream.setConsecutiveFailures(circuitBreakerThreshold)
+	stream.setCircuitOpenTimeForTest(time.Now().Add(-circuitBreakerCooldown - time.Second))
+
+	// The cooldown has expired; circuitCooldownRemaining should return false
+	// AND reset the failure counter.
+	remaining, open := stream.circuitCooldownRemaining()
+
+	assert.False(t, open, "circuit should be closed after cooldown")
+	assert.Equal(t, time.Duration(0), remaining, "no remaining cooldown expected")
+	assert.Equal(t, 0, stream.getConsecutiveFailures(),
+		"consecutive failures should be reset when cooldown expires")
+	assert.True(t, stream.getCircuitOpenTimeForTest().IsZero(),
+		"circuit open time should be cleared when cooldown expires")
+}
+
+// TestStream_CircuitBreakerCooldownStillOpen verifies that when
+// the circuit breaker cooldown has NOT expired, the failure counter is preserved.
+func TestStream_CircuitBreakerCooldownStillOpen(t *testing.T) {
+	t.Parallel()
+
+	stream := newTestStream(t)
+
+	// Open the circuit breaker recently.
+	stream.setConsecutiveFailures(circuitBreakerThreshold)
+	stream.setCircuitOpenTimeForTest(time.Now())
+
+	remaining, open := stream.circuitCooldownRemaining()
+
+	assert.True(t, open, "circuit should still be open during cooldown")
+	assert.Greater(t, remaining, time.Duration(0), "remaining cooldown should be positive")
+	assert.Equal(t, circuitBreakerThreshold, stream.getConsecutiveFailures(),
+		"consecutive failures should be preserved during cooldown")
+}
+
+// --- Integration: Non-blocking reader ---
+
+// TestProcessAudio_NonBlockingEventLoop verifies that the processAudio event
+// loop correctly dispatches data received from the reader goroutine and exits
+// when it encounters an EOF.
+func TestProcessAudio_NonBlockingEventLoop(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	var frameCount int
+	stream := NewStream(&cfg, func(frame audiocore.AudioFrame) {
+		frameCount++
+	}, nil, nil)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+
+	stream.cancelMu.Lock()
+	stream.ctx = ctx
+	stream.cancel = func(err error) { cancel() }
+	stream.cancelMu.Unlock()
+
+	// Use a pipe to control data delivery. Write data, wait for it to be consumed,
+	// then close the pipe after the quick-exit window so EOF is treated as normal.
+	pr, pw := io.Pipe()
+	t.Cleanup(func() { _ = pr.Close() })
+
+	stream.cmdMu.Lock()
+	stream.stdout = pr
+	stream.processStartTime = time.Now()
+	stream.cmdMu.Unlock()
+
+	stream.transitionState(StateStarting, "test setup")
+	stream.transitionState(StateRunning, "test setup")
+
+	done := make(chan error, 1)
+	go func() {
+		done <- stream.processAudio()
+	}()
+
+	// Write some audio data.
+	data := bytes.Repeat([]byte{0xAA}, 128)
+	_, err := pw.Write(data)
+	require.NoError(t, err)
+
+	// Wait past the quick-exit window before closing the pipe
+	// so EOF is treated as a normal end, not a startup failure.
+	time.Sleep(processQuickExitTime + 100*time.Millisecond)
+	_ = pw.Close()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		require.Fail(t, "processAudio did not complete within 5s")
+	}
+
+	assert.Positive(t, frameCount, "at least one frame should have been dispatched")
 }

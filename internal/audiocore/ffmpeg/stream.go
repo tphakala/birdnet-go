@@ -461,7 +461,8 @@ type Stream struct {
 	dropLogMu       sync.Mutex
 
 	// Stream creation time for grace period calculation.
-	streamCreatedAt time.Time
+	streamCreatedAt   time.Time
+	streamCreatedAtMu sync.RWMutex
 
 	// Process state tracking.
 	processState     ProcessState
@@ -649,6 +650,15 @@ func (s *Stream) Run(parentCtx context.Context) {
 
 			s.transitionState(StateRunning, "FFmpeg process started successfully")
 
+			// Capture processStartTime before processAudio runs, because
+			// processAudio may call cleanupProcess (on restart/cancel) which
+			// zeros processStartTime before we can compute runtime metrics.
+			processStartTime := func() time.Time {
+				s.cmdMu.Lock()
+				defer s.cmdMu.Unlock()
+				return s.processStartTime
+			}()
+
 			err := s.processAudio()
 
 			s.stoppedMu.RLock()
@@ -659,11 +669,6 @@ func (s *Stream) Run(parentCtx context.Context) {
 				return
 			}
 
-			processStartTime := func() time.Time {
-				s.cmdMu.Lock()
-				defer s.cmdMu.Unlock()
-				return s.processStartTime
-			}()
 			runtime := time.Since(processStartTime)
 
 			if err != nil && !errors.Is(err, context.Canceled) {
@@ -862,9 +867,19 @@ func (s *Stream) buildFFmpegInputArgs(ffmpegParameters []string) []string {
 	return args
 }
 
+// readResult carries the outcome of a single stdout.Read call from the
+// dedicated reader goroutine back to the processAudio event loop.
+type readResult struct {
+	data []byte
+	err  error
+}
+
 // processAudio reads and processes audio data from FFmpeg.
+// A dedicated reader goroutine performs blocking stdout.Read calls and
+// posts results to a channel, allowing the main event loop to remain
+// responsive to restart, stop, and context-cancellation signals even
+// when FFmpeg becomes unresponsive.
 func (s *Stream) processAudio() error {
-	buf := make([]byte, ffmpegBufferSize)
 	startTime := time.Now()
 
 	silenceCheckTicker := time.NewTicker(silenceCheckInterval)
@@ -897,73 +912,41 @@ func (s *Stream) processAudio() error {
 
 	s.resetDataTracking()
 
+	// Grab the stdout pipe once; closing it (via cleanupProcess) terminates the reader goroutine.
+	s.cmdMu.Lock()
+	stdout := s.stdout
+	s.cmdMu.Unlock()
+
+	if stdout == nil {
+		return nil
+	}
+
+	// Channel through which the reader goroutine delivers read results.
+	// Buffered by 1 so the reader doesn't block on send while the event
+	// loop handles a control signal.
+	readCh := make(chan readResult, 1)
+
+	// readerDone is closed when the main event loop exits to unblock the
+	// reader goroutine if readCh is full, preventing a goroutine leak.
+	readerDone := make(chan struct{})
+	defer close(readerDone)
+
+	// Launch a dedicated reader goroutine. It exits when stdout is closed
+	// (by cleanupProcess), on a read error, or when readerDone is closed.
+	go s.readStdout(stdout, readCh, readerDone)
+
 	for {
 		if s.GetProcessState() == StateStopped {
 			return nil
 		}
 
-		s.cmdMu.Lock()
-		stdout := s.stdout
-		s.cmdMu.Unlock()
-
-		if stdout == nil {
-			return nil
-		}
-
-		n, err := stdout.Read(buf)
-		if err != nil {
-			if time.Since(startTime) < processQuickExitTime {
-				return s.handleQuickExitError(startTime)
-			}
-
-			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-				return nil
-			}
-
-			return errors.Newf("error reading from FFmpeg: %w", err).
-				Category(errors.CategoryRTSP).
-				Component("ffmpeg-stream").
-				Context("operation", "process_audio").
-				Context("url", s.config.safeURL()).
-				Context("runtime_seconds", time.Since(startTime).Seconds()).
-				Build()
-		}
-
-		if n > 0 {
-			s.updateLastDataTime()
-
-			s.bytesReceivedMu.Lock()
-			s.totalBytesReceived += int64(n)
-			totalReceived := s.totalBytesReceived
-			s.bytesReceivedMu.Unlock()
-
-			s.dataRateCalc.addSample(int64(n))
-
-			s.conditionalFailureReset(totalReceived)
-
-			// Invoke onFrame callback with a fully populated AudioFrame.
-			if s.onFrame != nil {
-				// Copy the data out of the read buffer before dispatching.
-				data := make([]byte, n)
-				copy(data, buf[:n])
-				s.onFrame(audiocore.AudioFrame{
-					SourceID:   s.config.SourceID,
-					SourceName: s.config.SourceName,
-					Data:       data,
-					SampleRate: s.config.SampleRate,
-					BitDepth:   s.config.BitDepth,
-					Channels:   s.config.Channels,
-					Timestamp:  time.Now(),
-				})
-			}
-
-			// Update metrics if available.
-			if s.metrics != nil {
-				s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.getRate())
-			}
-		}
-
 		select {
+		case result := <-readCh:
+			if result.err != nil {
+				return s.handleReadError(result.err, startTime)
+			}
+			s.dispatchAudioData(result.data)
+
 		case <-s.restartChan:
 			getStreamLogger().Info("restart requested",
 				logger.String("url", s.config.safeURL()),
@@ -974,14 +957,17 @@ func (s *Stream) processAudio() error {
 			s.restartInProgress = false
 			s.restartMu.Unlock()
 			return nil
+
 		case <-s.ctx.Done():
 			s.cleanupProcess()
 			return s.ctx.Err()
+
 		case <-healthCheckTimer.C:
 			if !healthCheckDone {
 				healthCheckDone = true
 				s.logStreamHealth()
 			}
+
 		case <-earlyErrorCheckTimer.C:
 			earlyErrorCheckEnabled = false
 			earlyErrorCheckTicker.Stop()
@@ -989,19 +975,106 @@ func (s *Stream) processAudio() error {
 			case <-earlyErrorCheckTicker.C:
 			default:
 			}
+
 		case <-earlyErrorCheckTicker.C:
 			if earlyErrorCheckEnabled {
 				if err := s.handleEarlyErrorDetection(); err != nil {
 					return err
 				}
 			}
+
 		case <-silenceCheckTicker.C:
 			if err := s.handleSilenceTimeout(startTime); err != nil {
 				return err
 			}
-		default:
-			// Continue processing.
 		}
+	}
+}
+
+// handleReadError processes an error returned by the reader goroutine.
+// readStdout is the body of the dedicated reader goroutine launched by
+// processAudio. It allocates a single buffer and copies data before sending
+// to avoid retaining references to a shared backing array. It exits when
+// stdout is closed (by cleanupProcess), on a read error, or when readerDone
+// is closed (main loop exited, preventing a goroutine leak).
+func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, readerDone <-chan struct{}) {
+	buf := make([]byte, ffmpegBufferSize)
+	for {
+		n, err := stdout.Read(buf)
+		if n > 0 {
+			dataCopy := make([]byte, n)
+			copy(dataCopy, buf[:n])
+			select {
+			case readCh <- readResult{data: dataCopy}:
+			case <-readerDone:
+				return
+			}
+		}
+		if err != nil {
+			select {
+			case readCh <- readResult{err: err}:
+			case <-readerDone:
+			}
+			return
+		}
+	}
+}
+
+// It distinguishes quick-exit scenarios from normal EOF/cancel and general errors.
+func (s *Stream) handleReadError(readErr error, startTime time.Time) error {
+	if time.Since(startTime) < processQuickExitTime {
+		return s.handleQuickExitError(startTime)
+	}
+
+	if errors.Is(readErr, io.EOF) || errors.Is(readErr, context.Canceled) {
+		return nil
+	}
+
+	return errors.Newf("error reading from FFmpeg: %w", readErr).
+		Category(errors.CategoryRTSP).
+		Component("ffmpeg-stream").
+		Context("operation", "process_audio").
+		Context("url", s.config.safeURL()).
+		Context("runtime_seconds", time.Since(startTime).Seconds()).
+		Build()
+}
+
+// dispatchAudioData processes a chunk of audio data received from the reader
+// goroutine: updates tracking state, resets failure counters if stable, and
+// invokes the onFrame callback.
+func (s *Stream) dispatchAudioData(data []byte) {
+	if len(data) == 0 {
+		return
+	}
+
+	s.updateLastDataTime()
+
+	n := len(data)
+	s.bytesReceivedMu.Lock()
+	s.totalBytesReceived += int64(n)
+	totalReceived := s.totalBytesReceived
+	s.bytesReceivedMu.Unlock()
+
+	s.dataRateCalc.addSample(int64(n))
+
+	s.conditionalFailureReset(totalReceived)
+
+	// Invoke onFrame callback with a fully populated AudioFrame.
+	if s.onFrame != nil {
+		s.onFrame(audiocore.AudioFrame{
+			SourceID:   s.config.SourceID,
+			SourceName: s.config.SourceName,
+			Data:       data,
+			SampleRate: s.config.SampleRate,
+			BitDepth:   s.config.BitDepth,
+			Channels:   s.config.Channels,
+			Timestamp:  time.Now(),
+		})
+	}
+
+	// Update metrics if available.
+	if s.metrics != nil {
+		s.metrics.RecordDataRate(s.config.SourceID, s.dataRateCalc.getRate())
 	}
 }
 
@@ -1357,7 +1430,9 @@ func (s *Stream) Stop() {
 }
 
 // Restart requests a stream restart.
-// If manual is true, resets the restart count (user-initiated restart).
+// If manual is true, resets the restart count and consecutive failure counter
+// (operator-initiated restart), preventing accumulated backoff from delaying
+// the next attempt unnecessarily.
 func (s *Stream) Restart(manual bool) {
 	s.restartMu.Lock()
 	if s.restartInProgress {
@@ -1377,6 +1452,11 @@ func (s *Stream) Restart(manual bool) {
 		s.restartCountMu.Lock()
 		s.restartCount = 0
 		s.restartCountMu.Unlock()
+
+		s.circuitMu.Lock()
+		s.consecutiveFailures = 0
+		s.circuitOpenTime = time.Time{}
+		s.circuitMu.Unlock()
 	}
 
 	select {
@@ -1489,6 +1569,9 @@ func (s *Stream) updateLastDataTime() {
 }
 
 // resetDataTracking resets all data tracking state for a new process.
+// It also refreshes streamCreatedAt so that health checks and watchdog
+// calculations reference the current process lifetime, not the original
+// stream creation time.
 func (s *Stream) resetDataTracking() {
 	s.lastDataMu.Lock()
 	s.lastDataTime = time.Time{}
@@ -1497,6 +1580,10 @@ func (s *Stream) resetDataTracking() {
 	s.bytesReceivedMu.Lock()
 	s.totalBytesReceived = 0
 	s.bytesReceivedMu.Unlock()
+
+	s.streamCreatedAtMu.Lock()
+	s.streamCreatedAt = time.Now()
+	s.streamCreatedAtMu.Unlock()
 }
 
 // logStreamHealth logs the current stream health status.
@@ -1532,6 +1619,8 @@ func (s *Stream) logStreamHealth() {
 }
 
 // circuitCooldownRemaining returns (remaining, true) if the circuit is open, or (0, false) otherwise.
+// When the cooldown has expired it resets the failure counter and circuit open time so the next
+// retry starts with a clean slate.
 func (s *Stream) circuitCooldownRemaining() (time.Duration, bool) {
 	s.circuitMu.Lock()
 	defer s.circuitMu.Unlock()
@@ -1542,6 +1631,9 @@ func (s *Stream) circuitCooldownRemaining() (time.Duration, bool) {
 
 	elapsed := time.Since(s.circuitOpenTime)
 	if elapsed >= circuitBreakerCooldown {
+		// Reset failure state so the retry begins with a clean backoff.
+		s.consecutiveFailures = 0
+		s.circuitOpenTime = time.Time{}
 		return 0, false
 	}
 

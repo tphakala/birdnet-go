@@ -243,7 +243,7 @@ func (m *Manager) RestartStream(sourceID string) error {
 			Build()
 	}
 
-	stream.Restart(false)
+	stream.Restart(true)
 
 	m.logger.Info("restarted FFmpeg stream",
 		logger.String("source_id", sourceID),
@@ -462,7 +462,10 @@ func (m *Manager) checkForStuckStreams() {
 		// Determine how long the stream has been unhealthy.
 		var unhealthyFor time.Duration
 		if h.LastDataReceived.IsZero() {
-			unhealthyFor = time.Since(stream.streamCreatedAt)
+			stream.streamCreatedAtMu.RLock()
+			createdAt := stream.streamCreatedAt
+			stream.streamCreatedAtMu.RUnlock()
+			unhealthyFor = time.Since(createdAt)
 		} else {
 			unhealthyFor = time.Since(h.LastDataReceived)
 		}

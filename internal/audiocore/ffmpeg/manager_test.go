@@ -269,7 +269,9 @@ func TestManager_WatchdogForceReset(t *testing.T) {
 		// Advance the stream creation time so the watchdog considers it stuck.
 		mgr.mu.Lock()
 		stream := mgr.streams[sourceID]
+		stream.streamCreatedAtMu.Lock()
 		stream.streamCreatedAt = time.Now().Add(-(managerMaxUnhealthyDuration + time.Minute))
+		stream.streamCreatedAtMu.Unlock()
 		// Set process state to stopped so IsRestarting() returns false.
 		stream.processStateMu.Lock()
 		stream.processState = StateStopped
@@ -309,4 +311,49 @@ func TestManager_StartStream_EmptySourceID(t *testing.T) {
 	err := mgr.StartStream(cfg)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sourceID must not be empty")
+}
+
+// TestManager_RestartStreamResetsBackoff verifies that RestartStream
+// (operator-triggered) resets the backoff counters on the underlying stream.
+func TestManager_RestartStreamResetsBackoff(t *testing.T) {
+	t.Attr("component", "ffmpeg-manager")
+
+	mgr := newTestManager(t)
+	t.Cleanup(func() { _ = mgr.Shutdown() })
+
+	const sourceID = "restart-backoff"
+	require.NoError(t, mgr.StartStream(
+		newTestManagerConfig(sourceID, "rtsp://restart.example.com/stream")))
+
+	// Access the internal stream to set up backoff state.
+	mgr.mu.RLock()
+	stream := mgr.streams[sourceID]
+	mgr.mu.RUnlock()
+	require.NotNil(t, stream)
+
+	// Simulate accumulated failures.
+	stream.restartCountMu.Lock()
+	stream.restartCount = 15
+	stream.restartCountMu.Unlock()
+
+	stream.circuitMu.Lock()
+	stream.consecutiveFailures = 8
+	stream.circuitOpenTime = time.Now()
+	stream.circuitMu.Unlock()
+
+	// RestartStream should trigger a manual restart that resets backoff.
+	require.NoError(t, mgr.RestartStream(sourceID))
+
+	stream.restartCountMu.Lock()
+	restartCount := stream.restartCount
+	stream.restartCountMu.Unlock()
+
+	stream.circuitMu.Lock()
+	failures := stream.consecutiveFailures
+	circuitTime := stream.circuitOpenTime
+	stream.circuitMu.Unlock()
+
+	assert.Equal(t, 0, restartCount, "RestartStream should reset restart count")
+	assert.Equal(t, 0, failures, "RestartStream should reset consecutive failures")
+	assert.True(t, circuitTime.IsZero(), "RestartStream should clear circuit open time")
 }
