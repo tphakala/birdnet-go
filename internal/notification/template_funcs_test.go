@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"bytes"
 	"testing"
 	"text/template"
 	"time"
@@ -95,23 +96,12 @@ func TestTemplateFuncs_TemplateExecution(t *testing.T) {
 			tmpl, err := template.New("test").Funcs(TemplateFuncs).Parse(tt.tmplStr)
 			require.NoError(t, err)
 
-			var buf []byte
-			w := &writerHelper{buf: &buf}
-			err = tmpl.Execute(w, tt.data)
+			var buf bytes.Buffer
+			err = tmpl.Execute(&buf, tt.data)
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, string(buf))
+			assert.Equal(t, tt.expected, buf.String())
 		})
 	}
-}
-
-// writerHelper collects template output into a byte slice.
-type writerHelper struct {
-	buf *[]byte
-}
-
-func (w *writerHelper) Write(p []byte) (int, error) {
-	*w.buf = append(*w.buf, p...)
-	return len(p), nil
 }
 
 func TestNotification_ToTemplateMap(t *testing.T) {
@@ -148,6 +138,7 @@ func TestNotification_ToTemplateMap(t *testing.T) {
 
 	// camelCase aliases
 	assert.Equal(t, "test-123", m["id"])
+	assert.Equal(t, "Test Bird", m["title"])
 	assert.Equal(t, "Detected a test bird", m["message"])
 	assert.Equal(t, "analysis", m["component"])
 	assert.Equal(t, ts.Format(time.RFC3339), m["timestamp"])
@@ -200,6 +191,11 @@ func TestNotification_ToTemplateMap_UsableInTemplate(t *testing.T) {
 			expected: "American Robin",
 		},
 		{
+			name:     "lowercase title alias",
+			tmplStr:  `{{.title}}`,
+			expected: "american robin",
+		},
+		{
 			name:     "flattened metadata access",
 			tmplStr:  `{{.bg_confidence_percent}}%`,
 			expected: "95%",
@@ -218,11 +214,10 @@ func TestNotification_ToTemplateMap_UsableInTemplate(t *testing.T) {
 			tmpl, err := template.New("test").Funcs(TemplateFuncs).Parse(tt.tmplStr)
 			require.NoError(t, err)
 
-			var buf []byte
-			w := &writerHelper{buf: &buf}
-			err = tmpl.Execute(w, n.ToTemplateMap())
+			var buf bytes.Buffer
+			err = tmpl.Execute(&buf, n.ToTemplateMap())
 			require.NoError(t, err)
-			assert.Equal(t, tt.expected, string(buf))
+			assert.Equal(t, tt.expected, buf.String())
 		})
 	}
 }
@@ -244,4 +239,41 @@ func TestNotification_ToTemplateMap_NilMetadata(t *testing.T) {
 	assert.NotNil(t, m)
 	assert.Equal(t, "test", m["ID"])
 	assert.Equal(t, "test", m["id"])
+	assert.Equal(t, "Test", m["title"])
+}
+
+func TestNotification_ToTemplateMap_MetadataDoesNotOverwriteCoreFields(t *testing.T) {
+	t.Parallel()
+
+	n := &Notification{
+		ID:        "real-id",
+		Type:      TypeDetection,
+		Priority:  PriorityHigh,
+		Status:    StatusUnread,
+		Title:     "Real Title",
+		Message:   "Real Message",
+		Component: "analysis",
+		Timestamp: time.Date(2026, 3, 23, 10, 0, 0, 0, time.UTC),
+		Metadata: map[string]any{
+			"message":   "malicious-override",
+			"title":     "malicious-title",
+			"id":        "malicious-id",
+			"Timestamp": "malicious-timestamp",
+			"bg_custom": "safe-value",
+		},
+	}
+
+	m := n.ToTemplateMap()
+
+	// Core fields must NOT be overwritten by metadata
+	assert.Equal(t, "real-id", m["id"])
+	assert.Equal(t, "real-id", m["ID"])
+	assert.Equal(t, "Real Title", m["title"])
+	assert.Equal(t, "Real Title", m["Title"])
+	assert.Equal(t, "Real Message", m["message"])
+	assert.Equal(t, "Real Message", m["Message"])
+	assert.Equal(t, n.Timestamp, m["Timestamp"])
+
+	// Non-colliding metadata should still be accessible
+	assert.Equal(t, "safe-value", m["bg_custom"])
 }

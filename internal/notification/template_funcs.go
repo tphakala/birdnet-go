@@ -1,7 +1,6 @@
 package notification
 
 import (
-	"maps"
 	"strings"
 	"text/template"
 	"time"
@@ -54,14 +53,20 @@ func (n *Notification) ToTemplateMap() map[string]any {
 		"type":      string(n.Type),
 		"priority":  string(n.Priority),
 		"status":    string(n.Status),
+		"title":     n.Title,
 		"message":   n.Message,
 		"component": n.Component,
 		"timestamp": n.Timestamp.Format(time.RFC3339),
 		"metadata":  n.Metadata,
 	}
 
-	// Flatten metadata into the map so users can access bg_* keys directly
-	maps.Copy(m, n.Metadata)
+	// Flatten metadata into the map so users can access bg_* keys directly,
+	// without overwriting core notification fields.
+	for k, v := range n.Metadata {
+		if _, exists := m[k]; !exists {
+			m[k] = v
+		}
+	}
 
 	return m
 }
