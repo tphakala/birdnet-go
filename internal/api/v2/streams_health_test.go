@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tphakala/birdnet-go/internal/myaudio"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 )
 
 // Test error type constant for connection timeout scenarios
@@ -16,9 +16,9 @@ const testErrorTypeTimeout = "connection_timeout"
 // TestCreateHealthSnapshot tests the createHealthSnapshot function
 func TestCreateHealthSnapshot(t *testing.T) {
 	t.Run("healthy stream with all fields populated", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			RestartCount:       0,
 			IsReceivingData:    true,
 			TotalBytesReceived: 1024,
@@ -36,13 +36,13 @@ func TestCreateHealthSnapshot(t *testing.T) {
 	})
 
 	t.Run("unhealthy stream with error context", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateCircuitOpen,
+			ProcessState:       ffmpeg.StateCircuitOpen,
 			RestartCount:       5,
 			IsReceivingData:    false,
 			TotalBytesReceived: 0,
-			LastErrorContext: &myaudio.ErrorContext{
+			LastErrorContext: &ffmpeg.ErrorContext{
 				ErrorType:      "rtsp_404",
 				PrimaryMessage: "method DESCRIBE failed: 404 Not Found",
 			},
@@ -59,9 +59,9 @@ func TestCreateHealthSnapshot(t *testing.T) {
 	})
 
 	t.Run("stream with nil error context", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			RestartCount:       0,
 			IsReceivingData:    true,
 			TotalBytesReceived: 2048,
@@ -75,13 +75,13 @@ func TestCreateHealthSnapshot(t *testing.T) {
 	})
 
 	t.Run("stream in backoff state", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateBackoff,
+			ProcessState:       ffmpeg.StateBackoff,
 			RestartCount:       3,
 			IsReceivingData:    false,
 			TotalBytesReceived: 512,
-			LastErrorContext: &myaudio.ErrorContext{
+			LastErrorContext: &ffmpeg.ErrorContext{
 				ErrorType: testErrorTypeTimeout,
 			},
 		}
@@ -374,9 +374,9 @@ func TestDetermineEventType(t *testing.T) {
 func TestConvertStreamHealthToResponse(t *testing.T) {
 	t.Run("complete health data conversion", func(t *testing.T) {
 		now := time.Now()
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			LastDataReceived:   now,
 			RestartCount:       0,
 			Error:              nil,
@@ -384,8 +384,8 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 			BytesPerSecond:     128000.5,
 			IsReceivingData:    true,
 			LastErrorContext:   nil,
-			ErrorHistory:       []*myaudio.ErrorContext{},
-			StateHistory:       []myaudio.StateTransition{},
+			ErrorHistory:       []*ffmpeg.ErrorContext{},
+			StateHistory:       []ffmpeg.StateTransition{},
 		}
 
 		response := convertStreamHealthToResponse("rtsp://user:pass@camera.local:554/stream", health)
@@ -406,9 +406,9 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 	})
 
 	t.Run("handle nil LastDataReceived", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateStarting,
+			ProcessState:       ffmpeg.StateStarting,
 			LastDataReceived:   time.Time{}, // Zero time
 			RestartCount:       0,
 			TotalBytesReceived: 0,
@@ -424,9 +424,9 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 
 	t.Run("handle error present", func(t *testing.T) {
 		testError := errors.New("connection timeout")
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateBackoff,
+			ProcessState:       ffmpeg.StateBackoff,
 			LastDataReceived:   time.Time{},
 			RestartCount:       2,
 			Error:              testError,
@@ -442,7 +442,7 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 
 	t.Run("handle error context and history", func(t *testing.T) {
 		now := time.Now()
-		errorCtx := &myaudio.ErrorContext{
+		errorCtx := &ffmpeg.ErrorContext{
 			ErrorType:      "rtsp_404",
 			PrimaryMessage: "method DESCRIBE failed: 404 Not Found",
 			UserFacingMsg:  "RTSP stream not found (404)",
@@ -457,16 +457,16 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 			RTSPMethod: "describe",
 		}
 
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateCircuitOpen,
+			ProcessState:       ffmpeg.StateCircuitOpen,
 			LastDataReceived:   time.Time{},
 			RestartCount:       3,
 			TotalBytesReceived: 0,
 			BytesPerSecond:     0,
 			IsReceivingData:    false,
 			LastErrorContext:   errorCtx,
-			ErrorHistory:       []*myaudio.ErrorContext{errorCtx},
+			ErrorHistory:       []*ffmpeg.ErrorContext{errorCtx},
 		}
 
 		response := convertStreamHealthToResponse("rtsp://camera.local:554/stream", health)
@@ -479,18 +479,18 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 
 	t.Run("handle state history", func(t *testing.T) {
 		now := time.Now()
-		stateHistory := []myaudio.StateTransition{
+		stateHistory := []ffmpeg.StateTransition{
 			{
-				From:      myaudio.StateStarting,
-				To:        myaudio.StateCircuitOpen,
+				From:      ffmpeg.StateStarting,
+				To:        ffmpeg.StateCircuitOpen,
 				Timestamp: now,
 				Reason:    "permanent failure detected",
 			},
 		}
 
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          false,
-			ProcessState:       myaudio.StateCircuitOpen,
+			ProcessState:       ffmpeg.StateCircuitOpen,
 			LastDataReceived:   time.Time{},
 			RestartCount:       1,
 			TotalBytesReceived: 0,
@@ -508,9 +508,9 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 	})
 
 	t.Run("URL sanitization", func(t *testing.T) {
-		health := &myaudio.StreamHealth{
+		health := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			RestartCount:       0,
 			TotalBytesReceived: 1024,
 			BytesPerSecond:     128,
@@ -528,18 +528,18 @@ func TestConvertStreamHealthToResponse(t *testing.T) {
 	t.Run("multiple URLs with different credentials sanitize to different entries", func(t *testing.T) {
 		// This test verifies that URLs differing only by credentials are preserved
 		// as separate entries when using array response format (not map)
-		health1 := &myaudio.StreamHealth{
+		health1 := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			RestartCount:       0,
 			TotalBytesReceived: 1024,
 			BytesPerSecond:     128,
 			IsReceivingData:    true,
 		}
 
-		health2 := &myaudio.StreamHealth{
+		health2 := &ffmpeg.StreamHealth{
 			IsHealthy:          true,
-			ProcessState:       myaudio.StateRunning,
+			ProcessState:       ffmpeg.StateRunning,
 			RestartCount:       0,
 			TotalBytesReceived: 2048,
 			BytesPerSecond:     256,
@@ -570,7 +570,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 	t.Run("complete error context conversion", func(t *testing.T) {
 		now := time.Now()
 		timeout := 10 * time.Second
-		errCtx := &myaudio.ErrorContext{
+		errCtx := &ffmpeg.ErrorContext{
 			ErrorType:       testErrorTypeTimeout,
 			PrimaryMessage:  "Connection timed out after 10s",
 			UserFacingMsg:   "Connection timeout",
@@ -603,7 +603,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 
 	t.Run("permanent failure context", func(t *testing.T) {
 		now := time.Now()
-		errCtx := &myaudio.ErrorContext{
+		errCtx := &ffmpeg.ErrorContext{
 			ErrorType:       "rtsp_404",
 			PrimaryMessage:  "method DESCRIBE failed: 404 Not Found",
 			UserFacingMsg:   "RTSP stream not found (404)",
@@ -625,7 +625,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 
 	t.Run("RTSP method uppercase conversion", func(t *testing.T) {
 		now := time.Now()
-		errCtx := &myaudio.ErrorContext{
+		errCtx := &ffmpeg.ErrorContext{
 			ErrorType:      "rtsp_404",
 			PrimaryMessage: "method SETUP failed",
 			Timestamp:      now,
@@ -639,7 +639,7 @@ func TestConvertErrorContextToResponse(t *testing.T) {
 
 	t.Run("optional fields omitted when not set", func(t *testing.T) {
 		now := time.Now()
-		errCtx := &myaudio.ErrorContext{
+		errCtx := &ffmpeg.ErrorContext{
 			ErrorType:      "generic_error",
 			PrimaryMessage: "Something went wrong",
 			Timestamp:      now,
