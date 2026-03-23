@@ -24,10 +24,22 @@ var TemplateFuncs = template.FuncMap{
 	"formatTime": formatTime,
 }
 
-// formatTime formats a time.Time value using the given Go layout string.
-// Example usage in templates: {{formatTime .Timestamp "2006-01-02T15:04:05Z07:00"}}
-func formatTime(t time.Time, layout string) string {
-	return t.Format(layout)
+// formatTime formats a time value using the given Go layout string.
+// Accepts both time.Time and string (attempts to parse RFC3339).
+// Example usage in templates: {{formatTime .Timestamp "2006-01-02"}}
+func formatTime(t any, layout string) string {
+	switch v := t.(type) {
+	case time.Time:
+		return v.Format(layout)
+	case string:
+		parsed, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			return v // Return the original string if parsing fails
+		}
+		return parsed.Format(layout)
+	default:
+		return ""
+	}
 }
 
 // ToTemplateMap converts a Notification into a map for template execution.
