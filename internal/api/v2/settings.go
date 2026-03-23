@@ -1345,13 +1345,13 @@ func validateNotificationSection(data json.RawMessage) error {
 
 	// Validate new species notification templates if present
 	if notificationConfig.Templates.NewSpecies.Title != "" {
-		if _, err := template.New("title").Parse(notificationConfig.Templates.NewSpecies.Title); err != nil {
+		if _, err := template.New("title").Funcs(notification.TemplateFuncs).Parse(notificationConfig.Templates.NewSpecies.Title); err != nil {
 			return fmt.Errorf("invalid template syntax in new species title: %w", err)
 		}
 	}
 
 	if notificationConfig.Templates.NewSpecies.Message != "" {
-		if _, err := template.New("message").Parse(notificationConfig.Templates.NewSpecies.Message); err != nil {
+		if _, err := template.New("message").Funcs(notification.TemplateFuncs).Parse(notificationConfig.Templates.NewSpecies.Message); err != nil {
 			return fmt.Errorf("invalid template syntax in new species message: %w", err)
 		}
 	}

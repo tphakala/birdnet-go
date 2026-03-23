@@ -191,7 +191,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 
 	// Parse custom template if provided
 	if templateStr != "" {
-		tmpl, err := template.New("webhook").Parse(templateStr)
+		tmpl, err := template.New("webhook").Funcs(TemplateFuncs).Parse(templateStr)
 		if err != nil {
 			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("operation", "parse_webhook_template").Build()
 		}
@@ -212,7 +212,7 @@ func NewWebhookProvider(name string, enabled bool, endpoints []WebhookEndpoint, 
 				"species":    "Test Species",
 			},
 		}
-		if err := tmpl.Execute(io.Discard, testNotification); err != nil {
+		if err := tmpl.Execute(io.Discard, testNotification.ToTemplateMap()); err != nil {
 			return nil, errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("operation", "validate_webhook_template").Build()
 		}
 
@@ -429,7 +429,7 @@ func (w *WebhookProvider) buildPayload(n *Notification) ([]byte, error) {
 	if w.template != nil {
 		// Use custom template
 		var buf bytes.Buffer
-		err := w.template.Execute(&buf, n)
+		err := w.template.Execute(&buf, n.ToTemplateMap())
 		if err != nil {
 			return nil, errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "execute_webhook_template").Build()
 		}

@@ -124,7 +124,7 @@ func (w *NotificationWorker) initTemplates() error {
 	}
 
 	for name, tmplStr := range templates {
-		tmpl, err := template.New(name).Parse(tmplStr)
+		tmpl, err := template.New(name).Funcs(TemplateFuncs).Parse(tmplStr)
 		if err != nil {
 			return errors.New(err).Component("notification").Category(errors.CategoryConfiguration).Context("template", name).Build()
 		}
