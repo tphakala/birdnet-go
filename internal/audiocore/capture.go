@@ -284,7 +284,7 @@ func startCapture(
 			if err := captureDevice.Stop(); err != nil {
 				log.Error("failed to stop capture device",
 					logger.String("source_id", sourceID),
-					logger.Any("error", err))
+					logger.Error(err))
 			}
 			captureDevice.Uninit()
 			// Context requires explicit two-step teardown.
