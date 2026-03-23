@@ -39,11 +39,12 @@ The "realtime" command is an alias for backward compatibility.`,
 			// after APIServerService.Start(), so it is set later via
 			// AudioEngine.SetScheduler().
 			audioEngine := engine.New(cmd.Context(), &engine.Config{
-				FFmpegPath:       settings.Realtime.Audio.FfmpegPath,
-				SoxPath:          settings.Realtime.Audio.SoxPath,
-				Transport:        settings.Realtime.RTSP.Transport,
-				FFmpegParameters: settings.Realtime.RTSP.FFmpegParameters,
-				Debug:            settings.Debug,
+				FFmpegPath:           settings.Realtime.Audio.FfmpegPath,
+				SoxPath:              settings.Realtime.Audio.SoxPath,
+				Transport:            settings.Realtime.RTSP.Transport,
+				FFmpegParameters:     settings.Realtime.RTSP.FFmpegParameters,
+				Debug:                settings.Debug,
+				CaptureBufferSeconds: settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds(settings.Realtime.Audio.Export.PreCapture),
 			}, nil)
 			defer audioEngine.Stop()
 

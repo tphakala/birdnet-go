@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -47,8 +48,11 @@ const (
 	// 144000 bytes = 1.5 seconds of 16-bit 48 kHz mono audio.
 	defaultAnalysisReadSize = 144000
 
-	// defaultCaptureDuration is the capture buffer duration in seconds.
-	defaultCaptureDuration = 15
+	// defaultCaptureBufferSeconds is the ring buffer capacity in seconds.
+	// This determines how much audio history is retained for clip export.
+	// Must be large enough to cover the export length + detection window
+	// + pre-capture offset. Matches conf.DefaultCaptureBufferSeconds.
+	defaultCaptureBufferSeconds = conf.DefaultCaptureBufferSeconds
 
 	// defaultBytesPerSample is the default PCM bytes per sample (16-bit).
 	defaultBytesPerSample = 2
@@ -83,6 +87,12 @@ type Config struct {
 	// Debug enables verbose debug logging for stream capture.
 	Debug bool
 
+	// CaptureBufferSeconds is the ring buffer capacity for audio history.
+	// When zero, defaults to conf.DefaultCaptureBufferSeconds (120).
+	// Should be set from settings.Realtime.ExtendedCapture.EffectiveCaptureBufferSeconds()
+	// to support extended capture mode.
+	CaptureBufferSeconds int
+
 	// RouterMetrics is optional; nil-safe.
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	RouterMetrics audiocore.RouterMetrics
@@ -98,6 +108,14 @@ type Config struct {
 	// DeviceMetrics is optional; nil-safe.
 	// NOTE: Not yet wired to subsystems; metrics plumbing is planned for a future PR.
 	DeviceMetrics audiocore.DeviceMetrics
+}
+
+// captureBufferSecs returns v if positive, otherwise the default capture buffer size.
+func captureBufferSecs(v int) int {
+	if v > 0 {
+		return v
+	}
+	return defaultCaptureBufferSeconds
 }
 
 // AudioEngine coordinates all audio subsystems: source registry, audio router,
@@ -127,6 +145,8 @@ type AudioEngine struct {
 	logLevel string
 	// debug enables verbose debug logging for stream capture.
 	debug bool
+	// captureBufferSeconds is the ring buffer capacity for audio history.
+	captureBufferSeconds int
 }
 
 // New creates an AudioEngine with all subsystems initialised.
@@ -149,21 +169,22 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 	deviceMgr := audiocore.NewDeviceManager(router, log)
 
 	return &AudioEngine{
-		registry:         audiocore.NewSourceRegistry(log),
-		router:           router,
-		ffmpegMgr:        ffmpegMgr,
-		deviceMgr:        deviceMgr,
-		bufferMgr:        bufMgr,
-		scheduler:        scheduler,
-		logger:           log.With(logger.String("component", "audio_engine")),
-		ctx:              engineCtx,
-		cancel:           cancel,
-		ffmpegPath:       cfg.FFmpegPath,
-		soxPath:          cfg.SoxPath,
-		transport:        cfg.Transport,
-		ffmpegParameters: cfg.FFmpegParameters,
-		logLevel:         cfg.LogLevel,
-		debug:            cfg.Debug,
+		registry:             audiocore.NewSourceRegistry(log),
+		router:               router,
+		ffmpegMgr:            ffmpegMgr,
+		deviceMgr:            deviceMgr,
+		bufferMgr:            bufMgr,
+		scheduler:            scheduler,
+		logger:               log.With(logger.String("component", "audio_engine")),
+		ctx:                  engineCtx,
+		cancel:               cancel,
+		ffmpegPath:           cfg.FFmpegPath,
+		soxPath:              cfg.SoxPath,
+		transport:            cfg.Transport,
+		ffmpegParameters:     cfg.FFmpegParameters,
+		logLevel:             cfg.LogLevel,
+		debug:                cfg.Debug,
+		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),
 	}
 }
 
@@ -234,7 +255,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	}
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
-		defaultCaptureDuration,
+		e.captureBufferSeconds,
 		sampleRate,
 		defaultBytesPerSample,
 	); err != nil {
@@ -352,7 +373,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
-		defaultCaptureDuration,
+		e.captureBufferSeconds,
 		sampleRate,
 		defaultBytesPerSample,
 	); err != nil {
