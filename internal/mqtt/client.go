@@ -48,6 +48,13 @@ type client struct {
 	lastConnErrMsg     string    // last connection error message for deduplication
 	connErrCount       int       // count of consecutive identical connection errors
 	lastConnErrLogTime time.Time // when the repeated error was last logged
+	// Publish suppression while disconnected — prevents Sentry flood when broker is unreachable.
+	// When the connection drops, the first publish failure is logged as a warning.
+	// Subsequent publish attempts are silently suppressed until the connection is restored.
+	disconnected           bool      // true after onConnectionLost, false after onConnect
+	publishSuppressed      bool      // true after the first publish-while-disconnected warning is logged
+	suppressedPublishCount int64     // number of publish attempts suppressed since disconnect
+	disconnectedSince      time.Time // when the connection was lost (for log context)
 }
 
 // NewClient creates a new MQTT client with the provided configuration.
@@ -345,6 +352,11 @@ func (c *client) PublishWithRetain(ctx context.Context, topic, payload string, r
 // It attempts the publish without a pre-check on IsConnected() to avoid the TOCTOU
 // race (GitHub #2397 Layer 3). If the publish fails with a transient connection error,
 // it waits briefly for the auto-reconnect and retries once.
+//
+// When the client is in a known disconnected state (between onConnectionLost and
+// onConnect), publish attempts are suppressed to prevent Sentry event floods.
+// The first failure is logged as a warning; subsequent failures are silently counted
+// and reported in aggregate when the connection is restored.
 func (c *client) publishInternal(ctx context.Context, topic, payload string, retain bool) error {
 	// Check context before proceeding
 	if err := ctx.Err(); err != nil {
@@ -352,6 +364,12 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 			logger.String("topic", topic),
 			logger.Error(err))
 		return err
+	}
+
+	// Fast path: if we know the connection is down, suppress publish attempts
+	// to avoid flooding Sentry and logs with repeated errors.
+	if suppressed := c.suppressPublishWhileDisconnected(topic); suppressed {
+		return nil
 	}
 
 	// Get client reference under lock, but do NOT check IsConnected().
@@ -421,6 +439,33 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 	}
 
 	return err
+}
+
+// suppressPublishWhileDisconnected checks if publishes should be suppressed because
+// the client is in a known disconnected state. On the first suppressed publish, it
+// logs a warning. Subsequent attempts are silently counted. Returns true if the
+// publish should be suppressed (caller should return nil).
+func (c *client) suppressPublishWhileDisconnected(topic string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if !c.disconnected {
+		return false
+	}
+
+	c.suppressedPublishCount++
+
+	if !c.publishSuppressed {
+		// Log the first suppressed publish as a warning so operators know publishes are being dropped
+		c.publishSuppressed = true
+		GetLogger().Warn("MQTT publish suppressed while disconnected (reconnection in progress, further publishes will be silently dropped)",
+			logger.String("topic", topic),
+			logger.String("broker", c.config.Broker),
+			logger.Time("disconnected_since", c.disconnectedSince))
+	}
+
+	c.metrics.IncrementErrorsWithCategory("mqtt-publish", "suppressed_while_disconnected")
+	return true
 }
 
 // attemptPublish performs a single publish attempt using the given paho client.
@@ -824,7 +869,11 @@ func (c *client) disconnectWithTimeout(timeout time.Duration) {
 
 	clientToDisconnect := c.internalClient // Get client instance under lock
 	c.internalClient = nil                 // Clear internal client reference under lock
-	c.mu.Unlock()                          // Unlock before potentially blocking disconnect
+	// Note: Do NOT set c.disconnected here. Explicit Disconnect() already sets
+	// internalClient=nil which causes publishInternal to return an error.
+	// The disconnected flag is only set by onConnectionLost for unexpected drops
+	// where we want to suppress repeated errors during reconnection.
+	c.mu.Unlock() // Unlock before potentially blocking disconnect
 
 	if clientToDisconnect != nil {
 		// Check connection status *outside* lock to avoid potential deadlock
@@ -854,12 +903,25 @@ func (c *client) onConnect(client mqtt.Client) {
 		logger.String("client_id", c.config.ClientID))
 	c.metrics.UpdateConnectionStatus(true)
 
-	// Reset reconnection backoff state on successful connection
+	// Reset reconnection backoff and publish suppression state on successful connection
 	c.mu.Lock()
 	c.reconnectAttempts = 0
 	c.connErrCount = 0
 	c.lastConnErrMsg = ""
+	wasDisconnected := c.disconnected
+	suppressedCount := c.suppressedPublishCount
+	disconnectedSince := c.disconnectedSince
+	c.disconnected = false
+	c.publishSuppressed = false
+	c.suppressedPublishCount = 0
 	c.mu.Unlock()
+
+	// Log aggregate count of suppressed publishes during the outage
+	if wasDisconnected && suppressedCount > 0 {
+		log.Info("MQTT connection restored, resuming publish operations",
+			logger.Int64("suppressed_publishes", suppressedCount),
+			logger.Duration("outage_duration", time.Since(disconnectedSince)))
+	}
 
 	// Publish MQTT connected alert event
 	alerting.TryPublish(&alerting.AlertEvent{
@@ -914,6 +976,15 @@ func (c *client) onConnectionLost(client mqtt.Client, err error) {
 		logger.Error(err))
 	c.metrics.UpdateConnectionStatus(false)
 	c.metrics.IncrementErrorsWithCategory("mqtt-connection", "connection_lost")
+
+	// Mark as disconnected to suppress publish errors until reconnected.
+	// This prevents flooding Sentry with ~1000+ publish errors when the broker is unreachable.
+	c.mu.Lock()
+	c.disconnected = true
+	c.publishSuppressed = false
+	c.suppressedPublishCount = 0
+	c.disconnectedSince = time.Now()
+	c.mu.Unlock()
 
 	// Publish MQTT disconnected alert event
 	alerting.TryPublish(&alerting.AlertEvent{

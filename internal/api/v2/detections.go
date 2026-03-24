@@ -647,7 +647,7 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		c.Debug("Failed to parse detection timestamp from date=%q time=%q: %v", note.Date, note.Time, err)
 	}
 
-	c.applySpeciesTrackingMetadata(&detection, note.ScientificName)
+	c.applySpeciesTrackingMetadata(&detection, note.ScientificName, note.Date)
 	detection.Verified = c.mapVerificationStatus(note.Verified)
 	detection.Comments = extractNoteComments(note.Comments)
 
@@ -658,16 +658,31 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 	return detection
 }
 
-// applySpeciesTrackingMetadata adds species tracking info to detection response
-func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName string) {
+// applySpeciesTrackingMetadata adds species tracking info to detection response.
+// The detectionDate parameter (YYYY-MM-DD) is used to determine whether this specific
+// detection was the first sighting of the species (ever, this year, or this season).
+// Without this, all detections of a recently-first-seen species would incorrectly
+// show isNewSpecies=true instead of only the actual first detection.
+func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, scientificName, detectionDate string) {
 	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil {
 		return
 	}
 	status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(scientificName, time.Now())
-	detection.IsNewSpecies = status.IsNew
+
+	// Set flags based on whether THIS detection's date matches the first-seen date
+	// for each tracking period, rather than using the tracker's window-based "IsNew" flag.
+	// The window-based flag marks the entire species as "new" for N days, which causes
+	// every detection of that species to show isNewSpecies=true during the window.
+	detection.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
+		detectionDate == status.FirstSeenTime.Format(time.DateOnly)
+	detection.IsNewThisYear = status.FirstThisYear != nil &&
+		detectionDate == status.FirstThisYear.Format(time.DateOnly)
+	detection.IsNewThisSeason = status.FirstThisSeason != nil &&
+		detectionDate == status.FirstThisSeason.Format(time.DateOnly)
+
+	// DaysSinceFirstSeen is relative to now — tells the user how long ago
+	// this species was first observed overall.
 	detection.DaysSinceFirstSeen = status.DaysSinceFirst
-	detection.IsNewThisYear = status.IsNewThisYear
-	detection.IsNewThisSeason = status.IsNewThisSeason
 	detection.DaysThisYear = status.DaysThisYear
 	detection.DaysThisSeason = status.DaysThisSeason
 	detection.CurrentSeason = status.CurrentSeason

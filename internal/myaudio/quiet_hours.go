@@ -8,6 +8,7 @@ package myaudio
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -55,6 +56,11 @@ type QuietHoursScheduler struct {
 	// Control channel for sound card stop/start signals
 	controlChan chan string
 
+	// stopped is set to 1 when Stop() is called. Evaluate() checks this
+	// before sending on controlChan to avoid sending on a closed channel
+	// during shutdown.
+	stopped atomic.Int32
+
 	// Track which streams are currently suppressed by quiet hours.
 	// Key is the stream URL, value is true if currently suppressed.
 	suppressed map[string]bool
@@ -83,8 +89,11 @@ func (s *QuietHoursScheduler) Start() {
 	go s.run()
 }
 
-// Stop cancels the scheduler context and stops the evaluation loop.
+// Stop marks the scheduler as stopped and cancels the context to exit the
+// evaluation loop. The stopped flag prevents Evaluate() from sending on
+// controlChan after it has been closed during shutdown.
 func (s *QuietHoursScheduler) Stop() {
+	s.stopped.Store(1)
 	s.cancel()
 }
 
@@ -232,18 +241,32 @@ func (s *QuietHoursScheduler) Evaluate() {
 		}
 	}
 
-	// Execute sound card signal
-	if soundCardSignal != "" {
+	// Execute sound card signal if needed.
+	if soundCardSignal != "" && s.stopped.Load() == 0 {
 		log.Info("Quiet hours sound card action", logger.String("signal", soundCardSignal))
-		select {
-		case s.controlChan <- soundCardSignal:
-			s.mu.Lock()
-			s.soundCardSuppressed = (soundCardSignal == SignalQuietHoursStopSoundCard)
-			s.mu.Unlock()
-		default:
-			log.Warn("Control channel full, could not send sound card signal",
-				logger.String("signal", soundCardSignal))
+		s.trySendSoundCardSignal(soundCardSignal, log)
+	}
+}
+
+// trySendSoundCardSignal attempts to send a sound card signal on controlChan.
+// The recover guard is defense-in-depth against a theoretical TOCTOU race:
+// Evaluate() could pass the stopped check, then Stop() + close(controlChan)
+// execute before the select runs. The window is nanoseconds but the panic is fatal.
+func (s *QuietHoursScheduler) trySendSoundCardSignal(signal string, log logger.Logger) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Warn("Recovered from send on closed controlChan during shutdown",
+				logger.String("signal", signal))
 		}
+	}()
+	select {
+	case s.controlChan <- signal:
+		s.mu.Lock()
+		s.soundCardSuppressed = (signal == SignalQuietHoursStopSoundCard)
+		s.mu.Unlock()
+	default:
+		log.Warn("Control channel full, could not send sound card signal",
+			logger.String("signal", signal))
 	}
 }
 

@@ -1,6 +1,7 @@
 package myaudio
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -537,4 +538,57 @@ func TestEvaluate_NilAudioChanSkipsRestart(t *testing.T) {
 	assert.Empty(t, mock.stopped, "should not stop any streams")
 	assert.Empty(t, mock.started, "should not restart stream when audioChan is nil")
 	assert.True(t, scheduler.suppressed["rtsp://cam1"], "stream should remain suppressed when restart fails")
+}
+
+func TestEvaluate_StoppedSchedulerSkipsSendOnClosedControlChan(t *testing.T) {
+	// Regression test: Evaluate() must not panic when the scheduler is stopped
+	// and controlChan is closed. This reproduces the shutdown race where
+	// close(controlChan) executes while the scheduler's ticker fires Evaluate().
+	mock := &mockManager{activeStreams: []string{}}
+	setTestManager(t, mock)
+	setTestAudioChan(t)
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.Audio.Source = deviceDefault
+	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{
+		Enabled:   true,
+		Mode:      "fixed",
+		StartTime: "00:00",
+		EndTime:   "23:59", // always in quiet hours
+	}
+	setTestSettings(t, settings)
+
+	controlChan := make(chan string, 1)
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler := &QuietHoursScheduler{
+		ctx:         ctx,
+		cancel:      cancel,
+		controlChan: controlChan,
+		suppressed:  make(map[string]bool),
+	}
+
+	// Simulate the shutdown sequence: stop scheduler, then close the channel.
+	scheduler.Stop()
+	close(controlChan)
+
+	// Evaluate() after Stop() + close(controlChan) must not panic.
+	assert.NotPanics(t, func() {
+		scheduler.Evaluate()
+	}, "Evaluate() must not panic on a stopped scheduler with closed controlChan")
+}
+
+func TestStop_SetsStoppedFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(t.Context())
+	scheduler := &QuietHoursScheduler{
+		ctx:         ctx,
+		cancel:      cancel,
+		controlChan: make(chan string, 1),
+		suppressed:  make(map[string]bool),
+	}
+
+	assert.Equal(t, int32(0), scheduler.stopped.Load(), "stopped should be 0 before Stop()")
+	scheduler.Stop()
+	assert.Equal(t, int32(1), scheduler.stopped.Load(), "stopped should be 1 after Stop()")
 }

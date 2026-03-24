@@ -11,6 +11,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/restart"
 )
@@ -617,14 +619,13 @@ func TestGetJobQueueStats(t *testing.T) {
 	t.Attr("type", "integration")
 	t.Attr("feature", "job-queue")
 
-	t.Run("No processor in context", func(t *testing.T) {
+	t.Run("Nil processor", func(t *testing.T) {
 		e, controller := setupSystemTestEnvironment(t)
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/jobs", http.NoBody)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetPath("/api/v2/system/jobs")
-		// Note: Not setting processor in context
 
 		err := controller.GetJobQueueStats(c)
 		require.NoError(t, err) // HandleError returns nil after writing response
@@ -636,14 +637,39 @@ func TestGetJobQueueStats(t *testing.T) {
 		assert.Contains(t, response["message"], "Processor not available")
 	})
 
-	t.Run("Invalid processor type", func(t *testing.T) {
+	t.Run("Processor with job queue returns stats", func(t *testing.T) {
 		e, controller := setupSystemTestEnvironment(t)
+
+		// Create a real processor with a job queue
+		jq := jobqueue.NewJobQueue()
+		controller.Processor = &processor.Processor{
+			JobQueue: jq,
+		}
 
 		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/jobs", http.NoBody)
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetPath("/api/v2/system/jobs")
-		c.Set("processor", "not-a-processor") // Wrong type
+
+		err := controller.GetJobQueueStats(c)
+		require.NoError(t, err)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var statsMap map[string]any
+		err = json.Unmarshal(rec.Body.Bytes(), &statsMap)
+		require.NoError(t, err)
+		assert.Contains(t, statsMap, "queue", "response should contain job queue stats")
+	})
+
+	t.Run("Processor without job queue", func(t *testing.T) {
+		e, controller := setupSystemTestEnvironment(t)
+
+		controller.Processor = &processor.Processor{}
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/jobs", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/system/jobs")
 
 		err := controller.GetJobQueueStats(c)
 		require.NoError(t, err)
@@ -652,7 +678,7 @@ func TestGetJobQueueStats(t *testing.T) {
 		var response map[string]any
 		err = json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
-		assert.Contains(t, response["message"], "Invalid processor type")
+		assert.Contains(t, response["message"], "Job queue not available")
 	})
 }
 

@@ -345,6 +345,23 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	// HTTP 204: station exists but has no data available (not an error)
+	if resp.StatusCode == http.StatusNoContent {
+		log.Info("Weather station returned no data (HTTP 204)",
+			logger.String("station", cfg.stationID))
+		return nil, ErrWeatherNoData
+	}
+
+	// HTTP 401: authentication failed — likely invalid API key
+	if resp.StatusCode == http.StatusUnauthorized {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, log)
+		log.Error("Weather API authentication failed — check your API key",
+			logger.String("station", cfg.stationID),
+			logger.String("detail", errorMessage))
+		return nil, ErrWeatherAuthFailed
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, log)

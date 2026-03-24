@@ -46,6 +46,12 @@ const (
 // DefaultFlushInterval is the interval for checking and flushing pending detections
 const DefaultFlushInterval = 1 * time.Second
 
+// MinJobQueueGracePeriod is the minimum time to wait for in-flight job queue
+// workers to finish during shutdown, even when the context is already expired.
+// This prevents closing the datastore while workers are mid-write, which would
+// cause errors writing to a closed database connection.
+const MinJobQueueGracePeriod = 500 * time.Millisecond
+
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
 	Settings            *conf.Settings
@@ -1888,12 +1894,15 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	// Stop the job queue — use remaining context budget, not a hardcoded 30 seconds.
 	// Always send the stop signal even if the deadline has passed (remaining <= 0)
 	// so the queue's workers are notified and don't keep running after DB close.
+	// Enforce a minimum grace period so in-flight DB writes can complete before
+	// closeDataStore runs — a zero timeout would return immediately, risking
+	// writes to a closed database connection.
 	// Check ctx.Err() first to handle cancellation without deadline (WithCancel).
 	queueStopTimeout := 30 * time.Second
 	if ctx.Err() != nil {
-		queueStopTimeout = 0
+		queueStopTimeout = MinJobQueueGracePeriod
 	} else if deadline, ok := ctx.Deadline(); ok {
-		queueStopTimeout = max(time.Until(deadline), 0)
+		queueStopTimeout = max(time.Until(deadline), MinJobQueueGracePeriod)
 	}
 
 	if err := p.JobQueue.StopWithTimeout(queueStopTimeout); err != nil {

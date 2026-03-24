@@ -14,6 +14,35 @@ const (
 	MaxRetries     = 3
 )
 
+// Sentinel errors for weather API responses
+var (
+	// ErrWeatherAuthFailed indicates the API returned HTTP 401 (unauthorized).
+	// This typically means the API key is invalid or expired.
+	ErrWeatherAuthFailed = errors.Newf("weather API authentication failed").
+				Component("weather").Category(errors.CategoryConfiguration).Build()
+
+	// ErrWeatherNoData indicates the API returned HTTP 204 (no content).
+	// The station exists but has no current data available.
+	ErrWeatherNoData = errors.Newf("weather station has no data available").
+				Component("weather").Category(errors.CategoryNotFound).Build()
+)
+
+// Backoff constants for the polling service
+const (
+	// maxConsecutiveAuthFailures is the number of consecutive 401 errors
+	// before the service stops retrying and requires a config change.
+	maxConsecutiveAuthFailures = 3
+
+	// initialBackoffDuration is the starting backoff delay after the first failure.
+	initialBackoffDuration = 1 * time.Minute
+
+	// maxBackoffDuration caps the exponential backoff.
+	maxBackoffDuration = 1 * time.Hour
+
+	// backoffMultiplier is the factor by which backoff increases after each failure.
+	backoffMultiplier = 2
+)
+
 // newWeatherError creates a standardized weather error with common fields
 func newWeatherError(err error, category errors.ErrorCategory, operation, provider string) error {
 	return errors.New(err).

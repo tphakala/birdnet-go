@@ -435,7 +435,7 @@ func (c *Controller) buildDailySpeciesSummaryResponse(aggregatedData map[string]
 		thumbnailURL := getThumbnailWithFallback(thumbnailURLs, scientificName)
 		summary := buildSpeciesSummaryFromData(&data, thumbnailURL)
 		if status, exists := batchSpeciesStatus[scientificName]; exists {
-			applySpeciesStatusToSummary(&summary, &status)
+			applySpeciesStatusToSummary(&summary, &status, selectedDate)
 		}
 		result = append(result, summary)
 	}
@@ -517,16 +517,22 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 	}
 }
 
-// applySpeciesStatusToSummary applies tracking metadata to summary
-func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus) {
-	summary.IsNewSpecies = status.IsNew
+// applySpeciesStatusToSummary applies tracking metadata to summary.
+// The selectedDate parameter (YYYY-MM-DD) is compared against first-seen dates
+// so the "new" flags are true only on the actual first-sighting date.
+func applySpeciesStatusToSummary(summary *SpeciesDailySummary, status *species.SpeciesStatus, selectedDate string) {
+	// Mark as new only if the selected date matches the species' first-seen date
+	summary.IsNewSpecies = !status.FirstSeenTime.IsZero() &&
+		selectedDate == status.FirstSeenTime.Format(time.DateOnly)
 
 	if status.DaysSinceFirst >= 0 {
 		summary.DaysSinceFirstSeen = status.DaysSinceFirst
 	}
 
-	summary.IsNewThisYear = status.IsNewThisYear
-	summary.IsNewThisSeason = status.IsNewThisSeason
+	summary.IsNewThisYear = status.FirstThisYear != nil &&
+		selectedDate == status.FirstThisYear.Format(time.DateOnly)
+	summary.IsNewThisSeason = status.FirstThisSeason != nil &&
+		selectedDate == status.FirstThisSeason.Format(time.DateOnly)
 
 	if status.DaysThisYear >= 0 {
 		summary.DaysThisYear = status.DaysThisYear

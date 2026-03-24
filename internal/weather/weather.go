@@ -2,6 +2,7 @@ package weather
 
 import (
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -23,6 +24,79 @@ type Provider interface {
 	FetchWeather(settings *conf.Settings) (*WeatherData, error)
 }
 
+// backoffState tracks consecutive failures and backoff timing for the polling loop.
+type backoffState struct {
+	mu                   sync.Mutex
+	consecutiveFailures  int
+	consecutiveAuthFails int
+	currentBackoff       time.Duration
+	authDisabled         bool // true when auth failures exceed threshold
+	nextAllowedFetchTime time.Time
+}
+
+// reset clears all backoff state after a successful fetch.
+func (b *backoffState) reset() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.consecutiveFailures = 0
+	b.consecutiveAuthFails = 0
+	b.currentBackoff = 0
+	b.nextAllowedFetchTime = time.Time{}
+	// Note: authDisabled is NOT reset here — a successful fetch from
+	// a different path (e.g., after config change) would need explicit re-enable.
+}
+
+// recordAuthFailure increments the auth failure counter and returns true
+// if the threshold has been reached and retrying should stop.
+func (b *backoffState) recordAuthFailure() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.consecutiveAuthFails++
+	if b.consecutiveAuthFails >= maxConsecutiveAuthFailures {
+		b.authDisabled = true
+		return true
+	}
+	return false
+}
+
+// recordFailure increments the general failure counter and computes the next backoff.
+// Returns the backoff duration and the current consecutive failure count.
+func (b *backoffState) recordFailure() (backoff time.Duration, failures int) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.consecutiveFailures++
+	if b.currentBackoff == 0 {
+		b.currentBackoff = initialBackoffDuration
+	} else {
+		b.currentBackoff *= backoffMultiplier
+	}
+	if b.currentBackoff > maxBackoffDuration {
+		b.currentBackoff = maxBackoffDuration
+	}
+	b.nextAllowedFetchTime = time.Now().Add(b.currentBackoff)
+	return b.currentBackoff, b.consecutiveFailures
+}
+
+// shouldSkip returns true if the current time is before the next allowed fetch time.
+func (b *backoffState) shouldSkip() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.authDisabled {
+		return true
+	}
+	if b.nextAllowedFetchTime.IsZero() {
+		return false
+	}
+	return time.Now().Before(b.nextAllowedFetchTime)
+}
+
+// isAuthDisabled returns whether auth-based retrying has been permanently stopped.
+func (b *backoffState) isAuthDisabled() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.authDisabled
+}
+
 // Service handles weather data operations
 type Service struct {
 	provider     Provider
@@ -30,6 +104,7 @@ type Service struct {
 	settings     *conf.Settings
 	metrics      *metrics.WeatherMetrics
 	startupDelay time.Duration
+	backoff      backoffState
 }
 
 // WeatherData represents the common structure for weather data across providers
@@ -299,8 +374,24 @@ func (s *Service) Poll() error {
 	return s.fetchAndSave()
 }
 
-// fetchAndSave fetches weather data and saves it to the database
+// fetchAndSave fetches weather data and saves it to the database.
+// It tracks consecutive failures and applies exponential backoff for transient
+// errors. For persistent authentication failures (HTTP 401), it stops retrying
+// entirely after maxConsecutiveAuthFailures.
 func (s *Service) fetchAndSave() error {
+	// Check if we should skip this cycle due to backoff
+	if s.backoff.shouldSkip() {
+		if s.backoff.isAuthDisabled() {
+			// Already logged when auth was disabled; emit periodic reminder at Debug level
+			getLogger().Debug("Skipping weather fetch — API authentication disabled due to repeated 401 errors",
+				logger.String("provider", s.settings.Realtime.Weather.Provider))
+		} else {
+			getLogger().Debug("Skipping weather fetch — backing off after previous failures",
+				logger.String("provider", s.settings.Realtime.Weather.Provider))
+		}
+		return nil
+	}
+
 	// Track fetch duration
 	fetchStart := time.Now()
 
@@ -319,18 +410,46 @@ func (s *Service) fetchAndSave() error {
 	}
 
 	if err != nil {
-		// Handle "not modified" as a success case - no new data to save
+		// Handle "not modified" as a success case — no new data to save
 		if errors.Is(err, ErrWeatherDataNotModified) {
 			getLogger().Debug("Weather data not modified since last fetch",
 				logger.String("provider", s.settings.Realtime.Weather.Provider))
-			return nil // Not an error, just no new data
+			s.backoff.reset()
+			return nil
 		}
 
-		// Provider should log the specific error, we log the failure context here
-		getLogger().Error("Failed to fetch weather data from provider",
+		// Handle "no data" (HTTP 204) — station exists but has no observations
+		if errors.Is(err, ErrWeatherNoData) {
+			getLogger().Info("Weather station has no data available, will retry next cycle",
+				logger.String("provider", s.settings.Realtime.Weather.Provider))
+			// Don't backoff — this is a normal condition for inactive stations
+			return nil
+		}
+
+		// Handle authentication failure (HTTP 401)
+		if errors.Is(err, ErrWeatherAuthFailed) {
+			stopped := s.backoff.recordAuthFailure()
+			if stopped {
+				getLogger().Error("Weather API authentication failed repeatedly — stopping retries. "+
+					"Please check your API key in the settings and restart the service.",
+					logger.String("provider", s.settings.Realtime.Weather.Provider),
+					logger.Int("consecutive_failures", maxConsecutiveAuthFailures))
+			} else {
+				getLogger().Warn("Weather API authentication failed — will retry",
+					logger.String("provider", s.settings.Realtime.Weather.Provider),
+					logger.Error(err))
+			}
+			return ErrWeatherAuthFailed
+		}
+
+		// General failure: apply exponential backoff
+		backoff, failures := s.backoff.recordFailure()
+		getLogger().Error("Failed to fetch weather data from provider, backing off",
 			logger.String("provider", s.settings.Realtime.Weather.Provider),
+			logger.String("backoff", backoff.String()),
+			logger.Int("consecutive_failures", failures),
 			logger.Error(err))
-		// Return the original error for upstream handling
+
 		return errors.New(err).
 			Component("weather").
 			Category(errors.CategoryNetwork).
@@ -338,6 +457,9 @@ func (s *Service) fetchAndSave() error {
 			Context("provider", s.settings.Realtime.Weather.Provider).
 			Build()
 	}
+
+	// Success — reset backoff state
+	s.backoff.reset()
 
 	// Convert to local time for logging. SaveWeatherData handles its own
 	// timezone conversion for storage.

@@ -136,6 +136,14 @@ func executeOpenWeatherRequest(req *http.Request, log logger.Logger) ([]byte, er
 
 		attemptLogger.Debug("Received HTTP response", logger.Int("status_code", resp.StatusCode))
 
+		// HTTP 401: authentication failed — don't retry, return sentinel
+		if resp.StatusCode == http.StatusUnauthorized {
+			_, _ = io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			attemptLogger.Error("Weather API authentication failed — check your API key")
+			return nil, ErrWeatherAuthFailed
+		}
+
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, _ := io.ReadAll(resp.Body)
 			_ = resp.Body.Close()

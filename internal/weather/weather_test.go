@@ -15,6 +15,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
+// mockProvider is a test double for the Provider interface.
+type mockProvider struct {
+	fetchFunc func(settings *conf.Settings) (*WeatherData, error)
+}
+
+func (m *mockProvider) FetchWeather(settings *conf.Settings) (*WeatherData, error) {
+	return m.fetchFunc(settings)
+}
+
 func TestNewService(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -925,4 +934,279 @@ func TestService_StartPolling_StartupDelay(t *testing.T) {
 			t.Fatal("StartPolling was not interrupted by stopChan during startup delay")
 		}
 	})
+}
+
+// =============================================================================
+// BACKOFF AND AUTH FAILURE TESTS
+// =============================================================================
+
+// TestBackoffState_Reset verifies that reset clears all failure counters.
+func TestBackoffState_Reset(t *testing.T) {
+	b := &backoffState{}
+	b.recordFailure()
+	b.recordAuthFailure()
+
+	b.reset()
+
+	assert.False(t, b.shouldSkip(), "After reset, shouldSkip should be false")
+	assert.Equal(t, 0, b.consecutiveFailures)
+	assert.Equal(t, 0, b.consecutiveAuthFails)
+	assert.Equal(t, time.Duration(0), b.currentBackoff)
+}
+
+// TestBackoffState_ExponentialBackoff verifies the backoff increases exponentially.
+func TestBackoffState_ExponentialBackoff(t *testing.T) {
+	b := &backoffState{}
+
+	backoff1, failures1 := b.recordFailure()
+	assert.Equal(t, initialBackoffDuration, backoff1)
+	assert.Equal(t, 1, failures1)
+
+	backoff2, failures2 := b.recordFailure()
+	assert.Equal(t, initialBackoffDuration*backoffMultiplier, backoff2)
+	assert.Equal(t, 2, failures2)
+
+	backoff3, _ := b.recordFailure()
+	assert.Equal(t, initialBackoffDuration*backoffMultiplier*backoffMultiplier, backoff3)
+}
+
+// TestBackoffState_MaxBackoff verifies the backoff caps at maxBackoffDuration.
+func TestBackoffState_MaxBackoff(t *testing.T) {
+	b := &backoffState{}
+
+	// Record enough failures to exceed max
+	for range 20 {
+		b.recordFailure()
+	}
+
+	backoff, _ := b.recordFailure()
+	assert.LessOrEqual(t, backoff, maxBackoffDuration,
+		"Backoff should never exceed max")
+}
+
+// TestBackoffState_AuthFailureThreshold verifies auth failures stop after threshold.
+func TestBackoffState_AuthFailureThreshold(t *testing.T) {
+	b := &backoffState{}
+
+	// First two auth failures should not disable
+	for range maxConsecutiveAuthFailures - 1 {
+		stopped := b.recordAuthFailure()
+		assert.False(t, stopped)
+		assert.False(t, b.isAuthDisabled())
+	}
+
+	// Third auth failure should disable
+	stopped := b.recordAuthFailure()
+	assert.True(t, stopped)
+	assert.True(t, b.isAuthDisabled())
+	assert.True(t, b.shouldSkip(), "After auth disabled, shouldSkip should be true")
+}
+
+// TestBackoffState_AuthDisabledNotResetByReset verifies that authDisabled persists
+// through reset() calls — a restart or config change is required.
+func TestBackoffState_AuthDisabledNotResetByReset(t *testing.T) {
+	b := &backoffState{}
+
+	for range maxConsecutiveAuthFailures {
+		b.recordAuthFailure()
+	}
+	assert.True(t, b.isAuthDisabled())
+
+	b.reset()
+	assert.True(t, b.isAuthDisabled(),
+		"authDisabled should persist through reset — requires service restart")
+}
+
+// TestBackoffState_ShouldSkipDuringBackoff verifies skip behavior during backoff window.
+func TestBackoffState_ShouldSkipDuringBackoff(t *testing.T) {
+	b := &backoffState{}
+
+	// Before any failure, should not skip
+	assert.False(t, b.shouldSkip())
+
+	// After failure, should skip (backoff is 1 minute)
+	b.recordFailure()
+	assert.True(t, b.shouldSkip(), "Should skip during backoff window")
+}
+
+// TestFetchAndSave_AuthFailure tests that auth failures are tracked and eventually
+// stop retrying.
+func TestFetchAndSave_AuthFailure(t *testing.T) {
+	settings := createTestSettings(t, "wunderground")
+
+	callCount := 0
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			callCount++
+			return nil, ErrWeatherAuthFailed
+		},
+	}
+
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	// First few calls should attempt fetches and return auth error
+	for range maxConsecutiveAuthFailures {
+		err := service.fetchAndSave()
+		require.ErrorIs(t, err, ErrWeatherAuthFailed)
+	}
+	assert.Equal(t, maxConsecutiveAuthFailures, callCount,
+		"Provider should be called exactly maxConsecutiveAuthFailures times")
+
+	// After threshold, fetchAndSave should skip without calling provider
+	prevCount := callCount
+	err := service.fetchAndSave()
+	require.NoError(t, err, "Should return nil when skipping due to auth disabled")
+	assert.Equal(t, prevCount, callCount, "Provider should NOT be called after auth disabled")
+}
+
+// TestFetchAndSave_NoData tests that HTTP 204 is handled gracefully without backoff.
+func TestFetchAndSave_NoData(t *testing.T) {
+	settings := createTestSettings(t, "wunderground")
+
+	callCount := 0
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			callCount++
+			return nil, ErrWeatherNoData
+		},
+	}
+
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	// Should return nil and not trigger backoff
+	err := service.fetchAndSave()
+	require.NoError(t, err)
+	assert.Equal(t, 1, callCount)
+
+	// Next call should still attempt (no backoff)
+	err = service.fetchAndSave()
+	require.NoError(t, err)
+	assert.Equal(t, 2, callCount, "No backoff should be applied for no-data responses")
+}
+
+// TestFetchAndSave_GeneralFailureBackoff verifies exponential backoff for general errors.
+func TestFetchAndSave_GeneralFailureBackoff(t *testing.T) {
+	settings := createTestSettings(t, "wunderground")
+
+	callCount := 0
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			callCount++
+			return nil, errors.New("network timeout")
+		},
+	}
+
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	// First call should fail and apply backoff
+	err := service.fetchAndSave()
+	require.Error(t, err)
+	assert.Equal(t, 1, callCount)
+
+	// Second call should be skipped due to backoff (nextAllowedFetchTime is 1 minute away)
+	err = service.fetchAndSave()
+	require.NoError(t, err, "Should return nil when skipping due to backoff")
+	assert.Equal(t, 1, callCount, "Provider should NOT be called during backoff")
+}
+
+// TestFetchAndSave_SuccessResetsBackoff verifies that a successful fetch clears backoff.
+func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
+	mockDB := mocks.NewMockInterface(t)
+
+	settings := createTestSettings(t, "wunderground")
+
+	failOnFirst := true
+	provider := &mockProvider{
+		fetchFunc: func(_ *conf.Settings) (*WeatherData, error) {
+			if failOnFirst {
+				failOnFirst = false
+				return nil, errors.New("transient error")
+			}
+			return createTestWeatherData(t), nil
+		},
+	}
+
+	// Mock DB for the successful save
+	mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+		de := args.Get(0).(*datastore.DailyEvents)
+		de.ID = 1
+	}).Return(nil).Once()
+	mockDB.On("SaveHourlyWeather", mock.Anything).Return(nil).Once()
+
+	service := &Service{
+		provider: provider,
+		db:       mockDB,
+		settings: settings,
+		metrics:  nil,
+	}
+
+	// First call fails — sets backoff
+	err := service.fetchAndSave()
+	require.Error(t, err)
+	assert.True(t, service.backoff.shouldSkip(), "Should be in backoff after failure")
+
+	// Manually clear the backoff time so the next call proceeds
+	// (simulating the backoff period elapsing)
+	service.backoff.mu.Lock()
+	service.backoff.nextAllowedFetchTime = time.Time{}
+	service.backoff.mu.Unlock()
+
+	// Second call succeeds — should reset backoff
+	err = service.fetchAndSave()
+	require.NoError(t, err)
+	assert.False(t, service.backoff.shouldSkip(), "Backoff should be cleared after success")
+
+	mockDB.AssertExpectations(t)
+}
+
+// TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns
+// ErrWeatherNoData for HTTP 204.
+func TestWundergroundProvider_HTTP204_NoContent(t *testing.T) {
+	setupHTTPMock(t)
+
+	registerWundergroundResponder(t, http.StatusNoContent, "")
+
+	provider := NewWundergroundProvider(nil)
+	settings := createTestSettings(t, "wunderground")
+
+	data, err := provider.FetchWeather(settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	assert.ErrorIs(t, err, ErrWeatherNoData,
+		"HTTP 204 should return ErrWeatherNoData sentinel")
+}
+
+// TestWundergroundProvider_HTTP401_AuthFailed tests that Wunderground returns
+// ErrWeatherAuthFailed for HTTP 401.
+func TestWundergroundProvider_HTTP401_AuthFailed(t *testing.T) {
+	setupHTTPMock(t)
+
+	registerWundergroundResponder(t, http.StatusUnauthorized,
+		wundergroundTestErrorResponse("CDN-0001", "Invalid API key"))
+
+	provider := NewWundergroundProvider(nil)
+	settings := createTestSettings(t, "wunderground")
+
+	data, err := provider.FetchWeather(settings)
+
+	require.Error(t, err)
+	assert.Nil(t, data)
+	assert.ErrorIs(t, err, ErrWeatherAuthFailed,
+		"HTTP 401 should return ErrWeatherAuthFailed sentinel")
 }

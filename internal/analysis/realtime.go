@@ -648,8 +648,18 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 					}
 				}
 
-				// Step 6: Close controlChan to signal goroutines selecting on it to stop
-				log.Info("shutdown step 6: closing control channel after producers shutdown",
+				// Step 6a: Stop quiet hours scheduler before closing controlChan.
+				// The scheduler's Evaluate() sends on controlChan via a non-blocking
+				// select; sending on a closed channel panics even with a default case.
+				// Stopping the scheduler first cancels its context (exiting the run
+				// loop) and sets a stopped flag that guards the send in Evaluate().
+				log.Info("shutdown step 6a: stopping quiet hours scheduler",
+					logger.Int("step", 6),
+					logger.String("operation", "shutdown_quiet_hours_scheduler"))
+				quietHoursScheduler.Stop()
+
+				// Step 6b: Close controlChan to signal goroutines selecting on it to stop
+				log.Info("shutdown step 6b: closing control channel after producers shutdown",
 					logger.Int("step", 6),
 					logger.String("operation", "close_control_channel"))
 				close(controlChan)

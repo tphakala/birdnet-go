@@ -23,7 +23,6 @@ import (
 	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/shirou/gopsutil/v3/process"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -224,9 +223,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Get the processor from the context
-	processorObj := ctx.Get("processor")
-	if processorObj == nil {
+	// Check if processor is available
+	if c.Processor == nil {
 		c.logErrorIfEnabled("Processor not available for job queue stats",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -234,19 +232,8 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("processor not available"), "Processor not available", http.StatusInternalServerError)
 	}
 
-	// Get the processor with the correct type
-	p, ok := processorObj.(*processor.Processor)
-	if !ok {
-		c.logErrorIfEnabled("Invalid processor type for job queue stats",
-			logger.String("actual_type", fmt.Sprintf("%T", processorObj)),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
-		)
-		return c.HandleError(ctx, fmt.Errorf("invalid processor type"), "Invalid processor type", http.StatusInternalServerError)
-	}
-
 	// Check if job queue is available
-	if p.JobQueue == nil {
+	if c.Processor.JobQueue == nil {
 		c.logErrorIfEnabled("Job queue not available",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
@@ -255,7 +242,7 @@ func (c *Controller) GetJobQueueStats(ctx echo.Context) error {
 	}
 
 	// Get job queue stats
-	stats := p.JobQueue.GetStats()
+	stats := c.Processor.JobQueue.GetStats()
 
 	// Convert to JSON
 	jsonStats, err := stats.ToJSON()

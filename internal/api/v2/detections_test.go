@@ -21,6 +21,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
+	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
@@ -1585,8 +1587,8 @@ func TestGetExcludedSpecies(t *testing.T) {
 		clearExcludedSpeciesList(t)
 
 		// First add some species
-		species := []string{"American Crow", "Red-bellied Woodpecker", "Blue Jay"}
-		for _, s := range species {
+		speciesList := []string{"American Crow", "Red-bellied Woodpecker", "Blue Jay"}
+		for _, s := range speciesList {
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
 				strings.NewReader(`{"common_name": "`+s+`"}`))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
@@ -1609,7 +1611,7 @@ func TestGetExcludedSpecies(t *testing.T) {
 		err = json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 		assert.Equal(t, 3, response.Count)
-		assert.ElementsMatch(t, species, response.Species)
+		assert.ElementsMatch(t, speciesList, response.Species)
 	})
 
 	t.Run("Excluded list reflects toggle operations", func(t *testing.T) {
@@ -2267,4 +2269,69 @@ func TestTrueConcurrentPlatformSpecific(t *testing.T) {
 	assert.GreaterOrEqual(t, conflicts, int32(0), "Some requests should get conflict status")
 	assert.Equal(t, int32(0), failures, "There should be no unexpected failures")
 	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict") // #nosec G115 -- numConcurrent is a small test constant (3-10), no overflow risk
+}
+
+// TestApplySpeciesTrackingMetadata_NoveltyFlags verifies that the isNewSpecies,
+// isNewThisYear, and isNewThisSeason flags are true only when the detection date
+// matches the species' first-seen date for each period. Regression test for Forgejo #98.
+func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "unit")
+	t.Attr("feature", "novelty-flags")
+
+	settings := &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 30,
+		SyncIntervalMinutes:  60,
+		YearlyTracking:       conf.YearlyTrackingSettings{Enabled: true, WindowDays: 30},
+		SeasonalTracking:     conf.SeasonalTrackingSettings{Enabled: true, WindowDays: 30},
+	}
+
+	tracker := species.NewTrackerFromSettings(nil, settings)
+
+	// Seed the tracker: species first seen on 2026-03-20
+	_, _ = tracker.CheckAndUpdateSpecies("Parus major", time.Date(2026, 3, 20, 8, 0, 0, 0, time.Local))
+
+	controller := &Controller{
+		Processor: &processor.Processor{
+			NewSpeciesTracker: tracker,
+		},
+	}
+
+	tests := []struct {
+		name            string
+		detectionDate   string
+		wantNewSpecies  bool
+		wantNewThisYear bool
+	}{
+		{
+			name:            "detection on first-seen date is new",
+			detectionDate:   "2026-03-20",
+			wantNewSpecies:  true,
+			wantNewThisYear: true,
+		},
+		{
+			name:            "detection on later date is not new",
+			detectionDate:   "2026-03-21",
+			wantNewSpecies:  false,
+			wantNewThisYear: false,
+		},
+		{
+			name:            "detection on much later date is not new",
+			detectionDate:   "2026-06-15",
+			wantNewSpecies:  false,
+			wantNewThisYear: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var det DetectionResponse
+			controller.applySpeciesTrackingMetadata(&det, "Parus major", tt.detectionDate)
+			assert.Equal(t, tt.wantNewSpecies, det.IsNewSpecies, "isNewSpecies for date %s", tt.detectionDate)
+			assert.Equal(t, tt.wantNewThisYear, det.IsNewThisYear, "isNewThisYear for date %s", tt.detectionDate)
+		})
+	}
 }

@@ -1436,3 +1436,140 @@ func TestOnConnectResetsBackoffState(t *testing.T) {
 	assert.Empty(t, c.lastConnErrMsg, "Should clear last error message")
 	c.mu.RUnlock()
 }
+
+// TestPublishSuppressionWhileDisconnected verifies that publish attempts are
+// suppressed while the client is in a known disconnected state, preventing
+// Sentry event floods when the broker is unreachable.
+func TestPublishSuppressionWhileDisconnected(t *testing.T) {
+	t.Parallel()
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	config := DefaultConfig()
+	config.Broker = testExampleBroker
+	config.ClientID = testClientID
+
+	c := &client{
+		config:        config,
+		metrics:       metrics.MQTT,
+		reconnectStop: make(chan struct{}),
+	}
+
+	t.Run("suppresses publishes after onConnectionLost", func(t *testing.T) {
+		t.Parallel()
+
+		localMetrics, localErr := observability.NewMetrics()
+		require.NoError(t, localErr)
+
+		localConfig := DefaultConfig()
+		localConfig.Broker = testExampleBroker
+		localConfig.ClientID = testClientID
+
+		tc := &client{
+			config:        localConfig,
+			metrics:       localMetrics.MQTT,
+			reconnectStop: make(chan struct{}),
+		}
+
+		// Simulate connection loss
+		tc.mu.Lock()
+		tc.disconnected = true
+		tc.disconnectedSince = time.Now()
+		tc.mu.Unlock()
+
+		ctx := t.Context()
+
+		// First publish should be suppressed (with warning logged)
+		err := tc.publishInternal(ctx, "test/topic", "payload1", false)
+		require.NoError(t, err, "Suppressed publish should return nil, not an error")
+
+		tc.mu.RLock()
+		assert.True(t, tc.publishSuppressed, "Should be marked as suppressed after first publish")
+		assert.Equal(t, int64(1), tc.suppressedPublishCount, "Should count first suppressed publish")
+		tc.mu.RUnlock()
+
+		// Subsequent publishes should also be suppressed silently
+		for range 10 {
+			err = tc.publishInternal(ctx, "test/topic", "payload", false)
+			require.NoError(t, err, "Suppressed publish should return nil")
+		}
+
+		tc.mu.RLock()
+		assert.Equal(t, int64(11), tc.suppressedPublishCount, "Should count all suppressed publishes")
+		tc.mu.RUnlock()
+	})
+
+	t.Run("onConnect resets suppression state", func(t *testing.T) {
+		t.Parallel()
+
+		localMetrics, localErr := observability.NewMetrics()
+		require.NoError(t, localErr)
+
+		localConfig := DefaultConfig()
+		localConfig.Broker = testExampleBroker
+		localConfig.ClientID = testClientID
+
+		tc := &client{
+			config:                 localConfig,
+			metrics:                localMetrics.MQTT,
+			reconnectStop:          make(chan struct{}),
+			disconnected:           true,
+			publishSuppressed:      true,
+			suppressedPublishCount: 42,
+			disconnectedSince:      time.Now().Add(-5 * time.Minute),
+		}
+
+		// Create a mock paho client
+		opts := paho.NewClientOptions()
+		opts.AddBroker(testExampleBroker)
+		opts.SetAutoReconnect(false)
+		mockClient := paho.NewClient(opts)
+
+		// Simulate reconnection
+		tc.onConnect(mockClient)
+
+		tc.mu.RLock()
+		assert.False(t, tc.disconnected, "Should clear disconnected flag")
+		assert.False(t, tc.publishSuppressed, "Should clear publishSuppressed flag")
+		assert.Equal(t, int64(0), tc.suppressedPublishCount, "Should reset suppressed count")
+		tc.mu.RUnlock()
+	})
+
+	t.Run("not suppressed when connected", func(t *testing.T) {
+		// When not disconnected, suppressPublishWhileDisconnected should return false
+		c.mu.Lock()
+		c.disconnected = false
+		c.mu.Unlock()
+
+		suppressed := c.suppressPublishWhileDisconnected("test/topic")
+		assert.False(t, suppressed, "Should not suppress when connected")
+	})
+
+	t.Run("onConnectionLost sets disconnected state", func(t *testing.T) {
+		t.Parallel()
+
+		localMetrics, localErr := observability.NewMetrics()
+		require.NoError(t, localErr)
+
+		localConfig := DefaultConfig()
+		localConfig.Broker = testExampleBroker
+		localConfig.ClientID = testClientID
+
+		tc := &client{
+			config:        localConfig,
+			metrics:       localMetrics.MQTT,
+			reconnectStop: make(chan struct{}),
+		}
+
+		// Simulate connection loss
+		tc.onConnectionLost(nil, errors.New("connection refused"))
+
+		tc.mu.RLock()
+		assert.True(t, tc.disconnected, "Should set disconnected flag")
+		assert.False(t, tc.publishSuppressed, "Should not be suppressed yet (no publish attempted)")
+		assert.Equal(t, int64(0), tc.suppressedPublishCount, "Should start with zero suppressed count")
+		assert.False(t, tc.disconnectedSince.IsZero(), "Should record disconnect time")
+		tc.mu.RUnlock()
+	})
+}
