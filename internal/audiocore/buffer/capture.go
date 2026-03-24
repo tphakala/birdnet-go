@@ -205,6 +205,19 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 		startTime = cb.startTime
 	}
 
+	// After clamping, re-check that we still have a valid time range.
+	// Clamping can make startTime == endTime (zero-length read).
+	if !endTime.After(startTime) {
+		return nil, errors.Newf("requested time range is empty after clamping to buffer window").
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "capture_buffer_read_segment").
+			Context("source", cb.source).
+			Context("start_time", startTime.Format(time.RFC3339Nano)).
+			Context("end_time", endTime.Format(time.RFC3339Nano)).
+			Build()
+	}
+
 	startOffset := startTime.Sub(cb.startTime)
 	endOffset := endTime.Sub(cb.startTime)
 
