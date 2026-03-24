@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Aktualizacja ustawień telemetrii...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Aktualizacja śledzenia gatunków...",
+        "recalculatingThresholds": "Przeliczanie progów dynamicznych dla nowej wartości bazowej",
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
         "audioDeviceRestartRequired": "Zmieniono urządzenie audio. Wymagany restart.",

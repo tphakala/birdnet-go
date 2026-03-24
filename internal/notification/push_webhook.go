@@ -568,10 +568,10 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 		return httpErr
 	}
 
-	// Report successful delivery to reset error suppression state
-	if w.telemetry != nil {
-		w.telemetry.WebhookRequestSuccess(w.name)
-	}
+	// Success is recorded at the dispatcher level (logSuccess → errorSuppressor.RecordSuccess)
+	// after the Send() failover loop completes, not per-endpoint. Recording here would
+	// prematurely reset the error suppression streak when only one endpoint in a
+	// multi-endpoint failover chain succeeds.
 
 	return nil
 }

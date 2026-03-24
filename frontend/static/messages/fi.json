@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
+        "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "audioDeviceRestartRequired": "Äänilaite vaihdettu. Uudelleenkäynnistys vaaditaan.",

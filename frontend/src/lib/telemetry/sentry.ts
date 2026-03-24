@@ -15,6 +15,10 @@ export interface SentryConfig {
   version: string;
 }
 
+/** HTTP status codes for auth-related errors (expected flow, not bugs). */
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
+
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
   message: string;
@@ -26,7 +30,7 @@ interface ApiErrorLike {
 function isAuthError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const status = (err as Record<string, unknown>).status;
-  return status === 401 || status === 403;
+  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN;
 }
 
 /**
@@ -57,7 +61,7 @@ export function initSentry(config: SentryConfig): void {
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip auth-related errors — these are expected flow, not bugs
-  if (error.status === 401 || error.status === 403) return;
+  if (error.status === HTTP_UNAUTHORIZED || error.status === HTTP_FORBIDDEN) return;
 
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 

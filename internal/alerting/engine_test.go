@@ -791,8 +791,8 @@ func TestDeleteHistoryWithRetry_AbortsOnStop(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, int64(0), deleted)
-	// Should have attempted once and then aborted on the backoff select
-	assert.LessOrEqual(t, repo.deleteCalls.Load(), int64(2), "should abort early when stop channel is closed")
+	// stopCh is closed before retry, so only 1 DB call should happen
+	assert.Equal(t, int64(1), repo.deleteCalls.Load(), "should abort after a single DB call when stop channel is closed")
 }
 
 func TestIsDBLockError(t *testing.T) {

@@ -1122,7 +1122,33 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 		}
 	}
 
+	// Deduplicate provider names so that error suppression, circuit breakers,
+	// and metrics key each provider uniquely. When multiple providers share
+	// a name (e.g., two unnamed webhooks both default to "webhook"), append
+	// a "-<index>" suffix to every instance of that duplicated name.
+	deduplicateProviderNames(enhanced)
+
 	return enhanced
+}
+
+// deduplicateProviderNames ensures every provider in the slice has a unique
+// name. Names that appear more than once get a "-0", "-1", … suffix.
+func deduplicateProviderNames(providers []enhancedProvider) {
+	// Count occurrences
+	counts := make(map[string]int, len(providers))
+	for i := range providers {
+		counts[providers[i].name]++
+	}
+
+	// Append index suffixes to duplicated names
+	seen := make(map[string]int, len(providers))
+	for i := range providers {
+		name := providers[i].name
+		if counts[name] > 1 {
+			providers[i].name = fmt.Sprintf("%s-%d", name, seen[name])
+			seen[name]++
+		}
+	}
 }
 
 // getCircuitBreakerConfig returns circuit breaker config from settings or defaults.

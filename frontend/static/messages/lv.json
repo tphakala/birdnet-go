@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Atjaunina telemetrijas iestatījumus...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Atjaunina sugu izsekošanu...",
+        "recalculatingThresholds": "Pārrēķina dinamiskos sliekšņus jaunai bāzes vērtībai",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
         "audioDeviceRestartRequired": "Audio ierīce mainīta. Nepieciešama restartēšana.",

@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Telemetrieeinstellungen werden aktualisiert...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Artenverfolgung wird aktualisiert...",
+        "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
         "audioDeviceRestartRequired": "Audiogerät geändert. Neustart erforderlich.",

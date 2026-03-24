@@ -122,6 +122,7 @@ type SQLiteManager struct {
 	log    logger.Logger
 
 	// WAL checkpoint lifecycle
+	walMu     sync.Mutex // protects walCtx and walCancel
 	walCtx    context.Context
 	walCancel context.CancelFunc
 	walWg     sync.WaitGroup
@@ -420,11 +421,14 @@ func (m *SQLiteManager) CheckpointWAL() error {
 // use. The TRUNCATE mode used in CheckpointWAL() is reserved for shutdown
 // where we want to fully clean up the WAL file.
 func (m *SQLiteManager) StartPeriodicCheckpoint() {
+	m.walMu.Lock()
 	// Guard against double-start — would leak the previous goroutine.
 	if m.walCancel != nil {
+		m.walMu.Unlock()
 		return
 	}
 	m.walCtx, m.walCancel = context.WithCancel(context.Background())
+	m.walMu.Unlock()
 
 	m.walWg.Go(func() {
 		ticker := time.NewTicker(walCheckpointInterval)
@@ -454,10 +458,14 @@ func (m *SQLiteManager) StartPeriodicCheckpoint() {
 
 // StopPeriodicCheckpoint stops the background WAL checkpoint goroutine.
 func (m *SQLiteManager) StopPeriodicCheckpoint() {
-	if m.walCancel != nil {
-		m.walCancel()
+	m.walMu.Lock()
+	cancel := m.walCancel
+	m.walCancel = nil
+	m.walMu.Unlock()
+
+	if cancel != nil {
+		cancel()
 		m.walWg.Wait()
-		m.walCancel = nil
 	}
 }
 

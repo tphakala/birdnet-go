@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Telemetrie-instellingen worden bijgewerkt...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Soortentracering wordt bijgewerkt...",
+        "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",

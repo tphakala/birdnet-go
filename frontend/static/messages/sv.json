@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Uppdaterar telemetriinställningar...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Uppdaterar artspårning...",
+        "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
         "audioDeviceRestartRequired": "Ljudenhet ändrad. Omstart krävs.",

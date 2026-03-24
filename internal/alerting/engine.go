@@ -455,9 +455,22 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 func (e *Engine) deleteHistoryWithRetry(retentionDays int, stopCh <-chan struct{}) (int64, error) {
 	cutoff := time.Now().AddDate(0, 0, -retentionDays)
 
+	// Create a parent context that cancels when stopCh fires, so in-flight
+	// DB calls are aborted promptly on shutdown instead of waiting for
+	// their full timeout.
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-stopCh:
+			parentCancel()
+		case <-parentCtx.Done():
+		}
+	}()
+	defer parentCancel()
+
 	var lastErr error
 	for attempt := range cleanupMaxRetries {
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
+		cleanupCtx, cleanupCancel := context.WithTimeout(parentCtx, cleanupTimeout)
 		deleted, err := e.repo.DeleteHistoryBefore(cleanupCtx, cutoff)
 		cleanupCancel()
 
