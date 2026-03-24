@@ -503,42 +503,22 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		desired[cfg.ConnectionString] = cfg
 	}
 
-	// Build current sources keyed by connection string.
-	current := make(map[string]string) // connectionString → sourceID
-	for _, src := range p.engine.Registry().List() {
-		connStr, err := src.GetConnectionString()
-		if err != nil || connStr == "" {
-			log.Warn("skipping source with invalid connection string during reconfigure",
-				logger.String("source_id", src.ID),
-				logger.Error(err))
-			continue
-		}
-		current[connStr] = src.ID
-	}
-
-	// Remove sources no longer in config. Track counts for logging.
-	var removedCount, keptCount int
-	for connStr, srcID := range current {
-		if _, stillDesired := desired[connStr]; !stillDesired {
-			removedCount++
-			log.Info("removing stream no longer in config",
-				logger.String("source_id", srcID),
-				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
-				logger.String("operation", "reconfigure_diff"))
-			if err := p.engine.RemoveSource(srcID); err != nil {
-				log.Warn("failed to remove source during reconfigure",
-					logger.String("source_id", srcID),
-					logger.Error(err))
-			}
-		} else {
-			keptCount++
-		}
-	}
-
-	// Add sources that are new (not currently running).
+	// Determine which desired configs already have a running source.
+	// Registry.List() returns copies with cleared connectionStrings for
+	// security, so we look up sources via GetByConnection on the desired
+	// connection strings instead.
+	registry := p.engine.Registry()
+	alreadyRunning := make(map[string]string) // connStr → sourceID (for sources that stay)
 	var newSourceIDs []string
+	var keptCount int
+
 	for connStr, cfg := range desired {
-		if _, alreadyRunning := current[connStr]; !alreadyRunning {
+		if src, found := registry.GetByConnection(connStr); found {
+			// Source already running — keep it.
+			alreadyRunning[connStr] = src.ID
+			keptCount++
+		} else {
+			// New source — add it.
 			log.Info("adding new stream from config",
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
 				logger.String("operation", "reconfigure_diff"))
@@ -548,8 +528,33 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.Error(err))
 				continue
 			}
-			if src, ok := p.engine.Registry().GetByConnection(connStr); ok {
+			if src, ok := registry.GetByConnection(connStr); ok {
 				newSourceIDs = append(newSourceIDs, src.ID)
+			}
+		}
+	}
+
+	// Remove sources that are running but no longer in config.
+	// Use the registry's full source list (by ID) and check which IDs
+	// are not in the alreadyRunning set.
+	keepIDs := make(map[string]bool, len(alreadyRunning))
+	for _, id := range alreadyRunning {
+		keepIDs[id] = true
+	}
+	for _, id := range newSourceIDs {
+		keepIDs[id] = true
+	}
+	var removedCount int
+	for _, src := range registry.List() {
+		if !keepIDs[src.ID] {
+			removedCount++
+			log.Info("removing stream no longer in config",
+				logger.String("source_id", src.ID),
+				logger.String("operation", "reconfigure_diff"))
+			if err := p.engine.RemoveSource(src.ID); err != nil {
+				log.Warn("failed to remove source during reconfigure",
+					logger.String("source_id", src.ID),
+					logger.Error(err))
 			}
 		}
 	}
