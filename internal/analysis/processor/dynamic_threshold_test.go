@@ -26,7 +26,7 @@ func newTestProcessor() *Processor {
 				DynamicThreshold: conf.DynamicThresholdSettings{
 					Enabled:    true,
 					Trigger:    0.90,
-					Min:        0.20,
+					Min:        0.40,
 					ValidHours: 24,
 				},
 			},
@@ -134,33 +134,45 @@ func TestGetAdjustedThresholdResetsExpiredThreshold(t *testing.T) {
 // =============================================================================
 
 // TestLearnFromApprovedDetectionLevels verifies the three levels of dynamic threshold
-// adjustment when approved detections are spaced apart (beyond the learning cooldown)
+// adjustment require 2/4/6 approved detections spaced apart (beyond the learning cooldown)
 func TestLearnFromApprovedDetectionLevels(t *testing.T) {
 	p := newTestProcessor()
 
 	baseThreshold := float32(0.80)
 	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
 
-	// Level 1: First approved high-confidence detection (75%)
+	// Detection 1: Not enough for Level 1 yet (need 2)
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should be 1 after first learning")
+	assert.Equal(t, 0, p.DynamicThresholds["test species"].Level, "Level should be 0 after 1st detection")
+	assert.InDelta(t, 0.80, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should remain at base")
+
+	// Detection 2: Now reaches Level 1 (75% of base)
+	p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
+	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
+	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should be 1 after 2nd detection")
 	assert.InDelta(t, 0.60, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be 75% of base")
 
-	// Simulate time passing beyond the learning cooldown
+	// Detection 3: Still Level 1 (need 4 for Level 2)
 	p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
-
-	// Level 2: Second approved high-confidence detection (50%)
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 2, p.DynamicThresholds["test species"].Level, "Level should be 2 after second learning")
+	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should still be 1 after 3rd detection")
+
+	// Detection 4: Now reaches Level 2 (50% of base)
+	p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
+	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
+	assert.Equal(t, 2, p.DynamicThresholds["test species"].Level, "Level should be 2 after 4th detection")
 	assert.InDelta(t, 0.40, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be 50% of base")
 
-	// Simulate more time passing
+	// Detection 5: Still Level 2 (need 6 for Level 3)
 	p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
-
-	// Level 3: Third approved high-confidence detection (25%)
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 3, p.DynamicThresholds["test species"].Level, "Level should be 3 after third learning")
-	assert.InDelta(t, 0.20, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be 25% of base")
+	assert.Equal(t, 2, p.DynamicThresholds["test species"].Level, "Level should still be 2 after 5th detection")
+
+	// Detection 6: Now reaches Level 3 (25% of base, clamped to min 0.40)
+	p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
+	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
+	assert.Equal(t, 3, p.DynamicThresholds["test species"].Level, "Level should be 3 after 6th detection")
+	assert.InDelta(t, 0.40, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be clamped to min 0.40")
 }
 
 // TestLearnFromApprovedDetectionCooldown verifies that rapid approved detections
@@ -171,19 +183,19 @@ func TestLearnFromApprovedDetectionCooldown(t *testing.T) {
 	baseThreshold := float32(0.80)
 	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
 
-	// First approved detection triggers Level 1
+	// First approved detection — not enough for Level 1 yet (need 2)
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "First approval should trigger Level 1")
+	assert.Equal(t, 0, p.DynamicThresholds["test species"].Level, "First approval not enough for Level 1 (need 2)")
 	assert.Equal(t, 1, p.DynamicThresholds["test species"].HighConfCount, "HighConfCount should be 1")
 
-	// Immediate second approval should NOT trigger Level 2 (cooldown not expired)
+	// Immediate second approval should NOT increment (cooldown not expired)
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should stay at 1 during cooldown")
+	assert.Equal(t, 0, p.DynamicThresholds["test species"].Level, "Level should stay at 0 during cooldown")
 	assert.Equal(t, 1, p.DynamicThresholds["test species"].HighConfCount, "HighConfCount should stay at 1")
 
-	// Immediate third approval should also NOT trigger Level 3
+	// Immediate third approval should also NOT increment
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
-	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should still be 1")
+	assert.Equal(t, 0, p.DynamicThresholds["test species"].Level, "Level should still be 0")
 	assert.Equal(t, 1, p.DynamicThresholds["test species"].HighConfCount, "HighConfCount should still be 1")
 }
 
@@ -233,7 +245,8 @@ func TestLearnFromApprovedDetectionMinimumFloor(t *testing.T) {
 	p.addSpeciesToDynamicThresholds("test species", "Testus speciesus", baseThreshold)
 
 	// Trigger Level 3 (25% of 0.80 = 0.20, which is below min of 0.30)
-	for i := range 3 {
+	// Now requires 6 approved detections for Level 3
+	for i := range 6 {
 		if i > 0 {
 			// Simulate time passing beyond cooldown for subsequent detections
 			p.DynamicThresholds["test species"].LastLearnedAt = time.Now().Add(-15 * time.Second)
@@ -253,9 +266,10 @@ func TestLearnFromApprovedDetectionInitializesIfMissing(t *testing.T) {
 	// Don't call addSpeciesToDynamicThresholds - let LearnFromApprovedDetection create it
 	p.LearnFromApprovedDetection("new species", "Newus speciesus", 0.95)
 
-	// Should have created the entry and learned
+	// Should have created the entry and counted detection (but not yet at Level 1)
 	assert.NotNil(t, p.DynamicThresholds["new species"], "Should create threshold entry")
-	assert.Equal(t, 1, p.DynamicThresholds["new species"].Level, "Level should be 1")
+	assert.Equal(t, 0, p.DynamicThresholds["new species"].Level, "Level should be 0 (need 2 for Level 1)")
+	assert.Equal(t, 1, p.DynamicThresholds["new species"].HighConfCount, "HighConfCount should be 1")
 	assert.Equal(t, "Newus speciesus", p.DynamicThresholds["new species"].ScientificName, "ScientificName should be set")
 }
 
@@ -335,10 +349,11 @@ func TestApprovedDetectionTriggersLearning(t *testing.T) {
 	adjusted := p.getAdjustedConfidenceThreshold("test species", baseThreshold, false)
 	assert.InDelta(t, 0.80, adjusted, 0.001, "Threshold at base during filtering")
 
-	// Step 2: Detection is approved
+	// Step 2: Detection is approved — 1st detection, not enough for Level 1
 	p.LearnFromApprovedDetection("test species", "Testus speciesus", 0.95)
 
-	// Final state: threshold should now be at Level 1
-	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should be 1 after approval")
-	assert.InDelta(t, 0.60, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be 75% of base")
+	// Final state: threshold should still be at base (need 2 detections for Level 1)
+	assert.Equal(t, 0, p.DynamicThresholds["test species"].Level, "Level should be 0 after 1st approval (need 2)")
+	assert.InDelta(t, 0.80, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should remain at base")
+	assert.Equal(t, 1, p.DynamicThresholds["test species"].HighConfCount, "HighConfCount should be 1")
 }

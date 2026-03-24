@@ -8,12 +8,28 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// Threshold levels used throughout the dynamic threshold system.
+const (
+	thresholdLevelBase = 0 // No reduction, base threshold
+	thresholdLevel1    = 1 // 25% reduction
+	thresholdLevel2    = 2 // 50% reduction
+	thresholdLevel3    = 3 // 75% reduction (maximum)
+)
+
 // Threshold level multipliers define how much the base threshold is reduced at each level.
 // Level 1: 25% reduction, Level 2: 50% reduction, Level 3: 75% reduction (maximum)
 const (
-	thresholdLevel1Multiplier = 0.75 // First high-confidence detection: 75% of base
-	thresholdLevel2Multiplier = 0.50 // Second high-confidence detection: 50% of base
-	thresholdLevel3Multiplier = 0.25 // Third+ high-confidence detection: 25% of base (minimum)
+	thresholdLevel1Multiplier = 0.75 // Level 1: 75% of base
+	thresholdLevel2Multiplier = 0.50 // Level 2: 50% of base
+	thresholdLevel3Multiplier = 0.25 // Level 3: 25% of base (minimum)
+)
+
+// Minimum approved detections required to reach each threshold level.
+// Requires sustained evidence before lowering thresholds.
+const (
+	thresholdLevel1MinDetections = 2 // 2 approved detections for Level 1
+	thresholdLevel2MinDetections = 4 // 4 approved detections for Level 2
+	thresholdLevel3MinDetections = 6 // 6 approved detections for Level 3
 )
 
 // Threshold change reason constants for event recording
@@ -203,18 +219,22 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 	dt.HighConfCount++
 	dt.LastLearnedAt = now
 
-	// Adjust the dynamic threshold based on the number of high-confidence detections
-	switch dt.HighConfCount {
-	case 1:
-		dt.Level = 1
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
-	case 2:
-		dt.Level = 2
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
-	default:
-		// Level 3 is the maximum reduction; any count >= 3 stays at this level
-		dt.Level = 3
+	// Adjust the dynamic threshold based on the number of high-confidence detections.
+	// Requires sustained evidence before lowering thresholds.
+	switch {
+	case dt.HighConfCount >= thresholdLevel3MinDetections:
+		dt.Level = thresholdLevel3
 		dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
+	case dt.HighConfCount >= thresholdLevel2MinDetections:
+		dt.Level = thresholdLevel2
+		dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
+	case dt.HighConfCount >= thresholdLevel1MinDetections:
+		dt.Level = thresholdLevel1
+		dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
+	default:
+		// Not enough evidence yet — stay at base threshold
+		dt.Level = thresholdLevelBase
+		dt.CurrentValue = float64(baseThreshold)
 	}
 
 	// Apply minimum threshold clamp
