@@ -203,7 +203,7 @@ type DetectionRepository interface {
 	Lock(ctx context.Context, detectionID uint) error
 
 	// Unlock removes the lock from a detection.
-	// Returns ErrLockNotFound if not locked.
+	// This operation is idempotent — unlocking an already-unlocked detection succeeds silently.
 	Unlock(ctx context.Context, detectionID uint) error
 
 	// IsLocked checks if a detection is locked.
