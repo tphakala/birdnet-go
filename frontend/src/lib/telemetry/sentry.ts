@@ -22,6 +22,13 @@ interface ApiErrorLike {
   isNetworkError: boolean;
 }
 
+/** Check whether an unknown value looks like an ApiError with an auth-related status. */
+function isAuthError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const status = (err as Record<string, unknown>).status;
+  return status === 401 || status === 403;
+}
+
 /**
  * Initialize Sentry with privacy filtering.
  * Called once from appState.svelte.ts when telemetry is enabled.
@@ -91,6 +98,9 @@ export function captureError(
   error: Error,
   context?: { category?: string; [key: string]: unknown }
 ): void {
+  // Skip auth errors — 401/403 are expected when user isn't logged in
+  if (isAuthError(error)) return;
+
   Sentry.withScope(scope => {
     scope.setLevel('error');
     scope.setTag('error.type', 'logger');
@@ -111,8 +121,13 @@ export function captureError(
 
 /**
  * Privacy-first event filtering. Scrubs PII before events leave the browser.
+ * Also drops auth errors (401/403) which are expected when users aren't logged in.
  */
-function beforeSend(event: Sentry.ErrorEvent, _hint: Sentry.EventHint): Sentry.ErrorEvent | null {
+function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
+  // Drop auth errors — 401/403 are expected flow, not bugs.
+  // These can arrive via unhandled rejections or logger.error() paths.
+  if (isAuthError(hint.originalException)) return null;
+
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;
 

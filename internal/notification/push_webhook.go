@@ -568,6 +568,11 @@ func (w *WebhookProvider) sendToEndpoint(ctx context.Context, endpoint *WebhookE
 		return httpErr
 	}
 
+	// Report successful delivery to reset error suppression state
+	if w.telemetry != nil {
+		w.telemetry.WebhookRequestSuccess(w.name)
+	}
+
 	return nil
 }
 

@@ -445,7 +445,7 @@ func TestService_SaveWeatherData(t *testing.T) {
 		mockDB.AssertExpectations(t)
 	})
 
-	t.Run("daily_events_error_and_lookup_fails", func(t *testing.T) {
+	t.Run("daily_events_error_and_lookup_fails_retry_succeeds", func(t *testing.T) {
 		mockDB := mocks.NewMockInterface(t)
 
 		settings := createTestSettings(t, "yrno")
@@ -461,23 +461,35 @@ func TestService_SaveWeatherData(t *testing.T) {
 			d.Time = fixedTime
 		})
 
-		// SaveDailyEvents fails
+		// First SaveDailyEvents fails (e.g., SQLITE_BUSY)
 		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
 
 		// GetDailyEvents also fails — no existing row
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
 		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
 
+		// Retry SaveDailyEvents succeeds
+		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+			de := args.Get(0).(*datastore.DailyEvents)
+			de.ID = 99
+		}).Return(nil).Once()
+
+		// SaveHourlyWeather should be called with the retried row's ID
+		var capturedHW *datastore.HourlyWeather
+		mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
+			capturedHW = args.Get(0).(*datastore.HourlyWeather)
+		}).Return(nil).Once()
+
 		err := service.SaveWeatherData(testData)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "no rows")
-
-		// SaveHourlyWeather should NOT be called
-		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
+		require.NoError(t, err)
+		require.NotNil(t, capturedHW, "HourlyWeather should have been saved")
+		assert.Equal(t, uint(99), capturedHW.DailyEventsID,
+			"Should use daily events ID from retry save")
+		mockDB.AssertExpectations(t)
 	})
 
-	t.Run("daily_events_error_and_lookup_returns_empty_row", func(t *testing.T) {
+	t.Run("daily_events_error_and_lookup_fails_retry_also_fails", func(t *testing.T) {
 		mockDB := mocks.NewMockInterface(t)
 
 		settings := createTestSettings(t, "yrno")
@@ -493,20 +505,67 @@ func TestService_SaveWeatherData(t *testing.T) {
 			d.Time = fixedTime
 		})
 
-		// SaveDailyEvents fails
+		// First SaveDailyEvents fails
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+
+		// GetDailyEvents also fails — no existing row
+		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
+		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, errors.New("no rows")).Once()
+
+		// Retry SaveDailyEvents also fails
+		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
+
+		err := service.SaveWeatherData(testData)
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "database is locked")
+
+		// SaveHourlyWeather should NOT be called
+		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
+	})
+
+	t.Run("daily_events_error_and_lookup_returns_empty_row_retry_succeeds", func(t *testing.T) {
+		mockDB := mocks.NewMockInterface(t)
+
+		settings := createTestSettings(t, "yrno")
+		service := &Service{
+			provider: NewYrNoProvider(),
+			db:       mockDB,
+			settings: settings,
+			metrics:  nil,
+		}
+
+		fixedTime := time.Date(2026, 1, 13, 12, 0, 0, 0, time.UTC)
+		testData := createTestWeatherData(t, func(d *WeatherData) {
+			d.Time = fixedTime
+		})
+
+		// First SaveDailyEvents fails
 		mockDB.On("SaveDailyEvents", mock.Anything).Return(errors.New("database is locked")).Once()
 
 		// GetDailyEvents returns empty row with nil error (v1 legacy "not found" contract)
 		localDate := fixedTime.UTC().In(time.Local).Format(time.DateOnly)
 		mockDB.On("GetDailyEvents", localDate).Return(datastore.DailyEvents{}, nil).Once()
 
+		// Retry SaveDailyEvents succeeds
+		mockDB.On("SaveDailyEvents", mock.Anything).Run(func(args mock.Arguments) {
+			de := args.Get(0).(*datastore.DailyEvents)
+			de.ID = 77
+		}).Return(nil).Once()
+
+		// SaveHourlyWeather should be called with the retried row's ID
+		var capturedHW *datastore.HourlyWeather
+		mockDB.On("SaveHourlyWeather", mock.Anything).Run(func(args mock.Arguments) {
+			capturedHW = args.Get(0).(*datastore.HourlyWeather)
+		}).Return(nil).Once()
+
 		err := service.SaveWeatherData(testData)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "daily events not found")
-
-		// SaveHourlyWeather should NOT be called when fallback returns zero ID
-		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
+		require.NoError(t, err)
+		require.NotNil(t, capturedHW, "HourlyWeather should have been saved")
+		assert.Equal(t, uint(77), capturedHW.DailyEventsID,
+			"Should use daily events ID from retry save")
+		mockDB.AssertExpectations(t)
 	})
 
 	t.Run("hourly_weather_error", func(t *testing.T) {

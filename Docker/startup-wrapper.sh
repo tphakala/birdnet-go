@@ -41,9 +41,22 @@ echo ""
 "${APP_CMD[@]}" > >(tee "$STARTUP_LOG") 2>&1 &
 APP_PID=$!
 
-# Wait for the application to finish and capture its exit code
-wait "$APP_PID"
+# Wait for the application to finish and capture its exit code.
+# When a signal (SIGTERM/SIGINT) interrupts wait, bash returns immediately
+# with 128+signal. Re-wait to collect the child's actual exit code.
+wait "$APP_PID" 2>/dev/null
 EXIT_CODE=$?
+if [ $EXIT_CODE -ge 128 ]; then
+    # wait was interrupted by a signal; re-wait to get the child's real status
+    wait "$APP_PID" 2>/dev/null
+    EXIT_CODE=$?
+fi
+
+# Exit codes 143 (SIGTERM) and 130 (SIGINT) indicate the process was
+# terminated by a signal we forwarded — this is a clean shutdown, not a failure.
+if [ $EXIT_CODE -eq 143 ] || [ $EXIT_CODE -eq 130 ]; then
+    exit $EXIT_CODE
+fi
 
 # Check if the application failed
 if [ $EXIT_CODE -ne 0 ]; then

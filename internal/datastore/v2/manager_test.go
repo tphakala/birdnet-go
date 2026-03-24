@@ -492,3 +492,59 @@ func TestReportInitFailure_SentryNotInitialized(t *testing.T) {
 		reportInitFailure("sqlite", "AutoMigrate", fmt.Errorf("disk full"), "/tmp/test.db")
 	})
 }
+
+func TestSQLiteManager_PeriodicCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	t.Run("start and stop cleanly", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = mgr.Close() })
+
+		sqliteMgr := mgr
+
+		// Start should not panic
+		assert.NotPanics(t, func() {
+			sqliteMgr.StartPeriodicCheckpoint()
+		})
+
+		// Stop should not panic or hang
+		assert.NotPanics(t, func() {
+			sqliteMgr.StopPeriodicCheckpoint()
+		})
+	})
+
+	t.Run("stop is idempotent", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = mgr.Close() })
+
+		sqliteMgr := mgr
+		sqliteMgr.StartPeriodicCheckpoint()
+		sqliteMgr.StopPeriodicCheckpoint()
+
+		// Second stop should not panic
+		assert.NotPanics(t, func() {
+			sqliteMgr.StopPeriodicCheckpoint()
+		})
+	})
+
+	t.Run("manual checkpoint succeeds", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+		mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = mgr.Close() })
+
+		// Initialize schema to create tables and WAL entries
+		require.NoError(t, mgr.Initialize())
+
+		// Manual PASSIVE checkpoint should succeed
+		err = mgr.DB().Exec("PRAGMA wal_checkpoint(PASSIVE)").Error
+		assert.NoError(t, err, "PASSIVE WAL checkpoint should succeed")
+	})
+}

@@ -284,6 +284,13 @@ func New(cfg *Config) (*Datastore, error) {
 		dbCounters:         dbCounters,
 	}
 	ds.names.Store(nm)
+
+	// Start periodic WAL checkpoint for SQLite to prevent unbounded WAL growth.
+	// The auto-checkpoint mechanism may not fire reliably with connection pooling.
+	if sqliteMgr, ok := cfg.Manager.(*v2.SQLiteManager); ok {
+		sqliteMgr.StartPeriodicCheckpoint()
+	}
+
 	return ds, nil
 }
 
@@ -339,6 +346,10 @@ func (ds *Datastore) GetDBCounters() *dbstats.Counters {
 // Close closes the datastore.
 func (ds *Datastore) Close() error {
 	if ds.manager != nil {
+		// Stop periodic WAL checkpoint before the final TRUNCATE checkpoint.
+		if sqliteMgr, ok := ds.manager.(*v2.SQLiteManager); ok {
+			sqliteMgr.StopPeriodicCheckpoint()
+		}
 		if !ds.manager.IsMySQL() {
 			_ = ds.manager.CheckpointWAL()
 		}

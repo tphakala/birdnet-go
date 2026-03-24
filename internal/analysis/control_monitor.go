@@ -197,6 +197,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureSpeciesTracking()
 	case "reconfigure_push_notifications":
 		cm.handleReconfigurePushNotifications()
+	case "recalculate_dynamic_thresholds":
+		cm.handleRecalculateDynamicThresholds()
 	case myaudio.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
 	case myaudio.SignalQuietHoursStopSoundCard:
@@ -755,6 +757,15 @@ func (cm *ControlMonitor) handleReconfigurePushNotifications() {
 
 	GetLogger().Info("Push notification providers reconfigured successfully")
 	cm.notifySuccess("Push notification providers configured successfully")
+}
+
+// handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
+// when the global BirdNET.Threshold changes. The stored absolute values are recomputed
+// from each species' current level/tier and the new base threshold.
+func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
+	if cm.proc != nil {
+		cm.proc.RecalculateDynamicThresholds()
+	}
 }
 
 // handleReconfigureQuietHours triggers a re-evaluation of quiet hours after settings change.

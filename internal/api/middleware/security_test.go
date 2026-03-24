@@ -62,6 +62,7 @@ func TestNewSecureHeaders_CrossOriginOpenerPolicy(t *testing.T) {
 		t.Parallel()
 		c, rec := newTestContext(t, http.MethodGet, "/")
 		c.Request().Header.Set("X-Forwarded-Proto", "https")
+		c.Request().RemoteAddr = "127.0.0.1:54321" // simulate trusted reverse proxy
 
 		handler := mw(func(c echo.Context) error {
 			return c.String(http.StatusOK, "ok")

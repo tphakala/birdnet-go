@@ -2,6 +2,7 @@
 package processor
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -341,4 +342,168 @@ func TestApprovedDetectionTriggersLearning(t *testing.T) {
 	// Final state: threshold should now be at Level 1
 	assert.Equal(t, 1, p.DynamicThresholds["test species"].Level, "Level should be 1 after approval")
 	assert.InDelta(t, 0.60, p.DynamicThresholds["test species"].CurrentValue, 0.001, "Value should be 75% of base")
+}
+
+// =============================================================================
+// Tests for RecalculateDynamicThresholds
+// =============================================================================
+
+// TestRecalculateDynamicThresholds verifies that changing the global base threshold
+// causes all existing dynamic threshold CurrentValue entries to be recalculated
+// while preserving each species' level/tier.
+func TestRecalculateDynamicThresholds(t *testing.T) {
+	t.Run("RecalculatesAllLevels", func(t *testing.T) {
+		p := newTestProcessor()
+		// Old base was 0.80, set up species at different levels
+		p.DynamicThresholds["species_level0"] = &DynamicThreshold{
+			Level:          0,
+			CurrentValue:   0.80, // 100% of 0.80
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  0,
+			ValidHours:     24,
+			ScientificName: "Speciesus zerous",
+		}
+		p.DynamicThresholds["species_level1"] = &DynamicThreshold{
+			Level:          1,
+			CurrentValue:   0.60, // 75% of 0.80
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  1,
+			ValidHours:     24,
+			ScientificName: "Speciesus firstus",
+		}
+		p.DynamicThresholds["species_level2"] = &DynamicThreshold{
+			Level:          2,
+			CurrentValue:   0.40, // 50% of 0.80
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  2,
+			ValidHours:     24,
+			ScientificName: "Speciesus secondus",
+		}
+		p.DynamicThresholds["species_level3"] = &DynamicThreshold{
+			Level:          3,
+			CurrentValue:   0.20, // 25% of 0.80
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  3,
+			ValidHours:     24,
+			ScientificName: "Speciesus thirdus",
+		}
+
+		// Change the base threshold from 0.80 to 0.60
+		p.Settings.BirdNET.Threshold = 0.60
+
+		p.RecalculateDynamicThresholds()
+
+		// Verify all values were recalculated with the new base
+		assert.InDelta(t, 0.60, p.DynamicThresholds["species_level0"].CurrentValue, 0.001,
+			"Level 0: should be 100%% of new base 0.60")
+		assert.InDelta(t, 0.45, p.DynamicThresholds["species_level1"].CurrentValue, 0.001,
+			"Level 1: should be 75%% of new base 0.60")
+		assert.InDelta(t, 0.30, p.DynamicThresholds["species_level2"].CurrentValue, 0.001,
+			"Level 2: should be 50%% of new base 0.60")
+		assert.InDelta(t, 0.20, p.DynamicThresholds["species_level3"].CurrentValue, 0.001,
+			"Level 3: should be clamped to min 0.20 (25%% of 0.60 = 0.15 < min)")
+
+		// Verify levels are preserved
+		assert.Equal(t, 0, p.DynamicThresholds["species_level0"].Level)
+		assert.Equal(t, 1, p.DynamicThresholds["species_level1"].Level)
+		assert.Equal(t, 2, p.DynamicThresholds["species_level2"].Level)
+		assert.Equal(t, 3, p.DynamicThresholds["species_level3"].Level)
+	})
+
+	t.Run("RespectsMinimumThreshold", func(t *testing.T) {
+		p := newTestProcessor()
+		p.Settings.Realtime.DynamicThreshold.Min = 0.30
+
+		p.DynamicThresholds["species_level3"] = &DynamicThreshold{
+			Level:          3,
+			CurrentValue:   0.30, // Was clamped to min 0.30 (25% of 0.80 = 0.20 < 0.30)
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  3,
+			ValidHours:     24,
+			ScientificName: "Speciesus thirdus",
+		}
+
+		// Lower the base threshold
+		p.Settings.BirdNET.Threshold = 0.60
+
+		p.RecalculateDynamicThresholds()
+
+		// 25% of 0.60 = 0.15, but min is 0.30
+		assert.InDelta(t, 0.30, p.DynamicThresholds["species_level3"].CurrentValue, 0.001,
+			"Should be clamped to configured minimum")
+	})
+
+	t.Run("EmptyMapIsNoOp", func(t *testing.T) {
+		p := newTestProcessor()
+		p.Settings.BirdNET.Threshold = 0.60
+
+		// Should not panic or error with empty map
+		p.RecalculateDynamicThresholds()
+
+		assert.Empty(t, p.DynamicThresholds)
+	})
+
+	t.Run("NoChangeWhenBaseUnchanged", func(t *testing.T) {
+		p := newTestProcessor()
+		// Base is already 0.80
+
+		p.DynamicThresholds["species_level1"] = &DynamicThreshold{
+			Level:          1,
+			CurrentValue:   0.60, // 75% of 0.80 - already correct
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  1,
+			ValidHours:     24,
+			ScientificName: "Speciesus firstus",
+		}
+
+		p.RecalculateDynamicThresholds()
+
+		// Value should remain the same
+		assert.InDelta(t, 0.60, p.DynamicThresholds["species_level1"].CurrentValue, 0.001,
+			"Should remain unchanged when base is the same")
+	})
+
+	t.Run("HigherBaseThreshold", func(t *testing.T) {
+		p := newTestProcessor()
+
+		p.DynamicThresholds["species_level2"] = &DynamicThreshold{
+			Level:          2,
+			CurrentValue:   0.40, // 50% of 0.80
+			Timer:          time.Now().Add(1 * time.Hour),
+			HighConfCount:  2,
+			ValidHours:     24,
+			ScientificName: "Speciesus secondus",
+		}
+
+		// Increase the base threshold from 0.80 to 1.00
+		p.Settings.BirdNET.Threshold = 1.00
+
+		p.RecalculateDynamicThresholds()
+
+		// 50% of 1.00 = 0.50
+		assert.InDelta(t, 0.50, p.DynamicThresholds["species_level2"].CurrentValue, 0.001,
+			"Level 2: should be 50%% of new base 1.00")
+	})
+}
+
+// TestLevelMultiplier verifies the level-to-multiplier mapping is correct
+func TestLevelMultiplier(t *testing.T) {
+	tests := []struct {
+		level    int
+		expected float64
+	}{
+		{0, 1.0},
+		{1, thresholdLevel1Multiplier},
+		{2, thresholdLevel2Multiplier},
+		{3, thresholdLevel3Multiplier},
+		{4, 1.0},  // Unknown level defaults to 1.0
+		{-1, 1.0}, // Negative level defaults to 1.0
+	}
+
+	for _, tt := range tests {
+		t.Run(fmt.Sprintf("Level%d", tt.level), func(t *testing.T) {
+			t.Parallel()
+			assert.InDelta(t, tt.expected, levelMultiplier(tt.level), 0.001)
+		})
+	}
 }
