@@ -244,6 +244,11 @@ func (s *Server) initAuth() {
 
 // setupMiddleware configures the Echo middleware stack.
 func (s *Server) setupMiddleware() {
+	// HEAD→GET rewrite — runs before routing so HEAD requests match GET routes.
+	// Per RFC 9110 §9.3.2, HEAD must return the same status as GET.
+	// Go's net/http automatically suppresses the response body for HEAD.
+	s.echo.Pre(mw.NewHeadToGet())
+
 	// Recovery middleware - should be first
 	s.echo.Use(echomw.Recover())
 

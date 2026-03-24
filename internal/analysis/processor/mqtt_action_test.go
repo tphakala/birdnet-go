@@ -214,6 +214,7 @@ func TestMqttAction_Execute_PayloadContainsAllFields(t *testing.T) {
 
 	detectionCtx := &DetectionContext{}
 	detectionCtx.NoteID.Store(123)
+	detectionCtx.ClipSaved.Store(true) // Simulate successful audio export
 
 	action := &MqttAction{
 		Settings:       settings,
@@ -482,4 +483,82 @@ func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
 	err := action.Execute(t.Context(), nil)
 	require.NoError(t, err, "Should silently return nil when MQTT is disabled")
 	assert.Equal(t, 0, mockClient.GetPublishCalls(), "Should not attempt publish when disabled")
+}
+
+// TestMqttAction_Execute_ClearsClipNameWhenExportFailed verifies that MqttAction
+// clears ClipName in the MQTT payload when audio export did not succeed.
+// This prevents reporting phantom filenames for clips that don't exist (GitHub #107).
+func TestMqttAction_Execute_ClearsClipNameWhenExportFailed(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+	det.Result.ClipName = "2024/01/parus_major_95p_20240115T120000Z.wav"
+
+	// DetectionContext with ClipSaved=false (default) simulates export failure
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockClient,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	err = json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap)
+	require.NoError(t, err)
+
+	assert.Empty(t, jsonMap["ClipName"],
+		"ClipName should be empty when audio export failed (GitHub #107)")
+}
+
+// TestMqttAction_Execute_PreservesClipNameWhenExportSucceeded verifies that MqttAction
+// preserves ClipName in the MQTT payload when audio export succeeded.
+func TestMqttAction_Execute_PreservesClipNameWhenExportSucceeded(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+	det.Result.ClipName = "2024/01/parus_major_95p_20240115T120000Z.wav"
+
+	// DetectionContext with ClipSaved=true simulates successful export
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+	detectionCtx.ClipSaved.Store(true)
+
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		MqttClient:   mockClient,
+		EventTracker: eventTracker,
+		DetectionCtx: detectionCtx,
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	err = json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2024/01/parus_major_95p_20240115T120000Z.wav", jsonMap["ClipName"],
+		"ClipName should be preserved when audio export succeeded")
 }

@@ -242,6 +242,40 @@ func TestSSEAction_Execute_ReturnsErrorOnBroadcastFailure(t *testing.T) {
 	require.Error(t, err, "Should return error on broadcast failure")
 }
 
+// TestSSEAction_Execute_ClearsClipNameWhenExportFailed verifies that SSEAction
+// clears ClipName in the broadcasted note when audio export did not succeed.
+// This prevents reporting phantom filenames for clips that don't exist (GitHub #107).
+func TestSSEAction_Execute_ClearsClipNameWhenExportFailed(t *testing.T) {
+	t.Parallel()
+
+	mockBroadcaster := NewMockSSEBroadcaster()
+	settings := &conf.Settings{Debug: true}
+	eventTracker := NewEventTracker(testEventTrackerInterval)
+
+	det := testDetection()
+	det.Result.ClipName = "2024/01/testus_birdus_95p_20240115T120000Z.wav"
+
+	// DetectionContext with ClipSaved=false (default) simulates export failure
+	detectionCtx := &DetectionContext{}
+	detectionCtx.NoteID.Store(1)
+
+	action := &SSEAction{
+		Settings:       settings,
+		Result:         det.Result,
+		EventTracker:   eventTracker,
+		DetectionCtx:   detectionCtx,
+		SSEBroadcaster: mockBroadcaster.BroadcastFunc(),
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.NoError(t, err)
+
+	note := mockBroadcaster.GetLastNote()
+	require.NotNil(t, note)
+	assert.Empty(t, note.ClipName,
+		"ClipName should be empty when audio export failed (GitHub #107)")
+}
+
 // TestSSEAction_Execute_NoClipNameBroadcastsQuickly verifies that SSEAction
 // broadcasts without delay when ClipName is empty.
 func TestSSEAction_Execute_NoClipNameBroadcastsQuickly(t *testing.T) {

@@ -38,6 +38,10 @@ const (
 	maxNumResults         = 1000             // Maximum number of results
 	sunEventWindowMinutes = 30               // Minutes before/after sunrise/sunset
 	minHourRangeParts     = 2                // Minimum parts for hour range parsing
+
+	// queryType values for detection queries
+	queryTypeSpecies = "species"
+	queryTypeSearch  = "search"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -283,12 +287,19 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 	params.Duration = duration
 
 	// Validate dates
+	if err := validateDateParam(params.Date, "date"); err != nil {
+		return nil, &dateValidationError{message: err.Error(), paramName: "date"}
+	}
 	if err := c.validateDateParameters(params.StartDate, params.EndDate, ctx); err != nil {
 		return nil, err
 	}
 
-	// Parse and validate numResults
-	numResults, err := c.parseNumResults(ctx.QueryParam("numResults"))
+	// Parse and validate numResults (accept "limit" as an alias for better API ergonomics)
+	numResultsStr := ctx.QueryParam("numResults")
+	if numResultsStr == "" {
+		numResultsStr = ctx.QueryParam("limit")
+	}
+	numResults, err := c.parseNumResults(numResultsStr)
 	if err != nil {
 		return nil, err
 	}
@@ -314,6 +325,18 @@ func (c *Controller) parseDetectionQueryParams(ctx echo.Context) (*detectionQuer
 			allowedKeys := slices.Sorted(maps.Keys(allowedSortBy))
 			return nil, echo.NewHTTPError(http.StatusBadRequest,
 				fmt.Sprintf("invalid sortBy parameter '%s'. Allowed values: %v", params.SortBy, allowedKeys))
+		}
+	}
+
+	// Auto-infer queryType from provided parameters when not explicitly set.
+	// This prevents silent parameter ignoring — e.g., ?species=Robin without
+	// queryType=species would previously fall through to the "all" path.
+	if params.QueryType == "" {
+		switch {
+		case params.Species != "":
+			params.QueryType = queryTypeSpecies
+		case params.Search != "":
+			params.QueryType = queryTypeSearch
 		}
 	}
 
@@ -553,18 +576,21 @@ func (c *Controller) GetDetections(ctx echo.Context) error {
 
 // getDetectionsByQueryType retrieves detections based on the query type
 func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	// Check if advanced filters are present (non-default sort counts as advanced)
+	// Check if advanced filters are present (non-default sort counts as advanced).
+	// Date parameters are included so that ?date=2025-03-07 without an explicit
+	// queryType routes through the advanced search path instead of being ignored.
 	hasAdvancedFilters := params.Confidence != "" || params.TimeOfDay != "" ||
 		params.HourRange != "" || params.Verified != "" ||
 		params.Location != "" || params.Locked != "" ||
+		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
 		(params.SortBy != "" && params.SortBy != "date_desc")
 
 	switch params.QueryType {
 	case "hourly":
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
-	case "species":
+	case queryTypeSpecies:
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
-	case "search":
+	case queryTypeSearch:
 		// Use advanced search if filters are present
 		if hasAdvancedFilters {
 			return c.getSearchDetectionsAdvanced(params)

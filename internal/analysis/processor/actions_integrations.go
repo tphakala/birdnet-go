@@ -195,6 +195,12 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 		note.ID = detectionID
 	}
 
+	// Clear ClipName if audio export did not succeed, to avoid reporting a phantom
+	// filename for clips that don't exist on disk (GitHub #107).
+	if a.DetectionCtx != nil && !a.DetectionCtx.ClipSaved.Load() {
+		note.ClipName = ""
+	}
+
 	// Wrap note with bird image and include detection ID and SourceID
 	noteWithBirdImage := NoteWithBirdImage{
 		Note:        note,
@@ -366,6 +372,12 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 
 	// Convert Result to Note for SSEBroadcaster (backward compatible SSE payload)
 	note := datastore.NoteFromResult(&a.Result)
+
+	// Clear ClipName if audio export did not succeed, to avoid reporting a phantom
+	// filename for clips that don't exist on disk (GitHub #107).
+	if a.DetectionCtx != nil && !a.DetectionCtx.ClipSaved.Load() {
+		note.ClipName = ""
+	}
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&note, &birdImage); err != nil {

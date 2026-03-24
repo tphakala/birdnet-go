@@ -227,17 +227,26 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 
 			if err := saveAudioAction.Execute(ctx, nil); err != nil {
 				handleAudioExportError(err, logger.String("clip_name", a.Result.ClipName))
-			} else if a.Settings.Debug {
-				// Add structured logging
-				GetLogger().Debug("Saved audio clip successfully",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("detection_id", a.CorrelationID),
-					logger.String("species", a.Result.Species.CommonName),
-					logger.String("clip_name", a.Result.ClipName),
-					logger.String("detection_time", a.Result.Time()),
-					logger.Time("begin_time", a.Result.BeginTime),
-					logger.Time("end_time", time.Now()),
-					logger.String("operation", "save_audio_clip_debug"))
+			} else {
+				// Signal downstream actions (MQTT, SSE) that the clip file exists.
+				// Without this flag, downstream actions would report a phantom ClipName
+				// for detections where the export failed (GitHub #107).
+				if a.DetectionCtx != nil {
+					a.DetectionCtx.ClipSaved.Store(true)
+				}
+
+				if a.Settings.Debug {
+					// Add structured logging
+					GetLogger().Debug("Saved audio clip successfully",
+						logger.String("component", "analysis.processor.actions"),
+						logger.String("detection_id", a.CorrelationID),
+						logger.String("species", a.Result.Species.CommonName),
+						logger.String("clip_name", a.Result.ClipName),
+						logger.String("detection_time", a.Result.Time()),
+						logger.Time("begin_time", a.Result.BeginTime),
+						logger.Time("end_time", time.Now()),
+						logger.String("operation", "save_audio_clip_debug"))
+				}
 			}
 		}
 	}

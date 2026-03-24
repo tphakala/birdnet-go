@@ -462,17 +462,135 @@ func TestWebhookProvider_Send(t *testing.T) {
 		provider, _ := NewWebhookProvider("test", true, endpoints, nil, template)
 		_ = provider.ValidateConfig()
 
+		// Custom templates only send detection notifications
 		notif := &Notification{
 			ID:    "test",
-			Type:  TypeError,
-			Title: "Test Error",
+			Type:  TypeDetection,
+			Title: "Northern Cardinal",
 		}
 
 		err := provider.Send(t.Context(), notif)
 		require.NoError(t, err)
 
-		expected := `{"event":"error","msg":"Test Error"}`
+		expected := `{"event":"detection","msg":"Northern Cardinal"}`
 		assert.Equal(t, expected, receivedPayload)
+	})
+
+	t.Run("custom template skips warning notification", func(t *testing.T) {
+		serverCalled := false
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		endpoints := []WebhookEndpoint{
+			{URL: server.URL, Method: "POST"},
+		}
+		// Discord-style template referencing detection-specific metadata
+		tmpl := `{"embeds":[{"title":"{{.Title}}","fields":[{"name":"Confidence","value":"{{.Metadata.bg_confidence_percent}}%"}]}]}`
+		provider, err := NewWebhookProvider("test-discord", true, endpoints, nil, tmpl)
+		require.NoError(t, err)
+		_ = provider.ValidateConfig()
+
+		notif := &Notification{
+			ID:       "warn-123",
+			Type:     TypeWarning,
+			Priority: PriorityMedium,
+			Title:    "Disk space low",
+			Message:  "Running low on disk space",
+			Metadata: map[string]any{},
+		}
+
+		err = provider.Send(t.Context(), notif)
+		require.NoError(t, err, "warning notification should be skipped without error")
+		assert.False(t, serverCalled, "webhook endpoint should not be called for warning with custom template")
+	})
+
+	t.Run("custom template skips error notification", func(t *testing.T) {
+		serverCalled := false
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		endpoints := []WebhookEndpoint{
+			{URL: server.URL, Method: "POST"},
+		}
+		tmpl := `{"embeds":[{"title":"{{.Title}}"}]}`
+		provider, err := NewWebhookProvider("test-discord", true, endpoints, nil, tmpl)
+		require.NoError(t, err)
+		_ = provider.ValidateConfig()
+
+		notif := &Notification{
+			ID:   "err-456",
+			Type: TypeError,
+		}
+
+		err = provider.Send(t.Context(), notif)
+		require.NoError(t, err, "error notification should be skipped without error")
+		assert.False(t, serverCalled, "webhook endpoint should not be called for error with custom template")
+	})
+
+	t.Run("custom template sends detection notification", func(t *testing.T) {
+		serverCalled := false
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			serverCalled = true
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		endpoints := []WebhookEndpoint{
+			{URL: server.URL, Method: "POST"},
+		}
+		tmpl := `{"embeds":[{"title":"{{.Title}}","fields":[{"name":"Confidence","value":"{{.Metadata.bg_confidence_percent}}%"}]}]}`
+		provider, err := NewWebhookProvider("test-discord", true, endpoints, nil, tmpl)
+		require.NoError(t, err)
+		_ = provider.ValidateConfig()
+
+		notif := &Notification{
+			ID:    "det-789",
+			Type:  TypeDetection,
+			Title: "Northern Cardinal",
+			Metadata: map[string]any{
+				"bg_confidence_percent": "95",
+			},
+		}
+
+		err = provider.Send(t.Context(), notif)
+		require.NoError(t, err, "detection notification should be sent successfully")
+		assert.True(t, serverCalled, "webhook endpoint should be called for detection with custom template")
+	})
+
+	t.Run("no template sends all notification types", func(t *testing.T) {
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer server.Close()
+
+		endpoints := []WebhookEndpoint{
+			{URL: server.URL, Method: "POST"},
+		}
+		// No custom template — uses default payload structure
+		provider, err := NewWebhookProvider("test-default", true, endpoints, nil, "")
+		require.NoError(t, err)
+		_ = provider.ValidateConfig()
+
+		for _, notifType := range []Type{TypeWarning, TypeError, TypeInfo, TypeDetection, TypeSystem} {
+			notif := &Notification{
+				ID:      "test-" + string(notifType),
+				Type:    notifType,
+				Title:   "Test " + string(notifType),
+				Message: "Test message",
+			}
+			err = provider.Send(t.Context(), notif)
+			require.NoError(t, err, "all notification types should send with default payload")
+		}
+
+		assert.Equal(t, 5, callCount, "all 5 notification types should have been sent")
 	})
 }
 

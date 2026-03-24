@@ -3,6 +3,7 @@ package middleware
 import (
 	"net"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -71,9 +72,20 @@ func DefaultSecurityConfig() *SecurityConfig {
 	}
 }
 
+// hasWildcardOrigin reports whether the origin list contains the wildcard "*".
+func hasWildcardOrigin(origins []string) bool {
+	return slices.Contains(origins, "*")
+}
+
 // NewCORS creates a CORS middleware with the given configuration.
+//
+// When AllowCredentials is true and AllowedOrigins contains "*", the middleware
+// reflects the request's Origin header instead of sending the literal "*".
+// Sending "Access-Control-Allow-Origin: *" together with
+// "Access-Control-Allow-Credentials: true" violates the CORS specification and
+// causes browsers to reject the response.
 func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
-	return middleware.CORSWithConfig(middleware.CORSConfig{
+	corsConfig := middleware.CORSConfig{
 		AllowOrigins: config.AllowedOrigins,
 		AllowMethods: []string{
 			http.MethodGet,
@@ -93,7 +105,18 @@ func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 			"X-CSRF-Token",
 		},
 		AllowCredentials: config.AllowCredentials,
-	})
+	}
+
+	// When credentials are enabled with a wildcard origin, use AllowOriginFunc
+	// to reflect the actual request origin. This avoids the spec violation while
+	// preserving the "allow any origin" intent for local-network deployments.
+	if config.AllowCredentials && hasWildcardOrigin(config.AllowedOrigins) {
+		corsConfig.AllowOriginFunc = func(origin string) (bool, error) {
+			return true, nil
+		}
+	}
+
+	return middleware.CORSWithConfig(corsConfig)
 }
 
 // NewSecureHeaders creates a middleware that sets security-related HTTP headers.

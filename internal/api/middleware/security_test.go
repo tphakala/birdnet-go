@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -228,4 +229,142 @@ func TestNewSecureHeaders_XFrameOptions(t *testing.T) {
 			assert.Equal(t, tt.expected, rec.Header().Get("X-Frame-Options"))
 		})
 	}
+}
+
+func TestHasWildcardOrigin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		origins []string
+		want    bool
+	}{
+		{"wildcard only", []string{"*"}, true},
+		{"wildcard among others", []string{"https://example.com", "*"}, true},
+		{"no wildcard", []string{"https://example.com"}, false},
+		{"empty list", []string{}, false},
+		{"nil list", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, hasWildcardOrigin(tt.origins))
+		})
+	}
+}
+
+// newCORSTestContext creates an Echo context for CORS testing with the Origin header set.
+func newCORSTestContext(t *testing.T, method, path, origin string) (echo.Context, *httptest.ResponseRecorder) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(method, path, http.NoBody)
+	if origin != "" {
+		req.Header.Set(echo.HeaderOrigin, origin)
+	}
+	if method == http.MethodOptions {
+		req.Header.Set(echo.HeaderAccessControlRequestMethod, http.MethodGet)
+	}
+	rec := httptest.NewRecorder()
+	return e.NewContext(req, rec), rec
+}
+
+func TestNewCORS_WildcardWithCredentials(t *testing.T) {
+	t.Parallel()
+
+	t.Run("reflects origin instead of wildcard when credentials enabled", func(t *testing.T) {
+		t.Parallel()
+
+		corsMiddleware := NewCORS(&SecurityConfig{
+			AllowedOrigins:   []string{"*"},
+			AllowCredentials: true,
+		})
+
+		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://my-birdnet.local:8080")
+
+		handler := corsMiddleware(func(c echo.Context) error {
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+
+		// The origin should be reflected, not "*"
+		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+		assert.Equal(t, "https://my-birdnet.local:8080", allowOrigin,
+			"expected reflected origin, not wildcard")
+
+		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+	})
+
+	t.Run("uses wildcard when credentials disabled", func(t *testing.T) {
+		t.Parallel()
+
+		corsMiddleware := NewCORS(&SecurityConfig{
+			AllowedOrigins:   []string{"*"},
+			AllowCredentials: false,
+		})
+
+		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://example.com")
+
+		handler := corsMiddleware(func(c echo.Context) error {
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+
+		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+		assert.Equal(t, "*", allowOrigin,
+			"expected wildcard origin when credentials are disabled")
+
+		// Credentials header should not be set
+		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+	})
+
+	t.Run("explicit origins with credentials works normally", func(t *testing.T) {
+		t.Parallel()
+
+		corsMiddleware := NewCORS(&SecurityConfig{
+			AllowedOrigins:   []string{"https://trusted.example.com"},
+			AllowCredentials: true,
+		})
+
+		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://trusted.example.com")
+
+		handler := corsMiddleware(func(c echo.Context) error {
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+
+		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+		assert.Equal(t, "https://trusted.example.com", allowOrigin)
+		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+	})
+
+	t.Run("preflight reflects origin with credentials", func(t *testing.T) {
+		t.Parallel()
+
+		corsMiddleware := NewCORS(&SecurityConfig{
+			AllowedOrigins:   []string{"*"},
+			AllowCredentials: true,
+		})
+
+		c, rec := newCORSTestContext(t, http.MethodOptions, "/api/v2/detections", "https://home-assistant.local:8123")
+
+		handler := corsMiddleware(func(c echo.Context) error {
+			return c.String(http.StatusOK, "ok")
+		})
+
+		err := handler(c)
+		require.NoError(t, err)
+
+		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+		assert.Equal(t, "https://home-assistant.local:8123", allowOrigin,
+			"preflight should reflect origin when credentials are enabled")
+
+		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+	})
 }

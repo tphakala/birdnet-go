@@ -432,6 +432,105 @@ func TestGetDetections(t *testing.T) {
 				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
 			},
 		},
+		// Auto-inference: species param without queryType should infer queryType=species
+		{
+			name: "Species param without queryType infers species query",
+			queryParams: map[string]string{
+				"species":    "American Crow",
+				"date":       "2025-03-07",
+				"numResults": "10",
+				"offset":     "0",
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("SpeciesDetections", "American Crow", "2025-03-07", "", 1, false, 10, 0).Return(mockNotes[:1], nil)
+				m.On("CountSpeciesDetections", "American Crow", "2025-03-07", "", 1).Return(int64(1), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  1,
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, 1)
+			},
+		},
+		// Auto-inference: search param without queryType should infer queryType=search
+		{
+			name: "Search param without queryType infers search query",
+			queryParams: map[string]string{
+				"search":     "Crow",
+				"numResults": "10",
+				"offset":     "0",
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  1,
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, 1)
+			},
+		},
+		// Date param without queryType should route through advanced search
+		{
+			name: "Date param without queryType uses advanced search",
+			queryParams: map[string]string{
+				"date":       "2025-03-07",
+				"numResults": "10",
+				"offset":     "0",
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("SearchNotesAdvanced", mock.AnythingOfType("*datastore.AdvancedSearchFilters")).
+					Return(mockNotes[:1], int64(1), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  1,
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, 1)
+			},
+		},
+		// limit as alias for numResults
+		{
+			name: "Limit param as alias for numResults",
+			queryParams: map[string]string{
+				"queryType": "all",
+				"limit":     "5",
+				"offset":    "0",
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("SearchNotes", "", false, 5, 0).Return(mockNotes, int64(2), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, 2)
+			},
+		},
+		// numResults takes precedence over limit
+		{
+			name: "numResults takes precedence over limit alias",
+			queryParams: map[string]string{
+				"queryType":  "all",
+				"numResults": "10",
+				"limit":      "5",
+				"offset":     "0",
+			},
+			mockSetup: func(m *mock.Mock) {
+				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+			},
+			expectedStatus: http.StatusOK,
+			expectedCount:  2,
+			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, 2)
+			},
+		},
 	}
 
 	for _, tc := range testCases {

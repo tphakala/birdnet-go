@@ -1067,10 +1067,10 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
 		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
-			err = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
+			_ = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 			return
 		}
-		err = c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
+		_ = c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
 		return
 	}
 
@@ -1079,7 +1079,8 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 			logger.String("note_id", noteID),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		err = c.HandleError(ctx, fmt.Errorf("no audio file found"), "No audio clip available for this note", http.StatusNotFound)
+		err = fmt.Errorf("no audio file found for note %s", noteID)
+		_ = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		return
 	}
 

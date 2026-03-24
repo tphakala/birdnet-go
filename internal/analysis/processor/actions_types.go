@@ -43,6 +43,12 @@ type DetectionContext struct {
 	// NoteID holds the database primary key after successful save.
 	// Use atomic operations: Store() in DatabaseAction, Load() in MqttAction/SSEAction.
 	NoteID atomic.Uint64
+
+	// ClipSaved indicates whether the audio clip was successfully exported to disk.
+	// DatabaseAction sets this to true after successful audio export.
+	// Downstream actions (MQTT, SSE) check this to avoid reporting a phantom ClipName
+	// for detections where the audio export failed (GitHub #107).
+	ClipSaved atomic.Bool
 }
 
 // Action is the base interface for all actions that can be executed.

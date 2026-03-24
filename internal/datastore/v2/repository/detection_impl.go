@@ -1235,17 +1235,12 @@ func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error 
 }
 
 // Unlock removes the lock from a detection.
+// This operation is idempotent — unlocking an already-unlocked detection succeeds silently.
 func (r *detectionRepository) Unlock(ctx context.Context, detectionID uint) error {
 	result := r.db.WithContext(ctx).Table(r.locksTable()).
 		Where("detection_id = ?", detectionID).
 		Delete(&entities.DetectionLock{})
-	if result.Error != nil {
-		return result.Error
-	}
-	if result.RowsAffected == 0 {
-		return ErrLockNotFound
-	}
-	return nil
+	return result.Error
 }
 
 // IsLocked checks if a detection is locked.

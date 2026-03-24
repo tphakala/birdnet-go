@@ -652,7 +652,7 @@ func (dw *DualWriteRepository) Unlock(ctx context.Context, id string) error {
 	if dualWrite {
 		uid, err := parseDetectionID(id)
 		if err == nil {
-			if err := dw.v2.Unlock(ctx, uid); err != nil && !errors.Is(err, ErrLockNotFound) {
+			if err := dw.v2.Unlock(ctx, uid); err != nil {
 				dw.logger.Warn("v2 unlock failed", logger.String("id", id), logger.Error(err))
 			}
 		}

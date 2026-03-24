@@ -43,6 +43,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/httpclient"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/secrets"
 )
 
@@ -374,6 +375,13 @@ func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 // Send sends a notification to all configured webhook endpoints.
 // Attempts each endpoint in order until one succeeds, or returns error if all fail.
 //
+// When a custom template is configured, non-detection notifications are skipped
+// gracefully. Custom templates typically reference detection-specific metadata
+// fields (species, confidence, detection URL, etc.) that don't exist on warning,
+// error, or system notifications. Rendering such templates with missing fields
+// produces payloads with placeholder values like "<no value>" that external
+// services (e.g., Discord) reject with 400 errors.
+//
 // Context handling (Go 1.24+ best practice):
 //   - Respects context cancellation for immediate cleanup
 //   - Applies per-endpoint timeout if configured
@@ -381,6 +389,20 @@ func validateResolvedWebhookAuth(auth *WebhookAuth) error {
 func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 	if len(w.endpoints) == 0 {
 		return errors.Newf("no webhook endpoints configured").Component("notification").Category(errors.CategoryConfiguration).Build()
+	}
+
+	// Skip non-detection notifications when a custom template is configured.
+	// Custom templates are designed for detection payloads (Discord rich embeds,
+	// Slack messages, etc.) and reference metadata fields like bg_confidence_percent,
+	// bg_detection_url, and bg_image_url that only exist on detection notifications.
+	// Sending these templates with warning/error notifications produces payloads
+	// containing "<no value>" placeholders that external services reject.
+	if w.template != nil && n.Type != TypeDetection {
+		GetLogger().Debug("skipping non-detection notification for webhook with custom template",
+			logger.String("provider", w.name),
+			logger.String("notification_id", n.ID),
+			logger.String("type", string(n.Type)))
+		return nil
 	}
 
 	// Build payload once (reused for all endpoints)
