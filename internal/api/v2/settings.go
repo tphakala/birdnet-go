@@ -175,7 +175,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// Restore redacted secret fields to their current values so the
 	// update logic does not overwrite real secrets with the placeholder.
 	if err := restoreRedactedSecrets(settings, &updatedSettings); err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelError, "Redacted sentinel validation failed", logger.Error(err))
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 	}
 
@@ -556,7 +556,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// merge does not overwrite real secrets with the placeholder.
 	if err := restoreRedactedSecrets(&oldSettings, settings); err != nil {
 		*settings = oldSettings
-		c.logAPIRequest(ctx, logger.LogLevelError, "Redacted sentinel validation failed", logger.Error(err))
+		c.logAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 	}
 
@@ -1777,7 +1777,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 		prov := &s.Notification.Push.Providers[i]
 		for j := range prov.Endpoints {
 			ep := &prov.Endpoints[j]
-			prefix := fmt.Sprintf("notification.push.providers[%d(%s)].endpoints[%d(%s)].auth", i, prov.Name, j, ep.URL)
+			prefix := fmt.Sprintf("notification.push.providers[%d].endpoints[%d].auth", i, j)
 			check(ep.Auth.Token, prefix+".token")
 			check(ep.Auth.Pass, prefix+".pass")
 			check(ep.Auth.Value, prefix+".value")

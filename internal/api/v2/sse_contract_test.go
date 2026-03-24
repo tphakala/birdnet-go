@@ -1009,7 +1009,9 @@ func TestSSEContract_BirdImage_AllSubFields(t *testing.T) {
 		require.True(t, ok, "SSE API CONTRACT: birdImage must be an object")
 
 		// url field should be present but empty (no omitempty on url)
-		assert.Empty(t, birdImage["url"],
+		urlVal, urlExists := birdImage["url"]
+		assert.True(t, urlExists, "SSE API CONTRACT: birdImage.url key must exist even when empty")
+		assert.Empty(t, urlVal,
 			"SSE API CONTRACT: birdImage.url must be empty when no image provided")
 	})
 }

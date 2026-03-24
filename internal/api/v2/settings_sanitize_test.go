@@ -589,3 +589,26 @@ func TestRestoreRedactedSecrets_PATCHArrayMerge(t *testing.T) {
 	assert.Equal(t, "mqtt-password", incoming.Realtime.MQTT.Password)
 	assert.Equal(t, "db-password", incoming.Output.MySQL.Password)
 }
+
+// TestRestoreRedactedSecrets_FailsOnUnmatchedSentinel verifies that renaming a
+// provider while auth is redacted returns an error and clears the sentinel.
+func TestRestoreRedactedSecrets_FailsOnUnmatchedSentinel(t *testing.T) {
+	t.Parallel()
+
+	current := settingsWithSecrets(t)
+
+	// Incoming: provider renamed, but auth still contains redacted sentinel.
+	// The name-based lookup will fail to match, leaving the sentinel in place.
+	incoming := settingsWithSecrets(t)
+	incoming.Notification.Push.Providers[0].Name = "renamed-provider"
+	incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token = redactedValue
+
+	err := restoreRedactedSecrets(current, incoming)
+	require.Error(t, err, "should error when sentinel survives restore")
+	assert.Contains(t, err.Error(), "redacted placeholder",
+		"error should mention the redacted placeholder")
+
+	// The sentinel should be cleared to empty string, never persisted
+	assert.Empty(t, incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token,
+		"sentinel should be cleared to empty string")
+}
