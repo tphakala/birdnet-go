@@ -717,7 +717,6 @@ func (s *testLegacyInterface) GetHourlyDetections(_, _ string, _, _, _ int) ([]d
 func (s *testLegacyInterface) CountSpeciesDetections(_, _, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (s *testLegacyInterface) CountSearchResults(_ string) (int64, error)        { return 0, nil }
 func (s *testLegacyInterface) Transaction(_ func(tx *gorm.DB) error) error       { return nil }
 func (s *testLegacyInterface) LockNote(_ string) error                           { return nil }
 func (s *testLegacyInterface) UnlockNote(_ string) error                         { return nil }

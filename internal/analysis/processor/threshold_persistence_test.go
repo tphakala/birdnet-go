@@ -106,10 +106,9 @@ func (m *MockDatastore) GetHourlyDetections(string, string, int, int, int) ([]da
 func (m *MockDatastore) CountSpeciesDetections(string, string, string, int) (int64, error) {
 	return 0, nil
 }
-func (m *MockDatastore) CountSearchResults(string) (int64, error) { return 0, nil }
-func (m *MockDatastore) Transaction(func(*gorm.DB) error) error   { return nil }
-func (m *MockDatastore) LockNote(string) error                    { return nil }
-func (m *MockDatastore) UnlockNote(string) error                  { return nil }
+func (m *MockDatastore) Transaction(func(*gorm.DB) error) error { return nil }
+func (m *MockDatastore) LockNote(string) error                  { return nil }
+func (m *MockDatastore) UnlockNote(string) error                { return nil }
 func (m *MockDatastore) GetNoteLock(string) (*datastore.NoteLock, error) {
 	return nil, datastore.ErrNoteLockNotFound
 }

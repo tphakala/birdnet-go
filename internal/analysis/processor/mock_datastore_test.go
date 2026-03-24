@@ -230,9 +230,6 @@ func (m *ActionMockDatastore) GetHourlyDetections(_, _ string, _, _, _ int) ([]d
 func (m *ActionMockDatastore) CountSpeciesDetections(_, _, _ string, _ int) (int64, error) {
 	return 0, nil
 }
-func (m *ActionMockDatastore) CountSearchResults(_ string) (int64, error) {
-	return 0, nil
-}
 func (m *ActionMockDatastore) Transaction(_ func(tx *gorm.DB) error) error {
 	return nil
 }

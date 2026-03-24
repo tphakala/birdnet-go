@@ -1785,14 +1785,6 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 	return count, err
 }
 
-// CountSearchResults counts search results.
-func (ds *Datastore) CountSearchResults(query string) (int64, error) {
-	ctx := context.Background()
-	filters := &repository.SearchFilters{Query: query}
-	_, count, err := ds.detection.Search(ctx, filters)
-	return count, err
-}
-
 // CountHourlyDetections counts detections for a specific hour.
 func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	ctx := context.Background()

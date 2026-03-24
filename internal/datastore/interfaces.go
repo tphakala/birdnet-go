@@ -163,7 +163,6 @@ type Interface interface {
 	LatestHourlyWeather() (*HourlyWeather, error)
 	GetHourlyDetections(date, hour string, duration, limit, offset int) ([]Note, error)
 	CountSpeciesDetections(species, date, hour string, duration int) (int64, error)
-	CountSearchResults(query string) (int64, error)
 	Transaction(fc func(tx *gorm.DB) error) error
 	// Lock management methods
 	LockNote(noteID string) error
@@ -1162,25 +1161,6 @@ func (ds *DataStore) CountSpeciesDetections(species, date, hour string, duration
 			Context("operation", "count_species_detections").
 			Context("species", species).
 			Context("date", date).
-			Build()
-	}
-
-	return count, nil
-}
-
-// CountSearchResults counts the number of search results for a given query.
-func (ds *DataStore) CountSearchResults(query string) (int64, error) {
-	var count int64
-	err := ds.DB.Model(&Note{}).
-		Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
-		Count(&count).Error
-
-	if err != nil {
-		return 0, errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "count_search_results").
-			Context("query", query).
 			Build()
 	}
 

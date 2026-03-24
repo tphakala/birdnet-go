@@ -229,62 +229,6 @@ func (_c *MockInterface_CountResults_Call) RunAndReturn(run func() (int64, error
 	return _c
 }
 
-// CountSearchResults provides a mock function with given fields: query
-func (_m *MockInterface) CountSearchResults(query string) (int64, error) {
-	ret := _m.Called(query)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CountSearchResults")
-	}
-
-	var r0 int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(string) (int64, error)); ok {
-		return rf(query)
-	}
-	if rf, ok := ret.Get(0).(func(string) int64); ok {
-		r0 = rf(query)
-	} else {
-		r0 = ret.Get(0).(int64)
-	}
-
-	if rf, ok := ret.Get(1).(func(string) error); ok {
-		r1 = rf(query)
-	} else {
-		r1 = ret.Error(1)
-	}
-
-	return r0, r1
-}
-
-// MockInterface_CountSearchResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CountSearchResults'
-type MockInterface_CountSearchResults_Call struct {
-	*mock.Call
-}
-
-// CountSearchResults is a helper method to define mock.On call
-//   - query string
-func (_e *MockInterface_Expecter) CountSearchResults(query interface{}) *MockInterface_CountSearchResults_Call {
-	return &MockInterface_CountSearchResults_Call{Call: _e.mock.On("CountSearchResults", query)}
-}
-
-func (_c *MockInterface_CountSearchResults_Call) Run(run func(query string)) *MockInterface_CountSearchResults_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
-	})
-	return _c
-}
-
-func (_c *MockInterface_CountSearchResults_Call) Return(_a0 int64, _a1 error) *MockInterface_CountSearchResults_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *MockInterface_CountSearchResults_Call) RunAndReturn(run func(string) (int64, error)) *MockInterface_CountSearchResults_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // CountSpeciesDetections provides a mock function with given fields: species, date, hour, duration
 func (_m *MockInterface) CountSpeciesDetections(species string, date string, hour string, duration int) (int64, error) {
 	ret := _m.Called(species, date, hour, duration)
