@@ -1008,8 +1008,9 @@ func TestServeAudioByID_AudioFormats(t *testing.T) {
 				}
 			})
 
-			// Setup mock to return this filename
-			audioID := fmt.Sprintf("test%d", i)
+			// Setup mock to return this filename — use numeric IDs since the handler
+			// validates that :id is a valid number
+			audioID := fmt.Sprintf("%d", i+1)
 			mockDS.On("GetNoteClipPath", audioID).Return(format.filename, nil).Once()
 
 			// Create request

@@ -1794,6 +1794,25 @@ func (p *Processor) CleanupLogDeduplicator(staleAfter time.Duration) int {
 	return removed
 }
 
+// CleanupEventTracker removes stale entries from the event tracker's handler maps.
+func (p *Processor) CleanupEventTracker(staleAfter time.Duration) int {
+	p.eventTrackerMu.RLock()
+	tracker := p.EventTracker
+	p.eventTrackerMu.RUnlock()
+
+	if tracker == nil {
+		return 0
+	}
+	removed := tracker.Cleanup(staleAfter)
+	if removed > 0 {
+		GetLogger().Debug("Cleaned stale event tracker entries",
+			logger.Int("removed_count", removed),
+			logger.String("stale_after", staleAfter.String()),
+			logger.String("operation", "event_tracker_cleanup"))
+	}
+	return removed
+}
+
 // getDisplayNameForSource converts a source ID to user-friendly DisplayName
 // Falls back to sanitized source if lookup fails (prevents credential exposure)
 // TODO: Consider moving to AudioSource struct throughout the pipeline to eliminate this lookup

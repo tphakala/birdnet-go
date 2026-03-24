@@ -226,6 +226,7 @@ func (cm *ControlMonitor) handleRebuildRangeFilter() {
 	if cm.proc != nil {
 		// Clean entries older than 1 hour
 		cm.proc.CleanupLogDeduplicator(time.Hour)
+		cm.proc.CleanupEventTracker(time.Hour)
 	}
 }
 

@@ -60,8 +60,8 @@ func (m *MockDatastore) GetLastDetections(int) ([]datastore.Note, error) {
 func (m *MockDatastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }
-func (m *MockDatastore) SearchNotes(string, bool, int, int) ([]datastore.Note, error) {
-	return make([]datastore.Note, 0), nil
+func (m *MockDatastore) SearchNotes(string, bool, int, int) ([]datastore.Note, int64, error) {
+	return make([]datastore.Note, 0), 0, nil
 }
 func (m *MockDatastore) SearchNotesAdvanced(*datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	return make([]datastore.Note, 0), 0, nil

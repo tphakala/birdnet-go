@@ -2,6 +2,8 @@
 package processor
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -187,6 +189,36 @@ func (et *EventTracker) TrackEventWithNames(commonName, scientificName string, e
 	handler.Mutex.Unlock()
 
 	return allowEvent
+}
+
+// Cleanup removes entries from LastEventTime that are older than staleAfter,
+// preventing unbounded map growth. Returns the number of entries removed.
+func (h *EventHandler) Cleanup(staleAfter time.Duration) int {
+	h.Mutex.Lock()
+	defer h.Mutex.Unlock()
+
+	cutoff := time.Now().Add(-staleAfter)
+	removed := 0
+	for species, lastTime := range h.LastEventTime {
+		if lastTime.Before(cutoff) {
+			delete(h.LastEventTime, species)
+			removed++
+		}
+	}
+	return removed
+}
+
+// Cleanup removes stale entries from all event handlers. Returns total entries removed.
+func (et *EventTracker) Cleanup(staleAfter time.Duration) int {
+	et.Mutex.RLock()
+	handlers := slices.Collect(maps.Values(et.Handlers))
+	et.Mutex.RUnlock()
+
+	total := 0
+	for _, h := range handlers {
+		total += h.Cleanup(staleAfter)
+	}
+	return total
 }
 
 // ResetEvent resets the state for a specific species and event type, clearing any tracked event timing.

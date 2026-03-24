@@ -480,6 +480,18 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 			req := ctx.Request()
 			res := ctx.Response()
 
+			// Determine the actual status code. When a handler returns an
+			// *echo.HTTPError, Echo's centralized error handler has not yet
+			// executed at this point in the middleware chain, so res.Status
+			// is still the default 200. Extract the real code from the error.
+			status := res.Status
+			if err != nil {
+				var he *echo.HTTPError
+				if errors.As(err, &he) {
+					status = he.Code
+				}
+			}
+
 			// Get tunnel info from context
 			isTunneled, _ := ctx.Get("is_tunneled").(bool)
 			tunnelProvider, _ := ctx.Get("tunnel_provider").(string)
@@ -489,7 +501,7 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 				logger.String("method", req.Method),
 				logger.String("path", req.URL.Path),
 				logger.String("query", req.URL.RawQuery),
-				logger.Int("status", res.Status),
+				logger.Int("status", status),
 				logger.String("ip", ctx.RealIP()), // Uses custom extractor
 				logger.Bool("tunneled", isTunneled),
 				logger.String("tunnel_provider", tunnelProvider),

@@ -185,7 +185,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, nil)
+				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -247,8 +247,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], nil)
-				m.On("CountSearchResults", "Crow").Return(int64(1), nil)
+				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
@@ -305,8 +304,7 @@ func TestGetDetections(t *testing.T) {
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Controller should still process the request
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, int64(0), nil)
 			},
 			expectedStatus: http.StatusOK, // Now expecting 200 OK
 			expectedCount:  0,

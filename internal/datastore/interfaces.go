@@ -108,7 +108,7 @@ type Interface interface {
 	SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit int, offset int) ([]Note, error)
 	GetLastDetections(numDetections int) ([]Note, error)
 	GetAllDetectedSpecies() ([]Note, error)
-	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, error)
+	SearchNotes(query string, sortAscending bool, limit int, offset int) ([]Note, int64, error)
 	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
 	GetNoteClipPath(noteID string) (string, error)
 	DeleteNoteClipPath(noteID string) error
@@ -851,13 +851,29 @@ func (ds *DataStore) GetAllDetectedSpecies() ([]Note, error) {
 }
 
 // SearchNotes performs a search on notes with optional sorting, pagination, and limits.
-func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]Note, error) {
+// Returns the matching notes, the total count of matching records (before pagination), and any error.
+func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]Note, int64, error) {
 	var notes []Note
 	sortOrder := sortAscendingString(sortAscending)
 
-	err := ds.DB.Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
-		return db.Order("created_at DESC") // Order comments by creation time, newest first
-	}).Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%").
+	baseQuery := ds.DB.Model(&Note{}).
+		Where("common_name LIKE ? OR scientific_name LIKE ?", "%"+query+"%", "%"+query+"%")
+
+	// Count total matching results before pagination
+	var totalCount int64
+	if err := baseQuery.Session(&gorm.Session{}).Count(&totalCount).Error; err != nil {
+		return nil, 0, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "count_search_notes").
+			Context("query", query).
+			Build()
+	}
+
+	err := baseQuery.
+		Preload("Review").Preload("Lock").Preload("Comments", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at DESC")
+	}).
 		Order("id " + sortOrder).
 		Limit(limit).
 		Offset(offset).
@@ -872,14 +888,14 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 	}
 
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, 0, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "search_notes").
 			Context("query", query).
 			Build()
 	}
-	return notes, nil
+	return notes, totalCount, nil
 }
 
 // SaveDailyEvents saves daily events data to the database.

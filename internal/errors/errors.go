@@ -105,10 +105,13 @@ func (ee *EnhancedError) Unwrap() error {
 	return ee.Err
 }
 
-// Is implements error type checking
+// Is implements error type checking using pointer identity for EnhancedError targets.
+// Category-based matching was removed because it caused false positives: different
+// sentinel errors sharing the same category (e.g. ErrEngineStopped vs ErrDeviceAlreadyActive,
+// both CategoryState) would incorrectly match. To match by category, compare .Category directly.
 func (ee *EnhancedError) Is(target error) bool {
 	if ee2, ok := target.(*EnhancedError); ok {
-		return ee.Category == ee2.Category
+		return ee == ee2
 	}
 	return Is(ee.Err, target)
 }

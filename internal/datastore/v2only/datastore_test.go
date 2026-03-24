@@ -612,10 +612,11 @@ func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
 	}
 
 	// Search notes
-	notes, err := ds.SearchNotes("Passer", true, 10, 0)
+	notes, total, err := ds.SearchNotes("Passer", true, 10, 0)
 	require.NoError(t, err)
 	// Search may not work perfectly without full-text search, but shouldn't error
 	assert.NotNil(t, notes)
+	assert.GreaterOrEqual(t, total, int64(0))
 }
 
 func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {

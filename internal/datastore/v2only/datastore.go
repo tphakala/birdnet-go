@@ -730,6 +730,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Time:           timeStr,
 		ScientificName: scientificName,
 		CommonName:     commonName,
+		SpeciesCode:    ds.speciesCodeMap[scientificName],
 		Confidence:     det.Confidence,
 		Latitude:       lat,
 		Longitude:      lon,
@@ -1270,7 +1271,8 @@ func (ds *Datastore) GetAllDetectedSpecies() ([]datastore.Note, error) {
 }
 
 // SearchNotes searches notes by query string.
-func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
+// Returns the matching notes, the total count of matching records (before pagination), and any error.
+func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset int) ([]datastore.Note, int64, error) {
 	ctx := context.Background()
 	filters := &repository.SearchFilters{
 		Query:    query,
@@ -1280,9 +1282,9 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 		SortDesc: !sortAscending,
 	}
 
-	dets, _, err := ds.detection.Search(ctx, filters)
+	dets, total, err := ds.detection.Search(ctx, filters)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	// Load relations (review, lock, label, source) for accurate virtual fields
@@ -1292,7 +1294,7 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 		}
 	}
 
-	return ds.detectionsToNotes(dets), nil
+	return ds.detectionsToNotes(dets), total, nil
 }
 
 // SearchNotesAdvanced performs advanced search with filters.

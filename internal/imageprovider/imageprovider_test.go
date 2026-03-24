@@ -174,8 +174,8 @@ func (m *mockStore) SpeciesDetections(species, date, hour string, duration int, 
 }
 func (m *mockStore) GetLastDetections(num int) ([]datastore.Note, error) { return nil, nil }
 func (m *mockStore) GetAllDetectedSpecies() ([]datastore.Note, error)    { return nil, nil }
-func (m *mockStore) SearchNotes(query string, asc bool, limit, offset int) ([]datastore.Note, error) {
-	return nil, nil
+func (m *mockStore) SearchNotes(query string, asc bool, limit, offset int) ([]datastore.Note, int64, error) {
+	return nil, 0, nil
 }
 func (m *mockStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 	return nil, 0, nil

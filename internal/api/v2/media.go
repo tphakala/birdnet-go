@@ -526,6 +526,12 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
 	}
 
+	// Validate that the ID is numeric to prevent wildcard route collisions
+	// (e.g., /api/v2/audio/level or /api/v2/audio/stream matching this route)
+	if _, err := strconv.ParseUint(noteID, 10, 64); err != nil {
+		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
+	}
+
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		// Check if error is due to record not found
@@ -1043,6 +1049,16 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 		return
 	}
 
+	// Validate that the ID is numeric to prevent wildcard route collisions
+	if _, parseErr := strconv.ParseUint(noteID, 10, 64); parseErr != nil {
+		c.logErrorIfEnabled("Non-numeric note ID for spectrogram request",
+			logger.String("note_id", noteID),
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()))
+		err = c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
+		return
+	}
+
 	clipPath, err = c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get clip path from database",
@@ -1398,6 +1414,11 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	noteID := ctx.Param("id")
 	if noteID == "" {
 		return c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+	}
+
+	// Validate that the ID is numeric to prevent wildcard route collisions
+	if _, err := strconv.ParseUint(noteID, 10, 64); err != nil {
+		return c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
 	}
 
 	// Get detection from database

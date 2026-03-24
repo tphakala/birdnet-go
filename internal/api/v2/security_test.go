@@ -23,11 +23,10 @@ import (
 )
 
 // searchNotesEmptyMock returns a mockSetup function that configures empty search results.
-// Use this to reduce duplication in tests that mock SearchNotes and CountSearchResults.
+// Use this to reduce duplication in tests that mock SearchNotes.
 func searchNotesEmptyMock() func(*mock.Mock) {
 	return func(m *mock.Mock) {
-		m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, nil)
-		m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+		m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, int64(0), nil)
 	}
 }
 
@@ -254,8 +253,7 @@ func TestInputValidation(t *testing.T) {
 						assert.NotContains(t, searchParam, "<script>")
 						assert.NotContains(t, searchParam, "</script>")
 					}).
-					Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+					Return([]datastore.Note{}, int64(0), nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -369,8 +367,7 @@ func TestInputValidation(t *testing.T) {
 			},
 			mockSetup: func(m *mock.Mock) {
 				// Only mock what's actually being called
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, nil)
-				m.On("CountSearchResults", mock.Anything).Return(int64(0), nil)
+				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, int64(0), nil)
 			},
 			expectedStatus: http.StatusOK,
 		},
@@ -629,12 +626,7 @@ func TestDDoSProtection(t *testing.T) {
 	// Use Maybe() to allow for race conditions in concurrent testing.
 	mockDS.EXPECT().
 		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return([]datastore.Note{}, nil).
-		Maybe() // Multiple requests may call before cache is populated
-
-	mockDS.EXPECT().
-		CountSearchResults(mock.Anything).
-		Return(int64(0), nil).
+		Return([]datastore.Note{}, int64(0), nil).
 		Maybe() // Multiple requests may call before cache is populated
 
 	// Create a wait group to synchronize goroutines

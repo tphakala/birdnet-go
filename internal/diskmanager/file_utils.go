@@ -227,12 +227,15 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 
 	// Use pooled slice to reduce allocations
 	pooledSlice := getPooledSlice()
+	tookOwnership := false
 	defer func() {
-		// Handle panics and ensure pool cleanup
 		if r := recover(); r != nil {
-			// Always return to pool on panic
 			pooledSlice.Release()
 			panic(r) // Re-panic after cleanup
+		}
+		// Release on all error paths unless ownership was transferred
+		if !tookOwnership {
+			pooledSlice.Release()
 		}
 	}()
 
@@ -315,13 +318,13 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 	// Update the pooled slice with the final data while preserving the backing array
 	pooledSlice.SetData(state.files)
 
-	// Fast path: if no files found, return early
+	// Fast path: if no files found, return early (defer handles release)
 	if len(state.files) == 0 {
-		pooledSlice.Release() // Release the empty pooled slice
 		return nil, nil
 	}
 
 	// Transfer ownership of the data and automatically release the pooled slice
+	tookOwnership = true
 	return pooledSlice.TakeOwnership(), nil
 }
 

@@ -983,21 +983,12 @@ func (c *Controller) getSearchDetections(search string, numResults, offset int) 
 	}
 
 	// If not in cache, query the database
-	notes, err := c.DS.SearchNotes(search, false, numResults, offset)
+	notes, totalCount, err := c.DS.SearchNotes(search, false, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to search notes",
 			logger.String("query", search),
 			logger.Int("limit", numResults),
 			logger.Int("offset", offset),
-			logger.Error(err),
-		)
-		return nil, 0, err
-	}
-
-	totalCount, err := c.DS.CountSearchResults(search)
-	if err != nil {
-		c.logErrorIfEnabled("Failed to count search results",
-			logger.String("query", search),
 			logger.Error(err),
 		)
 		return nil, 0, err
@@ -1033,7 +1024,7 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 	}
 
 	// Use the datastore.SearchNotes method with an empty query to get all notes
-	notes, err := c.DS.SearchNotes("", false, numResults, offset)
+	notes, totalResults, err := c.DS.SearchNotes("", false, numResults, offset)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to get all detections",
 			logger.Int("limit", numResults),
@@ -1041,13 +1032,6 @@ func (c *Controller) getAllDetections(numResults, offset int) ([]datastore.Note,
 			logger.Error(err),
 		)
 		return nil, 0, err
-	}
-
-	// Estimate total by counting
-	totalResults := int64(len(notes))
-	if len(notes) == numResults {
-		// If we got exactly the number requested, there may be more
-		totalResults = int64(offset + numResults + 1) // This is an estimate
 	}
 
 	// Cache the results

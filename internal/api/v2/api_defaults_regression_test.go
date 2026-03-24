@@ -205,18 +205,12 @@ func TestTimeOfDayDistribution_DefaultParams(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-func TestGetDetections_DefaultParams(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "detections")
-	t.Attr("type", "regression")
-	t.Attr("issue", "2361")
-
-	e, mockDS, controller := setupTestEnvironment(t)
+// verifyGetDetectionsDefaults is a shared helper for detection default-parameter regression tests.
+func verifyGetDetectionsDefaults(t *testing.T, e *echo.Echo, mockDS *mocks.MockInterface, controller *Controller) {
+	t.Helper()
 
 	notes := testNotes()
-
-	// Default: queryType="all" → SearchNotes("", false, 100, 0)
-	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, nil).Once()
+	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, int64(len(notes)), nil).Once()
 
 	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections", controller.GetDetections)
 
@@ -225,12 +219,21 @@ func TestGetDetections_DefaultParams(t *testing.T) {
 	var result map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
 
-	// Paginated response has a "data" array (PaginatedResponse.Data)
 	detections, ok := result["data"].([]any)
 	require.True(t, ok, "response should contain 'data' array")
-	assert.NotEmpty(t, detections, "should return detections with default params")
+	assert.NotEmpty(t, detections, "should return detections")
 
 	mockDS.AssertExpectations(t)
+}
+
+func TestGetDetections_DefaultParams(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
+
+	e, mockDS, controller := setupTestEnvironment(t)
+	verifyGetDetectionsDefaults(t, e, mockDS, controller)
 }
 
 func TestGetRecentDetections_DefaultParams(t *testing.T) {
@@ -415,24 +418,7 @@ func TestGetDetections_DefaultParams_AfterMigration(t *testing.T) {
 	t.Attr("issue", "2361")
 
 	e, mockDS, controller := setupPostMigrationTestEnvironment(t)
-
-	notes := testNotes()
-
-	// Detection defaults (numResults=100) are not config-driven, so should be unaffected
-	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, nil).Once()
-
-	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections", controller.GetDetections)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var result map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-
-	detections, ok := result["data"].([]any)
-	require.True(t, ok, "response should contain 'data' array")
-	assert.NotEmpty(t, detections, "should return detections after config migration")
-
-	mockDS.AssertExpectations(t)
+	verifyGetDetectionsDefaults(t, e, mockDS, controller)
 }
 
 func TestGetEffectiveSummaryLimit_AfterMigration(t *testing.T) {
