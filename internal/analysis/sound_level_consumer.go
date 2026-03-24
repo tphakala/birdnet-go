@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -26,6 +27,7 @@ type SoundLevelConsumer struct {
 	processor *soundlevel.Processor
 	outCh     chan soundlevel.SoundLevelData
 	closed    atomic.Bool
+	closeOnce sync.Once
 }
 
 // NewSoundLevelConsumer creates a SoundLevelConsumer that wraps the given
@@ -136,6 +138,7 @@ func (c *SoundLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:
 // is responsible for draining it.
 func (c *SoundLevelConsumer) Close() error {
 	c.closed.Store(true)
+	c.closeOnce.Do(func() { close(c.outCh) })
 	return nil
 }
 

@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -14,12 +15,13 @@ const audioLevelChanSize = 100
 // and publishes an AudioLevelData value on its output channel for SSE
 // subscribers.
 type AudioLevelConsumer struct {
-	id       string
-	rate     int
-	depth    int
-	channels int
-	outCh    chan AudioLevelData
-	closed   atomic.Bool
+	id        string
+	rate      int
+	depth     int
+	channels  int
+	outCh     chan AudioLevelData
+	closed    atomic.Bool
+	closeOnce sync.Once
 }
 
 // NewAudioLevelConsumer creates an AudioLevelConsumer that publishes computed
@@ -77,6 +79,7 @@ func (c *AudioLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:
 // is responsible for draining it.
 func (c *AudioLevelConsumer) Close() error {
 	c.closed.Store(true)
+	c.closeOnce.Do(func() { close(c.outCh) })
 	return nil
 }
 
