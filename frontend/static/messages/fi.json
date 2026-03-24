@@ -3927,6 +3927,10 @@
     "labels": {
       "showPassword": "Näytä salasana",
       "hidePassword": "Piilota salasana",
+      "secretSet": "Asetettu",
+      "changeSecret": "Vaihda",
+      "cancelChange": "Peruuta",
+      "enterNewSecret": "Syötä uusi arvo",
       "copyToClipboard": "Kopioi leikepöydälle",
       "clearSelection": "Tyhjennä valinta",
       "selectOption": "Valitse vaihtoehto"

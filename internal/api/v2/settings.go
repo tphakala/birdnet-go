@@ -96,8 +96,9 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Return a copy of the settings
-	return ctx.JSON(http.StatusOK, settings)
+	// Return a sanitized copy with secrets redacted
+	sanitized := sanitizeSettingsForAPI(settings)
+	return ctx.JSON(http.StatusOK, sanitized)
 }
 
 // GetSectionSettings handles GET /api/v2/settings/:section
@@ -124,8 +125,9 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 		}
 	}
 
-	// Get the settings section
-	sectionValue, err := getSettingsSection(settings, section)
+	// Sanitize first, then extract the section from the sanitized copy
+	sanitized := sanitizeSettingsForAPI(settings)
+	sectionValue, err := getSettingsSection(sanitized, section)
 	if err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to get settings section", logger.String("section", section), logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to get settings section", http.StatusNotFound)
@@ -169,6 +171,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		c.logAPIRequest(ctx, logger.LogLevelError, "Invalid settings data received", logger.Error(err))
 		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
 	}
+
+	// Restore redacted secret fields to their current values so the
+	// update logic does not overwrite real secrets with the placeholder.
+	restoreRedactedSecrets(settings, &updatedSettings)
 
 	// Update only the fields that are allowed to be changed
 	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
@@ -542,6 +548,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		}
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
+
+	// Restore redacted secret fields to their current values so the
+	// merge does not overwrite real secrets with the placeholder.
+	restoreRedactedSecrets(&oldSettings, settings)
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
 	// This handles the case where the frontend sends coordinates without the flag,
@@ -1480,6 +1490,215 @@ func validatePassword(value any) error {
 		}
 	}
 	return nil
+}
+
+// redactedValue is the placeholder used for secret fields in API responses.
+// The frontend can check for this value to show a "secret is set" indicator.
+const redactedValue = "**********"
+
+// sanitizeSettingsForAPI returns a shallow copy of Settings with all secret
+// fields replaced by a redacted placeholder. This prevents the GET endpoints
+// from leaking credentials, session secrets, API keys, and other sensitive
+// data. The original Settings struct is never modified.
+func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
+	// Shallow-copy the top-level struct (value copy of all non-pointer fields).
+	sanitized := *s
+
+	// --- Security section ---
+	sanitized.Security.SessionSecret = redactedValue
+	sanitized.Security.BasicAuth.Password = redact(s.Security.BasicAuth.Password)
+	sanitized.Security.BasicAuth.ClientID = ""
+	sanitized.Security.BasicAuth.ClientSecret = ""
+
+	// Legacy OAuth providers
+	sanitized.Security.GoogleAuth.ClientSecret = redact(s.Security.GoogleAuth.ClientSecret)
+	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
+	sanitized.Security.MicrosoftAuth.ClientSecret = redact(s.Security.MicrosoftAuth.ClientSecret)
+
+	// Array-based OAuth providers — must copy the slice to avoid mutating the original
+	if len(s.Security.OAuthProviders) > 0 {
+		providers := make([]conf.OAuthProviderConfig, len(s.Security.OAuthProviders))
+		sanitized.Security.OAuthProviders = providers
+		for i := range s.Security.OAuthProviders {
+			p := s.Security.OAuthProviders[i]
+			p.ClientSecret = redact(p.ClientSecret)
+			providers[i] = p
+		}
+	}
+
+	// --- MQTT ---
+	sanitized.Realtime.MQTT.Password = redact(s.Realtime.MQTT.Password)
+
+	// --- Database ---
+	sanitized.Output.MySQL.Password = redact(s.Output.MySQL.Password)
+
+	// --- Weather API keys ---
+	sanitized.Realtime.Weather.OpenWeather.APIKey = redact(s.Realtime.Weather.OpenWeather.APIKey)
+	sanitized.Realtime.Weather.Wunderground.APIKey = redact(s.Realtime.Weather.Wunderground.APIKey)
+
+	// --- eBird API key ---
+	sanitized.Realtime.EBird.APIKey = redact(s.Realtime.EBird.APIKey)
+
+	// --- Backup secrets ---
+	sanitized.Backup.EncryptionKey = redact(s.Backup.EncryptionKey)
+
+	// Backup targets may contain FTP/SFTP/S3 credentials in their Settings map.
+	// Copy the slice and redact known secret keys.
+	if len(s.Backup.Targets) > 0 {
+		targets := make([]conf.BackupTarget, len(s.Backup.Targets))
+		sanitized.Backup.Targets = targets
+		for i, t := range s.Backup.Targets {
+			if t.Settings != nil {
+				sanitizedSettings := make(map[string]any, len(t.Settings))
+				for k, v := range t.Settings {
+					switch k {
+					case "password", "secretaccesskey":
+						if str, ok := v.(string); ok && str != "" {
+							sanitizedSettings[k] = redactedValue
+						} else {
+							sanitizedSettings[k] = v
+						}
+					default:
+						sanitizedSettings[k] = v
+					}
+				}
+				t.Settings = sanitizedSettings
+			}
+			targets[i] = t
+		}
+	}
+
+	// --- Notification webhook auth secrets ---
+	sanitizeNotificationSecrets(&sanitized)
+
+	return &sanitized
+}
+
+// sanitizeNotificationSecrets redacts auth credentials in push notification
+// webhook endpoints. The copy's Notification field is modified in place.
+func sanitizeNotificationSecrets(s *conf.Settings) {
+	providers := s.Notification.Push.Providers
+	if len(providers) == 0 {
+		return
+	}
+	// Copy the providers slice to avoid mutating the original
+	providersCopy := make([]conf.PushProviderConfig, len(providers))
+	for i := range providers {
+		p := providers[i]
+		if len(p.Endpoints) > 0 {
+			endpoints := make([]conf.WebhookEndpointConfig, len(p.Endpoints))
+			for j := range p.Endpoints {
+				ep := p.Endpoints[j]
+				ep.Auth.Token = redact(ep.Auth.Token)
+				ep.Auth.Pass = redact(ep.Auth.Pass)
+				ep.Auth.Value = redact(ep.Auth.Value)
+				endpoints[j] = ep
+			}
+			p.Endpoints = endpoints
+		}
+		providersCopy[i] = p
+	}
+	s.Notification.Push.Providers = providersCopy
+}
+
+// restoreRedactedSecrets replaces redacted placeholder values in the incoming
+// settings with the current (real) values so that an update round-trip
+// (GET → modify → PUT) does not overwrite real secrets with the placeholder.
+func restoreRedactedSecrets(current, incoming *conf.Settings) {
+	restore := func(cur, inc *string) {
+		if *inc == redactedValue {
+			*inc = *cur
+		}
+	}
+
+	// Security — defense-in-depth: restore even though SessionSecret is
+	// also in the blocked field map (protects against future unblocking).
+	restore(&current.Security.SessionSecret, &incoming.Security.SessionSecret)
+	restore(&current.Security.BasicAuth.Password, &incoming.Security.BasicAuth.Password)
+	restore(&current.Security.GoogleAuth.ClientSecret, &incoming.Security.GoogleAuth.ClientSecret)
+	restore(&current.Security.GithubAuth.ClientSecret, &incoming.Security.GithubAuth.ClientSecret)
+	restore(&current.Security.MicrosoftAuth.ClientSecret, &incoming.Security.MicrosoftAuth.ClientSecret)
+
+	// Array-based OAuth providers — match by Provider name to handle reordering
+	for i := range incoming.Security.OAuthProviders {
+		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
+			continue
+		}
+		for j := range current.Security.OAuthProviders {
+			if current.Security.OAuthProviders[j].Provider == incoming.Security.OAuthProviders[i].Provider {
+				incoming.Security.OAuthProviders[i].ClientSecret = current.Security.OAuthProviders[j].ClientSecret
+				break
+			}
+		}
+	}
+
+	// MQTT
+	restore(&current.Realtime.MQTT.Password, &incoming.Realtime.MQTT.Password)
+
+	// MySQL
+	restore(&current.Output.MySQL.Password, &incoming.Output.MySQL.Password)
+
+	// Weather API keys
+	restore(&current.Realtime.Weather.OpenWeather.APIKey, &incoming.Realtime.Weather.OpenWeather.APIKey)
+	restore(&current.Realtime.Weather.Wunderground.APIKey, &incoming.Realtime.Weather.Wunderground.APIKey)
+
+	// eBird
+	restore(&current.Realtime.EBird.APIKey, &incoming.Realtime.EBird.APIKey)
+
+	// Backup
+	restore(&current.Backup.EncryptionKey, &incoming.Backup.EncryptionKey)
+
+	// Backup target secrets — match by Type to handle reordering
+	for i := range incoming.Backup.Targets {
+		if incoming.Backup.Targets[i].Settings == nil {
+			continue
+		}
+		// Find the matching current target by type
+		var curSettings map[string]any
+		for j := range current.Backup.Targets {
+			if current.Backup.Targets[j].Type == incoming.Backup.Targets[i].Type {
+				curSettings = current.Backup.Targets[j].Settings
+				break
+			}
+		}
+		if curSettings == nil {
+			continue
+		}
+		for _, key := range []string{"password", "secretaccesskey"} {
+			if v, ok := incoming.Backup.Targets[i].Settings[key]; ok {
+				if str, isStr := v.(string); isStr && str == redactedValue {
+					incoming.Backup.Targets[i].Settings[key] = curSettings[key]
+				}
+			}
+		}
+	}
+
+	// Webhook auth secrets
+	for i := range incoming.Notification.Push.Providers {
+		if i >= len(current.Notification.Push.Providers) {
+			break
+		}
+		for j := range incoming.Notification.Push.Providers[i].Endpoints {
+			if j >= len(current.Notification.Push.Providers[i].Endpoints) {
+				break
+			}
+			curAuth := &current.Notification.Push.Providers[i].Endpoints[j].Auth
+			incAuth := &incoming.Notification.Push.Providers[i].Endpoints[j].Auth
+			restore(&curAuth.Token, &incAuth.Token)
+			restore(&curAuth.Pass, &incAuth.Pass)
+			restore(&curAuth.Value, &incAuth.Value)
+		}
+	}
+}
+
+// redact returns the redacted placeholder if the input is non-empty,
+// or an empty string if the field was never set. This lets the frontend
+// distinguish "secret is configured" from "no secret set".
+func redact(s string) string {
+	if s != "" {
+		return redactedValue
+	}
+	return ""
 }
 
 // getBlockedFieldMap returns a map of fields that are BLOCKED from being updated

@@ -3927,6 +3927,10 @@
     "labels": {
       "showPassword": "Mostrar contraseña",
       "hidePassword": "Ocultar contraseña",
+      "secretSet": "Configurado",
+      "changeSecret": "Cambiar",
+      "cancelChange": "Cancelar",
+      "enterNewSecret": "Introducir nuevo valor",
       "copyToClipboard": "Copiar al portapapeles",
       "clearSelection": "Limpiar selección",
       "selectOption": "Selecciona una opción"

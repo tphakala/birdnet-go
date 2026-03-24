@@ -1,8 +1,11 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn.js';
   import type { HTMLAttributes } from 'svelte/elements';
-  import { Eye, EyeOff, TriangleAlert } from '@lucide/svelte';
+  import { Eye, EyeOff, Pencil, X, TriangleAlert } from '@lucide/svelte';
   import { t } from '$lib/i18n';
+
+  /** The redacted placeholder the backend sends for configured secrets. */
+  const REDACTED_VALUE = '**********';
 
   // Generate unique ID using crypto.randomUUID for SSR compatibility
   const generateUniqueId = () => {
@@ -50,9 +53,36 @@
 
   let showPassword = $state(false);
 
+  // Track whether we are in "editing" mode for a redacted field.
+  // When the value arrives as the redacted placeholder the field starts in
+  // read-only "secret is set" mode; the user must click "Change" to edit.
+  let isRedacted = $derived(value === REDACTED_VALUE);
+  let isEditing = $state(false);
+
+  // Reset editing state when the value is externally set back to redacted
+  // (e.g., after a settings reload or save).
+  $effect(() => {
+    if (value === REDACTED_VALUE) {
+      isEditing = false;
+    }
+  });
+
+  function startEditing() {
+    isEditing = true;
+    value = '';
+    onUpdate('');
+  }
+
+  function cancelEditing() {
+    isEditing = false;
+    // Restore the redacted placeholder without triggering onUpdate
+    // to avoid marking the form as dirty when nothing actually changed.
+    value = REDACTED_VALUE;
+  }
+
   // Password strength calculation
   let passwordStrength = $derived.by(() => {
-    if (!showStrength || !value) return null;
+    if (!showStrength || !value || isRedacted) return null;
 
     let score = 0;
     let feedback: string[] = [];
@@ -128,38 +158,86 @@
     </label>
   {/if}
 
-  <!-- Input wrapper for toggle button positioning -->
-  <div class="relative">
-    <input
-      id={fieldId}
-      type={showPassword ? 'text' : 'password'}
-      name={fieldId}
-      bind:value
-      {placeholder}
-      {required}
-      {disabled}
-      {autocomplete}
-      oninput={e => handleChange(e.currentTarget.value)}
-      class={cn('input input-sm w-full pr-10', error ? 'input-error' : '')}
-    />
-
-    <!-- Password reveal toggle - vertically centered on input -->
-    {#if allowReveal}
-      <button
-        type="button"
-        class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
-        onclick={togglePasswordVisibility}
-        {disabled}
-        aria-label={showPassword ? t('forms.labels.hidePassword') : t('forms.labels.showPassword')}
+  <!-- Redacted "secret is set" display — shown when value is the redacted placeholder and user is not editing -->
+  {#if isRedacted && !isEditing}
+    <div class="relative flex items-center gap-2">
+      <div
+        class={cn(
+          'input input-sm w-full flex items-center gap-2 bg-[var(--color-base-200)]/50 cursor-default',
+          disabled ? 'opacity-50' : ''
+        )}
       >
-        {#if showPassword}
-          <EyeOff class="size-4" />
-        {:else}
-          <Eye class="size-4" />
+        <span class="tracking-widest text-[var(--color-base-content)]/40 select-none"
+          >{'●'.repeat(8)}</span
+        >
+        <span
+          class="ml-auto text-xs font-medium text-[var(--color-success)] whitespace-nowrap select-none"
+          >{t('forms.labels.secretSet')}</span
+        >
+      </div>
+      {#if !disabled}
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost gap-1 text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]"
+          onclick={startEditing}
+          aria-label={t('forms.labels.changeSecret')}
+        >
+          <Pencil class="size-3.5" />
+          {t('forms.labels.changeSecret')}
+        </button>
+      {/if}
+    </div>
+  {:else}
+    <!-- Regular password input -->
+    <div class="relative flex items-center gap-2">
+      <div class="relative flex-1">
+        <input
+          id={fieldId}
+          type={showPassword ? 'text' : 'password'}
+          name={fieldId}
+          bind:value
+          placeholder={isEditing ? t('forms.labels.enterNewSecret') : placeholder}
+          {required}
+          {disabled}
+          {autocomplete}
+          oninput={e => handleChange(e.currentTarget.value)}
+          class={cn('input input-sm w-full pr-10', error ? 'input-error' : '')}
+        />
+
+        <!-- Password reveal toggle - vertically centered on input -->
+        {#if allowReveal}
+          <button
+            type="button"
+            class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center p-1 rounded-sm text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50"
+            onclick={togglePasswordVisibility}
+            {disabled}
+            aria-label={showPassword
+              ? t('forms.labels.hidePassword')
+              : t('forms.labels.showPassword')}
+          >
+            {#if showPassword}
+              <EyeOff class="size-4" />
+            {:else}
+              <Eye class="size-4" />
+            {/if}
+          </button>
         {/if}
-      </button>
-    {/if}
-  </div>
+      </div>
+
+      <!-- Cancel button when editing a previously-set secret -->
+      {#if isEditing}
+        <button
+          type="button"
+          class="btn btn-sm btn-ghost gap-1 text-[var(--color-base-content)]/60 hover:text-[var(--color-base-content)]"
+          onclick={cancelEditing}
+          aria-label={t('forms.labels.cancelChange')}
+        >
+          <X class="size-3.5" />
+          {t('forms.labels.cancelChange')}
+        </button>
+      {/if}
+    </div>
+  {/if}
 
   <!-- Help text rendered after input wrapper -->
   {#if helpText}

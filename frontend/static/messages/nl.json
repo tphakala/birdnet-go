@@ -3927,6 +3927,10 @@
     "labels": {
       "showPassword": "Toon wachtwoord",
       "hidePassword": "Verberg wachtwoord",
+      "secretSet": "Ingesteld",
+      "changeSecret": "Wijzigen",
+      "cancelChange": "Annuleren",
+      "enterNewSecret": "Voer een nieuwe waarde in",
       "copyToClipboard": "Kopiëer naar prikbord",
       "clearSelection": "Wis selectie",
       "selectOption": "Selecteer een optie"

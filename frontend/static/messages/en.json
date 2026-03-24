@@ -3951,6 +3951,10 @@
     "labels": {
       "showPassword": "Show password",
       "hidePassword": "Hide password",
+      "secretSet": "Set",
+      "changeSecret": "Change",
+      "cancelChange": "Cancel",
+      "enterNewSecret": "Enter new value",
       "copyToClipboard": "Copy to clipboard",
       "clearSelection": "Clear selection",
       "selectOption": "Select an option"
