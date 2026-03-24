@@ -477,9 +477,11 @@ func (e *Engine) deleteHistoryWithRetry(retentionDays int, stopCh <-chan struct{
 			logger.Int("max_retries", cleanupMaxRetries),
 			logger.Int64("backoff_ms", backoff.Milliseconds()))
 
+		timer := time.NewTimer(backoff)
 		select {
-		case <-time.After(backoff):
+		case <-timer.C:
 		case <-stopCh:
+			timer.Stop()
 			return 0, lastErr
 		}
 	}

@@ -3,6 +3,7 @@ package middleware
 import (
 	"net"
 	"net/http"
+	pathpkg "path"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -114,7 +115,9 @@ func isSafeHTTPMethod(method string) bool {
 // DefaultCSRFSkipper returns the default skipper function that exempts
 // static assets, media streams, SSE, and auth endpoints from CSRF protection.
 func DefaultCSRFSkipper(c echo.Context) bool {
-	path := c.Request().URL.Path
+	// Clean the path to prevent traversal bypasses (e.g., /assets/../api/v2/admin
+	// would match the /assets/ prefix but route to a protected endpoint).
+	path := pathpkg.Clean(c.Request().URL.Path)
 
 	// Skip CSRF for static assets
 	if strings.HasPrefix(path, "/assets/") ||
