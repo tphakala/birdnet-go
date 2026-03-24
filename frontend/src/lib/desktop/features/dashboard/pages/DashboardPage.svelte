@@ -95,40 +95,52 @@ Performance Optimizations:
   const SPECIES_LIMIT_BUFFER_TRIGGER = 10;
   const SPECIES_LIMIT_BUFFER_TARGET = 5;
 
-  // SSE Detection Data Type
+  // SSE Detection Data Type (camelCase per API v2 conventions)
   type SSEDetectionData = {
-    ID: number;
-    CommonName: string;
-    ScientificName: string;
-    Confidence: number;
-    Date: string; // YYYY-MM-DD
-    Time: string; // HH:MM:SS
+    id: number;
+    commonName: string;
+    scientificName: string;
+    confidence: number;
+    date: string; // YYYY-MM-DD
+    time: string; // HH:MM:SS
     timestamp?: string; // ISO8601/RFC3339 with timezone
-    SpeciesCode: string;
-    Verified?: Detection['verified'];
-    Locked?: boolean;
-    Source?: string;
-    BeginTime?: string;
-    EndTime?: string;
+    speciesCode: string;
+    verified?: Detection['verified'];
+    locked?: boolean;
+    source?: { id: string; type?: string; displayName?: string };
+    beginTime?: string;
+    endTime?: string;
+    clipName?: string;
     eventType?: string;
+    birdImage?: {
+      url: string;
+      scientificName?: string;
+      licenseName?: string;
+      licenseURL?: string;
+      authorName?: string;
+      authorURL?: string;
+      sourceProvider?: string;
+    };
+    isNewSpecies?: boolean;
+    daysSinceFirstSeen?: number;
   };
 
   function isSSEDetectionData(v: unknown): v is SSEDetectionData {
     if (!isPlainObject(v)) return false;
     const o = v as Record<string, unknown>;
-    const dateOk = typeof o.Date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.Date);
-    const timeOk = typeof o.Time === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(o.Time);
+    const dateOk = typeof o.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(o.date);
+    const timeOk = typeof o.time === 'string' && /^\d{2}:\d{2}:\d{2}$/.test(o.time);
     return (
-      typeof o.ID === 'number' &&
-      typeof o.CommonName === 'string' &&
-      o.CommonName.length > 0 &&
-      typeof o.ScientificName === 'string' &&
-      o.ScientificName.length > 0 &&
-      typeof o.Confidence === 'number' &&
+      typeof o.id === 'number' &&
+      typeof o.commonName === 'string' &&
+      (o.commonName as string).length > 0 &&
+      typeof o.scientificName === 'string' &&
+      (o.scientificName as string).length > 0 &&
+      typeof o.confidence === 'number' &&
       dateOk &&
       timeOk &&
-      typeof o.SpeciesCode === 'string' &&
-      o.SpeciesCode.length > 0
+      typeof o.speciesCode === 'string' &&
+      (o.speciesCode as string).length > 0
     );
   }
 
@@ -600,7 +612,7 @@ Performance Optimizations:
               default:
                 logger.debug('Unknown event type:', data.eventType);
             }
-          } else if (data.ID && data.CommonName) {
+          } else if (data.id && data.commonName) {
             // This looks like a direct detection event
             handleSSEDetection(data);
           }
@@ -681,21 +693,24 @@ Performance Optimizations:
       return;
     }
     try {
-      // Convert SSEDetectionData to Detection format
+      // Convert SSEDetectionData to Detection format (both use camelCase now)
       const detection: Detection = {
-        id: detectionData.ID,
-        commonName: detectionData.CommonName,
-        scientificName: detectionData.ScientificName,
-        confidence: detectionData.Confidence,
-        date: detectionData.Date,
-        time: detectionData.Time,
+        id: detectionData.id,
+        commonName: detectionData.commonName,
+        scientificName: detectionData.scientificName,
+        confidence: detectionData.confidence,
+        date: detectionData.date,
+        time: detectionData.time,
         timestamp: detectionData.timestamp,
-        speciesCode: detectionData.SpeciesCode,
-        verified: detectionData.Verified ?? 'unverified',
-        locked: detectionData.Locked ?? false,
-        source: detectionData.Source ?? '',
-        beginTime: detectionData.BeginTime ?? '',
-        endTime: detectionData.EndTime ?? '',
+        speciesCode: detectionData.speciesCode,
+        verified: detectionData.verified ?? 'unverified',
+        locked: detectionData.locked ?? false,
+        source: detectionData.source?.displayName ?? '',
+        beginTime: detectionData.beginTime ?? '',
+        endTime: detectionData.endTime ?? '',
+        clipName: detectionData.clipName,
+        isNewSpecies: detectionData.isNewSpecies,
+        daysSinceFirstSeen: detectionData.daysSinceFirstSeen,
       };
 
       handleNewDetection(detection);
