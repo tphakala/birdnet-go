@@ -86,6 +86,7 @@ type Processor struct {
 	flusherCancel       context.CancelFunc // Function to cancel flusher goroutine
 	preRenderer         PreRendererSubmit  // Spectrogram pre-renderer for background generation
 	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce           sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -512,16 +513,18 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 // detections arrive before the buffer manager is available and audio
 // clip export silently fails.
 func (p *Processor) Start() {
-	GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
-		logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
-		logger.Bool("registry_set", p.Registry() != nil),
-		logger.String("operation", "processor_start"))
+	p.startOnce.Do(func() {
+		GetLogger().Info("Processor.Start() called — BufferMgr and Registry wired, launching detection goroutines",
+			logger.Bool("buffer_mgr_set", p.BufferMgr != nil),
+			logger.Bool("registry_set", p.Registry() != nil),
+			logger.String("operation", "processor_start"))
 
-	p.startDetectionProcessor()
-	p.startWorkerPool()
+		p.startDetectionProcessor()
+		p.startWorkerPool()
 
-	p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
-	p.pendingDetectionsFlusher()
+		p.flusherCtx, p.flusherCancel = context.WithCancel(context.Background())
+		p.pendingDetectionsFlusher()
+	})
 }
 
 // startDetectionProcessor starts the goroutine that processes detections from the queue.

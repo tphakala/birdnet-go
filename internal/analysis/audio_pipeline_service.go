@@ -506,13 +506,21 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// Build current sources keyed by connection string.
 	current := make(map[string]string) // connectionString → sourceID
 	for _, src := range p.engine.Registry().List() {
-		connStr, _ := src.GetConnectionString()
+		connStr, err := src.GetConnectionString()
+		if err != nil || connStr == "" {
+			log.Warn("skipping source with invalid connection string during reconfigure",
+				logger.String("source_id", src.ID),
+				logger.Error(err))
+			continue
+		}
 		current[connStr] = src.ID
 	}
 
-	// Remove sources no longer in config.
+	// Remove sources no longer in config. Track counts for logging.
+	var removedCount, keptCount int
 	for connStr, srcID := range current {
 		if _, stillDesired := desired[connStr]; !stillDesired {
+			removedCount++
 			log.Info("removing stream no longer in config",
 				logger.String("source_id", srcID),
 				logger.String("connection", privacy.SanitizeStreamUrl(connStr)),
@@ -522,6 +530,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("source_id", srcID),
 					logger.Error(err))
 			}
+		} else {
+			keptCount++
 		}
 	}
 
@@ -555,9 +565,9 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	}
 
 	log.Info("stream reconfiguration complete",
-		logger.Int("kept", len(current)-len(newSourceIDs)),
+		logger.Int("kept", keptCount),
 		logger.Int("added", len(newSourceIDs)),
-		logger.Int("removed", len(current)-len(desired)+len(newSourceIDs)),
+		logger.Int("removed", removedCount),
 		logger.String("operation", "reconfigure_diff"))
 }
 
