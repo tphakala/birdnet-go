@@ -616,7 +616,7 @@ func TestV2OnlyDatastore_SearchNotes(t *testing.T) {
 	require.NoError(t, err)
 	// Search may not work perfectly without full-text search, but shouldn't error
 	assert.NotNil(t, notes)
-	assert.GreaterOrEqual(t, total, int64(0))
+	assert.Equal(t, int64(len(notes)), total, "total should match returned rows for limit=10, offset=0")
 }
 
 func TestV2OnlyDatastore_GetLastDetections(t *testing.T) {

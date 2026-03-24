@@ -489,6 +489,12 @@ func (c *Controller) LoggingMiddleware() echo.MiddlewareFunc {
 				var he *echo.HTTPError
 				if errors.As(err, &he) {
 					status = he.Code
+				} else if status < http.StatusBadRequest {
+					// Non-HTTP errors (e.g. database errors) won't have a
+					// status set yet — Echo's error handler runs after this
+					// middleware. Default to 500 to avoid logging failures
+					// as successes.
+					status = http.StatusInternalServerError
 				}
 			}
 
