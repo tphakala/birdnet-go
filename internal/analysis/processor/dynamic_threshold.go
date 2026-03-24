@@ -207,15 +207,13 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 	switch dt.HighConfCount {
 	case 1:
 		dt.Level = 1
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
 	case 2:
 		dt.Level = 2
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
 	default:
 		// Level 3 is the maximum reduction; any count >= 3 stays at this level
 		dt.Level = 3
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
 	}
+	dt.CurrentValue = float64(baseThreshold) * levelMultiplier(dt.Level)
 
 	// Apply minimum threshold clamp
 	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
