@@ -7,6 +7,7 @@ import (
 	"maps"
 	"runtime/debug"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -22,6 +23,10 @@ const (
 	cleanupTimeout = 5 * time.Second
 	// cleanupInterval is how often the history cleanup goroutine runs.
 	cleanupInterval = 1 * time.Hour
+	// cleanupMaxRetries is how many times to retry the cleanup on transient DB lock errors.
+	cleanupMaxRetries = 3
+	// cleanupBaseDelay is the base delay for exponential backoff between cleanup retries.
+	cleanupBaseDelay = 100 * time.Millisecond
 )
 
 // ActionFunc is called when a rule fires. Receives the rule and triggering event.
@@ -420,13 +425,18 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 		for {
 			select {
 			case <-ticker.C:
-				cutoff := time.Now().AddDate(0, 0, -retentionDays)
-				cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), cleanupTimeout)
-				deleted, err := e.repo.DeleteHistoryBefore(cleanupCtx, cutoff)
-				cleanupCancel()
+				deleted, err := e.deleteHistoryWithRetry(retentionDays, stopCh)
 				if err != nil {
-					e.log.Error("alert history cleanup failed", logger.Error(err))
-					e.telemetry.ReportDBWriteFailed("history_cleanup", err.Error())
+					if isDBLockError(err) {
+						// Transient SQLite lock contention — the cleanup runs hourly,
+						// so it will succeed on the next tick. Log as warning only;
+						// do not report to Sentry.
+						e.log.Warn("alert history cleanup skipped due to database lock, will retry next cycle",
+							logger.Error(err))
+					} else {
+						e.log.Error("alert history cleanup failed", logger.Error(err))
+						e.telemetry.ReportDBWriteFailed("history_cleanup", err.Error())
+					}
 				} else if deleted > 0 {
 					e.log.Info("alert history cleanup completed",
 						logger.Int64("deleted", deleted),
@@ -437,6 +447,58 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 			}
 		}
 	}()
+}
+
+// deleteHistoryWithRetry attempts the history deletion with exponential backoff
+// on transient SQLite lock errors. Returns the number of deleted rows and any
+// non-retryable (or exhausted) error.
+func (e *Engine) deleteHistoryWithRetry(retentionDays int, stopCh <-chan struct{}) (int64, error) {
+	cutoff := time.Now().AddDate(0, 0, -retentionDays)
+
+	// Create a parent context that cancels when stopCh fires, so in-flight
+	// DB calls are aborted promptly on shutdown instead of waiting for
+	// their full timeout.
+	parentCtx, parentCancel := context.WithCancel(context.Background())
+	go func() {
+		select {
+		case <-stopCh:
+			parentCancel()
+		case <-parentCtx.Done():
+		}
+	}()
+	defer parentCancel()
+
+	var lastErr error
+	for attempt := range cleanupMaxRetries {
+		cleanupCtx, cleanupCancel := context.WithTimeout(parentCtx, cleanupTimeout)
+		deleted, err := e.repo.DeleteHistoryBefore(cleanupCtx, cutoff)
+		cleanupCancel()
+
+		if err == nil {
+			return deleted, nil
+		}
+		lastErr = err
+
+		// Only retry on transient DB lock errors; bail immediately on other errors.
+		if !isDBLockError(err) || attempt == cleanupMaxRetries-1 {
+			return 0, err
+		}
+
+		backoff := cleanupBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by cleanupMaxRetries (3)
+		e.log.Warn("alert history cleanup hit database lock, retrying",
+			logger.Int("attempt", attempt+1),
+			logger.Int("max_retries", cleanupMaxRetries),
+			logger.Int64("backoff_ms", backoff.Milliseconds()))
+
+		timer := time.NewTimer(backoff)
+		select {
+		case <-timer.C:
+		case <-stopCh:
+			timer.Stop()
+			return 0, lastErr
+		}
+	}
+	return 0, lastErr
 }
 
 // stopCleanup signals the cleanup goroutine to exit. Uses rulesMu to make
@@ -455,4 +517,11 @@ func (e *Engine) stopCleanup() {
 // Stop shuts down background goroutines (history cleanup).
 func (e *Engine) Stop() {
 	e.stopCleanup()
+}
+
+// isDBLockError checks if an error is a transient SQLite database lock error.
+func isDBLockError(err error) bool {
+	errStr := err.Error()
+	return strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY")
 }

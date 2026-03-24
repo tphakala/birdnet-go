@@ -264,6 +264,9 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 			Build()
 	}
 
+	// Start periodic WAL checkpoint for the v2 migration database
+	v2Manager.StartPeriodicCheckpoint()
+
 	// Setup the migration worker using the common helper
 	if err := setupMigrationWorker(&migrationSetupConfig{
 		manager:     v2Manager,

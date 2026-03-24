@@ -56,6 +56,7 @@ type pushDispatcher struct {
 	healthChecker     *HealthChecker
 	concurrencySem    *semaphore.Weighted // Limits concurrent dispatch goroutines to prevent resource exhaustion
 	maxConcurrentJobs int64               // Maximum concurrent dispatches - dynamically calculated as max(defaultMaxConcurrentJobs, providers*jobsPerProvider)
+	errorSuppressor   *ErrorSuppressor    // Suppresses repeated provider error logging to prevent log/Sentry flooding
 	// rateLimiter removed - now per-provider in enhancedProvider
 }
 
@@ -144,8 +145,9 @@ func initializePushDispatcher(settings *conf.Settings, notificationMetrics *metr
 // createPushDispatcher creates a new push dispatcher with the given settings.
 func createPushDispatcher(settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *pushDispatcher {
 	maxConcurrentJobs := calculateMaxConcurrentJobs(settings)
+	log := GetLogger()
 	return &pushDispatcher{
-		log:               GetLogger(),
+		log:               log,
 		enabled:           settings.Notification.Push.Enabled,
 		maxRetries:        settings.Notification.Push.MaxRetries,
 		retryDelay:        settings.Notification.Push.RetryDelay.Std(),
@@ -153,6 +155,7 @@ func createPushDispatcher(settings *conf.Settings, notificationMetrics *metrics.
 		metrics:           notificationMetrics,
 		concurrencySem:    semaphore.NewWeighted(maxConcurrentJobs),
 		maxConcurrentJobs: maxConcurrentJobs,
+		errorSuppressor:   NewErrorSuppressor(log, nil), // reporter injected later via telemetry
 	}
 }
 
@@ -550,7 +553,7 @@ func (d *pushDispatcher) recordAttemptMetrics(providerName, notifType string, er
 	}
 }
 
-// logSuccess logs a successful delivery.
+// logSuccess logs a successful delivery and resets error suppression state.
 func (d *pushDispatcher) logSuccess(providerName string, notif *Notification, notifType string, attempts int, duration time.Duration) {
 	d.log.Info("push sent",
 		logger.String("provider", providerName),
@@ -559,6 +562,12 @@ func (d *pushDispatcher) logSuccess(providerName string, notif *Notification, no
 		logger.String("priority", string(notif.Priority)),
 		logger.Int("attempt", attempts),
 		logger.Duration("elapsed", duration))
+
+	// Reset error suppression state on success. This logs a recovery message
+	// if the provider was in a failure state and resets the consecutive failure count.
+	if d.errorSuppressor != nil {
+		d.errorSuppressor.RecordSuccess(providerName)
+	}
 }
 
 // logCircuitBreakerOpen logs when circuit breaker blocks a request.
@@ -585,11 +594,35 @@ func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName strin
 	}
 
 	if !retryable || attempts > d.maxRetries {
-		d.log.Error("push send failed",
-			logger.String("provider", providerName),
-			logger.Int("attempts", attempts),
-			logger.Error(err),
-			logger.Bool("retryable", retryable))
+		// Use error suppressor to avoid flooding logs with repeated failures.
+		// The first failure is always logged. Subsequent failures for the same
+		// provider are suppressed until recovery or the reminder interval.
+		shouldLog := true
+		if d.errorSuppressor != nil {
+			shouldLog = d.errorSuppressor.ShouldReport(providerName)
+			d.errorSuppressor.RecordFailure(providerName, err.Error())
+		}
+
+		if shouldLog {
+			suppressed := 0
+			if d.errorSuppressor != nil {
+				suppressed = d.errorSuppressor.GetSuppressedCount(providerName)
+			}
+			if suppressed > 1 {
+				d.log.Error("push send failed (repeated)",
+					logger.String("provider", providerName),
+					logger.Int("attempts", attempts),
+					logger.Error(err),
+					logger.Bool("retryable", retryable),
+					logger.Int("consecutive_failures", suppressed))
+			} else {
+				d.log.Error("push send failed",
+					logger.String("provider", providerName),
+					logger.Int("attempts", attempts),
+					logger.Error(err),
+					logger.Bool("retryable", retryable))
+			}
+		}
 		return false
 	}
 
@@ -1089,7 +1122,33 @@ func (d *pushDispatcher) initializeEnhancedProviders(settings *conf.Settings, no
 		}
 	}
 
+	// Deduplicate provider names so that error suppression, circuit breakers,
+	// and metrics key each provider uniquely. When multiple providers share
+	// a name (e.g., two unnamed webhooks both default to "webhook"), append
+	// a "-<index>" suffix to every instance of that duplicated name.
+	deduplicateProviderNames(enhanced)
+
 	return enhanced
+}
+
+// deduplicateProviderNames ensures every provider in the slice has a unique
+// name. Names that appear more than once get a "-0", "-1", … suffix.
+func deduplicateProviderNames(providers []enhancedProvider) {
+	// Count occurrences
+	counts := make(map[string]int, len(providers))
+	for i := range providers {
+		counts[providers[i].name]++
+	}
+
+	// Append index suffixes to duplicated names
+	seen := make(map[string]int, len(providers))
+	for i := range providers {
+		name := providers[i].name
+		if counts[name] > 1 {
+			providers[i].name = fmt.Sprintf("%s-%d", name, seen[name])
+			seen[name]++
+		}
+	}
 }
 
 // getCircuitBreakerConfig returns circuit breaker config from settings or defaults.

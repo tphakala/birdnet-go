@@ -1,7 +1,9 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
+	pathpkg "path"
 	"strings"
 
 	"github.com/labstack/echo/v4"
@@ -27,18 +29,44 @@ const (
 )
 
 // IsSecureRequest determines if the request is over HTTPS.
-// Checks direct TLS connection and X-Forwarded-Proto header (standard proxy header).
-// This is used to set the Secure flag on cookies appropriately.
+// Checks direct TLS connection first, then X-Forwarded-Proto but only when
+// the request originates from a trusted source (loopback or private network).
+// Trusting X-Forwarded-Proto from arbitrary clients would let an attacker on
+// plain HTTP inject the header, forcing Secure=true on cookies and causing
+// browsers to drop them (denial-of-service on CSRF tokens).
 func IsSecureRequest(r *http.Request) bool {
-	// Direct TLS connection
+	// Direct TLS connection — always authoritative.
 	if r.TLS != nil {
 		return true
 	}
-	// Standard proxy header (used by Cloudflare, nginx, etc.)
-	if r.Header.Get("X-Forwarded-Proto") == "https" {
-		return true
+
+	// Only trust X-Forwarded-Proto when the immediate client is on a
+	// loopback or private network address, which implies a trusted reverse
+	// proxy (nginx, Caddy, Cloudflare tunnel, etc.).
+	if proto := r.Header.Get("X-Forwarded-Proto"); proto == "https" {
+		if isTrustedRemote(r.RemoteAddr) {
+			return true
+		}
 	}
+
 	return false
+}
+
+// isTrustedRemote reports whether remoteAddr belongs to a loopback or
+// private (RFC 1918 / RFC 4193) network, indicating a trusted reverse proxy.
+func isTrustedRemote(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// RemoteAddr without a port (unlikely but handle gracefully).
+		host = remoteAddr
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	return ip.IsLoopback() || ip.IsPrivate()
 }
 
 // CSRFConfig holds configuration for the CSRF middleware.
@@ -73,10 +101,23 @@ type CSRFConfig struct {
 	SecureCookie bool
 }
 
+// isSafeHTTPMethod reports whether the given HTTP method is safe (read-only)
+// per RFC 7231 and therefore does not need CSRF protection.
+func isSafeHTTPMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	default:
+		return false
+	}
+}
+
 // DefaultCSRFSkipper returns the default skipper function that exempts
 // static assets, media streams, SSE, and auth endpoints from CSRF protection.
 func DefaultCSRFSkipper(c echo.Context) bool {
-	path := c.Request().URL.Path
+	// Clean the path to prevent traversal bypasses (e.g., /assets/../api/v2/admin
+	// would match the /assets/ prefix but route to a protected endpoint).
+	path := pathpkg.Clean(c.Request().URL.Path)
 
 	// Skip CSRF for static assets
 	if strings.HasPrefix(path, "/assets/") ||
@@ -89,12 +130,14 @@ func DefaultCSRFSkipper(c echo.Context) bool {
 		return true
 	}
 
-	// Skip for media and streaming endpoints (read-only)
+	// Skip for media and streaming endpoints only when using safe (read-only)
+	// HTTP methods. POST/PUT/DELETE/PATCH on these paths still require CSRF
+	// to prevent state-changing actions from bypassing protection.
 	if strings.HasPrefix(path, "/api/v2/media/") ||
 		strings.HasPrefix(path, "/api/v2/streams/") ||
 		strings.HasPrefix(path, "/api/v2/spectrogram/") ||
 		strings.HasPrefix(path, "/api/v2/audio/") {
-		return true
+		return isSafeHTTPMethod(c.Request().Method)
 	}
 
 	// Skip for auth endpoints (login needs to work before CSRF token exists)

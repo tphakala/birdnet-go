@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Opdaterer telemetriindstillinger...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Opdaterer artssporing...",
+        "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
         "audioDeviceRestartRequired": "Lydenhed ændret. Genstart påkrævet.",

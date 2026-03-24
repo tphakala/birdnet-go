@@ -313,6 +313,11 @@ func (s *SQLiteStore) Open() error {
 	GetLogger().Debug("Starting daily integrity check loop")
 	s.startIntegrityCheckLoop()
 
+	// Start periodic WAL checkpoint to prevent unbounded WAL growth.
+	// SQLite's auto-checkpoint (1000 pages) may not fire reliably with
+	// GORM's connection pool because the page counter is per-connection.
+	s.startWALCheckpointLoop()
+
 	return nil
 }
 
@@ -345,6 +350,43 @@ func (s *SQLiteStore) startIntegrityCheckLoop() {
 			}
 		}
 	})
+}
+
+// legacyWALCheckpointInterval is how often a periodic passive WAL checkpoint runs
+// for the legacy SQLite store. Matches the v2 manager's interval.
+const legacyWALCheckpointInterval = 5 * time.Minute
+
+// startWALCheckpointLoop runs a passive WAL checkpoint periodically to prevent
+// unbounded WAL growth. Uses the monitoring context for clean shutdown.
+func (s *SQLiteStore) startWALCheckpointLoop() {
+	// Ensure monitoring context exists
+	s.monitoringMu.Lock()
+	if s.monitoringCtx == nil {
+		s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+	}
+	ctx := s.monitoringCtx
+	s.monitoringMu.Unlock()
+
+	s.monitoringWg.Go(func() {
+		ticker := time.NewTicker(legacyWALCheckpointInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+					GetLogger().Warn("periodic WAL checkpoint failed",
+						logger.Error(err),
+						logger.String("operation", "periodic_wal_checkpoint"))
+				}
+			}
+		}
+	})
+
+	GetLogger().Debug("started periodic WAL checkpoint",
+		logger.String("interval", legacyWALCheckpointInterval.String()),
+		logger.String("mode", "PASSIVE"))
 }
 
 // Close closes the SQLite database connection

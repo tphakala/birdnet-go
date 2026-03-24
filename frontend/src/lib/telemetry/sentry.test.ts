@@ -58,6 +58,27 @@ describe('beforeSend privacy filtering', () => {
     expect(beforeSend).toBeTypeOf('function');
   });
 
+  it('drops events where originalException has status 401', () => {
+    const error = Object.assign(new Error('Unauthorized'), { status: 401 });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops events where originalException has status 403', () => {
+    const error = Object.assign(new Error('Forbidden'), { status: 403 });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('passes through non-auth errors', () => {
+    const error = Object.assign(new Error('Server Error'), { status: 500 });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).not.toBeNull();
+  });
+
   it('strips user data', () => {
     const event = { type: undefined, user: { ip_address: '1.2.3.4' } } as Sentry.ErrorEvent;
     const result = beforeSend?.(event, {} as Sentry.EventHint);
@@ -164,6 +185,18 @@ describe('captureError', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     initSentry({ dsn: 'https://test@sentry.io/123', systemId: 'sys-1', version: '1.0.0' });
+  });
+
+  it('skips errors with status 401', () => {
+    const error = Object.assign(new Error('Unauthorized'), { status: 401 });
+    captureError(error, { category: 'api' });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('skips errors with status 403', () => {
+    const error = Object.assign(new Error('Forbidden'), { status: 403 });
+    captureError(error, { category: 'api' });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
   it('captures Error with logger tag', () => {

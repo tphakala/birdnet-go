@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "A atualizar definições de telemetria...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "A atualizar monitorização de espécies...",
+        "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
         "audioDeviceRestartRequired": "Dispositivo de áudio alterado. Reinício necessário.",

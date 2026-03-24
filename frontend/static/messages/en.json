@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Updating telemetry settings...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Updating species tracking...",
+        "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",

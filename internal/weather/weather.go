@@ -228,23 +228,38 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	if dailyEventsFailed {
 		existing, lookupErr := s.db.GetDailyEvents(localDate)
 		if lookupErr != nil || existing.ID == 0 {
-			// No existing row either — can't save hourly weather without the FK.
-			// The v1 legacy store returns DailyEvents{} with nil error for "not found",
-			// so we also check for zero ID.
-			if lookupErr == nil {
-				lookupErr = fmt.Errorf("daily events not found for %s", localDate)
+			// No existing row — this is likely the first fetch of the day and the
+			// initial save hit a transient error (e.g., SQLITE_BUSY). Brief pause
+			// to let the transient lock clear, then retry once.
+			getLogger().Info("No existing daily events row found, retrying save after brief delay",
+				logger.String("date", localDate))
+			time.Sleep(100 * time.Millisecond)
+			if retryErr := s.db.SaveDailyEvents(dailyEvents); retryErr != nil {
+				getLogger().Error("Retry of SaveDailyEvents also failed",
+					logger.Error(retryErr),
+					logger.String("date", localDate))
+				if s.metrics != nil {
+					s.metrics.RecordWeatherDbError("save_daily_events_retry", "database_error")
+				}
+				return errors.New(retryErr).
+					Component("weather").
+					Category(errors.CategoryDatabase).
+					Context("operation", "save_daily_events_retry").
+					Context("date", localDate).
+					Build()
 			}
-			return errors.New(lookupErr).
-				Component("weather").
-				Category(errors.CategoryDatabase).
-				Context("operation", "save_daily_events_fallback").
-				Context("date", localDate).
-				Build()
+			getLogger().Info("Retry of SaveDailyEvents succeeded",
+				logger.String("date", localDate),
+				logger.Any("id", dailyEvents.ID))
+			if s.metrics != nil {
+				s.metrics.RecordWeatherDbOperation("save_daily_events_retry", "success")
+			}
+		} else {
+			dailyEvents.ID = existing.ID
+			getLogger().Info("Using existing daily events row after save failure",
+				logger.String("date", localDate),
+				logger.Any("id", dailyEvents.ID))
 		}
-		dailyEvents.ID = existing.ID
-		getLogger().Info("Using existing daily events row after save failure",
-			logger.String("date", localDate),
-			logger.Any("id", dailyEvents.ID))
 	}
 
 	// Create hourly weather data

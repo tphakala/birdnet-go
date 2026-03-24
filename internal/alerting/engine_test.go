@@ -2,6 +2,7 @@ package alerting
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
@@ -691,6 +692,115 @@ func TestEngine_EscalationSteps_MultiplePathsIndependent(t *testing.T) {
 
 	emit(96, "/")
 	assert.Equal(t, []string{"/", "/mnt/data"}, fired, "same path+step should be suppressed")
+}
+
+// retryMockRepo wraps mockAlertRuleRepo and adds controllable DeleteHistoryBefore behavior.
+type retryMockRepo struct {
+	mockAlertRuleRepo
+	deleteErrors []error      // errors to return on successive calls (nil = success)
+	deleteCalls  atomic.Int64 // total calls to DeleteHistoryBefore
+}
+
+func (m *retryMockRepo) DeleteHistoryBefore(_ context.Context, _ time.Time) (int64, error) {
+	call := int(m.deleteCalls.Add(1)) - 1
+	if call < len(m.deleteErrors) && m.deleteErrors[call] != nil {
+		return 0, m.deleteErrors[call]
+	}
+	return 5, nil // simulate 5 deleted rows on success
+}
+
+func TestDeleteHistoryWithRetry_SucceedsOnFirstAttempt(t *testing.T) {
+	repo := &retryMockRepo{}
+	engine := NewEngine(repo, nil, testLogger(), nil)
+	stopCh := make(chan struct{})
+
+	deleted, err := engine.deleteHistoryWithRetry(30, stopCh)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), deleted)
+	assert.Equal(t, int64(1), repo.deleteCalls.Load())
+}
+
+func TestDeleteHistoryWithRetry_RetriesOnDBLock(t *testing.T) {
+	repo := &retryMockRepo{
+		deleteErrors: []error{
+			fmt.Errorf("database is locked"),
+			fmt.Errorf("database is locked"),
+			nil, // succeeds on third attempt
+		},
+	}
+	engine := NewEngine(repo, nil, testLogger(), nil)
+	stopCh := make(chan struct{})
+
+	deleted, err := engine.deleteHistoryWithRetry(30, stopCh)
+
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), deleted)
+	assert.Equal(t, int64(3), repo.deleteCalls.Load())
+}
+
+func TestDeleteHistoryWithRetry_ExhaustsRetriesOnPersistentLock(t *testing.T) {
+	repo := &retryMockRepo{
+		deleteErrors: []error{
+			fmt.Errorf("database is locked"),
+			fmt.Errorf("SQLITE_BUSY"),
+			fmt.Errorf("database is locked"),
+		},
+	}
+	engine := NewEngine(repo, nil, testLogger(), nil)
+	stopCh := make(chan struct{})
+
+	deleted, err := engine.deleteHistoryWithRetry(30, stopCh)
+
+	require.Error(t, err)
+	assert.Equal(t, int64(0), deleted)
+	assert.True(t, isDBLockError(err), "error should be a DB lock error")
+	assert.Equal(t, int64(3), repo.deleteCalls.Load(), "should attempt exactly cleanupMaxRetries times")
+}
+
+func TestDeleteHistoryWithRetry_NoRetryOnNonLockError(t *testing.T) {
+	repo := &retryMockRepo{
+		deleteErrors: []error{
+			fmt.Errorf("disk I/O error"),
+		},
+	}
+	engine := NewEngine(repo, nil, testLogger(), nil)
+	stopCh := make(chan struct{})
+
+	deleted, err := engine.deleteHistoryWithRetry(30, stopCh)
+
+	require.Error(t, err)
+	assert.Equal(t, int64(0), deleted)
+	assert.Contains(t, err.Error(), "disk I/O error")
+	assert.Equal(t, int64(1), repo.deleteCalls.Load(), "should not retry non-lock errors")
+}
+
+func TestDeleteHistoryWithRetry_AbortsOnStop(t *testing.T) {
+	repo := &retryMockRepo{
+		deleteErrors: []error{
+			fmt.Errorf("database is locked"),
+			fmt.Errorf("database is locked"),
+			fmt.Errorf("database is locked"),
+		},
+	}
+	engine := NewEngine(repo, nil, testLogger(), nil)
+	stopCh := make(chan struct{})
+	close(stopCh) // already stopped
+
+	deleted, err := engine.deleteHistoryWithRetry(30, stopCh)
+
+	require.Error(t, err)
+	assert.Equal(t, int64(0), deleted)
+	// stopCh is closed before retry, so only 1 DB call should happen
+	assert.Equal(t, int64(1), repo.deleteCalls.Load(), "should abort after a single DB call when stop channel is closed")
+}
+
+func TestIsDBLockError(t *testing.T) {
+	assert.True(t, isDBLockError(fmt.Errorf("database is locked")))
+	assert.True(t, isDBLockError(fmt.Errorf("SQLITE_BUSY")))
+	assert.True(t, isDBLockError(fmt.Errorf("some context: database is locked")))
+	assert.False(t, isDBLockError(fmt.Errorf("disk I/O error")))
+	assert.False(t, isDBLockError(fmt.Errorf("connection refused")))
 }
 
 func TestEngine_NoEscalationSteps_LegacyBehavior(t *testing.T) {

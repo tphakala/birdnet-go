@@ -15,11 +15,22 @@ export interface SentryConfig {
   version: string;
 }
 
+/** HTTP status codes for auth-related errors (expected flow, not bugs). */
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_FORBIDDEN = 403;
+
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
   message: string;
   status: number;
   isNetworkError: boolean;
+}
+
+/** Check whether an unknown value looks like an ApiError with an auth-related status. */
+function isAuthError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const status = (err as Record<string, unknown>).status;
+  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN;
 }
 
 /**
@@ -50,7 +61,7 @@ export function initSentry(config: SentryConfig): void {
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip auth-related errors — these are expected flow, not bugs
-  if (error.status === 401 || error.status === 403) return;
+  if (error.status === HTTP_UNAUTHORIZED || error.status === HTTP_FORBIDDEN) return;
 
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 
@@ -91,6 +102,9 @@ export function captureError(
   error: Error,
   context?: { category?: string; [key: string]: unknown }
 ): void {
+  // Skip auth errors — 401/403 are expected when user isn't logged in
+  if (isAuthError(error)) return;
+
   Sentry.withScope(scope => {
     scope.setLevel('error');
     scope.setTag('error.type', 'logger');
@@ -111,8 +125,13 @@ export function captureError(
 
 /**
  * Privacy-first event filtering. Scrubs PII before events leave the browser.
+ * Also drops auth errors (401/403) which are expected when users aren't logged in.
  */
-function beforeSend(event: Sentry.ErrorEvent, _hint: Sentry.EventHint): Sentry.ErrorEvent | null {
+function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
+  // Drop auth errors — 401/403 are expected flow, not bugs.
+  // These can arrive via unhandled rejections or logger.error() paths.
+  if (isAuthError(hint.originalException)) return null;
+
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;
 

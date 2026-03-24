@@ -55,8 +55,9 @@ func DefaultTelemetryConfig() TelemetryConfig {
 
 // NotificationTelemetry handles telemetry reporting for notification operations
 type NotificationTelemetry struct {
-	config   *TelemetryConfig
-	reporter TelemetryReporter
+	config     *TelemetryConfig
+	reporter   TelemetryReporter
+	suppressor *ErrorSuppressor // Suppresses repeated provider errors to prevent Sentry flooding
 }
 
 // NewNotificationTelemetry creates a new notification telemetry instance.
@@ -68,8 +69,9 @@ func NewNotificationTelemetry(config *TelemetryConfig, reporter TelemetryReporte
 	}
 
 	return &NotificationTelemetry{
-		config:   config,
-		reporter: reporter,
+		config:     config,
+		reporter:   reporter,
+		suppressor: NewErrorSuppressor(GetLogger(), reporter),
 	}
 }
 
@@ -79,6 +81,15 @@ func (nt *NotificationTelemetry) IsEnabled() bool {
 		return false
 	}
 	return nt.config.Enabled && nt.reporter.IsEnabled()
+}
+
+// GetSuppressor returns the error suppressor used by this telemetry instance.
+// Returns nil if telemetry is nil.
+func (nt *NotificationTelemetry) GetSuppressor() *ErrorSuppressor {
+	if nt == nil {
+		return nil
+	}
+	return nt.suppressor
 }
 
 // CircuitBreakerStateTransition reports a circuit breaker state change event
@@ -212,7 +223,30 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	// (service not running, wrong URL, DNS misconfiguration, firewall, etc.)
 	// not code quality problems that need telemetry alerts
 	if isConnectionError(err) {
+		// Still track the failure for suppression state even if we don't report
+		if nt.suppressor != nil {
+			_ = nt.suppressor.ShouldReport(providerName)
+			if err != nil {
+				nt.suppressor.RecordFailure(providerName, err.Error())
+			}
+		}
 		return
+	}
+
+	// Check error suppressor to prevent Sentry flooding from repeated failures.
+	// The first error is always reported. Subsequent identical errors are suppressed
+	// until the provider recovers or the periodic reminder interval elapses.
+	if nt.suppressor != nil {
+		if !nt.suppressor.ShouldReport(providerName) {
+			// Record the failure details even though we're suppressing the report
+			if err != nil {
+				nt.suppressor.RecordFailure(providerName, err.Error())
+			}
+			return
+		}
+		if err != nil {
+			nt.suppressor.RecordFailure(providerName, err.Error())
+		}
 	}
 
 	// Determine severity based on error type
@@ -256,18 +290,40 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	}
 
 	// Build contexts
+	requestCtx := map[string]any{
+		"method":        method,
+		"endpoint_hash": anonymizedURL,
+		"auth_type":     authType, // Type only, never token/credentials
+		"is_timeout":    isTimeout,
+		"is_cancelled":  isCancelled,
+	}
+
+	// Include suppressed error count for periodic reminders
+	if nt.suppressor != nil {
+		suppressedCount := nt.suppressor.GetSuppressedCount(providerName)
+		if suppressedCount > 1 {
+			requestCtx["consecutive_failures"] = suppressedCount
+			tags["consecutive_failures"] = fmt.Sprintf("%d", suppressedCount)
+			scrubbedMessage = fmt.Sprintf("%s (after %d consecutive failures)", scrubbedMessage, suppressedCount)
+		}
+	}
+
 	contexts := map[string]any{
-		"request": map[string]any{
-			"method":        method,
-			"endpoint_hash": anonymizedURL,
-			"auth_type":     authType, // Type only, never token/credentials
-			"is_timeout":    isTimeout,
-			"is_cancelled":  isCancelled,
-		},
+		"request": requestCtx,
 	}
 
 	// Report error through interface
 	nt.reporter.CaptureEvent(scrubbedMessage, level, tags, contexts)
+}
+
+// WebhookRequestSuccess records a successful webhook request, resetting error
+// suppression state for the provider. This should be called on every successful
+// delivery so the suppressor can log recovery events and reset its counters.
+func (nt *NotificationTelemetry) WebhookRequestSuccess(providerName string) {
+	if nt == nil || nt.suppressor == nil {
+		return
+	}
+	nt.suppressor.RecordSuccess(providerName)
 }
 
 // ProviderInitializationError reports provider creation/validation failures

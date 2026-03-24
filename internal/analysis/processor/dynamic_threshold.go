@@ -207,15 +207,13 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 	switch dt.HighConfCount {
 	case 1:
 		dt.Level = 1
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel1Multiplier)
 	case 2:
 		dt.Level = 2
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel2Multiplier)
 	default:
 		// Level 3 is the maximum reduction; any count >= 3 stays at this level
 		dt.Level = 3
-		dt.CurrentValue = float64(baseThreshold * thresholdLevel3Multiplier)
 	}
+	dt.CurrentValue = float64(baseThreshold) * levelMultiplier(dt.Level)
 
 	// Apply minimum threshold clamp
 	if dt.CurrentValue < p.Settings.Realtime.DynamicThreshold.Min {
@@ -408,4 +406,66 @@ type DynamicThresholdData struct {
 	HighConfCount  int       `json:"highConfCount"`
 	ExpiresAt      time.Time `json:"expiresAt"`
 	IsActive       bool      `json:"isActive"`
+}
+
+// levelMultiplier returns the threshold multiplier for a given level.
+// This centralizes the level-to-multiplier mapping used by both LearnFromApprovedDetection
+// and RecalculateDynamicThresholds to avoid duplication.
+func levelMultiplier(level int) float64 {
+	switch level {
+	case 1:
+		return thresholdLevel1Multiplier
+	case 2:
+		return thresholdLevel2Multiplier
+	case 3:
+		return thresholdLevel3Multiplier
+	default:
+		return 1.0 // Level 0 = no reduction
+	}
+}
+
+// RecalculateDynamicThresholds recomputes all CurrentValue entries based on the current
+// BirdNET.Threshold. This must be called when the global base threshold changes so that
+// stored absolute values remain consistent with each species' level/tier.
+// Species with custom per-species thresholds are not present in the dynamic thresholds
+// map (they are filtered out in LearnFromApprovedDetection), so no special handling is needed.
+func (p *Processor) RecalculateDynamicThresholds() {
+	log := GetLogger()
+	newBase := float64(p.Settings.BirdNET.Threshold)
+	minThreshold := p.Settings.Realtime.DynamicThreshold.Min
+
+	p.thresholdsMutex.Lock()
+	defer p.thresholdsMutex.Unlock()
+
+	recalculated := 0
+	for species, dt := range p.DynamicThresholds {
+		oldValue := dt.CurrentValue
+		newValue := newBase * levelMultiplier(dt.Level)
+
+		// Apply minimum threshold clamp
+		if newValue < minThreshold {
+			newValue = minThreshold
+		}
+
+		if oldValue != newValue {
+			dt.CurrentValue = newValue
+			recalculated++
+
+			if p.Settings.Realtime.DynamicThreshold.Debug {
+				log.Debug("Recalculated dynamic threshold for new base",
+					logger.String("species", species),
+					logger.Int("level", dt.Level),
+					logger.Float64("old_value", oldValue),
+					logger.Float64("new_value", newValue),
+					logger.Float64("new_base", newBase))
+			}
+		}
+	}
+
+	if recalculated > 0 {
+		log.Info("Recalculated dynamic thresholds for new base threshold",
+			logger.Int("recalculated", recalculated),
+			logger.Int("total", len(p.DynamicThresholds)),
+			logger.Float64("new_base", newBase))
+	}
 }

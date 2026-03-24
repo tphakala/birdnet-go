@@ -390,6 +390,7 @@
         "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
+        "recalculatingThresholds": "Prepočítavanie dynamických prahov pre novú základnú hodnotu",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
         "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
