@@ -190,6 +190,42 @@ describe('Settings API - Secret redaction contract', () => {
         database: 'birdnet',
       },
     },
+    backup: {
+      enabled: true,
+      encryptionKey: REDACTED,
+      targets: [
+        {
+          type: 'ftp',
+          enabled: true,
+          settings: { host: 'ftp.local', username: 'ftpuser', password: REDACTED },
+        },
+        {
+          type: 's3',
+          enabled: true,
+          settings: { bucket: 'my-bucket', accesskeyid: 'AKIAEXAMPLE', secretaccesskey: REDACTED },
+        },
+      ],
+    },
+    notification: {
+      push: {
+        providers: [
+          {
+            type: 'webhook',
+            enabled: true,
+            endpoints: [
+              {
+                url: 'https://hooks.example.com/notify',
+                auth: { type: 'bearer', token: REDACTED },
+              },
+              {
+                url: 'https://hooks.example.com/other',
+                auth: { type: 'basic', pass: REDACTED },
+              },
+            ],
+          },
+        ],
+      },
+    },
   };
 
   beforeEach(() => {
@@ -221,6 +257,7 @@ describe('Settings API - Secret redaction contract', () => {
       'realtime.ebird.apiKey',
       'realtime.weather.openWeather.apiKey',
       'realtime.weather.wunderground.apiKey',
+      'backup.encryptionKey',
     ];
 
     const leaked: Array<{ path: string; value: unknown }> = [];
@@ -243,7 +280,10 @@ describe('Settings API - Secret redaction contract', () => {
     const { settingsAPI } = await import('./settingsApi.js');
     const settings = await settingsAPI.load();
 
-    const leaked = findLeakedSecrets(settings, new Set(['sessionSecret', 'clientSecret']));
+    const leaked = findLeakedSecrets(
+      settings,
+      new Set(['sessionSecret', 'clientSecret', 'encryptionKey', 'secretaccesskey'])
+    );
 
     expect(
       leaked,
@@ -251,13 +291,13 @@ describe('Settings API - Secret redaction contract', () => {
     ).toHaveLength(0);
   });
 
-  it('should not contain plaintext passwords at any depth', async () => {
+  it('should not contain plaintext passwords or auth tokens at any depth', async () => {
     mockFetch.mockResolvedValueOnce(mockFetchResponse(SANITIZED_RESPONSE));
 
     const { settingsAPI } = await import('./settingsApi.js');
     const settings = await settingsAPI.load();
 
-    const leaked = findLeakedSecrets(settings, new Set(['password']));
+    const leaked = findLeakedSecrets(settings, new Set(['password', 'pass', 'token']));
 
     expect(
       leaked,

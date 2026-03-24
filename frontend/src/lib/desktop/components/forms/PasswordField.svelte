@@ -69,15 +69,18 @@
 
   function startEditing() {
     isEditing = true;
+    // Only clear the local display — don't propagate to the parent store
+    // until the user actually types a new value via the input handler.
     value = '';
-    onUpdate('');
   }
 
   function cancelEditing() {
     isEditing = false;
-    // Restore the redacted placeholder without triggering onUpdate
-    // to avoid marking the form as dirty when nothing actually changed.
     value = REDACTED_VALUE;
+    // Revert any typed input that was propagated via oninput.
+    // This is safe: the original value was REDACTED_VALUE, so setting it
+    // back won't mark the form as dirty (original === current).
+    onUpdate(REDACTED_VALUE);
   }
 
   // Password strength calculation
@@ -162,6 +165,9 @@
   {#if isRedacted && !isEditing}
     <div class="relative flex items-center gap-2">
       <div
+        id={fieldId}
+        role="status"
+        aria-label="{label} {t('forms.labels.secretSet')}"
         class={cn(
           'input input-sm w-full flex items-center gap-2 bg-[var(--color-base-200)]/50 cursor-default',
           disabled ? 'opacity-50' : ''
