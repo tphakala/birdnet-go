@@ -229,10 +229,11 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		existing, lookupErr := s.db.GetDailyEvents(localDate)
 		if lookupErr != nil || existing.ID == 0 {
 			// No existing row — this is likely the first fetch of the day and the
-			// initial save hit a transient error (e.g., SQLITE_BUSY). Retry the
-			// save once; the contention should have cleared by now.
-			getLogger().Info("No existing daily events row found, retrying save",
+			// initial save hit a transient error (e.g., SQLITE_BUSY). Brief pause
+			// to let the transient lock clear, then retry once.
+			getLogger().Info("No existing daily events row found, retrying save after brief delay",
 				logger.String("date", localDate))
+			time.Sleep(100 * time.Millisecond)
 			if retryErr := s.db.SaveDailyEvents(dailyEvents); retryErr != nil {
 				getLogger().Error("Retry of SaveDailyEvents also failed",
 					logger.Error(retryErr),

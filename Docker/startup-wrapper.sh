@@ -46,8 +46,11 @@ APP_PID=$!
 # with 128+signal. Re-wait to collect the child's actual exit code.
 wait "$APP_PID" 2>/dev/null
 EXIT_CODE=$?
-if [ $EXIT_CODE -ge 128 ]; then
-    # wait was interrupted by a signal; re-wait to get the child's real status
+if [ $EXIT_CODE -ge 128 ] && kill -0 "$APP_PID" 2>/dev/null; then
+    # wait was interrupted by a signal and the child is still running;
+    # re-wait to collect the child's actual exit code.
+    # Without the kill -0 guard, re-waiting a process that already exited
+    # (e.g., SIGSEGV crash) would overwrite the real exit code with 127.
     wait "$APP_PID" 2>/dev/null
     EXIT_CODE=$?
 fi
