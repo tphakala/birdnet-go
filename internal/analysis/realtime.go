@@ -793,14 +793,15 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 				// Ensure migration worker is stopped on timeout
 				apiv2.StopMigrationWorker()
 				cancel()
-				// Give the shutdown goroutine a brief grace period to exit.
-				// With the timeout-aware wg.Wait(), it should exit quickly
-				// after context cancellation. But if it doesn't, don't block
-				// forever — let deferred cleanup handle the rest.
+				// Give the shutdown goroutine a grace period to exit.
+				// Must be larger than processor.MinJobQueueGracePeriod (500ms)
+				// so the job queue can drain before closeDataStore fires.
+				// The goroutine also runs steps 6a–8 before reaching the job
+				// queue, so add an extra second of margin.
 				select {
 				case <-shutdownComplete:
 					// Goroutine exited cleanly
-				case <-time.After(500 * time.Millisecond):
+				case <-time.After(processor.MinJobQueueGracePeriod + time.Second):
 					GetLogger().Warn("shutdown goroutine did not exit within grace period",
 						logger.String("operation", "shutdown_forced_exit"))
 				}

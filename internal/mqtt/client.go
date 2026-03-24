@@ -368,6 +368,10 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 
 	// Fast path: if we know the connection is down, suppress publish attempts
 	// to avoid flooding Sentry and logs with repeated errors.
+	// Returns nil (not an error) because detection data is already persisted
+	// in the database before MQTT publish — a missed notification during a
+	// broker outage is graceful degradation, not data loss. Callers do not
+	// need to retry suppressed publishes.
 	if suppressed := c.suppressPublishWhileDisconnected(topic); suppressed {
 		return nil
 	}

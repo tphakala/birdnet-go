@@ -667,6 +667,10 @@ func (c *Controller) applySpeciesTrackingMetadata(detection *DetectionResponse, 
 	if c.Processor == nil || c.Processor.NewSpeciesTracker == nil {
 		return
 	}
+	// GetSpeciesStatus is called with time.Now() intentionally: the "days since"
+	// counters (DaysSinceFirstSeen, DaysThisYear, DaysThisSeason) describe the
+	// species' current tracking state, not the state at the detection's time.
+	// The boolean flags (IsNew*) are computed below using date comparison instead.
 	status := c.Processor.NewSpeciesTracker.GetSpeciesStatus(scientificName, time.Now())
 
 	// Set flags based on whether THIS detection's date matches the first-seen date
