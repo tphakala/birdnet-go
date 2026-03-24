@@ -1045,7 +1045,8 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 		c.logErrorIfEnabled("Missing note ID for spectrogram request",
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		err = c.HandleError(ctx, fmt.Errorf("missing ID"), "Note ID is required", http.StatusBadRequest)
+		err = fmt.Errorf("missing ID")
+		_ = c.HandleError(ctx, err, "Note ID is required", http.StatusBadRequest)
 		return
 	}
 
@@ -1055,7 +1056,8 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 			logger.String("note_id", noteID),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		err = c.HandleError(ctx, fmt.Errorf("invalid note ID: %s", noteID), "Note ID must be a numeric value", http.StatusBadRequest)
+		err = fmt.Errorf("invalid note ID: %s", noteID)
+		_ = c.HandleError(ctx, err, "Note ID must be a numeric value", http.StatusBadRequest)
 		return
 	}
 
