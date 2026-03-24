@@ -420,6 +420,10 @@ func (m *SQLiteManager) CheckpointWAL() error {
 // use. The TRUNCATE mode used in CheckpointWAL() is reserved for shutdown
 // where we want to fully clean up the WAL file.
 func (m *SQLiteManager) StartPeriodicCheckpoint() {
+	// Guard against double-start — would leak the previous goroutine.
+	if m.walCancel != nil {
+		return
+	}
 	m.walCtx, m.walCancel = context.WithCancel(context.Background())
 
 	m.walWg.Go(func() {

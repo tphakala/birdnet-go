@@ -112,28 +112,35 @@ func (es *ErrorSuppressor) RecordFailure(providerName, errorMessage string) {
 // recovery message with the count of suppressed errors.
 func (es *ErrorSuppressor) RecordSuccess(providerName string) {
 	es.mu.Lock()
-	defer es.mu.Unlock()
 
 	state, exists := es.states[providerName]
 	if !exists || state.consecutiveFailures == 0 {
+		es.mu.Unlock()
 		return
 	}
 
+	// Copy state for reporting outside the lock — reportRecovery may do
+	// network I/O (Sentry CaptureEvent) which must not hold the mutex.
+	stateCopy := *state
+	shouldLog := state.consecutiveFailures > 1 && es.log != nil
+	shouldReport := state.consecutiveFailures > 1 && es.reporter != nil && es.reporter.IsEnabled()
+
+	// Reset state while holding lock
+	delete(es.states, providerName)
+	es.mu.Unlock()
+
 	// Log recovery if there were suppressed failures
-	if state.consecutiveFailures > 1 && es.log != nil {
+	if shouldLog {
 		es.log.Info("provider recovered after consecutive failures",
 			logger.String("provider", providerName),
-			logger.Int("suppressed_errors", state.consecutiveFailures-1),
-			logger.Duration("failure_duration", time.Since(state.firstFailureTime)))
+			logger.Int("suppressed_errors", stateCopy.consecutiveFailures-1),
+			logger.Duration("failure_duration", time.Since(stateCopy.firstFailureTime)))
 	}
 
-	// Report recovery telemetry event
-	if state.consecutiveFailures > 1 && es.reporter != nil && es.reporter.IsEnabled() {
-		es.reportRecovery(providerName, state)
+	// Report recovery telemetry event (outside lock — may involve network I/O)
+	if shouldReport {
+		es.reportRecovery(providerName, &stateCopy)
 	}
-
-	// Reset state
-	delete(es.states, providerName)
 }
 
 // GetSuppressedCount returns the number of consecutive failures for a provider.
