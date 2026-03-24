@@ -72,7 +72,7 @@ type SSEDetectionData struct {
 	ScientificName string  `json:"scientificName"`
 	CommonName     string  `json:"commonName"`
 	SpeciesCode    string  `json:"speciesCode,omitempty"`
-	Confidence     float64 `json:"confidence"`
+	Confidence     float64 `json:"confidence"` // No omitempty — 0.0 is a valid confidence value
 
 	// Location
 	Latitude  float64 `json:"latitude,omitempty"`
@@ -123,6 +123,15 @@ type SSEBirdImage struct {
 	SourceProvider string `json:"sourceProvider,omitempty"`
 }
 
+// safeBaseName returns the filename component of a path, or empty string if the path is empty.
+// Unlike filepath.Base("") which returns ".", this returns "" for empty inputs.
+func safeBaseName(path string) string {
+	if path == "" {
+		return ""
+	}
+	return filepath.Base(path)
+}
+
 // newSSEDetectionData creates an SSEDetectionData from a datastore.Note and BirdImage.
 // It sanitizes sensitive data: ClipName is stripped to filename only, and Source
 // only includes safe display fields (no raw connection strings or credentials).
@@ -137,7 +146,7 @@ func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 		Confidence:     note.Confidence,
 		Latitude:       note.Latitude,
 		Longitude:      note.Longitude,
-		ClipName:       filepath.Base(note.ClipName),
+		ClipName:       safeBaseName(note.ClipName),
 		Verified:       note.Verified,
 		Locked:         note.Locked,
 		Timestamp:      time.Now(),
@@ -156,7 +165,6 @@ func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImag
 	if note.Source.ID != "" {
 		det.Source = &SSESourceInfo{
 			ID:          note.Source.ID,
-			Type:        note.Source.DisplayName, // Use display name as type for SSE consumers
 			DisplayName: note.Source.DisplayName,
 		}
 	}

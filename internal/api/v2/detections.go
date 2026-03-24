@@ -1171,6 +1171,14 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 		return
 	}
 
+	// Validate that the normalized path stays within the managed tree
+	if !filepath.IsLocal(normalized) {
+		log.Warn("Refusing to remove files: path escapes managed directory",
+			logger.String("normalized", normalized),
+			logger.String("clip_name", clipName))
+		return
+	}
+
 	baseDir := c.SFS.BaseDir()
 	absClipPath := filepath.Join(baseDir, normalized)
 
