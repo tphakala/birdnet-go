@@ -174,7 +174,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 	// Restore redacted secret fields to their current values so the
 	// update logic does not overwrite real secrets with the placeholder.
-	restoreRedactedSecrets(settings, &updatedSettings)
+	if err := restoreRedactedSecrets(settings, &updatedSettings); err != nil {
+		c.logAPIRequest(ctx, logger.LogLevelError, "Redacted sentinel validation failed", logger.Error(err))
+		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+	}
 
 	// Update only the fields that are allowed to be changed
 	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
@@ -551,7 +554,11 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 
 	// Restore redacted secret fields to their current values so the
 	// merge does not overwrite real secrets with the placeholder.
-	restoreRedactedSecrets(&oldSettings, settings)
+	if err := restoreRedactedSecrets(&oldSettings, settings); err != nil {
+		*settings = oldSettings
+		c.logAPIRequest(ctx, logger.LogLevelError, "Redacted sentinel validation failed", logger.Error(err))
+		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
 	// This handles the case where the frontend sends coordinates without the flag,
@@ -1604,7 +1611,14 @@ func sanitizeNotificationSecrets(s *conf.Settings) {
 // restoreRedactedSecrets replaces redacted placeholder values in the incoming
 // settings with the current (real) values so that an update round-trip
 // (GET → modify → PUT) does not overwrite real secrets with the placeholder.
-func restoreRedactedSecrets(current, incoming *conf.Settings) {
+//
+// After restoring all fields, it validates that no sentinel values remain.
+// A remaining sentinel means the user changed a lookup key (e.g. provider
+// name, endpoint URL, or backup target type) while the auth field was still
+// showing the redacted placeholder, so the restore could not match it.
+// In that case the offending field is cleared to the empty string and an
+// error is returned listing all affected fields.
+func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	restore := func(cur, inc *string) {
 		if *inc == redactedValue {
 			*inc = *cur
@@ -1700,6 +1714,133 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) {
 			restore(&curEP.Auth.Token, &incAuth.Token)
 			restore(&curEP.Auth.Pass, &incAuth.Pass)
 			restore(&curEP.Auth.Value, &incAuth.Value)
+		}
+	}
+
+	// Validate that no redacted sentinels remain after restore.
+	return validateNoRedactedSentinels(incoming)
+}
+
+// validateNoRedactedSentinels scans all secret fields in the settings for
+// leftover redacted sentinel values. Any field still containing the sentinel
+// after restoreRedactedSecrets means the restore lookup failed (the user
+// changed a lookup key like provider name, endpoint URL, or backup type
+// while the auth was still redacted). Such fields are cleared to the empty
+// string to prevent persisting the sentinel literal, and an error listing
+// all affected fields is returned.
+func validateNoRedactedSentinels(s *conf.Settings) error {
+	var stale []string
+
+	check := func(field, path string) {
+		if field == redactedValue {
+			stale = append(stale, path)
+		}
+	}
+
+	// Scalar secret fields — these always have a 1:1 restore and should
+	// never remain as sentinel, but check defensively.
+	check(s.Security.SessionSecret, "security.sessionSecret")
+	check(s.Security.BasicAuth.Password, "security.basicAuth.password")
+	check(s.Security.GoogleAuth.ClientSecret, "security.googleAuth.clientSecret")
+	check(s.Security.GithubAuth.ClientSecret, "security.githubAuth.clientSecret")
+	check(s.Security.MicrosoftAuth.ClientSecret, "security.microsoftAuth.clientSecret")
+	check(s.Realtime.MQTT.Password, "realtime.mqtt.password")
+	check(s.Output.MySQL.Password, "output.mysql.password")
+	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
+	check(s.Realtime.Weather.Wunderground.APIKey, "realtime.weather.wunderground.apiKey")
+	check(s.Realtime.EBird.APIKey, "realtime.ebird.apiKey")
+	check(s.Backup.EncryptionKey, "backup.encryptionKey")
+
+	// Array-based OAuth providers
+	for i := range s.Security.OAuthProviders {
+		p := &s.Security.OAuthProviders[i]
+		check(p.ClientSecret, fmt.Sprintf("security.oauthProviders[%d(%s)].clientSecret", i, p.Provider))
+	}
+
+	// Backup target secrets
+	for i := range s.Backup.Targets {
+		t := &s.Backup.Targets[i]
+		if t.Settings == nil {
+			continue
+		}
+		for _, key := range []string{"password", "secretaccesskey"} {
+			if v, ok := t.Settings[key]; ok {
+				if str, isStr := v.(string); isStr {
+					check(str, fmt.Sprintf("backup.targets[%d(%s)].settings.%s", i, t.Type, key))
+				}
+			}
+		}
+	}
+
+	// Webhook auth secrets
+	for i := range s.Notification.Push.Providers {
+		prov := &s.Notification.Push.Providers[i]
+		for j := range prov.Endpoints {
+			ep := &prov.Endpoints[j]
+			prefix := fmt.Sprintf("notification.push.providers[%d(%s)].endpoints[%d(%s)].auth", i, prov.Name, j, ep.URL)
+			check(ep.Auth.Token, prefix+".token")
+			check(ep.Auth.Pass, prefix+".pass")
+			check(ep.Auth.Value, prefix+".value")
+		}
+	}
+
+	if len(stale) == 0 {
+		return nil
+	}
+
+	// Clear all stale sentinel values to prevent persisting the literal.
+	clearRedactedSentinels(s)
+
+	return fmt.Errorf("cannot save settings: %d secret field(s) contain the redacted placeholder "+
+		"because the identifying key (provider name, endpoint URL, or target type) was changed "+
+		"while the secret was hidden; re-enter the secret value for: %s",
+		len(stale), strings.Join(stale, ", "))
+}
+
+// clearRedactedSentinels replaces any remaining redacted sentinel values
+// with empty strings so they are never persisted to disk.
+func clearRedactedSentinels(s *conf.Settings) {
+	clearField := func(field *string) {
+		if *field == redactedValue {
+			*field = ""
+		}
+	}
+
+	clearField(&s.Security.SessionSecret)
+	clearField(&s.Security.BasicAuth.Password)
+	clearField(&s.Security.GoogleAuth.ClientSecret)
+	clearField(&s.Security.GithubAuth.ClientSecret)
+	clearField(&s.Security.MicrosoftAuth.ClientSecret)
+	clearField(&s.Realtime.MQTT.Password)
+	clearField(&s.Output.MySQL.Password)
+	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
+	clearField(&s.Realtime.Weather.Wunderground.APIKey)
+	clearField(&s.Realtime.EBird.APIKey)
+	clearField(&s.Backup.EncryptionKey)
+
+	for i := range s.Security.OAuthProviders {
+		clearField(&s.Security.OAuthProviders[i].ClientSecret)
+	}
+
+	for i := range s.Backup.Targets {
+		if s.Backup.Targets[i].Settings == nil {
+			continue
+		}
+		for _, key := range []string{"password", "secretaccesskey"} {
+			if v, ok := s.Backup.Targets[i].Settings[key]; ok {
+				if str, isStr := v.(string); isStr && str == redactedValue {
+					s.Backup.Targets[i].Settings[key] = ""
+				}
+			}
+		}
+	}
+
+	for i := range s.Notification.Push.Providers {
+		for j := range s.Notification.Push.Providers[i].Endpoints {
+			auth := &s.Notification.Push.Providers[i].Endpoints[j].Auth
+			clearField(&auth.Token)
+			clearField(&auth.Pass)
+			clearField(&auth.Value)
 		}
 	}
 }

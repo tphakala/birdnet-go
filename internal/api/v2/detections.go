@@ -1201,25 +1201,17 @@ func (c *Controller) removeDetectionFiles(clipName string) {
 	basePath := strings.TrimSuffix(absClipPath, ext)
 
 	removed := 0
+	suffixes := []string{"%s_%dpx.png", "%s_%dpx-legend.png"}
 	for _, width := range spectrogramWidths {
-		// Raw spectrogram: <basename>_<width>px.png
-		rawPath := fmt.Sprintf("%s_%dpx.png", basePath, width)
-		if err := os.Remove(rawPath); err == nil {
-			removed++
-		} else if !os.IsNotExist(err) {
-			log.Warn("Failed to remove spectrogram file",
-				logger.String("path", rawPath),
-				logger.Error(err))
-		}
-
-		// Legend spectrogram: <basename>_<width>px-legend.png
-		legendPath := fmt.Sprintf("%s_%dpx-legend.png", basePath, width)
-		if err := os.Remove(legendPath); err == nil {
-			removed++
-		} else if !os.IsNotExist(err) {
-			log.Warn("Failed to remove spectrogram file",
-				logger.String("path", legendPath),
-				logger.Error(err))
+		for _, sfx := range suffixes {
+			path := fmt.Sprintf(sfx, basePath, width)
+			if err := os.Remove(path); err == nil {
+				removed++
+			} else if !os.IsNotExist(err) {
+				log.Warn("Failed to remove spectrogram file",
+					logger.String("path", path),
+					logger.Error(err))
+			}
 		}
 	}
 

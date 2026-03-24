@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -1236,11 +1237,49 @@ func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error 
 
 // Unlock removes the lock from a detection.
 // This operation is idempotent — unlocking an already-unlocked detection succeeds silently.
+// Uses retry with exponential backoff for transient SQLite lock contention.
 func (r *detectionRepository) Unlock(ctx context.Context, detectionID uint) error {
-	result := r.db.WithContext(ctx).Table(r.locksTable()).
-		Where("detection_id = ?", detectionID).
-		Delete(&entities.DetectionLock{})
-	return result.Error
+	const (
+		maxRetries = 5
+		baseDelay  = 500 * time.Millisecond
+	)
+
+	var lastErr error
+	for attempt := range maxRetries {
+		result := r.db.WithContext(ctx).Table(r.locksTable()).
+			Where("detection_id = ?", detectionID).
+			Delete(&entities.DetectionLock{})
+		if result.Error == nil {
+			return nil
+		}
+
+		lastErr = result.Error
+		if !isDBLockError(lastErr) || attempt == maxRetries-1 {
+			return fmt.Errorf("unlock detection %d: %w", detectionID, lastErr)
+		}
+
+		// Exponential backoff: 500ms, 1s, 2s, 4s — respect context cancellation
+		delay := baseDelay * time.Duration(1<<attempt)
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("unlock detection %d: %w", detectionID, ctx.Err())
+		case <-time.After(delay):
+		}
+	}
+	return fmt.Errorf("unlock detection %d after %d retries: %w", detectionID, maxRetries, lastErr)
+}
+
+// isDBLockError checks if an error is a transient database lock contention error.
+// Handles both SQLite and MySQL lock errors.
+func isDBLockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "database is locked") ||
+		strings.Contains(errStr, "SQLITE_BUSY") ||
+		strings.Contains(errStr, "Lock wait timeout exceeded") ||
+		strings.Contains(errStr, "Deadlock found")
 }
 
 // IsLocked checks if a detection is locked.

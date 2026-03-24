@@ -278,7 +278,8 @@ func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
 	incoming.Security.OAuthProviders[0].ClientSecret = redactedValue
 	incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token = redactedValue
 
-	restoreRedactedSecrets(current, incoming)
+	err := restoreRedactedSecrets(current, incoming)
+	require.NoError(t, err)
 
 	// After restore, incoming should have the original real values
 	assert.Equal(t, "hmac-session-key-abc123", incoming.Security.SessionSecret)
@@ -306,7 +307,8 @@ func TestRestoreRedactedSecrets_MatchesByProviderName(t *testing.T) {
 		{Provider: "google", Enabled: true, ClientID: "goog-id", ClientSecret: redactedValue},
 	}
 
-	restoreRedactedSecrets(current, incoming)
+	err := restoreRedactedSecrets(current, incoming)
+	require.NoError(t, err)
 
 	// Each provider should get its own secret back, not the other's
 	assert.Equal(t, "gh-secret", incoming.Security.OAuthProviders[0].ClientSecret, "github should get github's secret")
@@ -341,7 +343,8 @@ func TestRestoreRedactedSecrets_MatchesByBackupType(t *testing.T) {
 		},
 	}
 
-	restoreRedactedSecrets(current, incoming)
+	err := restoreRedactedSecrets(current, incoming)
+	require.NoError(t, err)
 
 	assert.Equal(t, "s3-secret-key", incoming.Backup.Targets[0].Settings["secretaccesskey"], "s3 target should get s3 secret")
 	assert.Equal(t, "ftp-password", incoming.Backup.Targets[1].Settings["password"], "ftp target should get ftp secret")
@@ -413,7 +416,7 @@ func TestRestoreRedactedSecrets_MatchesByWebhookNameAndURL(t *testing.T) {
 		},
 	}
 
-	restoreRedactedSecrets(current, incoming)
+	require.NoError(t, restoreRedactedSecrets(current, incoming))
 
 	// discord (now at index 0) should get discord's secret
 	assert.Equal(t, "discord-token", incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token,
@@ -448,7 +451,7 @@ func TestRestoreRedactedSecrets_WebhookNewProvider(t *testing.T) {
 	)
 
 	assert.NotPanics(t, func() {
-		restoreRedactedSecrets(current, incoming)
+		require.NoError(t, restoreRedactedSecrets(current, incoming))
 	})
 
 	// The new provider's token should be kept as-is (not restored from anything)
@@ -469,7 +472,7 @@ func TestRestoreRedactedSecrets_NilSettingsMap(t *testing.T) {
 
 	// Should not panic
 	assert.NotPanics(t, func() {
-		restoreRedactedSecrets(current, incoming)
+		require.NoError(t, restoreRedactedSecrets(current, incoming))
 	})
 }
 
@@ -482,7 +485,7 @@ func TestRestoreRedactedSecrets_AllowsNewValues(t *testing.T) {
 	incoming.Security.BasicAuth.Password = "new-password-from-user"
 	incoming.Realtime.MQTT.Password = "new-mqtt-password"
 
-	restoreRedactedSecrets(current, incoming)
+	require.NoError(t, restoreRedactedSecrets(current, incoming))
 
 	assert.Equal(t, "new-password-from-user", incoming.Security.BasicAuth.Password)
 	assert.Equal(t, "new-mqtt-password", incoming.Realtime.MQTT.Password)
@@ -496,7 +499,7 @@ func TestRestoreRedactedSecrets_SessionSecret(t *testing.T) {
 	incoming := settingsWithSecrets(t)
 	incoming.Security.SessionSecret = redactedValue
 
-	restoreRedactedSecrets(current, incoming)
+	require.NoError(t, restoreRedactedSecrets(current, incoming))
 
 	assert.Equal(t, "hmac-session-key-abc123", incoming.Security.SessionSecret)
 }
@@ -516,7 +519,7 @@ func TestRoundTrip_SanitizeThenRestore(t *testing.T) {
 	incoming := *sanitized // simulate frontend round-trip
 
 	// Step 3: Restore before applying the update
-	restoreRedactedSecrets(original, &incoming)
+	require.NoError(t, restoreRedactedSecrets(original, &incoming))
 
 	// The incoming struct should now have the original real values
 	assert.Equal(t, "admin-password", incoming.Security.BasicAuth.Password)
@@ -538,7 +541,7 @@ func TestRoundTrip_UserChangesPassword(t *testing.T) {
 	incoming := *sanitized
 	incoming.Security.BasicAuth.Password = "brand-new-password"
 
-	restoreRedactedSecrets(original, &incoming)
+	require.NoError(t, restoreRedactedSecrets(original, &incoming))
 
 	// New password should be kept, not restored to old
 	assert.Equal(t, "brand-new-password", incoming.Security.BasicAuth.Password)
@@ -554,7 +557,7 @@ func TestRoundTrip_UserClearsPassword(t *testing.T) {
 	incoming := *sanitized
 	incoming.Security.BasicAuth.Password = ""
 
-	restoreRedactedSecrets(original, &incoming)
+	require.NoError(t, restoreRedactedSecrets(original, &incoming))
 
 	// Empty should stay empty (user intentionally cleared it)
 	assert.Empty(t, incoming.Security.BasicAuth.Password)
@@ -577,7 +580,7 @@ func TestRestoreRedactedSecrets_PATCHArrayMerge(t *testing.T) {
 	incoming.Realtime.MQTT.Password = redactedValue
 	incoming.Output.MySQL.Password = redactedValue
 
-	restoreRedactedSecrets(current, incoming)
+	require.NoError(t, restoreRedactedSecrets(current, incoming))
 
 	// Secrets inside arrays should be restored by provider name
 	assert.Equal(t, "goog-secret", incoming.Security.OAuthProviders[0].ClientSecret)
