@@ -276,26 +276,45 @@ func GetBoardModel() string {
 	return model
 }
 
-// ParsePercentage converts a percentage string (e.g., "80%") to a float64
+// ParsePercentage converts a percentage value to a float64 in the 0–100 range.
+// Accepted formats:
+//   - "80%" or "99.5%" — explicit percentage suffix
+//   - "80" or "99.5"   — bare number, treated as a percentage (0–100)
+//   - "0.8"            — decimal in 0 < x < 1 range, auto-scaled to 0–100 (0.8 → 80)
 func ParsePercentage(percentage, configKey string) (float64, error) {
-	if before, ok := strings.CutSuffix(percentage, "%"); ok {
-		value, err := strconv.ParseFloat(before, 64)
-		if err != nil {
-			return 0, errors.New(err).
-				Component("conf").
-				Category(errors.CategoryValidation).
-				Context("input", percentage).
-				Context("config_key", configKey).
-				Build()
-		}
-		return value, nil
+	trimmed := strings.TrimSpace(percentage)
+	if trimmed == "" {
+		return 0, errors.Newf("invalid percentage format: empty value").
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("input", percentage).
+			Context("config_key", configKey).
+			Build()
 	}
-	return 0, errors.Newf("invalid percentage format").
-		Component("conf").
-		Category(errors.CategoryValidation).
-		Context("input", percentage).
-		Context("config_key", configKey).
-		Build()
+
+	// Strip % suffix if present
+	numeric := trimmed
+	if before, ok := strings.CutSuffix(trimmed, "%"); ok {
+		numeric = before
+	}
+
+	value, err := strconv.ParseFloat(numeric, 64)
+	if err != nil {
+		return 0, errors.New(err).
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("input", percentage).
+			Context("config_key", configKey).
+			Build()
+	}
+
+	// Auto-scale fractional values (0 < x < 1) to the 0–100 range.
+	// A user writing "0.8" almost certainly means 80%, not 0.8%.
+	if value > 0 && value < 1 {
+		value *= 100
+	}
+
+	return value, nil
 }
 
 // ParseRetentionPeriod converts a string like "24h", "7d", "1w", "3m", "1y" to hours.

@@ -81,6 +81,7 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 		{
 			Type:    "webhook",
 			Enabled: true,
+			Name:    "alerts",
 			Endpoints: []conf.WebhookEndpointConfig{
 				{
 					URL: "https://hooks.example.com/notify",
@@ -344,6 +345,116 @@ func TestRestoreRedactedSecrets_MatchesByBackupType(t *testing.T) {
 
 	assert.Equal(t, "s3-secret-key", incoming.Backup.Targets[0].Settings["secretaccesskey"], "s3 target should get s3 secret")
 	assert.Equal(t, "ftp-password", incoming.Backup.Targets[1].Settings["password"], "ftp target should get ftp secret")
+}
+
+// TestRestoreRedactedSecrets_MatchesByWebhookNameAndURL verifies that
+// webhook auth secrets are restored by provider Name + endpoint URL,
+// not by index position. This handles the case where the frontend
+// reorders providers or endpoints.
+func TestRestoreRedactedSecrets_MatchesByWebhookNameAndURL(t *testing.T) {
+	current := &conf.Settings{}
+	current.Notification.Push.Providers = []conf.PushProviderConfig{
+		{
+			Type:    "webhook",
+			Enabled: true,
+			Name:    "slack",
+			Endpoints: []conf.WebhookEndpointConfig{
+				{
+					URL:  "https://hooks.slack.com/a",
+					Auth: conf.WebhookAuthConfig{Type: "bearer", Token: "slack-token-a"},
+				},
+				{
+					URL:  "https://hooks.slack.com/b",
+					Auth: conf.WebhookAuthConfig{Type: "basic", Pass: "slack-pass-b"},
+				},
+			},
+		},
+		{
+			Type:    "webhook",
+			Enabled: true,
+			Name:    "discord",
+			Endpoints: []conf.WebhookEndpointConfig{
+				{
+					URL:  "https://discord.com/webhook",
+					Auth: conf.WebhookAuthConfig{Type: "bearer", Token: "discord-token"},
+				},
+			},
+		},
+	}
+
+	// Incoming has providers in reversed order AND endpoints in reversed order
+	incoming := &conf.Settings{}
+	incoming.Notification.Push.Providers = []conf.PushProviderConfig{
+		{
+			Type:    "webhook",
+			Enabled: true,
+			Name:    "discord",
+			Endpoints: []conf.WebhookEndpointConfig{
+				{
+					URL:  "https://discord.com/webhook",
+					Auth: conf.WebhookAuthConfig{Type: "bearer", Token: redactedValue},
+				},
+			},
+		},
+		{
+			Type:    "webhook",
+			Enabled: true,
+			Name:    "slack",
+			Endpoints: []conf.WebhookEndpointConfig{
+				{
+					URL:  "https://hooks.slack.com/b",
+					Auth: conf.WebhookAuthConfig{Type: "basic", Pass: redactedValue},
+				},
+				{
+					URL:  "https://hooks.slack.com/a",
+					Auth: conf.WebhookAuthConfig{Type: "bearer", Token: redactedValue},
+				},
+			},
+		},
+	}
+
+	restoreRedactedSecrets(current, incoming)
+
+	// discord (now at index 0) should get discord's secret
+	assert.Equal(t, "discord-token", incoming.Notification.Push.Providers[0].Endpoints[0].Auth.Token,
+		"discord should get discord's token")
+
+	// slack (now at index 1) endpoints are reversed — each should get its own secret
+	assert.Equal(t, "slack-pass-b", incoming.Notification.Push.Providers[1].Endpoints[0].Auth.Pass,
+		"slack endpoint /b should get /b's password")
+	assert.Equal(t, "slack-token-a", incoming.Notification.Push.Providers[1].Endpoints[1].Auth.Token,
+		"slack endpoint /a should get /a's token")
+}
+
+// TestRestoreRedactedSecrets_WebhookNewProvider verifies that a newly added
+// webhook provider (not present in current) does not panic or get stale secrets.
+func TestRestoreRedactedSecrets_WebhookNewProvider(t *testing.T) {
+	current := settingsWithSecrets(t)
+
+	incoming := settingsWithSecrets(t)
+	// Add a brand-new provider that doesn't exist in current
+	incoming.Notification.Push.Providers = append(incoming.Notification.Push.Providers,
+		conf.PushProviderConfig{
+			Type:    "webhook",
+			Enabled: true,
+			Name:    "new-provider",
+			Endpoints: []conf.WebhookEndpointConfig{
+				{
+					URL:  "https://new.example.com/hook",
+					Auth: conf.WebhookAuthConfig{Type: "bearer", Token: "fresh-token"},
+				},
+			},
+		},
+	)
+
+	assert.NotPanics(t, func() {
+		restoreRedactedSecrets(current, incoming)
+	})
+
+	// The new provider's token should be kept as-is (not restored from anything)
+	assert.Equal(t, "fresh-token",
+		incoming.Notification.Push.Providers[1].Endpoints[0].Auth.Token,
+		"new provider's token should not be modified")
 }
 
 // TestRestoreRedactedSecrets_NilSettingsMap verifies no panic when an

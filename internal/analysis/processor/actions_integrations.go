@@ -25,6 +25,15 @@ import (
 // See: https://github.com/tphakala/birdnet-go/discussions/1759
 type NoteWithBirdImage struct {
 	datastore.Note
+
+	// Suppress redundant fields from embedded Note that duplicate explicit fields below.
+	// Note.ID duplicates DetectionID (both carry the database primary key).
+	// Note.Source duplicates SourceID (both carry the audio source identifier).
+	// These nil-pointer shadows with omitempty prevent the embedded fields from
+	// leaking into the JSON payload (GitHub #109).
+	ID     *struct{} `json:"ID,omitempty"`     // Suppressed: use detectionId instead
+	Source *struct{} `json:"Source,omitempty"` // Suppressed: use sourceId instead
+
 	DetectionID uint                    `json:"detectionId"` // Database ID for URL construction (e.g., /api/v2/audio/{id})
 	SourceID    string                  `json:"sourceId"`    // Audio source ID for HA filtering (added for HA discovery)
 	BirdImage   imageprovider.BirdImage `json:"BirdImage"`   // PascalCase for backward compatibility - DO NOT CHANGE

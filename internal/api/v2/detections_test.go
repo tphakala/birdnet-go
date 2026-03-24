@@ -8,6 +8,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -1025,6 +1027,118 @@ func TestDeleteDetection(t *testing.T) {
 			mockDS.AssertExpectations(t)
 		})
 	}
+}
+
+// TestDeleteDetectionRemovesFiles verifies that deleting a detection also
+// removes the associated audio clip and spectrogram files from disk.
+func TestDeleteDetectionRemovesFiles(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Create a subdirectory structure matching real clip paths
+	baseDir := controller.SFS.BaseDir()
+	clipDir := filepath.Join(baseDir, "2025", "01", "15")
+	require.NoError(t, os.MkdirAll(clipDir, 0o750))
+
+	clipFile := "Eurasian_Blue_Tit_85p_20250115T100000Z.wav"
+	clipPath := filepath.Join(clipDir, clipFile)
+
+	// Create the audio clip file
+	require.NoError(t, os.WriteFile(clipPath, []byte("fake-audio"), 0o600))
+
+	// Create spectrogram files in the naming patterns used by the API
+	baseName := "Eurasian_Blue_Tit_85p_20250115T100000Z"
+	spectrogramFiles := []string{
+		baseName + "_258px.png",
+		baseName + "_1026px.png",
+		baseName + "_1026px-legend.png",
+	}
+	for _, sf := range spectrogramFiles {
+		require.NoError(t, os.WriteFile(filepath.Join(clipDir, sf), []byte("fake-png"), 0o600))
+	}
+
+	// The ClipName stored in the DB is typically a relative path like
+	// "clips/2025/01/15/file.wav" or just the path relative to export dir.
+	// The controller normalizes it using the clips prefix.
+	relativeClipName := filepath.Join("2025", "01", "15", clipFile)
+
+	mockDS.On("Get", "10").Return(datastore.Note{
+		ID:       10,
+		Locked:   false,
+		ClipName: relativeClipName,
+	}, nil)
+	mockDS.On("Delete", "10").Return(nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/10", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("10")
+
+	err := controller.DeleteDetection(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	// Verify the audio clip was removed
+	_, statErr := os.Stat(clipPath)
+	assert.True(t, os.IsNotExist(statErr), "audio clip file should have been removed")
+
+	// Verify spectrogram files were removed
+	for _, sf := range spectrogramFiles {
+		_, statErr := os.Stat(filepath.Join(clipDir, sf))
+		assert.True(t, os.IsNotExist(statErr), "spectrogram file %s should have been removed", sf)
+	}
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestDeleteDetectionMissingFilesNoError verifies that deleting a detection
+// succeeds even when the associated files are already missing from disk.
+func TestDeleteDetectionMissingFilesNoError(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	mockDS.On("Get", "20").Return(datastore.Note{
+		ID:       20,
+		Locked:   false,
+		ClipName: "2025/01/15/nonexistent.wav",
+	}, nil)
+	mockDS.On("Delete", "20").Return(nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/20", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("20")
+
+	err := controller.DeleteDetection(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	mockDS.AssertExpectations(t)
+}
+
+// TestDeleteDetectionEmptyClipName verifies that deleting a detection with
+// no clip name still succeeds (no file removal attempted).
+func TestDeleteDetectionEmptyClipName(t *testing.T) {
+	e, mockDS, controller := setupTestEnvironment(t)
+
+	mockDS.On("Get", "30").Return(datastore.Note{
+		ID:       30,
+		Locked:   false,
+		ClipName: "",
+	}, nil)
+	mockDS.On("Delete", "30").Return(nil)
+
+	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/30", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues("30")
+
+	err := controller.DeleteDetection(c)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, rec.Code)
+
+	mockDS.AssertExpectations(t)
 }
 
 // TestReviewDetection tests the ReviewDetection endpoint

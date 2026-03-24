@@ -23,18 +23,17 @@ import (
 )
 
 // =============================================================================
-// SSE API CONTRACT - FIELD NAMES
+// SSE API CONTRACT - FIELD NAMES (camelCase per REST API conventions)
 // =============================================================================
 //
-// The following field names are part of the SSE API contract consumed by the
-// frontend. Changes to these names will break the UI.
+// All field names use camelCase JSON tags. The SSEDetectionData struct no longer
+// embeds datastore.Note directly, avoiding PascalCase Go default marshaling.
 // =============================================================================
 
 // sseContractFields defines the expected JSON field names for SSE detection events.
 var sseContractFields = struct {
-	// Note fields (embedded, PascalCase from Go default marshaling)
+	// Detection fields (camelCase via explicit json tags)
 	ID             string
-	SourceNode     string
 	Date           string
 	Time           string
 	BeginTime      string
@@ -45,70 +44,81 @@ var sseContractFields = struct {
 	Confidence     string
 	Latitude       string
 	Longitude      string
-	Threshold      string
-	Sensitivity    string
 	ClipName       string
-	ProcessingTime string
+	Verified       string
+	Locked         string
+	Source         string
 
-	// SSE-specific fields (explicit JSON tags, camelCase)
+	// SSE-specific fields (camelCase)
 	BirdImage          string
 	Timestamp          string
 	EventType          string
 	IsNewSpecies       string
 	DaysSinceFirstSeen string
 
-	// BirdImage nested fields (PascalCase from Go default)
+	// BirdImage nested fields (camelCase via explicit json tags)
 	BirdImageURL            string
 	BirdImageScientificName string
 	BirdImageLicenseName    string
 	BirdImageLicenseURL     string
 	BirdImageAuthorName     string
 	BirdImageAuthorURL      string
-	BirdImageCachedAt       string
 	BirdImageSourceProvider string
-}{
-	// Note fields (PascalCase - Go default marshaling)
-	ID:             "ID",
-	SourceNode:     "SourceNode",
-	Date:           "Date",
-	Time:           "Time",
-	BeginTime:      "BeginTime",
-	EndTime:        "EndTime",
-	SpeciesCode:    "SpeciesCode",
-	ScientificName: "ScientificName",
-	CommonName:     "CommonName",
-	Confidence:     "Confidence",
-	Latitude:       "Latitude",
-	Longitude:      "Longitude",
-	Threshold:      "Threshold",
-	Sensitivity:    "Sensitivity",
-	ClipName:       "ClipName",
-	ProcessingTime: "ProcessingTime",
 
-	// SSE-specific fields (camelCase via json tags)
+	// Source nested fields (camelCase)
+	SourceID          string
+	SourceType        string
+	SourceDisplayName string
+}{
+	// Detection fields (camelCase)
+	ID:             "id",
+	Date:           "date",
+	Time:           "time",
+	BeginTime:      "beginTime",
+	EndTime:        "endTime",
+	SpeciesCode:    "speciesCode",
+	ScientificName: "scientificName",
+	CommonName:     "commonName",
+	Confidence:     "confidence",
+	Latitude:       "latitude",
+	Longitude:      "longitude",
+	ClipName:       "clipName",
+	Verified:       "verified",
+	Locked:         "locked",
+	Source:         "source",
+
+	// SSE-specific fields (camelCase)
 	BirdImage:          "birdImage",
 	Timestamp:          "timestamp",
 	EventType:          "eventType",
 	IsNewSpecies:       "isNewSpecies",
 	DaysSinceFirstSeen: "daysSinceFirstSeen",
 
-	// BirdImage nested fields (PascalCase - Go default)
-	BirdImageURL:            "URL",
-	BirdImageScientificName: "ScientificName",
-	BirdImageLicenseName:    "LicenseName",
-	BirdImageLicenseURL:     "LicenseURL",
-	BirdImageAuthorName:     "AuthorName",
-	BirdImageAuthorURL:      "AuthorURL",
-	BirdImageCachedAt:       "CachedAt",
-	BirdImageSourceProvider: "SourceProvider",
+	// BirdImage nested fields (camelCase)
+	BirdImageURL:            "url",
+	BirdImageScientificName: "scientificName",
+	BirdImageLicenseName:    "licenseName",
+	BirdImageLicenseURL:     "licenseURL",
+	BirdImageAuthorName:     "authorName",
+	BirdImageAuthorURL:      "authorURL",
+	BirdImageSourceProvider: "sourceProvider",
+
+	// Source nested fields (camelCase)
+	SourceID:          "id",
+	SourceType:        "type",
+	SourceDisplayName: "displayName",
 }
 
 // createTestNoteWithAllFields creates a Note with all fields populated for contract testing.
-// Test coordinates are Helsinki, Finland (60.1699°N, 24.9384°E).
+// Test coordinates are Helsinki, Finland (60.1699N, 24.9384E).
 func createTestNoteWithAllFields() datastore.Note {
 	return datastore.Note{
-		ID:             12345,
-		SourceNode:     "test-node",
+		ID: 12345,
+		Source: datastore.AudioSource{
+			ID:          "rtsp_test123",
+			SafeString:  "rtsp://user:***@192.168.1.100:554/stream",
+			DisplayName: "Garden Microphone",
+		},
 		Date:           "2024-01-15",
 		Time:           "14:30:45",
 		BeginTime:      time.Date(2024, 1, 15, 14, 30, 45, 0, time.UTC),
@@ -121,30 +131,36 @@ func createTestNoteWithAllFields() datastore.Note {
 		Longitude:      24.9384,
 		Threshold:      0.7,
 		Sensitivity:    1.0,
-		ClipName:       "clip_001.wav",
+		ClipName:       "/home/user/birdnet-go/clips/clip_001.wav",
 		ProcessingTime: 150 * time.Millisecond,
+		Verified:       "correct",
+		Locked:         true,
 	}
 }
 
-// createTestSSEDetectionData creates an SSEDetectionData with all fields populated.
-func createTestSSEDetectionData() SSEDetectionData {
-	return SSEDetectionData{
-		Note: createTestNoteWithAllFields(),
-		BirdImage: imageprovider.BirdImage{
-			URL:            "https://example.com/bird.jpg",
-			ScientificName: "Parus major",
-			LicenseName:    "CC BY-SA 4.0",
-			LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
-			AuthorName:     "Test Author",
-			AuthorURL:      "https://example.com/author",
-			CachedAt:       time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
-			SourceProvider: "wikimedia",
-		},
-		Timestamp:          time.Date(2024, 1, 15, 14, 30, 45, 0, time.UTC),
-		EventType:          "new_detection",
-		IsNewSpecies:       true,
-		DaysSinceFirstSeen: 0,
+// createTestBirdImage creates a BirdImage with all fields populated.
+func createTestBirdImage() imageprovider.BirdImage {
+	return imageprovider.BirdImage{
+		URL:            "https://example.com/bird.jpg",
+		ScientificName: "Parus major",
+		LicenseName:    "CC BY-SA 4.0",
+		LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
+		AuthorName:     "Test Author",
+		AuthorURL:      "https://example.com/author",
+		CachedAt:       time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC),
+		SourceProvider: "wikimedia",
 	}
+}
+
+// createTestSSEDetectionData creates an SSEDetectionData with all fields populated
+// using the newSSEDetectionData constructor (same code path as production).
+func createTestSSEDetectionData() SSEDetectionData {
+	note := createTestNoteWithAllFields()
+	birdImage := createTestBirdImage()
+	det := newSSEDetectionData(&note, &birdImage)
+	det.IsNewSpecies = true
+	det.DaysSinceFirstSeen = 0
+	return det
 }
 
 // TestSSEContract_DetectionPayload_FieldNames validates that SSE detection
@@ -170,10 +186,9 @@ func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
 	// CONTRACT ASSERTIONS - DO NOT MODIFY EXPECTED VALUES
 	// ==========================================================================
 
-	t.Run("Note fields use PascalCase", func(t *testing.T) {
-		noteFields := []string{
+	t.Run("Detection fields use camelCase", func(t *testing.T) {
+		detectionFields := []string{
 			sseContractFields.ID,
-			sseContractFields.SourceNode,
 			sseContractFields.Date,
 			sseContractFields.Time,
 			sseContractFields.SpeciesCode,
@@ -183,11 +198,12 @@ func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
 			sseContractFields.Latitude,
 			sseContractFields.Longitude,
 			sseContractFields.ClipName,
+			sseContractFields.Locked,
 		}
 
-		for _, field := range noteFields {
+		for _, field := range detectionFields {
 			assert.Contains(t, payload, field,
-				"SSE API CONTRACT VIOLATION: Note field '%s' must be present", field)
+				"SSE API CONTRACT VIOLATION: Detection field '%s' must be present", field)
 		}
 	})
 
@@ -221,6 +237,24 @@ func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
 		}
 	})
 
+	t.Run("Source nested structure is correct", func(t *testing.T) {
+		sourceRaw, exists := payload[sseContractFields.Source]
+		require.True(t, exists, "source field must be present")
+
+		source, ok := sourceRaw.(map[string]any)
+		require.True(t, ok, "source must be an object")
+
+		expectedSourceFields := []string{
+			sseContractFields.SourceID,
+			sseContractFields.SourceDisplayName,
+		}
+
+		for _, field := range expectedSourceFields {
+			assert.Contains(t, source, field,
+				"SSE API CONTRACT VIOLATION: Source.%s field must be present", field)
+		}
+	})
+
 	t.Run("New species tracking fields are present when populated", func(t *testing.T) {
 		// isNewSpecies should be present (true in our test data)
 		assert.Contains(t, payload, sseContractFields.IsNewSpecies,
@@ -232,14 +266,14 @@ func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
 func TestSSEContract_DetectionPayload_DateTimeFormat(t *testing.T) {
 	t.Parallel()
 
-	note := createTestNoteWithAllFields()
+	detection := createTestSSEDetectionData()
 
 	// Date should be "YYYY-MM-DD"
-	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, note.Date,
+	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, detection.Date,
 		"SSE API CONTRACT: Date must be in YYYY-MM-DD format")
 
 	// Time should be "HH:MM:SS"
-	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, note.Time,
+	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, detection.Time,
 		"SSE API CONTRACT: Time must be in HH:MM:SS format")
 }
 
@@ -257,44 +291,44 @@ func TestSSEContract_FrontendAccessPaths(t *testing.T) {
 	require.NoError(t, err)
 
 	// ==========================================================================
-	// SIMULATE FRONTEND ACCESS PATTERNS
+	// SIMULATE FRONTEND ACCESS PATTERNS (camelCase)
 	// ==========================================================================
 
 	t.Run("Frontend can access detection species info", func(t *testing.T) {
-		// Frontend accesses: data.CommonName, data.ScientificName
-		commonName, exists := payload["CommonName"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.CommonName")
+		// Frontend accesses: data.commonName, data.scientificName
+		commonName, exists := payload["commonName"]
+		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.commonName")
 		assert.Equal(t, "Great Tit", commonName)
 
-		sciName, exists := payload["ScientificName"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.ScientificName")
+		sciName, exists := payload["scientificName"]
+		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.scientificName")
 		assert.Equal(t, "Parus major", sciName)
 	})
 
 	t.Run("Frontend can access detection confidence", func(t *testing.T) {
-		// Frontend accesses: data.Confidence
-		confidence, exists := payload["Confidence"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.Confidence")
+		// Frontend accesses: data.confidence
+		confidence, exists := payload["confidence"]
+		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.confidence")
 		assert.InDelta(t, 0.85, confidence, 0.001)
 	})
 
 	t.Run("Frontend can access bird image URL", func(t *testing.T) {
-		// Frontend accesses: data.birdImage.URL
+		// Frontend accesses: data.birdImage.url
 		birdImageRaw, exists := payload["birdImage"]
 		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage")
 
 		birdImage, ok := birdImageRaw.(map[string]any)
 		require.True(t, ok, "FRONTEND BROKEN: data.birdImage is not an object")
 
-		url, exists := birdImage["URL"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage.URL")
+		url, exists := birdImage["url"]
+		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage.url")
 		assert.Equal(t, "https://example.com/bird.jpg", url)
 	})
 
 	t.Run("Frontend can access detection ID", func(t *testing.T) {
-		// Frontend accesses: data.ID for navigation/links
-		id, exists := payload["ID"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.ID")
+		// Frontend accesses: data.id for navigation/links
+		id, exists := payload["id"]
+		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.id")
 		assert.InDelta(t, float64(12345), id, 0.001)
 	})
 
@@ -310,14 +344,11 @@ func TestSSEContract_FrontendAccessPaths(t *testing.T) {
 func TestSSEContract_IsNewSpeciesOmittedWhenFalse(t *testing.T) {
 	t.Parallel()
 
-	detection := SSEDetectionData{
-		Note:               createTestNoteWithAllFields(),
-		BirdImage:          imageprovider.BirdImage{},
-		Timestamp:          time.Now(),
-		EventType:          "new_detection",
-		IsNewSpecies:       false, // Should be omitted
-		DaysSinceFirstSeen: 0,     // Should be omitted
-	}
+	note := createTestNoteWithAllFields()
+	birdImage := createTestBirdImage()
+	detection := newSSEDetectionData(&note, &birdImage)
+	detection.IsNewSpecies = false   // Should be omitted
+	detection.DaysSinceFirstSeen = 0 // Should be omitted
 
 	jsonBytes, err := json.Marshal(detection)
 	require.NoError(t, err)
@@ -351,14 +382,14 @@ func TestSSEContract_AllExpectedFieldsPresent(t *testing.T) {
 	require.NoError(t, err)
 
 	// ==========================================================================
-	// EXPECTED ROOT-LEVEL FIELDS
+	// EXPECTED ROOT-LEVEL FIELDS (all camelCase)
 	// ==========================================================================
 	expectedRootFields := []string{
-		// From embedded Note (PascalCase)
-		"ID", "SourceNode", "Date", "Time",
-		"SpeciesCode", "ScientificName", "CommonName", "Confidence",
-		"Latitude", "Longitude", "Threshold", "Sensitivity",
-		"ClipName", "ProcessingTime",
+		// Detection fields (camelCase)
+		"id", "date", "time",
+		"speciesCode", "scientificName", "commonName", "confidence",
+		"latitude", "longitude",
+		"clipName",
 		// SSE-specific (camelCase)
 		"birdImage", "timestamp", "eventType",
 	}
@@ -369,10 +400,9 @@ func TestSSEContract_AllExpectedFieldsPresent(t *testing.T) {
 	}
 }
 
-// TestSSEContract_NoCamelCaseConversionForNoteFields verifies that Note fields
-// retain their PascalCase naming (Go default) and haven't been accidentally
-// converted to camelCase.
-func TestSSEContract_NoCamelCaseConversionForNoteFields(t *testing.T) {
+// TestSSEContract_NoPascalCaseFields verifies that all fields use camelCase
+// naming and no PascalCase Go defaults leak through.
+func TestSSEContract_NoPascalCaseFields(t *testing.T) {
 	t.Parallel()
 
 	detection := createTestSSEDetectionData()
@@ -382,21 +412,119 @@ func TestSSEContract_NoCamelCaseConversionForNoteFields(t *testing.T) {
 
 	jsonStr := string(jsonBytes)
 
-	// These would be wrong if someone added json tags with camelCase
-	forbiddenFields := []struct {
-		wrong   string
-		correct string
-	}{
-		{"commonName", "CommonName"},
-		{"scientificName", "ScientificName"},
-		{"clipName", "ClipName"},
-		{"sourceNode", "SourceNode"},
-		{"speciesCode", "SpeciesCode"},
-		{"processingTime", "ProcessingTime"},
+	// These PascalCase fields should NOT appear in the JSON output
+	forbiddenFields := []string{
+		"CommonName",
+		"ScientificName",
+		"ClipName",
+		"SourceNode",
+		"SpeciesCode",
+		"ProcessingTime",
+		"BeginTime",
+		"EndTime",
+		"Confidence",
+		"Latitude",
+		"Longitude",
+		"Threshold",
+		"Sensitivity",
 	}
 
-	for _, f := range forbiddenFields {
-		assert.NotContains(t, jsonStr, `"`+f.wrong+`":`,
-			"SSE API CONTRACT VIOLATION: Found '%s' but should be '%s'", f.wrong, f.correct)
+	for _, field := range forbiddenFields {
+		assert.NotContains(t, jsonStr, `"`+field+`":`,
+			"SSE API CONTRACT VIOLATION: PascalCase field '%s' must not appear in SSE payload", field)
+	}
+}
+
+// TestSSEContract_SensitiveDataExcluded verifies that sensitive internal data
+// is not exposed in SSE payloads.
+func TestSSEContract_SensitiveDataExcluded(t *testing.T) {
+	t.Parallel()
+
+	note := createTestNoteWithAllFields()
+	// Set a full filesystem path to verify it gets stripped to filename
+	note.ClipName = "/var/lib/birdnet-go/clips/2024/01/15/clip_001.wav"
+	// Set source with credentials in SafeString
+	note.Source = datastore.AudioSource{
+		ID:          "rtsp_abc123",
+		SafeString:  "rtsp://admin:secretpass@192.168.1.100:554/stream1",
+		DisplayName: "Backyard Camera",
+	}
+
+	birdImage := createTestBirdImage()
+	detection := newSSEDetectionData(&note, &birdImage)
+
+	jsonBytes, err := json.Marshal(detection)
+	require.NoError(t, err)
+
+	jsonStr := string(jsonBytes)
+
+	// ClipName should be just the filename, not the full path
+	assert.NotContains(t, jsonStr, "/var/lib/birdnet-go",
+		"SSE payload must not contain filesystem paths")
+	assert.Contains(t, jsonStr, "clip_001.wav",
+		"SSE payload should contain the clip filename")
+
+	// SafeString (which could contain sanitized RTSP URLs) should not appear
+	assert.NotContains(t, jsonStr, "rtsp://",
+		"SSE payload must not contain RTSP URLs")
+	assert.NotContains(t, jsonStr, "safeString",
+		"SSE payload must not contain safeString field")
+	assert.NotContains(t, jsonStr, "SafeString",
+		"SSE payload must not contain SafeString field")
+	assert.NotContains(t, jsonStr, "secretpass",
+		"SSE payload must not contain credentials")
+
+	// Internal Note fields should not be present
+	assert.NotContains(t, jsonStr, "Threshold",
+		"SSE payload must not contain internal Threshold field")
+	assert.NotContains(t, jsonStr, "Sensitivity",
+		"SSE payload must not contain internal Sensitivity field")
+	assert.NotContains(t, jsonStr, "ProcessingTime",
+		"SSE payload must not contain internal ProcessingTime field")
+	assert.NotContains(t, jsonStr, "SourceNode",
+		"SSE payload must not contain internal SourceNode field")
+
+	// Verify source only has safe fields
+	var payload map[string]any
+	err = json.Unmarshal(jsonBytes, &payload)
+	require.NoError(t, err)
+
+	sourceRaw, exists := payload["source"]
+	require.True(t, exists, "source field must be present")
+
+	source, ok := sourceRaw.(map[string]any)
+	require.True(t, ok, "source must be an object")
+
+	assert.Equal(t, "rtsp_abc123", source["id"])
+	assert.Equal(t, "Backyard Camera", source["displayName"])
+	// SafeString must not appear as a field
+	_, hasSafeString := source["safeString"]
+	assert.False(t, hasSafeString, "source must not contain safeString field")
+}
+
+// TestSSEContract_NullInternalFieldsExcluded verifies that null internal fields
+// like Results, Review, Comments, and Lock are not present in the SSE payload.
+func TestSSEContract_NullInternalFieldsExcluded(t *testing.T) {
+	t.Parallel()
+
+	detection := createTestSSEDetectionData()
+
+	jsonBytes, err := json.Marshal(detection)
+	require.NoError(t, err)
+
+	jsonStr := string(jsonBytes)
+
+	// These internal Note fields should never appear in SSE output
+	internalFields := []string{
+		"Results",
+		"Review",
+		"Comments",
+		"Lock",
+		"Occurrence",
+	}
+
+	for _, field := range internalFields {
+		assert.NotContains(t, jsonStr, `"`+field+`"`,
+			"SSE payload must not contain internal field '%s'", field)
 	}
 }

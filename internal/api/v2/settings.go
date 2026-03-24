@@ -1673,20 +1673,33 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) {
 		}
 	}
 
-	// Webhook auth secrets
+	// Webhook auth secrets — match by provider Name + endpoint URL to handle reordering
+	// Build a map of current providers keyed by Name for O(1) lookup.
+	curProvidersByName := make(map[string]*conf.PushProviderConfig, len(current.Notification.Push.Providers))
+	for i := range current.Notification.Push.Providers {
+		curProvidersByName[current.Notification.Push.Providers[i].Name] = &current.Notification.Push.Providers[i]
+	}
+
 	for i := range incoming.Notification.Push.Providers {
-		if i >= len(current.Notification.Push.Providers) {
-			break
+		curProvider, ok := curProvidersByName[incoming.Notification.Push.Providers[i].Name]
+		if !ok {
+			continue
 		}
+		// Build a map of current endpoints keyed by URL for this provider.
+		curEndpointsByURL := make(map[string]*conf.WebhookEndpointConfig, len(curProvider.Endpoints))
+		for j := range curProvider.Endpoints {
+			curEndpointsByURL[curProvider.Endpoints[j].URL] = &curProvider.Endpoints[j]
+		}
+
 		for j := range incoming.Notification.Push.Providers[i].Endpoints {
-			if j >= len(current.Notification.Push.Providers[i].Endpoints) {
-				break
+			curEP, found := curEndpointsByURL[incoming.Notification.Push.Providers[i].Endpoints[j].URL]
+			if !found {
+				continue
 			}
-			curAuth := &current.Notification.Push.Providers[i].Endpoints[j].Auth
 			incAuth := &incoming.Notification.Push.Providers[i].Endpoints[j].Auth
-			restore(&curAuth.Token, &incAuth.Token)
-			restore(&curAuth.Pass, &incAuth.Pass)
-			restore(&curAuth.Value, &incAuth.Value)
+			restore(&curEP.Auth.Token, &incAuth.Token)
+			restore(&curEP.Auth.Pass, &incAuth.Pass)
+			restore(&curEP.Auth.Value, &incAuth.Value)
 		}
 	}
 }

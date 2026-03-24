@@ -144,7 +144,7 @@ func NewSecureHeaders(config *SecurityConfig) echo.MiddlewareFunc {
 	}
 
 	echoSecure := middleware.SecureWithConfig(middleware.SecureConfig{
-		XSSProtection:         "1; mode=block",
+		XSSProtection:         "0", // Disable deprecated XSS Auditor per OWASP guidance
 		ContentTypeNosniff:    "nosniff",
 		XFrameOptions:         xFrameOptions,
 		HSTSMaxAge:            config.HSTSMaxAge,

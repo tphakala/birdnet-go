@@ -413,6 +413,51 @@ func TestMQTTAPIContract_AllExpectedFieldsPresent(t *testing.T) {
 	}
 }
 
+// TestMQTTAPIContract_NoRedundantDuplicateFields verifies that the MQTT payload
+// does not contain redundant fields that duplicate the canonical identifiers.
+//
+// Previously, the embedded Note struct leaked "ID" (duplicate of "detectionId")
+// and "Source" (duplicate of "sourceId") into the JSON payload (GitHub #109).
+func TestMQTTAPIContract_NoRedundantDuplicateFields(t *testing.T) {
+	t.Parallel()
+
+	note := NoteWithBirdImage{
+		Note: datastore.Note{
+			ID:             12345,
+			CommonName:     "Test Bird",
+			ScientificName: "Testus birdus",
+			Confidence:     0.9,
+			Source:         testAudioSource(),
+		},
+		DetectionID: 12345,
+		SourceID:    "test-source",
+		BirdImage: imageprovider.BirdImage{
+			URL: "https://example.com/test.jpg",
+		},
+	}
+
+	jsonData, err := json.Marshal(note)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	err = json.Unmarshal(jsonData, &jsonMap)
+	require.NoError(t, err)
+
+	// "ID" from embedded Note must NOT appear — "detectionId" is the canonical field
+	assert.NotContains(t, jsonMap, "ID",
+		"Redundant field 'ID' must not appear in MQTT payload — use 'detectionId' (GitHub #109)")
+
+	// "Source" from embedded Note must NOT appear — "sourceId" is the canonical field
+	assert.NotContains(t, jsonMap, "Source",
+		"Redundant field 'Source' must not appear in MQTT payload — use 'sourceId' (GitHub #109)")
+
+	// Canonical fields must still be present
+	assert.Contains(t, jsonMap, "detectionId",
+		"Canonical field 'detectionId' must be present")
+	assert.Contains(t, jsonMap, "sourceId",
+		"Canonical field 'sourceId' must be present")
+}
+
 // TestMQTTAPIContract_NoUnexpectedCamelCaseConversions verifies that fields that
 // should be PascalCase have not been accidentally converted to camelCase.
 //

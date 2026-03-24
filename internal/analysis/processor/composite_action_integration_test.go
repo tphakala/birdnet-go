@@ -231,11 +231,11 @@ func TestCompositeAction_RepoPath_DatabaseToMQTT_IDPropagation(t *testing.T) {
 	assert.InDelta(t, float64(1), detectionID, 0.001,
 		"MQTT payload should contain database ID from Repo path")
 
-	// Also verify the embedded Note.ID in the JSON payload
-	noteID, ok := jsonMap["ID"].(float64)
-	require.True(t, ok, "Note ID should be present in MQTT payload")
-	assert.InDelta(t, float64(1), noteID, 0.001,
-		"Embedded Note.ID should match database ID")
+	// Verify that the redundant embedded Note.ID is NOT in the payload (GitHub #109).
+	// The canonical field is "detectionId" — "ID" was a redundant leak from the embedded Note.
+	_, hasNoteID := jsonMap["ID"]
+	assert.False(t, hasNoteID,
+		"Redundant 'ID' field must not appear in MQTT payload — use 'detectionId' (GitHub #109)")
 }
 
 // TestCompositeAction_RepoPath_MultipleDetections verifies that multiple

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"runtime/debug"
 	"sync"
 	"sync/atomic"
@@ -59,14 +60,121 @@ type WriteDeadlineSetter interface {
 	SetWriteDeadline(time.Time) error
 }
 
-// SSEDetectionData represents the detection data sent via SSE
+// SSEDetectionData represents the detection data sent via SSE.
+// Uses explicit fields with camelCase JSON tags instead of embedding datastore.Note
+// to avoid exposing internal Go struct layout, sensitive data (filesystem paths,
+// RTSP credentials), and to provide a stable, well-defined API contract.
 type SSEDetectionData struct {
-	datastore.Note
-	BirdImage          imageprovider.BirdImage `json:"birdImage"`
-	Timestamp          time.Time               `json:"timestamp"`
-	EventType          string                  `json:"eventType"`
-	IsNewSpecies       bool                    `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int                     `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	// Detection identity and classification
+	ID             uint    `json:"id"`
+	Date           string  `json:"date"` // "2024-01-15"
+	Time           string  `json:"time"` // "14:30:00"
+	ScientificName string  `json:"scientificName"`
+	CommonName     string  `json:"commonName"`
+	SpeciesCode    string  `json:"speciesCode,omitempty"`
+	Confidence     float64 `json:"confidence"`
+
+	// Location
+	Latitude  float64 `json:"latitude,omitempty"`
+	Longitude float64 `json:"longitude,omitempty"`
+
+	// Audio clip (filename only, no path)
+	ClipName string `json:"clipName,omitempty"`
+
+	// Source info (safe fields only, no credentials)
+	Source *SSESourceInfo `json:"source,omitempty"`
+
+	// Time context
+	BeginTime string `json:"beginTime,omitempty"`
+	EndTime   string `json:"endTime,omitempty"`
+
+	// Review status
+	Verified string `json:"verified,omitempty"`
+	Locked   bool   `json:"locked"`
+
+	// Bird image with attribution
+	BirdImage SSEBirdImage `json:"birdImage"`
+
+	// SSE event metadata
+	Timestamp time.Time `json:"timestamp"`
+	EventType string    `json:"eventType"`
+
+	// Species tracking metadata
+	IsNewSpecies       bool `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int  `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+}
+
+// SSESourceInfo describes the audio source in SSE events.
+// Only exposes safe identifiers, never raw connection strings or credentials.
+type SSESourceInfo struct {
+	ID          string `json:"id"`
+	Type        string `json:"type,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
+}
+
+// SSEBirdImage represents bird image data in SSE events with proper JSON tags.
+type SSEBirdImage struct {
+	URL            string `json:"url"`
+	ScientificName string `json:"scientificName,omitempty"`
+	LicenseName    string `json:"licenseName,omitempty"`
+	LicenseURL     string `json:"licenseURL,omitempty"`
+	AuthorName     string `json:"authorName,omitempty"`
+	AuthorURL      string `json:"authorURL,omitempty"`
+	SourceProvider string `json:"sourceProvider,omitempty"`
+}
+
+// newSSEDetectionData creates an SSEDetectionData from a datastore.Note and BirdImage.
+// It sanitizes sensitive data: ClipName is stripped to filename only, and Source
+// only includes safe display fields (no raw connection strings or credentials).
+func newSSEDetectionData(note *datastore.Note, birdImage *imageprovider.BirdImage) SSEDetectionData {
+	det := SSEDetectionData{
+		ID:             note.ID,
+		Date:           note.Date,
+		Time:           note.Time,
+		ScientificName: note.ScientificName,
+		CommonName:     note.CommonName,
+		SpeciesCode:    note.SpeciesCode,
+		Confidence:     note.Confidence,
+		Latitude:       note.Latitude,
+		Longitude:      note.Longitude,
+		ClipName:       filepath.Base(note.ClipName),
+		Verified:       note.Verified,
+		Locked:         note.Locked,
+		Timestamp:      time.Now(),
+		EventType:      "new_detection",
+	}
+
+	// Format time fields as RFC3339 if non-zero
+	if !note.BeginTime.IsZero() {
+		det.BeginTime = note.BeginTime.Format(time.RFC3339)
+	}
+	if !note.EndTime.IsZero() {
+		det.EndTime = note.EndTime.Format(time.RFC3339)
+	}
+
+	// Only expose safe source identifiers, never raw connection strings
+	if note.Source.ID != "" {
+		det.Source = &SSESourceInfo{
+			ID:          note.Source.ID,
+			Type:        note.Source.DisplayName, // Use display name as type for SSE consumers
+			DisplayName: note.Source.DisplayName,
+		}
+	}
+
+	// Map bird image with proper camelCase tags
+	if birdImage != nil {
+		det.BirdImage = SSEBirdImage{
+			URL:            birdImage.URL,
+			ScientificName: birdImage.ScientificName,
+			LicenseName:    birdImage.LicenseName,
+			LicenseURL:     birdImage.LicenseURL,
+			AuthorName:     birdImage.AuthorName,
+			AuthorURL:      birdImage.AuthorURL,
+			SourceProvider: birdImage.SourceProvider,
+		}
+	}
+
+	return det
 }
 
 // SSESoundLevelData represents sound level data sent via SSE
@@ -731,7 +839,9 @@ func (c *Controller) GetSSEStatus(ctx echo.Context) error {
 	})
 }
 
-// BroadcastDetection is a helper method to broadcast detection from the controller
+// BroadcastDetection is a helper method to broadcast detection from the controller.
+// It maps the internal datastore.Note to a sanitized SSEDetectionData struct that
+// only exposes safe fields with proper camelCase JSON tags.
 func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imageprovider.BirdImage) error {
 	if c.sseManager == nil {
 		return fmt.Errorf("SSE manager not initialized")
@@ -747,12 +857,7 @@ func (c *Controller) BroadcastDetection(note *datastore.Note, birdImage *imagepr
 		return fmt.Errorf("birdImage is nil")
 	}
 
-	detection := SSEDetectionData{
-		Note:      *note,
-		BirdImage: *birdImage,
-		Timestamp: time.Now(),
-		EventType: "new_detection",
-	}
+	detection := newSSEDetectionData(note, birdImage)
 
 	// Add species tracking metadata if processor has tracker
 	if c.Processor != nil && c.Processor.NewSpeciesTracker != nil {

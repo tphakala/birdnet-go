@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"maps"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -1123,6 +1126,9 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("detection is locked"), "Detection is locked", http.StatusForbidden)
 	}
 
+	// Capture the clip name before deleting the DB record
+	clipName := note.ClipName
+
 	err = c.DS.Delete(idStr)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to delete detection", http.StatusInternalServerError)
@@ -1131,7 +1137,89 @@ func (c *Controller) DeleteDetection(ctx echo.Context) error {
 	// Invalidate cache after deletion
 	c.invalidateDetectionCache()
 
+	// Best-effort removal of associated clip and spectrogram files.
+	// Failures are logged but do not affect the API response.
+	if clipName != "" {
+		c.removeDetectionFiles(clipName)
+	}
+
 	return ctx.NoContent(http.StatusNoContent)
+}
+
+// spectrogramWidths lists all valid spectrogram widths used for file naming.
+// These correspond to the size constants: sm=258, md=514, lg=1026, xl=2050.
+var spectrogramWidths = []int{
+	SpectrogramSizeSm,
+	SpectrogramSizeMd,
+	SpectrogramSizeLg,
+	SpectrogramSizeXl,
+}
+
+// removeDetectionFiles removes the audio clip and all associated spectrogram
+// files from disk. Deletions are best-effort: files that are already missing
+// are silently ignored, and other errors are logged as warnings without
+// affecting the caller.
+func (c *Controller) removeDetectionFiles(clipName string) {
+	log := c.apiLogger
+
+	// Normalize the clip path to get a relative path within SecureFS
+	clipsPrefix := c.Settings.Realtime.Audio.Export.Path
+	normalized := NormalizeClipPath(clipName, clipsPrefix)
+	if normalized == "" {
+		log.Warn("Cannot remove detection files: empty normalized clip path",
+			logger.String("clip_name", clipName))
+		return
+	}
+
+	baseDir := c.SFS.BaseDir()
+	absClipPath := filepath.Join(baseDir, normalized)
+
+	// Remove the audio clip file
+	if err := os.Remove(absClipPath); err != nil {
+		if !os.IsNotExist(err) {
+			log.Warn("Failed to remove audio clip file",
+				logger.String("path", absClipPath),
+				logger.Error(err))
+		}
+	} else {
+		log.Info("Removed audio clip file",
+			logger.String("path", absClipPath))
+	}
+
+	// Remove all associated spectrogram files.
+	// Spectrograms follow the naming pattern: <basename>_<width>px.png
+	// and <basename>_<width>px-legend.png for each valid width.
+	ext := filepath.Ext(normalized)
+	basePath := strings.TrimSuffix(absClipPath, ext)
+
+	removed := 0
+	for _, width := range spectrogramWidths {
+		// Raw spectrogram: <basename>_<width>px.png
+		rawPath := fmt.Sprintf("%s_%dpx.png", basePath, width)
+		if err := os.Remove(rawPath); err == nil {
+			removed++
+		} else if !os.IsNotExist(err) {
+			log.Warn("Failed to remove spectrogram file",
+				logger.String("path", rawPath),
+				logger.Error(err))
+		}
+
+		// Legend spectrogram: <basename>_<width>px-legend.png
+		legendPath := fmt.Sprintf("%s_%dpx-legend.png", basePath, width)
+		if err := os.Remove(legendPath); err == nil {
+			removed++
+		} else if !os.IsNotExist(err) {
+			log.Warn("Failed to remove spectrogram file",
+				logger.String("path", legendPath),
+				logger.Error(err))
+		}
+	}
+
+	if removed > 0 {
+		log.Info("Removed associated spectrogram files",
+			logger.Int("count", removed),
+			logger.String("clip_name", clipName))
+	}
 }
 
 // invalidateDetectionCache clears the detection cache to ensure fresh data
