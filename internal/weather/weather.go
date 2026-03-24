@@ -370,7 +370,12 @@ func (s *Service) StartPolling(stopChan <-chan struct{}) {
 // Poll fetches weather data once and saves it to the database.
 // This is useful for on-demand updates or testing the fetch-save cycle.
 // Returns nil on success or if data is not modified (304 response).
+// Returns ErrWeatherAuthFailed if the weather API key is invalid and retrying
+// has been permanently disabled.
 func (s *Service) Poll() error {
+	if s.backoff.isAuthDisabled() {
+		return ErrWeatherAuthFailed
+	}
 	return s.fetchAndSave()
 }
 

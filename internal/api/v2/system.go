@@ -169,30 +169,28 @@ var cpuCache = &CPUCache{
 
 // UpdateCPUCache updates the cached CPU usage data
 func UpdateCPUCache(ctx context.Context) {
+	ticker := time.NewTicker(cpuCacheUpdateInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
-			// Context canceled, exit the goroutine
 			return
 		default:
 			// Get CPU usage (this will block for 1 second)
 			percent, err := cpu.Percent(time.Second, false)
 			if err == nil && len(percent) > 0 {
-				// Update the cache
 				cpuCache.mu.Lock()
 				cpuCache.cpuPercent = percent
 				cpuCache.lastUpdated = time.Now()
 				cpuCache.mu.Unlock()
 			}
 
-			// Wait before next update (can be adjusted based on needs)
-			// We add a small buffer to ensure we don't constantly block
-			// Use time.After in a select to make it cancellable
+			// Wait for next tick or context cancellation
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(cpuCacheUpdateInterval):
-				// Continue to next iteration
+			case <-ticker.C:
 			}
 		}
 	}
@@ -1708,6 +1706,12 @@ func (c *Controller) DownloadDatabaseBackup(ctx echo.Context) error {
 		}
 		dbPath = c.V2Manager.Path()
 		gormDB = c.V2Manager.DB()
+	}
+
+	// Verify we have a valid database handle before proceeding
+	if gormDB == nil {
+		return c.HandleError(ctx, fmt.Errorf("database handle not available"),
+			"Database connection not initialized", http.StatusServiceUnavailable)
 	}
 
 	// Get source database size for disk space check
