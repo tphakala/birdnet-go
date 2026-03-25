@@ -933,8 +933,9 @@
       "frequencyRange": "Frequency Range",
       "colorMap": "Color Map",
       "gain": "Gain",
-      "mute": "Mute",
-      "unmute": "Unmute",
+      "gainTooltip": "Spektrogrammas vizualizācijas pastiprināšana",
+      "mute": "Izslēgt audio izvadi",
+      "unmute": "Ieslēgt audio izvadi",
       "frequencyRangeMin": "Minimum frequency",
       "frequencyRangeMax": "Maximum frequency"
     },

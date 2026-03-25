@@ -921,8 +921,9 @@
       "frequencyRange": "Frequency Range",
       "colorMap": "Color Map",
       "gain": "Gain",
-      "mute": "Mute",
-      "unmute": "Unmute",
+      "gainTooltip": "Guadagno visualizzazione spettrogramma",
+      "mute": "Disattiva uscita audio",
+      "unmute": "Attiva uscita audio",
       "frequencyRangeMin": "Minimum frequency",
       "frequencyRangeMax": "Maximum frequency"
     },

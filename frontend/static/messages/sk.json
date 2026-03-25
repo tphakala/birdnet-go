@@ -928,8 +928,9 @@
       "frequencyRange": "Frequency Range",
       "colorMap": "Color Map",
       "gain": "Gain",
-      "mute": "Mute",
-      "unmute": "Unmute",
+      "gainTooltip": "Zosilnenie vizualizácie spektrogramu",
+      "mute": "Stlmiť zvukový výstup",
+      "unmute": "Zapnúť zvukový výstup",
       "frequencyRangeMin": "Minimum frequency",
       "frequencyRangeMax": "Maximum frequency"
     },

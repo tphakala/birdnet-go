@@ -198,7 +198,7 @@
         oninput={handleGainChange}
         class={SLIDER_CLASSES}
         aria-describedby="spectrogram-gain-readout"
-        title={t('spectrogram.controls.gain')}
+        title={t('spectrogram.controls.gainTooltip')}
       />
       <span id="spectrogram-gain-readout" class="text-[var(--color-base-content)]/50 tabular-nums"
         >{gainDb} dB</span
