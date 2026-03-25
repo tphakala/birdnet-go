@@ -1546,8 +1546,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 			Settings:          p.Settings,
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
-			processor:         p, // Add processor reference for source name resolution
-			PreRenderer:       p.preRenderer,
+			processor:         p,            // Add processor reference for source name resolution
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
 			Result:            det.Result,   // Domain model (single source of truth)
 			Results:           det.Results,  // Domain model - converted to legacy format at save time
@@ -1624,6 +1623,12 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// - SSE/MQTT receive the correct detection ID for URL construction
 	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
 	//
+	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
+	// separate independent action to prevent slow FFmpeg encoding (especially on
+	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
+	// race where a client requests audio before export completes, using server-side
+	// wait with retries and 503 + Retry-After responses.
+	//
 	// See: https://github.com/tphakala/birdnet-go/issues/1158 (race condition)
 	// See: https://github.com/tphakala/birdnet-go/issues/1748 (detection ID in MQTT)
 	var sequentialActions []Action
@@ -1648,6 +1653,16 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	} else if len(sequentialActions) == 1 {
 		// Only one action enabled, add it directly
 		actions = append(actions, sequentialActions[0])
+	}
+
+	// Add SaveAudioAction if audio export is enabled.
+	// This runs as an INDEPENDENT action (not inside the CompositeAction) so that
+	// slow audio encoding does not block the Database -> SSE -> MQTT pipeline.
+	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
+	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
+	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
+	if p.Settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
+		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx))
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -1692,6 +1707,76 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	}
 
 	return actions
+}
+
+// buildSaveAudioAction creates a SaveAudioAction for the given detection.
+// It reads PCM data from the capture buffer eagerly (while the data is still
+// available) and returns an action that will encode and write the audio file
+// when executed by the job queue. This decouples the slow FFmpeg encoding
+// from the fast Database -> SSE -> MQTT pipeline.
+func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
+	captureLength := p.Settings.Realtime.Audio.Export.Length
+	if !det.Result.EndTime.IsZero() && !det.Result.BeginTime.IsZero() {
+		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+		derivedLength := int(det.Result.EndTime.Sub(det.Result.BeginTime).Seconds()) + preCapture
+		if derivedLength > captureLength {
+			captureLength = derivedLength
+			GetLogger().Info("Using derived capture duration from detection time span",
+				logger.String("detection_id", det.CorrelationID),
+				logger.String("species", det.Result.Species.CommonName),
+				logger.Int("duration_seconds", captureLength),
+				logger.Int("configured_length", p.Settings.Realtime.Audio.Export.Length),
+				logger.String("operation", "extended_capture_audio_export"))
+		}
+	}
+
+	// Cap at capture buffer size to prevent reading beyond buffer bounds.
+	bufferCap := conf.DefaultCaptureBufferSeconds
+	if p.Settings.Realtime.ExtendedCapture.Enabled && p.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		bufferCap = p.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+	}
+	if captureLength > bufferCap {
+		GetLogger().Warn("Capping capture length at buffer size",
+			logger.String("detection_id", det.CorrelationID),
+			logger.Int("requested_seconds", captureLength),
+			logger.Int("buffer_seconds", bufferCap),
+			logger.String("operation", "capture_buffer_cap"))
+		captureLength = bufferCap
+	}
+
+	// Read PCM data from the capture buffer NOW, while the data is still in the
+	// ring buffer. By the time the job queue picks up the SaveAudioAction, the
+	// buffer may have been overwritten with newer audio data.
+	pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(det.Result.AudioSource.ID, det.Result.BeginTime, captureLength)
+	if err != nil {
+		GetLogger().Error("Failed to read capture buffer for audio export",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", det.CorrelationID),
+			logger.Error(err),
+			logger.String("source", det.Result.AudioSource.SafeString),
+			logger.Time("begin_time", det.Result.BeginTime),
+			logger.Int("duration_seconds", captureLength),
+			logger.String("operation", "capture_buffer_read_for_export"))
+		// Return an action with nil pcmData; Execute() will be a no-op
+		return &SaveAudioAction{
+			Settings:      p.Settings,
+			ClipName:      det.Result.ClipName,
+			NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+			PreRenderer:   p.preRenderer,
+			DetectionCtx:  detectionCtx,
+			CorrelationID: det.CorrelationID,
+		}
+	}
+
+	return &SaveAudioAction{
+		Settings:      p.Settings,
+		ClipName:      det.Result.ClipName,
+		pcmData:       pcmData,
+		NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+		PreRenderer:   p.preRenderer,
+		DetectionCtx:  detectionCtx,
+		CorrelationID: det.CorrelationID,
+	}
 }
 
 // GetBwClient safely returns the current BirdWeather client

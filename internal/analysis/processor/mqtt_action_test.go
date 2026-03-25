@@ -488,7 +488,7 @@ func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
 // TestMqttAction_Execute_ClearsClipNameWhenExportFailed verifies that MqttAction
 // clears ClipName in the MQTT payload when audio export did not succeed.
 // This prevents reporting phantom filenames for clips that don't exist (GitHub #107).
-func TestMqttAction_Execute_ClearsClipNameWhenExportFailed(t *testing.T) {
+func TestMqttAction_Execute_IncludesClipNameEvenBeforeExport(t *testing.T) {
 	t.Parallel()
 
 	mockClient := NewMockMQTTClient()
@@ -501,7 +501,9 @@ func TestMqttAction_Execute_ClearsClipNameWhenExportFailed(t *testing.T) {
 	det := testDetection()
 	det.Result.ClipName = "2024/01/parus_major_95p_20240115T120000Z.wav"
 
-	// DetectionContext with ClipSaved=false (default) simulates export failure
+	// DetectionContext with ClipSaved=false (default) - audio export hasn't run yet.
+	// MQTT should still include ClipName because audio export runs independently
+	// and consumers should handle missing files gracefully.
 	detectionCtx := &DetectionContext{}
 	detectionCtx.NoteID.Store(1)
 
@@ -520,8 +522,8 @@ func TestMqttAction_Execute_ClearsClipNameWhenExportFailed(t *testing.T) {
 	err = json.Unmarshal([]byte(mockClient.GetPublishedPayload()), &jsonMap)
 	require.NoError(t, err)
 
-	assert.Empty(t, jsonMap["ClipName"],
-		"ClipName should be empty when audio export failed (GitHub #107)")
+	assert.Equal(t, "2024/01/parus_major_95p_20240115T120000Z.wav", jsonMap["ClipName"],
+		"ClipName should always be included; audio export runs independently")
 }
 
 // TestMqttAction_Execute_PreservesClipNameWhenExportSucceeded verifies that MqttAction

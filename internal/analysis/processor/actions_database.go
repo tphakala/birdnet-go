@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -137,8 +136,6 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	}
 
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
-	// This must happen before audio export so downstream actions get the ID
-	// even if audio export fails.
 	if a.DetectionCtx != nil {
 		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
 	}
@@ -146,110 +143,15 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// After successful save, publish detection event for new species
 	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
-	// Save audio clip to file if enabled.
-	// IMPORTANT: Audio export errors are logged but NOT returned.
-	// This allows downstream actions (SSE, MQTT) to proceed with the detection.
-	// The detection record is valuable even without audio - users integrating with
-	// Home Assistant want the detection event regardless of audio export status.
-	if a.Settings.Realtime.Audio.Export.Enabled {
-		captureLength := a.Settings.Realtime.Audio.Export.Length
-		if !a.Result.EndTime.IsZero() && !a.Result.BeginTime.IsZero() {
-			// Duration = EndTime - BeginTime + PreCapture (audio starts PreCapture seconds before BeginTime)
-			preCapture := a.Settings.Realtime.Audio.Export.PreCapture
-			derivedLength := int(a.Result.EndTime.Sub(a.Result.BeginTime).Seconds()) + preCapture
-			if derivedLength > captureLength {
-				captureLength = derivedLength
-				GetLogger().Info("Using derived capture duration from detection time span",
-					logger.String("detection_id", a.CorrelationID),
-					logger.String("species", a.Result.Species.CommonName),
-					logger.Int("duration_seconds", captureLength),
-					logger.Int("configured_length", a.Settings.Realtime.Audio.Export.Length),
-					logger.String("operation", "extended_capture_audio_export"))
-			}
-		}
-		// Cap at capture buffer size to prevent reading beyond buffer bounds.
-		// Determine actual buffer size: use extended capture buffer if configured,
-		// otherwise fall back to the default capture buffer.
-		bufferCap := conf.DefaultCaptureBufferSeconds
-		if a.Settings.Realtime.ExtendedCapture.Enabled && a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-			bufferCap = a.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
-		}
-		if captureLength > bufferCap {
-			GetLogger().Warn("Capping capture length at buffer size",
-				logger.String("detection_id", a.CorrelationID),
-				logger.Int("requested_seconds", captureLength),
-				logger.Int("buffer_seconds", bufferCap),
-				logger.String("operation", "capture_buffer_cap"))
-			captureLength = bufferCap
-		}
-
-		// debug log note begin, end and capture length
-		GetLogger().Debug("Saving detection audio clip",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.Time("begin_time", a.Result.BeginTime),
-			logger.Time("end_time", a.Result.EndTime),
-			logger.Int("capture_length", captureLength),
-			logger.String("operation", "note_begin_end_capture_length"))
-
-		// handleAudioExportError logs the error.
-		// This helper reduces duplication between buffer read and save failures.
-		handleAudioExportError := func(err error, extraFields ...logger.Field) {
-			fields := make([]logger.Field, 0, 5+len(extraFields))
-			fields = append(fields,
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("operation", "audio_export_non_fatal"),
-			)
-			fields = append(fields, extraFields...)
-			GetLogger().Error("Audio export failed (continuing with detection broadcast)", fields...)
-		}
-
-		// export audio clip from capture buffer
-		pcmData, err := myaudio.ReadSegmentFromCaptureBuffer(a.Result.AudioSource.ID, a.Result.BeginTime, captureLength)
-		if err != nil {
-			handleAudioExportError(err,
-				logger.String("source", a.Result.AudioSource.SafeString),
-				logger.Time("begin_time", a.Result.BeginTime),
-				logger.Int("duration_seconds", captureLength))
-		} else {
-			// Create a SaveAudioAction and execute it
-			saveAudioAction := &SaveAudioAction{
-				Settings:      a.Settings,
-				ClipName:      a.Result.ClipName,
-				pcmData:       pcmData,
-				NoteID:        a.Result.ID,
-				PreRenderer:   a.PreRenderer,
-				CorrelationID: a.CorrelationID,
-			}
-
-			if err := saveAudioAction.Execute(ctx, nil); err != nil {
-				handleAudioExportError(err, logger.String("clip_name", a.Result.ClipName))
-			} else {
-				// Signal downstream actions (MQTT, SSE) that the clip file exists.
-				// Without this flag, downstream actions would report a phantom ClipName
-				// for detections where the export failed (GitHub #107).
-				if a.DetectionCtx != nil {
-					a.DetectionCtx.ClipSaved.Store(true)
-				}
-
-				if a.Settings.Debug {
-					// Add structured logging
-					GetLogger().Debug("Saved audio clip successfully",
-						logger.String("component", "analysis.processor.actions"),
-						logger.String("detection_id", a.CorrelationID),
-						logger.String("species", a.Result.Species.CommonName),
-						logger.String("clip_name", a.Result.ClipName),
-						logger.String("detection_time", a.Result.Time()),
-						logger.Time("begin_time", a.Result.BeginTime),
-						logger.Time("end_time", time.Now()),
-						logger.String("operation", "save_audio_clip_debug"))
-				}
-			}
-		}
-	}
+	// NOTE: Audio export is intentionally NOT performed here.
+	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
+	// that contains Database -> SSE -> MQTT. This prevents slow audio encoding
+	// (e.g., FFmpeg on Raspberry Pi) from blocking SSE/MQTT broadcasts and
+	// causing CompositeAction 30s timeouts (Sentry BIRDNET-GO-WD).
+	//
+	// The media API already handles the race where SSE broadcasts a ClipName
+	// before the audio file is on disk, using waitForAudioFile() with retries
+	// and 503 + Retry-After responses.
 
 	return nil
 }
@@ -380,6 +282,25 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 // Execute saves the audio clip to a file
 func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
+	// If PCM data was not captured (e.g., buffer read failed), skip export.
+	if len(a.pcmData) == 0 {
+		GetLogger().Warn("Skipping audio export: no PCM data available",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("clip_name", a.ClipName),
+			logger.String("operation", "audio_export_skip"))
+		return nil
+	}
+
+	// Resolve NoteID from DetectionContext if available (set by DatabaseAction).
+	// The NoteID field may be 0 at construction time because the action is built
+	// before the database save runs. DetectionContext provides the live value.
+	if a.DetectionCtx != nil {
+		if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
+			a.NoteID = liveID
+		}
+	}
+
 	// Get the full path by joining the export path with the relative clip name
 	outputPath := filepath.Join(a.Settings.Realtime.Audio.Export.Path, a.ClipName)
 
@@ -423,6 +344,12 @@ func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
 		logger.Int64("file_size_bytes", fileSize),
 		logger.String("format", a.Settings.Realtime.Audio.Export.Type),
 		logger.String("operation", "audio_export_success"))
+
+	// Signal that the clip file exists on disk. This is used by any late
+	// consumers that check whether the audio was actually exported.
+	if a.DetectionCtx != nil {
+		a.DetectionCtx.ClipSaved.Store(true)
+	}
 
 	// Submit for pre-rendering if enabled
 	if a.Settings.Realtime.Dashboard.Spectrogram.Enabled && a.PreRenderer != nil {
