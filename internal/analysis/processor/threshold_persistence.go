@@ -374,10 +374,13 @@ func (p *Processor) startThresholdCleanup() {
 // via the settings UI. It is safe to call multiple times; if goroutines are already
 // running (thresholdsCancel is non-nil), the call is a no-op.
 func (p *Processor) StartDynamicThresholds() {
-	// Guard against double-start: if context is already active, do nothing
+	// Guard against double-start under lock to prevent race between concurrent callers.
+	p.thresholdsMutex.Lock()
 	if p.thresholdsCancel != nil {
+		p.thresholdsMutex.Unlock()
 		return
 	}
+	p.thresholdsMutex.Unlock()
 
 	if err := p.loadDynamicThresholdsFromDB(); err != nil {
 		GetLogger().Debug("Starting with fresh dynamic thresholds",
@@ -397,14 +400,8 @@ func (p *Processor) StartDynamicThresholds() {
 // This is called when dynamic thresholds are disabled at runtime via the settings UI.
 // It is safe to call when goroutines are not running.
 func (p *Processor) StopDynamicThresholds() {
-	// Cancel persistence and cleanup goroutines
-	if p.thresholdsCancel != nil {
-		p.thresholdsCancel()
-		p.thresholdsCancel = nil
-		p.thresholdsCtx = nil
-	}
-
-	// Flush any remaining thresholds to DB before clearing
+	// Flush thresholds to DB BEFORE cancelling the context, because
+	// persistDynamicThresholds → saveThresholdsWithRetry reads p.thresholdsCtx.
 	if p.Ds != nil {
 		if err := p.persistDynamicThresholds(); err != nil {
 			GetLogger().Warn("Failed to flush dynamic thresholds during disable",
@@ -413,8 +410,15 @@ func (p *Processor) StopDynamicThresholds() {
 		}
 	}
 
-	// Clear in-memory thresholds
+	// Cancel persistence and cleanup goroutines after flush completes.
+	// Protected by thresholdsMutex to prevent races with StartDynamicThresholds.
 	p.thresholdsMutex.Lock()
+	if p.thresholdsCancel != nil {
+		p.thresholdsCancel()
+		p.thresholdsCancel = nil
+		p.thresholdsCtx = nil
+	}
+	// Clear in-memory thresholds while still holding the lock
 	p.DynamicThresholds = make(map[string]*DynamicThreshold)
 	p.thresholdsMutex.Unlock()
 
