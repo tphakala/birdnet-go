@@ -91,7 +91,7 @@ const (
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
-	hlsListSize    = 3 // Number of HLS segments to keep in playlist
+	hlsListSize    = 6 // Number of HLS segments to keep in playlist (must exceed HLS.js liveSyncDurationCount)
 	hlsAllowCache  = 1 // Allow client-side caching of HLS segments
 	hlsStartNumber = 0 // Starting sequence number for HLS segments
 )
@@ -1341,12 +1341,13 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 		"-f", "hls",
 		"-hls_time", fmt.Sprintf("%d", segmentLength),
 		"-hls_list_size", strconv.Itoa(hlsListSize),
-		"-hls_flags", "delete_segments+temp_file+program_date_time",
+		"-hls_flags", "delete_segments+temp_file+program_date_time+independent_segments",
 		"-hls_segment_type", "fmp4",
 		"-hls_fmp4_init_filename", "init.mp4",
 		"-hls_init_time", fmt.Sprintf("%d", segmentLength),
 		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
 		"-movflags", "empty_moov+separate_moof+default_base_moof",
+		"-flush_packets", "1",
 		"-start_number", strconv.Itoa(hlsStartNumber),
 		"-loglevel", logLevel,
 		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d.m4s")),

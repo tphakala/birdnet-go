@@ -33,6 +33,13 @@ func (p *Processor) getTaxonomyDB() *birdnet.TaxonomyDatabase {
 	return p.taxonomyDB
 }
 
+// RebuildExtendedCaptureFilter re-resolves the extended capture species filter
+// from the current settings. This is called by the control monitor when
+// ExtendedCapture settings (Enabled, Species, MaxDuration) change at runtime.
+func (p *Processor) RebuildExtendedCaptureFilter() {
+	p.initExtendedCapture()
+}
+
 // initExtendedCapture resolves the extended capture species filter at startup.
 // Called from Processor.New(). Safe to re-call on settings refresh.
 func (p *Processor) initExtendedCapture() {

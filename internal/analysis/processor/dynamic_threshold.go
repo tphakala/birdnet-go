@@ -312,8 +312,12 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
 	p.thresholdsMutex.Lock()
 
-	// Remove from in-memory map
+	// Remove from in-memory map and mark as pending reset so the periodic
+	// persistence goroutine won't re-insert a stale snapshot into the database.
 	delete(p.DynamicThresholds, speciesName)
+	if p.pendingResets != nil {
+		p.pendingResets[speciesName] = struct{}{}
+	}
 	p.thresholdsMutex.Unlock()
 
 	// Delete from database
@@ -346,8 +350,14 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	// Count in-memory thresholds
 	count := int64(len(p.DynamicThresholds))
 
-	// Clear all in-memory thresholds (no need to record reset events since history is cleared)
+	// Clear all in-memory thresholds and set pendingResetAll so the periodic
+	// persistence goroutine won't re-insert a stale snapshot into the database.
+	// Also clear individual pending resets since pendingResetAll supersedes them.
 	p.DynamicThresholds = make(map[string]*DynamicThreshold)
+	p.pendingResetAll = true
+	if p.pendingResets != nil {
+		p.pendingResets = make(map[string]struct{})
+	}
 	p.thresholdsMutex.Unlock()
 
 	// Delete all from database

@@ -40,14 +40,16 @@ const (
 	MsgSettingsReconfiguringSpeciesTracking   = "notifications.content.settings.reconfiguringSpeciesTracking"
 	MsgSettingsReconfiguringPushNotifications = "notifications.content.settings.reconfiguringPushNotifications"
 	MsgSettingsRecalculatingThresholds        = "notifications.content.settings.recalculatingThresholds"
+	MsgSettingsReconfiguringDynamicThresholds = "notifications.content.settings.reconfiguringDynamicThresholds"
 	MsgSettingsWebserverRestart               = "notifications.content.settings.webserverRestartRequired"
 
 	// Audio settings toasts
-	MsgSettingsReconfiguringSoundLevel = "notifications.content.settings.reconfiguringSoundLevel"
-	MsgSettingsAudioDeviceRestart      = "notifications.content.settings.audioDeviceRestartRequired"
-	MsgSettingsExtendedCaptureRestart  = "notifications.content.settings.extendedCaptureRestartRequired"
-	MsgSettingsEqualizerFailed         = "notifications.content.settings.equalizerUpdateFailed"
-	MsgSettingsEqualizerUpdated        = "notifications.content.settings.equalizerUpdated"
+	MsgSettingsReconfiguringSoundLevel   = "notifications.content.settings.reconfiguringSoundLevel"
+	MsgSettingsAudioDeviceRestart        = "notifications.content.settings.audioDeviceRestartRequired"
+	MsgSettingsRebuildingExtendedCapture = "notifications.content.settings.rebuildingExtendedCapture"
+	MsgSettingsExtendedCaptureRestart    = "notifications.content.settings.extendedCaptureRestartRequired"
+	MsgSettingsEqualizerFailed           = "notifications.content.settings.equalizerUpdateFailed"
+	MsgSettingsEqualizerUpdated          = "notifications.content.settings.equalizerUpdated"
 
 	// Database migration notifications
 	MsgMigrationStartedTitle     = "notifications.content.migration.startedTitle"

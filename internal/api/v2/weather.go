@@ -101,8 +101,8 @@ func (c *Controller) initWeatherRoutes() {
 func (c *Controller) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) DailyWeatherResponse {
 	return DailyWeatherResponse{
 		Date:     dailyEvents.Date,
-		Sunrise:  time.Unix(dailyEvents.Sunrise, 0).UTC(),
-		Sunset:   time.Unix(dailyEvents.Sunset, 0).UTC(),
+		Sunrise:  time.Unix(dailyEvents.Sunrise, 0).In(time.Local),
+		Sunset:   time.Unix(dailyEvents.Sunset, 0).In(time.Local),
 		Country:  dailyEvents.Country,
 		CityName: dailyEvents.CityName,
 	}

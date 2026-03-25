@@ -103,6 +103,7 @@ type Service struct {
 	db           datastore.Interface
 	settings     *conf.Settings
 	metrics      *metrics.WeatherMetrics
+	sunCalc      *suncalc.SunCalc
 	startupDelay time.Duration
 	backoff      backoffState
 }
@@ -172,6 +173,7 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 		db:           db,
 		settings:     settings,
 		metrics:      weatherMetrics,
+		sunCalc:      suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude),
 		startupDelay: DefaultStartupDelay,
 	}, nil
 }
@@ -200,6 +202,19 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 		Date:     localDate,
 		Country:  data.Location.Country,
 		CityName: data.Location.City,
+	}
+
+	// Populate sunrise/sunset from suncalc so that daily weather responses
+	// include correct local-timezone sun times.
+	if s.sunCalc != nil {
+		if sunTimes, sunErr := s.sunCalc.GetSunEventTimes(data.Time); sunErr == nil {
+			dailyEvents.Sunrise = sunTimes.Sunrise.Unix()
+			dailyEvents.Sunset = sunTimes.Sunset.Unix()
+		} else {
+			getLogger().Warn("Failed to calculate sun times for daily events",
+				logger.Error(sunErr),
+				logger.String("date", localDate))
+		}
 	}
 
 	// Compute moon phase for this date (location-independent, pure math)

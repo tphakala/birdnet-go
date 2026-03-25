@@ -220,12 +220,21 @@ func (p *Processor) persistDynamicThresholds() error {
 	p.cleanupExpiredThresholds(expiredSpecies)
 
 	if len(dbThresholds) == 0 {
+		// Even when there are no thresholds to persist, drain pending resets
+		// to clean up species that were deleted between persistence cycles.
+		p.drainPendingResets()
 		return nil
 	}
 
 	if err := p.saveThresholdsWithRetry(dbThresholds); err != nil {
 		return err
 	}
+
+	// After the batch save, drain pending resets. If a species was deleted
+	// between the snapshot (convertThresholdsForPersistence) and the write
+	// (saveThresholdsWithRetry), the batch upsert may have re-inserted it.
+	// Draining pending resets re-deletes those species from the database.
+	p.drainPendingResets()
 
 	if p.Settings.Realtime.DynamicThreshold.Debug {
 		GetLogger().Debug("Persisted dynamic thresholds to database",
@@ -234,6 +243,58 @@ func (p *Processor) persistDynamicThresholds() error {
 	}
 
 	return nil
+}
+
+// drainPendingResets processes any species that were reset (deleted) while a
+// persistence cycle was in progress. Because the periodic batch upsert could
+// re-insert a stale snapshot of a deleted species, this method re-deletes them
+// from the database after the batch write completes.
+func (p *Processor) drainPendingResets() {
+	p.thresholdsMutex.Lock()
+	resets := p.pendingResets
+	resetAll := p.pendingResetAll
+	// Reset the pending state. Use nil-safe initialization since tests may
+	// create Processor structs without initializing pendingResets.
+	if p.pendingResets != nil {
+		p.pendingResets = make(map[string]struct{})
+	}
+	p.pendingResetAll = false
+	p.thresholdsMutex.Unlock()
+
+	if p.Ds == nil || (len(resets) == 0 && !resetAll) {
+		return
+	}
+
+	log := GetLogger()
+
+	if resetAll {
+		if _, err := p.Ds.DeleteAllDynamicThresholds(); err != nil {
+			log.Warn("failed to re-delete all dynamic thresholds after persistence",
+				logger.Error(err),
+				logger.String("operation", "drain_pending_resets"))
+		}
+		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
+			log.Warn("failed to re-delete all threshold events after persistence",
+				logger.Error(err),
+				logger.String("operation", "drain_pending_resets"))
+		}
+		return
+	}
+
+	for speciesName := range resets {
+		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
+			log.Warn("failed to re-delete dynamic threshold after persistence",
+				logger.String("species", speciesName),
+				logger.Error(err),
+				logger.String("operation", "drain_pending_resets"))
+		}
+		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
+			log.Warn("failed to re-delete threshold events after persistence",
+				logger.String("species", speciesName),
+				logger.Error(err),
+				logger.String("operation", "drain_pending_resets"))
+		}
+	}
 }
 
 // startThresholdPersistence starts a goroutine that periodically persists dynamic thresholds
@@ -306,6 +367,66 @@ func (p *Processor) startThresholdCleanup() {
 			}
 		}
 	}()
+}
+
+// StartDynamicThresholds loads thresholds from the database and starts the persistence
+// and cleanup goroutines. This is called when dynamic thresholds are enabled at runtime
+// via the settings UI. It is safe to call multiple times; if goroutines are already
+// running (thresholdsCancel is non-nil), the call is a no-op.
+func (p *Processor) StartDynamicThresholds() {
+	// Guard against double-start under lock to prevent race between concurrent callers.
+	p.thresholdsMutex.Lock()
+	if p.thresholdsCancel != nil {
+		p.thresholdsMutex.Unlock()
+		return
+	}
+	p.thresholdsMutex.Unlock()
+
+	if err := p.loadDynamicThresholdsFromDB(); err != nil {
+		GetLogger().Debug("Starting with fresh dynamic thresholds",
+			logger.String("reason", err.Error()),
+			logger.String("operation", "start_dynamic_thresholds"))
+	}
+
+	p.startThresholdPersistence()
+	p.startThresholdCleanup()
+
+	GetLogger().Info("Dynamic threshold goroutines started",
+		logger.String("operation", "start_dynamic_thresholds"))
+}
+
+// StopDynamicThresholds stops the persistence and cleanup goroutines, flushes any
+// in-memory thresholds to the database, and clears the in-memory threshold map.
+// This is called when dynamic thresholds are disabled at runtime via the settings UI.
+// It is safe to call when goroutines are not running.
+func (p *Processor) StopDynamicThresholds() {
+	// Flush thresholds to DB BEFORE cancelling the context, because
+	// persistDynamicThresholds → saveThresholdsWithRetry reads p.thresholdsCtx.
+	// Guard against nil thresholdsCtx: if goroutines were never started (e.g.,
+	// feature toggled off before it was ever on), thresholdsCtx is nil and
+	// saveThresholdsWithRetry would panic on thresholdsCtx.Done().
+	if p.Ds != nil && p.thresholdsCtx != nil {
+		if err := p.persistDynamicThresholds(); err != nil {
+			GetLogger().Warn("Failed to flush dynamic thresholds during disable",
+				logger.Error(err),
+				logger.String("operation", "stop_dynamic_thresholds"))
+		}
+	}
+
+	// Cancel persistence and cleanup goroutines after flush completes.
+	// Protected by thresholdsMutex to prevent races with StartDynamicThresholds.
+	p.thresholdsMutex.Lock()
+	if p.thresholdsCancel != nil {
+		p.thresholdsCancel()
+		p.thresholdsCancel = nil
+		p.thresholdsCtx = nil
+	}
+	// Clear in-memory thresholds while still holding the lock
+	p.DynamicThresholds = make(map[string]*DynamicThreshold)
+	p.thresholdsMutex.Unlock()
+
+	GetLogger().Info("Dynamic threshold goroutines stopped and thresholds cleared",
+		logger.String("operation", "stop_dynamic_thresholds"))
 }
 
 // FlushDynamicThresholds immediately persists all dynamic thresholds to the database

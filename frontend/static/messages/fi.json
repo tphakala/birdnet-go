@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
         "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
+        "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
         "webserverRestartRequired": "Verkkopalvelimen asetukset muuttuivat. Uudelleenkäynnistys vaaditaan.",
         "reconfiguringSoundLevel": "Päivitetään äänitason seurantaa...",
         "audioDeviceRestartRequired": "Äänilaite vaihdettu. Uudelleenkäynnistys vaaditaan.",
+        "rebuildingExtendedCapture": "Rakennetaan laajennetun tallennuksen suodatinta uudelleen...",
         "extendedCaptureRestartRequired": "Laajennetun tallennuksen asetukset muuttuneet. Uudelleenkäynnistys vaaditaan.",
         "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
         "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
@@ -511,6 +513,15 @@
       "unverified": "Todentamaton",
       "locked": "Lukittu",
       "unlocked": "Avoin"
+    },
+    "review": {
+      "review": "Tarkista",
+      "reviewDetection": "Tarkista havainto: {species}",
+      "markCorrect": "Merkitse oikeaksi",
+      "markFalsePositive": "Merkitse virheelliseksi",
+      "markedCorrect": "Havainto merkitty oikeaksi",
+      "markedFalsePositive": "Havainto merkitty virheelliseksi",
+      "failed": "Todennustilan päivitys epäonnistui"
     },
     "detailsPanel": {
       "audioPlayer": "Äänisoitin",

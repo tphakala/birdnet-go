@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Soortentracering wordt bijgewerkt...",
         "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
+        "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
         "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",
+        "rebuildingExtendedCapture": "Filter voor uitgebreide opname wordt opnieuw opgebouwd...",
         "extendedCaptureRestartRequired": "Instellingen voor uitgebreide opname gewijzigd. Herstart vereist.",
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
         "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
@@ -511,6 +513,15 @@
       "unverified": "Niet beoordeeld",
       "locked": "Vergrendeld",
       "unlocked": "Ontgrendeld"
+    },
+    "review": {
+      "review": "Beoordelen",
+      "reviewDetection": "Detectie beoordelen voor {species}",
+      "markCorrect": "Markeer als juist",
+      "markFalsePositive": "Markeer als fout-positief",
+      "markedCorrect": "Detectie gemarkeerd als juist",
+      "markedFalsePositive": "Detectie gemarkeerd als fout-positief",
+      "failed": "Verificatiestatus bijwerken mislukt"
     },
     "detailsPanel": {
       "audioPlayer": "Geluid opname",

@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Opdaterer artssporing...",
         "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
+        "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
         "audioDeviceRestartRequired": "Lydenhed ændret. Genstart påkrævet.",
+        "rebuildingExtendedCapture": "Genopbygger udvidet optagelsesfilter...",
         "extendedCaptureRestartRequired": "Udvidede optagelsesindstillinger ændret. Genstart påkrævet.",
         "equalizerUpdateFailed": "Kunne ikke opdatere lyd-equalizerindstillinger",
         "equalizerUpdated": "Lyd-equalizerindstillinger opdateret",
@@ -511,6 +513,15 @@
       "unverified": "Ubekræftet",
       "locked": "Låst",
       "unlocked": "Ulåst"
+    },
+    "review": {
+      "review": "Gennemgå",
+      "reviewDetection": "Gennemgå detektion af {species}",
+      "markCorrect": "Markér som korrekt",
+      "markFalsePositive": "Markér som falsk positiv",
+      "markedCorrect": "Detektion markeret som korrekt",
+      "markedFalsePositive": "Detektion markeret som falsk positiv",
+      "failed": "Kunne ikke opdatere bekræftelsesstatus"
     },
     "detailsPanel": {
       "audioPlayer": "Lydafspiller",

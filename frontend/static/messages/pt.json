@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "A atualizar monitorização de espécies...",
         "recalculatingThresholds": "Recalculando limiares dinâmicos para novo valor base",
+        "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
         "audioDeviceRestartRequired": "Dispositivo de áudio alterado. Reinício necessário.",
+        "rebuildingExtendedCapture": "A reconstruir filtro de captura estendida...",
         "extendedCaptureRestartRequired": "Definições de captura estendida alteradas. Reinício necessário.",
         "equalizerUpdateFailed": "Falha ao atualizar definições do equalizador de áudio",
         "equalizerUpdated": "Definições do equalizador de áudio atualizadas",
@@ -511,6 +513,15 @@
       "unverified": "Não verificado",
       "locked": "Bloqueado",
       "unlocked": "Desbloqueado"
+    },
+    "review": {
+      "review": "Revisar",
+      "reviewDetection": "Revisar deteção de {species}",
+      "markCorrect": "Marcar como correta",
+      "markFalsePositive": "Marcar como falso positivo",
+      "markedCorrect": "Deteção marcada como correta",
+      "markedFalsePositive": "Deteção marcada como falso positivo",
+      "failed": "Falha ao atualizar o estado de verificação"
     },
     "detailsPanel": {
       "audioPlayer": "Reprodutor de áudio",

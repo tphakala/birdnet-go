@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
         "recalculatingThresholds": "Prepočítavanie dynamických prahov pre novú základnú hodnotu",
+        "reconfiguringDynamicThresholds": "Prekonfigurovanie dynamických prahov...",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
         "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
+        "rebuildingExtendedCapture": "Prestavba filtra rozšíreného nahrávania...",
         "extendedCaptureRestartRequired": "Nastavenia rozšíreného nahrávania zmenené. Vyžaduje sa reštart.",
         "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
         "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
@@ -511,6 +513,15 @@
       "unverified": "Neoverené",
       "locked": "Uzamknuté",
       "unlocked": "Odomknuté"
+    },
+    "review": {
+      "review": "Overiť",
+      "reviewDetection": "Overiť detekciu {species}",
+      "markCorrect": "Označiť ako správne",
+      "markFalsePositive": "Označiť ako falošný poplach",
+      "markedCorrect": "Detekcia označená ako správna",
+      "markedFalsePositive": "Detekcia označená ako falošný poplach",
+      "failed": "Nepodarilo sa aktualizovať stav overenia"
     },
     "detailsPanel": {
       "audioPlayer": "Prehrávač zvuku",

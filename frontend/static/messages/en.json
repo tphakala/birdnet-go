@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Updating species tracking...",
         "recalculatingThresholds": "Recalculating dynamic thresholds for new base value",
+        "reconfiguringDynamicThresholds": "Reconfiguring dynamic thresholds...",
         "webserverRestartRequired": "Web server settings changed. Restart required.",
         "reconfiguringSoundLevel": "Updating sound level monitoring...",
         "audioDeviceRestartRequired": "Audio device changed. Restart required.",
+        "rebuildingExtendedCapture": "Rebuilding extended capture filter...",
         "extendedCaptureRestartRequired": "Extended capture settings changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
         "equalizerUpdated": "Audio equalizer settings updated",
@@ -511,6 +513,15 @@
       "unverified": "Unverified",
       "locked": "Locked",
       "unlocked": "Unlocked"
+    },
+    "review": {
+      "review": "Review",
+      "reviewDetection": "Review detection for {species}",
+      "markCorrect": "Mark as correct",
+      "markFalsePositive": "Mark as false positive",
+      "markedCorrect": "Detection marked as correct",
+      "markedFalsePositive": "Detection marked as false positive",
+      "failed": "Failed to update verification status"
     },
     "detailsPanel": {
       "audioPlayer": "Audio Player",

@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Atjaunina sugu izsekošanu...",
         "recalculatingThresholds": "Pārrēķina dinamiskos sliekšņus jaunai bāzes vērtībai",
+        "reconfiguringDynamicThresholds": "Pārkonfigurē dinamiskos sliekšņus...",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
         "audioDeviceRestartRequired": "Audio ierīce mainīta. Nepieciešama restartēšana.",
+        "rebuildingExtendedCapture": "Pārbūvē paplašinātās ierakstīšanas filtru...",
         "extendedCaptureRestartRequired": "Paplašinātās ierakstīšanas iestatījumi mainīti. Nepieciešama restartēšana.",
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",
         "equalizerUpdated": "Audio ekvalaizera iestatījumi atjaunināti",
@@ -511,6 +513,15 @@
       "unverified": "Neverificēts",
       "locked": "Bloķēts",
       "unlocked": "Atbloķēts"
+    },
+    "review": {
+      "review": "Pārskatīt",
+      "reviewDetection": "Pārskatīt {species} noteikšanu",
+      "markCorrect": "Atzīmēt kā pareizu",
+      "markFalsePositive": "Atzīmēt kā kļūdainu",
+      "markedCorrect": "Noteikšana atzīmēta kā pareiza",
+      "markedFalsePositive": "Noteikšana atzīmēta kā kļūdaina",
+      "failed": "Neizdevās atjaunināt verifikācijas statusu"
     },
     "detailsPanel": {
       "audioPlayer": "Audio atskaņotājs",

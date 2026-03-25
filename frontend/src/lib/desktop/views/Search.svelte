@@ -8,21 +8,25 @@
   import { getLocale, t } from '$lib/i18n';
   import { dashboardSettings } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
-  import { api } from '$lib/utils/api';
+  import { api, fetchWithCSRF } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import type { TemperatureUnit } from '$lib/utils/formatters';
   import {
     ArrowDownUp,
+    Check,
     ChevronDown,
     Eye,
     FrownIcon,
     Music,
     Search,
+    SquarePen,
     Volume2,
+    X,
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { isAuthenticated } from '$lib/utils/auth';
+  import { loggers } from '$lib/utils/logger';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -65,6 +69,84 @@
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
   let clipExtractionEnabled = $derived($isAuthenticated);
+  let canReview = $derived($isAuthenticated);
+
+  const logger = loggers.ui;
+
+  // Review state for inline quick-review dropdown
+  let reviewOpenForId = $state<string | null>(null);
+
+  /**
+   * Toggle the quick-review dropdown for a search result.
+   */
+  function toggleReviewMenu(resultId: string) {
+    reviewOpenForId = reviewOpenForId === resultId ? null : resultId;
+  }
+
+  /**
+   * Close the review dropdown.
+   */
+  function closeReviewMenu() {
+    reviewOpenForId = null;
+  }
+
+  // Close review dropdown when clicking outside
+  $effect(() => {
+    if (reviewOpenForId !== null) {
+      function handleClickOutside() {
+        closeReviewMenu();
+      }
+      // Use setTimeout to avoid the click that opened the menu from immediately closing it
+      const timeoutId = setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+      }, 0);
+      return () => {
+        clearTimeout(timeoutId);
+        document.removeEventListener('click', handleClickOutside);
+      };
+    }
+  });
+
+  /**
+   * Submit a verification status change for a search result.
+   * Updates the local results array on success so the UI reflects the change immediately.
+   */
+  async function submitVerification(
+    resultId: string,
+    status: 'correct' | 'false_positive'
+  ): Promise<void> {
+    closeReviewMenu();
+    try {
+      await fetchWithCSRF(`/api/v2/detections/${resultId}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified: status }),
+      });
+
+      // Update the local results array so the status badge reflects the change.
+      // If a verification filter is active (not 'any'), remove the item from results
+      // since it no longer matches the active filter, and adjust the total count.
+      const idx = results.findIndex(r => r.id === resultId);
+      if (idx !== -1) {
+        if (verifiedStatus !== 'any') {
+          results.splice(idx, 1);
+          totalResults = Math.max(0, totalResults - 1);
+        } else {
+          // eslint-disable-next-line security/detect-object-injection -- idx is validated from findIndex
+          results[idx].verified = status;
+        }
+      }
+
+      toastActions.success(
+        status === 'correct'
+          ? t('search.review.markedCorrect')
+          : t('search.review.markedFalsePositive')
+      );
+    } catch (error) {
+      toastActions.error(t('search.review.failed'));
+      logger.error('Error updating verification status:', error);
+    }
+  }
 
   // Component state
   let speciesSearchTerm = $state('');
@@ -785,6 +867,49 @@
                   </td>
                   <td>
                     <div class="flex gap-1">
+                      {#if canReview}
+                        <div class="relative">
+                          <button
+                            class="btn btn-xs btn-square"
+                            onclick={e => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              toggleReviewMenu(result.id);
+                            }}
+                            aria-label={t('search.review.reviewDetection', {
+                              species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                            })}
+                            aria-haspopup="true"
+                            aria-expanded={reviewOpenForId === result.id}
+                          >
+                            <SquarePen class="size-4" />
+                          </button>
+                          {#if reviewOpenForId === result.id}
+                            <div class="review-dropdown">
+                              <button
+                                class="review-dropdown-item correct"
+                                onclick={e => {
+                                  e.stopPropagation();
+                                  submitVerification(result.id, 'correct');
+                                }}
+                              >
+                                <Check class="size-4" />
+                                <span>{t('search.review.markCorrect')}</span>
+                              </button>
+                              <button
+                                class="review-dropdown-item false-positive"
+                                onclick={e => {
+                                  e.stopPropagation();
+                                  submitVerification(result.id, 'false_positive');
+                                }}
+                              >
+                                <X class="size-4" />
+                                <span>{t('search.review.markFalsePositive')}</span>
+                              </button>
+                            </div>
+                          {/if}
+                        </div>
+                      {/if}
                       <button
                         class="btn btn-xs btn-square"
                         onclick={e => {
@@ -996,7 +1121,50 @@
                   </div>
 
                   <!-- Actions -->
-                  <div class="mt-2 flex items-center gap-2">
+                  <div class="mt-2 flex items-center gap-2 flex-wrap">
+                    {#if canReview}
+                      <div class="relative">
+                        <button
+                          class="btn btn-outline btn-sm"
+                          onclick={e => {
+                            e.stopPropagation();
+                            toggleReviewMenu(result.id);
+                          }}
+                          aria-label={t('search.review.reviewDetection', {
+                            species: result.commonName || t('search.detailsPanel.unknownSpecies'),
+                          })}
+                          aria-haspopup="true"
+                          aria-expanded={reviewOpenForId === result.id}
+                        >
+                          <SquarePen class="size-4" />
+                          {t('search.review.review')}
+                        </button>
+                        {#if reviewOpenForId === result.id}
+                          <div class="review-dropdown">
+                            <button
+                              class="review-dropdown-item correct"
+                              onclick={e => {
+                                e.stopPropagation();
+                                submitVerification(result.id, 'correct');
+                              }}
+                            >
+                              <Check class="size-4" />
+                              <span>{t('search.review.markCorrect')}</span>
+                            </button>
+                            <button
+                              class="review-dropdown-item false-positive"
+                              onclick={e => {
+                                e.stopPropagation();
+                                submitVerification(result.id, 'false_positive');
+                              }}
+                            >
+                              <X class="size-4" />
+                              <span>{t('search.review.markFalsePositive')}</span>
+                            </button>
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
                     <button
                       class="btn btn-primary btn-sm"
                       onclick={() => openMobilePlayer(result)}
@@ -1187,6 +1355,61 @@
   @media (min-width: 768px) {
     .search-date-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Review dropdown menu */
+  .review-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    margin-top: 0.25rem;
+    min-width: 12rem;
+    padding: 0.25rem;
+    background-color: var(--color-base-100);
+    border: 1px solid var(--color-base-300);
+    border-radius: 0.5rem;
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+    z-index: 50;
+    animation: reviewFadeIn 0.15s ease-out;
+  }
+
+  .review-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    text-align: left;
+    color: var(--color-base-content);
+    transition: background-color 0.1s ease;
+  }
+
+  .review-dropdown-item:hover {
+    background-color: var(--color-base-200);
+  }
+
+  .review-dropdown-item.correct:hover {
+    background-color: color-mix(in srgb, var(--color-success) 15%, transparent);
+    color: var(--color-success);
+  }
+
+  .review-dropdown-item.false-positive:hover {
+    background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
+    color: var(--color-error);
+  }
+
+  @keyframes reviewFadeIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+
+    to {
+      opacity: 1;
+      transform: scale(1);
     }
   }
 </style>

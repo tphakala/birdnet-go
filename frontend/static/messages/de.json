@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Artenverfolgung wird aktualisiert...",
         "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
+        "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
         "audioDeviceRestartRequired": "Audiogerät geändert. Neustart erforderlich.",
+        "rebuildingExtendedCapture": "Erweiterter Aufnahmefilter wird neu aufgebaut...",
         "extendedCaptureRestartRequired": "Erweiterte Aufnahmeeinstellungen geändert. Neustart erforderlich.",
         "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
         "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
@@ -511,6 +513,15 @@
       "unverified": "Unverifiziert",
       "locked": "Gesperrt",
       "unlocked": "Entsperrt"
+    },
+    "review": {
+      "review": "Überprüfen",
+      "reviewDetection": "Erkennung für {species} überprüfen",
+      "markCorrect": "Als korrekt markieren",
+      "markFalsePositive": "Als Fehlalarm markieren",
+      "markedCorrect": "Erkennung als korrekt markiert",
+      "markedFalsePositive": "Erkennung als Fehlalarm markiert",
+      "failed": "Verifizierungsstatus konnte nicht aktualisiert werden"
     },
     "detailsPanel": {
       "audioPlayer": "Audio-Player",

@@ -77,7 +77,9 @@ type Processor struct {
 	LastHumanDetection  map[string]time.Time    // keep track of human vocal per audio source
 	Metrics             *observability.Metrics
 	DynamicThresholds   map[string]*DynamicThreshold
-	thresholdsMutex     sync.RWMutex // Mutex to protect access to DynamicThresholds
+	thresholdsMutex     sync.RWMutex        // Mutex to protect access to DynamicThresholds
+	pendingResets       map[string]struct{} // Species names pending reset, protected by thresholdsMutex
+	pendingResetAll     bool                // True if a full reset is pending, protected by thresholdsMutex
 	pendingDetections   map[string]PendingDetection
 	pendingMutex        sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
 	lastDogDetectionLog map[string]time.Time
@@ -408,6 +410,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, m
 		LastDogDetection:    make(map[string]time.Time),
 		LastHumanDetection:  make(map[string]time.Time),
 		DynamicThresholds:   make(map[string]*DynamicThreshold),
+		pendingResets:       make(map[string]struct{}),
 		pendingDetections:   make(map[string]PendingDetection),
 		lastDogDetectionLog: make(map[string]time.Time),
 		controlChan:         make(chan string, 10),  // Buffered channel to prevent blocking
@@ -753,6 +756,21 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 		return true, 0 // Filter out human detections for privacy
 	}
 
+	// Check species exclusion filter (ignore list).
+	// This is the authoritative per-detection check. The range filter also excludes these
+	// species when building the included list, but that only works when the range filter
+	// model is active and location is configured. This check ensures excluded species are
+	// always filtered regardless of range filter state.
+	if isSpeciesExcluded(commonName, scientificName, p.Settings.Realtime.Species.Exclude) {
+		if p.Settings.Debug {
+			GetLogger().Debug("Detection filtered: species is on exclude list",
+				logger.String("species", result.Species),
+				logger.Float32("confidence", result.Confidence),
+				logger.String("operation", "species_exclusion_filter"))
+		}
+		return true, 0
+	}
+
 	// Determine confidence threshold
 	if p.Settings.Realtime.DynamicThreshold.Enabled {
 		// Check if this species has a custom user-configured threshold (> 0)
@@ -790,6 +808,18 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	}
 
 	return false, confidenceThreshold
+}
+
+// isSpeciesExcluded checks if a species (by common or scientific name) matches any entry
+// in the exclude list. Matching is case-insensitive and supports either name form, consistent
+// with the range filter's matchesSpecies logic (see birdnet/range_filter.go).
+func isSpeciesExcluded(commonName, scientificName string, excludeList []string) bool {
+	for _, excluded := range excludeList {
+		if strings.EqualFold(commonName, excluded) || strings.EqualFold(scientificName, excluded) {
+			return true
+		}
+	}
+	return false
 }
 
 // createDetection creates a detection object with all necessary information

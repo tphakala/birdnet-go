@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Aktualizacja śledzenia gatunków...",
         "recalculatingThresholds": "Przeliczanie progów dynamicznych dla nowej wartości bazowej",
+        "reconfiguringDynamicThresholds": "Ponowna konfiguracja progów dynamicznych...",
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
         "audioDeviceRestartRequired": "Zmieniono urządzenie audio. Wymagany restart.",
+        "rebuildingExtendedCapture": "Przebudowa filtru rozszerzonego nagrywania...",
         "extendedCaptureRestartRequired": "Zmieniono ustawienia rozszerzonego nagrywania. Wymagany restart.",
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
@@ -511,6 +513,15 @@
       "unverified": "Niezweryfikowane",
       "locked": "Zablokowane",
       "unlocked": "Odblokowane"
+    },
+    "review": {
+      "review": "Oceń",
+      "reviewDetection": "Oceń detekcję {species}",
+      "markCorrect": "Oznacz jako poprawne",
+      "markFalsePositive": "Oznacz jako fałszywe",
+      "markedCorrect": "Detekcja oznaczona jako poprawna",
+      "markedFalsePositive": "Detekcja oznaczona jako fałszywa",
+      "failed": "Nie udało się zaktualizować statusu weryfikacji"
     },
     "detailsPanel": {
       "audioPlayer": "Odtwarzacz Audio",

@@ -17,6 +17,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// v2OnlySkipMessage is the standard message for prerequisite checks that are
+// skipped in v2-only (fresh install) mode where no legacy database exists.
+const v2OnlySkipMessage = "Running in enhanced database mode, legacy database not available"
+
 // PrerequisiteCheck represents a single prerequisite check result.
 type PrerequisiteCheck struct {
 	ID          string `json:"id"`
@@ -112,7 +116,7 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 	}
 
 	allPassed := criticalFailures == 0
-	canStart := allPassed && !isV2OnlyMode
+	canStart := allPassed && !getIsV2OnlyMode()
 
 	response := PrerequisitesResponse{
 		AllPassed:         allPassed,
@@ -151,7 +155,7 @@ func (c *Controller) checkStateIdle() PrerequisiteCheck {
 	}
 
 	if stateManager == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = "Running in enhanced database mode, migration already complete"
 			return check
@@ -298,6 +302,11 @@ func (c *Controller) checkLegacyAccessible() PrerequisiteCheck {
 	}
 
 	if c.DS == nil {
+		if getIsV2OnlyMode() {
+			check.Status = CheckStatusSkipped
+			check.Message = v2OnlySkipMessage
+			return check
+		}
 		check.Status = CheckStatusError
 		check.Message = "Database not available"
 		return check
@@ -329,6 +338,11 @@ func (c *Controller) checkSQLiteIntegrity() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
+		if getIsV2OnlyMode() {
+			check.Status = CheckStatusSkipped
+			check.Message = v2OnlySkipMessage
+			return check
+		}
 		check.Status = CheckStatusError
 		check.Message = errMsgDBConnectionUnavailable
 		return check
@@ -406,6 +420,11 @@ func (c *Controller) checkMySQLTableHealth() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
+		if getIsV2OnlyMode() {
+			check.Status = CheckStatusSkipped
+			check.Message = v2OnlySkipMessage
+			return check
+		}
 		check.Status = CheckStatusError
 		check.Message = errMsgDBConnectionUnavailable
 		return check
@@ -452,6 +471,11 @@ func (c *Controller) checkMySQLPermissions() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
+		if getIsV2OnlyMode() {
+			check.Status = CheckStatusSkipped
+			check.Message = v2OnlySkipMessage
+			return check
+		}
 		check.Status = CheckStatusError
 		check.Message = errMsgDBConnectionUnavailable
 		return check
@@ -561,6 +585,11 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 	}
 
 	if c.Repo == nil {
+		if getIsV2OnlyMode() {
+			check.Status = CheckStatusSkipped
+			check.Message = v2OnlySkipMessage
+			return check
+		}
 		check.Status = CheckStatusError
 		check.Message = "Detection repository not available"
 		return check

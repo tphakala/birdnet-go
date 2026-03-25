@@ -51,10 +51,10 @@ func getAudioBlockedFields() map[string]any {
 	}
 }
 
-// extendedCaptureSettingsChanged checks if extended capture settings have changed
-// in a way that requires a restart. When extended capture is disabled on both old
-// and new settings, changes to MaxDuration or Species are irrelevant.
-func extendedCaptureSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
+// extendedCaptureFilterChanged checks if extended capture settings that affect
+// the species filter have changed (Enabled, Species, MaxDuration). These changes
+// can be applied at runtime without a restart by rebuilding the filter map.
+func extendedCaptureFilterChanged(oldSettings, currentSettings *conf.Settings) bool {
 	old := oldSettings.Realtime.ExtendedCapture
 	cur := currentSettings.Realtime.ExtendedCapture
 
@@ -78,6 +78,15 @@ func extendedCaptureSettingsChanged(oldSettings, currentSettings *conf.Settings)
 	return false
 }
 
+// extendedCaptureBufferChanged checks if capture buffer settings have changed,
+// which requires a restart to resize the audio ring buffer.
+func extendedCaptureBufferChanged(oldSettings, currentSettings *conf.Settings) bool {
+	old := oldSettings.Realtime.ExtendedCapture
+	cur := currentSettings.Realtime.ExtendedCapture
+
+	return old.CaptureBufferSeconds != cur.CaptureBufferSeconds
+}
+
 // handleAudioSettingsChanges checks for audio-related settings changes and triggers appropriate actions
 func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *conf.Settings) ([]string, error) {
 	var reconfigActions []string
@@ -99,10 +108,18 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsAudioDeviceRestart, nil)
 	}
 
-	// Check extended capture settings (requires restart to resize capture buffers)
-	if extendedCaptureSettingsChanged(oldSettings, currentSettings) {
-		c.Debug("Extended capture settings changed. A restart will be required.")
-		_ = c.SendToastWithKey("Extended capture settings changed. Restart required to apply changes.", "warning", toastDurationExtended,
+	// Check extended capture filter settings (hot-reloadable: Enabled, Species, MaxDuration)
+	if extendedCaptureFilterChanged(oldSettings, currentSettings) {
+		c.Debug("Extended capture filter settings changed, triggering rebuild")
+		reconfigActions = append(reconfigActions, "rebuild_extended_capture")
+		_ = c.SendToastWithKey("Rebuilding extended capture species filter...", "info", toastDurationShort,
+			notification.MsgSettingsRebuildingExtendedCapture, nil)
+	}
+
+	// Check extended capture buffer settings (requires restart to resize audio ring buffer)
+	if extendedCaptureBufferChanged(oldSettings, currentSettings) {
+		c.Debug("Extended capture buffer settings changed. A restart will be required.")
+		_ = c.SendToastWithKey("Extended capture buffer settings changed. Restart required to apply.", "warning", toastDurationExtended,
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 

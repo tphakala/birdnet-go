@@ -140,7 +140,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
-    element: HTMLElement | HTMLAudioElement | Document | Window;
+    element: HTMLElement | HTMLAudioElement | Document | Window | null;
     event: string;
     handler: EventListener;
   }> = [];
@@ -428,7 +428,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
       // Remove all tracked event listeners
       eventListeners.forEach(({ element, event, handler }) => {
-        element.removeEventListener(event, handler);
+        element?.removeEventListener(event, handler);
       });
       eventListeners = [];
 

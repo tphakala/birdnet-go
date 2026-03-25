@@ -391,9 +391,11 @@
         "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
         "reconfiguringSpeciesTracking": "Uppdaterar artspårning...",
         "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
+        "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
         "audioDeviceRestartRequired": "Ljudenhet ändrad. Omstart krävs.",
+        "rebuildingExtendedCapture": "Bygger om filter för utökad inspelning...",
         "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
         "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",
         "equalizerUpdated": "Ljudequalizerinställningar uppdaterade",
@@ -511,6 +513,15 @@
       "unverified": "Overifierad",
       "locked": "Låst",
       "unlocked": "Olåst"
+    },
+    "review": {
+      "review": "Granska",
+      "reviewDetection": "Granska detektion av {species}",
+      "markCorrect": "Markera som korrekt",
+      "markFalsePositive": "Markera som falskt positiv",
+      "markedCorrect": "Detektion markerad som korrekt",
+      "markedFalsePositive": "Detektion markerad som falskt positiv",
+      "failed": "Kunde inte uppdatera verifieringsstatus"
     },
     "detailsPanel": {
       "audioPlayer": "Ljudspelare",

@@ -90,13 +90,13 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	// Skip filtering if range interpreter is not initialized
 	if bn.RangeInterpreter == nil {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
+		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels, bn.Settings.Realtime.Species.Exclude), nil
 	}
 
 	// Skip filtering if location is not configured
 	if !bn.Settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels), nil
+		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels, bn.Settings.Realtime.Species.Exclude), nil
 	}
 
 	// Apply prediction filter based on the context
@@ -153,11 +153,15 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	return speciesScores, nil
 }
 
-// zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels
-func zeroScoresForAllLabels(labels []string) []SpeciesScore {
-	speciesScores := make([]SpeciesScore, len(labels))
-	for i, label := range labels {
-		speciesScores[i] = SpeciesScore{Score: 0.0, Label: label}
+// zeroScoresForAllLabels creates a slice of SpeciesScore with zero scores for all provided labels,
+// excluding any species that appear in the exclude list. This ensures that excluded species are
+// filtered even when the range filter model is not active or location is not configured.
+func zeroScoresForAllLabels(labels, excludeList []string) []SpeciesScore {
+	speciesScores := make([]SpeciesScore, 0, len(labels))
+	for _, label := range labels {
+		if !isSpeciesExcluded(label, excludeList) {
+			speciesScores = append(speciesScores, SpeciesScore{Score: 0.0, Label: label})
+		}
 	}
 	return speciesScores
 }

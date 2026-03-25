@@ -33,6 +33,7 @@ func newTestProcessor() *Processor {
 			},
 		},
 		DynamicThresholds: make(map[string]*DynamicThreshold),
+		pendingResets:     make(map[string]struct{}),
 	}
 }
 
