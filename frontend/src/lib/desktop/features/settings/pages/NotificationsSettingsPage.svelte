@@ -1018,16 +1018,23 @@
   }
 
   // Auto-detect ntfy server protocol after a brief debounce when the server changes.
+  // The promise is created immediately so saveProvider() can await it even if the
+  // debounce timer has not yet fired.
   let ntfyAutoCheckTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleNtfyAutoCheck() {
     clearTimeout(ntfyAutoCheckTimer);
     const server = serviceFormData.ntfyServer?.trim() || '';
-    if (!server || server === 'ntfy.sh') return;
-    ntfyAutoCheckTimer = setTimeout(() => {
-      ntfyCheckPromise = checkNtfyServer().finally(() => {
-        ntfyCheckPromise = undefined;
-      });
-    }, 800);
+    if (!server || server === 'ntfy.sh') {
+      ntfyCheckPromise = undefined;
+      return;
+    }
+    ntfyCheckPromise = new Promise<void>(resolve => {
+      ntfyAutoCheckTimer = setTimeout(() => {
+        checkNtfyServer().finally(resolve);
+      }, 800);
+    }).finally(() => {
+      ntfyCheckPromise = undefined;
+    });
   }
 
   function toggleFilterType(type: string) {
