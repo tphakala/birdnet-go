@@ -362,9 +362,9 @@
     if (!enableClipExtraction || duration <= 0) return;
     if (e.button !== 0) return;
 
-    // Ignore clicks on interactive elements (toolbar buttons, controls, etc.)
+    // Ignore clicks on interactive elements (toolbar buttons, controls, sliders, popups, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"]')) return;
+    if (target.closest('button, select, input, label, a, [role="button"], [role="dialog"]')) return;
 
     dragOriginX = e.clientX;
     mouseDownInPlayer = true;
@@ -510,9 +510,9 @@
   const handleSelectionTouchStart = (e: TouchEvent) => {
     if (!enableClipExtraction || duration <= 0 || !e.touches[0]) return;
 
-    // Ignore touches on interactive elements
+    // Ignore touches on interactive elements (buttons, sliders, popups, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"]')) return;
+    if (target.closest('button, select, input, label, a, [role="button"], [role="dialog"]')) return;
 
     if (playerContainer) playerContainer.style.touchAction = 'none';
 
