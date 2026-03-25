@@ -189,6 +189,8 @@
       bind:this={menuElement}
       class="settings-menu"
       onclick={e => e.stopPropagation()}
+      onmousedown={e => e.stopPropagation()}
+      ontouchstart={e => e.stopPropagation()}
       onkeydown={e => {
         if (e.key === 'Escape') {
           showSettings = false;

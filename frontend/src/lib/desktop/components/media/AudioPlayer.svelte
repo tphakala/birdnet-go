@@ -320,6 +320,8 @@
   const MIN_SELECTION_DURATION = 0.05; // Seconds — minimum useful selection
   const ARROW_KEY_STEP = 0.1; // Seconds — keyboard handle adjustment
   const PROCESS_DEBOUNCE_MS = 300; // Debounce delay for server-side processing requests
+  const INTERACTIVE_ELEMENTS_SELECTOR =
+    'button, select, input, label, a, [role="button"], [role="dialog"]';
 
   // Check if a pointer X position is near a selection handle, returning which handle
   const detectHandleGrab = (clientX: number, thresholdPx: number): 'start' | 'end' | null => {
@@ -362,9 +364,9 @@
     if (!enableClipExtraction || duration <= 0) return;
     if (e.button !== 0) return;
 
-    // Ignore clicks on interactive elements (toolbar buttons, controls, etc.)
+    // Ignore clicks on interactive elements (toolbar buttons, controls, sliders, popups, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"]')) return;
+    if (target.closest(INTERACTIVE_ELEMENTS_SELECTOR)) return;
 
     dragOriginX = e.clientX;
     mouseDownInPlayer = true;
@@ -510,9 +512,9 @@
   const handleSelectionTouchStart = (e: TouchEvent) => {
     if (!enableClipExtraction || duration <= 0 || !e.touches[0]) return;
 
-    // Ignore touches on interactive elements
+    // Ignore touches on interactive elements (buttons, sliders, popups, etc.)
     const target = e.target as HTMLElement;
-    if (target.closest('button, select, a, [role="button"]')) return;
+    if (target.closest(INTERACTIVE_ELEMENTS_SELECTOR)) return;
 
     if (playerContainer) playerContainer.style.touchAction = 'none';
 
