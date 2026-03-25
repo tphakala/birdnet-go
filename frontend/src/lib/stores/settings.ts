@@ -40,7 +40,6 @@
  * - Error handling and user feedback
  */
 import { t } from '$lib/i18n';
-import { api } from '$lib/utils/api';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
@@ -1344,13 +1343,10 @@ export const settingsActions = {
     const state = get(settingsStore);
     const birdnet = state.formData.birdnet;
 
-    const data = await api.post<{ count: number; species?: RangeFilterSpeciesEntry[] }>(
-      '/api/v2/range/species/test',
-      {
-        latitude: birdnet.latitude,
-        longitude: birdnet.longitude,
-        threshold: birdnet.rangeFilter.threshold,
-      }
+    const data = await settingsAPI.rangeFilter.testSpecies(
+      birdnet.latitude,
+      birdnet.longitude,
+      birdnet.rangeFilter.threshold
     );
 
     return {

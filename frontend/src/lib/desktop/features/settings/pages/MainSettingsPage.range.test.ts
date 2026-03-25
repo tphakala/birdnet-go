@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
 import type { BirdNetSettings, SettingsFormData } from '$lib/stores/settings';
-import { api } from '$lib/utils/api';
+import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -333,7 +333,7 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     vi.useRealTimers();
   });
 
-  it('should use POST test endpoint (not GET list endpoint) when loading species', async () => {
+  it('should call settingsAPI.rangeFilter.testSpecies with store threshold', async () => {
     // The bug was that loadRangeFilterSpecies() used GET /api/v2/range/species/list
     // which ignores threshold params and returns all server-side species.
     // The fix changes it to use POST /api/v2/range/species/test which filters
@@ -354,7 +354,7 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
       },
     ];
 
-    vi.mocked(api.post).mockResolvedValue({
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
       count: FILTERED_COUNT,
       species: mockSpecies,
     });
@@ -362,15 +362,12 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     // Call the actual settingsActions function that the component uses
     const result = await settingsActions.loadRangeFilterSpecies();
 
-    // Verify the POST test endpoint was called with the store's threshold
-    expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
-      latitude: LATITUDE,
-      longitude: LONGITUDE,
-      threshold: THRESHOLD,
-    });
-
-    // Verify the GET list endpoint was NOT called
-    expect(api.get).not.toHaveBeenCalled();
+    // Verify the testSpecies API was called with the store's threshold
+    expect(settingsAPI.rangeFilter.testSpecies).toHaveBeenCalledWith(
+      LATITUDE,
+      LONGITUDE,
+      THRESHOLD
+    );
 
     // Verify the returned data has the filtered count
     expect(result.count).toBe(FILTERED_COUNT);
@@ -381,7 +378,7 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     // Verifies that repeated calls (e.g. opening modal multiple times)
     // always return the threshold-filtered result, not the full database count
 
-    vi.mocked(api.post).mockResolvedValue({
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
       count: FILTERED_COUNT,
       species: [
         {
@@ -403,17 +400,16 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     expect(secondResult.count).toBe(FILTERED_COUNT);
     expect(secondResult.species).toHaveLength(1);
 
-    // Both calls should use POST with the threshold
-    expect(api.post).toHaveBeenCalledTimes(2);
-    expect(api.get).not.toHaveBeenCalled();
+    // Both calls should use the testSpecies endpoint
+    expect(settingsAPI.rangeFilter.testSpecies).toHaveBeenCalledTimes(2);
   });
 
   it('should handle empty species list with nullish coalescing', async () => {
     // When the API returns null/undefined species, the action should
     // default to an empty array (using ?? instead of ||)
-    vi.mocked(api.post).mockResolvedValue({
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
       count: 0,
-      species: null,
+      species: undefined,
     });
 
     const result = await settingsActions.loadRangeFilterSpecies();
