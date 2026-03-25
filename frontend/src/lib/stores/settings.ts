@@ -40,6 +40,7 @@
  * - Error handling and user feedback
  */
 import { t } from '$lib/i18n';
+import { api } from '$lib/utils/api';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
@@ -90,6 +91,20 @@ export interface RangeFilterSettings {
   threshold: number;
   speciesCount: number | null;
   species: string[];
+}
+
+/** Species entry returned by the range filter test endpoint */
+export interface RangeFilterSpeciesEntry {
+  commonName?: string;
+  scientificName?: string;
+  label?: string;
+  score?: number;
+}
+
+/** Result from loadRangeFilterSpecies */
+export interface RangeFilterSpeciesResult {
+  count: number;
+  species: RangeFilterSpeciesEntry[];
 }
 
 export interface SQLiteSettings {
@@ -1315,5 +1330,32 @@ export const settingsActions = {
       ...state,
       error: null,
     }));
+  },
+
+  /**
+   * Load range filter species using the test endpoint that respects the
+   * current threshold. Returns the filtered species list and count.
+   *
+   * This uses POST /api/v2/range/species/test (not GET /api/v2/range/species/list)
+   * because the list endpoint ignores query parameters and returns all species,
+   * which would reset the displayed count. See #2393.
+   */
+  async loadRangeFilterSpecies(): Promise<RangeFilterSpeciesResult> {
+    const state = get(settingsStore);
+    const birdnet = state.formData.birdnet;
+
+    const data = await api.post<{ count: number; species?: RangeFilterSpeciesEntry[] }>(
+      '/api/v2/range/species/test',
+      {
+        latitude: birdnet.latitude,
+        longitude: birdnet.longitude,
+        threshold: birdnet.rangeFilter.threshold,
+      }
+    );
+
+    return {
+      count: data.count,
+      species: data.species ?? [],
+    };
   },
 };

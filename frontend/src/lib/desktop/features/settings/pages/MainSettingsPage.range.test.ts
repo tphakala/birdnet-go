@@ -278,17 +278,6 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
   });
 });
 
-// Response shape for the range filter test endpoint
-interface RangeFilterTestResponse {
-  count: number;
-  species: Array<{
-    commonName: string;
-    scientificName: string;
-    label: string;
-    score: number;
-  }>;
-}
-
 describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
   const FILTERED_COUNT = 150;
   const THRESHOLD = 0.05;
@@ -344,13 +333,12 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     vi.useRealTimers();
   });
 
-  it('should use POST test endpoint (not GET list endpoint) when loading species for modal', async () => {
+  it('should use POST test endpoint (not GET list endpoint) when loading species', async () => {
     // The bug was that loadRangeFilterSpecies() used GET /api/v2/range/species/list
     // which ignores threshold params and returns all server-side species.
     // The fix changes it to use POST /api/v2/range/species/test which filters
     // by the current threshold setting.
 
-    // Mock the test endpoint to return filtered species
     const mockSpecies = [
       {
         commonName: 'House Sparrow',
@@ -371,19 +359,10 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
       species: mockSpecies,
     });
 
-    // Simulate what the component does when "View Species" is clicked:
-    // It calls loadRangeFilterSpecies() which should POST to the test endpoint
-    const state = get(settingsStore);
-    const birdnet = state.formData.birdnet;
+    // Call the actual settingsActions function that the component uses
+    const result = await settingsActions.loadRangeFilterSpecies();
 
-    // Replicate the fixed loadRangeFilterSpecies logic
-    const data = (await api.post('/api/v2/range/species/test', {
-      latitude: birdnet.latitude,
-      longitude: birdnet.longitude,
-      threshold: birdnet.rangeFilter.threshold,
-    })) as RangeFilterTestResponse;
-
-    // Verify the test endpoint was called with the correct threshold
+    // Verify the POST test endpoint was called with the store's threshold
     expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
       latitude: LATITUDE,
       longitude: LONGITUDE,
@@ -393,16 +372,15 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
     // Verify the GET list endpoint was NOT called
     expect(api.get).not.toHaveBeenCalled();
 
-    // Verify the returned data has the filtered count, not the full database count
-    expect(data.count).toBe(FILTERED_COUNT);
-    expect(data.species).toHaveLength(2);
+    // Verify the returned data has the filtered count
+    expect(result.count).toBe(FILTERED_COUNT);
+    expect(result.species).toHaveLength(2);
   });
 
-  it('should preserve species count after viewing species modal', async () => {
-    // This tests the core bug: opening the modal should not reset speciesCount
-    // to the unfiltered value from the server
+  it('should return filtered species count consistently across multiple calls', async () => {
+    // Verifies that repeated calls (e.g. opening modal multiple times)
+    // always return the threshold-filtered result, not the full database count
 
-    // Mock filtered test response
     vi.mocked(api.post).mockResolvedValue({
       count: FILTERED_COUNT,
       species: [
@@ -415,48 +393,32 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
       ],
     });
 
-    // Simulate the component state: rangeFilterState starts with a filtered count
-    const rangeFilterState = {
-      speciesCount: FILTERED_COUNT,
-      loading: false,
-      testing: false,
-      downloading: false,
-      error: null,
-      showModal: false,
-      species: [] as Array<{
-        commonName: string;
-        scientificName: string;
-        label: string;
-        score: number;
-      }>,
-    };
+    // First call (opening modal)
+    const firstResult = await settingsActions.loadRangeFilterSpecies();
+    expect(firstResult.count).toBe(FILTERED_COUNT);
+    expect(firstResult.species).toHaveLength(1);
 
-    // Simulate clicking "View Species" - opens modal and loads species
-    rangeFilterState.showModal = true;
-    rangeFilterState.loading = true;
+    // Second call (re-opening modal after close)
+    const secondResult = await settingsActions.loadRangeFilterSpecies();
+    expect(secondResult.count).toBe(FILTERED_COUNT);
+    expect(secondResult.species).toHaveLength(1);
 
-    const state = get(settingsStore);
-    const birdnet = state.formData.birdnet;
+    // Both calls should use POST with the threshold
+    expect(api.post).toHaveBeenCalledTimes(2);
+    expect(api.get).not.toHaveBeenCalled();
+  });
 
-    const data = (await api.post('/api/v2/range/species/test', {
-      latitude: birdnet.latitude,
-      longitude: birdnet.longitude,
-      threshold: birdnet.rangeFilter.threshold,
-    })) as RangeFilterTestResponse;
+  it('should handle empty species list with nullish coalescing', async () => {
+    // When the API returns null/undefined species, the action should
+    // default to an empty array (using ?? instead of ||)
+    vi.mocked(api.post).mockResolvedValue({
+      count: 0,
+      species: null,
+    });
 
-    // Update state from response (matching component logic)
-    rangeFilterState.species = data.species;
-    rangeFilterState.speciesCount = data.count;
-    rangeFilterState.loading = false;
+    const result = await settingsActions.loadRangeFilterSpecies();
 
-    // Verify the species count was NOT reset to a different value
-    expect(rangeFilterState.speciesCount).toBe(FILTERED_COUNT);
-    expect(rangeFilterState.species).toHaveLength(1);
-
-    // Simulate closing the modal
-    rangeFilterState.showModal = false;
-
-    // The species count should still be the filtered value
-    expect(rangeFilterState.speciesCount).toBe(FILTERED_COUNT);
+    expect(result.count).toBe(0);
+    expect(result.species).toEqual([]);
   });
 });
