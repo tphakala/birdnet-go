@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -31,6 +32,7 @@ type GenerateSupportDumpRequest struct {
 	IncludeSystemInfo bool   `json:"include_system_info"`
 	UserMessage       string `json:"user_message"`
 	UploadToSentry    bool   `json:"upload_to_sentry"`
+	GitHubIssueNumber string `json:"github_issue_number"`
 }
 
 // GenerateSupportDumpResponse represents the response for support dump generation
@@ -43,6 +45,15 @@ type GenerateSupportDumpResponse struct {
 	DownloadURL string `json:"download_url,omitempty"`
 }
 
+// sanitizeGitHubIssueNumber returns the issue number if it is a valid positive
+// integer, or an empty string otherwise.
+func sanitizeGitHubIssueNumber(issueNum string) string {
+	if _, err := strconv.ParseUint(issueNum, 10, 64); err != nil {
+		return ""
+	}
+	return issueNum
+}
+
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logDebugIfEnabled("Support dump generation started")
@@ -53,11 +64,15 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request", http.StatusBadRequest)
 	}
 
+	// Sanitize GitHub issue number: must be digits only (frontend strips '#' prefix)
+	req.GitHubIssueNumber = sanitizeGitHubIssueNumber(req.GitHubIssueNumber)
+
 	c.logDebugIfEnabled("Support dump request parsed",
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
+		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
@@ -149,7 +164,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
+			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
 				// Log error but don't fail the request
 				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),

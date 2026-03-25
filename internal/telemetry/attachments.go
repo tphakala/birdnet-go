@@ -67,7 +67,7 @@ func NewAttachmentUploader(enabled bool) *AttachmentUploader {
 }
 
 // UploadSupportDump uploads a support dump to Sentry as an event with attachment
-func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID, userMessage string) error {
+func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []byte, systemID, userMessage, githubIssue string) error {
 	log := GetLogger()
 
 	// Extract trace ID early for use in error messages
@@ -84,6 +84,7 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 		logger.Int("dump_size", len(dumpData)),
 		logger.Bool("has_message", userMessage != ""),
 		logger.String("trace_id", traceID),
+		logger.String("github_issue", githubIssue),
 		logger.String("scrubbed_message", scrubbedMessage))
 
 	if !au.enabled {
@@ -119,8 +120,14 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	now := time.Now()
 	event := sentry.NewEvent()
 	event.Level = sentry.LevelInfo
-	event.Message = fmt.Sprintf("Support Dump - System: %s - %s", systemID, now.Format(time.RFC3339))
 	event.Timestamp = now
+
+	// Build event message including GitHub issue if provided
+	var issuePart string
+	if githubIssue != "" {
+		issuePart = fmt.Sprintf(" - GitHub #%s", githubIssue)
+	}
+	event.Message = fmt.Sprintf("Support Dump - System: %s%s - %s", systemID, issuePart, now.Format(time.RFC3339))
 
 	// Add custom context
 	supportContext := map[string]any{
@@ -131,6 +138,9 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	}
 	if traceID != "" {
 		supportContext["trace_id"] = traceID
+	}
+	if githubIssue != "" {
+		supportContext["github_issue"] = githubIssue
 	}
 	event.Contexts["support"] = supportContext
 
@@ -146,6 +156,9 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	}
 	if traceID != "" {
 		event.Tags["trace_id"] = traceID
+	}
+	if githubIssue != "" {
+		event.Tags["github_issue"] = githubIssue
 	}
 
 	// Capture the event with attachment using WithScope

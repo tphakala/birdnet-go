@@ -902,8 +902,12 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 			if event.Tags == nil || event.Tags["type"] != "support_dump" {
 				return nil // Drop all non-support events
 			}
-			// Apply privacy filters
-			event.Message = privacy.ScrubMessage(event.Message)
+			// Skip ScrubMessage on event.Message: the message is constructed by
+			// our code (system ID + timestamp) and contains no user input. The
+			// IPv6 regex in ScrubStandaloneIPs incorrectly matches the colon-
+			// separated time components of ISO 8601 timestamps, corrupting them
+			// to "invalid-ip-..." hashes. User-provided text is already scrubbed
+			// before being added to the support context.
 			event.User = sentry.User{ID: systemID} // Only include system ID
 			event.ServerName = ""
 			event.Modules = nil
