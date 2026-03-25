@@ -167,7 +167,7 @@ test.describe('Notification Delete Modal', () => {
 
     // Count delete buttons before deletion for comparison
     const deleteButtonLocator = page.locator(
-      'button[aria-label*="delete" i], button[aria-label*="supprimer" i]'
+      'button[aria-label*="delete" i], button[aria-label*="Delete" i], button[aria-label*="supprimer" i]'
     );
     const countBefore = await deleteButtonLocator.count();
 

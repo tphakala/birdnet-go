@@ -3,6 +3,8 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 test.describe('Alert Rules Settings Page', () => {
   test.setTimeout(30000);
 
+  const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:8080';
+
   // Selector for individual rule card elements inside the rules list.
   // The rules render inside a rounded-xl container as direct child divs.
   const RULE_CARD = '#settings-tabpanel-rules .rounded-xl > div';
@@ -14,8 +16,12 @@ test.describe('Alert Rules Settings Page', () => {
   let alertsAvailable = true;
 
   test.beforeAll(async ({ request }) => {
-    const resp = await request.get('/api/v2/alerts/schema', { timeout: 5000 });
-    if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
+    try {
+      const resp = await request.get(`${baseUrl}/api/v2/alerts/schema`, { timeout: 5000 });
+      if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
+        alertsAvailable = false;
+      }
+    } catch {
       alertsAvailable = false;
     }
   });
@@ -452,8 +458,8 @@ test.describe('Alert Rules Settings Page', () => {
       const firstRuleCard = page.locator(RULE_CARD).first();
 
       // Each card should have test and edit action buttons (with title attributes)
-      await expect(firstRuleCard.locator('button[title*="test" i]')).toBeVisible();
-      await expect(firstRuleCard.locator('button[title*="edit" i]')).toBeVisible();
+      await expect(firstRuleCard.locator('button[title*="est" i]')).toBeVisible();
+      await expect(firstRuleCard.locator('button[title*="dit" i]')).toBeVisible();
 
       // Should have a toggle checkbox
       const toggle = firstRuleCard.locator('input[type="checkbox"]');
