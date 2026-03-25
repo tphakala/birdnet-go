@@ -899,6 +899,9 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 
 // SaveDailyEvents saves daily events data to the database.
 func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
+	if dailyEvents == nil {
+		return validationError("daily events cannot be nil", "daily_events", nil)
+	}
 	return retryOnLock("save_daily_events", func() error {
 		// Use upsert to handle the unique date constraint
 		result := ds.DB.Where("date = ?", dailyEvents.Date).
@@ -965,6 +968,9 @@ func (ds *DataStore) GetAllHourlyWeather() ([]HourlyWeather, error) {
 
 // SaveHourlyWeather saves hourly weather data to the database.
 func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
+	if hourlyWeather == nil {
+		return validationError("hourly weather cannot be nil", "hourly_weather", nil)
+	}
 	// Basic validation
 	if hourlyWeather.Time.IsZero() {
 		return errors.Newf("invalid time value").

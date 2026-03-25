@@ -222,7 +222,7 @@ func (s *SQLiteStore) Open() error {
 	// happens to execute the statement gets them; new pool connections
 	// remain at SQLite defaults and miss busy_timeout entirely, leading
 	// to immediate "database is locked" errors under concurrency.
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000", dbPath)
+	dsn := buildSQLiteDSN(dbPath, "_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000")
 
 	// Open SQLite database with GORM
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
