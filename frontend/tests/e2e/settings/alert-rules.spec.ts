@@ -21,7 +21,9 @@ test.describe('Alert Rules Settings Page', () => {
       if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
         alertsAvailable = false;
       }
-    } catch {
+    } catch (error) {
+       
+      console.warn('Alerts API check failed, skipping alert-rules tests:', error);
       alertsAvailable = false;
     }
   });
@@ -458,8 +460,8 @@ test.describe('Alert Rules Settings Page', () => {
       const firstRuleCard = page.locator(RULE_CARD).first();
 
       // Each card should have test and edit action buttons (with title attributes)
-      await expect(firstRuleCard.locator('button[title*="est" i]')).toBeVisible();
-      await expect(firstRuleCard.locator('button[title*="dit" i]')).toBeVisible();
+      await expect(firstRuleCard.locator('button[title*="test" i]')).toBeVisible();
+      await expect(firstRuleCard.locator('button[title*="edit" i]')).toBeVisible();
 
       // Should have a toggle checkbox
       const toggle = firstRuleCard.locator('input[type="checkbox"]');
