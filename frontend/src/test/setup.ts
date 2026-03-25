@@ -100,6 +100,13 @@ vi.mock('$lib/utils/logger', () => ({
   })),
 }));
 
+// Mock transition utilities - transitions don't run in jsdom, use instant duration
+const instantTransition = () => ({ duration: 0, css: () => '' });
+vi.mock('$lib/utils/transitions', () => ({
+  dropdown: instantTransition,
+  flyout: instantTransition,
+}));
+
 // Mock toast notifications
 vi.mock('$lib/stores/toast', () => ({
   toastActions: {

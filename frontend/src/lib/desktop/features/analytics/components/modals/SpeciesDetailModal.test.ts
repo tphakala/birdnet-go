@@ -55,7 +55,7 @@ describe('SpeciesDetailModal', () => {
     expect(screen.getByText('House Sparrow')).toBeInTheDocument();
   });
 
-  it('does not render when isOpen is false', () => {
+  it('is not visible when isOpen is false', () => {
     modalTest.render({
       props: {
         isOpen: false,
@@ -63,7 +63,9 @@ describe('SpeciesDetailModal', () => {
       },
     });
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    // Modal.svelte uses CSS visibility toggle (always renders DOM, hides with invisible class)
+    const dialog = screen.queryByRole('dialog');
+    expect(dialog === null || dialog.classList.contains('invisible')).toBe(true);
   });
 
   it('calls onClose when close button is clicked', async () => {

@@ -44,6 +44,7 @@
 
 <Modal
   isOpen={open}
+  title={t('system.database.migration.confirmDialog.title')}
   size="xl"
   type="default"
   closeOnBackdrop={!isLoading}
