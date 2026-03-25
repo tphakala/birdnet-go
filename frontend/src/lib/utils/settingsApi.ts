@@ -4,6 +4,7 @@ import type {
   TestResult,
   BirdWeatherSettings,
   MQTTSettings,
+  RangeFilterSpeciesEntry,
 } from '$lib/stores/settings.js';
 
 export interface TLSCertificateInfo {
@@ -89,6 +90,29 @@ export const settingsAPI = {
      */
     audio: (config: Record<string, unknown>): Promise<TestResult> => {
       return api.post<TestResult>('/api/v2/test/audio', config);
+    },
+  },
+
+  /**
+   * Range filter API calls
+   */
+  rangeFilter: {
+    /**
+     * Load species using the test endpoint that respects the current threshold.
+     * Uses POST /api/v2/range/species/test (not GET /api/v2/range/species/list)
+     * because the list endpoint ignores query parameters and returns all species.
+     * See #2393.
+     */
+    testSpecies: (
+      latitude: number,
+      longitude: number,
+      threshold: number
+    ): Promise<{ count: number; species?: RangeFilterSpeciesEntry[] | null }> => {
+      return api.post('/api/v2/range/species/test', {
+        latitude,
+        longitude,
+        threshold,
+      });
     },
   },
 

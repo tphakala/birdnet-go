@@ -931,16 +931,8 @@
     rangeFilterState.error = null;
 
     try {
-      const params = new URLSearchParams({
-        latitude: settings.birdnet.latitude.toString(),
-        longitude: settings.birdnet.longitude.toString(),
-        threshold: settings.birdnet.rangeFilter.threshold.toString(),
-      });
-
-      const data = await api.get<{ count: number; species: RangeFilterSpecies[] }>(
-        `/api/v2/range/species/list?${params}`
-      );
-      rangeFilterState.species = data.species || [];
+      const data = await settingsActions.loadRangeFilterSpecies();
+      rangeFilterState.species = data.species;
       rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load species list:', error);

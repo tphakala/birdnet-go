@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
 import type { BirdNetSettings, SettingsFormData } from '$lib/stores/settings';
+import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -274,5 +275,146 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(birdnet.latitude).toBe(51.5074);
     expect(birdnet.longitude).toBe(-0.1278);
     expect(birdnet.rangeFilter.threshold).toBe(0.05);
+  });
+});
+
+describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
+  const FILTERED_COUNT = 150;
+  const THRESHOLD = 0.05;
+  const LATITUDE = 40.7128;
+  const LONGITUDE = -74.006;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Initialize store with configured location and custom threshold
+    const formData: SettingsFormData = {
+      main: { name: 'TestNode' },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.8,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: LATITUDE,
+        longitude: LONGITUDE,
+        locationConfigured: true,
+        rangeFilter: {
+          threshold: THRESHOLD,
+          speciesCount: null,
+          species: [],
+        },
+      },
+      realtime: {
+        dynamicThreshold: {
+          enabled: false,
+          debug: false,
+          trigger: 0.8,
+          min: 0.3,
+          validHours: 24,
+        },
+      },
+    };
+
+    settingsStore.set({
+      formData,
+      originalData: {} as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      restartRequired: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should call settingsAPI.rangeFilter.testSpecies with store threshold', async () => {
+    // The bug was that loadRangeFilterSpecies() used GET /api/v2/range/species/list
+    // which ignores threshold params and returns all server-side species.
+    // The fix changes it to use POST /api/v2/range/species/test which filters
+    // by the current threshold setting.
+
+    const mockSpecies = [
+      {
+        commonName: 'House Sparrow',
+        scientificName: 'Passer domesticus',
+        label: 'Passer domesticus_House Sparrow',
+        score: 0.85,
+      },
+      {
+        commonName: 'European Robin',
+        scientificName: 'Erithacus rubecula',
+        label: 'Erithacus rubecula_European Robin',
+        score: 0.72,
+      },
+    ];
+
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
+      count: FILTERED_COUNT,
+      species: mockSpecies,
+    });
+
+    // Call the actual settingsActions function that the component uses
+    const result = await settingsActions.loadRangeFilterSpecies();
+
+    // Verify the testSpecies API was called with the store's threshold
+    expect(settingsAPI.rangeFilter.testSpecies).toHaveBeenCalledWith(
+      LATITUDE,
+      LONGITUDE,
+      THRESHOLD
+    );
+
+    // Verify the returned data has the filtered count
+    expect(result.count).toBe(FILTERED_COUNT);
+    expect(result.species).toHaveLength(2);
+  });
+
+  it('should return filtered species count consistently across multiple calls', async () => {
+    // Verifies that repeated calls (e.g. opening modal multiple times)
+    // always return the threshold-filtered result, not the full database count
+
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
+      count: FILTERED_COUNT,
+      species: [
+        {
+          commonName: 'House Sparrow',
+          scientificName: 'Passer domesticus',
+          label: 'Passer domesticus_House Sparrow',
+          score: 0.85,
+        },
+      ],
+    });
+
+    // First call (opening modal)
+    const firstResult = await settingsActions.loadRangeFilterSpecies();
+    expect(firstResult.count).toBe(FILTERED_COUNT);
+    expect(firstResult.species).toHaveLength(1);
+
+    // Second call (re-opening modal after close)
+    const secondResult = await settingsActions.loadRangeFilterSpecies();
+    expect(secondResult.count).toBe(FILTERED_COUNT);
+    expect(secondResult.species).toHaveLength(1);
+
+    // Both calls should use the testSpecies endpoint
+    expect(settingsAPI.rangeFilter.testSpecies).toHaveBeenCalledTimes(2);
+  });
+
+  it('should handle empty species list with nullish coalescing', async () => {
+    // When the API returns null/undefined species, the action should
+    // default to an empty array (using ?? instead of ||)
+    vi.mocked(settingsAPI.rangeFilter.testSpecies).mockResolvedValue({
+      count: 0,
+      species: undefined,
+    });
+
+    const result = await settingsActions.loadRangeFilterSpecies();
+
+    expect(result.count).toBe(0);
+    expect(result.species).toEqual([]);
   });
 });

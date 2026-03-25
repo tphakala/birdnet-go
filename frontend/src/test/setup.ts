@@ -400,6 +400,9 @@ vi.mock('$lib/utils/settingsApi.js', () => {
         database: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
         audio: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
       },
+      rangeFilter: {
+        testSpecies: vi.fn().mockResolvedValue({ count: 0, species: [] }),
+      },
       species: {
         search: vi.fn().mockResolvedValue([]),
         rangeFilter: vi.fn().mockResolvedValue([]),
