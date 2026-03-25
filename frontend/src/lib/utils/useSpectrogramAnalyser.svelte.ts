@@ -52,6 +52,8 @@ const HIGH_PASS_Q = 1;
 const ANALYSER_SMOOTHING = 0.8;
 const OUTPUT_GAIN_UNMUTED = 1;
 const OUTPUT_GAIN_MUTED = 0;
+/** Short ramp duration (seconds) to avoid audible clicks when muting/unmuting */
+const GAIN_RAMP_DURATION = 0.01;
 
 export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   const fftSize = options?.fftSize ?? DEFAULT_FFT_SIZE;
@@ -166,9 +168,14 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   /** Toggle audio output to speakers via the output gain node */
   function setAudioOutput(enabled: boolean): void {
     audioOutput = enabled;
-    if (!outputGainNode) return;
+    if (!outputGainNode || !audioContext) return;
 
-    outputGainNode.gain.value = enabled ? OUTPUT_GAIN_UNMUTED : OUTPUT_GAIN_MUTED;
+    // Use a short ramp to avoid audible clicks when muting/unmuting
+    const now = audioContext.currentTime;
+    outputGainNode.gain.linearRampToValueAtTime(
+      enabled ? OUTPUT_GAIN_UNMUTED : OUTPUT_GAIN_MUTED,
+      now + GAIN_RAMP_DURATION
+    );
   }
 
   /** Update gain in dB */
