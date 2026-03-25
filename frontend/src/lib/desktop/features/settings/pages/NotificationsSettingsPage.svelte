@@ -835,7 +835,7 @@
 
   // Track an in-flight checkNtfyServer() promise so the save button stays
   // disabled during the debounce window, preventing a race condition.
-  let ntfyCheckPromise: Promise<void> | undefined;
+  let ntfyCheckPromise: Promise<void> | undefined = $state();
 
   function saveProvider() {
     if (!isServiceFormValid) return;
