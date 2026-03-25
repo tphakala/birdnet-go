@@ -117,26 +117,21 @@ test.describe('Mobile drawer closes after navigation', () => {
       })
       .first();
 
-    if (await settingsSection.isVisible()) {
-      await settingsSection.click();
+    await expect(settingsSection).toBeVisible();
+    await settingsSection.click();
 
-      // Wait a moment for the section to expand
-      await page.waitForTimeout(300);
+    // Look for a sub-menu item (e.g. "Main" settings) and wait for it to appear
+    const subItem = page
+      .locator('.drawer-side nav button')
+      .filter({
+        has: page.locator('.lucide-sliders-horizontal'),
+      })
+      .first();
 
-      // Look for a sub-menu item (e.g. "Main" settings)
-      const subItem = page
-        .locator('.drawer-side nav button')
-        .filter({
-          has: page.locator('.lucide-sliders-horizontal'),
-        })
-        .first();
+    await expect(subItem).toBeVisible();
+    await subItem.click();
 
-      if (await subItem.isVisible()) {
-        await subItem.click();
-
-        // Drawer should be closed after navigating to sub-item
-        await expect(page.locator('#my-drawer')).not.toBeChecked();
-      }
-    }
+    // Drawer should be closed after navigating to sub-item
+    await expect(page.locator('#my-drawer')).not.toBeChecked();
   });
 });
