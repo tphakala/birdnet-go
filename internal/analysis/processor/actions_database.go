@@ -282,6 +282,17 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 
 // Execute saves the audio clip to a file
 func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
+	// Hot-reload guard: skip export if audio export was disabled at runtime.
+	// This mirrors the pattern used by MqttAction and BirdWeatherAction.
+	if !a.Settings.Realtime.Audio.Export.Enabled {
+		GetLogger().Debug("Skipping audio export: disabled at runtime",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("clip_name", a.ClipName),
+			logger.String("operation", "audio_export_disabled"))
+		return nil
+	}
+
 	// If PCM data was not captured (e.g., buffer read failed), skip export.
 	if len(a.pcmData) == 0 {
 		GetLogger().Warn("Skipping audio export: no PCM data available",
@@ -292,12 +303,24 @@ func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
 		return nil
 	}
 
-	// Resolve NoteID from DetectionContext if available (set by DatabaseAction).
-	// The NoteID field may be 0 at construction time because the action is built
-	// before the database save runs. DetectionContext provides the live value.
+	// Resolve NoteID from DetectionContext (set by DatabaseAction).
+	// The NoteID field is 0 at construction time because the action is built
+	// before the database save runs. Since SaveAudioAction runs as an independent
+	// job queue task, it may start before the CompositeAction (DB -> SSE -> MQTT)
+	// finishes on another worker. Poll briefly for the NoteID to be set, which
+	// ensures the DB save has committed before we use the ID for spectrogram
+	// pre-render correlation. If the timeout expires, proceed with NoteID=0 --
+	// the audio file is still saved, just without pre-render correlation.
 	if a.DetectionCtx != nil {
-		if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
-			a.NoteID = liveID
+		const noteIDWaitTimeout = 5 * time.Second
+		const noteIDPollInterval = 50 * time.Millisecond
+		deadline := time.Now().Add(noteIDWaitTimeout)
+		for time.Now().Before(deadline) {
+			if liveID := uint(a.DetectionCtx.NoteID.Load()); liveID > 0 {
+				a.NoteID = liveID
+				break
+			}
+			time.Sleep(noteIDPollInterval)
 		}
 	}
 
