@@ -156,8 +156,10 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 		gormLogger = gorm_logger.Default.LogMode(gorm_logger.Silent)
 	}
 
-	// Build DSN with recommended SQLite pragmas
-	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=ON", dbPath, sqliteBusyTimeoutMs)
+	// Build DSN with recommended SQLite pragmas.
+	// All pragmas are set via DSN query parameters so they apply to every
+	// connection created by the pool, not just the first one.
+	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=%d&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000", dbPath, sqliteBusyTimeoutMs)
 
 	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger,
@@ -165,6 +167,17 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open v2 database: %w", err)
 	}
+
+	// Limit to a single open connection to serialize all database access.
+	// SQLite only supports one writer at a time; with Go's connection pool,
+	// multiple goroutines can obtain separate connections and attempt
+	// concurrent writes, causing "database is locked" errors even with
+	// busy_timeout set.  A single connection eliminates this contention.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get underlying database: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(1)
 
 	return &SQLiteManager{
 		db:     db,

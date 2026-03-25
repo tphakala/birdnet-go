@@ -32,7 +32,7 @@ func initRegexPatterns() {
 		diskFullPattern = regexp.MustCompile(`(?i)(disk full|no space|out of space)`)
 		deadlockPattern = regexp.MustCompile(`(?i)(deadlock detected|lock wait timeout|deadlock found)`)
 		corruptionPattern = regexp.MustCompile(`(?i)(corrupt|malformed|database disk image is malformed|file is not a database)`)
-		lockPattern = regexp.MustCompile(`(?i)(locked|database is locked|resource busy)`)
+		lockPattern = regexp.MustCompile(`(?i)(locked|database is locked|resource busy|SQLITE_BUSY)`)
 		constraintPattern = regexp.MustCompile(`(?i)(constraint|duplicate|unique constraint|foreign key)`)
 	})
 }

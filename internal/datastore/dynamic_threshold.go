@@ -250,14 +250,16 @@ func (ds *DataStore) SaveThresholdEvent(event *ThresholdEvent) error {
 		event.CreatedAt = time.Now()
 	}
 
-	if err := ds.DB.Create(event).Error; err != nil {
-		return dbError(err, "save_threshold_event", errors.PriorityMedium,
-			"species", event.SpeciesName,
-			"table", "threshold_events",
-			"action", "record_threshold_change")
-	}
+	return retryOnLock("save_threshold_event", func() error {
+		if err := ds.DB.Create(event).Error; err != nil {
+			return dbError(err, "save_threshold_event", errors.PriorityMedium,
+				"species", event.SpeciesName,
+				"table", "threshold_events",
+				"action", "record_threshold_change")
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // GetThresholdEvents retrieves threshold events for a specific species

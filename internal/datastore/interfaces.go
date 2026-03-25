@@ -899,21 +899,23 @@ func (ds *DataStore) SearchNotes(query string, sortAscending bool, limit, offset
 
 // SaveDailyEvents saves daily events data to the database.
 func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
-	// Use upsert to handle the unique date constraint
-	result := ds.DB.Where("date = ?", dailyEvents.Date).
-		Assign(*dailyEvents).
-		FirstOrCreate(dailyEvents)
+	return retryOnLock("save_daily_events", func() error {
+		// Use upsert to handle the unique date constraint
+		result := ds.DB.Where("date = ?", dailyEvents.Date).
+			Assign(*dailyEvents).
+			FirstOrCreate(dailyEvents)
 
-	if result.Error != nil {
-		return errors.New(result.Error).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_daily_events").
-			Context("date", dailyEvents.Date).
-			Build()
-	}
+		if result.Error != nil {
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_daily_events").
+				Context("date", dailyEvents.Date).
+				Build()
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // GetDailyEvents retrieves daily events data by date from the database.
@@ -972,30 +974,32 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 			Build()
 	}
 
-	// Use upsert to avoid duplicates for the same timestamp.
-	// Compare using Unix epoch seconds to handle legacy records with local
-	// timezone offsets alongside new UTC records.
-	var whereClause string
-	switch strings.ToLower(ds.Dialector().Name()) {
-	case DialectMySQL:
-		whereClause = "UNIX_TIMESTAMP(time) = UNIX_TIMESTAMP(?)"
-	default: // SQLite
-		whereClause = "strftime('%s', time) = strftime('%s', ?)"
-	}
+	return retryOnLock("save_hourly_weather", func() error {
+		// Use upsert to avoid duplicates for the same timestamp.
+		// Compare using Unix epoch seconds to handle legacy records with local
+		// timezone offsets alongside new UTC records.
+		var whereClause string
+		switch strings.ToLower(ds.Dialector().Name()) {
+		case DialectMySQL:
+			whereClause = "UNIX_TIMESTAMP(time) = UNIX_TIMESTAMP(?)"
+		default: // SQLite
+			whereClause = "strftime('%s', time) = strftime('%s', ?)"
+		}
 
-	result := ds.DB.Where(whereClause, hourlyWeather.Time).
-		Assign(*hourlyWeather).
-		FirstOrCreate(hourlyWeather)
+		result := ds.DB.Where(whereClause, hourlyWeather.Time).
+			Assign(*hourlyWeather).
+			FirstOrCreate(hourlyWeather)
 
-	if result.Error != nil {
-		return errors.New(result.Error).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_hourly_weather").
-			Build()
-	}
+		if result.Error != nil {
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_hourly_weather").
+				Build()
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
@@ -1819,39 +1823,44 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		return err
 	}
 
-	// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
-	// Update all columns except primary key on conflict
-	if err := ds.DB.Clauses(clause.OnConflict{
-		Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
-		DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
-	}).Create(cache).Error; err != nil {
-		// Detect constraint violations
-		if isConstraintViolation(err) {
-			// This is expected with UPSERT, log at debug level
-			GetLogger().Debug("Image cache UPSERT handled constraint",
-				logger.String("scientific_name", cache.ScientificName),
-				logger.String("provider", cache.ProviderName))
-		} else {
-			enhancedErr := dbError(err, "save_image_cache", errors.PriorityMedium,
-				"table", "image_caches",
-				"scientific_name", cache.ScientificName,
-				"provider", cache.ProviderName,
-				"action", "cache_species_thumbnail")
-
-			GetLogger().Error("Failed to save image cache",
-				logger.Error(enhancedErr))
-
-			// Record error metric
-			ds.metricsMu.RLock()
-			metricsInstance := ds.metrics
-			ds.metricsMu.RUnlock()
-			if metricsInstance != nil {
-				metricsInstance.RecordImageCacheOperation("save", "error")
-				metricsInstance.RecordImageCacheDuration("save", time.Since(start).Seconds())
+	err := retryOnLock("save_image_cache", func() error {
+		// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
+		// Update all columns except primary key on conflict
+		if err := ds.DB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
+			DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
+		}).Create(cache).Error; err != nil {
+			// Detect constraint violations
+			if isConstraintViolation(err) {
+				// This is expected with UPSERT, log at debug level
+				GetLogger().Debug("Image cache UPSERT handled constraint",
+					logger.String("scientific_name", cache.ScientificName),
+					logger.String("provider", cache.ProviderName))
+			} else {
+				return dbError(err, "save_image_cache", errors.PriorityMedium,
+					"table", "image_caches",
+					"scientific_name", cache.ScientificName,
+					"provider", cache.ProviderName,
+					"action", "cache_species_thumbnail")
 			}
-
-			return enhancedErr
 		}
+		return nil
+	})
+
+	if err != nil {
+		GetLogger().Error("Failed to save image cache",
+			logger.Error(err))
+
+		// Record error metric
+		ds.metricsMu.RLock()
+		metricsInstance := ds.metrics
+		ds.metricsMu.RUnlock()
+		if metricsInstance != nil {
+			metricsInstance.RecordImageCacheOperation("save", "error")
+			metricsInstance.RecordImageCacheDuration("save", time.Since(start).Seconds())
+		}
+
+		return err
 	}
 
 	// Record success metric

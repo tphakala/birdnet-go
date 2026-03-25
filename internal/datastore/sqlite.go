@@ -216,8 +216,16 @@ func (s *SQLiteStore) Open() error {
 		gormLogger = NewGormLogger(500*time.Millisecond, gormlogger.Warn, s.metrics)
 	}
 
+	// Build DSN with pragmas as query parameters so they apply to every
+	// connection opened by the pool, not just the first one.  When pragmas
+	// are set via Exec() after gorm.Open(), only the connection that
+	// happens to execute the statement gets them; new pool connections
+	// remain at SQLite defaults and miss busy_timeout entirely, leading
+	// to immediate "database is locked" errors under concurrency.
+	dsn := fmt.Sprintf("%s?_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000", dbPath)
+
 	// Open SQLite database with GORM
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: gormLogger,
 	})
 	if err != nil {
@@ -236,7 +244,13 @@ func (s *SQLiteStore) Open() error {
 		return enhancedErr
 	}
 
-	// Set SQLite pragmas for better performance
+	// Configure connection pool for SQLite.
+	// SQLite only supports a single writer at a time.  With Go's
+	// database/sql connection pool, multiple goroutines can obtain
+	// separate connections and attempt concurrent writes, causing
+	// "database is locked" errors even with busy_timeout set.
+	// Limiting to one open connection serializes all database access
+	// through a single connection, eliminating write contention.
 	sqlDB, err := db.DB()
 	if err != nil {
 		return errors.New(err).
@@ -245,24 +259,7 @@ func (s *SQLiteStore) Open() error {
 			Context("operation", "get_underlying_sqldb").
 			Build()
 	}
-
-	// Set pragmas
-	pragmas := []string{
-		"PRAGMA foreign_keys=ON",    // required for foreign key constraints
-		"PRAGMA journal_mode=WAL",   // faster writes
-		"PRAGMA synchronous=NORMAL", // faster writes
-		"PRAGMA cache_size=-4000",   // increase cache size
-		"PRAGMA temp_store=MEMORY",  // faster writes
-		"PRAGMA busy_timeout=30000", // wait up to 30s for locks (critical for concurrent access)
-	}
-
-	for _, pragma := range pragmas {
-		if _, err := sqlDB.Exec(pragma); err != nil {
-			GetLogger().Warn("Failed to set pragma",
-				logger.String("pragma", pragma),
-				logger.Error(err))
-		}
-	}
+	sqlDB.SetMaxOpenConns(1)
 
 	// Store the database connection
 	s.DB = db

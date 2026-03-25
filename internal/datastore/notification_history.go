@@ -38,27 +38,29 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 
 	// Upsert: Use GORM's OnConflict clause for efficient upsert
 	// This handles the composite unique index on (scientific_name, notification_type)
-	result := ds.DB.Clauses(clause.OnConflict{
-		Columns: []clause.Column{
-			{Name: "scientific_name"},
-			{Name: "notification_type"},
-		},
-		DoUpdates: clause.AssignmentColumns([]string{
-			"last_sent",
-			"expires_at",
-			"updated_at",
-		}),
-	}).Create(history)
+	return retryOnLock("save_notification_history", func() error {
+		result := ds.DB.Clauses(clause.OnConflict{
+			Columns: []clause.Column{
+				{Name: "scientific_name"},
+				{Name: "notification_type"},
+			},
+			DoUpdates: clause.AssignmentColumns([]string{
+				"last_sent",
+				"expires_at",
+				"updated_at",
+			}),
+		}).Create(history)
 
-	if result.Error != nil {
-		return dbError(result.Error, "save_notification_history", errors.PriorityMedium,
-			"species", history.ScientificName,
-			"notification_type", history.NotificationType,
-			"table", "notification_histories",
-			"action", "persist_notification_suppression")
-	}
+		if result.Error != nil {
+			return dbError(result.Error, "save_notification_history", errors.PriorityMedium,
+				"species", history.ScientificName,
+				"notification_type", history.NotificationType,
+				"table", "notification_histories",
+				"action", "persist_notification_suppression")
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // GetNotificationHistory retrieves a notification history record for a specific species and type
