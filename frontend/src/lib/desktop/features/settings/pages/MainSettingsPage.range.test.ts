@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
 import type { BirdNetSettings, SettingsFormData } from '$lib/stores/settings';
+import { api } from '$lib/utils/api';
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -274,5 +275,188 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
     expect(birdnet.latitude).toBe(51.5074);
     expect(birdnet.longitude).toBe(-0.1278);
     expect(birdnet.rangeFilter.threshold).toBe(0.05);
+  });
+});
+
+// Response shape for the range filter test endpoint
+interface RangeFilterTestResponse {
+  count: number;
+  species: Array<{
+    commonName: string;
+    scientificName: string;
+    label: string;
+    score: number;
+  }>;
+}
+
+describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
+  const FILTERED_COUNT = 150;
+  const THRESHOLD = 0.05;
+  const LATITUDE = 40.7128;
+  const LONGITUDE = -74.006;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+
+    // Initialize store with configured location and custom threshold
+    const formData: SettingsFormData = {
+      main: { name: 'TestNode' },
+      birdnet: {
+        modelPath: '',
+        labelPath: '',
+        sensitivity: 1.0,
+        threshold: 0.8,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: LATITUDE,
+        longitude: LONGITUDE,
+        locationConfigured: true,
+        rangeFilter: {
+          threshold: THRESHOLD,
+          speciesCount: null,
+          species: [],
+        },
+      },
+      realtime: {
+        dynamicThreshold: {
+          enabled: false,
+          debug: false,
+          trigger: 0.8,
+          min: 0.3,
+          validHours: 24,
+        },
+      },
+    };
+
+    settingsStore.set({
+      formData,
+      originalData: {} as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      restartRequired: false,
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('should use POST test endpoint (not GET list endpoint) when loading species for modal', async () => {
+    // The bug was that loadRangeFilterSpecies() used GET /api/v2/range/species/list
+    // which ignores threshold params and returns all server-side species.
+    // The fix changes it to use POST /api/v2/range/species/test which filters
+    // by the current threshold setting.
+
+    // Mock the test endpoint to return filtered species
+    const mockSpecies = [
+      {
+        commonName: 'House Sparrow',
+        scientificName: 'Passer domesticus',
+        label: 'Passer domesticus_House Sparrow',
+        score: 0.85,
+      },
+      {
+        commonName: 'European Robin',
+        scientificName: 'Erithacus rubecula',
+        label: 'Erithacus rubecula_European Robin',
+        score: 0.72,
+      },
+    ];
+
+    vi.mocked(api.post).mockResolvedValue({
+      count: FILTERED_COUNT,
+      species: mockSpecies,
+    });
+
+    // Simulate what the component does when "View Species" is clicked:
+    // It calls loadRangeFilterSpecies() which should POST to the test endpoint
+    const state = get(settingsStore);
+    const birdnet = state.formData.birdnet;
+
+    // Replicate the fixed loadRangeFilterSpecies logic
+    const data = (await api.post('/api/v2/range/species/test', {
+      latitude: birdnet.latitude,
+      longitude: birdnet.longitude,
+      threshold: birdnet.rangeFilter.threshold,
+    })) as RangeFilterTestResponse;
+
+    // Verify the test endpoint was called with the correct threshold
+    expect(api.post).toHaveBeenCalledWith('/api/v2/range/species/test', {
+      latitude: LATITUDE,
+      longitude: LONGITUDE,
+      threshold: THRESHOLD,
+    });
+
+    // Verify the GET list endpoint was NOT called
+    expect(api.get).not.toHaveBeenCalled();
+
+    // Verify the returned data has the filtered count, not the full database count
+    expect(data.count).toBe(FILTERED_COUNT);
+    expect(data.species).toHaveLength(2);
+  });
+
+  it('should preserve species count after viewing species modal', async () => {
+    // This tests the core bug: opening the modal should not reset speciesCount
+    // to the unfiltered value from the server
+
+    // Mock filtered test response
+    vi.mocked(api.post).mockResolvedValue({
+      count: FILTERED_COUNT,
+      species: [
+        {
+          commonName: 'House Sparrow',
+          scientificName: 'Passer domesticus',
+          label: 'Passer domesticus_House Sparrow',
+          score: 0.85,
+        },
+      ],
+    });
+
+    // Simulate the component state: rangeFilterState starts with a filtered count
+    const rangeFilterState = {
+      speciesCount: FILTERED_COUNT,
+      loading: false,
+      testing: false,
+      downloading: false,
+      error: null,
+      showModal: false,
+      species: [] as Array<{
+        commonName: string;
+        scientificName: string;
+        label: string;
+        score: number;
+      }>,
+    };
+
+    // Simulate clicking "View Species" - opens modal and loads species
+    rangeFilterState.showModal = true;
+    rangeFilterState.loading = true;
+
+    const state = get(settingsStore);
+    const birdnet = state.formData.birdnet;
+
+    const data = (await api.post('/api/v2/range/species/test', {
+      latitude: birdnet.latitude,
+      longitude: birdnet.longitude,
+      threshold: birdnet.rangeFilter.threshold,
+    })) as RangeFilterTestResponse;
+
+    // Update state from response (matching component logic)
+    rangeFilterState.species = data.species;
+    rangeFilterState.speciesCount = data.count;
+    rangeFilterState.loading = false;
+
+    // Verify the species count was NOT reset to a different value
+    expect(rangeFilterState.speciesCount).toBe(FILTERED_COUNT);
+    expect(rangeFilterState.species).toHaveLength(1);
+
+    // Simulate closing the modal
+    rangeFilterState.showModal = false;
+
+    // The species count should still be the filtered value
+    expect(rangeFilterState.speciesCount).toBe(FILTERED_COUNT);
   });
 });

@@ -931,16 +931,18 @@
     rangeFilterState.error = null;
 
     try {
-      const params = new URLSearchParams({
-        latitude: settings.birdnet.latitude.toString(),
-        longitude: settings.birdnet.longitude.toString(),
-        threshold: settings.birdnet.rangeFilter.threshold.toString(),
-      });
-
-      const data = await api.get<{ count: number; species: RangeFilterSpecies[] }>(
-        `/api/v2/range/species/list?${params}`
+      // Use the test endpoint which respects the current threshold setting.
+      // The list endpoint ignores query parameters and returns the full
+      // server-side species list, which would reset the displayed count.
+      const data = await api.post<{ count: number; species: RangeFilterSpecies[] }>(
+        '/api/v2/range/species/test',
+        {
+          latitude: settings.birdnet.latitude,
+          longitude: settings.birdnet.longitude,
+          threshold: settings.birdnet.rangeFilter.threshold,
+        }
       );
-      rangeFilterState.species = data.species || [];
+      rangeFilterState.species = data.species ?? [];
       rangeFilterState.speciesCount = data.count;
     } catch (error) {
       logger.error('Failed to load species list:', error);
