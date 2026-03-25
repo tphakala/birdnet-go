@@ -1836,19 +1836,11 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 			Columns:   []clause.Column{{Name: "provider_name"}, {Name: "scientific_name"}},
 			DoUpdates: clause.AssignmentColumns([]string{"url", "license_name", "license_url", "author_name", "author_url", "cached_at"}),
 		}).Create(cache).Error; err != nil {
-			// Detect constraint violations
-			if isConstraintViolation(err) {
-				// This is expected with UPSERT, log at debug level
-				GetLogger().Debug("Image cache UPSERT handled constraint",
-					logger.String("scientific_name", cache.ScientificName),
-					logger.String("provider", cache.ProviderName))
-			} else {
-				return dbError(err, "save_image_cache", errors.PriorityMedium,
-					"table", "image_caches",
-					"scientific_name", cache.ScientificName,
-					"provider", cache.ProviderName,
-					"action", "cache_species_thumbnail")
-			}
+			return dbError(err, "save_image_cache", errors.PriorityMedium,
+				"table", "image_caches",
+				"scientific_name", cache.ScientificName,
+				"provider", cache.ProviderName,
+				"action", "cache_species_thumbnail")
 		}
 		return nil
 	})

@@ -64,7 +64,7 @@ func retryOnLock(operation string, fn func() error) error {
 // buildSQLiteDSN constructs a SQLite DSN string with pragma query parameters.
 // Handles the case where dbPath may already contain query parameters (e.g.,
 // "file::memory:?cache=shared") by using "&" instead of "?" as the separator.
-func buildSQLiteDSN(dbPath string, pragmas string) string {
+func buildSQLiteDSN(dbPath, pragmas string) string {
 	sep := "?"
 	if strings.Contains(dbPath, "?") {
 		sep = "&"
