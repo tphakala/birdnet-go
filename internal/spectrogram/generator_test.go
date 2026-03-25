@@ -1075,6 +1075,8 @@ func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			env := setupTestEnv(t)
 			env.Settings.Realtime.Audio.Export.Length = 15
 			env.Settings.Realtime.Dashboard.Spectrogram.Style = tt.style
@@ -1104,24 +1106,31 @@ func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
 func TestSoxAndFFmpegStyleConsistency(t *testing.T) {
 	t.Parallel()
 
-	allStyles := []string{
-		conf.SpectrogramStyleDefault,
-		conf.SpectrogramStyleScientificDark,
-		conf.SpectrogramStyleHighContrastDark,
-		conf.SpectrogramStyleScientific,
+	allStyles := []struct {
+		style         string
+		wantSoxMapped bool // true if Sox should return non-nil args for this style
+	}{
+		{conf.SpectrogramStyleDefault, false},
+		{conf.SpectrogramStyleScientificDark, true},
+		{conf.SpectrogramStyleHighContrastDark, true},
+		{conf.SpectrogramStyleScientific, true},
 	}
 
-	for _, style := range allStyles {
-		t.Run(style, func(t *testing.T) {
+	for _, tc := range allStyles {
+		t.Run(tc.style, func(t *testing.T) {
 			t.Parallel()
 
-			// getStyleArgs should not panic
-			_ = getStyleArgs(style)
+			// Verify Sox style mapping returns args for non-default presets
+			soxArgs := getStyleArgs(tc.style)
+			if tc.wantSoxMapped {
+				assert.NotEmpty(t, soxArgs,
+					"Sox args should be mapped for style %q", tc.style)
+			}
 
 			// getFFmpegColorMode should return a non-empty value
-			colorMode := getFFmpegColorMode(style)
+			colorMode := getFFmpegColorMode(tc.style)
 			assert.NotEmpty(t, colorMode,
-				"FFmpeg color mode should not be empty for style %q", style)
+				"FFmpeg color mode should not be empty for style %q", tc.style)
 		})
 	}
 }
