@@ -120,6 +120,27 @@ Accessibility:
   );
   let calendarRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
+  let wrapperRef: HTMLDivElement | null = $state(null);
+  let dropdownStyle = $state('');
+
+  // Generate a unique ID for this datepicker instance
+  const pickerId = $state(Math.random().toString(36).slice(2, 9));
+
+  // Calculate dropdown position based on trigger button's bounding rect
+  function updateDropdownPosition() {
+    const trigger =
+      document.querySelector(`[data-datepicker-id="${pickerId}"]`) ||
+      wrapperRef?.querySelector('.datepicker-trigger');
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const calendarWidth = calendarRef?.offsetWidth ?? 280;
+    const calendarHeight = calendarRef?.offsetHeight ?? 0;
+    const maxLeft = Math.max(8, window.innerWidth - calendarWidth - 8);
+    const left = Math.min(Math.max(rect.left, 8), maxLeft);
+    const fitsBelow = rect.bottom + 4 + calendarHeight <= window.innerHeight - 8;
+    const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - calendarHeight - 4);
+    dropdownStyle = `position: fixed; top: ${top}px; left: ${left}px; z-index: 9999;`;
+  }
 
   // State for keyboard navigation focus
   let focusedDate = $state<Date | null>(null);
@@ -249,6 +270,7 @@ Accessibility:
       : t('components.datePicker.aria.calendarClosed');
     if (opening) {
       focusedDate = selectedDate || new Date();
+      updateDropdownPosition();
     }
   }
 
@@ -396,6 +418,20 @@ Accessibility:
     };
   });
 
+  // Reposition or close dropdown on scroll/resize
+  $effect(() => {
+    if (showCalendar) {
+      updateDropdownPosition();
+      const handleReposition = () => updateDropdownPosition();
+      window.addEventListener('scroll', handleReposition, true);
+      window.addEventListener('resize', handleReposition);
+      return () => {
+        window.removeEventListener('scroll', handleReposition, true);
+        window.removeEventListener('resize', handleReposition);
+      };
+    }
+  });
+
   // Week day headers (localized)
   const weekDays = Array.from({ length: 7 }, (_, i) =>
     new Date(1970, 0, 4 + i).toLocaleDateString(undefined, { weekday: 'short' })
@@ -418,11 +454,12 @@ Accessibility:
   });
 </script>
 
-<div class={cn('relative datepicker-wrapper', className)}>
+<div bind:this={wrapperRef} class={cn('relative datepicker-wrapper', className)}>
   <!-- Date Input Button -->
   <button
     bind:this={buttonRef}
     type="button"
+    data-datepicker-id={pickerId}
     {...restProps}
     class={cn('datepicker-trigger', sizeClass, disabled && 'opacity-50 cursor-not-allowed')}
     onclick={toggleCalendar}
@@ -467,6 +504,7 @@ Accessibility:
     <div
       bind:this={calendarRef}
       class="datepicker-calendar"
+      style={dropdownStyle}
       role="dialog"
       aria-label={t('common.aria.datePickerCalendar')}
     >
@@ -642,12 +680,8 @@ Accessibility:
     border-color: rgb(100 116 139); /* slate-500 */
   }
 
-  /* Calendar dropdown */
+  /* Calendar dropdown - position is set dynamically via inline style (position: fixed) */
   .datepicker-calendar {
-    position: absolute;
-    right: 0;
-    z-index: 50;
-    margin-top: 0.25rem;
     min-width: 280px;
     padding: 1rem;
     border-radius: 0.5rem;

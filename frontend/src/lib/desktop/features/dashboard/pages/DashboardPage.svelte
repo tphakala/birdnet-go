@@ -167,9 +167,13 @@ Performance Optimizations:
     { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
   ];
+  // Check whether authenticated settings were actually loaded successfully.
+  // When settings failed to load (e.g. guest/unauthenticated), skip the
+  // settings-derived layout so we fall through to the public app config.
+  let settingsLoaded = $derived(!$settingsStore.isLoading && !$settingsStore.error);
   // Priority: authenticated settings > public app config > hardcoded defaults
   let layoutElements = $derived(
-    $dashboardLayout?.elements ??
+    (settingsLoaded ? $dashboardLayout?.elements : null) ??
       (appState.layout?.elements as DashboardElement[] | undefined) ??
       defaultElements
   );

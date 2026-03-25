@@ -98,6 +98,7 @@
       });
 
       audioElementRef.addEventListener('error', _e => {
+        if (!playingSource) return; // Ignore errors from cleanup
         showStatusMessage('Playback error');
         isPlaying = false;
         stopPlayback();
@@ -468,16 +469,17 @@
     hideStatusMessage();
     stopHeartbeat();
 
-    const el = getAudioElement();
-    if (el) {
-      el.pause();
-      el.src = '';
-      el.load();
-    }
-
+    // Destroy HLS instance FIRST (before touching the audio element)
     if (hlsInstance) {
       hlsInstance.destroy();
       hlsInstance = null;
+    }
+
+    const el = getAudioElement();
+    if (el) {
+      el.pause();
+      el.removeAttribute('src'); // Don't use el.src = '' which triggers error events
+      // Don't call el.load() -- removeAttribute is sufficient
     }
 
     const previousSource = playingSource;
@@ -566,7 +568,7 @@
 
         if (audioElementRef) {
           audioElementRef.pause();
-          audioElementRef.src = '';
+          audioElementRef.removeAttribute('src');
           audioElementRef.remove();
           audioElementRef = null;
         }
