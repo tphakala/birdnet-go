@@ -50,6 +50,8 @@ const DEFAULT_FFT_SIZE = 1024;
 const HIGH_PASS_FREQ = 20;
 const HIGH_PASS_Q = 1;
 const ANALYSER_SMOOTHING = 0.8;
+const OUTPUT_GAIN_UNMUTED = 1;
+const OUTPUT_GAIN_MUTED = 0;
 
 export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   const fftSize = options?.fftSize ?? DEFAULT_FFT_SIZE;
@@ -114,7 +116,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
 
       // Output gain node controls audio to speakers (mute sets to 0)
       outputGainNode = audioContext.createGain();
-      outputGainNode.gain.value = audioOutput ? 1 : 0;
+      outputGainNode.gain.value = audioOutput ? OUTPUT_GAIN_UNMUTED : OUTPUT_GAIN_MUTED;
 
       // Connect chain: source → highpass → gain → analyser → outputGain → destination
       sourceNode.connect(highPassNode);
@@ -166,7 +168,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     audioOutput = enabled;
     if (!outputGainNode) return;
 
-    outputGainNode.gain.value = enabled ? 1 : 0;
+    outputGainNode.gain.value = enabled ? OUTPUT_GAIN_UNMUTED : OUTPUT_GAIN_MUTED;
   }
 
   /** Update gain in dB */
