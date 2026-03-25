@@ -4483,8 +4483,6 @@
   "Larus livens_Yellow-footed Gull": "yefgul",
   "calgul": "Larus californicus_California Gull",
   "Larus californicus_California Gull": "calgul",
-  "hergul": "Larus argentatus_Herring Gull",
-  "Larus argentatus_Herring Gull": "hergul",
   "yelgul1": "Larus michahellis_Yellow-legged Gull",
   "Larus michahellis_Yellow-legged Gull": "yelgul1",
   "casgul2": "Larus cachinnans_Caspian Gull",
@@ -25276,5 +25274,7 @@
   "Environmental_Environmental": "envrnm",
   "envrnm": "Environmental_Environmental",
   "Noise_Noise": "nocall",
-  "nocall": "Noise_Noise"
+  "nocall": "Noise_Noise",
+  "euhgul1": "Larus argentatus_Herring Gull",
+  "Larus argentatus_Herring Gull": "euhgul1"
 }
