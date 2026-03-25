@@ -32,6 +32,7 @@
     Bell,
     Send,
   } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import type { AlertRule, AlertSchema, ObjectTypeSchema } from '$lib/api/alerts';
   import {
@@ -457,6 +458,8 @@
         </button>
         {#if objDropOpen}
           <div
+            in:dropdown={{ y: -4, duration: 120 }}
+            out:dropdown={{ y: -4, duration: 80 }}
             role="listbox"
             class="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg rounded-lg overflow-hidden"
           >
@@ -590,6 +593,8 @@
       {#if eventDropOpen}
         {@const items = triggerType === 'event' ? eventOptions : metricOptions}
         <div
+          in:dropdown={{ y: -4, duration: 120 }}
+          out:dropdown={{ y: -4, duration: 80 }}
           role="listbox"
           class="absolute z-50 top-full left-0 right-0 mt-1 bg-[var(--color-base-100)] border border-[var(--color-base-300)] shadow-lg rounded-lg overflow-hidden max-h-60 overflow-y-auto"
         >

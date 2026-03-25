@@ -12,6 +12,7 @@
   import { getLogger } from '$lib/utils/logger';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import { Settings, Sun, Moon, Pencil, RotateCcw, Github } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
 
   const logger = getLogger('dashboard');
@@ -168,6 +169,8 @@
     <div
       bind:this={dropdownRef}
       id="header-settings-menu"
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
       class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-content)]/10 bg-[var(--color-base-100)] shadow-lg"
       style:z-index="1010"
       aria-label={t('navigation.settingsMenu')}

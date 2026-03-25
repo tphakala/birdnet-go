@@ -10,6 +10,7 @@
   import type { Snippet } from 'svelte';
   import type { DashboardElement } from '$lib/stores/settings';
   import { GripVertical, EyeOff, Eye, Trash2, Columns2, Square, Settings } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { cn } from '$lib/utils/cn.js';
   import { t } from '$lib/i18n';
   import { getElementLabel } from '$lib/desktop/features/dashboard/utils/elementLabels';
@@ -159,6 +160,8 @@
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
               id={settingsDropdownId}
+              in:dropdown
+              out:dropdown={{ duration: 100 }}
               class="absolute right-0 top-full z-50 mt-2 min-w-64 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] p-4 shadow-xl"
               onmousedown={e => e.stopPropagation()}
             >

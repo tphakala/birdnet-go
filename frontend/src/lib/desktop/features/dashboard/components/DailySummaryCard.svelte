@@ -1737,7 +1737,7 @@ Responsive Breakpoints:
 
     /* Force a new stacking context to escape sticky header */
     isolation: isolate;
-    z-index: 9999;
+    z-index: 1100;
   }
 
   .sun-icon-wrapper:hover .sun-tooltip {

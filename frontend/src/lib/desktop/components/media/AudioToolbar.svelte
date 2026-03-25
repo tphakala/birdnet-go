@@ -17,6 +17,7 @@
     Loader2,
     ChevronDown,
   } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
 
   interface Props {
@@ -284,7 +285,11 @@
         <ChevronDown size={10} />
       </button>
       {#if showDenoiseMenu}
-        <div class="denoise-menu">
+        <div
+          class="denoise-menu"
+          in:dropdown={{ y: -4, duration: 120 }}
+          out:dropdown={{ y: -4, duration: 80 }}
+        >
           {#each denoiseOptions as opt (opt.id)}
             <button
               class="denoise-option"
@@ -342,7 +347,11 @@
         <span class="export-error" role="alert" aria-live="assertive">{extractionError}</span>
       {/if}
       {#if showExportMenu}
-        <div class="export-menu">
+        <div
+          class="export-menu"
+          in:dropdown={{ y: -4, duration: 120 }}
+          out:dropdown={{ y: -4, duration: 80 }}
+        >
           <button class="export-option" onclick={() => handleExport('original')}>
             {t('components.audioPlayer.processing.exportOriginal')}
           </button>

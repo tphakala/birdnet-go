@@ -46,6 +46,7 @@ Accessibility:
   import { onMount } from 'svelte';
   import { cn } from '$lib/utils/cn.js';
   import { Calendar, ChevronLeft, ChevronRight } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { getLocalDateString } from '$lib/utils/date.js';
   import { t } from '$lib/i18n';
   import type { HTMLAttributes } from 'svelte/elements';
@@ -139,7 +140,7 @@ Accessibility:
     const left = Math.min(Math.max(rect.left, 8), maxLeft);
     const fitsBelow = rect.bottom + 4 + calendarHeight <= window.innerHeight - 8;
     const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - calendarHeight - 4);
-    dropdownStyle = `position: fixed; top: ${top}px; left: ${left}px; z-index: 9999;`;
+    dropdownStyle = `position: fixed; top: ${top}px; left: ${left}px; z-index: 1100;`;
   }
 
   // State for keyboard navigation focus
@@ -503,6 +504,8 @@ Accessibility:
   {#if showCalendar}
     <div
       bind:this={calendarRef}
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
       class="datepicker-calendar"
       style={dropdownStyle}
       role="dialog"

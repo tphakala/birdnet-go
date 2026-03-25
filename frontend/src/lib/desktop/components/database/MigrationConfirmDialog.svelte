@@ -13,6 +13,7 @@
   @component
 -->
 <script lang="ts">
+  import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { AlertTriangle, Loader2 } from '@lucide/svelte';
 
@@ -41,79 +42,75 @@
   });
 </script>
 
-{#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <!-- Backdrop -->
-    <button
-      type="button"
-      class="fixed inset-0 bg-black/50"
-      onclick={onCancel}
-      aria-label={t('common.aria.closeModal')}
-    ></button>
-
-    <!-- Dialog -->
-    <div
-      class="relative bg-[var(--color-base-100)] rounded-xl shadow-xl p-8 max-w-xl w-full mx-4 z-10"
-    >
-      <div class="flex items-center gap-4 mb-6">
-        <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
-          <AlertTriangle class="size-7 text-[var(--color-warning)]" />
-        </div>
-        <h3 class="text-xl font-semibold text-[var(--color-base-content)]">
-          {t('system.database.migration.confirmDialog.title')}
-        </h3>
+<Modal
+  isOpen={open}
+  size="xl"
+  type="default"
+  closeOnBackdrop={!isLoading}
+  closeOnEsc={!isLoading}
+  showCloseButton={false}
+  loading={isLoading}
+  onClose={onCancel}
+>
+  {#snippet header()}
+    <div class="flex items-center gap-4 mb-6">
+      <div class="p-3 rounded-full bg-[var(--color-warning)]/10">
+        <AlertTriangle class="size-7 text-[var(--color-warning)]" />
       </div>
-
-      <p class="text-base text-[var(--color-base-content)]/80 mb-6 leading-relaxed">
-        {t('system.database.migration.confirmDialog.message')}
-      </p>
-
-      <!-- Checkbox -->
-      <label
-        class="flex items-start gap-4 p-4 rounded-lg bg-[var(--color-base-200)] cursor-pointer mb-6"
-      >
-        <input
-          type="checkbox"
-          bind:checked={confirmed}
-          class="mt-1 size-5 rounded border-[var(--color-base-300)]
-                 text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
-        />
-        <span class="text-base text-[var(--color-base-content)]">
-          {t('system.database.migration.confirmDialog.checkbox')}
-        </span>
-      </label>
-
-      <p class="text-sm text-[var(--color-base-content)]/60 mb-8">
-        {t('system.database.migration.confirmDialog.note')}
-      </p>
-
-      <!-- Actions -->
-      <div class="flex justify-end gap-3">
-        <button
-          class="inline-flex items-center justify-center gap-2 px-5 py-2.5
-                 text-sm font-medium rounded-lg transition-colors
-                 border border-[var(--color-base-300)]
-                 text-[var(--color-base-content)]
-                 hover:bg-[var(--color-base-200)]"
-          onclick={onCancel}
-        >
-          {t('common.cancel')}
-        </button>
-        <button
-          class="inline-flex items-center justify-center gap-2 px-5 py-2.5
-                 text-sm font-medium rounded-lg transition-colors
-                 bg-[var(--color-primary)] text-[var(--color-primary-content)]
-                 hover:bg-[var(--color-primary)]/90
-                 disabled:opacity-50 disabled:cursor-not-allowed"
-          onclick={handleConfirm}
-          disabled={!confirmed || isLoading}
-        >
-          {#if isLoading}
-            <Loader2 class="size-4 animate-spin" />
-          {/if}
-          {t('system.database.migration.actions.start')}
-        </button>
-      </div>
+      <h3 id="modal-title" class="text-xl font-semibold text-[var(--color-base-content)]">
+        {t('system.database.migration.confirmDialog.title')}
+      </h3>
     </div>
-  </div>
-{/if}
+  {/snippet}
+
+  {#snippet children()}
+    <p class="text-base text-[var(--color-base-content)]/80 mb-6 leading-relaxed">
+      {t('system.database.migration.confirmDialog.message')}
+    </p>
+
+    <label
+      class="flex items-start gap-4 p-4 rounded-lg bg-[var(--color-base-200)] cursor-pointer mb-6"
+    >
+      <input
+        type="checkbox"
+        bind:checked={confirmed}
+        class="mt-1 size-5 rounded border-[var(--color-base-300)]
+               text-[var(--color-primary)] focus:ring-[var(--color-primary)]"
+      />
+      <span class="text-base text-[var(--color-base-content)]">
+        {t('system.database.migration.confirmDialog.checkbox')}
+      </span>
+    </label>
+
+    <p class="text-sm text-[var(--color-base-content)]/60">
+      {t('system.database.migration.confirmDialog.note')}
+    </p>
+  {/snippet}
+
+  {#snippet footer()}
+    <button
+      class="inline-flex items-center justify-center gap-2 px-5 py-2.5
+             text-sm font-medium rounded-lg transition-colors
+             border border-[var(--color-base-300)]
+             text-[var(--color-base-content)]
+             hover:bg-[var(--color-base-200)]"
+      onclick={onCancel}
+    >
+      {t('common.cancel')}
+    </button>
+    <button
+      class="inline-flex items-center justify-center gap-2 px-5 py-2.5
+             text-sm font-medium rounded-lg transition-colors
+             bg-[var(--color-primary)] text-[var(--color-primary-content)]
+             hover:bg-[var(--color-primary)]/90
+             disabled:opacity-50 disabled:cursor-not-allowed"
+      onclick={handleConfirm}
+      disabled={!confirmed || isLoading}
+    >
+      {#if isLoading}
+        <Loader2 class="size-4 animate-spin" />
+      {/if}
+      {t('system.database.migration.actions.start')}
+    </button>
+  {/snippet}
+</Modal>

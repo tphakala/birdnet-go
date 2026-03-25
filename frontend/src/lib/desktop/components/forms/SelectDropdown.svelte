@@ -3,6 +3,7 @@
   import type { Snippet, Component } from 'svelte';
   import type { SelectOption, SelectDropdownVariant } from './SelectDropdown.types';
   import { X, ChevronDown } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import {
     safeGet,
     safeArrayAccess,
@@ -452,6 +453,8 @@
     {#if isOpen}
       <div
         bind:this={dropdownElement}
+        in:dropdown={{ y: -4, duration: 120 }}
+        out:dropdown={{ y: -4, duration: 80 }}
         class={cn(
           'fixed z-[60] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName

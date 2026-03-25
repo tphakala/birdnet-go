@@ -11,6 +11,7 @@
 <script lang="ts">
   import { dndzone } from 'svelte-dnd-action';
   import { Plus, Save, X } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import type { DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import type { DashboardElementType } from '$lib/stores/settings';
   import DashboardElementWrapper from './DashboardElementWrapper.svelte';
@@ -227,6 +228,8 @@
       {#if addDropdownOpen && missingTypes.length > 0}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
+          in:dropdown
+          out:dropdown={{ duration: 100 }}
           class="absolute right-0 top-full mt-2 min-w-48 rounded-lg border border-[var(--color-base-200)] bg-[var(--color-base-100)] py-1 shadow-xl"
           onclick={e => e.stopPropagation()}
           onkeydown={e => e.stopPropagation()}

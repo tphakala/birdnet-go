@@ -18,6 +18,7 @@
   import { api } from '$lib/utils/api';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import { ChevronDown, Check, Globe, Monitor } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
 
   interface NetworkInterface {
     address: string;
@@ -212,6 +213,8 @@
     </button>
     {#if dropOpen}
       <div
+        in:dropdown={{ y: -4, duration: 120 }}
+        out:dropdown={{ y: -4, duration: 80 }}
         role="listbox"
         class="absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-hidden overflow-y-auto rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] shadow-lg"
       >

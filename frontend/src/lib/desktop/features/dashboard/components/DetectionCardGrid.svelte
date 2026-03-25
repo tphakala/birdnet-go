@@ -27,6 +27,7 @@
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { RefreshCw, XCircle, ChevronDown, Check } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -213,6 +214,8 @@
           {#if showLimitDropdown}
             <div
               bind:this={dropdownRef}
+              in:dropdown={{ y: -4, duration: 120 }}
+              out:dropdown={{ y: -4, duration: 80 }}
               class="limit-dropdown-menu"
               role="listbox"
               aria-label={t('dashboard.recentDetections.controls.show')}
@@ -389,19 +392,6 @@
     box-shadow:
       0 10px 15px -3px rgba(0, 0, 0, 0.1),
       0 4px 6px -2px rgba(0, 0, 0, 0.05);
-    animation: dropdown-enter 150ms ease-out;
-  }
-
-  @keyframes dropdown-enter {
-    from {
-      opacity: 0;
-      transform: translateY(-0.25rem);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
   }
 
   :global([data-theme='dark']) .limit-dropdown-menu {

@@ -25,6 +25,7 @@
     XCircle,
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
 
@@ -885,7 +886,11 @@
                             <SquarePen class="size-4" />
                           </button>
                           {#if reviewOpenForId === result.id}
-                            <div class="review-dropdown">
+                            <div
+                              class="review-dropdown"
+                              in:dropdown={{ y: -4, duration: 120 }}
+                              out:dropdown={{ y: -4, duration: 80 }}
+                            >
                               <button
                                 class="review-dropdown-item correct"
                                 onclick={e => {
@@ -1140,7 +1145,11 @@
                           {t('search.review.review')}
                         </button>
                         {#if reviewOpenForId === result.id}
-                          <div class="review-dropdown">
+                          <div
+                            class="review-dropdown"
+                            in:dropdown={{ y: -4, duration: 120 }}
+                            out:dropdown={{ y: -4, duration: 80 }}
+                          >
                             <button
                               class="review-dropdown-item correct"
                               onclick={e => {
@@ -1371,7 +1380,6 @@
     border-radius: 0.5rem;
     box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
     z-index: 50;
-    animation: reviewFadeIn 0.15s ease-out;
   }
 
   .review-dropdown-item {
@@ -1399,17 +1407,5 @@
   .review-dropdown-item.false-positive:hover {
     background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
     color: var(--color-error);
-  }
-
-  @keyframes reviewFadeIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
   }
 </style>

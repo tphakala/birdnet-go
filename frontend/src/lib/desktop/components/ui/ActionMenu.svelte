@@ -18,6 +18,7 @@
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
   import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
 
@@ -195,6 +196,8 @@
     {#if isOpen}
       <ul
         bind:this={menuElement}
+        in:dropdown
+        out:dropdown={{ duration: 100 }}
         class="fixed menu p-2 shadow-lg bg-[var(--color-base-100)] rounded-box w-52 border border-[var(--color-base-300)]"
         role="menu"
       >
@@ -279,21 +282,7 @@
 
 <style>
   .menu {
-    animation: fadeIn 0.2s ease-out;
-
-    /* Ensure menu is always on top - fallback for CSS-only scenarios */
-    z-index: 9999 !important;
-  }
-
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
+    /* Above cards and header dropdowns, below modals */
+    z-index: 1100;
   }
 </style>

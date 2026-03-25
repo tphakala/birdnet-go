@@ -2,6 +2,7 @@
   import { cn } from '$lib/utils/cn';
   import ReconnectingEventSource from 'reconnecting-eventsource';
   import { Mic, CirclePlay, CircleStop, Check } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { loggers } from '$lib/utils/logger';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -638,6 +639,8 @@
     {#if dropdownOpen}
       <div
         bind:this={dropdownRef}
+        in:dropdown
+        out:dropdown={{ duration: 100 }}
         role="menu"
         aria-label="Audio Source Selection"
         class="audio-dropdown absolute top-full mt-2 w-72 sm:w-80 max-w-[calc(100vw-2rem)] bg-[var(--color-base-100)] rounded-lg shadow-xl border border-[var(--color-base-300)] overflow-hidden flex flex-col z-50"

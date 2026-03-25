@@ -219,7 +219,7 @@
 
 <div
   class={cn(
-    'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
+    'fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-black/50 opacity-0 invisible transition-[opacity,visibility] duration-200 ease-out',
     { 'opacity-100 visible': isOpen }
   )}
   role="dialog"

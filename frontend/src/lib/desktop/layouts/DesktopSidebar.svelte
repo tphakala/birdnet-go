@@ -72,6 +72,7 @@ Performance Optimizations:
     LifeBuoy,
     Paintbrush,
   } from '@lucide/svelte';
+  import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
@@ -466,6 +467,8 @@ Performance Optimizations:
             <!-- Flyout submenu (fixed positioning to escape overflow container) -->
             {#if analyticsFlyoutOpen}
               <div
+                in:flyout
+                out:flyout={{ duration: 100 }}
                 class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                 style:top="{analyticsFlyoutPosition.top}px"
                 style:left="{analyticsFlyoutPosition.left}px"
@@ -475,7 +478,7 @@ Performance Optimizations:
                 >
                   {t('navigation.analytics')}
                 </div>
-                <div class="p-1">
+                <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
                   <button
                     onclick={() => navigate(navigationUrls.analytics)}
                     class={cn(
@@ -648,6 +651,8 @@ Performance Optimizations:
               <!-- Flyout submenu (fixed positioning to escape overflow container) -->
               {#if systemFlyoutOpen}
                 <div
+                  in:flyout
+                  out:flyout={{ duration: 100 }}
                   class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                   style:top="{systemFlyoutPosition.top}px"
                   style:left="{systemFlyoutPosition.left}px"
@@ -657,7 +662,7 @@ Performance Optimizations:
                   >
                     {t('navigation.system')}
                   </div>
-                  <div class="p-1">
+                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
                     <button
                       onclick={() => navigate(navigationUrls.systemOverview)}
                       class={cn(
@@ -787,6 +792,8 @@ Performance Optimizations:
               <!-- Flyout submenu (fixed positioning to escape overflow container) -->
               {#if settingsFlyoutOpen}
                 <div
+                  in:flyout
+                  out:flyout={{ duration: 100 }}
                   class="fixed bg-[var(--color-base-100)] border border-[var(--color-base-200)] rounded-lg shadow-xl min-w-48 z-[100]"
                   style:top="{settingsFlyoutPosition.top}px"
                   style:left="{settingsFlyoutPosition.left}px"
@@ -796,7 +803,7 @@ Performance Optimizations:
                   >
                     {t('navigation.settings')}
                   </div>
-                  <div class="p-1 max-h-80 overflow-y-auto">
+                  <div class="p-1 max-h-[calc(100vh-8rem)] overflow-y-auto">
                     <button
                       onclick={() => navigate(navigationUrls.settingsMain)}
                       class={cn(
@@ -1100,7 +1107,7 @@ Performance Optimizations:
   <!-- Fixed-position tooltip for collapsed sidebar (escapes overflow containers) -->
   {#if tooltipVisible && isCollapsed}
     <div
-      class="fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
+      class="sidebar-tooltip fixed px-2 py-1 bg-[var(--color-base-300)] text-[var(--color-base-content)] text-sm rounded shadow-lg pointer-events-none whitespace-nowrap z-[100] -translate-y-1/2"
       style:top="{tooltipPosition.top}px"
       style:left="{tooltipPosition.left}px"
     >
@@ -1116,3 +1123,19 @@ Performance Optimizations:
   redirectUrl={window.location.pathname}
   {authConfig}
 />
+
+<style>
+  /* Left-pointing arrow on sidebar tooltips */
+  .sidebar-tooltip::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -5px;
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 5px solid transparent;
+    border-bottom: 5px solid transparent;
+    border-right: 5px solid var(--color-base-300);
+  }
+</style>

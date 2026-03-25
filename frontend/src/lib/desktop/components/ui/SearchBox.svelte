@@ -8,6 +8,7 @@
     formatFilterForDisplay,
   } from '$lib/utils/searchParser';
   import { X, Search, Filter, Clock, TriangleAlert } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { safeArrayAccess } from '$lib/utils/security';
 
   interface Props {
@@ -507,6 +508,8 @@
         <!-- Search suggestions dropdown -->
         {#if showDropdown && suggestions.length > 0}
           <div
+            in:dropdown={{ y: -4, duration: 120 }}
+            out:dropdown={{ y: -4, duration: 80 }}
             class="absolute top-full left-0 right-0 bg-[var(--color-base-100)] border border-[var(--color-base-300)] border-t-0 rounded-b-lg shadow-lg z-50 max-h-80 overflow-y-auto"
           >
             {#each suggestions as suggestion, index (`suggestion-${index}`)}

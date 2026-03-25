@@ -29,6 +29,7 @@
   import type { ImageAttribution } from '$lib/types/detection.types';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import Portal from 'svelte-portal';
+  import { dropdown } from '$lib/utils/transitions';
   import { Image } from '@lucide/svelte';
 
   interface Props {
@@ -214,7 +215,9 @@
       <div
         bind:this={popupElement}
         id="bird-popup"
-        class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4 transition-opacity duration-200"
+        in:dropdown
+        out:dropdown={{ duration: 100 }}
+        class="fixed z-50 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-lg shadow-xl p-4"
         style:left="{popupX}px"
         style:top="{popupY}px"
         style:width="320px"
@@ -363,23 +366,10 @@
     pointer-events: auto;
   }
 
-  /* Smooth entrance animation and theme accessibility */
+  /* Theme accessibility */
   #bird-popup {
-    animation: popupFadeIn 0.2s ease-out;
     backdrop-filter: blur(8px);
     background-color: color-mix(in srgb, var(--color-base-100) 95%, transparent);
-  }
-
-  @keyframes popupFadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-10px) scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
   }
 
   /* Mobile responsiveness */

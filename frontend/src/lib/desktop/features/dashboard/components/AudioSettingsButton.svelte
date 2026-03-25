@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { Volume2 } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { SPEED_OPTIONS, DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
 
@@ -187,6 +188,8 @@
   {#if showSettings}
     <div
       bind:this={menuElement}
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
       class="settings-menu"
       onclick={e => e.stopPropagation()}
       onmousedown={e => e.stopPropagation()}
@@ -322,26 +325,13 @@
     border-radius: 0.5rem;
     box-shadow: 0 10px 25px rgb(0 0 0 / 0.4);
     backdrop-filter: blur(8px);
-    animation: menuFadeIn 0.15s ease-out;
-    z-index: 9999 !important;
+    z-index: 1100;
   }
 
   :global([data-theme='light']) .settings-menu {
     background-color: rgb(255 255 255 / 0.95);
     border-color: var(--color-base-300);
     box-shadow: 0 10px 25px rgb(0 0 0 / 0.15);
-  }
-
-  @keyframes menuFadeIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
   }
 
   .settings-title {

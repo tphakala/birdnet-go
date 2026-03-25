@@ -26,6 +26,7 @@
     Trash2,
     Download,
   } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import { auth } from '$lib/stores/auth';
 
@@ -166,7 +167,13 @@
   </button>
 
   {#if isOpen}
-    <ul bind:this={menuElement} class="action-menu" role="menu">
+    <ul
+      bind:this={menuElement}
+      in:dropdown
+      out:dropdown={{ duration: 100 }}
+      class="action-menu"
+      role="menu"
+    >
       {#if canEdit}
         <li>
           <button onclick={() => handleAction(onReview)} class="menu-item" role="menuitem">
@@ -255,8 +262,7 @@
     border: 1px solid rgb(51 65 85);
     border-radius: 0.5rem;
     box-shadow: 0 10px 25px rgb(0 0 0 / 0.4);
-    animation: menuFadeIn 0.15s ease-out;
-    z-index: 9999 !important;
+    z-index: 1100;
   }
 
   /* Light theme menu */
@@ -307,17 +313,5 @@
 
   :global([data-theme='light']) .menu-separator {
     background-color: var(--color-base-300);
-  }
-
-  @keyframes menuFadeIn {
-    from {
-      opacity: 0;
-      transform: scale(0.95);
-    }
-
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
   }
 </style>

@@ -26,6 +26,7 @@
   import type { Component } from 'svelte';
   import type { IconProps } from '@lucide/svelte';
   import { Trash2, Search, Plus, ChevronUp, ChevronDown, ChevronsUpDown } from '@lucide/svelte';
+  import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
 
@@ -391,6 +392,8 @@
       {#if showPredictions && filteredPredictions.length > 0}
         <div
           id="species-predictions-{iconColorClass}"
+          in:dropdown={{ y: -4, duration: 120 }}
+          out:dropdown={{ y: -4, duration: 80 }}
           class="absolute left-0 right-0 top-full mt-1 bg-[var(--surface-100)] border border-[var(--border-100)] rounded-lg shadow-lg max-h-48 overflow-y-auto z-50"
           role="listbox"
           aria-label={t('settings.species.suggestions') || 'Species suggestions'}
