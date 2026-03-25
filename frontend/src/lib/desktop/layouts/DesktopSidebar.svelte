@@ -279,6 +279,13 @@ Performance Optimizations:
     analyticsFlyoutOpen = false;
     settingsFlyoutOpen = false;
     systemFlyoutOpen = false;
+    // Close the mobile drawer on navigation by unchecking the toggle.
+    // Dispatch a synthetic event so Svelte's bind:checked stays in sync.
+    const drawer = document.getElementById('my-drawer') as HTMLInputElement | null;
+    if (drawer?.checked) {
+      drawer.checked = false;
+      drawer.dispatchEvent(new Event('change', { bubbles: true }));
+    }
     if (onNavigate) {
       onNavigate(url);
     } else {
