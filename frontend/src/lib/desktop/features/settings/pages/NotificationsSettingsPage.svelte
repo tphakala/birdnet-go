@@ -1023,12 +1023,17 @@
       ntfyCheckPromise = undefined;
       return;
     }
-    ntfyCheckPromise = new Promise<void>(resolve => {
+    const promise = new Promise<void>(resolve => {
       ntfyAutoCheckTimer = setTimeout(() => {
         checkNtfyServer().finally(resolve);
       }, 800);
-    }).finally(() => {
-      ntfyCheckPromise = undefined;
+    });
+    ntfyCheckPromise = promise;
+    promise.finally(() => {
+      // Only clear if no newer check has replaced us
+      if (ntfyCheckPromise === promise) {
+        ntfyCheckPromise = undefined;
+      }
     });
   }
 
