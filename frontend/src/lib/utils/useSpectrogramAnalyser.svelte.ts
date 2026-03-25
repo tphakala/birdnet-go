@@ -170,8 +170,10 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     audioOutput = enabled;
     if (!outputGainNode || !audioContext) return;
 
-    // Use a short ramp to avoid audible clicks when muting/unmuting
+    // Cancel any pending ramp to handle rapid mute/unmute clicks,
+    // then use a short ramp to avoid audible clicks
     const now = audioContext.currentTime;
+    outputGainNode.gain.cancelScheduledValues(now);
     outputGainNode.gain.linearRampToValueAtTime(
       enabled ? OUTPUT_GAIN_UNMUTED : OUTPUT_GAIN_MUTED,
       now + GAIN_RAMP_DURATION
