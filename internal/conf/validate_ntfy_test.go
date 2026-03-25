@@ -74,6 +74,26 @@ func TestNormalizeNtfyURL(t *testing.T) {
 			input:    "ntfy://192.168.1.100:8080/mytopic?scheme=http",
 			expected: "ntfy://192.168.1.100:8080/mytopic?scheme=http",
 		},
+		{
+			name:     "localhost host is not modified",
+			input:    "ntfy://localhost",
+			expected: "ntfy://localhost",
+		},
+		{
+			name:     "localhost host with port is not modified",
+			input:    "ntfy://localhost:8080",
+			expected: "ntfy://localhost:8080",
+		},
+		{
+			name:     "FQDN host without path is not modified",
+			input:    "ntfy://myserver.local",
+			expected: "ntfy://myserver.local",
+		},
+		{
+			name:     "custom host with scheme param is not modified",
+			input:    "ntfy://myserver.local?scheme=http",
+			expected: "ntfy://myserver.local?scheme=http",
+		},
 	}
 
 	for _, tt := range tests {

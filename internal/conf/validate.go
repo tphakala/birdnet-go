@@ -1681,38 +1681,38 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 // NormalizeNtfyURL fixes a bare ntfy topic URL (ntfy://topic) by inserting
 // the default ntfy.sh host, producing ntfy://ntfy.sh/topic. The shoutrrr
 // library interprets ntfy://topic as hostname="topic" with an empty path,
-// which fails to deliver. URLs that already include a host are returned
-// unchanged. Non-ntfy URLs are returned as-is.
+// which fails to deliver. URLs that already contain a recognizable host
+// (containing a dot, a colon port, "localhost", or an IP address) are
+// returned unchanged. Non-ntfy URLs are returned as-is.
 func NormalizeNtfyURL(raw string) string {
-	if !strings.HasPrefix(raw, "ntfy://") {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "ntfy" {
 		return raw
 	}
 
-	// Strip the scheme for analysis
-	remainder := strings.TrimPrefix(raw, "ntfy://")
-
-	// Separate userinfo@ prefix if present
-	userinfo := ""
-	body := remainder
-	if atIdx := strings.Index(body, "@"); atIdx != -1 {
-		userinfo = body[:atIdx+1]
-		body = body[atIdx+1:]
+	// When the URL already has a path (e.g. ntfy://host/topic), the host
+	// part is unambiguous -- leave it alone.
+	if u.Path != "" {
+		return raw
 	}
 
-	// Split body into host+path and query
-	query := ""
-	if qIdx := strings.Index(body, "?"); qIdx != -1 {
-		query = body[qIdx:]
-		body = body[:qIdx]
+	// No path means the URL is either a bare topic (ntfy://mytopic) or a
+	// host with an empty topic (ntfy://localhost). Apply a heuristic: if
+	// the host portion looks like a real hostname or IP, leave it as-is.
+	host := u.Hostname()
+	if strings.Contains(host, ".") || host == "localhost" || net.ParseIP(host) != nil {
+		return raw
 	}
 
-	// If there is no slash in the body, the URL looks like ntfy://topic
-	// (or ntfy://user:pass@topic) with no host/path separator.
-	// Insert the default ntfy.sh host.
-	if !strings.Contains(body, "/") {
-		return "ntfy://" + userinfo + "ntfy.sh/" + body + query
+	// Also leave URLs with an explicit port alone (e.g. ntfy://myhost:8080).
+	if u.Port() != "" {
+		return raw
 	}
-	return raw
+
+	// It is a bare topic. Reconstruct the URL with ntfy.sh as the host.
+	u.Path = "/" + u.Host
+	u.Host = "ntfy.sh"
+	return u.String()
 }
 
 // normalizeNtfyURLs repairs bare ntfy topic URLs in a shoutrrr provider's

@@ -833,8 +833,17 @@
     editingProviderIndex = null;
   }
 
-  function saveProvider() {
+  // Track an in-flight checkNtfyServer() promise so saveProvider can await it.
+  let ntfyCheckPromise: Promise<void> | undefined;
+
+  async function saveProvider() {
     if (!isServiceFormValid) return;
+
+    // If an ntfy protocol check is still in flight, wait for it to finish
+    // so the generated URL uses the correct scheme.
+    if (selectedService === 'ntfy' && ntfyCheckPromise) {
+      await ntfyCheckPromise;
+    }
 
     let name = providerFormData.name.trim();
     if (!name) {
@@ -1015,7 +1024,9 @@
     const server = serviceFormData.ntfyServer?.trim() || '';
     if (!server || server === 'ntfy.sh') return;
     ntfyAutoCheckTimer = setTimeout(() => {
-      checkNtfyServer();
+      ntfyCheckPromise = checkNtfyServer().finally(() => {
+        ntfyCheckPromise = undefined;
+      });
     }, 800);
   }
 
@@ -1949,7 +1960,9 @@
                     <button
                       onclick={saveProvider}
                       class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      disabled={!isServiceFormValid}
+                      disabled={!isServiceFormValid ||
+                        (selectedService === 'ntfy' &&
+                          serviceFormData.ntfyCheckStatus === 'checking')}
                     >
                       {t('settings.notifications.push.form.saveButton')}
                     </button>
