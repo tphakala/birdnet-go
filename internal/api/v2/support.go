@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -44,16 +45,11 @@ type GenerateSupportDumpResponse struct {
 	DownloadURL string `json:"download_url,omitempty"`
 }
 
-// sanitizeGitHubIssueNumber returns the issue number if it contains only digits,
-// or an empty string otherwise. GitHub issue numbers are positive integers.
+// sanitizeGitHubIssueNumber returns the issue number if it is a valid positive
+// integer, or an empty string otherwise.
 func sanitizeGitHubIssueNumber(issueNum string) string {
-	if issueNum == "" {
+	if _, err := strconv.ParseUint(issueNum, 10, 64); err != nil {
 		return ""
-	}
-	for _, r := range issueNum {
-		if r < '0' || r > '9' {
-			return ""
-		}
 	}
 	return issueNum
 }

@@ -123,11 +123,11 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 	event.Timestamp = now
 
 	// Build event message including GitHub issue if provided
+	var issuePart string
 	if githubIssue != "" {
-		event.Message = fmt.Sprintf("Support Dump - System: %s - GitHub #%s - %s", systemID, githubIssue, now.Format(time.RFC3339))
-	} else {
-		event.Message = fmt.Sprintf("Support Dump - System: %s - %s", systemID, now.Format(time.RFC3339))
+		issuePart = fmt.Sprintf(" - GitHub #%s", githubIssue)
 	}
+	event.Message = fmt.Sprintf("Support Dump - System: %s%s - %s", systemID, issuePart, now.Format(time.RFC3339))
 
 	// Add custom context
 	supportContext := map[string]any{
