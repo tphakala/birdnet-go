@@ -1,6 +1,11 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Live Stream Page', () => {
+  /** Minimum expected width (px) for the live-stream container filling the viewport. */
+  const MIN_CONTAINER_WIDTH_PX = 100;
+  /** Minimum expected height (px) for the live-stream container filling the viewport. */
+  const MIN_CONTAINER_HEIGHT_PX = 50;
+
   test('Route loads and renders page structure', async ({ page }) => {
     await page.goto('/ui/live-stream');
     await page.waitForLoadState('domcontentloaded');
@@ -14,8 +19,11 @@ test.describe('Live Stream Page', () => {
 
     // Should have the source picker (SelectDropdown renders a <button> with
     // aria-haspopup="listbox" and placeholder text like "Loading..." or "Audio Source").
-    // Use .first() since multiple SelectDropdowns exist (source picker + color map).
-    const sourceSelect = page.locator('button[aria-haspopup="listbox"]').first();
+    // Filter by text to avoid binding to a different dropdown (e.g. color map).
+    const sourceSelect = page
+      .locator('button[aria-haspopup="listbox"]')
+      .filter({ hasText: /audio source|loading/i })
+      .first();
     await expect(sourceSelect).toBeVisible();
   });
 
@@ -129,8 +137,8 @@ test.describe('Live Stream Page', () => {
     const box = await container.boundingBox();
     expect(box).not.toBeNull();
     if (box) {
-      expect(box.width).toBeGreaterThan(100);
-      expect(box.height).toBeGreaterThan(50);
+      expect(box.width).toBeGreaterThan(MIN_CONTAINER_WIDTH_PX);
+      expect(box.height).toBeGreaterThan(MIN_CONTAINER_HEIGHT_PX);
     }
   });
 });
