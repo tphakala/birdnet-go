@@ -105,25 +105,26 @@ func TestParsePercentage(t *testing.T) {
 	const testConfigKey = "disk_manager.retention_policy.min_disk_free"
 
 	tests := []struct {
-		name         string
-		input        string
-		wantValue    float64
-		wantErr      bool
-		wantParseErr bool // true = wrapped strconv.ParseFloat error
+		name          string
+		input         string
+		wantValue     float64
+		wantErr       bool
+		wantParseErr  bool // true = wrapped strconv.ParseFloat error
+		wantRangeErr  bool // true = out-of-range error
 	}{
 		// --- with % suffix ---
 		{name: "whole number with suffix", input: "85%", wantValue: 85.0},
 		{name: "zero percent", input: "0%", wantValue: 0.0},
 		{name: "one hundred percent", input: "100%", wantValue: 100.0},
 		{name: "fractional percent", input: "99.5%", wantValue: 99.5},
-		{name: "negative percent", input: "-10%", wantValue: -10.0},
 		// --- bare integers (no % suffix) ---
 		{name: "integer without suffix", input: "85", wantValue: 85.0},
 		{name: "hundred without suffix", input: "100", wantValue: 100.0},
 		{name: "zero without suffix", input: "0", wantValue: 0.0},
+		{name: "bare number 25", input: "25", wantValue: 25.0},
 		// --- bare decimals >= 1 ---
 		{name: "decimal without suffix", input: "99.5", wantValue: 99.5},
-		// --- fractional values auto-scaled (0 < x < 1 → x*100) ---
+		// --- fractional values auto-scaled (0 < x < 1 -> x*100) ---
 		{name: "fraction 0.8 scaled to 80", input: "0.8", wantValue: 80.0},
 		{name: "fraction 0.5 scaled to 50", input: "0.5", wantValue: 50.0},
 		{name: "fraction 0.01 scaled to 1", input: "0.01", wantValue: 1.0},
@@ -132,6 +133,11 @@ func TestParsePercentage(t *testing.T) {
 		{name: "leading whitespace trimmed", input: " 85%", wantValue: 85.0},
 		{name: "trailing whitespace trimmed", input: "85% ", wantValue: 85.0},
 		{name: "bare number with whitespace", input: " 80 ", wantValue: 80.0},
+		// --- out-of-range values ---
+		{name: "negative percent", input: "-10%", wantErr: true, wantRangeErr: true},
+		{name: "negative bare number", input: "-5", wantErr: true, wantRangeErr: true},
+		{name: "over 100 percent", input: "150%", wantErr: true, wantRangeErr: true},
+		{name: "over 100 bare number", input: "200", wantErr: true, wantRangeErr: true},
 		// --- invalid inputs ---
 		{name: "letters before suffix", input: "abc%", wantErr: true, wantParseErr: true},
 		{name: "empty before suffix", input: "%", wantErr: true, wantParseErr: true},
@@ -170,6 +176,9 @@ func TestParsePercentage(t *testing.T) {
 			if tt.wantParseErr {
 				assert.ErrorContains(t, err, "invalid syntax",
 					"parse errors must wrap the underlying ParseFloat error")
+			} else if tt.wantRangeErr {
+				assert.ErrorContains(t, err, "outside the 0-100 range",
+					"range errors must indicate the value is out of bounds")
 			} else {
 				assert.ErrorContains(t, err, "invalid percentage format",
 					"format errors must carry the format-validation message")

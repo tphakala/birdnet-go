@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -47,7 +48,12 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	startTime := time.Now() // Track cleanup duration
 	keepSpectrograms := retention.KeepSpectrograms
 	minClipsPerSpecies := retention.MinClips
-	usageThresholdSetting := retention.MaxUsage
+
+	// Apply default if the config value is empty (e.g. user cleared the field via the UI).
+	usageThresholdSetting := strings.TrimSpace(retention.MaxUsage)
+	if usageThresholdSetting == "" {
+		usageThresholdSetting = defaultMaxUsagePercent
+	}
 
 	// Convert usage threshold string (e.g., "80%") to float64
 	// This determines at what disk usage percentage the cleanup should activate

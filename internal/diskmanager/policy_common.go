@@ -25,6 +25,10 @@ const maxDeletionsPerRun = 1000
 // configKeyRetentionMaxUsage is the config key for the retention max usage percentage setting
 const configKeyRetentionMaxUsage = "retention.max_usage"
 
+// defaultMaxUsagePercent is the fallback when the user's config has an empty MaxUsage value.
+// Matches the viper default in conf/defaults.go.
+const defaultMaxUsagePercent = "80%"
+
 // Package-level metrics with explicit synchronization
 var (
 	// Thread-safe diskMetrics with explicit synchronization
@@ -399,8 +403,14 @@ func categorizeFilePath(path string) string {
 //   - utilization: current disk usage as integer percentage
 //   - err: error if check failed (nil on success)
 func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir string) (skip bool, utilization int, err error) {
+	// Apply default if the config value is empty (e.g. user cleared the field via the UI).
+	maxUsage := strings.TrimSpace(retention.MaxUsage)
+	if maxUsage == "" {
+		maxUsage = defaultMaxUsagePercent
+	}
+
 	// Parse the threshold percentage
-	usageThresholdFloat, parseErr := conf.ParsePercentage(retention.MaxUsage, configKeyRetentionMaxUsage)
+	usageThresholdFloat, parseErr := conf.ParsePercentage(maxUsage, configKeyRetentionMaxUsage)
 	if parseErr != nil {
 		return false, 0, parseErr
 	}
