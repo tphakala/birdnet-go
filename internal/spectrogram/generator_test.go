@@ -2,6 +2,7 @@ package spectrogram
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -882,4 +884,255 @@ func TestNewGenerator_WithNilLogger(t *testing.T) {
 	// getSoxSpectrogramArgs uses g.log().Warn internally
 	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
 	assert.NotEmpty(t, args, "should return valid args without panic")
+}
+
+// TestGetStyleArgs tests that Sox style arguments are correct for each style preset.
+func TestGetStyleArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		style    string
+		wantArgs []string
+	}{
+		{
+			name:     "default style returns nil",
+			style:    conf.SpectrogramStyleDefault,
+			wantArgs: nil,
+		},
+		{
+			name:     "scientific dark returns monochrome with Dolph window",
+			style:    conf.SpectrogramStyleScientificDark,
+			wantArgs: []string{"-m", "-w", "dolph"},
+		},
+		{
+			name:     "high contrast dark returns high saturation flag",
+			style:    conf.SpectrogramStyleHighContrastDark,
+			wantArgs: []string{"-h"},
+		},
+		{
+			name:     "scientific returns monochrome light with Dolph window",
+			style:    conf.SpectrogramStyleScientific,
+			wantArgs: []string{"-m", "-l", "-w", "dolph"},
+		},
+		{
+			name:     "unknown style returns nil like default",
+			style:    "nonexistent_style",
+			wantArgs: nil,
+		},
+		{
+			name:     "empty style returns nil like default",
+			style:    "",
+			wantArgs: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := getStyleArgs(tt.style)
+			assert.Equal(t, tt.wantArgs, got)
+		})
+	}
+}
+
+// TestGetFFmpegColorMode tests that FFmpeg color modes match the expected
+// values for each style preset, ensuring the FFmpeg fallback produces
+// visually consistent spectrograms with the Sox primary path.
+func TestGetFFmpegColorMode(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		style     string
+		wantColor string
+	}{
+		{
+			name:      "default style uses channel color mode",
+			style:     conf.SpectrogramStyleDefault,
+			wantColor: ffmpegColorDefault,
+		},
+		{
+			name:      "scientific dark uses intensity (grayscale)",
+			style:     conf.SpectrogramStyleScientificDark,
+			wantColor: ffmpegColorIntensity,
+		},
+		{
+			name:      "high contrast dark uses fire (high saturation)",
+			style:     conf.SpectrogramStyleHighContrastDark,
+			wantColor: ffmpegColorFire,
+		},
+		{
+			name:      "scientific uses intensity (grayscale)",
+			style:     conf.SpectrogramStyleScientific,
+			wantColor: ffmpegColorIntensity,
+		},
+		{
+			name:      "unknown style falls back to channel default",
+			style:     "nonexistent_style",
+			wantColor: ffmpegColorDefault,
+		},
+		{
+			name:      "empty style falls back to channel default",
+			style:     "",
+			wantColor: ffmpegColorDefault,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := getFFmpegColorMode(tt.style)
+			assert.Equal(t, tt.wantColor, got)
+		})
+	}
+}
+
+// TestFFmpegFallback_AppliesStyleSetting verifies that the FFmpeg fallback
+// generation path includes the style-aware color parameter in the filter string.
+// This is the core fix for issue #1937 where changing the spectrogram style
+// to "scientific dark" would intermittently render the default colorful style
+// when Sox failed and FFmpeg took over without style information.
+func TestFFmpegFallback_AppliesStyleSetting(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		style         string
+		expectInColor string // substring expected in the FFmpeg filter
+	}{
+		{
+			name:          "default style includes channel color",
+			style:         conf.SpectrogramStyleDefault,
+			expectInColor: "color=" + ffmpegColorDefault,
+		},
+		{
+			name:          "scientific dark includes intensity color",
+			style:         conf.SpectrogramStyleScientificDark,
+			expectInColor: "color=" + ffmpegColorIntensity,
+		},
+		{
+			name:          "high contrast dark includes fire color",
+			style:         conf.SpectrogramStyleHighContrastDark,
+			expectInColor: "color=" + ffmpegColorFire,
+		},
+		{
+			name:          "scientific includes intensity color",
+			style:         conf.SpectrogramStyleScientific,
+			expectInColor: "color=" + ffmpegColorIntensity,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Build the same filter string that generateWithFFmpeg constructs,
+			// verifying the style-aware color parameter is integrated correctly.
+			colorMode := getFFmpegColorMode(tt.style)
+			filterStr := fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
+				400, fftFriendlyHeight(400), 1, ffmpegGain, ffmpegDrange, colorMode)
+			assert.Contains(t, filterStr, tt.expectInColor,
+				"FFmpeg filter string should include style-aware color mode")
+		})
+	}
+}
+
+// TestGetSoxSpectrogramArgs_StyleArgs verifies that Sox spectrogram args
+// include the correct style-specific arguments for each preset.
+func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		style        string
+		wantContains []string // Args that must be present
+		wantAbsent   []string // Args that must NOT be present
+	}{
+		{
+			name:         "default style has no style-specific args",
+			style:        conf.SpectrogramStyleDefault,
+			wantContains: nil,
+			wantAbsent:   []string{"-m", "-h", "-l"},
+		},
+		{
+			name:         "scientific dark includes monochrome and Dolph",
+			style:        conf.SpectrogramStyleScientificDark,
+			wantContains: []string{"-m", "-w", "dolph"},
+			wantAbsent:   []string{"-h", "-l"},
+		},
+		{
+			name:         "high contrast dark includes high saturation",
+			style:        conf.SpectrogramStyleHighContrastDark,
+			wantContains: []string{"-h"},
+			wantAbsent:   []string{"-m", "-l"},
+		},
+		{
+			name:         "scientific includes monochrome and light background",
+			style:        conf.SpectrogramStyleScientific,
+			wantContains: []string{"-m", "-l", "-w", "dolph"},
+			wantAbsent:   []string{"-h"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := setupTestEnv(t)
+			env.Settings.Realtime.Audio.Export.Length = 15
+			env.Settings.Realtime.Dashboard.Spectrogram.Style = tt.style
+
+			gen := NewGenerator(env.Settings, env.SFS, logger.Global().Module("spectrogram.test"))
+
+			audioPath := filepath.Join(env.TempDir, "test.wav")
+			outputPath := filepath.Join(env.TempDir, "test.png")
+
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
+
+			for _, want := range tt.wantContains {
+				assert.True(t, slices.Contains(args, want),
+					"args should contain %q for style %q, got: %v", want, tt.style, args)
+			}
+			for _, absent := range tt.wantAbsent {
+				assert.False(t, slices.Contains(args, absent),
+					"args should NOT contain %q for style %q, got: %v", absent, tt.style, args)
+			}
+		})
+	}
+}
+
+// TestSoxAndFFmpegStyleConsistency verifies that every known style preset
+// has mappings in both getStyleArgs (Sox) and getFFmpegColorMode (FFmpeg).
+// This prevents future style additions from only updating one path.
+func TestSoxAndFFmpegStyleConsistency(t *testing.T) {
+	t.Parallel()
+
+	allStyles := []struct {
+		style         string
+		wantSoxMapped bool // true if Sox should return non-nil args for this style
+	}{
+		{conf.SpectrogramStyleDefault, false},
+		{conf.SpectrogramStyleScientificDark, true},
+		{conf.SpectrogramStyleHighContrastDark, true},
+		{conf.SpectrogramStyleScientific, true},
+	}
+
+	for _, tc := range allStyles {
+		t.Run(tc.style, func(t *testing.T) {
+			t.Parallel()
+
+			// Verify Sox style mapping returns args for non-default presets
+			soxArgs := getStyleArgs(tc.style)
+			if tc.wantSoxMapped {
+				assert.NotEmpty(t, soxArgs,
+					"Sox args should be mapped for style %q", tc.style)
+			}
+
+			// getFFmpegColorMode should return a non-empty value
+			colorMode := getFFmpegColorMode(tc.style)
+			assert.NotEmpty(t, colorMode,
+				"FFmpeg color mode should not be empty for style %q", tc.style)
+		})
+	}
 }

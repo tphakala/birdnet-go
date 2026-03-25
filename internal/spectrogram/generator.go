@@ -94,6 +94,22 @@ func fftFriendlyHeight(width int) int {
 	return n + 1
 }
 
+// FFmpeg showspectrumpic color mode constants for style mapping.
+// These are the closest FFmpeg equivalents to the Sox style presets.
+const (
+	// ffmpegColorDefault is FFmpeg's default colorful spectrogram (channel mode).
+	// Matches Sox default style (colorful with dark background).
+	ffmpegColorDefault = "channel"
+
+	// ffmpegColorIntensity produces a grayscale spectrogram in FFmpeg.
+	// Matches Sox monochrome mode (-m) used by scientific styles.
+	ffmpegColorIntensity = "intensity"
+
+	// ffmpegColorFire produces a high-saturation warm-toned spectrogram in FFmpeg.
+	// Matches Sox high-contrast mode (-h) used by high_contrast_dark style.
+	ffmpegColorFire = "fire"
+)
+
 // getStyleArgs returns Sox spectrogram arguments for the given style preset.
 // These arguments control the visual appearance of the spectrogram.
 func getStyleArgs(style string) []string {
@@ -110,6 +126,27 @@ func getStyleArgs(style string) []string {
 	default:
 		// Default style - no extra args (colorful with dark background)
 		return nil
+	}
+}
+
+// getFFmpegColorMode returns the FFmpeg showspectrumpic color parameter value
+// for the given style preset. This ensures the FFmpeg fallback produces a
+// spectrogram visually consistent with the Sox primary path, preventing
+// intermittent style mismatches when Sox fails and FFmpeg takes over.
+func getFFmpegColorMode(style string) string {
+	switch style {
+	case conf.SpectrogramStyleScientificDark:
+		// Grayscale - closest FFmpeg equivalent to Sox -m (monochrome)
+		return ffmpegColorIntensity
+	case conf.SpectrogramStyleHighContrastDark:
+		// High saturation - closest FFmpeg equivalent to Sox -h (high color)
+		return ffmpegColorFire
+	case conf.SpectrogramStyleScientific:
+		// Grayscale - closest FFmpeg equivalent to Sox -m -l (monochrome, light)
+		return ffmpegColorIntensity
+	default:
+		// Default colorful style
+		return ffmpegColorDefault
 	}
 }
 
@@ -239,7 +276,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 	// Try Sox first (faster, direct processing)
 	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
-		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg (style settings may not be applied)",
+		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg",
 			logger.String("audio_path", audioPath),
 			logger.Error(err),
 			logger.Int64("elapsed_ms", time.Since(start).Milliseconds()))
@@ -701,14 +738,20 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 	}
 
 	height := fftFriendlyHeight(width)
+
+	// Apply style-aware color mode so FFmpeg fallback matches the Sox primary style.
+	// Without this, the FFmpeg fallback always produces the default colorful style,
+	// causing intermittent style mismatches when Sox fails under resource pressure.
+	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	colorMode := getFFmpegColorMode(style)
+
 	var filterStr string
+	legendFlag := 1
 	if raw {
-		// Raw spectrogram without frequency/time axes and legends
-		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=0:gain=%s:drange=%s", width, height, ffmpegGain, ffmpegDrange)
-	} else {
-		// Standard spectrogram with frequency/time axes and legends
-		filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=1:gain=%s:drange=%s", width, height, ffmpegGain, ffmpegDrange)
+		legendFlag = 0
 	}
+	filterStr = fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
+		width, height, legendFlag, ffmpegGain, ffmpegDrange, colorMode)
 
 	ffmpegArgs := []string{
 		"-hide_banner",
