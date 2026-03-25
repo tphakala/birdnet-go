@@ -29,6 +29,12 @@ type SlogLogger struct {
 	mu         sync.RWMutex // protects logWriter and slogLogger
 }
 
+// isValid reports whether the SlogLogger is properly initialized with a
+// non-nil inner slog.Logger.  It is safe to call on a nil receiver.
+func (l *SlogLogger) isValid() bool {
+	return l != nil && l.slogLogger != nil
+}
+
 // NewSlogLogger creates a new slog-based logger with JSON output
 func NewSlogLogger(writer io.Writer, level LogLevel, timezone *time.Location) *SlogLogger {
 	if writer == nil {
@@ -143,7 +149,7 @@ func (l *SlogLogger) Module(name string) Logger {
 	if l == nil {
 		return nil
 	}
-	if l.slogLogger == nil {
+	if !l.isValid() {
 		return l
 	}
 
@@ -166,10 +172,7 @@ func (l *SlogLogger) Module(name string) Logger {
 
 // Trace logs a trace message (most verbose level)
 func (l *SlogLogger) Trace(msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
-		return
-	}
-	if l.level > traceLevelValue {
+	if !l.isValid() || l.level > traceLevelValue {
 		return
 	}
 	l.log(traceLevelValue, msg, fields...)
@@ -177,10 +180,7 @@ func (l *SlogLogger) Trace(msg string, fields ...Field) {
 
 // Debug logs a debug message
 func (l *SlogLogger) Debug(msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
-		return
-	}
-	if l.level > slog.LevelDebug {
+	if !l.isValid() || l.level > slog.LevelDebug {
 		return
 	}
 	l.log(slog.LevelDebug, msg, fields...)
@@ -188,10 +188,7 @@ func (l *SlogLogger) Debug(msg string, fields ...Field) {
 
 // Info logs an info message
 func (l *SlogLogger) Info(msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
-		return
-	}
-	if l.level > slog.LevelInfo {
+	if !l.isValid() || l.level > slog.LevelInfo {
 		return
 	}
 	l.log(slog.LevelInfo, msg, fields...)
@@ -199,10 +196,7 @@ func (l *SlogLogger) Info(msg string, fields ...Field) {
 
 // Warn logs a warning message
 func (l *SlogLogger) Warn(msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
-		return
-	}
-	if l.level > slog.LevelWarn {
+	if !l.isValid() || l.level > slog.LevelWarn {
 		return
 	}
 	l.log(slog.LevelWarn, msg, fields...)
@@ -210,7 +204,7 @@ func (l *SlogLogger) Warn(msg string, fields ...Field) {
 
 // Error logs an error message
 func (l *SlogLogger) Error(msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
+	if !l.isValid() {
 		return
 	}
 	l.log(slog.LevelError, msg, fields...)
@@ -218,7 +212,7 @@ func (l *SlogLogger) Error(msg string, fields ...Field) {
 
 // Log logs a message with explicit level
 func (l *SlogLogger) Log(level LogLevel, msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
+	if !l.isValid() {
 		return
 	}
 	l.log(parseSlogLevel(level), msg, fields...)
@@ -229,7 +223,7 @@ func (l *SlogLogger) With(fields ...Field) Logger {
 	if l == nil {
 		return nil
 	}
-	if l.slogLogger == nil {
+	if !l.isValid() {
 		return l
 	}
 
@@ -250,7 +244,7 @@ func (l *SlogLogger) WithContext(ctx context.Context) Logger {
 	if l == nil {
 		return nil
 	}
-	if l.slogLogger == nil {
+	if !l.isValid() {
 		return l
 	}
 	if ctx == nil {
@@ -307,7 +301,7 @@ func (l *SlogLogger) Close() error {
 
 // log is the internal logging method
 func (l *SlogLogger) log(level slog.Level, msg string, fields ...Field) {
-	if l == nil || l.slogLogger == nil {
+	if !l.isValid() {
 		return
 	}
 
