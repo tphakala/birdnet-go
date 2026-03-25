@@ -196,7 +196,7 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		// Run OPTIMIZE TABLE
 		if err := store.DB.Exec(fmt.Sprintf("OPTIMIZE TABLE `%s`", table)).Error; err != nil {
 			// MySQL may return a note/warning for InnoDB tables, which is not an error
-			if !strings.Contains(err.Error(), "Table does not support optimize") {
+			if !strings.Contains(err.Error(), "Table does not support optimize") { //nolint:gocritic // MySQL returns this as a note/warning, not a typed error code
 				optimizeLogger.Warn("Failed to optimize table",
 					logger.String("table", table),
 					logger.Error(err),

@@ -1666,7 +1666,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			FirstOrCreate(lock)
 
 		if result.Error != nil {
-			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
+			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") { //nolint:gocritic // GORM wraps SQLite errors; sqlite3.ErrBusy not reliably extractable through GORM's error chain
 				// Calculate exponential backoff with jitter
 				baseBackoff := baseDelay * time.Duration(attempt+1)
 				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
@@ -1735,7 +1735,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 
 		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
 		if result.Error != nil {
-			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
+			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") { //nolint:gocritic // GORM wraps SQLite errors; sqlite3.ErrBusy not reliably extractable through GORM's error chain
 				// Calculate exponential backoff with jitter
 				baseBackoff := baseDelay * time.Duration(attempt+1)
 				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical

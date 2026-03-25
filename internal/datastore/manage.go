@@ -183,7 +183,7 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 
 	if err := db.Raw(query, dbName, targetTableName).Scan(&stats).Error; err != nil {
 		// Handle case where information_schema might not be accessible or table doesn't exist yet
-		if strings.Contains(err.Error(), "doesn't exist") {
+		if strings.Contains(err.Error(), "doesn't exist") { //nolint:gocritic // MySQL information_schema error; no typed error for missing schema metadata
 			return false, nil // Treat as schema incorrect/incomplete if table/schema info missing
 		}
 		return false, fmt.Errorf("failed to query index info from information_schema for %s.%s: %w", dbName, targetTableName, err)

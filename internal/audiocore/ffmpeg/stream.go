@@ -1329,7 +1329,7 @@ func (s *Stream) cleanupProcess() {
 
 		select {
 		case err := <-waitDone:
-			if err != nil && !strings.Contains(err.Error(), "signal: killed") && !strings.Contains(err.Error(), "signal: terminated") {
+			if err != nil && !strings.Contains(err.Error(), "signal: killed") && !strings.Contains(err.Error(), "signal: terminated") { //nolint:gocritic // fallback for non-ExitError types; exit code check is above
 				getStreamLogger().Warn("FFmpeg process wait error",
 					logger.String("url", s.config.safeURL()),
 					logger.Error(err),

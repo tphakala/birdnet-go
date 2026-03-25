@@ -147,7 +147,7 @@ func IsOperationalError(err error) bool {
 	}
 
 	// Fallback to string matching for compatibility with other error types
-	return strings.Contains(err.Error(), signalKilledMessage)
+	return strings.Contains(err.Error(), signalKilledMessage) //nolint:gocritic // fallback for non-ExitError types; exit code check is above
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.

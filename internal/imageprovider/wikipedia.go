@@ -996,7 +996,7 @@ func logSuccessfulAPIResponse(resp *jason.Object) {
 
 // handleJSONParsingErrorIfNeeded checks for JSON parsing errors and handles them appropriately.
 func (l *wikiMediaProvider) handleJSONParsingErrorIfNeeded(err error, reqID, fullURL string, attempt int) error {
-	if !strings.Contains(err.Error(), "invalid character") || !strings.Contains(err.Error(), "looking for beginning of value") {
+	if !strings.Contains(err.Error(), "invalid character") || !strings.Contains(err.Error(), "looking for beginning of value") { //nolint:gocritic // detecting non-JSON responses (HTML error pages); json.SyntaxError does not always contain these substrings
 		return nil
 	}
 

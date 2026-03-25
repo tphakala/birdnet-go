@@ -535,7 +535,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		// Check if error is due to record not found
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { // Adapt based on datastore error type
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { //nolint:gocritic // datastore may return unwrapped "not found" strings; errors.Is covers the typed case // Adapt based on datastore error type
 			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
@@ -650,7 +650,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	// Resolve clip path from datastore
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { //nolint:gocritic // datastore may return unwrapped "not found" strings; errors.Is covers the typed case
 			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
@@ -782,7 +782,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { //nolint:gocritic // datastore may return unwrapped "not found" strings; errors.Is covers the typed case
 			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
@@ -881,7 +881,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Resolve clip path
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { //nolint:gocritic // datastore may return unwrapped "not found" strings; errors.Is covers the typed case
 			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
@@ -1075,7 +1075,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { //nolint:gocritic // datastore may return unwrapped "not found" strings; errors.Is covers the typed case
 			_ = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 			return
 		}

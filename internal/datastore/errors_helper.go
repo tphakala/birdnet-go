@@ -251,9 +251,9 @@ func getUserFriendlyMessage(operation string, err error) string {
 		return "The database is currently busy. Please try again in a moment."
 	case constraintPattern.MatchString(err.Error()):
 		return "This operation conflicts with existing data. Please check for duplicates."
-	case strings.Contains(strings.ToLower(err.Error()), "timeout"):
+	case strings.Contains(strings.ToLower(err.Error()), "timeout"): //nolint:gocritic // generic error classifier — timeout errors come from multiple drivers with no common typed error
 		return "The operation took too long. Please try again or contact support if the issue persists."
-	case strings.Contains(strings.ToLower(err.Error()), "not found"):
+	case strings.Contains(strings.ToLower(err.Error()), "not found"): //nolint:gocritic // generic error classifier — covers multiple "not found" sources without a common typed error
 		return "The requested item could not be found."
 	case corruptionPattern.MatchString(err.Error()):
 		return "Database integrity issue detected. Please contact support immediately."

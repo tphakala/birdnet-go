@@ -429,7 +429,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 		// Job already exists
 		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
 		// to resume polling (see DatabaseStatsCard.svelte).
-		if strings.Contains(err.Error(), "already in progress") {
+		if strings.Contains(err.Error(), "already in progress") { //nolint:gocritic // our own error string; no typed error defined for backup-in-progress
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
 				"error":           "Backup already in progress",
@@ -581,7 +581,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 		}
 
 		// Check if it's a lock error
-		if !strings.Contains(lastErr.Error(), "locked") {
+		if !strings.Contains(lastErr.Error(), "locked") { //nolint:gocritic // SQLite error from VACUUM INTO exec; not a GORM error so sqlite3.ErrBusy is unavailable
 			break // Non-recoverable error
 		}
 

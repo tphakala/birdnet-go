@@ -413,7 +413,7 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	err := t.withRetry(ctx, func(conn *ftp.ServerConn) error {
 		entries, err := conn.List(t.config.BasePath)
 		if err != nil {
-			if strings.Contains(err.Error(), "No such file or directory") {
+			if strings.Contains(err.Error(), "No such file or directory") { //nolint:gocritic // jlaffaye/ftp does not wrap errors with os.ErrNotExist
 				return nil
 			}
 			return backup.NewError(backup.ErrIO, "ftp: failed to list backups", err)
