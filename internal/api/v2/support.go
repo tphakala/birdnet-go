@@ -44,6 +44,20 @@ type GenerateSupportDumpResponse struct {
 	DownloadURL string `json:"download_url,omitempty"`
 }
 
+// sanitizeGitHubIssueNumber returns the issue number if it contains only digits,
+// or an empty string otherwise. GitHub issue numbers are positive integers.
+func sanitizeGitHubIssueNumber(issueNum string) string {
+	if issueNum == "" {
+		return ""
+	}
+	for _, r := range issueNum {
+		if r < '0' || r > '9' {
+			return ""
+		}
+	}
+	return issueNum
+}
+
 // GenerateSupportDump handles the generation and optional upload of support dumps
 func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 	c.logDebugIfEnabled("Support dump generation started")
@@ -54,11 +68,15 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request", http.StatusBadRequest)
 	}
 
+	// Sanitize GitHub issue number: must be digits only (frontend strips '#' prefix)
+	req.GitHubIssueNumber = sanitizeGitHubIssueNumber(req.GitHubIssueNumber)
+
 	c.logDebugIfEnabled("Support dump request parsed",
 		logger.Bool("include_logs", req.IncludeLogs),
 		logger.Bool("include_config", req.IncludeConfig),
 		logger.Bool("include_system_info", req.IncludeSystemInfo),
 		logger.Bool("upload_to_sentry", req.UploadToSentry),
+		logger.String("github_issue", req.GitHubIssueNumber),
 		logger.Bool("has_user_message", req.UserMessage != ""))
 
 	// Set defaults if nothing is selected
