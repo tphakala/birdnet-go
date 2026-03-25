@@ -2,6 +2,7 @@ package spectrogram
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -1026,10 +1027,13 @@ func TestFFmpegFallback_AppliesStyleSetting(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Verify getFFmpegColorMode returns the expected value
+			// Build the same filter string that generateWithFFmpeg constructs,
+			// verifying the style-aware color parameter is integrated correctly.
 			colorMode := getFFmpegColorMode(tt.style)
-			assert.Contains(t, tt.expectInColor, colorMode,
-				"FFmpeg color mode should be present in the expected filter substring")
+			filterStr := fmt.Sprintf("showspectrumpic=s=%dx%d:legend=%d:gain=%s:drange=%s:color=%s",
+				400, fftFriendlyHeight(400), 1, ffmpegGain, ffmpegDrange, colorMode)
+			assert.Contains(t, filterStr, tt.expectInColor,
+				"FFmpeg filter string should include style-aware color mode")
 		})
 	}
 }
