@@ -568,7 +568,7 @@
 
         if (audioElementRef) {
           audioElementRef.pause();
-          audioElementRef.src = '';
+          audioElementRef.removeAttribute('src');
           audioElementRef.remove();
           audioElementRef = null;
         }

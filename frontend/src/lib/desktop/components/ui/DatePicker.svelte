@@ -133,7 +133,13 @@ Accessibility:
       wrapperRef?.querySelector('.datepicker-trigger');
     if (!trigger) return;
     const rect = trigger.getBoundingClientRect();
-    dropdownStyle = `position: fixed; top: ${rect.bottom + 4}px; left: ${rect.left}px; z-index: 9999;`;
+    const calendarWidth = calendarRef?.offsetWidth ?? 280;
+    const calendarHeight = calendarRef?.offsetHeight ?? 0;
+    const maxLeft = Math.max(8, window.innerWidth - calendarWidth - 8);
+    const left = Math.min(Math.max(rect.left, 8), maxLeft);
+    const fitsBelow = rect.bottom + 4 + calendarHeight <= window.innerHeight - 8;
+    const top = fitsBelow ? rect.bottom + 4 : Math.max(8, rect.top - calendarHeight - 4);
+    dropdownStyle = `position: fixed; top: ${top}px; left: ${left}px; z-index: 9999;`;
   }
 
   // State for keyboard navigation focus

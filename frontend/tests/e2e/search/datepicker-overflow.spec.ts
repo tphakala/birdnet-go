@@ -11,37 +11,48 @@ import { test, expect, type Page } from '@playwright/test';
  * Also includes functional tests for date selection on the Search page.
  */
 
+const SEARCH_URL = '/ui/search';
+const NAVIGATION_TIMEOUT_MS = 15000;
+const CONTENT_TIMEOUT_MS = 10000;
+const INTERACTION_TIMEOUT_MS = 5000;
+const SEARCH_FORM_SELECTOR = '#searchForm';
+const DATEPICKER_TRIGGER_SELECTOR = '.datepicker-trigger';
+const DATEPICKER_CALENDAR_SELECTOR = '.datepicker-calendar';
+const DATEPICKER_WRAPPER_SELECTOR = '.datepicker-wrapper';
+
 /** Navigate to the Search page and wait for it to load. */
 const navigateToSearch = async (page: Page) => {
-  await page.goto('/ui/search', { timeout: 15000 });
-  await page.waitForLoadState('domcontentloaded', { timeout: 10000 });
+  await page.goto(SEARCH_URL, { timeout: NAVIGATION_TIMEOUT_MS });
+  await page.waitForLoadState('domcontentloaded', { timeout: CONTENT_TIMEOUT_MS });
 
   // Wait for the search form to be present
-  await expect(page.locator('#searchForm')).toBeVisible({ timeout: 10000 });
+  await expect(page.locator(SEARCH_FORM_SELECTOR)).toBeVisible({
+    timeout: CONTENT_TIMEOUT_MS,
+  });
 };
 
 /** Open the first DatePicker calendar (the "From" date picker). */
 const openStartDatePicker = async (page: Page) => {
-  const trigger = page.locator('.datepicker-trigger').first();
-  await expect(trigger).toBeVisible({ timeout: 5000 });
+  const trigger = page.locator(DATEPICKER_TRIGGER_SELECTOR).first();
+  await expect(trigger).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
   await trigger.click();
 
   // Wait for the calendar dialog to appear
-  const calendar = page.locator('.datepicker-calendar');
-  await expect(calendar).toBeVisible({ timeout: 5000 });
+  const calendar = page.locator(DATEPICKER_CALENDAR_SELECTOR);
+  await expect(calendar).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
 
   return calendar;
 };
 
 /** Open the second DatePicker calendar (the "To" date picker). */
 const openEndDatePicker = async (page: Page) => {
-  const trigger = page.locator('.datepicker-trigger').nth(1);
-  await expect(trigger).toBeVisible({ timeout: 5000 });
+  const trigger = page.locator(DATEPICKER_TRIGGER_SELECTOR).nth(1);
+  await expect(trigger).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
   await trigger.click();
 
   // Wait for the calendar dialog to appear
-  const calendar = page.locator('.datepicker-calendar');
-  await expect(calendar).toBeVisible({ timeout: 5000 });
+  const calendar = page.locator(DATEPICKER_CALENDAR_SELECTOR);
+  await expect(calendar).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
 
   return calendar;
 };
@@ -190,21 +201,26 @@ test.describe('Search DatePicker - Functional Tests', () => {
     await navigateToSearch(page);
     const calendar = await openStartDatePicker(page);
 
+    // Record the initial trigger text before selecting a date
+    const trigger = page.locator(DATEPICKER_TRIGGER_SELECTOR).first();
+    const initialText = (await trigger.textContent())?.trim();
+
     // Click on a selectable day (pick the 15th if available, or any enabled day)
     const selectableDay = calendar
-      .locator('button[role="gridcell"]:not(.datepicker-day-disabled)')
+      .locator(
+        'button[role="gridcell"]:not(.datepicker-day-disabled):not(.datepicker-day-selected)'
+      )
       .first();
     await expect(selectableDay).toBeVisible();
     await selectableDay.click();
 
     // Calendar should close after selection
-    await expect(calendar).not.toBeVisible({ timeout: 5000 });
+    await expect(calendar).not.toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
 
     // The trigger button text should have changed from the placeholder
-    const trigger = page.locator('.datepicker-trigger').first();
-    const buttonText = await trigger.textContent();
-    // Should no longer show the placeholder (it should show a formatted date)
-    expect(buttonText?.trim()).toBeTruthy();
+    const updatedText = (await trigger.textContent())?.trim();
+    expect(updatedText).toBeTruthy();
+    expect(updatedText).not.toBe(initialText);
   });
 
   test('Today button selects today and closes calendar', async ({ page }) => {
@@ -220,7 +236,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
       await todayButton.click();
 
       // Calendar should close
-      await expect(calendar).not.toBeVisible({ timeout: 5000 });
+      await expect(calendar).not.toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
     }
   });
 
@@ -232,7 +248,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
     await page.keyboard.press('Escape');
 
     // Calendar should close
-    await expect(calendar).not.toBeVisible({ timeout: 5000 });
+    await expect(calendar).not.toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
   });
 
   test('clicking outside closes the calendar', async ({ page }) => {
@@ -244,7 +260,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
     await heading.click();
 
     // Calendar should close
-    await expect(calendar).not.toBeVisible({ timeout: 5000 });
+    await expect(calendar).not.toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
   });
 
   test('month navigation works without breaking layout', async ({ page }) => {
@@ -357,7 +373,7 @@ test.describe('UI Overflow - General Interactive Elements', () => {
     await navigateToSearch(page);
     await openStartDatePicker(page);
 
-    const calendar = page.locator('.datepicker-calendar');
+    const calendar = page.locator(DATEPICKER_CALENDAR_SELECTOR);
     await expect(calendar).toHaveAttribute('role', 'dialog');
 
     // Should have an accessible label
@@ -367,21 +383,27 @@ test.describe('UI Overflow - General Interactive Elements', () => {
   test('opening one datepicker and then the other closes the first', async ({ page }) => {
     await navigateToSearch(page);
 
+    // Scope locators to each picker wrapper for precise assertions
+    const startPicker = page.locator(DATEPICKER_WRAPPER_SELECTOR).first();
+    const endPicker = page.locator(DATEPICKER_WRAPPER_SELECTOR).nth(1);
+
     // Open the start date picker
-    const startTrigger = page.locator('.datepicker-trigger').first();
+    const startTrigger = startPicker.locator(DATEPICKER_TRIGGER_SELECTOR);
     await startTrigger.click();
-    const firstCalendar = page.locator('.datepicker-calendar');
-    await expect(firstCalendar).toBeVisible({ timeout: 5000 });
+    const startCalendar = startPicker.locator(DATEPICKER_CALENDAR_SELECTOR);
+    await expect(startCalendar).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
 
     // Open the end date picker (should close the first)
-    const endTrigger = page.locator('.datepicker-trigger').nth(1);
+    const endTrigger = endPicker.locator(DATEPICKER_TRIGGER_SELECTOR);
     await endTrigger.click();
 
-    // Wait for the end date calendar to appear
-    await expect(firstCalendar).toBeVisible({ timeout: 5000 });
+    // Wait for the end date calendar to appear and verify the start one closed
+    const endCalendar = endPicker.locator(DATEPICKER_CALENDAR_SELECTOR);
+    await expect(endCalendar).toBeVisible({ timeout: INTERACTION_TIMEOUT_MS });
+    await expect(startCalendar).toHaveCount(0);
 
     // There should only be one calendar visible at a time
-    const visibleCalendars = page.locator('.datepicker-calendar');
+    const visibleCalendars = page.locator(DATEPICKER_CALENDAR_SELECTOR);
     await expect(visibleCalendars).toHaveCount(1);
   });
 });
