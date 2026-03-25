@@ -4,9 +4,15 @@
  * Connects to an HTMLMediaElement (HLS.js attached), creates an AnalyserNode,
  * and exposes the frequency data buffer for rendering by SpectrogramCanvas.
  *
+ * Audio graph:
+ *   source → highpass → gainNode (visualization) → analyserNode → outputGainNode → destination
+ *
+ * The visualization gain (gainNode) controls the FFT input for the spectrogram.
+ * The output gain (outputGainNode) controls audio to speakers — mute sets it to 0.
+ * This separation means muting audio does not affect the spectrogram visualization.
+ *
  * Key constraints:
  * - createMediaElementSource() can only be called once per element (guarded by WeakMap)
- * - The element must stay unmuted — muting is done by disconnecting from destination
  * - Uses the shared audioContextManager singleton
  * - Does NOT use onMount — exposes connect()/disconnect() for parent control
  */
@@ -61,6 +67,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   let audioContext: AudioContext | null = null;
   let sourceNode: MediaElementAudioSourceNode | null = null;
   let gainNode: GainNode | null = null;
+  let outputGainNode: GainNode | null = null;
   let highPassNode: BiquadFilterNode | null = null;
   let analyserNode: AnalyserNode | null = null;
 
@@ -105,15 +112,16 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       analyserNode.fftSize = fftSize;
       analyserNode.smoothingTimeConstant = ANALYSER_SMOOTHING;
 
-      // Connect chain: source → highpass → gain → analyser
+      // Output gain node controls audio to speakers (mute sets to 0)
+      outputGainNode = audioContext.createGain();
+      outputGainNode.gain.value = audioOutput ? 1 : 0;
+
+      // Connect chain: source → highpass → gain → analyser → outputGain → destination
       sourceNode.connect(highPassNode);
       highPassNode.connect(gainNode);
       gainNode.connect(analyserNode);
-
-      // Connect to speakers only if audioOutput is true
-      if (audioOutput) {
-        analyserNode.connect(audioContext.destination);
-      }
+      analyserNode.connect(outputGainNode);
+      outputGainNode.connect(audioContext.destination);
 
       // Allocate buffer matching analyser bin count
       frequencyData = new Uint8Array(analyserNode.frequencyBinCount);
@@ -135,6 +143,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
   /** Disconnect the audio graph */
   function disconnect(): void {
     try {
+      if (outputGainNode) outputGainNode.disconnect();
       if (analyserNode) analyserNode.disconnect();
       if (gainNode) gainNode.disconnect();
       if (highPassNode) highPassNode.disconnect();
@@ -143,6 +152,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       // Nodes may already be disconnected
     }
 
+    outputGainNode = null;
     analyserNode = null;
     gainNode = null;
     highPassNode = null;
@@ -151,24 +161,12 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     isActive = false;
   }
 
-  /** Toggle audio output to speakers */
+  /** Toggle audio output to speakers via the output gain node */
   function setAudioOutput(enabled: boolean): void {
     audioOutput = enabled;
-    if (!analyserNode || !audioContext) return;
+    if (!outputGainNode) return;
 
-    if (enabled) {
-      try {
-        analyserNode.connect(audioContext.destination);
-      } catch {
-        // Already connected
-      }
-    } else {
-      try {
-        analyserNode.disconnect(audioContext.destination);
-      } catch {
-        // Already disconnected
-      }
-    }
+    outputGainNode.gain.value = enabled ? 1 : 0;
   }
 
   /** Update gain in dB */
