@@ -197,8 +197,12 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureSpeciesTracking()
 	case "reconfigure_push_notifications":
 		cm.handleReconfigurePushNotifications()
+	case "rebuild_extended_capture":
+		cm.handleRebuildExtendedCapture()
 	case "recalculate_dynamic_thresholds":
 		cm.handleRecalculateDynamicThresholds()
+	case "reconfigure_dynamic_thresholds":
+		cm.handleReconfigureDynamicThresholds()
 	case myaudio.SignalReconfigureQuietHours:
 		cm.handleReconfigureQuietHours()
 	case myaudio.SignalQuietHoursStopSoundCard:
@@ -759,12 +763,60 @@ func (cm *ControlMonitor) handleReconfigurePushNotifications() {
 	cm.notifySuccess("Push notification providers configured successfully")
 }
 
+// handleRebuildExtendedCapture rebuilds the extended capture species filter
+// when ExtendedCapture settings (Enabled, Species, MaxDuration) change at runtime.
+func (cm *ControlMonitor) handleRebuildExtendedCapture() {
+	GetLogger().Info("Rebuilding extended capture species filter")
+
+	if cm.proc == nil {
+		GetLogger().Error("Processor not available for extended capture rebuild")
+		cm.notifyError("Failed to rebuild extended capture filter", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "rebuild_extended_capture").
+			Build())
+		return
+	}
+
+	cm.proc.RebuildExtendedCaptureFilter()
+
+	GetLogger().Info("Extended capture species filter rebuilt successfully")
+	cm.notifySuccess("Extended capture species filter rebuilt successfully")
+}
+
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
 // when the global BirdNET.Threshold changes. The stored absolute values are recomputed
 // from each species' current level/tier and the new base threshold.
 func (cm *ControlMonitor) handleRecalculateDynamicThresholds() {
 	if cm.proc != nil {
 		cm.proc.RecalculateDynamicThresholds()
+	}
+}
+
+// handleReconfigureDynamicThresholds starts or stops the dynamic threshold persistence
+// and cleanup goroutines when the DynamicThreshold.Enabled flag is toggled via the settings UI.
+func (cm *ControlMonitor) handleReconfigureDynamicThresholds() {
+	GetLogger().Info("Reconfiguring dynamic thresholds")
+
+	if cm.proc == nil {
+		GetLogger().Error("Processor not available for dynamic threshold reconfiguration")
+		cm.notifyError("Failed to reconfigure dynamic thresholds", errors.Newf("processor not available").
+			Component("analysis").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "reconfigure_dynamic_thresholds").
+			Build())
+		return
+	}
+
+	settings := conf.Setting()
+	if settings.Realtime.DynamicThreshold.Enabled {
+		cm.proc.StartDynamicThresholds()
+		GetLogger().Info("Dynamic thresholds enabled")
+		cm.notifySuccess("Dynamic thresholds enabled")
+	} else {
+		cm.proc.StopDynamicThresholds()
+		GetLogger().Info("Dynamic thresholds disabled")
+		cm.notifySuccess("Dynamic thresholds disabled")
 	}
 }
 

@@ -512,6 +512,15 @@
       "locked": "Vergrendeld",
       "unlocked": "Ontgrendeld"
     },
+    "review": {
+      "review": "Beoordelen",
+      "reviewDetection": "Detectie beoordelen voor {species}",
+      "markCorrect": "Markeer als juist",
+      "markFalsePositive": "Markeer als fout-positief",
+      "markedCorrect": "Detectie gemarkeerd als juist",
+      "markedFalsePositive": "Detectie gemarkeerd als fout-positief",
+      "failed": "Verificatiestatus bijwerken mislukt"
+    },
     "detailsPanel": {
       "audioPlayer": "Geluid opname",
       "expandDetails": "Meer details voor {species}",

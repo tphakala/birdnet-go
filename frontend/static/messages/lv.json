@@ -512,6 +512,15 @@
       "locked": "Bloķēts",
       "unlocked": "Atbloķēts"
     },
+    "review": {
+      "review": "Pārskatīt",
+      "reviewDetection": "Pārskatīt {species} noteikšanu",
+      "markCorrect": "Atzīmēt kā pareizu",
+      "markFalsePositive": "Atzīmēt kā kļūdainu",
+      "markedCorrect": "Noteikšana atzīmēta kā pareiza",
+      "markedFalsePositive": "Noteikšana atzīmēta kā kļūdaina",
+      "failed": "Neizdevās atjaunināt verifikācijas statusu"
+    },
     "detailsPanel": {
       "audioPlayer": "Audio atskaņotājs",
       "expandDetails": "Izvērst detaļas par {species}",

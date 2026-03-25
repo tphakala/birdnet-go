@@ -453,7 +453,7 @@
     // Use the popup window's setTimeout to let the DOM settle
     popup.setTimeout(() => {
       // Remove the early fallback; the full handler below replaces it.
-      popup.removeEventListener('beforeunload', earlyCleanup);
+      popup?.removeEventListener('beforeunload', earlyCleanup);
       let currentThemeId: TerminalThemeId = activeThemeId;
       let currentTheme = TERMINAL_THEMES[currentThemeId];
 

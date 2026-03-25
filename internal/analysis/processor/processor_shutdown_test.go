@@ -84,6 +84,7 @@ func TestProcessor_ShutdownWithContext_RespectsDeadline(t *testing.T) {
 			},
 			JobQueue:          queue,
 			DynamicThresholds: make(map[string]*DynamicThreshold),
+			pendingResets:     make(map[string]struct{}),
 		}
 
 		// Use a very short deadline — flush should be cut short

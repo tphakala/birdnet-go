@@ -512,6 +512,15 @@
       "locked": "Uzamknuté",
       "unlocked": "Odomknuté"
     },
+    "review": {
+      "review": "Overiť",
+      "reviewDetection": "Overiť detekciu {species}",
+      "markCorrect": "Označiť ako správne",
+      "markFalsePositive": "Označiť ako falošný poplach",
+      "markedCorrect": "Detekcia označená ako správna",
+      "markedFalsePositive": "Detekcia označená ako falošný poplach",
+      "failed": "Nepodarilo sa aktualizovať stav overenia"
+    },
     "detailsPanel": {
       "audioPlayer": "Prehrávač zvuku",
       "expandDetails": "Rozbaliť podrobnosti pre {species}",

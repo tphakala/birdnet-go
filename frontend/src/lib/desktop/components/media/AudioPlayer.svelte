@@ -202,7 +202,7 @@
   let playEndTimeout: ReturnType<typeof setTimeout> | undefined;
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let eventListeners: Array<{
-    element: HTMLElement | Document | Window;
+    element: HTMLElement | Document | Window | null;
     event: string;
     handler: EventListener;
   }> = [];
@@ -1708,7 +1708,7 @@
 
       // Remove all tracked event listeners
       eventListeners.forEach(({ element, event, handler }) => {
-        element.removeEventListener(event, handler);
+        element?.removeEventListener(event, handler);
       });
       eventListeners = [];
 

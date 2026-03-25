@@ -298,7 +298,7 @@
       firstElement?.focus();
 
       focusTrap = () => {
-        modalElement.removeEventListener('keydown', trapFocus);
+        modalElement?.removeEventListener('keydown', trapFocus);
       };
     } else if (!isOpen) {
       // Clear all sensitive state when modal closes

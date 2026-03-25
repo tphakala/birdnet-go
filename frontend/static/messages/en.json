@@ -512,6 +512,15 @@
       "locked": "Locked",
       "unlocked": "Unlocked"
     },
+    "review": {
+      "review": "Review",
+      "reviewDetection": "Review detection for {species}",
+      "markCorrect": "Mark as correct",
+      "markFalsePositive": "Mark as false positive",
+      "markedCorrect": "Detection marked as correct",
+      "markedFalsePositive": "Detection marked as false positive",
+      "failed": "Failed to update verification status"
+    },
     "detailsPanel": {
       "audioPlayer": "Audio Player",
       "expandDetails": "Expand details for {species}",

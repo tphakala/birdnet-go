@@ -224,6 +224,78 @@ func TestCheckSQLiteIntegrity_NilDB(t *testing.T) {
 	assert.Contains(t, check.Message, errMsgDBConnectionUnavailable)
 }
 
+// TestCheckSQLiteIntegrity_V2OnlyMode tests checkSQLiteIntegrity returns skipped in v2-only mode.
+// Note: Not parallel due to global state modification.
+func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	migrationTestMu.Lock()
+	t.Cleanup(func() { migrationTestMu.Unlock() })
+
+	prevV2Only := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+
+	controller := &Controller{DS: nil}
+
+	check := controller.checkSQLiteIntegrity()
+
+	assert.Equal(t, "sqlite_integrity", check.ID)
+	assert.Equal(t, CheckStatusSkipped, check.Status)
+	assert.Equal(t, CheckSeverityCritical, check.Severity)
+	assert.Contains(t, check.Message, "enhanced database mode")
+}
+
+// TestCheckLegacyAccessible_V2OnlyMode tests checkLegacyAccessible returns skipped in v2-only mode.
+// Note: Not parallel due to global state modification.
+func TestCheckLegacyAccessible_V2OnlyMode(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	migrationTestMu.Lock()
+	t.Cleanup(func() { migrationTestMu.Unlock() })
+
+	prevV2Only := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+
+	controller := &Controller{DS: nil}
+
+	check := controller.checkLegacyAccessible()
+
+	assert.Equal(t, "legacy_accessible", check.ID)
+	assert.Equal(t, CheckStatusSkipped, check.Status)
+	assert.Equal(t, CheckSeverityCritical, check.Severity)
+	assert.Contains(t, check.Message, "enhanced database mode")
+}
+
+// TestCheckRecordCount_V2OnlyMode tests checkRecordCount returns skipped in v2-only mode.
+// Note: Not parallel due to global state modification.
+func TestCheckRecordCount_V2OnlyMode(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	migrationTestMu.Lock()
+	t.Cleanup(func() { migrationTestMu.Unlock() })
+
+	prevV2Only := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+
+	controller := &Controller{Repo: nil}
+
+	check := controller.checkRecordCount()
+
+	assert.Equal(t, "record_count", check.ID)
+	assert.Equal(t, CheckStatusSkipped, check.Status)
+	assert.Equal(t, CheckSeverityCritical, check.Severity)
+	assert.Contains(t, check.Message, "enhanced database mode")
+}
+
 // TestCheckMemoryAvailable tests checkMemoryAvailable function.
 func TestCheckMemoryAvailable(t *testing.T) {
 	t.Attr("component", "migration")

@@ -512,6 +512,15 @@
       "locked": "Verrouillé",
       "unlocked": "Déverrouillé"
     },
+    "review": {
+      "review": "Vérifier",
+      "reviewDetection": "Vérifier la détection de {species}",
+      "markCorrect": "Marquer comme correcte",
+      "markFalsePositive": "Marquer comme faux positif",
+      "markedCorrect": "Détection marquée comme correcte",
+      "markedFalsePositive": "Détection marquée comme faux positif",
+      "failed": "Échec de la mise à jour du statut de vérification"
+    },
     "detailsPanel": {
       "audioPlayer": "Lecteur audio",
       "expandDetails": "Développer les détails pour {species}",

@@ -512,6 +512,15 @@
       "locked": "Låst",
       "unlocked": "Olåst"
     },
+    "review": {
+      "review": "Granska",
+      "reviewDetection": "Granska detektion av {species}",
+      "markCorrect": "Markera som korrekt",
+      "markFalsePositive": "Markera som falskt positiv",
+      "markedCorrect": "Detektion markerad som korrekt",
+      "markedFalsePositive": "Detektion markerad som falskt positiv",
+      "failed": "Kunde inte uppdatera verifieringsstatus"
+    },
     "detailsPanel": {
       "audioPlayer": "Ljudspelare",
       "expandDetails": "Expandera detaljer för {species}",

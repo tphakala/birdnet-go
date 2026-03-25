@@ -370,6 +370,7 @@ func createTestProcessor() *Processor {
 		Settings:          settings,
 		Ds:                mockDs,
 		DynamicThresholds: make(map[string]*DynamicThreshold),
+		pendingResets:     make(map[string]struct{}),
 	}
 
 	return p

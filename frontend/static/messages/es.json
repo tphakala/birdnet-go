@@ -512,6 +512,15 @@
       "locked": "Bloqueado",
       "unlocked": "Desbloqueado"
     },
+    "review": {
+      "review": "Revisar",
+      "reviewDetection": "Revisar detección de {species}",
+      "markCorrect": "Marcar como correcta",
+      "markFalsePositive": "Marcar como falso positivo",
+      "markedCorrect": "Detección marcada como correcta",
+      "markedFalsePositive": "Detección marcada como falso positivo",
+      "failed": "Error al actualizar el estado de verificación"
+    },
     "detailsPanel": {
       "audioPlayer": "Reproductor de audio",
       "expandDetails": "Expandir detalles para {species}",
