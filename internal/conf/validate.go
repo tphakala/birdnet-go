@@ -1553,6 +1553,8 @@ func validateNotificationSettings(n *NotificationConfig) error {
 					Context("validation_type", "notification-push-shoutrrr-urls").
 					Build()
 			}
+			// Normalize ntfy URLs: ntfy://topic -> ntfy://ntfy.sh/topic
+			normalizeNtfyURLs(p)
 		case "webhook":
 			if err := validateWebhookProvider(p); err != nil {
 				return err
@@ -1674,4 +1676,49 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	}
 
 	return nil
+}
+
+// NormalizeNtfyURL fixes a bare ntfy topic URL (ntfy://topic) by inserting
+// the default ntfy.sh host, producing ntfy://ntfy.sh/topic. The shoutrrr
+// library interprets ntfy://topic as hostname="topic" with an empty path,
+// which fails to deliver. URLs that already contain a recognizable host
+// (containing a dot, a colon port, "localhost", or an IP address) are
+// returned unchanged. Non-ntfy URLs are returned as-is.
+func NormalizeNtfyURL(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "ntfy" {
+		return raw
+	}
+
+	// When the URL already has a path (e.g. ntfy://host/topic), the host
+	// part is unambiguous -- leave it alone.
+	if u.Path != "" {
+		return raw
+	}
+
+	// No path means the URL is either a bare topic (ntfy://mytopic) or a
+	// host with an empty topic (ntfy://localhost). Apply a heuristic: if
+	// the host portion looks like a real hostname or IP, leave it as-is.
+	host := u.Hostname()
+	if strings.Contains(host, ".") || host == "localhost" || net.ParseIP(host) != nil {
+		return raw
+	}
+
+	// Also leave URLs with an explicit port alone (e.g. ntfy://myhost:8080).
+	if u.Port() != "" {
+		return raw
+	}
+
+	// It is a bare topic. Reconstruct the URL with ntfy.sh as the host.
+	u.Path = "/" + u.Host
+	u.Host = "ntfy.sh"
+	return u.String()
+}
+
+// normalizeNtfyURLs repairs bare ntfy topic URLs in a shoutrrr provider's
+// URL list so that shoutrrr receives the expected host/topic format.
+func normalizeNtfyURLs(p *PushProviderConfig) {
+	for i, u := range p.URLs {
+		p.URLs[i] = NormalizeNtfyURL(u)
+	}
 }
