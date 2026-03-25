@@ -22,7 +22,6 @@ test.describe('Alert Rules Settings Page', () => {
         alertsAvailable = false;
       }
     } catch (error) {
-       
       console.warn('Alerts API check failed, skipping alert-rules tests:', error);
       alertsAvailable = false;
     }
