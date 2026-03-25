@@ -480,7 +480,6 @@
       case 'ntfy': {
         if (!serviceFormData.ntfyTopic) return '';
         const server = serviceFormData.ntfyServer?.trim() || 'ntfy.sh';
-        const isPublic = server === 'ntfy.sh';
 
         const user = serviceFormData.ntfyUsername?.trim() || '';
         const pass = serviceFormData.ntfyPassword?.trim() || '';
@@ -490,10 +489,9 @@
             : `${encodeURIComponent(user)}@`
           : '';
 
-        if (isPublic) {
-          return `ntfy://${serviceFormData.ntfyTopic}`;
-        }
-
+        // Always include the server hostname in the URL.
+        // ntfy://topic (without host) is ambiguous and shoutrrr interprets
+        // the topic as the hostname, causing delivery failures.
         const normalizedServer = normalizeNtfyHost(server);
         const schemeParam = serviceFormData.ntfyProtocol === 'http' ? '?scheme=http' : '';
         return `ntfy://${auth}${normalizedServer}/${serviceFormData.ntfyTopic}${schemeParam}`;
@@ -1008,6 +1006,17 @@
         serviceFormData.ntfyCheckStatus = 'unreachable';
       }
     }
+  }
+
+  // Auto-detect ntfy server protocol after a brief debounce when the server changes.
+  let ntfyAutoCheckTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleNtfyAutoCheck() {
+    clearTimeout(ntfyAutoCheckTimer);
+    const server = serviceFormData.ntfyServer?.trim() || '';
+    if (!server || server === 'ntfy.sh') return;
+    ntfyAutoCheckTimer = setTimeout(() => {
+      checkNtfyServer();
+    }, 800);
   }
 
   function toggleFilterType(type: string) {
@@ -1547,6 +1556,7 @@
                         serviceFormData.ntfyCheckHost = '';
                         serviceFormData.ntfyUsername = '';
                         serviceFormData.ntfyPassword = '';
+                        scheduleNtfyAutoCheck();
                       }}
                     />
                     <p class="text-xs text-[var(--color-base-content)]/60 -mt-2">

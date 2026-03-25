@@ -1553,6 +1553,8 @@ func validateNotificationSettings(n *NotificationConfig) error {
 					Context("validation_type", "notification-push-shoutrrr-urls").
 					Build()
 			}
+			// Normalize ntfy URLs: ntfy://topic -> ntfy://ntfy.sh/topic
+			normalizeNtfyURLs(p)
 		case "webhook":
 			if err := validateWebhookProvider(p); err != nil {
 				return err
@@ -1674,4 +1676,49 @@ func validateWebhookAuth(auth *WebhookAuthConfig, providerName string, endpointI
 	}
 
 	return nil
+}
+
+// NormalizeNtfyURL fixes a bare ntfy topic URL (ntfy://topic) by inserting
+// the default ntfy.sh host, producing ntfy://ntfy.sh/topic. The shoutrrr
+// library interprets ntfy://topic as hostname="topic" with an empty path,
+// which fails to deliver. URLs that already include a host are returned
+// unchanged. Non-ntfy URLs are returned as-is.
+func NormalizeNtfyURL(raw string) string {
+	if !strings.HasPrefix(raw, "ntfy://") {
+		return raw
+	}
+
+	// Strip the scheme for analysis
+	remainder := strings.TrimPrefix(raw, "ntfy://")
+
+	// Separate userinfo@ prefix if present
+	userinfo := ""
+	body := remainder
+	if atIdx := strings.Index(body, "@"); atIdx != -1 {
+		userinfo = body[:atIdx+1]
+		body = body[atIdx+1:]
+	}
+
+	// Split body into host+path and query
+	query := ""
+	if qIdx := strings.Index(body, "?"); qIdx != -1 {
+		query = body[qIdx:]
+		body = body[:qIdx]
+	}
+
+	// If there is no slash in the body, the URL looks like ntfy://topic
+	// (or ntfy://user:pass@topic) with no host/path separator.
+	// Insert the default ntfy.sh host.
+	if !strings.Contains(body, "/") {
+		return "ntfy://" + userinfo + "ntfy.sh/" + body + query
+	}
+	return raw
+}
+
+// normalizeNtfyURLs repairs bare ntfy topic URLs in a shoutrrr provider's
+// URL list so that shoutrrr receives the expected host/topic format.
+func normalizeNtfyURLs(p *PushProviderConfig) {
+	for i, u := range p.URLs {
+		p.URLs[i] = NormalizeNtfyURL(u)
+	}
 }
