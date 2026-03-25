@@ -123,11 +123,18 @@
         body: JSON.stringify({ verified: status }),
       });
 
-      // Update the local results array so the status badge reflects the change
+      // Update the local results array so the status badge reflects the change.
+      // If a verification filter is active (not 'any'), remove the item from results
+      // since it no longer matches the active filter, and adjust the total count.
       const idx = results.findIndex(r => r.id === resultId);
       if (idx !== -1) {
-        // eslint-disable-next-line security/detect-object-injection -- idx is validated from findIndex
-        results[idx].verified = status;
+        if (verifiedStatus !== 'any') {
+          results.splice(idx, 1);
+          totalResults = Math.max(0, totalResults - 1);
+        } else {
+          // eslint-disable-next-line security/detect-object-injection -- idx is validated from findIndex
+          results[idx].verified = status;
+        }
       }
 
       toastActions.success(
@@ -878,14 +885,13 @@
                             <SquarePen class="size-4" />
                           </button>
                           {#if reviewOpenForId === result.id}
-                            <div class="review-dropdown" role="menu">
+                            <div class="review-dropdown">
                               <button
                                 class="review-dropdown-item correct"
                                 onclick={e => {
                                   e.stopPropagation();
                                   submitVerification(result.id, 'correct');
                                 }}
-                                role="menuitem"
                               >
                                 <Check class="size-4" />
                                 <span>{t('search.review.markCorrect')}</span>
@@ -896,7 +902,6 @@
                                   e.stopPropagation();
                                   submitVerification(result.id, 'false_positive');
                                 }}
-                                role="menuitem"
                               >
                                 <X class="size-4" />
                                 <span>{t('search.review.markFalsePositive')}</span>
@@ -1135,14 +1140,13 @@
                           {t('search.review.review')}
                         </button>
                         {#if reviewOpenForId === result.id}
-                          <div class="review-dropdown" role="menu">
+                          <div class="review-dropdown">
                             <button
                               class="review-dropdown-item correct"
                               onclick={e => {
                                 e.stopPropagation();
                                 submitVerification(result.id, 'correct');
                               }}
-                              role="menuitem"
                             >
                               <Check class="size-4" />
                               <span>{t('search.review.markCorrect')}</span>
@@ -1153,7 +1157,6 @@
                                 e.stopPropagation();
                                 submitVerification(result.id, 'false_positive');
                               }}
-                              role="menuitem"
                             >
                               <X class="size-4" />
                               <span>{t('search.review.markFalsePositive')}</span>

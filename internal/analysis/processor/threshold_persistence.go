@@ -402,7 +402,10 @@ func (p *Processor) StartDynamicThresholds() {
 func (p *Processor) StopDynamicThresholds() {
 	// Flush thresholds to DB BEFORE cancelling the context, because
 	// persistDynamicThresholds → saveThresholdsWithRetry reads p.thresholdsCtx.
-	if p.Ds != nil {
+	// Guard against nil thresholdsCtx: if goroutines were never started (e.g.,
+	// feature toggled off before it was ever on), thresholdsCtx is nil and
+	// saveThresholdsWithRetry would panic on thresholdsCtx.Done().
+	if p.Ds != nil && p.thresholdsCtx != nil {
 		if err := p.persistDynamicThresholds(); err != nil {
 			GetLogger().Warn("Failed to flush dynamic thresholds during disable",
 				logger.Error(err),

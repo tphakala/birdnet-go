@@ -116,7 +116,7 @@ func (c *Controller) GetPrerequisites(ctx echo.Context) error {
 	}
 
 	allPassed := criticalFailures == 0
-	canStart := allPassed && !isV2OnlyMode
+	canStart := allPassed && !getIsV2OnlyMode()
 
 	response := PrerequisitesResponse{
 		AllPassed:         allPassed,
@@ -155,7 +155,7 @@ func (c *Controller) checkStateIdle() PrerequisiteCheck {
 	}
 
 	if stateManager == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = "Running in enhanced database mode, migration already complete"
 			return check
@@ -302,7 +302,7 @@ func (c *Controller) checkLegacyAccessible() PrerequisiteCheck {
 	}
 
 	if c.DS == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
 			return check
@@ -338,7 +338,7 @@ func (c *Controller) checkSQLiteIntegrity() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
 			return check
@@ -420,7 +420,7 @@ func (c *Controller) checkMySQLTableHealth() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
 			return check
@@ -471,7 +471,7 @@ func (c *Controller) checkMySQLPermissions() PrerequisiteCheck {
 
 	db := c.getLegacyGormDB()
 	if db == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
 			return check
@@ -585,7 +585,7 @@ func (c *Controller) checkRecordCount() PrerequisiteCheck {
 	}
 
 	if c.Repo == nil {
-		if isV2OnlyMode {
+		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = v2OnlySkipMessage
 			return check

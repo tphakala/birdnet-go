@@ -84,7 +84,8 @@
     // For search queries, omitting the date allows searching across all dates.
     // When date is included, the backend restricts results to that single day,
     // which causes search to return no results for species detected on other days.
-    const date = params.get('date') ?? (queryType !== 'search' ? getLocalDateString() : undefined);
+    const date =
+      params.get('date')?.trim() || (queryType !== 'search' ? getLocalDateString() : undefined);
 
     return {
       queryType,
@@ -129,7 +130,7 @@
       detectionsData = {
         notes: data.data || [],
         queryType: queryParams.queryType || 'all',
-        date: queryParams.date ?? getLocalDateString(),
+        date: queryParams.date?.trim() || getLocalDateString(),
         hour: queryParams.hour ? parseInt(queryParams.hour) : undefined,
         duration: queryParams.duration,
         species: queryParams.species,
