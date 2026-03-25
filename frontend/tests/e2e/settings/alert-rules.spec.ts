@@ -5,6 +5,33 @@ test.describe('Alert Rules Settings Page', () => {
 
   const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:8080';
 
+  // Selector for individual rule card elements inside the rules list.
+  // The rules render inside a rounded-xl container as direct child divs.
+  const RULE_CARD = '#settings-tabpanel-rules .rounded-xl > div';
+
+  // Alert routes require the v2 database. When V2Manager is nil,
+  // initAlertRoutes() returns early and no /alerts/* endpoints exist.
+  // Only skip for 404/409 (feature unavailable); let 500s fail the tests.
+  const SKIP_STATUSES = new Set([404, 409]);
+  let alertsAvailable = true;
+
+  test.beforeAll(async ({ request }) => {
+    try {
+      const resp = await request.get(`${baseUrl}/api/v2/alerts/schema`, { timeout: 5000 });
+      if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
+        alertsAvailable = false;
+      }
+    } catch (error) {
+      console.warn('Alerts API check failed, skipping alert-rules tests:', error);
+      alertsAvailable = false;
+    }
+  });
+
+  test.beforeEach(() => {
+    // eslint-disable-next-line playwright/no-skipped-test -- Conditional skip when v2 database unavailable
+    test.skip(!alertsAvailable, 'Alert rules API unavailable -- v2 database not initialized');
+  });
+
   /**
    * Helper: navigate to alert rules settings page and wait for content.
    */
@@ -31,7 +58,7 @@ test.describe('Alert Rules Settings Page', () => {
    */
   async function waitForRulesLoaded(page: Page) {
     await waitForSpinner(page);
-    const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+    const ruleCards = page.locator(RULE_CARD);
     await expect(ruleCards.first()).toBeVisible({ timeout: 10000 });
   }
 
@@ -142,7 +169,7 @@ test.describe('Alert Rules Settings Page', () => {
       await waitForSpinner(page);
 
       // Should display rule cards (default rules are seeded by the engine)
-      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCards = page.locator(RULE_CARD);
       await expect(ruleCards.first()).toBeVisible({ timeout: 10000 });
 
       const count = await ruleCards.count();
@@ -163,7 +190,7 @@ test.describe('Alert Rules Settings Page', () => {
       await navigateToAlertRules(page);
       await waitForSpinner(page);
 
-      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCards = page.locator(RULE_CARD);
       await expect(ruleCards.first()).toBeVisible({ timeout: 10000 });
 
       const duplicateKeyErrors = errors.filter(e => e.includes('each_key_duplicate'));
@@ -340,14 +367,15 @@ test.describe('Alert Rules Settings Page', () => {
   // ──────────────────────────────────────────────
 
   test.describe('UI Elements', () => {
-    test('filter dropdowns are visible', async ({ page }) => {
+    test('action buttons area is visible', async ({ page }) => {
       await navigateToAlertRules(page);
 
       const rulesPanel = page.locator('#settings-tabpanel-rules');
       await expect(rulesPanel).toBeVisible({ timeout: 10000 });
 
-      const filterArea = rulesPanel.locator('.flex.flex-wrap.items-center.gap-3').first();
-      await expect(filterArea).toBeVisible();
+      // The rules tab has action buttons: Export, Import, Reset, New Rule
+      const actionArea = rulesPanel.locator('.flex.items-center.gap-2.flex-wrap').first();
+      await expect(actionArea).toBeVisible();
     });
 
     test('action buttons are visible (export, import, reset, new rule)', async ({ page }) => {
@@ -396,16 +424,16 @@ test.describe('Alert Rules Settings Page', () => {
       await navigateToAlertRules(page);
       await waitForRulesLoaded(page);
 
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
 
       // Rule card should display the rule name
-      const ruleName = firstRuleCard.locator('h4');
+      const ruleName = firstRuleCard.locator('span.font-medium').first();
       await expect(ruleName).toBeVisible();
       const nameText = await ruleName.textContent();
       expect(nameText?.trim().length).toBeGreaterThan(0);
 
-      // Should show trigger, conditions, actions, cooldown metadata
-      const metadata = firstRuleCard.locator('.flex.flex-wrap');
+      // Should show trigger metadata (event/metric code badge)
+      const metadata = firstRuleCard.locator('code');
       await expect(metadata).toBeVisible();
     });
 
@@ -414,10 +442,7 @@ test.describe('Alert Rules Settings Page', () => {
       await waitForRulesLoaded(page);
 
       // Default rules are built-in, so at least one badge should be visible
-      const builtInBadge = page
-        .locator('#settings-tabpanel-rules .space-y-2 > div')
-        .locator('text=/built.?in/i')
-        .first();
+      const builtInBadge = page.locator(RULE_CARD).locator('text=/built.?in/i').first();
       await expect(builtInBadge).toBeVisible({ timeout: 3000 });
     });
   });
@@ -427,45 +452,46 @@ test.describe('Alert Rules Settings Page', () => {
   // ──────────────────────────────────────────────
 
   test.describe('Rule Card Interactions', () => {
-    test('rule cards have action buttons (edit, toggle, test, delete)', async ({ page }) => {
+    test('rule cards have action buttons (edit, test) and toggle', async ({ page }) => {
       await navigateToAlertRules(page);
       await waitForRulesLoaded(page);
 
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
 
-      // Each card should have 4 action buttons
-      const actionButtons = firstRuleCard.locator('button[aria-label]');
-      const buttonCount = actionButtons;
-      await expect(buttonCount, 'Rule card should have 4 action buttons').toHaveCount(4);
+      // Each card should have test and edit action buttons (with title attributes)
+      await expect(firstRuleCard.locator('button[title*="test" i]')).toBeVisible();
+      await expect(firstRuleCard.locator('button[title*="edit" i]')).toBeVisible();
+
+      // Should have a toggle checkbox
+      const toggle = firstRuleCard.locator('input[type="checkbox"]');
+      await expect(toggle).toBeVisible();
     });
 
     test('toggle button changes rule enabled state', async ({ page }) => {
       await navigateToAlertRules(page);
       await waitForRulesLoaded(page);
 
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
 
-      const toggleButton = firstRuleCard
-        .locator('button[aria-label*="able" i], button[aria-label*="activ" i]')
-        .first();
-      await expect(toggleButton).toBeVisible();
+      const toggleCheckbox = firstRuleCard.locator('input[type="checkbox"]').first();
+      await expect(toggleCheckbox).toBeVisible();
 
-      const wasEnabled = !(await firstRuleCard.evaluate(el => el.classList.contains('opacity-60')));
+      const wasChecked = await toggleCheckbox.isChecked();
 
       // Toggle off/on
-      await toggleButton.click();
-      if (wasEnabled) {
-        await expect(firstRuleCard).toHaveClass(/opacity-60/, { timeout: 5000 });
+      await toggleCheckbox.click();
+      if (wasChecked) {
+        await expect(toggleCheckbox).not.toBeChecked({ timeout: 5000 });
       } else {
-        await expect(firstRuleCard).not.toHaveClass(/opacity-60/, { timeout: 5000 });
+        await expect(toggleCheckbox).toBeChecked({ timeout: 5000 });
       }
 
       // Toggle back to restore original state
-      await toggleButton.click();
-      if (wasEnabled) {
-        await expect(firstRuleCard).not.toHaveClass(/opacity-60/, { timeout: 5000 });
+      await toggleCheckbox.click();
+      if (wasChecked) {
+        await expect(toggleCheckbox).toBeChecked({ timeout: 5000 });
       } else {
-        await expect(firstRuleCard).toHaveClass(/opacity-60/, { timeout: 5000 });
+        await expect(toggleCheckbox).not.toBeChecked({ timeout: 5000 });
       }
     });
 
@@ -473,10 +499,10 @@ test.describe('Alert Rules Settings Page', () => {
       await navigateToAlertRules(page);
       await waitForRulesLoaded(page);
 
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
 
       // Test button has Play icon and "test" aria-label
-      const testButton = firstRuleCard.locator('button[aria-label*="est" i]').first();
+      const testButton = firstRuleCard.locator('button[title*="est" i]').first();
       await expect(testButton).toBeVisible();
       await testButton.click();
 
@@ -496,7 +522,7 @@ test.describe('Alert Rules Settings Page', () => {
         await waitForRulesLoaded(page);
 
         // Find the test rule card
-        const testRuleCard = page.locator(`#settings-tabpanel-rules .space-y-2 > div`, {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -509,7 +535,7 @@ test.describe('Alert Rules Settings Page', () => {
         // Set up dialog handler to decline the delete
         page.on('dialog', dialog => dialog.dismiss());
 
-        const deleteButton = testRuleCard.locator('button[aria-label*="elete" i]').first();
+        const deleteButton = testRuleCard.locator('button[title*="elete" i]').first();
         await expect(deleteButton).toBeVisible();
         await deleteButton.click();
 
@@ -529,7 +555,7 @@ test.describe('Alert Rules Settings Page', () => {
         await navigateToAlertRules(page);
         await waitForRulesLoaded(page);
 
-        const testRuleCard = page.locator(`#settings-tabpanel-rules .space-y-2 > div`, {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -541,7 +567,7 @@ test.describe('Alert Rules Settings Page', () => {
         // Accept the confirmation dialog
         page.on('dialog', dialog => dialog.accept());
 
-        const deleteButton = testRuleCard.locator('button[aria-label*="elete" i]').first();
+        const deleteButton = testRuleCard.locator('button[title*="elete" i]').first();
         await deleteButton.click();
 
         // Rule card should disappear
@@ -721,7 +747,7 @@ test.describe('Alert Rules Settings Page', () => {
       await expect(editor).not.toBeVisible({ timeout: 10000 });
 
       // New rule should appear in the list
-      const newRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+      const newRuleCard = page.locator(RULE_CARD, {
         has: page.locator(`text="${uniqueName}"`),
       });
       await expect(newRuleCard).toBeVisible({ timeout: 5000 });
@@ -769,7 +795,7 @@ test.describe('Alert Rules Settings Page', () => {
         await navigateToAlertRules(page);
         await waitForRulesLoaded(page);
 
-        const testRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -777,7 +803,7 @@ test.describe('Alert Rules Settings Page', () => {
           return;
         }
 
-        const editButton = testRuleCard.locator('button[aria-label*="dit" i]').first();
+        const editButton = testRuleCard.locator('button[title*="dit" i]').first();
         await editButton.click();
 
         // Editor should open
@@ -809,7 +835,7 @@ test.describe('Alert Rules Settings Page', () => {
         await navigateToAlertRules(page);
         await waitForRulesLoaded(page);
 
-        const testRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -817,7 +843,7 @@ test.describe('Alert Rules Settings Page', () => {
           return;
         }
 
-        const editButton = testRuleCard.locator('button[aria-label*="dit" i]').first();
+        const editButton = testRuleCard.locator('button[title*="dit" i]').first();
         await editButton.click();
 
         const rulesPanel = page.locator('#settings-tabpanel-rules');
@@ -842,8 +868,8 @@ test.describe('Alert Rules Settings Page', () => {
       await openNewRuleEditor(page);
 
       // Edit buttons on existing rule cards should be disabled
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
-      const editButton = firstRuleCard.locator('button[aria-label*="dit" i]').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
+      const editButton = firstRuleCard.locator('button[title*="dit" i]').first();
       await expect(editButton).toBeDisabled();
     });
 
@@ -853,8 +879,8 @@ test.describe('Alert Rules Settings Page', () => {
 
       await openNewRuleEditor(page);
 
-      const firstRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div').first();
-      const deleteButton = firstRuleCard.locator('button[aria-label*="elete" i]').first();
+      const firstRuleCard = page.locator(RULE_CARD).first();
+      const deleteButton = firstRuleCard.locator('button[title*="elete" i]').first();
       await expect(deleteButton).toBeDisabled();
     });
   });
@@ -874,7 +900,7 @@ test.describe('Alert Rules Settings Page', () => {
         await waitForRulesLoaded(page);
 
         // Edit the test rule to get to condition section
-        const testRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -882,7 +908,7 @@ test.describe('Alert Rules Settings Page', () => {
           return;
         }
 
-        const editButton = testRuleCard.locator('button[aria-label*="dit" i]').first();
+        const editButton = testRuleCard.locator('button[title*="dit" i]').first();
         await editButton.click();
 
         const rulesPanel = page.locator('#settings-tabpanel-rules');
@@ -899,7 +925,7 @@ test.describe('Alert Rules Settings Page', () => {
           await expect(conditionRow).toBeVisible({ timeout: 3000 });
 
           // Remove button should be visible (trash icon)
-          const removeButton = conditionRow.locator('button[aria-label*="emove" i]');
+          const removeButton = conditionRow.locator('button[title*="emove" i]');
           await expect(removeButton).toBeVisible();
         }
       } finally {
@@ -916,7 +942,7 @@ test.describe('Alert Rules Settings Page', () => {
         await navigateToAlertRules(page);
         await waitForRulesLoaded(page);
 
-        const testRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -924,7 +950,7 @@ test.describe('Alert Rules Settings Page', () => {
           return;
         }
 
-        const editButton = testRuleCard.locator('button[aria-label*="dit" i]').first();
+        const editButton = testRuleCard.locator('button[title*="dit" i]').first();
         await editButton.click();
 
         const rulesPanel = page.locator('#settings-tabpanel-rules');
@@ -943,7 +969,7 @@ test.describe('Alert Rules Settings Page', () => {
         expect(countBefore).toBeGreaterThan(0);
 
         // Remove it
-        const removeButton = conditionRows.first().locator('button[aria-label*="emove" i]');
+        const removeButton = conditionRows.first().locator('button[title*="emove" i]');
         await removeButton.click();
 
         // Count should decrease
@@ -966,7 +992,7 @@ test.describe('Alert Rules Settings Page', () => {
         await navigateToAlertRules(page);
         await waitForRulesLoaded(page);
 
-        const testRuleCard = page.locator('#settings-tabpanel-rules .space-y-2 > div', {
+        const testRuleCard = page.locator(RULE_CARD, {
           has: page.locator(`text="${testName}"`),
         });
 
@@ -974,7 +1000,7 @@ test.describe('Alert Rules Settings Page', () => {
           return;
         }
 
-        const editButton = testRuleCard.locator('button[aria-label*="dit" i]').first();
+        const editButton = testRuleCard.locator('button[title*="dit" i]').first();
         await editButton.click();
 
         const rulesPanel = page.locator('#settings-tabpanel-rules');
@@ -1062,17 +1088,17 @@ test.describe('Alert Rules Settings Page', () => {
       await waitForRulesLoaded(page);
 
       // Get initial count of rule cards
-      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCards = page.locator(RULE_CARD);
       const initialCount = await ruleCards.count();
 
       if (initialCount === 0) {
         return; // Nothing to filter
       }
 
-      // Find the status filter dropdown (second dropdown in filter area)
-      // SelectDropdown renders with a button; the enabled/disabled filter is the 2nd one
+      // The current rules tab has no filter dropdowns (only action buttons).
+      // If a filter area is added in the future, test it here.
       const filterArea = page
-        .locator('#settings-tabpanel-rules .flex.flex-wrap.items-center.gap-3')
+        .locator('#settings-tabpanel-rules .flex.items-center.gap-2.flex-wrap')
         .first();
       const dropdowns = filterArea.locator('.w-40 button, .w-40 select');
 
@@ -1124,7 +1150,7 @@ test.describe('Alert Rules Settings Page', () => {
       await waitForSpinner(page);
 
       // Should still have rules after reset
-      const ruleCardsAfter = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCardsAfter = page.locator(RULE_CARD);
       await expect(ruleCardsAfter.first()).toBeVisible({ timeout: 10000 });
 
       const countAfter = await ruleCardsAfter.count();
@@ -1181,7 +1207,7 @@ test.describe('Alert Rules Settings Page', () => {
       await waitForRulesLoaded(page);
 
       // Get initial rule count
-      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCards = page.locator(RULE_CARD);
       const initialCount = await ruleCards.count();
 
       // Switch to history
@@ -1233,7 +1259,7 @@ test.describe('Alert Rules Settings Page', () => {
       await navigateToAlertRules(page);
       await waitForSpinner(page);
 
-      const ruleCards = page.locator('#settings-tabpanel-rules .space-y-2 > div');
+      const ruleCards = page.locator(RULE_CARD);
       await expect(ruleCards.first()).toBeVisible({ timeout: 10000 });
 
       const criticalErrors = errors.filter(

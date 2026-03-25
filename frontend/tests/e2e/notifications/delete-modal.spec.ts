@@ -79,9 +79,7 @@ test.describe('Notification Delete Modal', () => {
     // Wait for view to switch - in flat view we should see individual notifications
     // The delete button should now be visible
     const deleteButton = page
-      .locator(
-        'button[aria-label*="delete" i], button[aria-label*="Delete" i], button[aria-label*="supprimer" i]'
-      )
+      .locator('button[aria-label*="delete" i], button[aria-label*="supprimer" i]')
       .first();
 
     // Wait for delete button to be visible
@@ -167,9 +165,11 @@ test.describe('Notification Delete Modal', () => {
     // Switch to flat view and get the delete button
     const deleteButton = await switchToFlatViewAndGetDeleteButton(page);
 
-    // Get a reference to the parent card before clicking delete
-    const notificationCard = deleteButton.locator('xpath=ancestor::div[contains(@class, "card")]');
-    await expect(notificationCard).toBeVisible();
+    // Count delete buttons before deletion for comparison
+    const deleteButtonLocator = page.locator(
+      'button[aria-label*="delete" i], button[aria-label*="supprimer" i]'
+    );
+    const countBefore = await deleteButtonLocator.count();
 
     await deleteButton.click();
 
@@ -186,8 +186,8 @@ test.describe('Notification Delete Modal', () => {
     // Modal should close
     await expect(modal).not.toBeVisible({ timeout: 5000 });
 
-    // The specific notification card should be removed from the UI
-    await expect(notificationCard).not.toBeVisible({ timeout: 5000 });
+    // The number of delete buttons should decrease (notification was removed)
+    await expect(deleteButtonLocator).toHaveCount(countBefore - 1, { timeout: 5000 });
   });
 
   test('modal has proper backdrop styling', async ({ page, request }) => {
@@ -239,7 +239,9 @@ test.describe('Notification Delete Modal', () => {
       const modal = page.locator('dialog[open]');
       await expect(modal).toBeVisible({ timeout: 5000 });
 
-      // Press Escape to close (native dialog behavior)
+      // Ensure focus is on the dialog before pressing Escape.
+      // Native <dialog> Escape behavior requires focus within the dialog.
+      await modal.focus();
       await page.keyboard.press('Escape');
 
       // Modal should close
