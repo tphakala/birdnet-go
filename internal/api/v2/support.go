@@ -31,6 +31,7 @@ type GenerateSupportDumpRequest struct {
 	IncludeSystemInfo bool   `json:"include_system_info"`
 	UserMessage       string `json:"user_message"`
 	UploadToSentry    bool   `json:"upload_to_sentry"`
+	GitHubIssueNumber string `json:"github_issue_number"`
 }
 
 // GenerateSupportDumpResponse represents the response for support dump generation
@@ -149,7 +150,7 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		// Proceed with upload if still requested
 		if req.UploadToSentry {
 			uploader := telemetry.GetAttachmentUploader()
-			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage); err != nil {
+			if err := uploader.UploadSupportDump(ctx.Request().Context(), archiveData, settings.SystemID, req.UserMessage, req.GitHubIssueNumber); err != nil {
 				// Log error but don't fail the request
 				c.logErrorIfEnabled("Failed to upload support dump to Sentry",
 					logger.Error(err),
