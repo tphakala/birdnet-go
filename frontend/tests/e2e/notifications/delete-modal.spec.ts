@@ -79,9 +79,7 @@ test.describe('Notification Delete Modal', () => {
     // Wait for view to switch - in flat view we should see individual notifications
     // The delete button should now be visible
     const deleteButton = page
-      .locator(
-        'button[aria-label*="delete" i], button[aria-label*="Delete" i], button[aria-label*="supprimer" i]'
-      )
+      .locator('button[aria-label*="delete" i], button[aria-label*="supprimer" i]')
       .first();
 
     // Wait for delete button to be visible
@@ -169,7 +167,7 @@ test.describe('Notification Delete Modal', () => {
 
     // Count delete buttons before deletion for comparison
     const deleteButtonLocator = page.locator(
-      'button[aria-label*="delete" i], button[aria-label*="Delete" i], button[aria-label*="supprimer" i]'
+      'button[aria-label*="delete" i], button[aria-label*="supprimer" i]'
     );
     const countBefore = await deleteButtonLocator.count();
 
