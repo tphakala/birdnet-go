@@ -18,11 +18,10 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
     // Navigate to dashboard to find a detection
     await page.goto('/ui/dashboard');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
     // Find a detection card link to navigate to detail page
     const detectionLink = page.locator('a[href*="/ui/detection/"]').first();
-    if (!(await detectionLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+    if (!(await detectionLink.isVisible({ timeout: 10000 }).catch(() => false))) {
       // eslint-disable-next-line playwright/no-skipped-test -- No detections in test env
       test.skip(true, 'No detections available to test audio settings popup');
       return;
@@ -31,7 +30,6 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
     // Navigate to the detection detail page
     await detectionLink.click();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
     // Find the audio settings button (Volume2 icon button with aria-label)
     const audioSettingsBtn = page
@@ -53,7 +51,6 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
 
       if (await playerContainer.isVisible({ timeout: 3000 }).catch(() => false)) {
         await playerContainer.hover();
-        await page.waitForTimeout(500);
       }
     }
 
@@ -73,7 +70,6 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
 
     // Open the audio settings popup
     await settingsBtn.click();
-    await page.waitForTimeout(300);
 
     // Verify the settings dialog opened
     const settingsDialog = page.locator('[role="dialog"]');
@@ -119,10 +115,9 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
     // mousedown events on the popup's interactive elements are stopped
     await page.goto('/ui/dashboard');
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
     const detectionLink = page.locator('a[href*="/ui/detection/"]').first();
-    if (!(await detectionLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+    if (!(await detectionLink.isVisible({ timeout: 10000 }).catch(() => false))) {
       // eslint-disable-next-line playwright/no-skipped-test -- No detections in test env
       test.skip(true, 'No detections available to test');
       return;
@@ -130,7 +125,6 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
 
     await detectionLink.click();
     await page.waitForLoadState('domcontentloaded');
-    await page.waitForTimeout(1000);
 
     // Use evaluate to inject a listener that tracks if the spectrogram container
     // received a mousedown event (which it should NOT when interacting with popup)
@@ -184,10 +178,6 @@ test.describe('Audio Settings Popup - Click-through Regression', () => {
 
     // The container should NOT have received the mousedown from the popup
     // (because the popup's onmousedown stopPropagation should prevent it)
-    // Note: This test may return false if the container doesn't exist or
-    // doesn't have clip extraction enabled, which is acceptable
-    if (containerReceivedMouseDown !== false) {
-      expect(containerReceivedMouseDown).toBe(false);
-    }
+    expect(containerReceivedMouseDown).toBe(false);
   });
 });
