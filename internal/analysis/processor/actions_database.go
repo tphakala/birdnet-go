@@ -281,7 +281,7 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 }
 
 // Execute saves the audio clip to a file
-func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
+func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 	// Hot-reload guard: skip export if audio export was disabled at runtime.
 	// This mirrors the pattern used by MqttAction and BirdWeatherAction.
 	if !a.Settings.Realtime.Audio.Export.Enabled {
@@ -320,7 +320,16 @@ func (a *SaveAudioAction) Execute(_ context.Context, _ any) error {
 				a.NoteID = liveID
 				break
 			}
-			time.Sleep(noteIDPollInterval)
+			// Use select to respect context cancellation (e.g., during shutdown)
+			// instead of blocking with time.Sleep.
+			select {
+			case <-ctx.Done():
+				// Context cancelled; proceed with current NoteID (may be 0)
+			case <-time.After(noteIDPollInterval):
+			}
+			if ctx.Err() != nil {
+				break
+			}
 		}
 	}
 
