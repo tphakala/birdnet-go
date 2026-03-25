@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"os"
 	"os/exec"
@@ -282,8 +283,7 @@ func GetBoardModel() string {
 //   - "80" or "99.5"   - bare number, treated as a percentage (0-100)
 //   - "0.8"            - decimal in 0 < x < 1 range, auto-scaled to 0-100 (0.8 -> 80)
 //
-// The returned value is clamped to [0, 100]. Negative values and values above
-// 100 (after auto-scaling) are rejected with a validation error.
+// Values outside [0, 100] (after auto-scaling) are rejected with a validation error.
 func ParsePercentage(percentage, configKey string) (float64, error) {
 	trimmed := strings.TrimSpace(percentage)
 	if trimmed == "" {
@@ -315,6 +315,18 @@ func ParsePercentage(percentage, configKey string) (float64, error) {
 	// A user writing "0.8" almost certainly means 80%, not 0.8%.
 	if value > 0 && value < 1 {
 		value *= 100
+	}
+
+	// Reject non-finite values (NaN, +Inf, -Inf) that strconv.ParseFloat
+	// accepts but are meaningless as percentages. NaN comparisons always
+	// return false, so the range check below would not catch it.
+	if math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0, errors.Newf("invalid percentage format: value is not finite").
+			Component("conf").
+			Category(errors.CategoryValidation).
+			Context("input", percentage).
+			Context("config_key", configKey).
+			Build()
 	}
 
 	// Reject values outside the valid 0-100 range.

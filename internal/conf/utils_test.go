@@ -105,12 +105,13 @@ func TestParsePercentage(t *testing.T) {
 	const testConfigKey = "disk_manager.retention_policy.min_disk_free"
 
 	tests := []struct {
-		name          string
-		input         string
-		wantValue     float64
-		wantErr       bool
-		wantParseErr  bool // true = wrapped strconv.ParseFloat error
-		wantRangeErr  bool // true = out-of-range error
+		name             string
+		input            string
+		wantValue        float64
+		wantErr          bool
+		wantParseErr     bool // true = wrapped strconv.ParseFloat error
+		wantRangeErr     bool // true = out-of-range error
+		wantNonFiniteErr bool // true = NaN/Inf error
 	}{
 		// --- with % suffix ---
 		{name: "whole number with suffix", input: "85%", wantValue: 85.0},
@@ -138,6 +139,10 @@ func TestParsePercentage(t *testing.T) {
 		{name: "negative bare number", input: "-5", wantErr: true, wantRangeErr: true},
 		{name: "over 100 percent", input: "150%", wantErr: true, wantRangeErr: true},
 		{name: "over 100 bare number", input: "200", wantErr: true, wantRangeErr: true},
+		// --- non-finite values ---
+		{name: "NaN", input: "NaN", wantErr: true, wantNonFiniteErr: true},
+		{name: "positive infinity", input: "Inf", wantErr: true, wantNonFiniteErr: true},
+		{name: "negative infinity", input: "-Inf", wantErr: true, wantNonFiniteErr: true},
 		// --- invalid inputs ---
 		{name: "letters before suffix", input: "abc%", wantErr: true, wantParseErr: true},
 		{name: "empty before suffix", input: "%", wantErr: true, wantParseErr: true},
@@ -173,14 +178,18 @@ func TestParsePercentage(t *testing.T) {
 			assert.Equal(t, tt.input, ctx["input"], "context must carry the original input")
 			assert.Equal(t, testConfigKey, ctx["config_key"], "context must carry the config key")
 
-			if tt.wantParseErr {
-				assert.ErrorContains(t, err, "invalid syntax",
+			switch {
+			case tt.wantParseErr:
+				require.ErrorContains(t, err, "invalid syntax",
 					"parse errors must wrap the underlying ParseFloat error")
-			} else if tt.wantRangeErr {
-				assert.ErrorContains(t, err, "outside the 0-100 range",
+			case tt.wantRangeErr:
+				require.ErrorContains(t, err, "outside the 0-100 range",
 					"range errors must indicate the value is out of bounds")
-			} else {
-				assert.ErrorContains(t, err, "invalid percentage format",
+			case tt.wantNonFiniteErr:
+				require.ErrorContains(t, err, "value is not finite",
+					"non-finite errors must indicate the value is NaN or Inf")
+			default:
+				require.ErrorContains(t, err, "invalid percentage format",
 					"format errors must carry the format-validation message")
 			}
 		})
