@@ -1041,6 +1041,8 @@ func TestFFmpegFallback_AppliesStyleSetting(t *testing.T) {
 // TestGetSoxSpectrogramArgs_StyleArgs verifies that Sox spectrogram args
 // include the correct style-specific arguments for each preset.
 func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		style        string
