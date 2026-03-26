@@ -16,13 +16,8 @@ test.describe('Alert Rules Settings Page', () => {
   let alertsAvailable = true;
 
   test.beforeAll(async ({ request }) => {
-    try {
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/schema`, { timeout: 5000 });
-      if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
-        alertsAvailable = false;
-      }
-    } catch (error) {
-      console.warn('Alerts API check failed, skipping alert-rules tests:', error);
+    const resp = await request.get('/api/v2/alerts/schema', { timeout: 5000 });
+    if (!resp.ok() && SKIP_STATUSES.has(resp.status())) {
       alertsAvailable = false;
     }
   });
