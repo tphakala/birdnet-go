@@ -265,24 +265,23 @@ func (p *Processor) drainPendingResets() {
 	log := GetLogger()
 
 	if resetAll {
-		thresholdsOK := true
-		eventsOK := true
+		var requeue bool
 
 		if _, err := p.Ds.DeleteAllDynamicThresholds(); err != nil {
-			thresholdsOK = false
+			requeue = true
 			log.Warn("failed to re-delete all dynamic thresholds after persistence, requeuing",
 				logger.Error(err),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
-			eventsOK = false
+			requeue = true
 			log.Warn("failed to re-delete all threshold events after persistence, requeuing",
 				logger.Error(err),
 				logger.String("operation", "drain_pending_resets"))
 		}
 
 		// If either delete-all failed, requeue the resetAll flag
-		if !thresholdsOK || !eventsOK {
+		if requeue {
 			p.thresholdsMutex.Lock()
 			p.pendingResetAll = true
 			p.thresholdsMutex.Unlock()
@@ -294,22 +293,21 @@ func (p *Processor) drainPendingResets() {
 	var failedResets []string
 
 	for speciesName := range resets {
-		failed := false
-		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
-			failed = true
+		thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
+		if thresholdErr != nil {
 			log.Warn("failed to re-delete dynamic threshold after persistence, requeuing",
 				logger.String("species", speciesName),
-				logger.Error(err),
+				logger.Error(thresholdErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
-		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
-			failed = true
+		eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
+		if eventsErr != nil {
 			log.Warn("failed to re-delete threshold events after persistence, requeuing",
 				logger.String("species", speciesName),
-				logger.Error(err),
+				logger.Error(eventsErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
-		if failed {
+		if thresholdErr != nil || eventsErr != nil {
 			failedResets = append(failedResets, speciesName)
 		}
 	}

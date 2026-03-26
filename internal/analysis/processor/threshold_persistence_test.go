@@ -31,6 +31,11 @@ type MockDatastore struct {
 	batchSaveCalled              bool
 	deleteExpiredCalled          bool
 	getAllCalled                 bool
+	// Call counters to verify both delete paths are invoked even on error
+	deleteDynamicThresholdCalls int
+	deleteThresholdEventsCalls  int
+	deleteAllThresholdsCalls    int
+	deleteAllEventsCalls        int
 }
 
 // Implement all required methods from datastore.Interface
@@ -196,6 +201,7 @@ func (m *MockDatastore) GetAllDynamicThresholds(limit ...int) ([]datastore.Dynam
 }
 
 func (m *MockDatastore) DeleteDynamicThreshold(speciesName string) error {
+	m.deleteDynamicThresholdCalls++
 	// Check per-species errors first
 	if m.deletePerSpeciesErrors != nil {
 		if err, ok := m.deletePerSpeciesErrors[speciesName]; ok {
@@ -256,6 +262,7 @@ func (m *MockDatastore) BatchSaveDynamicThresholds(thresholds []datastore.Dynami
 
 // BG-59: Add new dynamic threshold methods
 func (m *MockDatastore) DeleteAllDynamicThresholds() (int64, error) {
+	m.deleteAllThresholdsCalls++
 	if m.deleteAllThresholdsError != nil {
 		return 0, m.deleteAllThresholdsError
 	}
@@ -293,6 +300,7 @@ func (m *MockDatastore) GetRecentThresholdEvents(int) ([]datastore.ThresholdEven
 }
 
 func (m *MockDatastore) DeleteThresholdEvents(speciesName string) error {
+	m.deleteThresholdEventsCalls++
 	if m.deleteEventsPerSpeciesErrors != nil {
 		if err, ok := m.deleteEventsPerSpeciesErrors[speciesName]; ok {
 			return err
@@ -302,6 +310,7 @@ func (m *MockDatastore) DeleteThresholdEvents(speciesName string) error {
 }
 
 func (m *MockDatastore) DeleteAllThresholdEvents() (int64, error) {
+	m.deleteAllEventsCalls++
 	if m.deleteAllEventsError != nil {
 		return 0, m.deleteAllEventsError
 	}
@@ -710,6 +719,12 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 		// "blue jay" should be requeued because its delete failed
 		assert.Contains(t, p.pendingResets, "blue jay",
 			"Failed species should be requeued for retry")
+
+		// Both delete paths must be invoked for each species
+		assert.Equal(t, 2, mockDs.deleteDynamicThresholdCalls,
+			"DeleteDynamicThreshold should be called once per species")
+		assert.Equal(t, 2, mockDs.deleteThresholdEventsCalls,
+			"DeleteThresholdEvents should be called once per species")
 	})
 
 	t.Run("PerSpecies_EventsDeleteFailureAlsoRequeues", func(t *testing.T) {
@@ -729,6 +744,12 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 		// "blue jay" should be requeued because events delete failed
 		assert.Contains(t, p.pendingResets, "blue jay",
 			"Species with failed events delete should be requeued")
+
+		// Both delete paths must be invoked even when only events fail
+		assert.Equal(t, 1, mockDs.deleteDynamicThresholdCalls,
+			"DeleteDynamicThreshold should be called even when events fail")
+		assert.Equal(t, 1, mockDs.deleteThresholdEventsCalls,
+			"DeleteThresholdEvents should be called even when threshold delete succeeds")
 	})
 
 	t.Run("PerSpecies_AllSucceed_NothingRequeued", func(t *testing.T) {
@@ -759,6 +780,12 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 		// pendingResetAll should be re-set because the delete-all failed
 		assert.True(t, p.pendingResetAll,
 			"pendingResetAll should be requeued when delete-all fails")
+
+		// Both delete-all paths must be invoked even when thresholds fail
+		assert.Equal(t, 1, mockDs.deleteAllThresholdsCalls,
+			"DeleteAllDynamicThresholds should be called")
+		assert.Equal(t, 1, mockDs.deleteAllEventsCalls,
+			"DeleteAllThresholdEvents should be called even when thresholds delete fails")
 	})
 
 	t.Run("ResetAll_EventsDeleteFailRequeues", func(t *testing.T) {
@@ -776,6 +803,12 @@ func TestDrainPendingResetsRequeuesOnFailure(t *testing.T) {
 		// pendingResetAll should be re-set because the events delete-all failed
 		assert.True(t, p.pendingResetAll,
 			"pendingResetAll should be requeued when events delete-all fails")
+
+		// Both delete-all paths must be invoked even when only events fail
+		assert.Equal(t, 1, mockDs.deleteAllThresholdsCalls,
+			"DeleteAllDynamicThresholds should be called even when events fail")
+		assert.Equal(t, 1, mockDs.deleteAllEventsCalls,
+			"DeleteAllThresholdEvents should be called even when thresholds delete succeeds")
 	})
 
 	t.Run("ResetAll_AllSucceed_NotRequeued", func(t *testing.T) {
