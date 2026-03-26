@@ -3,8 +3,6 @@ import { test, expect, type Page, type APIRequestContext } from '@playwright/tes
 test.describe('Alert Rules Settings Page', () => {
   test.setTimeout(30000);
 
-  const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:8080';
-
   // Selector for individual rule card elements inside the rules list.
   // The rules render inside a rounded-xl container as direct child divs.
   const RULE_CARD = '#settings-tabpanel-rules .rounded-xl > div';
@@ -74,7 +72,7 @@ test.describe('Alert Rules Settings Page', () => {
    * Helper: get the alert schema from the API for test data.
    */
   async function getSchema(request: APIRequestContext) {
-    const resp = await request.get(`${baseUrl}/api/v2/alerts/schema`, { timeout: 10000 });
+    const resp = await request.get('/api/v2/alerts/schema', { timeout: 10000 });
     expect(resp.ok()).toBeTruthy();
     return resp.json();
   }
@@ -100,7 +98,7 @@ test.describe('Alert Rules Settings Page', () => {
       actions: [{ target: 'bell', template_title: '', template_message: '', sort_order: 0 }],
     };
 
-    const resp = await request.post(`${baseUrl}/api/v2/alerts/rules`, {
+    const resp = await request.post('/api/v2/alerts/rules', {
       data: rule,
       timeout: 10000,
     });
@@ -115,7 +113,7 @@ test.describe('Alert Rules Settings Page', () => {
   async function deleteTestRule(request: APIRequestContext, id: number | null) {
     if (!id) return;
     try {
-      await request.delete(`${baseUrl}/api/v2/alerts/rules/${id}`, { timeout: 5000 });
+      await request.delete(`/api/v2/alerts/rules/${id}`, { timeout: 5000 });
     } catch {
       // Cleanup failure is acceptable
     }
@@ -202,7 +200,7 @@ test.describe('Alert Rules Settings Page', () => {
 
   test.describe('API Contract', () => {
     test('alert rules API returns valid response', async ({ request }) => {
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/rules`, { timeout: 10000 });
+      const resp = await request.get('/api/v2/alerts/rules', { timeout: 10000 });
       expect(resp.ok(), `Rules API responded with status ${resp.status()}`).toBeTruthy();
 
       const data = await resp.json();
@@ -213,7 +211,7 @@ test.describe('Alert Rules Settings Page', () => {
     });
 
     test('alert rules have unique IDs', async ({ request }) => {
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/rules`, { timeout: 10000 });
+      const resp = await request.get('/api/v2/alerts/rules', { timeout: 10000 });
       expect(resp.ok()).toBeTruthy();
 
       const data = await resp.json();
@@ -235,7 +233,7 @@ test.describe('Alert Rules Settings Page', () => {
     });
 
     test('alert schema API returns valid response', async ({ request }) => {
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/schema`, { timeout: 10000 });
+      const resp = await request.get('/api/v2/alerts/schema', { timeout: 10000 });
       expect(resp.ok(), `Schema API responded with status ${resp.status()}`).toBeTruthy();
 
       const data = await resp.json();
@@ -253,7 +251,7 @@ test.describe('Alert Rules Settings Page', () => {
     });
 
     test('alert history API returns valid response', async ({ request }) => {
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/history?limit=10`, {
+      const resp = await request.get('/api/v2/alerts/history?limit=10', {
         timeout: 10000,
       });
       expect(resp.ok(), `History API responded with status ${resp.status()}`).toBeTruthy();
@@ -272,7 +270,7 @@ test.describe('Alert Rules Settings Page', () => {
       const event = objectType?.events?.[0];
       const uniqueName = `E2E-CRUD-${Date.now()}`;
 
-      const createResp = await request.post(`${baseUrl}/api/v2/alerts/rules`, {
+      const createResp = await request.post('/api/v2/alerts/rules', {
         data: {
           name: uniqueName,
           description: 'CRUD test',
@@ -293,7 +291,7 @@ test.describe('Alert Rules Settings Page', () => {
 
       try {
         // Read
-        const getResp = await request.get(`${baseUrl}/api/v2/alerts/rules/${ruleId}`, {
+        const getResp = await request.get(`/api/v2/alerts/rules/${ruleId}`, {
           timeout: 10000,
         });
         expect(getResp.ok()).toBeTruthy();
@@ -301,7 +299,7 @@ test.describe('Alert Rules Settings Page', () => {
         expect(fetched.name).toBe(uniqueName);
 
         // Update
-        const updateResp = await request.put(`${baseUrl}/api/v2/alerts/rules/${ruleId}`, {
+        const updateResp = await request.put(`/api/v2/alerts/rules/${ruleId}`, {
           data: { ...fetched, description: 'Updated CRUD test' },
           timeout: 10000,
         });
@@ -310,20 +308,20 @@ test.describe('Alert Rules Settings Page', () => {
         expect(updated.description).toBe('Updated CRUD test');
 
         // Toggle
-        const toggleResp = await request.patch(`${baseUrl}/api/v2/alerts/rules/${ruleId}/toggle`, {
+        const toggleResp = await request.patch(`/api/v2/alerts/rules/${ruleId}/toggle`, {
           data: { enabled: false },
           timeout: 10000,
         });
         expect(toggleResp.ok()).toBeTruthy();
 
         // Delete
-        const deleteResp = await request.delete(`${baseUrl}/api/v2/alerts/rules/${ruleId}`, {
+        const deleteResp = await request.delete(`/api/v2/alerts/rules/${ruleId}`, {
           timeout: 10000,
         });
         expect(deleteResp.ok()).toBeTruthy();
 
         // Verify deleted
-        const verifyResp = await request.get(`${baseUrl}/api/v2/alerts/rules/${ruleId}`, {
+        const verifyResp = await request.get(`/api/v2/alerts/rules/${ruleId}`, {
           timeout: 10000,
         });
         expect(verifyResp.status()).toBe(404);
@@ -335,7 +333,7 @@ test.describe('Alert Rules Settings Page', () => {
     });
 
     test('export and import alert rules', async ({ request }) => {
-      const exportResp = await request.get(`${baseUrl}/api/v2/alerts/rules/export`, {
+      const exportResp = await request.get('/api/v2/alerts/rules/export', {
         timeout: 10000,
       });
       expect(exportResp.ok()).toBeTruthy();
@@ -346,7 +344,7 @@ test.describe('Alert Rules Settings Page', () => {
       expect(Array.isArray(exported.rules)).toBe(true);
 
       // Import should work with valid data (may skip duplicates)
-      const importResp = await request.post(`${baseUrl}/api/v2/alerts/rules/import`, {
+      const importResp = await request.post('/api/v2/alerts/rules/import', {
         data: { rules: [], version: exported.version },
         timeout: 10000,
       });
@@ -748,7 +746,7 @@ test.describe('Alert Rules Settings Page', () => {
       await expect(newRuleCard).toBeVisible({ timeout: 5000 });
 
       // Cleanup: delete the created rule
-      const resp = await request.get(`${baseUrl}/api/v2/alerts/rules`, { timeout: 10000 });
+      const resp = await request.get('/api/v2/alerts/rules', { timeout: 10000 });
       const data = await resp.json();
       const createdRule = (data.rules as { id: number; name: string }[]).find(
         r => r.name === uniqueName
