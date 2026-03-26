@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Modal from '$lib/desktop/components/ui/Modal.svelte';
   import { t } from '$lib/i18n';
   import { parseLocalDateString } from '$lib/utils/date';
@@ -26,6 +27,18 @@
   // Updated when a new species is provided, retained when species becomes null
   // while isOpen transitions to false.
   let cachedSpecies = $state<SpeciesData | null>(null);
+
+  // Clear stale cache when the modal opens so previous species data doesn't flash.
+  // The cache is only useful during the close transition (species becomes null while
+  // isOpen transitions to false), not during open.
+  let prevIsOpen = $state(false);
+  $effect(() => {
+    if (isOpen && !untrack(() => prevIsOpen)) {
+      cachedSpecies = null;
+    }
+    prevIsOpen = isOpen;
+  });
+
   $effect(() => {
     if (species) {
       cachedSpecies = species;
