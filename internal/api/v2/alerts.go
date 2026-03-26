@@ -59,7 +59,7 @@ func (c *Controller) initAlertRoutes() {
 	}
 
 	// Initialize repository lazily from V2Manager
-	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB())
+	c.alertRuleRepo = repository.NewAlertRuleRepository(c.V2Manager.DB(), nil)
 
 	// Initialize the alerting engine — seeds default rules and starts event processing
 	alertTelemetry := alerting.NewAlertingTelemetry()

@@ -17,14 +17,17 @@ import (
 // labelRepository implements LabelRepository.
 type labelRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool // For MySQL: use v2_ table prefix
 	isMySQL     bool // For MySQL dialect
 }
 
 // NewLabelRepository creates a new LabelRepository.
-func NewLabelRepository(db *gorm.DB, useV2Prefix, isMySQL bool) LabelRepository {
+// metrics is optional (nil-safe) and enables retry observability.
+func NewLabelRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) LabelRepository {
 	return &labelRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -70,7 +73,7 @@ func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string
 
 	createErr := datastore.RetryOnLock("v2_create_label", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&label).Error
-	}, nil)
+	}, r.metrics)
 	if createErr != nil {
 		// Handle race condition - try to fetch the existing record
 		findErr := r.db.WithContext(ctx).Table(r.tableName()).
@@ -224,7 +227,7 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		return r.db.WithContext(ctx).Table(r.tableName()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(newLabels, batchQuerySize).Error
-	}, nil); err != nil {
+	}, r.metrics); err != nil {
 		return nil, fmt.Errorf("batch create labels: %w", err)
 	}
 
@@ -308,7 +311,7 @@ func (r *labelRepository) Delete(ctx context.Context, id uint) error {
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -378,13 +381,16 @@ func (r *labelRepository) GetByScientificNames(ctx context.Context, names []stri
 // labelTypeRepository implements LabelTypeRepository.
 type labelTypeRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 }
 
 // NewLabelTypeRepository creates a new LabelTypeRepository.
-func NewLabelTypeRepository(db *gorm.DB, useV2Prefix bool) LabelTypeRepository {
+// metrics is optional (nil-safe) and enables retry observability.
+func NewLabelTypeRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix bool) LabelTypeRepository {
 	return &labelTypeRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 	}
 }
@@ -446,7 +452,7 @@ func (r *labelTypeRepository) GetOrCreate(ctx context.Context, name string) (*en
 	lt = entities.LabelType{Name: name}
 	if createErr := datastore.RetryOnLock("v2_create_label_type", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&lt).Error
-	}, nil); createErr != nil {
+	}, r.metrics); createErr != nil {
 		// Race condition - try to fetch again
 		if findErr := r.db.WithContext(ctx).Table(r.tableName()).Where("name = ?", name).First(&lt).Error; findErr != nil {
 			return nil, createErr
@@ -458,13 +464,16 @@ func (r *labelTypeRepository) GetOrCreate(ctx context.Context, name string) (*en
 // taxonomicClassRepository implements TaxonomicClassRepository.
 type taxonomicClassRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 }
 
 // NewTaxonomicClassRepository creates a new TaxonomicClassRepository.
-func NewTaxonomicClassRepository(db *gorm.DB, useV2Prefix bool) TaxonomicClassRepository {
+// metrics is optional (nil-safe) and enables retry observability.
+func NewTaxonomicClassRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix bool) TaxonomicClassRepository {
 	return &taxonomicClassRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 	}
 }
@@ -526,7 +535,7 @@ func (r *taxonomicClassRepository) GetOrCreate(ctx context.Context, name string)
 	tc = entities.TaxonomicClass{Name: name}
 	if createErr := datastore.RetryOnLock("v2_create_taxonomic_class", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&tc).Error
-	}, nil); createErr != nil {
+	}, r.metrics); createErr != nil {
 		// Race condition - try to fetch again
 		if findErr := r.db.WithContext(ctx).Table(r.tableName()).Where("name = ?", name).First(&tc).Error; findErr != nil {
 			return nil, createErr

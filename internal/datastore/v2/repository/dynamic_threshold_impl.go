@@ -14,6 +14,7 @@ import (
 // dynamicThresholdRepository implements DynamicThresholdRepository.
 type dynamicThresholdRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	labelRepo   LabelRepository
 	useV2Prefix bool
 	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
@@ -22,12 +23,14 @@ type dynamicThresholdRepository struct {
 // NewDynamicThresholdRepository creates a new DynamicThresholdRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - labelRepo: LabelRepository for resolving species names to label IDs
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewDynamicThresholdRepository(db *gorm.DB, labelRepo LabelRepository, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
+func NewDynamicThresholdRepository(db *gorm.DB, metrics *datastore.Metrics, labelRepo LabelRepository, useV2Prefix, isMySQL bool) DynamicThresholdRepository {
 	return &dynamicThresholdRepository{
 		db:          db,
+		metrics:     metrics,
 		labelRepo:   labelRepo,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
@@ -70,7 +73,7 @@ func (r *dynamicThresholdRepository) SaveDynamicThreshold(ctx context.Context, t
 				UpdateAll: true,
 			}).
 			Create(threshold).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetDynamicThreshold retrieves a threshold by species name (scientific name).
@@ -142,7 +145,7 @@ func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context,
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -164,7 +167,7 @@ func (r *dynamicThresholdRepository) DeleteExpiredDynamicThresholds(ctx context.
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }
 
@@ -193,7 +196,7 @@ func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Co
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -222,7 +225,7 @@ func (r *dynamicThresholdRepository) BatchSaveDynamicThresholds(ctx context.Cont
 				UpdateAll: true,
 			}).
 			CreateInBatches(thresholds, 100).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // DeleteAllDynamicThresholds deletes all thresholds.
@@ -237,7 +240,7 @@ func (r *dynamicThresholdRepository) DeleteAllDynamicThresholds(ctx context.Cont
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }
 
@@ -291,7 +294,7 @@ func (r *dynamicThresholdRepository) SaveThresholdEvent(ctx context.Context, eve
 	}
 	return datastore.RetryOnLock("v2_save_threshold_event", func() error {
 		return r.db.WithContext(ctx).Table(r.eventTable()).Create(event).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetThresholdEvents retrieves events for a species (by scientific name).
@@ -353,7 +356,7 @@ func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, 
 		return r.db.WithContext(ctx).Table(r.eventTable()).
 			Where("label_id IN ?", labelIDs).
 			Delete(&entities.ThresholdEvent{}).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // DeleteAllThresholdEvents deletes all threshold events.
@@ -368,6 +371,6 @@ func (r *dynamicThresholdRepository) DeleteAllThresholdEvents(ctx context.Contex
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }

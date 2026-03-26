@@ -187,14 +187,14 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 
 	// Create repositories (useV2Prefix = false for direct table access in tests, isMySQL = false for SQLite)
 	db := mgr.DB()
-	ctx.DetectionRepo = repository.NewDetectionRepository(db, false, false)
-	ctx.LabelRepo = repository.NewLabelRepository(db, false, false)
-	ctx.ModelRepo = repository.NewModelRepository(db, false, false)
-	ctx.SourceRepo = repository.NewAudioSourceRepository(db, false, false)
-	ctx.WeatherRepo = repository.NewWeatherRepository(db, false, false)
-	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, ctx.LabelRepo, false, false)
-	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, ctx.LabelRepo, false, false)
+	ctx.DetectionRepo = repository.NewDetectionRepository(db, nil, false, false)
+	ctx.LabelRepo = repository.NewLabelRepository(db, nil, false, false)
+	ctx.ModelRepo = repository.NewModelRepository(db, nil, false, false)
+	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
+	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
+	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
 
 	// Populate lookup tables for V2 normalized schema
 	ctx.setupLookupTables(t)

@@ -81,6 +81,7 @@ func (c *Controller) initAppRoutes() {
 		}
 		c.appMetadataRepo = repository.NewAppMetadataRepository(
 			c.V2Manager.DB(),
+			nil,
 			useV2Prefix,
 			c.V2Manager.IsMySQL(),
 		)

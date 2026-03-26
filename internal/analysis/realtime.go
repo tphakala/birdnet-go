@@ -1905,16 +1905,16 @@ func setupMigrationWorker(cfg *migrationSetupConfig) error {
 			Build()
 	}
 
-	labelRepo := repository.NewLabelRepository(v2DB, cfg.useV2Prefix, isMySQL)
-	modelRepo := repository.NewModelRepository(v2DB, cfg.useV2Prefix, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, cfg.useV2Prefix, isMySQL)
-	v2DetectionRepo := repository.NewDetectionRepository(v2DB, cfg.useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
+	v2DetectionRepo := repository.NewDetectionRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
 
 	// Create repositories for auxiliary data migration
-	weatherRepo := repository.NewWeatherRepository(v2DB, cfg.useV2Prefix, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, labelRepo, cfg.useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(v2DB, nil, cfg.useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, cfg.useV2Prefix, isMySQL)
 
 	// Create the legacy detection repository
 	legacyRepo := datastore.NewDetectionRepository(cfg.ds, time.Local)
@@ -2271,14 +2271,14 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	// Create repositories
 	v2DB := v2Manager.DB()
 	isMySQL := settings.Output.MySQL.Enabled // Determine dialect from settings
-	detectionRepo := repository.NewDetectionRepository(v2DB, useV2Prefix, isMySQL)
-	labelRepo := repository.NewLabelRepository(v2DB, useV2Prefix, isMySQL)
-	modelRepo := repository.NewModelRepository(v2DB, useV2Prefix, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(v2DB, useV2Prefix, isMySQL)
-	weatherRepo := repository.NewWeatherRepository(v2DB, useV2Prefix, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, labelRepo, useV2Prefix, isMySQL)
+	detectionRepo := repository.NewDetectionRepository(v2DB, nil, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(v2DB, nil, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(v2DB, nil, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(v2DB, nil, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(v2DB, nil, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
 
 	// Load eBird taxonomy for species code lookups in analytics endpoints.
 	_, scientificIndex, taxonomyErr := birdnet.LoadTaxonomyData("")

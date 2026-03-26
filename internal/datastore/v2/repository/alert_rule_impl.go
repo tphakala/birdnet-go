@@ -13,12 +13,14 @@ import (
 
 // alertRuleRepository implements AlertRuleRepository.
 type alertRuleRepository struct {
-	db *gorm.DB
+	db      *gorm.DB
+	metrics *datastore.Metrics
 }
 
 // NewAlertRuleRepository creates a new AlertRuleRepository.
-func NewAlertRuleRepository(db *gorm.DB) AlertRuleRepository {
-	return &alertRuleRepository{db: db}
+// metrics is optional (nil-safe) and enables retry observability.
+func NewAlertRuleRepository(db *gorm.DB, metrics *datastore.Metrics) AlertRuleRepository {
+	return &alertRuleRepository{db: db, metrics: metrics}
 }
 
 // ListRules returns alert rules matching the given filter.
@@ -65,7 +67,7 @@ func (r *alertRuleRepository) CreateRule(ctx context.Context, rule *entities.Ale
 			return fmt.Errorf("failed to create alert rule: %w", err)
 		}
 		return nil
-	}, nil)
+	}, r.metrics)
 }
 
 // UpdateRule replaces an alert rule, deleting existing conditions and actions first.
@@ -91,7 +93,7 @@ func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.Ale
 			return fmt.Errorf("failed to update alert rule: %w", err)
 		}
 		return nil
-	}, nil)
+	}, r.metrics)
 }
 
 // DeleteRule deletes an alert rule and its conditions/actions via cascade.
@@ -104,7 +106,7 @@ func (r *alertRuleRepository) DeleteRule(ctx context.Context, id uint) error {
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -124,7 +126,7 @@ func (r *alertRuleRepository) ToggleRule(ctx context.Context, id uint, enabled b
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -150,7 +152,7 @@ func (r *alertRuleRepository) DeleteBuiltInRules(ctx context.Context) (int64, er
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }
 
@@ -161,7 +163,7 @@ func (r *alertRuleRepository) SaveHistory(ctx context.Context, history *entities
 			return fmt.Errorf("failed to save alert history: %w", err)
 		}
 		return nil
-	}, nil)
+	}, r.metrics)
 }
 
 // ListHistory returns alert history entries matching the filter with pagination.
@@ -203,7 +205,7 @@ func (r *alertRuleRepository) DeleteHistory(ctx context.Context) (int64, error) 
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }
 
@@ -217,7 +219,7 @@ func (r *alertRuleRepository) DeleteHistoryBefore(ctx context.Context, before ti
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }
 

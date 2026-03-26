@@ -14,6 +14,7 @@ import (
 // appMetadataRepository implements AppMetadataRepository.
 type appMetadataRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool
 }
@@ -21,11 +22,13 @@ type appMetadataRepository struct {
 // NewAppMetadataRepository creates a new AppMetadataRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewAppMetadataRepository(db *gorm.DB, useV2Prefix, isMySQL bool) AppMetadataRepository {
+func NewAppMetadataRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) AppMetadataRepository {
 	return &appMetadataRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -71,5 +74,5 @@ func (r *appMetadataRepository) Set(ctx context.Context, key, value string) erro
 			return fmt.Errorf("set app metadata key %q: %w", key, err)
 		}
 		return nil
-	}, nil)
+	}, r.metrics)
 }

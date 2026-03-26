@@ -89,16 +89,16 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	db := manager.DB()
 	useV2Prefix := false         // Fresh installs use clean table names
 	isMySQL := manager.IsMySQL() // Derive dialect from actual manager, not settings
-	detectionRepo := repository.NewDetectionRepository(db, useV2Prefix, isMySQL)
-	labelRepo := repository.NewLabelRepository(db, useV2Prefix, isMySQL)
-	modelRepo := repository.NewModelRepository(db, useV2Prefix, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(db, useV2Prefix, isMySQL)
-	weatherRepo := repository.NewWeatherRepository(db, useV2Prefix, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(db, labelRepo, useV2Prefix, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, labelRepo, useV2Prefix, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, labelRepo, useV2Prefix, isMySQL)
-	labelTypeRepo := repository.NewLabelTypeRepository(db, useV2Prefix)
-	taxClassRepo := repository.NewTaxonomicClassRepository(db, useV2Prefix)
+	detectionRepo := repository.NewDetectionRepository(db, nil, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+	modelRepo := repository.NewModelRepository(db, nil, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, useV2Prefix)
+	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, useV2Prefix)
 
 	// Get or create required lookup table entries and cache their IDs
 	ctx := context.Background()

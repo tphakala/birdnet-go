@@ -14,6 +14,7 @@ import (
 // notificationHistoryRepository implements NotificationHistoryRepository.
 type notificationHistoryRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	labelRepo   LabelRepository
 	useV2Prefix bool
 	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
@@ -22,12 +23,14 @@ type notificationHistoryRepository struct {
 // NewNotificationHistoryRepository creates a new NotificationHistoryRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - labelRepo: LabelRepository for resolving scientific names to label IDs
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewNotificationHistoryRepository(db *gorm.DB, labelRepo LabelRepository, useV2Prefix, isMySQL bool) NotificationHistoryRepository {
+func NewNotificationHistoryRepository(db *gorm.DB, metrics *datastore.Metrics, labelRepo LabelRepository, useV2Prefix, isMySQL bool) NotificationHistoryRepository {
 	return &notificationHistoryRepository{
 		db:          db,
+		metrics:     metrics,
 		labelRepo:   labelRepo,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
@@ -63,7 +66,7 @@ func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Cont
 				UpdateAll: true,
 			}).
 			Create(history).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetNotificationHistory retrieves a notification history entry by scientific name.
@@ -119,6 +122,6 @@ func (r *notificationHistoryRepository) DeleteExpiredNotificationHistory(ctx con
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	return rowsAffected, err
 }

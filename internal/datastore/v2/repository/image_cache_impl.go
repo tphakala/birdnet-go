@@ -13,6 +13,7 @@ import (
 // imageCacheRepository implements ImageCacheRepository.
 type imageCacheRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	labelRepo   LabelRepository
 	useV2Prefix bool
 	isMySQL     bool // For API consistency; currently unused here (used by detection_impl.go for dialect-specific SQL)
@@ -21,12 +22,14 @@ type imageCacheRepository struct {
 // NewImageCacheRepository creates a new ImageCacheRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - labelRepo: LabelRepository for resolving scientific names to label IDs
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewImageCacheRepository(db *gorm.DB, labelRepo LabelRepository, useV2Prefix, isMySQL bool) ImageCacheRepository {
+func NewImageCacheRepository(db *gorm.DB, metrics *datastore.Metrics, labelRepo LabelRepository, useV2Prefix, isMySQL bool) ImageCacheRepository {
 	return &imageCacheRepository{
 		db:          db,
+		metrics:     metrics,
 		labelRepo:   labelRepo,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
@@ -94,7 +97,7 @@ func (r *imageCacheRepository) SaveImageCache(ctx context.Context, cache *entiti
 				UpdateAll: true,
 			}).
 			Create(cache).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetAllImageCaches retrieves all image cache entries for a provider.

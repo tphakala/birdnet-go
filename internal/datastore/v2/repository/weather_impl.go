@@ -14,6 +14,7 @@ import (
 // weatherRepository implements WeatherRepository.
 type weatherRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool // Dialect flag: true for MySQL (UNIX_TIMESTAMP), false for SQLite (strftime)
 }
@@ -21,11 +22,13 @@ type weatherRepository struct {
 // NewWeatherRepository creates a new WeatherRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewWeatherRepository(db *gorm.DB, useV2Prefix, isMySQL bool) WeatherRepository {
+func NewWeatherRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) WeatherRepository {
 	return &weatherRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -54,7 +57,7 @@ func (r *weatherRepository) SaveDailyEvents(ctx context.Context, events *entitie
 				UpdateAll: true,
 			}).
 			Create(events).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetDailyEvents retrieves daily events by date.
@@ -76,7 +79,7 @@ func (r *weatherRepository) GetDailyEvents(ctx context.Context, date string) (*e
 func (r *weatherRepository) SaveHourlyWeather(ctx context.Context, weather *entities.HourlyWeather) error {
 	return datastore.RetryOnLock("v2_save_hourly_weather", func() error {
 		return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).Create(weather).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetHourlyWeather retrieves hourly weather for a date.
@@ -174,7 +177,7 @@ func (r *weatherRepository) SaveAllDailyEvents(ctx context.Context, events []ent
 					DoNothing: true,
 				}).
 				Create(&batch).Error
-		}, nil)
+		}, r.metrics)
 		if err != nil {
 			return saved, err
 		}
@@ -202,7 +205,7 @@ func (r *weatherRepository) SaveAllHourlyWeather(ctx context.Context, weather []
 		err := datastore.RetryOnLock("v2_save_all_hourly_weather", func() error {
 			return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
 				Create(&batch).Error
-		}, nil)
+		}, r.metrics)
 		if err != nil {
 			return saved, err
 		}

@@ -63,7 +63,7 @@ func createTestRule(t *testing.T, repo AlertRuleRepository, name, objectType, tr
 
 func TestAlertRuleRepository_CreateAndGet(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := &entities.AlertRule{
@@ -110,7 +110,7 @@ func TestAlertRuleRepository_CreateAndGet(t *testing.T) {
 
 func TestAlertRuleRepository_ListRules(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	// Create rules with different object types and states
@@ -152,7 +152,7 @@ func TestAlertRuleRepository_ListRules(t *testing.T) {
 
 func TestAlertRuleRepository_UpdateRule(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := createTestRule(t, repo, "Original", "detection", "event", "detection.occurred")
@@ -181,7 +181,7 @@ func TestAlertRuleRepository_UpdateRule(t *testing.T) {
 
 func TestAlertRuleRepository_UpdateRule_WithExistingIDs(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := createTestRule(t, repo, "IDTest", "detection", "event", "detection.occurred")
@@ -216,7 +216,7 @@ func TestAlertRuleRepository_UpdateRule_WithExistingIDs(t *testing.T) {
 
 func TestAlertRuleRepository_DeleteRule(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := createTestRule(t, repo, "ToDelete", "stream", "event", "stream.error")
@@ -239,7 +239,7 @@ func TestAlertRuleRepository_DeleteRule(t *testing.T) {
 
 func TestAlertRuleRepository_ToggleRule(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := createTestRule(t, repo, "Toggle", "detection", "event", "detection.new_species")
@@ -262,7 +262,7 @@ func TestAlertRuleRepository_ToggleRule(t *testing.T) {
 
 func TestAlertRuleRepository_History(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	rule := createTestRule(t, repo, "HistRule", "detection", "event", "detection.new_species")
@@ -325,7 +325,7 @@ func TestAlertRuleRepository_History(t *testing.T) {
 
 func TestAlertRuleRepository_GetEnabledRules(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	// Create mix of enabled and disabled rules
@@ -347,7 +347,7 @@ func TestAlertRuleRepository_GetEnabledRules(t *testing.T) {
 
 func TestAlertRuleRepository_DeleteBuiltInRules(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	// Create mix of built-in and custom rules
@@ -371,7 +371,7 @@ func TestAlertRuleRepository_DeleteBuiltInRules(t *testing.T) {
 
 func TestAlertRuleRepository_CountRulesByName(t *testing.T) {
 	db := setupAlertTestDB(t)
-	repo := NewAlertRuleRepository(db)
+	repo := NewAlertRuleRepository(db, nil)
 	ctx := t.Context()
 
 	createTestRule(t, repo, "Duplicate Test", "detection", "event", "detection.new_species")

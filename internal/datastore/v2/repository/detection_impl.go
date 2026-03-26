@@ -33,6 +33,7 @@ const defaultDBBatchSize = 500
 // detectionRepository implements DetectionRepository.
 type detectionRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool
 }
@@ -40,11 +41,13 @@ type detectionRepository struct {
 // NewDetectionRepository creates a new DetectionRepository.
 // Parameters:
 //   - db: GORM database connection
+//   - metrics: optional DatastoreMetrics for retry observability (nil-safe)
 //   - useV2Prefix: true to use v2_ table prefix (MySQL migration mode)
 //   - isMySQL: true for MySQL dialect (affects date/time SQL expressions)
-func NewDetectionRepository(db *gorm.DB, useV2Prefix, isMySQL bool) DetectionRepository {
+func NewDetectionRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) DetectionRepository {
 	return &detectionRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -135,7 +138,7 @@ func (r *detectionRepository) hourFromUnixExpr(column string) string {
 func (r *detectionRepository) Save(ctx context.Context, det *entities.Detection) error {
 	return datastore.RetryOnLock("v2_save_detection", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(det).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // SaveWithID persists a detection with a specific ID (for migration).
@@ -143,7 +146,7 @@ func (r *detectionRepository) Save(ctx context.Context, det *entities.Detection)
 func (r *detectionRepository) SaveWithID(ctx context.Context, det *entities.Detection) error {
 	return datastore.RetryOnLock("v2_save_detection_with_id", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(det).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // Get retrieves a detection by ID.
@@ -250,7 +253,7 @@ func (r *detectionRepository) Update(ctx context.Context, id uint, updates map[s
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -284,7 +287,7 @@ func (r *detectionRepository) Delete(ctx context.Context, id uint) error {
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -313,7 +316,7 @@ func (r *detectionRepository) SaveBatch(ctx context.Context, dets []*entities.De
 	}
 	return datastore.RetryOnLock("v2_save_detection_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).CreateInBatches(dets, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // DeleteBatch removes multiple detections by ID.
@@ -323,7 +326,7 @@ func (r *detectionRepository) DeleteBatch(ctx context.Context, ids []uint) error
 	}
 	return datastore.RetryOnLock("v2_delete_detection_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.Detection{}, ids).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // SaveBatchWithIDs persists multiple detections with specific IDs (for migration).
@@ -334,7 +337,7 @@ func (r *detectionRepository) SaveBatchWithIDs(ctx context.Context, dets []*enti
 	}
 	return datastore.RetryOnLock("v2_save_detection_batch_with_ids", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).CreateInBatches(dets, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetExistingAndLockedIDs checks which IDs exist and which are locked.
@@ -1010,7 +1013,7 @@ func (r *detectionRepository) SavePredictions(ctx context.Context, detectionID u
 
 	return datastore.RetryOnLock("v2_save_predictions", func() error {
 		return r.db.WithContext(ctx).Table(r.predictionsTable()).Create(&preds).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // SavePredictionsBatch stores predictions for multiple detections efficiently.
@@ -1023,7 +1026,7 @@ func (r *detectionRepository) SavePredictionsBatch(ctx context.Context, preds []
 		return r.db.WithContext(ctx).Table(r.predictionsTable()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(preds, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetPredictions retrieves all predictions for a detection.
@@ -1042,7 +1045,7 @@ func (r *detectionRepository) DeletePredictions(ctx context.Context, detectionID
 		return r.db.WithContext(ctx).Table(r.predictionsTable()).
 			Where("detection_id = ?", detectionID).
 			Delete(&entities.DetectionPrediction{}).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // ============================================================================
@@ -1061,7 +1064,7 @@ func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.D
 		// Create new review
 		return datastore.RetryOnLock("v2_save_review", func() error {
 			return r.db.WithContext(ctx).Table(r.reviewsTable()).Create(review).Error
-		}, nil)
+		}, r.metrics)
 	}
 	if err != nil {
 		return err
@@ -1075,7 +1078,7 @@ func (r *detectionRepository) SaveReview(ctx context.Context, review *entities.D
 				"verified":   review.Verified,
 				"updated_at": time.Now(),
 			}).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetReview retrieves the review for a detection.
@@ -1105,7 +1108,7 @@ func (r *detectionRepository) UpdateReview(ctx context.Context, detectionID uint
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -1127,7 +1130,7 @@ func (r *detectionRepository) DeleteReview(ctx context.Context, detectionID uint
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -1146,7 +1149,7 @@ func (r *detectionRepository) SaveReviewsBatch(ctx context.Context, reviews []*e
 		return r.db.WithContext(ctx).Table(r.reviewsTable()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(reviews, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetReviewsByDetectionIDs retrieves reviews for multiple detections.
@@ -1184,7 +1187,7 @@ func (r *detectionRepository) GetReviewsByDetectionIDs(ctx context.Context, dete
 func (r *detectionRepository) SaveComment(ctx context.Context, comment *entities.DetectionComment) error {
 	return datastore.RetryOnLock("v2_save_comment", func() error {
 		return r.db.WithContext(ctx).Table(r.commentsTable()).Create(comment).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetComments retrieves all comments for a detection.
@@ -1212,7 +1215,7 @@ func (r *detectionRepository) UpdateComment(ctx context.Context, commentID uint,
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -1232,7 +1235,7 @@ func (r *detectionRepository) DeleteComment(ctx context.Context, commentID uint)
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
@@ -1251,7 +1254,7 @@ func (r *detectionRepository) SaveCommentsBatch(ctx context.Context, comments []
 		return r.db.WithContext(ctx).Table(r.commentsTable()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(comments, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetCommentsByDetectionIDs retrieves comments for multiple detections.
@@ -1306,7 +1309,7 @@ func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error 
 	lock := entities.DetectionLock{DetectionID: detectionID}
 	return datastore.RetryOnLock("v2_lock_detection", func() error {
 		return r.db.WithContext(ctx).Table(r.locksTable()).Create(&lock).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // Unlock removes the lock from a detection.
@@ -1317,7 +1320,7 @@ func (r *detectionRepository) Unlock(ctx context.Context, detectionID uint) erro
 		return r.db.WithContext(ctx).Table(r.locksTable()).
 			Where("detection_id = ?", detectionID).
 			Delete(&entities.DetectionLock{}).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // IsLocked checks if a detection is locked.
@@ -1350,7 +1353,7 @@ func (r *detectionRepository) SaveLocksBatch(ctx context.Context, locks []*entit
 		return r.db.WithContext(ctx).Table(r.locksTable()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(locks, defaultDBBatchSize).Error
-	}, nil)
+	}, r.metrics)
 }
 
 // GetLocksByDetectionIDs retrieves lock status for multiple detections.

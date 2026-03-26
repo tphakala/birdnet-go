@@ -34,7 +34,7 @@ func setupAppMetadataTestDB(t *testing.T) *gorm.DB {
 func TestAppMetadataRepository_GetEmpty(t *testing.T) {
 	t.Parallel()
 	db := setupAppMetadataTestDB(t)
-	repo := NewAppMetadataRepository(db, false, false)
+	repo := NewAppMetadataRepository(db, nil, false, false)
 	ctx := t.Context()
 
 	value, err := repo.Get(ctx, "nonexistent_key")
@@ -45,7 +45,7 @@ func TestAppMetadataRepository_GetEmpty(t *testing.T) {
 func TestAppMetadataRepository_SetThenGet(t *testing.T) {
 	t.Parallel()
 	db := setupAppMetadataTestDB(t)
-	repo := NewAppMetadataRepository(db, false, false)
+	repo := NewAppMetadataRepository(db, nil, false, false)
 	ctx := t.Context()
 
 	err := repo.Set(ctx, "my_key", "my_value")
@@ -59,7 +59,7 @@ func TestAppMetadataRepository_SetThenGet(t *testing.T) {
 func TestAppMetadataRepository_SetOverwrites(t *testing.T) {
 	t.Parallel()
 	db := setupAppMetadataTestDB(t)
-	repo := NewAppMetadataRepository(db, false, false)
+	repo := NewAppMetadataRepository(db, nil, false, false)
 	ctx := t.Context()
 
 	err := repo.Set(ctx, "version", "v1.0.0")
@@ -76,7 +76,7 @@ func TestAppMetadataRepository_SetOverwrites(t *testing.T) {
 func TestAppMetadataRepository_GetDifferentKeys(t *testing.T) {
 	t.Parallel()
 	db := setupAppMetadataTestDB(t)
-	repo := NewAppMetadataRepository(db, false, false)
+	repo := NewAppMetadataRepository(db, nil, false, false)
 	ctx := t.Context()
 
 	err := repo.Set(ctx, "key_a", "value_a")
@@ -101,7 +101,7 @@ func TestAppMetadataRepository_GetDifferentKeys(t *testing.T) {
 func TestAppMetadataRepository_SetEmptyValue(t *testing.T) {
 	t.Parallel()
 	db := setupAppMetadataTestDB(t)
-	repo := NewAppMetadataRepository(db, false, false)
+	repo := NewAppMetadataRepository(db, nil, false, false)
 	ctx := t.Context()
 
 	err := repo.Set(ctx, "empty_key", "")

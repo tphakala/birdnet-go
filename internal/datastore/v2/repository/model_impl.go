@@ -12,14 +12,17 @@ import (
 // modelRepository implements ModelRepository.
 type modelRepository struct {
 	db          *gorm.DB
+	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool
 }
 
 // NewModelRepository creates a new ModelRepository.
-func NewModelRepository(db *gorm.DB, useV2Prefix, isMySQL bool) ModelRepository {
+// metrics is optional (nil-safe) and enables retry observability.
+func NewModelRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) ModelRepository {
 	return &modelRepository{
 		db:          db,
+		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
 		isMySQL:     isMySQL,
 	}
@@ -67,7 +70,7 @@ func (r *modelRepository) GetOrCreate(ctx context.Context, name, version, varian
 
 	createErr := datastore.RetryOnLock("v2_create_model", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&model).Error
-	}, nil)
+	}, r.metrics)
 	if createErr != nil {
 		// Handle race condition
 		findErr := r.db.WithContext(ctx).Table(r.tableName()).
@@ -145,7 +148,7 @@ func (r *modelRepository) Delete(ctx context.Context, id uint) error {
 		}
 		rowsAffected = result.RowsAffected
 		return nil
-	}, nil)
+	}, r.metrics)
 	if err != nil {
 		return err
 	}
