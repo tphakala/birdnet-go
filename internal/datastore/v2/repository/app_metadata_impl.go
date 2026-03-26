@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
@@ -60,13 +61,15 @@ func (r *appMetadataRepository) Set(ctx context.Context, key, value string) erro
 		Key:   key,
 		Value: value,
 	}
-	if err := r.db.WithContext(ctx).Table(r.tableName()).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "key"}},
-			DoUpdates: clause.AssignmentColumns([]string{"value"}),
-		}).
-		Create(&meta).Error; err != nil {
-		return fmt.Errorf("set app metadata key %q: %w", key, err)
-	}
-	return nil
+	return datastore.RetryOnLock("v2_set_app_metadata", func() error {
+		if err := r.db.WithContext(ctx).Table(r.tableName()).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "key"}},
+				DoUpdates: clause.AssignmentColumns([]string{"value"}),
+			}).
+			Create(&meta).Error; err != nil {
+			return fmt.Errorf("set app metadata key %q: %w", key, err)
+		}
+		return nil
+	}, nil)
 }

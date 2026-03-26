@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
@@ -59,10 +60,12 @@ func (r *alertRuleRepository) GetRule(ctx context.Context, id uint) (*entities.A
 
 // CreateRule creates a new alert rule with its conditions and actions.
 func (r *alertRuleRepository) CreateRule(ctx context.Context, rule *entities.AlertRule) error {
-	if err := r.db.WithContext(ctx).Create(rule).Error; err != nil {
-		return fmt.Errorf("failed to create alert rule: %w", err)
-	}
-	return nil
+	return datastore.RetryOnLock("v2_create_alert_rule", func() error {
+		if err := r.db.WithContext(ctx).Create(rule).Error; err != nil {
+			return fmt.Errorf("failed to create alert rule: %w", err)
+		}
+		return nil
+	}, nil)
 }
 
 // UpdateRule replaces an alert rule, deleting existing conditions and actions first.
@@ -70,14 +73,14 @@ func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.Ale
 	if rule.ID == 0 {
 		return fmt.Errorf("failed to update alert rule: missing rule ID")
 	}
-	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return datastore.RetryTransactionOnLock(r.db.WithContext(ctx), "v2_update_alert_rule", func(tx *gorm.DB) error {
 		if err := tx.Where("rule_id = ?", rule.ID).Delete(&entities.AlertCondition{}).Error; err != nil {
 			return fmt.Errorf("failed to delete old conditions: %w", err)
 		}
 		if err := tx.Where("rule_id = ?", rule.ID).Delete(&entities.AlertAction{}).Error; err != nil {
 			return fmt.Errorf("failed to delete old actions: %w", err)
 		}
-		// Zero out IDs so GORM inserts new rows instead of trying to update deleted ones
+		// Reset IDs to prevent stale primary keys on retry
 		for i := range rule.Conditions {
 			rule.Conditions[i].ID = 0
 		}
@@ -88,16 +91,24 @@ func (r *alertRuleRepository) UpdateRule(ctx context.Context, rule *entities.Ale
 			return fmt.Errorf("failed to update alert rule: %w", err)
 		}
 		return nil
-	})
+	}, nil)
 }
 
 // DeleteRule deletes an alert rule and its conditions/actions via cascade.
 func (r *alertRuleRepository) DeleteRule(ctx context.Context, id uint) error {
-	result := r.db.WithContext(ctx).Delete(&entities.AlertRule{}, id)
-	if result.Error != nil {
-		return fmt.Errorf("failed to delete alert rule %d: %w", id, result.Error)
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_alert_rule", func() error {
+		result := r.db.WithContext(ctx).Delete(&entities.AlertRule{}, id)
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete alert rule %d: %w", id, result.Error)
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return ErrAlertRuleNotFound
 	}
 	return nil
@@ -105,11 +116,19 @@ func (r *alertRuleRepository) DeleteRule(ctx context.Context, id uint) error {
 
 // ToggleRule enables or disables an alert rule.
 func (r *alertRuleRepository) ToggleRule(ctx context.Context, id uint, enabled bool) error {
-	result := r.db.WithContext(ctx).Model(&entities.AlertRule{}).Where("id = ?", id).Update("enabled", enabled)
-	if result.Error != nil {
-		return fmt.Errorf("failed to toggle alert rule %d: %w", id, result.Error)
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_toggle_alert_rule", func() error {
+		result := r.db.WithContext(ctx).Model(&entities.AlertRule{}).Where("id = ?", id).Update("enabled", enabled)
+		if result.Error != nil {
+			return fmt.Errorf("failed to toggle alert rule %d: %w", id, result.Error)
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return ErrAlertRuleNotFound
 	}
 	return nil
@@ -123,19 +142,26 @@ func (r *alertRuleRepository) GetEnabledRules(ctx context.Context) ([]entities.A
 
 // DeleteBuiltInRules deletes all built-in alert rules.
 func (r *alertRuleRepository) DeleteBuiltInRules(ctx context.Context) (int64, error) {
-	result := r.db.WithContext(ctx).Where("built_in = ?", true).Delete(&entities.AlertRule{})
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete built-in alert rules: %w", result.Error)
-	}
-	return result.RowsAffected, nil
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_built_in_rules", func() error {
+		result := r.db.WithContext(ctx).Where("built_in = ?", true).Delete(&entities.AlertRule{})
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete built-in alert rules: %w", result.Error)
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	return rowsAffected, err
 }
 
 // SaveHistory saves an alert history entry.
 func (r *alertRuleRepository) SaveHistory(ctx context.Context, history *entities.AlertHistory) error {
-	if err := r.db.WithContext(ctx).Create(history).Error; err != nil {
-		return fmt.Errorf("failed to save alert history: %w", err)
-	}
-	return nil
+	return datastore.RetryOnLock("v2_save_alert_history", func() error {
+		if err := r.db.WithContext(ctx).Create(history).Error; err != nil {
+			return fmt.Errorf("failed to save alert history: %w", err)
+		}
+		return nil
+	}, nil)
 }
 
 // ListHistory returns alert history entries matching the filter with pagination.
@@ -169,20 +195,30 @@ func (r *alertRuleRepository) ListHistory(ctx context.Context, filter AlertHisto
 
 // DeleteHistory deletes all alert history entries.
 func (r *alertRuleRepository) DeleteHistory(ctx context.Context) (int64, error) {
-	result := r.db.WithContext(ctx).Where("1 = 1").Delete(&entities.AlertHistory{})
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete alert history: %w", result.Error)
-	}
-	return result.RowsAffected, nil
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_alert_history", func() error {
+		result := r.db.WithContext(ctx).Where("1 = 1").Delete(&entities.AlertHistory{})
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete alert history: %w", result.Error)
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	return rowsAffected, err
 }
 
 // DeleteHistoryBefore deletes alert history entries older than the given time.
 func (r *alertRuleRepository) DeleteHistoryBefore(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).Where("fired_at < ?", before).Delete(&entities.AlertHistory{})
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to delete alert history before %v: %w", before, result.Error)
-	}
-	return result.RowsAffected, nil
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_alert_history_before", func() error {
+		result := r.db.WithContext(ctx).Where("fired_at < ?", before).Delete(&entities.AlertHistory{})
+		if result.Error != nil {
+			return fmt.Errorf("failed to delete alert history before %v: %w", before, result.Error)
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	return rowsAffected, err
 }
 
 // CountRulesByName returns the number of rules with the given name.

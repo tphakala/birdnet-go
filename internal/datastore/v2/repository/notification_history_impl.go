@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
@@ -55,12 +56,14 @@ func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Cont
 	if history.LabelID == 0 {
 		return errors.NewStd("notification history LabelID must be set before saving")
 	}
-	return r.db.WithContext(ctx).Table(r.tableName()).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "label_id"}, {Name: "notification_type"}},
-			UpdateAll: true,
-		}).
-		Create(history).Error
+	return datastore.RetryOnLock("v2_save_notification_history", func() error {
+		return r.db.WithContext(ctx).Table(r.tableName()).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "label_id"}, {Name: "notification_type"}},
+				UpdateAll: true,
+			}).
+			Create(history).Error
+	}, nil)
 }
 
 // GetNotificationHistory retrieves a notification history entry by scientific name.
@@ -106,8 +109,16 @@ func (r *notificationHistoryRepository) GetActiveNotificationHistory(ctx context
 
 // DeleteExpiredNotificationHistory deletes expired entries.
 func (r *notificationHistoryRepository) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
-	result := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("expires_at < ?", before).
-		Delete(&entities.NotificationHistory{})
-	return result.RowsAffected, result.Error
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_expired_notification_history", func() error {
+		result := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("expires_at < ?", before).
+			Delete(&entities.NotificationHistory{})
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	return rowsAffected, err
 }

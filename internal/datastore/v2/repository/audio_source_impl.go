@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
 )
@@ -65,7 +66,9 @@ func (r *audioSourceRepository) GetOrCreate(ctx context.Context, sourceURI, node
 		SourceType:  sourceType,
 	}
 
-	createErr := r.db.WithContext(ctx).Table(r.tableName()).Create(&source).Error
+	createErr := datastore.RetryOnLock("v2_create_audio_source", func() error {
+		return r.db.WithContext(ctx).Table(r.tableName()).Create(&source).Error
+	}, nil)
 	if createErr != nil {
 		// Handle race condition - another goroutine may have created it.
 		// Try to fetch the existing record; if that also fails, return the original create error.
@@ -183,11 +186,19 @@ func (r *audioSourceRepository) Count(ctx context.Context) (int64, error) {
 
 // Delete removes an audio source by ID.
 func (r *audioSourceRepository) Delete(ctx context.Context, id uint) error {
-	result := r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.AudioSource{}, id)
-	if result.Error != nil {
-		return result.Error
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_delete_audio_source", func() error {
+		result := r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.AudioSource{}, id)
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return ErrAudioSourceNotFound
 	}
 	return nil
@@ -195,13 +206,21 @@ func (r *audioSourceRepository) Delete(ctx context.Context, id uint) error {
 
 // Update modifies an audio source's fields.
 func (r *audioSourceRepository) Update(ctx context.Context, id uint, updates map[string]any) error {
-	result := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("id = ?", id).
-		Updates(updates)
-	if result.Error != nil {
-		return result.Error
+	var rowsAffected int64
+	err := datastore.RetryOnLock("v2_update_audio_source", func() error {
+		result := r.db.WithContext(ctx).Table(r.tableName()).
+			Where("id = ?", id).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, nil)
+	if err != nil {
+		return err
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return ErrAudioSourceNotFound
 	}
 	return nil

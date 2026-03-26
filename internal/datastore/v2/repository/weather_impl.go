@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -46,12 +47,14 @@ func (r *weatherRepository) hourlyWeatherTable() string {
 
 // SaveDailyEvents saves or updates daily events (upsert).
 func (r *weatherRepository) SaveDailyEvents(ctx context.Context, events *entities.DailyEvents) error {
-	return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "date"}},
-			UpdateAll: true,
-		}).
-		Create(events).Error
+	return datastore.RetryOnLock("v2_save_daily_events", func() error {
+		return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "date"}},
+				UpdateAll: true,
+			}).
+			Create(events).Error
+	}, nil)
 }
 
 // GetDailyEvents retrieves daily events by date.
@@ -71,7 +74,9 @@ func (r *weatherRepository) GetDailyEvents(ctx context.Context, date string) (*e
 
 // SaveHourlyWeather saves hourly weather data.
 func (r *weatherRepository) SaveHourlyWeather(ctx context.Context, weather *entities.HourlyWeather) error {
-	return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).Create(weather).Error
+	return datastore.RetryOnLock("v2_save_hourly_weather", func() error {
+		return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).Create(weather).Error
+	}, nil)
 }
 
 // GetHourlyWeather retrieves hourly weather for a date.
@@ -162,12 +167,14 @@ func (r *weatherRepository) SaveAllDailyEvents(ctx context.Context, events []ent
 		end := min(i+batchSize, len(events))
 		batch := events[i:end]
 
-		err := r.db.WithContext(ctx).Table(r.dailyEventsTable()).
-			Clauses(clause.OnConflict{
-				Columns:   []clause.Column{{Name: "date"}},
-				DoNothing: true,
-			}).
-			Create(&batch).Error
+		err := datastore.RetryOnLock("v2_save_all_daily_events", func() error {
+			return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
+				Clauses(clause.OnConflict{
+					Columns:   []clause.Column{{Name: "date"}},
+					DoNothing: true,
+				}).
+				Create(&batch).Error
+		}, nil)
 		if err != nil {
 			return saved, err
 		}
@@ -192,8 +199,10 @@ func (r *weatherRepository) SaveAllHourlyWeather(ctx context.Context, weather []
 		end := min(i+batchSize, len(weather))
 		batch := weather[i:end]
 
-		err := r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
-			Create(&batch).Error
+		err := datastore.RetryOnLock("v2_save_all_hourly_weather", func() error {
+			return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
+				Create(&batch).Error
+		}, nil)
 		if err != nil {
 			return saved, err
 		}

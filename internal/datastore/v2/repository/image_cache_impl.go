@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
@@ -86,12 +87,14 @@ func (r *imageCacheRepository) SaveImageCache(ctx context.Context, cache *entiti
 	if cache.LabelID == 0 {
 		return errors.NewStd("image cache LabelID must be set before saving")
 	}
-	return r.db.WithContext(ctx).Table(r.tableName()).
-		Clauses(clause.OnConflict{
-			Columns:   []clause.Column{{Name: "provider_name"}, {Name: "label_id"}},
-			UpdateAll: true,
-		}).
-		Create(cache).Error
+	return datastore.RetryOnLock("v2_save_image_cache", func() error {
+		return r.db.WithContext(ctx).Table(r.tableName()).
+			Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "provider_name"}, {Name: "label_id"}},
+				UpdateAll: true,
+			}).
+			Create(cache).Error
+	}, nil)
 }
 
 // GetAllImageCaches retrieves all image cache entries for a provider.
