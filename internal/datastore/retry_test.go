@@ -204,9 +204,6 @@ func TestRetryOnLock_RecordsMetricsOnRetry(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, 3, calls)
-	// Passing metrics does not panic and the retry code paths execute.
-	// RecordTransactionRetry was called twice (once per retry) and
-	// RecordLockContention("database","retry_succeeded") was called on success.
 }
 
 func TestRetryOnLock_RecordsExhaustedMetric(t *testing.T) {
@@ -219,7 +216,6 @@ func TestRetryOnLock_RecordsExhaustedMetric(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "database is locked")
-	// RecordLockRetriesExhausted and RecordLockContention were called.
 }
 
 func TestRetryOnLock_NilMetricsDoesNotPanic(t *testing.T) {
@@ -320,7 +316,9 @@ func TestRetryTransactionOnLock_RollsBackOnError(t *testing.T) {
 	// The fn creates a row then returns a non-transient error.
 	// The row should NOT be persisted because the transaction is rolled back.
 	err := retryTransactionOnLock(db, "test_rollback", func(tx *gorm.DB) error {
-		_ = tx.Create(&DailyEvents{Date: "2024-03-01", CityName: "Ghost"}).Error
+		if createErr := tx.Create(&DailyEvents{Date: "2024-03-01", CityName: "Ghost"}).Error; createErr != nil {
+			return createErr
+		}
 		return fmt.Errorf("simulated application error")
 	}, nil)
 

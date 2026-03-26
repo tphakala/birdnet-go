@@ -54,13 +54,11 @@ func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
 			return err
 		}
 
-		// Record each retry attempt in metrics.
-		if metrics != nil {
-			metrics.RecordTransactionRetry(operation, "database_locked")
-		}
-
-		// Don't sleep after the last attempt
+		// Only record the retry metric and sleep when there will be a real retry.
 		if attempt < retryMaxAttempts-1 {
+			if metrics != nil {
+				metrics.RecordTransactionRetry(operation, "database_locked")
+			}
 			backoff := retryBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by retryMaxAttempts
 			// Add 0-25% jitter to avoid thundering herd when multiple writers contend.
 			jitter := time.Duration(rand.Float64() * 0.25 * float64(backoff)) //nolint:gosec // G404: math/rand is fine for jitter
@@ -145,21 +143,22 @@ func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) 
 			}
 		}
 
-		// Record each retry attempt in metrics.
-		if metrics != nil {
-			metrics.RecordTransactionRetry(operation, "database_locked")
-		}
-
-		// Don't sleep after the last attempt.
+		// Only record the retry metric and sleep when there will be a real retry.
 		if attempt < retryMaxAttempts-1 {
+			if metrics != nil {
+				metrics.RecordTransactionRetry(operation, "database_locked")
+			}
 			backoff := retryBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by retryMaxAttempts
+			// Add 0-25% jitter to avoid thundering herd when multiple writers contend.
+			jitter := time.Duration(rand.Float64() * 0.25 * float64(backoff)) //nolint:gosec // G404: math/rand is fine for jitter
+			delay := backoff + jitter
 			GetLogger().Warn("retrying after database lock error",
 				logger.String("operation", operation),
 				logger.Int("attempt", attempt+1),
 				logger.Int("max_attempts", retryMaxAttempts),
-				logger.Int64("backoff_ms", backoff.Milliseconds()),
+				logger.Int64("backoff_ms", delay.Milliseconds()),
 				logger.Error(lastErr))
-			time.Sleep(backoff)
+			time.Sleep(delay)
 		}
 	}
 

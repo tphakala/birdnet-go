@@ -342,10 +342,6 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			}
 			return err
 		}
-		if metricsInstance != nil {
-			metricsInstance.RecordNoteOperation("save", "success")
-		}
-
 		// Save the results, linking them to the note
 		for i := range results {
 			results[i].NoteID = note.ID
@@ -377,7 +373,11 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			}
 		}
 
-		return stateError(err, "save_transaction", "transaction_retry_exhausted",
+		errState := "transaction_retry_exhausted"
+		if !isTransientDBError(err) {
+			errState = "transaction_failed"
+		}
+		return stateError(err, "save_transaction", errState,
 			"tx_id", txID,
 			"action", "save_detection_data",
 			"total_duration_ms", time.Since(txStart).Milliseconds())
@@ -391,6 +391,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		logger.Int("rows_affected", 1+len(results)))
 
 	if metricsInstance != nil {
+		metricsInstance.RecordNoteOperation("save", "success")
 		metricsInstance.RecordTransaction("committed")
 		metricsInstance.RecordTransactionDuration("save_note", duration.Seconds())
 	}
