@@ -324,7 +324,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 
 	metricsInstance := ds.getMetrics()
 
-	err := retryTransactionOnLock(ds.DB, "save_note", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(ds.DB, "save_note", func(tx *gorm.DB) error {
 		// Reset auto-generated IDs before each attempt so that retries after
 		// a rolled-back transaction do not try to re-use a stale primary key.
 		note.ID = 0
@@ -364,7 +364,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		if metricsInstance != nil {
 			// Only record retry-exhaustion metrics when retries were actually exhausted
 			// (transient error after all attempts), not for immediate non-retryable failures.
-			if isTransientDBError(err) {
+			if IsTransientDBError(err) {
 				metricsInstance.RecordTransaction("timeout")
 				metricsInstance.RecordTransactionError("save_note", "max_retries_exhausted")
 			} else {
@@ -374,7 +374,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		}
 
 		errState := "transaction_retry_exhausted"
-		if !isTransientDBError(err) {
+		if !IsTransientDBError(err) {
 			errState = "transaction_failed"
 		}
 		return stateError(err, "save_transaction", errState,
@@ -453,8 +453,8 @@ func (ds *DataStore) Delete(id string) error {
 			"action", "delete_detection_record")
 	}
 
-	// Perform the deletion within a transaction
-	return ds.DB.Transaction(func(tx *gorm.DB) error {
+	// Perform the deletion within a retryable transaction
+	return RetryTransactionOnLock(ds.DB, "delete_note", func(tx *gorm.DB) error {
 		// Delete the full results entry associated with the note
 		if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
 			return dbError(err, "delete_results", errors.PriorityMedium,
@@ -470,7 +470,7 @@ func (ds *DataStore) Delete(id string) error {
 				"action", "delete_detection_record")
 		}
 		return nil
-	})
+	}, ds.getMetrics())
 }
 
 // GetNoteClipPath retrieves the path to the audio clip associated with a note.
@@ -509,18 +509,18 @@ func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
 	}
 
 	// Update the clip_name field to an empty string for the specified note ID
-	err := ds.DB.Model(&Note{}).Where("id = ?", noteID).Update("clip_name", "").Error
-	if err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "delete_clip_path").
-			Context("note_id", noteID).
-			Build()
-	}
-
-	// Return nil if no errors occurred, indicating successful execution
-	return nil
+	return RetryOnLock("delete_note_clip_path", func() error {
+		err := ds.DB.Model(&Note{}).Where("id = ?", noteID).Update("clip_name", "").Error
+		if err != nil {
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_clip_path").
+				Context("note_id", noteID).
+				Build()
+		}
+		return nil
+	}, ds.getMetrics())
 }
 
 // GetAllNotes retrieves all notes from the database.
@@ -931,7 +931,7 @@ func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 	if dailyEvents == nil {
 		return validationError("daily events cannot be nil", "daily_events", nil)
 	}
-	return retryOnLock("save_daily_events", func() error {
+	return RetryOnLock("save_daily_events", func() error {
 		// Use upsert to handle the unique date constraint
 		result := ds.DB.Where("date = ?", dailyEvents.Date).
 			Assign(*dailyEvents).
@@ -1009,7 +1009,7 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 			Build()
 	}
 
-	return retryOnLock("save_hourly_weather", func() error {
+	return RetryOnLock("save_hourly_weather", func() error {
 		// Use upsert to avoid duplicates for the same timestamp.
 		// Compare using Unix epoch seconds to handle legacy records with local
 		// timezone offsets alongside new UTC records.
@@ -1224,16 +1224,25 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 			Build()
 	}
 
-	result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
-	if result.Error != nil {
-		return errors.New(result.Error).
+	var rowsAffected int64
+	err := RetryOnLock("update_note", func() error {
+		result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, ds.getMetrics())
+
+	if err != nil {
+		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "update_note").
 			Context("note_id", id).
 			Build()
 	}
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.Newf("note not found").
 			Component("datastore").
 			Category(errors.CategoryValidation).
@@ -1280,21 +1289,23 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 
 // SaveNoteReview saves or updates a note review
 func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
-	// Use upsert operation to either create or update the review
-	result := ds.DB.Where("note_id = ?", review.NoteID).
-		Assign(*review).
-		FirstOrCreate(review)
+	return RetryOnLock("save_note_review", func() error {
+		// Use upsert operation to either create or update the review
+		result := ds.DB.Where("note_id = ?", review.NoteID).
+			Assign(*review).
+			FirstOrCreate(review)
 
-	if result.Error != nil {
-		return errors.New(result.Error).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_note_review").
-			Context("note_id", fmt.Sprintf("%d", review.NoteID)).
-			Build()
-	}
+		if result.Error != nil {
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_note_review").
+				Context("note_id", fmt.Sprintf("%d", review.NoteID)).
+				Build()
+		}
 
-	return nil
+		return nil
+	}, ds.getMetrics())
 }
 
 // GetNoteComments retrieves all comments for a note
@@ -1504,13 +1515,15 @@ func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 		return validationError("comment entry exceeds maximum length", "entry_length", len(comment.Entry))
 	}
 
-	if err := ds.DB.Create(comment).Error; err != nil {
-		return dbError(err, "save_note_comment", errors.PriorityMedium,
-			"note_id", fmt.Sprintf("%d", comment.NoteID),
-			"table", "note_comments",
-			"action", "add_user_comment")
-	}
-	return nil
+	return RetryOnLock("save_note_comment", func() error {
+		if err := ds.DB.Create(comment).Error; err != nil {
+			return dbError(err, "save_note_comment", errors.PriorityMedium,
+				"note_id", fmt.Sprintf("%d", comment.NoteID),
+				"table", "note_comments",
+				"action", "add_user_comment")
+		}
+		return nil
+	}, ds.getMetrics())
 }
 
 // DeleteNoteComment deletes a comment
@@ -1525,15 +1538,17 @@ func (ds *DataStore) DeleteNoteComment(commentID string) error {
 			Build()
 	}
 
-	if err := ds.DB.Delete(&NoteComment{}, id).Error; err != nil {
-		return errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "delete_note_comment").
-			Context("comment_id", commentID).
-			Build()
-	}
-	return nil
+	return RetryOnLock("delete_note_comment", func() error {
+		if err := ds.DB.Delete(&NoteComment{}, id).Error; err != nil {
+			return errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "delete_note_comment").
+				Context("comment_id", commentID).
+				Build()
+		}
+		return nil
+	}, ds.getMetrics())
 }
 
 // UpdateNoteComment updates an existing comment's entry
@@ -1548,13 +1563,22 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 			Build()
 	}
 
-	result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]any{
-		"entry":      entry,
-		"updated_at": time.Now(),
-	})
+	var rowsAffected int64
+	err = RetryOnLock("update_note_comment", func() error {
+		result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]any{
+			"entry":      entry,
+			"updated_at": time.Now(),
+		})
 
-	if result.Error != nil {
-		return errors.New(result.Error).
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, ds.getMetrics())
+
+	if err != nil {
+		return errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
 			Context("operation", "update_note_comment").
@@ -1562,7 +1586,7 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 			Build()
 	}
 
-	if result.RowsAffected == 0 {
+	if rowsAffected == 0 {
 		return errors.Newf("comment not found").
 			Component("datastore").
 			Category(errors.CategoryValidation).
@@ -1685,7 +1709,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			Build()
 	}
 
-	err = retryOnLock("lock_note", func() error {
+	err = RetryOnLock("lock_note", func() error {
 		lock := &NoteLock{
 			NoteID:   uint(id),
 			LockedAt: time.Now(),
@@ -1695,7 +1719,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			Assign(*lock).
 			FirstOrCreate(lock)
 		if result.Error != nil {
-			// Let retryOnLock decide whether this is transient or not.
+			// Let RetryOnLock decide whether this is transient or not.
 			return result.Error
 		}
 		return nil
@@ -1716,7 +1740,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		return validationError("invalid note ID format for unlock", "note_id", noteID)
 	}
 
-	err = retryOnLock("unlock_note", func() error {
+	err = RetryOnLock("unlock_note", func() error {
 		// Check if the lock exists before attempting to delete.
 		exists, checkErr := ds.IsNoteLocked(noteID)
 		if checkErr != nil {
@@ -1782,7 +1806,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		return err
 	}
 
-	err := retryOnLock("save_image_cache", func() error {
+	err := RetryOnLock("save_image_cache", func() error {
 		// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
 		// Update all columns except primary key on conflict
 		if err := ds.DB.Clauses(clause.OnConflict{

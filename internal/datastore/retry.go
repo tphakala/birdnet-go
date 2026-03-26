@@ -21,12 +21,12 @@ const (
 	retryBaseDelay = 500 * time.Millisecond
 )
 
-// isTransientDBError checks if an error (or any error in its unwrap chain) is a
+// IsTransientDBError checks if an error (or any error in its unwrap chain) is a
 // transient database lock or deadlock error that is safe to retry. Covers both
 // SQLite (database is locked, SQLITE_BUSY) and MySQL (deadlock detected, lock
 // wait timeout). Wrapped errors (e.g. EnhancedError) are unwrapped so the
 // underlying message is inspected at every level.
-func isTransientDBError(err error) bool {
+func IsTransientDBError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -40,8 +40,8 @@ func isTransientDBError(err error) bool {
 }
 
 // retryBackoff computes a jittered exponential backoff delay, logs a warning,
-// records the retry metric, and sleeps. It is called by retryOnLock and
-// retryTransactionOnLock when a real retry is about to happen.
+// records the retry metric, and sleeps. It is called by RetryOnLock and
+// RetryTransactionOnLock when a real retry is about to happen.
 func retryBackoff(attempt int, operation string, lastErr error, m *Metrics) {
 	if m != nil {
 		m.RecordTransactionRetry(operation, "database_locked")
@@ -60,7 +60,7 @@ func retryBackoff(attempt int, operation string, lastErr error, m *Metrics) {
 }
 
 // recordRetryExhaustion records metrics when all retry attempts have been
-// exhausted. Called by both retryOnLock and retryTransactionOnLock.
+// exhausted. Called by both RetryOnLock and RetryTransactionOnLock.
 func recordRetryExhaustion(m *Metrics, operation string, start time.Time) {
 	if m == nil {
 		return
@@ -70,13 +70,13 @@ func recordRetryExhaustion(m *Metrics, operation string, start time.Time) {
 	m.RecordLockContention("database", "max_retries_exhausted")
 }
 
-// retryOnLock executes fn and retries up to retryMaxAttempts times if the
+// RetryOnLock executes fn and retries up to retryMaxAttempts times if the
 // error is a transient database lock or deadlock error. Uses exponential
 // backoff between retries. Returns the first non-transient error or the
 // last error after all retries are exhausted.
 //
 // If metrics is non-nil, each retry attempt and exhaustion are recorded.
-func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
+func RetryOnLock(operation string, fn func() error, metrics *Metrics) error {
 	start := time.Now()
 	var err error
 	for attempt := range retryMaxAttempts {
@@ -90,7 +90,7 @@ func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
 		}
 
 		// Only retry on transient lock/deadlock errors; bail immediately on others.
-		if !isTransientDBError(err) {
+		if !IsTransientDBError(err) {
 			return err
 		}
 
@@ -105,7 +105,7 @@ func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
 	return err
 }
 
-// retryTransactionOnLock wraps a transaction lifecycle (Begin/fn/Commit) inside
+// RetryTransactionOnLock wraps a transaction lifecycle (Begin/fn/Commit) inside
 // the standard retry loop. Each retry starts a fresh transaction so that a
 // failed attempt's rolled-back state does not leak into the next try.
 //
@@ -115,7 +115,7 @@ func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
 //
 // If metrics is non-nil, retry attempts, exhaustion, and lock wait duration
 // are recorded.
-func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) error, metrics *Metrics) error {
+func RetryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) error, metrics *Metrics) error {
 	start := time.Now()
 	var lastErr error
 
@@ -123,7 +123,7 @@ func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) 
 		tx := db.Begin()
 		if tx.Error != nil {
 			lastErr = tx.Error
-			if !isTransientDBError(tx.Error) {
+			if !IsTransientDBError(tx.Error) {
 				return tx.Error
 			}
 			// Begin itself hit a lock error; fall through to retry logic.
@@ -142,7 +142,7 @@ func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) 
 			if fnErr != nil {
 				tx.Rollback()
 				lastErr = fnErr
-				if !isTransientDBError(fnErr) {
+				if !IsTransientDBError(fnErr) {
 					return fnErr
 				}
 				// Transient error; fall through to retry logic.
@@ -151,7 +151,7 @@ func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) 
 				if err := tx.Commit().Error; err != nil {
 					tx.Rollback() // Defensive rollback after failed commit.
 					lastErr = err
-					if !isTransientDBError(err) {
+					if !IsTransientDBError(err) {
 						return err
 					}
 					// Commit hit a lock error; fall through to retry logic.

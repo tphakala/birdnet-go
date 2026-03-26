@@ -297,7 +297,7 @@ func TestMaxOpenConnsEffectiveness(t *testing.T) {
 }
 
 // TestRetryExhaustion verifies that when lock contention exceeds the retry
-// budget, the error is surfaced (not swallowed). Uses retryOnLock directly
+// budget, the error is surfaced (not swallowed). Uses RetryOnLock directly
 // with a function that always returns a lock error.
 func TestRetryExhaustion(t *testing.T) {
 	t.Parallel()
@@ -305,16 +305,16 @@ func TestRetryExhaustion(t *testing.T) {
 	callCount := 0
 	lockErr := fmt.Errorf("database is locked")
 
-	err := retryOnLock("test_exhaustion", func() error {
+	err := RetryOnLock("test_exhaustion", func() error {
 		callCount++
 		return lockErr
 	}, nil)
 
-	require.Error(t, err, "retryOnLock should return an error after exhausting retries")
+	require.Error(t, err, "RetryOnLock should return an error after exhausting retries")
 	assert.Contains(t, err.Error(), "database is locked",
 		"the returned error should be the original lock error")
 	assert.Equal(t, retryMaxAttempts, callCount,
-		"retryOnLock should have attempted exactly %d times", retryMaxAttempts)
+		"RetryOnLock should have attempted exactly %d times", retryMaxAttempts)
 }
 
 // TestRetryExhaustion_NonTransientBailsImmediately verifies that non-transient
@@ -325,7 +325,7 @@ func TestRetryExhaustion_NonTransientBailsImmediately(t *testing.T) {
 	callCount := 0
 	constraintErr := fmt.Errorf("UNIQUE constraint failed: daily_events.date")
 
-	err := retryOnLock("test_non_transient", func() error {
+	err := RetryOnLock("test_non_transient", func() error {
 		callCount++
 		return constraintErr
 	}, nil)
@@ -364,7 +364,7 @@ func TestRetryExhaustion_IntegrationWithRealDB(t *testing.T) {
 	}).Error)
 	// Don't commit yet — keep the transaction open to hold the write lock
 
-	// Try to write from a different goroutine using retryOnLock.
+	// Try to write from a different goroutine using RetryOnLock.
 	// With busy_timeout=0 and the lock held, every attempt should fail.
 	done := make(chan error, 1)
 	go func() {
@@ -372,7 +372,7 @@ func TestRetryExhaustion_IntegrationWithRealDB(t *testing.T) {
 			Date:     "2024-05-02",
 			CityName: "Blocked",
 		}
-		done <- retryOnLock("blocked_write", func() error {
+		done <- RetryOnLock("blocked_write", func() error {
 			return ds.DB.Create(event).Error
 		}, nil)
 	}()

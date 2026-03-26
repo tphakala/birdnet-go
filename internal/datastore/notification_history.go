@@ -38,7 +38,7 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 
 	// Upsert: Use GORM's OnConflict clause for efficient upsert
 	// This handles the composite unique index on (scientific_name, notification_type)
-	return retryOnLock("save_notification_history", func() error {
+	return RetryOnLock("save_notification_history", func() error {
 		result := ds.DB.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "scientific_name"},
@@ -116,18 +116,27 @@ func (ds *DataStore) GetActiveNotificationHistory(after time.Time) ([]Notificati
 // Returns the count of deleted records
 // This is typically called periodically by a cleanup job
 func (ds *DataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
-	result := ds.DB.Where("expires_at < ?", before).Delete(&NotificationHistory{})
-	if result.Error != nil {
-		return 0, dbError(result.Error, "delete_expired_notification_history", errors.PriorityLow,
+	var rowsAffected int64
+	err := RetryOnLock("delete_expired_notification_history", func() error {
+		result := ds.DB.Where("expires_at < ?", before).Delete(&NotificationHistory{})
+		if result.Error != nil {
+			return result.Error
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, ds.getMetrics())
+
+	if err != nil {
+		return 0, dbError(err, "delete_expired_notification_history", errors.PriorityLow,
 			"before", before.Format(time.RFC3339),
 			"action", "cleanup_expired_notifications")
 	}
 
-	if result.RowsAffected > 0 {
+	if rowsAffected > 0 {
 		GetLogger().Info("Cleaned up expired notification history",
-			logger.Int64("count", result.RowsAffected),
+			logger.Int64("count", rowsAffected),
 			logger.String("before", before.Format(time.RFC3339)))
 	}
 
-	return result.RowsAffected, nil
+	return rowsAffected, nil
 }
