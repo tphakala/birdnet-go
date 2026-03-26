@@ -1,12 +1,12 @@
 package datastore
 
 import (
-	stderrors "errors"
 	"fmt"
 	"math/rand"
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 )
@@ -31,7 +31,7 @@ func isTransientDBError(err error) bool {
 		return false
 	}
 	// Walk the error chain -- wrapped errors may hide the transient message.
-	for e := err; e != nil; e = stderrors.Unwrap(e) {
+	for e := err; e != nil; e = errors.Unwrap(e) {
 		if isDatabaseLocked(e) || isDeadlock(e) {
 			return true
 		}
