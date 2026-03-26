@@ -914,6 +914,51 @@ func TestWebhookRequestError_ConnectionErrorsNotReported(t *testing.T) {
 	assert.Empty(t, reporter.capturedEvents, "Network unreachable errors should not be reported to telemetry")
 }
 
+// TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors verifies that
+// a connection error does not cause subsequent non-connection errors to be suppressed.
+// Regression test: ShouldReport() was previously called in the connection error branch,
+// which incremented consecutiveFailures, causing the next real error to be suppressed.
+func TestWebhookRequestError_ConnectionErrorDoesNotSuppressSubsequentErrors(t *testing.T) {
+	t.Parallel()
+
+	reporter := &mockTelemetryReporter{enabled: true}
+	config := DefaultTelemetryConfig()
+	telemetry := NewNotificationTelemetry(&config, reporter)
+
+	// Step 1: Send a connection error (should NOT be reported to telemetry)
+	telemetry.WebhookRequestError(
+		"webhook-test",
+		errors.New("dial tcp 192.168.1.100:443: connect: connection refused"),
+		0,
+		"https://example.com/webhook",
+		"POST",
+		"bearer",
+		false,
+		false,
+	)
+	assert.Empty(t, reporter.capturedEvents, "connection error should not generate a telemetry event")
+
+	// Step 2: Send a non-connection error (SHOULD be reported — this is the first real error)
+	telemetry.WebhookRequestError(
+		"webhook-test",
+		errors.New("server returned 500: internal server error"),
+		500,
+		"https://example.com/webhook",
+		"POST",
+		"bearer",
+		false,
+		false,
+	)
+
+	// The 500 error must be reported because it is the first non-connection error.
+	// Before the fix, ShouldReport() in the connection error branch incremented
+	// consecutiveFailures to 1, so this call would see consecutiveFailures=2
+	// and suppress the report.
+	require.Len(t, reporter.capturedEvents, 1, "first non-connection error after a connection error must be reported")
+	assert.Equal(t, "error", reporter.capturedEvents[0].level)
+	assert.Contains(t, reporter.capturedEvents[0].message, "500")
+}
+
 // TestWebhookRequestError_ServerErrorsStillReported tests that non-connection errors are still reported
 func TestWebhookRequestError_ServerErrorsStillReported(t *testing.T) {
 	reporter := &mockTelemetryReporter{enabled: true}

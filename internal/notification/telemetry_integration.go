@@ -223,12 +223,12 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 	// (service not running, wrong URL, DNS misconfiguration, firewall, etc.)
 	// not code quality problems that need telemetry alerts
 	if isConnectionError(err) {
-		// Still track the failure for suppression state even if we don't report
+		// Track the failure for suppression state even if we don't report.
+		// Use RecordFailure only — not ShouldReport — because ShouldReport
+		// increments consecutiveFailures, which would cause the next
+		// non-connection error to be incorrectly suppressed.
 		if nt.suppressor != nil {
-			_ = nt.suppressor.ShouldReport(providerName)
-			if err != nil {
-				nt.suppressor.RecordFailure(providerName, err.Error())
-			}
+			nt.suppressor.RecordFailure(providerName, err.Error())
 		}
 		return
 	}
