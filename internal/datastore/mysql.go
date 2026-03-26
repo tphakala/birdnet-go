@@ -17,6 +17,16 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// MySQL connection pool defaults. Tuned for BirdNET-Go's typical workload
+// (periodic detections, weather updates, daily events). Conservative relative
+// to MySQL's default max_connections (151), leaving headroom for admin tools.
+const (
+	mysqlMaxOpenConns    = 25
+	mysqlMaxIdleConns    = 10
+	mysqlConnMaxLifetime = 5 * time.Minute
+	mysqlConnMaxIdleTime = 3 * time.Minute
+)
+
 // validTableNameRegex matches valid table names: alphanumeric, underscores, and dashes only
 var validTableNameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
@@ -76,6 +86,23 @@ func (store *MySQLStore) Open() error {
 		GetLogger().Error("Failed to open MySQL database", logger.Error(err))
 		return fmt.Errorf("failed to open MySQL database: %w", err)
 	}
+
+	// Configure connection pool for MySQL.
+	// Unlike SQLite which serializes with MaxOpenConns(1), MySQL handles
+	// concurrent connections natively. These settings prevent resource
+	// exhaustion while keeping warm connections for latency.
+	sqlDB, err := db.DB()
+	if err != nil {
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_underlying_sqldb").
+			Build()
+	}
+	sqlDB.SetMaxOpenConns(mysqlMaxOpenConns)
+	sqlDB.SetMaxIdleConns(mysqlMaxIdleConns)
+	sqlDB.SetConnMaxLifetime(mysqlConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(mysqlConnMaxIdleTime)
 
 	store.DB = db
 
