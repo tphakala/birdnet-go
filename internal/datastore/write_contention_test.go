@@ -10,6 +10,7 @@
 package datastore
 
 import (
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -198,6 +199,11 @@ func TestConcurrentMixedWrites(t *testing.T) {
 	var noteCount int64
 	require.NoError(t, sqliteStore.DB.Model(&Note{}).Count(&noteCount).Error)
 	assert.Equal(t, int64(numPerType), noteCount, "Note count mismatch")
+
+	// Verify Results rows were also persisted (each Save call included 1 Result)
+	var resultsCount int64
+	require.NoError(t, sqliteStore.DB.Model(&Results{}).Count(&resultsCount).Error)
+	assert.Equal(t, int64(numPerType), resultsCount, "Results count mismatch — Save() dropped Results?")
 }
 
 // TestMaxOpenConnsEffectiveness validates that SetMaxOpenConns(1) prevents
@@ -416,69 +422,65 @@ func TestDSNPragmaVerification(t *testing.T) {
 // pragmas apply to ALL connections in the pool, not just the first one.
 // This was the root cause of the original bug: pragmas set via Exec() only
 // applied to one connection, leaving new pool connections at SQLite defaults.
+//
+// Uses a barrier pattern: acquires and holds exactly MaxOpenConns connections
+// simultaneously, then verifies pragmas on all of them before releasing.
 func TestDSNPragmaVerification_AllPoolConnections(t *testing.T) {
 	t.Parallel()
+
+	const maxConns = 5
 
 	// Open with multiple pool connections to test pragma propagation
 	db := openRawSQLiteDB(t, "pragma_pool",
 		"_journal_mode=WAL&_busy_timeout=30000&_foreign_keys=ON&_synchronous=NORMAL&_cache_size=-4000")
-	setMaxOpenConns(t, db, 5)
+	setMaxOpenConns(t, db, maxConns)
 
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 
-	// Query pragmas from multiple connections concurrently.
-	// If pragmas were set via Exec() instead of DSN, some connections
-	// would report SQLite defaults (delete journal, 0ms busy_timeout).
-	const numChecks = 10
+	// Acquire and hold all MaxOpenConns connections simultaneously.
+	// This guarantees we test every distinct pool connection, not just
+	// reuse the same one. If pragmas were set via Exec() instead of DSN,
+	// some connections would report SQLite defaults.
 	type pragmaResult struct {
 		journalMode string
 		busyTimeout int
 	}
 
-	results := make(chan pragmaResult, numChecks)
-	errs := make(chan error, numChecks)
-	var wg sync.WaitGroup
+	conns := make([]*sql.Conn, maxConns)
+	results := make([]pragmaResult, maxConns)
 
-	for range numChecks {
-		wg.Go(func() {
-			// Each goroutine gets a potentially different pool connection
-			conn, connErr := sqlDB.Conn(t.Context())
-			if connErr != nil {
-				errs <- connErr
-				return
-			}
-			defer func() { _ = conn.Close() }()
-
-			var jm string
-			if scanErr := conn.QueryRowContext(t.Context(), "PRAGMA journal_mode").Scan(&jm); scanErr != nil {
-				errs <- scanErr
-				return
-			}
-
-			var bt int
-			if scanErr := conn.QueryRowContext(t.Context(), "PRAGMA busy_timeout").Scan(&bt); scanErr != nil {
-				errs <- scanErr
-				return
-			}
-
-			results <- pragmaResult{journalMode: jm, busyTimeout: bt}
-		})
+	// Phase 1: Acquire all connections (barrier — hold them all open)
+	for i := range maxConns {
+		conn, connErr := sqlDB.Conn(t.Context())
+		require.NoError(t, connErr, "failed to acquire pool connection %d", i)
+		conns[i] = conn
 	}
 
-	wg.Wait()
-	close(results)
-	close(errs)
+	// Phase 2: Query pragmas on all held connections
+	for i, conn := range conns {
+		var jm string
+		err := conn.QueryRowContext(t.Context(), "PRAGMA journal_mode").Scan(&jm)
+		require.NoError(t, err, "PRAGMA journal_mode failed on connection %d", i)
 
-	for err := range errs {
-		require.NoError(t, err, "pragma query should not fail")
+		var bt int
+		err = conn.QueryRowContext(t.Context(), "PRAGMA busy_timeout").Scan(&bt)
+		require.NoError(t, err, "PRAGMA busy_timeout failed on connection %d", i)
+
+		results[i] = pragmaResult{journalMode: jm, busyTimeout: bt}
 	}
 
-	for pr := range results {
+	// Phase 3: Release all connections
+	for i, conn := range conns {
+		require.NoError(t, conn.Close(), "failed to close connection %d", i)
+	}
+
+	// Verify all connections reported correct pragmas
+	for i, pr := range results {
 		assert.Equal(t, "wal", pr.journalMode,
-			"every pool connection should have journal_mode=WAL")
+			"pool connection %d should have journal_mode=WAL", i)
 		assert.Equal(t, 30000, pr.busyTimeout,
-			"every pool connection should have busy_timeout=30000")
+			"pool connection %d should have busy_timeout=30000", i)
 	}
 }
 
