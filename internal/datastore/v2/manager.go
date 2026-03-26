@@ -13,6 +13,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -458,8 +459,9 @@ func (m *SQLiteManager) StartPeriodicCheckpoint() {
 			case <-m.walCtx.Done():
 				return
 			case <-ticker.C:
-				if err := m.db.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
-					if m.log != nil {
+				if err := m.db.WithContext(m.walCtx).Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+					// Suppress expected context.Canceled errors during shutdown
+					if m.log != nil && !errors.Is(err, context.Canceled) {
 						m.log.Warn("periodic WAL checkpoint failed",
 							logger.Error(err),
 							logger.String("operation", "periodic_wal_checkpoint"))
