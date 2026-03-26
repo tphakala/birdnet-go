@@ -27,6 +27,7 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 
 	// Upsert: set FirstCreated only on INSERT; always update other fields
 	return RetryOnLock("save_dynamic_threshold", func() error {
+		threshold.ID = 0 // Reset ID for retry safety with FirstOrCreate
 		result := ds.DB.Where("species_name = ?", threshold.SpeciesName).
 			Attrs(DynamicThreshold{
 				FirstCreated: now, // Only set on INSERT

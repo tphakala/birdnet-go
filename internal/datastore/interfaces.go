@@ -1290,6 +1290,7 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 // SaveNoteReview saves or updates a note review
 func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
 	return RetryOnLock("save_note_review", func() error {
+		review.ID = 0 // Reset ID for retry safety with FirstOrCreate
 		// Use upsert operation to either create or update the review
 		result := ds.DB.Where("note_id = ?", review.NoteID).
 			Assign(*review).
