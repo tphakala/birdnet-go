@@ -26,7 +26,7 @@
   } from '@lucide/svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dropdown } from '$lib/utils/transitions';
-  import { isAuthenticated } from '$lib/utils/auth';
+  import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
@@ -70,7 +70,7 @@
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
 
   let clipExtractionEnabled = $derived($isAuthenticated);
-  let canReview = $derived($isAuthenticated);
+  let canReview = $derived($hasReviewPermission);
 
   const logger = loggers.ui;
 
