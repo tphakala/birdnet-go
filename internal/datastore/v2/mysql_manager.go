@@ -2,8 +2,8 @@ package v2
 
 import (
 	"fmt"
-	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -67,14 +67,17 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 		return nil, fmt.Errorf("failed to open MySQL database for v2: %w", err)
 	}
 
-	// Configure connection pool
+	// Configure connection pool using shared constants (see datastore.MySQL*).
+	// Matches the v1 store so both stay within MySQL's max_connections budget
+	// during migration when both are active (combined max = 2 * 25 = 50).
 	sqlDB, err := db.DB()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get underlying database: %w", err)
 	}
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	sqlDB.SetMaxOpenConns(datastore.MySQLMaxOpenConns)
+	sqlDB.SetMaxIdleConns(datastore.MySQLMaxIdleConns)
+	sqlDB.SetConnMaxLifetime(datastore.MySQLConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(datastore.MySQLConnMaxIdleTime)
 
 	return &MySQLManager{
 		db:          db,
