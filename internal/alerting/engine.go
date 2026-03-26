@@ -7,10 +7,10 @@ import (
 	"maps"
 	"runtime/debug"
 	"slices"
-	"strings"
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -427,7 +427,7 @@ func (e *Engine) StartHistoryCleanup(retentionDays int) {
 			case <-ticker.C:
 				deleted, err := e.deleteHistoryWithRetry(retentionDays, stopCh)
 				if err != nil {
-					if isDBLockError(err) {
+					if datastore.IsTransientDBError(err) {
 						// Transient SQLite lock contention — the cleanup runs hourly,
 						// so it will succeed on the next tick. Log as warning only;
 						// do not report to Sentry.
@@ -480,7 +480,7 @@ func (e *Engine) deleteHistoryWithRetry(retentionDays int, stopCh <-chan struct{
 		lastErr = err
 
 		// Only retry on transient DB lock errors; bail immediately on other errors.
-		if !isDBLockError(err) || attempt == cleanupMaxRetries-1 {
+		if !datastore.IsTransientDBError(err) || attempt == cleanupMaxRetries-1 {
 			return 0, err
 		}
 
@@ -517,11 +517,4 @@ func (e *Engine) stopCleanup() {
 // Stop shuts down background goroutines (history cleanup).
 func (e *Engine) Stop() {
 	e.stopCleanup()
-}
-
-// isDBLockError checks if an error is a transient SQLite database lock error.
-func isDBLockError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "database is locked") ||
-		strings.Contains(errStr, "SQLITE_BUSY")
 }

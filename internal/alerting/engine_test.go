@@ -11,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -754,7 +755,7 @@ func TestDeleteHistoryWithRetry_ExhaustsRetriesOnPersistentLock(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, int64(0), deleted)
-	assert.True(t, isDBLockError(err), "error should be a DB lock error")
+	assert.True(t, datastore.IsTransientDBError(err), "error should be a DB lock error")
 	assert.Equal(t, int64(3), repo.deleteCalls.Load(), "should attempt exactly cleanupMaxRetries times")
 }
 
@@ -796,11 +797,11 @@ func TestDeleteHistoryWithRetry_AbortsOnStop(t *testing.T) {
 }
 
 func TestIsDBLockError(t *testing.T) {
-	assert.True(t, isDBLockError(fmt.Errorf("database is locked")))
-	assert.True(t, isDBLockError(fmt.Errorf("SQLITE_BUSY")))
-	assert.True(t, isDBLockError(fmt.Errorf("some context: database is locked")))
-	assert.False(t, isDBLockError(fmt.Errorf("disk I/O error")))
-	assert.False(t, isDBLockError(fmt.Errorf("connection refused")))
+	assert.True(t, datastore.IsTransientDBError(fmt.Errorf("database is locked")))
+	assert.True(t, datastore.IsTransientDBError(fmt.Errorf("SQLITE_BUSY")))
+	assert.True(t, datastore.IsTransientDBError(fmt.Errorf("some context: database is locked")))
+	assert.False(t, datastore.IsTransientDBError(fmt.Errorf("disk I/O error")))
+	assert.False(t, datastore.IsTransientDBError(fmt.Errorf("connection refused")))
 }
 
 func TestEngine_NoEscalationSteps_LegacyBehavior(t *testing.T) {

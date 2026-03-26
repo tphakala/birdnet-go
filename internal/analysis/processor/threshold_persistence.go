@@ -177,7 +177,7 @@ func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThre
 			return nil
 		}
 
-		if !isDBLockError(err) || attempt == maxRetries-1 {
+		if !datastore.IsTransientDBError(err) || attempt == maxRetries-1 {
 			GetLogger().Error("Failed to persist dynamic thresholds",
 				logger.Error(err),
 				logger.Int("threshold_count", len(dbThresholds)),
@@ -203,13 +203,6 @@ func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThre
 		}
 	}
 	return err
-}
-
-// isDBLockError checks if an error is a database lock error.
-func isDBLockError(err error) bool {
-	errStr := err.Error()
-	return strings.Contains(errStr, "database is locked") ||
-		strings.Contains(errStr, "SQLITE_BUSY")
 }
 
 // persistDynamicThresholds saves all current dynamic thresholds to the database

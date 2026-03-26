@@ -312,6 +312,10 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 
 // Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
+	if note == nil {
+		return validationError("note cannot be nil", "note", nil)
+	}
+
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
 	txLogger := GetLogger()
@@ -1289,6 +1293,10 @@ func (ds *DataStore) GetNoteReview(noteID string) (*NoteReview, error) {
 
 // SaveNoteReview saves or updates a note review
 func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
+	if review == nil {
+		return validationError("review cannot be nil", "review", nil)
+	}
+
 	return RetryOnLock("save_note_review", func() error {
 		review.ID = 0 // Reset ID for retry safety with FirstOrCreate
 		// Use upsert operation to either create or update the review
