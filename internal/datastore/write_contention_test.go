@@ -305,7 +305,7 @@ func TestRetryExhaustion(t *testing.T) {
 	callCount := 0
 	lockErr := fmt.Errorf("database is locked")
 
-	err := RetryOnLock("test_exhaustion", func() error {
+	err := RetryOnLock(t.Context(), "test_exhaustion", func() error {
 		callCount++
 		return lockErr
 	}, nil)
@@ -325,7 +325,7 @@ func TestRetryExhaustion_NonTransientBailsImmediately(t *testing.T) {
 	callCount := 0
 	constraintErr := fmt.Errorf("UNIQUE constraint failed: daily_events.date")
 
-	err := RetryOnLock("test_non_transient", func() error {
+	err := RetryOnLock(t.Context(), "test_non_transient", func() error {
 		callCount++
 		return constraintErr
 	}, nil)
@@ -372,7 +372,7 @@ func TestRetryExhaustion_IntegrationWithRealDB(t *testing.T) {
 			Date:     "2024-05-02",
 			CityName: "Blocked",
 		}
-		done <- RetryOnLock("blocked_write", func() error {
+		done <- RetryOnLock(t.Context(), "blocked_write", func() error {
 			return ds.DB.Create(event).Error
 		}, nil)
 	}()

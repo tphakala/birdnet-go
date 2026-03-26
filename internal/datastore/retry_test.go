@@ -140,7 +140,7 @@ func TestRetryOnLock(t *testing.T) {
 			t.Parallel()
 
 			calls := 0
-			err := RetryOnLock("test_op", func() error {
+			err := RetryOnLock(t.Context(), "test_op", func() error {
 				calls++
 				return tc.fn(&calls)
 			}, nil)
@@ -220,7 +220,7 @@ func TestRetryOnLock_RecordsMetricsOnRetry(t *testing.T) {
 
 	reg, m := newTestMetrics(t)
 	calls := 0
-	err := RetryOnLock("test_metrics_retry", func() error {
+	err := RetryOnLock(t.Context(), "test_metrics_retry", func() error {
 		calls++
 		if calls < 3 {
 			return fmt.Errorf("database is locked")
@@ -239,7 +239,7 @@ func TestRetryOnLock_RecordsExhaustedMetric(t *testing.T) {
 	t.Parallel()
 
 	reg, m := newTestMetrics(t)
-	err := RetryOnLock("test_exhausted", func() error {
+	err := RetryOnLock(t.Context(), "test_exhausted", func() error {
 		return fmt.Errorf("database is locked")
 	}, m)
 
@@ -254,7 +254,7 @@ func TestRetryOnLock_NilMetricsDoesNotPanic(t *testing.T) {
 	t.Parallel()
 
 	calls := 0
-	err := RetryOnLock("nil_metrics", func() error {
+	err := RetryOnLock(t.Context(), "nil_metrics", func() error {
 		calls++
 		if calls < 2 {
 			return fmt.Errorf("database is locked")
@@ -272,7 +272,7 @@ func TestRetryTransactionOnLock_SucceedsImmediately(t *testing.T) {
 	db := openRetryTestDB(t)
 	calls := 0
 
-	err := RetryTransactionOnLock(db, "test_tx", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx", func(tx *gorm.DB) error {
 		calls++
 		return tx.Create(&DailyEvents{Date: "2024-01-01", CityName: "Test"}).Error
 	}, nil)
@@ -292,7 +292,7 @@ func TestRetryTransactionOnLock_RetriesTransientError(t *testing.T) {
 	db := openRetryTestDB(t)
 	calls := 0
 
-	err := RetryTransactionOnLock(db, "test_tx_retry", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx_retry", func(tx *gorm.DB) error {
 		calls++
 		if calls < 3 {
 			return fmt.Errorf("database is locked")
@@ -314,7 +314,7 @@ func TestRetryTransactionOnLock_DoesNotRetryNonTransient(t *testing.T) {
 	db := openRetryTestDB(t)
 	calls := 0
 
-	err := RetryTransactionOnLock(db, "test_tx_bail", func(_ *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx_bail", func(_ *gorm.DB) error {
 		calls++
 		return fmt.Errorf("UNIQUE constraint failed")
 	}, nil)
@@ -330,7 +330,7 @@ func TestRetryTransactionOnLock_ExhaustsRetries(t *testing.T) {
 	db := openRetryTestDB(t)
 	calls := 0
 
-	err := RetryTransactionOnLock(db, "test_tx_exhaust", func(_ *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx_exhaust", func(_ *gorm.DB) error {
 		calls++
 		return fmt.Errorf("database is locked")
 	}, nil)
@@ -347,7 +347,7 @@ func TestRetryTransactionOnLock_RollsBackOnError(t *testing.T) {
 
 	// The fn creates a row then returns a non-transient error.
 	// The row should NOT be persisted because the transaction is rolled back.
-	err := RetryTransactionOnLock(db, "test_rollback", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_rollback", func(tx *gorm.DB) error {
 		if createErr := tx.Create(&DailyEvents{Date: "2024-03-01", CityName: "Ghost"}).Error; createErr != nil {
 			return createErr
 		}
@@ -368,7 +368,7 @@ func TestRetryTransactionOnLock_WithMetrics(t *testing.T) {
 	reg, m := newTestMetrics(t)
 	calls := 0
 
-	err := RetryTransactionOnLock(db, "test_tx_metrics", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx_metrics", func(tx *gorm.DB) error {
 		calls++
 		if calls < 2 {
 			return fmt.Errorf("database is locked")
@@ -393,7 +393,7 @@ func TestRetryTransactionOnLock_ExhaustedWithMetrics(t *testing.T) {
 	db := openRetryTestDB(t)
 	reg, m := newTestMetrics(t)
 
-	err := RetryTransactionOnLock(db, "test_tx_exhaust_metrics", func(_ *gorm.DB) error {
+	err := RetryTransactionOnLock(t.Context(), db, "test_tx_exhaust_metrics", func(_ *gorm.DB) error {
 		return fmt.Errorf("database is locked")
 	}, m)
 

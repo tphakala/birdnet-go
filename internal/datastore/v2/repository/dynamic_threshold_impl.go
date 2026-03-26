@@ -66,7 +66,7 @@ func (r *dynamicThresholdRepository) SaveDynamicThreshold(ctx context.Context, t
 	if threshold.LabelID == 0 {
 		return errors.NewStd("dynamic threshold LabelID must be set before saving")
 	}
-	return datastore.RetryOnLock("v2_save_dynamic_threshold", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_dynamic_threshold", func() error {
 		return r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "label_id"}},
@@ -136,7 +136,7 @@ func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context,
 	}
 
 	var rowsAffected int64
-	err = datastore.RetryOnLock("v2_delete_dynamic_threshold", func() error {
+	err = datastore.RetryOnLock(ctx, "v2_delete_dynamic_threshold", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Where("label_id IN ?", labelIDs).
 			Delete(&entities.DynamicThreshold{})
@@ -158,7 +158,7 @@ func (r *dynamicThresholdRepository) DeleteDynamicThreshold(ctx context.Context,
 // DeleteExpiredDynamicThresholds deletes thresholds that have expired.
 func (r *dynamicThresholdRepository) DeleteExpiredDynamicThresholds(ctx context.Context, before time.Time) (int64, error) {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_expired_dynamic_thresholds", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_expired_dynamic_thresholds", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Where("expires_at < ?", before).
 			Delete(&entities.DynamicThreshold{})
@@ -187,7 +187,7 @@ func (r *dynamicThresholdRepository) UpdateDynamicThresholdExpiry(ctx context.Co
 	}
 
 	var rowsAffected int64
-	err = datastore.RetryOnLock("v2_update_dynamic_threshold_expiry", func() error {
+	err = datastore.RetryOnLock(ctx, "v2_update_dynamic_threshold_expiry", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Where("label_id IN ?", labelIDs).
 			Update("expires_at", expiresAt)
@@ -218,7 +218,7 @@ func (r *dynamicThresholdRepository) BatchSaveDynamicThresholds(ctx context.Cont
 			return errors.NewStd("all thresholds must have LabelID set before batch save")
 		}
 	}
-	return datastore.RetryOnLock("v2_batch_save_dynamic_thresholds", func() error {
+	return datastore.RetryOnLock(ctx, "v2_batch_save_dynamic_thresholds", func() error {
 		return r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "label_id"}},
@@ -231,7 +231,7 @@ func (r *dynamicThresholdRepository) BatchSaveDynamicThresholds(ctx context.Cont
 // DeleteAllDynamicThresholds deletes all thresholds.
 func (r *dynamicThresholdRepository) DeleteAllDynamicThresholds(ctx context.Context) (int64, error) {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_all_dynamic_thresholds", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_all_dynamic_thresholds", func() error {
 		result := r.db.WithContext(ctx).Table(r.thresholdTable()).
 			Where("1 = 1").
 			Delete(&entities.DynamicThreshold{})
@@ -292,7 +292,7 @@ func (r *dynamicThresholdRepository) SaveThresholdEvent(ctx context.Context, eve
 	if event.LabelID == 0 {
 		return errors.NewStd("threshold event LabelID must be set before saving")
 	}
-	return datastore.RetryOnLock("v2_save_threshold_event", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_threshold_event", func() error {
 		return r.db.WithContext(ctx).Table(r.eventTable()).Create(event).Error
 	}, r.metrics)
 }
@@ -352,7 +352,7 @@ func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, 
 		return nil // Nothing to delete
 	}
 
-	return datastore.RetryOnLock("v2_delete_threshold_events", func() error {
+	return datastore.RetryOnLock(ctx, "v2_delete_threshold_events", func() error {
 		return r.db.WithContext(ctx).Table(r.eventTable()).
 			Where("label_id IN ?", labelIDs).
 			Delete(&entities.ThresholdEvent{}).Error
@@ -362,7 +362,7 @@ func (r *dynamicThresholdRepository) DeleteThresholdEvents(ctx context.Context, 
 // DeleteAllThresholdEvents deletes all threshold events.
 func (r *dynamicThresholdRepository) DeleteAllThresholdEvents(ctx context.Context) (int64, error) {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_all_threshold_events", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_all_threshold_events", func() error {
 		result := r.db.WithContext(ctx).Table(r.eventTable()).
 			Where("1 = 1").
 			Delete(&entities.ThresholdEvent{})

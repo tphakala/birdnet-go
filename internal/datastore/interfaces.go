@@ -328,7 +328,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 
 	metricsInstance := ds.getMetrics()
 
-	err := RetryTransactionOnLock(ds.DB, "save_note", func(tx *gorm.DB) error {
+	err := RetryTransactionOnLock(context.Background(), ds.DB, "save_note", func(tx *gorm.DB) error {
 		// Reset auto-generated IDs before each attempt so that retries after
 		// a rolled-back transaction do not try to re-use a stale primary key.
 		note.ID = 0
@@ -458,7 +458,7 @@ func (ds *DataStore) Delete(id string) error {
 	}
 
 	// Perform the deletion within a retryable transaction
-	return RetryTransactionOnLock(ds.DB, "delete_note", func(tx *gorm.DB) error {
+	return RetryTransactionOnLock(context.Background(), ds.DB, "delete_note", func(tx *gorm.DB) error {
 		// Delete the full results entry associated with the note
 		if err := tx.Where("note_id = ?", noteID).Delete(&Results{}).Error; err != nil {
 			return dbError(err, "delete_results", errors.PriorityMedium,
@@ -513,7 +513,7 @@ func (ds *DataStore) DeleteNoteClipPath(noteID string) error {
 	}
 
 	// Update the clip_name field to an empty string for the specified note ID
-	return RetryOnLock("delete_note_clip_path", func() error {
+	return RetryOnLock(context.Background(), "delete_note_clip_path", func() error {
 		err := ds.DB.Model(&Note{}).Where("id = ?", noteID).Update("clip_name", "").Error
 		if err != nil {
 			return errors.New(err).
@@ -935,7 +935,7 @@ func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 	if dailyEvents == nil {
 		return validationError("daily events cannot be nil", "daily_events", nil)
 	}
-	return RetryOnLock("save_daily_events", func() error {
+	return RetryOnLock(context.Background(), "save_daily_events", func() error {
 		// Use upsert to handle the unique date constraint
 		result := ds.DB.Where("date = ?", dailyEvents.Date).
 			Assign(*dailyEvents).
@@ -1013,7 +1013,7 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 			Build()
 	}
 
-	return RetryOnLock("save_hourly_weather", func() error {
+	return RetryOnLock(context.Background(), "save_hourly_weather", func() error {
 		// Use upsert to avoid duplicates for the same timestamp.
 		// Compare using Unix epoch seconds to handle legacy records with local
 		// timezone offsets alongside new UTC records.
@@ -1229,7 +1229,7 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 	}
 
 	var rowsAffected int64
-	err := RetryOnLock("update_note", func() error {
+	err := RetryOnLock(context.Background(), "update_note", func() error {
 		result := ds.DB.Model(&Note{}).Where("id = ?", id).Updates(updates)
 		if result.Error != nil {
 			return result.Error
@@ -1297,7 +1297,7 @@ func (ds *DataStore) SaveNoteReview(review *NoteReview) error {
 		return validationError("review cannot be nil", "review", nil)
 	}
 
-	return RetryOnLock("save_note_review", func() error {
+	return RetryOnLock(context.Background(), "save_note_review", func() error {
 		review.ID = 0 // Reset ID for retry safety with FirstOrCreate
 		// Use upsert operation to either create or update the review
 		result := ds.DB.Where("note_id = ?", review.NoteID).
@@ -1524,7 +1524,7 @@ func (ds *DataStore) SaveNoteComment(comment *NoteComment) error {
 		return validationError("comment entry exceeds maximum length", "entry_length", len(comment.Entry))
 	}
 
-	return RetryOnLock("save_note_comment", func() error {
+	return RetryOnLock(context.Background(), "save_note_comment", func() error {
 		if err := ds.DB.Create(comment).Error; err != nil {
 			return dbError(err, "save_note_comment", errors.PriorityMedium,
 				"note_id", fmt.Sprintf("%d", comment.NoteID),
@@ -1547,7 +1547,7 @@ func (ds *DataStore) DeleteNoteComment(commentID string) error {
 			Build()
 	}
 
-	return RetryOnLock("delete_note_comment", func() error {
+	return RetryOnLock(context.Background(), "delete_note_comment", func() error {
 		if err := ds.DB.Delete(&NoteComment{}, id).Error; err != nil {
 			return errors.New(err).
 				Component("datastore").
@@ -1573,7 +1573,7 @@ func (ds *DataStore) UpdateNoteComment(commentID, entry string) error {
 	}
 
 	var rowsAffected int64
-	err = RetryOnLock("update_note_comment", func() error {
+	err = RetryOnLock(context.Background(), "update_note_comment", func() error {
 		result := ds.DB.Model(&NoteComment{}).Where("id = ?", id).Updates(map[string]any{
 			"entry":      entry,
 			"updated_at": time.Now(),
@@ -1718,7 +1718,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			Build()
 	}
 
-	err = RetryOnLock("lock_note", func() error {
+	err = RetryOnLock(context.Background(), "lock_note", func() error {
 		lock := &NoteLock{
 			NoteID:   uint(id),
 			LockedAt: time.Now(),
@@ -1749,7 +1749,7 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		return validationError("invalid note ID format for unlock", "note_id", noteID)
 	}
 
-	err = RetryOnLock("unlock_note", func() error {
+	err = RetryOnLock(context.Background(), "unlock_note", func() error {
 		// Check if the lock exists before attempting to delete.
 		exists, checkErr := ds.IsNoteLocked(noteID)
 		if checkErr != nil {
@@ -1815,7 +1815,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 		return err
 	}
 
-	err := RetryOnLock("save_image_cache", func() error {
+	err := RetryOnLock(context.Background(), "save_image_cache", func() error {
 		// Use Clauses(clause.OnConflict...) to perform an UPSERT operation
 		// Update all columns except primary key on conflict
 		if err := ds.DB.Clauses(clause.OnConflict{

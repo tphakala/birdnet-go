@@ -90,7 +90,7 @@ func (r *imageCacheRepository) SaveImageCache(ctx context.Context, cache *entiti
 	if cache.LabelID == 0 {
 		return errors.NewStd("image cache LabelID must be set before saving")
 	}
-	return datastore.RetryOnLock("v2_save_image_cache", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_image_cache", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "provider_name"}, {Name: "label_id"}},

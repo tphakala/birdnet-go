@@ -71,7 +71,7 @@ func (r *labelRepository) GetOrCreate(ctx context.Context, scientificName string
 		TaxonomicClassID: taxonomicClassID,
 	}
 
-	createErr := datastore.RetryOnLock("v2_create_label", func() error {
+	createErr := datastore.RetryOnLock(ctx, "v2_create_label", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&label).Error
 	}, r.metrics)
 	if createErr != nil {
@@ -223,7 +223,7 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 		}
 	}
 
-	if err := datastore.RetryOnLock("v2_batch_create_labels", func() error {
+	if err := datastore.RetryOnLock(ctx, "v2_batch_create_labels", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).
 			Clauses(clause.OnConflict{DoNothing: true}).
 			CreateInBatches(newLabels, batchQuerySize).Error
@@ -304,7 +304,7 @@ func (r *labelRepository) GetAll(ctx context.Context) ([]*entities.Label, error)
 // Delete removes a label by ID.
 func (r *labelRepository) Delete(ctx context.Context, id uint) error {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_label", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_label", func() error {
 		result := r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.Label{}, id)
 		if result.Error != nil {
 			return result.Error
@@ -450,7 +450,7 @@ func (r *labelTypeRepository) GetOrCreate(ctx context.Context, name string) (*en
 	}
 
 	lt = entities.LabelType{Name: name}
-	if createErr := datastore.RetryOnLock("v2_create_label_type", func() error {
+	if createErr := datastore.RetryOnLock(ctx, "v2_create_label_type", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&lt).Error
 	}, r.metrics); createErr != nil {
 		// Race condition - try to fetch again
@@ -533,7 +533,7 @@ func (r *taxonomicClassRepository) GetOrCreate(ctx context.Context, name string)
 	}
 
 	tc = entities.TaxonomicClass{Name: name}
-	if createErr := datastore.RetryOnLock("v2_create_taxonomic_class", func() error {
+	if createErr := datastore.RetryOnLock(ctx, "v2_create_taxonomic_class", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&tc).Error
 	}, r.metrics); createErr != nil {
 		// Race condition - try to fetch again

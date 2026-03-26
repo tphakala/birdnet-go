@@ -50,7 +50,7 @@ func (r *weatherRepository) hourlyWeatherTable() string {
 
 // SaveDailyEvents saves or updates daily events (upsert).
 func (r *weatherRepository) SaveDailyEvents(ctx context.Context, events *entities.DailyEvents) error {
-	return datastore.RetryOnLock("v2_save_daily_events", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_daily_events", func() error {
 		return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "date"}},
@@ -77,7 +77,7 @@ func (r *weatherRepository) GetDailyEvents(ctx context.Context, date string) (*e
 
 // SaveHourlyWeather saves hourly weather data.
 func (r *weatherRepository) SaveHourlyWeather(ctx context.Context, weather *entities.HourlyWeather) error {
-	return datastore.RetryOnLock("v2_save_hourly_weather", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_hourly_weather", func() error {
 		return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).Create(weather).Error
 	}, r.metrics)
 }
@@ -170,7 +170,7 @@ func (r *weatherRepository) SaveAllDailyEvents(ctx context.Context, events []ent
 		end := min(i+batchSize, len(events))
 		batch := events[i:end]
 
-		err := datastore.RetryOnLock("v2_save_all_daily_events", func() error {
+		err := datastore.RetryOnLock(ctx, "v2_save_all_daily_events", func() error {
 			return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
 				Clauses(clause.OnConflict{
 					Columns:   []clause.Column{{Name: "date"}},
@@ -202,7 +202,7 @@ func (r *weatherRepository) SaveAllHourlyWeather(ctx context.Context, weather []
 		end := min(i+batchSize, len(weather))
 		batch := weather[i:end]
 
-		err := datastore.RetryOnLock("v2_save_all_hourly_weather", func() error {
+		err := datastore.RetryOnLock(ctx, "v2_save_all_hourly_weather", func() error {
 			return r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
 				Create(&batch).Error
 		}, r.metrics)

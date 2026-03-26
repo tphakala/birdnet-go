@@ -69,7 +69,7 @@ func (r *audioSourceRepository) GetOrCreate(ctx context.Context, sourceURI, node
 		SourceType:  sourceType,
 	}
 
-	createErr := datastore.RetryOnLock("v2_create_audio_source", func() error {
+	createErr := datastore.RetryOnLock(ctx, "v2_create_audio_source", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).Create(&source).Error
 	}, r.metrics)
 	if createErr != nil {
@@ -190,7 +190,7 @@ func (r *audioSourceRepository) Count(ctx context.Context) (int64, error) {
 // Delete removes an audio source by ID.
 func (r *audioSourceRepository) Delete(ctx context.Context, id uint) error {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_audio_source", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_audio_source", func() error {
 		result := r.db.WithContext(ctx).Table(r.tableName()).Delete(&entities.AudioSource{}, id)
 		if result.Error != nil {
 			return result.Error
@@ -210,7 +210,7 @@ func (r *audioSourceRepository) Delete(ctx context.Context, id uint) error {
 // Update modifies an audio source's fields.
 func (r *audioSourceRepository) Update(ctx context.Context, id uint, updates map[string]any) error {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_update_audio_source", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_update_audio_source", func() error {
 		result := r.db.WithContext(ctx).Table(r.tableName()).
 			Where("id = ?", id).
 			Updates(updates)

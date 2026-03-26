@@ -10,6 +10,7 @@
 package datastore
 
 import (
+	"context"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -38,7 +39,7 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 
 	// Upsert: Use GORM's OnConflict clause for efficient upsert
 	// This handles the composite unique index on (scientific_name, notification_type)
-	return RetryOnLock("save_notification_history", func() error {
+	return RetryOnLock(context.Background(), "save_notification_history", func() error {
 		result := ds.DB.Clauses(clause.OnConflict{
 			Columns: []clause.Column{
 				{Name: "scientific_name"},
@@ -117,7 +118,7 @@ func (ds *DataStore) GetActiveNotificationHistory(after time.Time) ([]Notificati
 // This is typically called periodically by a cleanup job
 func (ds *DataStore) DeleteExpiredNotificationHistory(before time.Time) (int64, error) {
 	var rowsAffected int64
-	err := RetryOnLock("delete_expired_notification_history", func() error {
+	err := RetryOnLock(context.Background(), "delete_expired_notification_history", func() error {
 		result := ds.DB.Where("expires_at < ?", before).Delete(&NotificationHistory{})
 		if result.Error != nil {
 			return result.Error

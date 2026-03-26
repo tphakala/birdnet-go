@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -42,9 +43,16 @@ func IsTransientDBError(err error) bool {
 // retryBackoff computes a jittered exponential backoff delay, logs a warning,
 // records the retry metric, and sleeps. It is called by RetryOnLock and
 // RetryTransactionOnLock when a real retry is about to happen.
-func retryBackoff(attempt int, operation string, lastErr error, m *Metrics) {
+//
+// Returns ctx.Err() if the context is cancelled during the backoff sleep,
+// or nil if the sleep completed normally.
+func retryBackoff(ctx context.Context, attempt int, operation string, lastErr error, m *Metrics) error {
 	if m != nil {
-		m.RecordTransactionRetry(operation, "database_locked")
+		reason := "database_locked"
+		if isDeadlock(lastErr) {
+			reason = "deadlock"
+		}
+		m.RecordTransactionRetry(operation, reason)
 	}
 	backoff := retryBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by retryMaxAttempts
 	// Add 0-25% jitter to avoid thundering herd when multiple writers contend.
@@ -56,7 +64,14 @@ func retryBackoff(attempt int, operation string, lastErr error, m *Metrics) {
 		logger.Int("max_attempts", retryMaxAttempts),
 		logger.Int64("backoff_ms", delay.Milliseconds()),
 		logger.Error(lastErr))
-	time.Sleep(delay)
+
+	// Context-aware sleep: return early if the caller's context is cancelled.
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(delay):
+	}
+	return nil
 }
 
 // recordRetryExhaustion records metrics when all retry attempts have been
@@ -75,8 +90,11 @@ func recordRetryExhaustion(m *Metrics, operation string, start time.Time) {
 // backoff between retries. Returns the first non-transient error or the
 // last error after all retries are exhausted.
 //
+// The ctx parameter enables cancellation-aware backoff: if the context is
+// cancelled during a backoff sleep, the retry loop exits early with ctx.Err().
+//
 // If metrics is non-nil, each retry attempt and exhaustion are recorded.
-func RetryOnLock(operation string, fn func() error, metrics *Metrics) error {
+func RetryOnLock(ctx context.Context, operation string, fn func() error, metrics *Metrics) error {
 	start := time.Now()
 	var err error
 	for attempt := range retryMaxAttempts {
@@ -96,7 +114,9 @@ func RetryOnLock(operation string, fn func() error, metrics *Metrics) error {
 
 		// Only record the retry metric and sleep when there will be a real retry.
 		if attempt < retryMaxAttempts-1 {
-			retryBackoff(attempt, operation, err, metrics)
+			if backoffErr := retryBackoff(ctx, attempt, operation, err, metrics); backoffErr != nil {
+				return backoffErr // context cancelled during backoff
+			}
 		}
 	}
 
@@ -113,14 +133,18 @@ func RetryOnLock(operation string, fn func() error, metrics *Metrics) error {
 // execute its queries on it. It must NOT call Commit or Rollback -- that is
 // handled by this helper.
 //
+// The ctx parameter enables cancellation-aware backoff and is propagated to
+// db.WithContext(ctx).Begin() so that each transaction attempt respects the
+// caller's deadline.
+//
 // If metrics is non-nil, retry attempts, exhaustion, and lock wait duration
 // are recorded.
-func RetryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) error, metrics *Metrics) error {
+func RetryTransactionOnLock(ctx context.Context, db *gorm.DB, operation string, fn func(tx *gorm.DB) error, metrics *Metrics) error {
 	start := time.Now()
 	var lastErr error
 
 	for attempt := range retryMaxAttempts {
-		tx := db.Begin()
+		tx := db.WithContext(ctx).Begin()
 		if tx.Error != nil {
 			lastErr = tx.Error
 			if !IsTransientDBError(tx.Error) {
@@ -168,7 +192,9 @@ func RetryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) 
 
 		// Only record the retry metric and sleep when there will be a real retry.
 		if attempt < retryMaxAttempts-1 {
-			retryBackoff(attempt, operation, lastErr, metrics)
+			if backoffErr := retryBackoff(ctx, attempt, operation, lastErr, metrics); backoffErr != nil {
+				return backoffErr // context cancelled during backoff
+			}
 		}
 	}
 

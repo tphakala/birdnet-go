@@ -2,6 +2,7 @@
 package datastore
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -26,7 +27,7 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 	threshold.UpdatedAt = now
 
 	// Upsert: set FirstCreated only on INSERT; always update other fields
-	return RetryOnLock("save_dynamic_threshold", func() error {
+	return RetryOnLock(context.Background(), "save_dynamic_threshold", func() error {
 		threshold.ID = 0 // Reset ID for retry safety with FirstOrCreate
 		result := ds.DB.Where("species_name = ?", threshold.SpeciesName).
 			Attrs(DynamicThreshold{
@@ -102,7 +103,7 @@ func (ds *DataStore) DeleteDynamicThreshold(speciesName string) error {
 		return validationError("species name cannot be empty", "species_name", "")
 	}
 
-	return RetryOnLock("delete_dynamic_threshold", func() error {
+	return RetryOnLock(context.Background(), "delete_dynamic_threshold", func() error {
 		result := ds.DB.Where("species_name = ?", speciesName).Delete(&DynamicThreshold{})
 		if result.Error != nil {
 			return dbError(result.Error, "delete_dynamic_threshold", errors.PriorityMedium,
@@ -118,7 +119,7 @@ func (ds *DataStore) DeleteDynamicThreshold(speciesName string) error {
 // This is typically called periodically by a cleanup job
 func (ds *DataStore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
 	var rowsAffected int64
-	err := RetryOnLock("delete_expired_dynamic_thresholds", func() error {
+	err := RetryOnLock(context.Background(), "delete_expired_dynamic_thresholds", func() error {
 		result := ds.DB.Where("expires_at < ?", before).Delete(&DynamicThreshold{})
 		if result.Error != nil {
 			return result.Error
@@ -150,7 +151,7 @@ func (ds *DataStore) UpdateDynamicThresholdExpiry(speciesName string, expiresAt 
 	}
 
 	var rowsAffected int64
-	err := RetryOnLock("update_dynamic_threshold_expiry", func() error {
+	err := RetryOnLock(context.Background(), "update_dynamic_threshold_expiry", func() error {
 		result := ds.DB.Model(&DynamicThreshold{}).
 			Where("species_name = ?", speciesName).
 			Updates(map[string]any{
@@ -244,7 +245,7 @@ func (ds *DataStore) GetDynamicThresholdStats() (totalCount, activeCount, atMini
 // BG-59: Used for "Reset All" functionality
 func (ds *DataStore) DeleteAllDynamicThresholds() (int64, error) {
 	var rowsAffected int64
-	err := RetryOnLock("delete_all_dynamic_thresholds", func() error {
+	err := RetryOnLock(context.Background(), "delete_all_dynamic_thresholds", func() error {
 		result := ds.DB.Where("1 = 1").Delete(&DynamicThreshold{})
 		if result.Error != nil {
 			return result.Error
@@ -281,7 +282,7 @@ func (ds *DataStore) SaveThresholdEvent(event *ThresholdEvent) error {
 		event.CreatedAt = time.Now()
 	}
 
-	return RetryOnLock("save_threshold_event", func() error {
+	return RetryOnLock(context.Background(), "save_threshold_event", func() error {
 		if err := ds.DB.Create(event).Error; err != nil {
 			return dbError(err, "save_threshold_event", errors.PriorityMedium,
 				"species", event.SpeciesName,
@@ -343,7 +344,7 @@ func (ds *DataStore) DeleteThresholdEvents(speciesName string) error {
 		return validationError("species name cannot be empty", "species_name", "")
 	}
 
-	return RetryOnLock("delete_threshold_events", func() error {
+	return RetryOnLock(context.Background(), "delete_threshold_events", func() error {
 		result := ds.DB.Where("species_name = ?", speciesName).Delete(&ThresholdEvent{})
 		if result.Error != nil {
 			return dbError(result.Error, "delete_threshold_events", errors.PriorityMedium,
@@ -359,7 +360,7 @@ func (ds *DataStore) DeleteThresholdEvents(speciesName string) error {
 // BG-59: Used for "Reset All" functionality
 func (ds *DataStore) DeleteAllThresholdEvents() (int64, error) {
 	var rowsAffected int64
-	err := RetryOnLock("delete_all_threshold_events", func() error {
+	err := RetryOnLock(context.Background(), "delete_all_threshold_events", func() error {
 		result := ds.DB.Where("1 = 1").Delete(&ThresholdEvent{})
 		if result.Error != nil {
 			return result.Error
@@ -396,7 +397,7 @@ func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) e
 		}
 	}
 
-	return RetryTransactionOnLock(ds.DB, "batch_save_dynamic_thresholds", func(tx *gorm.DB) error {
+	return RetryTransactionOnLock(context.Background(), ds.DB, "batch_save_dynamic_thresholds", func(tx *gorm.DB) error {
 		now := time.Now()
 
 		// Prepare batch data - set FirstCreated for all entries

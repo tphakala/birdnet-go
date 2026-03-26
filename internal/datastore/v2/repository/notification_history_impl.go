@@ -59,7 +59,7 @@ func (r *notificationHistoryRepository) SaveNotificationHistory(ctx context.Cont
 	if history.LabelID == 0 {
 		return errors.NewStd("notification history LabelID must be set before saving")
 	}
-	return datastore.RetryOnLock("v2_save_notification_history", func() error {
+	return datastore.RetryOnLock(ctx, "v2_save_notification_history", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "label_id"}, {Name: "notification_type"}},
@@ -113,7 +113,7 @@ func (r *notificationHistoryRepository) GetActiveNotificationHistory(ctx context
 // DeleteExpiredNotificationHistory deletes expired entries.
 func (r *notificationHistoryRepository) DeleteExpiredNotificationHistory(ctx context.Context, before time.Time) (int64, error) {
 	var rowsAffected int64
-	err := datastore.RetryOnLock("v2_delete_expired_notification_history", func() error {
+	err := datastore.RetryOnLock(ctx, "v2_delete_expired_notification_history", func() error {
 		result := r.db.WithContext(ctx).Table(r.tableName()).
 			Where("expires_at < ?", before).
 			Delete(&entities.NotificationHistory{})

@@ -64,7 +64,7 @@ func (r *appMetadataRepository) Set(ctx context.Context, key, value string) erro
 		Key:   key,
 		Value: value,
 	}
-	return datastore.RetryOnLock("v2_set_app_metadata", func() error {
+	return datastore.RetryOnLock(ctx, "v2_set_app_metadata", func() error {
 		if err := r.db.WithContext(ctx).Table(r.tableName()).
 			Clauses(clause.OnConflict{
 				Columns:   []clause.Column{{Name: "key"}},
