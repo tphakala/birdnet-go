@@ -65,9 +65,10 @@ type DatastoreMetrics struct {
 	dbIndexSizeBytesGauge *prometheus.GaugeVec
 
 	// Lock contention metrics
-	lockContentionTotal   *prometheus.CounterVec
-	lockWaitTimeHistogram *prometheus.HistogramVec
-	activeLockCountGauge  prometheus.Gauge
+	lockContentionTotal       *prometheus.CounterVec
+	lockWaitTimeHistogram     *prometheus.HistogramVec
+	activeLockCountGauge      prometheus.Gauge
+	lockRetriesExhaustedTotal *prometheus.CounterVec
 
 	// Backup and maintenance metrics
 	backupOperationsTotal      *prometheus.CounterVec
@@ -374,6 +375,14 @@ func (m *DatastoreMetrics) initMetrics() error {
 		Help: "Current number of active locks",
 	})
 
+	m.lockRetriesExhaustedTotal = prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "datastore_lock_retries_exhausted_total",
+			Help: "Total number of operations that exhausted all lock retries, indicating potential data loss",
+		},
+		[]string{"operation"},
+	)
+
 	// Backup and maintenance metrics
 	m.backupOperationsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -438,6 +447,7 @@ func (m *DatastoreMetrics) initMetrics() error {
 		m.lockContentionTotal,
 		m.lockWaitTimeHistogram,
 		m.activeLockCountGauge,
+		m.lockRetriesExhaustedTotal,
 		m.backupOperationsTotal,
 		m.backupDuration,
 		m.maintenanceOperationsTotal,
@@ -648,6 +658,12 @@ func (m *DatastoreMetrics) RecordLockWaitTime(lockType string, waitTime float64)
 // UpdateActiveLockCount updates the number of active locks
 func (m *DatastoreMetrics) UpdateActiveLockCount(count int) {
 	m.activeLockCountGauge.Set(float64(count))
+}
+
+// RecordLockRetriesExhausted records when an operation exhausts all lock retries.
+// This is a critical metric indicating potential data loss.
+func (m *DatastoreMetrics) RecordLockRetriesExhausted(operation string) {
+	m.lockRetriesExhaustedTotal.WithLabelValues(operation).Inc()
 }
 
 // Backup and maintenance methods

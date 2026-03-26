@@ -1,21 +1,22 @@
 package datastore
 
 import (
+	"fmt"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"gorm.io/gorm"
 )
 
 const (
 	// retryMaxAttempts is the number of times to retry a write operation
 	// that fails with a transient database lock or deadlock error.
-	// Matches the retry budget used by the Save() method.
 	retryMaxAttempts = 5
 
 	// retryBaseDelay is the initial backoff delay between retries.
 	// Subsequent retries double the delay (exponential backoff).
-	// Matches the retry budget used by the Save() method.
 	retryBaseDelay = 500 * time.Millisecond
 )
 
@@ -33,11 +34,18 @@ func isTransientDBError(err error) bool {
 // error is a transient database lock or deadlock error. Uses exponential
 // backoff between retries. Returns the first non-transient error or the
 // last error after all retries are exhausted.
-func retryOnLock(operation string, fn func() error) error {
+//
+// If metrics is non-nil, each retry attempt and exhaustion are recorded.
+func retryOnLock(operation string, fn func() error, metrics *Metrics) error {
+	start := time.Now()
 	var err error
 	for attempt := range retryMaxAttempts {
 		err = fn()
 		if err == nil {
+			if attempt > 0 && metrics != nil {
+				metrics.RecordLockWaitTime("database", time.Since(start).Seconds())
+				metrics.RecordLockContention("database", "retry_succeeded")
+			}
 			return nil
 		}
 
@@ -46,7 +54,103 @@ func retryOnLock(operation string, fn func() error) error {
 			return err
 		}
 
+		// Record each retry attempt in metrics.
+		if metrics != nil {
+			metrics.RecordTransactionRetry(operation, "database_locked")
+		}
+
 		// Don't sleep after the last attempt
+		if attempt < retryMaxAttempts-1 {
+			backoff := retryBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by retryMaxAttempts
+			// Add 0-25% jitter to avoid thundering herd when multiple writers contend.
+			jitter := time.Duration(rand.Float64() * 0.25 * float64(backoff)) //nolint:gosec // G404: math/rand is fine for jitter
+			delay := backoff + jitter
+			GetLogger().Warn("retrying after database lock error",
+				logger.String("operation", operation),
+				logger.Int("attempt", attempt+1),
+				logger.Int("max_attempts", retryMaxAttempts),
+				logger.Int64("backoff_ms", delay.Milliseconds()),
+				logger.Error(err))
+			time.Sleep(delay)
+		}
+	}
+
+	// All retries exhausted — record the critical exhaustion metric.
+	if metrics != nil {
+		metrics.RecordLockRetriesExhausted(operation)
+		metrics.RecordLockWaitTime("database", time.Since(start).Seconds())
+		metrics.RecordLockContention("database", "max_retries_exhausted")
+	}
+	return err
+}
+
+// retryTransactionOnLock wraps a transaction lifecycle (Begin/fn/Commit) inside
+// the standard retry loop. Each retry starts a fresh transaction so that a
+// failed attempt's rolled-back state does not leak into the next try.
+//
+// The caller-supplied fn receives the open *gorm.DB transaction and should
+// execute its queries on it. It must NOT call Commit or Rollback — that is
+// handled by this helper.
+//
+// If metrics is non-nil, retry attempts, exhaustion, and lock wait duration
+// are recorded.
+func retryTransactionOnLock(db *gorm.DB, operation string, fn func(tx *gorm.DB) error, metrics *Metrics) error {
+	start := time.Now()
+	var lastErr error
+
+	for attempt := range retryMaxAttempts {
+		tx := db.Begin()
+		if tx.Error != nil {
+			lastErr = tx.Error
+			if !isTransientDBError(tx.Error) {
+				return tx.Error
+			}
+			// Begin itself hit a lock error; fall through to retry logic.
+		} else {
+			// Execute the caller's work inside the transaction with panic recovery.
+			fnErr := func() (retErr error) {
+				defer func() {
+					if r := recover(); r != nil {
+						tx.Rollback()
+						retErr = fmt.Errorf("panic in transaction: %v", r)
+					}
+				}()
+				return fn(tx)
+			}()
+
+			if fnErr != nil {
+				tx.Rollback()
+				lastErr = fnErr
+				if !isTransientDBError(fnErr) {
+					return fnErr
+				}
+				// Transient error; fall through to retry logic.
+			} else {
+				// Commit the transaction.
+				if err := tx.Commit().Error; err != nil {
+					tx.Rollback() // Defensive rollback after failed commit.
+					lastErr = err
+					if !isTransientDBError(err) {
+						return err
+					}
+					// Commit hit a lock error; fall through to retry logic.
+				} else {
+					// Success.
+					if attempt > 0 && metrics != nil {
+						metrics.RecordLockWaitTime("database", time.Since(start).Seconds())
+						metrics.RecordLockContention("database", "retry_succeeded")
+					}
+					return nil
+				}
+			}
+		}
+
+		// Record each retry attempt in metrics.
+		if metrics != nil {
+			metrics.RecordTransactionRetry(operation, "database_locked")
+		}
+
+		// Don't sleep after the last attempt.
 		if attempt < retryMaxAttempts-1 {
 			backoff := retryBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt bounded by retryMaxAttempts
 			GetLogger().Warn("retrying after database lock error",
@@ -54,11 +158,18 @@ func retryOnLock(operation string, fn func() error) error {
 				logger.Int("attempt", attempt+1),
 				logger.Int("max_attempts", retryMaxAttempts),
 				logger.Int64("backoff_ms", backoff.Milliseconds()),
-				logger.Error(err))
+				logger.Error(lastErr))
 			time.Sleep(backoff)
 		}
 	}
-	return err
+
+	// All retries exhausted — record the critical exhaustion metric.
+	if metrics != nil {
+		metrics.RecordLockRetriesExhausted(operation)
+		metrics.RecordLockWaitTime("database", time.Since(start).Seconds())
+		metrics.RecordLockContention("database", "max_retries_exhausted")
+	}
+	return lastErr
 }
 
 // buildSQLiteDSN constructs a SQLite DSN string with pragma query parameters.

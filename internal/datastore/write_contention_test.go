@@ -308,7 +308,7 @@ func TestRetryExhaustion(t *testing.T) {
 	err := retryOnLock("test_exhaustion", func() error {
 		callCount++
 		return lockErr
-	})
+	}, nil)
 
 	require.Error(t, err, "retryOnLock should return an error after exhausting retries")
 	assert.Contains(t, err.Error(), "database is locked",
@@ -328,7 +328,7 @@ func TestRetryExhaustion_NonTransientBailsImmediately(t *testing.T) {
 	err := retryOnLock("test_non_transient", func() error {
 		callCount++
 		return constraintErr
-	})
+	}, nil)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "UNIQUE constraint failed")
@@ -374,7 +374,7 @@ func TestRetryExhaustion_IntegrationWithRealDB(t *testing.T) {
 		}
 		done <- retryOnLock("blocked_write", func() error {
 			return ds.DB.Create(event).Error
-		})
+		}, nil)
 	}()
 
 	// Wait for retries to exhaust (with busy_timeout=0, each attempt fails

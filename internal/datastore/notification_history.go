@@ -60,7 +60,7 @@ func (ds *DataStore) SaveNotificationHistory(history *NotificationHistory) error
 		}
 
 		return nil
-	})
+	}, ds.getMetrics())
 }
 
 // GetNotificationHistory retrieves a notification history record for a specific species and type

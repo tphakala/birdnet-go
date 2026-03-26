@@ -259,7 +259,7 @@ func (ds *DataStore) SaveThresholdEvent(event *ThresholdEvent) error {
 		}
 
 		return nil
-	})
+	}, ds.getMetrics())
 }
 
 // GetThresholdEvents retrieves threshold events for a specific species

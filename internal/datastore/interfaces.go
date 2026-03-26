@@ -15,7 +15,6 @@ package datastore
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"strconv"
 	"strings"
 	"sync"
@@ -313,7 +312,6 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 
 // Save stores a note and its associated results as a single transaction in the database.
 func (ds *DataStore) Save(note *Note, results []Results) error {
-	// Generate a unique transaction ID (first 8 chars of UUID)
 	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
 	txStart := time.Now()
 	txLogger := GetLogger()
@@ -324,50 +322,80 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 		logger.String("note_scientific_name", note.ScientificName),
 		logger.Int("results_count", len(results)))
 
-	// Retry configuration
-	maxRetries := 5
-	baseDelay := 500 * time.Millisecond
+	metricsInstance := ds.getMetrics()
 
-	var lastErr error
-	for attempt := range maxRetries {
-		// Begin a transaction
-		tx := ds.DB.Begin()
-		if tx.Error != nil {
-			lastErr = dbError(tx.Error, "begin_transaction", errors.PriorityHigh,
-				"tx_id", txID,
-				"attempt", fmt.Sprintf("%d", attempt+1),
-				"action", "save_detection",
-				"table", "notes")
-
-			txLogger.Error("Failed to begin transaction",
-				logger.String("tx_id", txID),
-				logger.String("operation", "save_note"),
-				logger.Error(lastErr),
-				logger.Int("attempt", attempt+1))
-
-			continue
+	err := retryTransactionOnLock(ds.DB, "save_note", func(tx *gorm.DB) error {
+		// Reset auto-generated IDs before each attempt so that retries after
+		// a rolled-back transaction do not try to re-use a stale primary key.
+		note.ID = 0
+		for i := range results {
+			results[i].ID = 0
+			results[i].NoteID = 0
 		}
 
-		// Execute transaction with rollback on error
-		transactionErr := ds.executeTransaction(tx, note, results, txID, attempt+1, txLogger)
-
-		if transactionErr != nil {
-			lastErr = transactionErr
-			if isDatabaseLocked(transactionErr) {
-				ds.handleDatabaseLockError(attempt, maxRetries, baseDelay, txLogger)
-				continue
+		// Omit Results to prevent GORM auto-save of associations.
+		// Results are saved separately below for explicit error handling.
+		if err := tx.Omit("Results").Create(note).Error; err != nil {
+			if metricsInstance != nil {
+				metricsInstance.RecordNoteOperation("save", "error")
+				metricsInstance.RecordDbOperationError("create", "notes", categorizeError(err))
 			}
-			// Non-retryable error
-			return transactionErr
+			return err
+		}
+		if metricsInstance != nil {
+			metricsInstance.RecordNoteOperation("save", "success")
 		}
 
-		// Success - record metrics
-		ds.recordTransactionSuccess(txStart, attempt+1, len(results), txLogger)
+		// Save the results, linking them to the note
+		for i := range results {
+			results[i].NoteID = note.ID
+			if err := tx.Create(&results[i]).Error; err != nil {
+				if metricsInstance != nil {
+					metricsInstance.RecordDbOperationError("create", "results", categorizeError(err))
+				}
+				return err
+			}
+		}
 		return nil
+	}, metricsInstance)
+
+	if err != nil {
+		txLogger.Error("Transaction failed",
+			logger.String("tx_id", txID),
+			logger.Error(err),
+			logger.Duration("total_duration", time.Since(txStart)))
+
+		if metricsInstance != nil {
+			// Only record retry-exhaustion metrics when retries were actually exhausted
+			// (transient error after all attempts), not for immediate non-retryable failures.
+			if isTransientDBError(err) {
+				metricsInstance.RecordTransaction("timeout")
+				metricsInstance.RecordTransactionError("save_note", "max_retries_exhausted")
+			} else {
+				metricsInstance.RecordTransaction("rollback")
+				metricsInstance.RecordTransactionError("save_note", categorizeError(err))
+			}
+		}
+
+		return stateError(err, "save_transaction", "transaction_retry_exhausted",
+			"tx_id", txID,
+			"action", "save_detection_data",
+			"total_duration_ms", time.Since(txStart).Milliseconds())
 	}
 
-	// All retries exhausted
-	return ds.handleMaxRetriesExhausted(lastErr, txID, txStart, txLogger)
+	// Success — record metrics.
+	duration := time.Since(txStart)
+	txLogger.Info("Transaction completed",
+		logger.String("tx_id", txID),
+		logger.Duration("duration", duration),
+		logger.Int("rows_affected", 1+len(results)))
+
+	if metricsInstance != nil {
+		metricsInstance.RecordTransaction("committed")
+		metricsInstance.RecordTransactionDuration("save_note", duration.Seconds())
+	}
+
+	return nil
 }
 
 // Get retrieves a note by its ID from the database.
@@ -918,7 +946,7 @@ func (ds *DataStore) SaveDailyEvents(dailyEvents *DailyEvents) error {
 		}
 
 		return nil
-	})
+	}, ds.getMetrics())
 }
 
 // GetDailyEvents retrieves daily events data by date from the database.
@@ -1005,7 +1033,7 @@ func (ds *DataStore) SaveHourlyWeather(hourlyWeather *HourlyWeather) error {
 		}
 
 		return nil
-	})
+	}, ds.getMetrics())
 }
 
 // GetHourlyWeather retrieves hourly weather data by date from the database.
@@ -1656,16 +1684,7 @@ func (ds *DataStore) LockNote(noteID string) error {
 			Build()
 	}
 
-	// Generate a unique transaction ID (first 8 chars of UUID)
-	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
-
-	// Retry configuration
-	maxRetries := 5
-	baseDelay := 500 * time.Millisecond
-
-	var lastErr error
-	for attempt := range maxRetries {
-		// Use upsert operation to either create or update the lock
+	err = retryOnLock("lock_note", func() error {
 		lock := &NoteLock{
 			NoteID:   uint(id),
 			LockedAt: time.Now(),
@@ -1674,42 +1693,19 @@ func (ds *DataStore) LockNote(noteID string) error {
 		result := ds.DB.Where("note_id = ?", id).
 			Assign(*lock).
 			FirstOrCreate(lock)
-
 		if result.Error != nil {
-			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
-				// Calculate exponential backoff with jitter
-				baseBackoff := baseDelay * time.Duration(attempt+1)
-				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
-				delay := baseBackoff + jitter
-				GetLogger().Debug("Database locked, retrying",
-					logger.String("tx_id", txID),
-					logger.Duration("delay", delay),
-					logger.Int("attempt", attempt+1),
-					logger.Int("max_retries", maxRetries),
-					logger.Duration("jitter", jitter))
-				time.Sleep(delay)
-				lastErr = result.Error
-				continue
-			}
-			return stateError(result.Error, "lock_note", "note_lock_acquisition",
-				"note_id", noteID,
-				"action", "acquire_edit_lock")
-		}
-
-		// If we get here, the transaction was successful
-		if attempt > 0 {
-			GetLogger().Info("Database transaction successful after retries",
-				logger.String("tx_id", txID),
-				logger.Int("attempts", attempt+1))
+			// Let retryOnLock decide whether this is transient or not.
+			return result.Error
 		}
 		return nil
-	}
+	}, ds.getMetrics())
 
-	return stateError(lastErr, "lock_note", "lock_retry_exhausted",
-		"note_id", noteID,
-		"transaction_id", txID,
-		"max_retries", fmt.Sprintf("%d", maxRetries),
-		"action", "acquire_edit_lock")
+	if err != nil {
+		return stateError(err, "lock_note", "note_lock_acquisition",
+			"note_id", noteID,
+			"action", "acquire_edit_lock")
+	}
+	return nil
 }
 
 // UnlockNote removes a lock from a note
@@ -1719,72 +1715,28 @@ func (ds *DataStore) UnlockNote(noteID string) error {
 		return validationError("invalid note ID format for unlock", "note_id", noteID)
 	}
 
-	// Generate a unique transaction ID (first 8 chars of UUID)
-	txID := fmt.Sprintf("tx-%s", uuid.New().String()[:8])
-
-	// Retry configuration
-	maxRetries := 5
-	baseDelay := 500 * time.Millisecond
-
-	var lastErr error
-	for attempt := range maxRetries {
-		// First check if the lock exists
-		exists, err := ds.IsNoteLocked(noteID)
-		if err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "unlock_note_check_existence").
-				Context("note_id", noteID).
-				Build()
+	err = retryOnLock("unlock_note", func() error {
+		// Check if the lock exists before attempting to delete.
+		exists, checkErr := ds.IsNoteLocked(noteID)
+		if checkErr != nil {
+			return checkErr
 		}
 		if !exists {
-			// Lock doesn't exist, nothing to unlock
 			return nil
 		}
 
-		result := ds.DB.Where("note_id = ?", id).Delete(&NoteLock{})
-		if result.Error != nil {
-			if strings.Contains(strings.ToLower(result.Error.Error()), "database is locked") {
-				// Calculate exponential backoff with jitter
-				baseBackoff := baseDelay * time.Duration(attempt+1)
-				jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
-				delay := baseBackoff + jitter
-				GetLogger().Debug("Database locked, retrying",
-					logger.String("tx_id", txID),
-					logger.Duration("delay", delay),
-					logger.Int("attempt", attempt+1),
-					logger.Int("max_retries", maxRetries),
-					logger.Duration("jitter", jitter))
-				time.Sleep(delay)
-				lastErr = result.Error
-				continue
-			}
-			return errors.New(result.Error).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "unlock_note").
-				Context("note_id", noteID).
-				Build()
-		}
+		return ds.DB.Where("note_id = ?", id).Delete(&NoteLock{}).Error
+	}, ds.getMetrics())
 
-		// If we get here, the transaction was successful
-		if attempt > 0 {
-			GetLogger().Info("Database transaction successful after retries",
-				logger.String("tx_id", txID),
-				logger.Int("attempts", attempt+1))
-		}
-		return nil
+	if err != nil {
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "unlock_note").
+			Context("note_id", noteID).
+			Build()
 	}
-
-	return errors.New(lastErr).
-		Component("datastore").
-		Category(errors.CategoryDatabase).
-		Context("operation", "unlock_note").
-		Context("note_id", noteID).
-		Context("transaction_id", txID).
-		Context("max_retries", fmt.Sprintf("%d", maxRetries)).
-		Build()
+	return nil
 }
 
 // GetImageCache retrieves an image cache entry by scientific name and provider
@@ -1843,7 +1795,7 @@ func (ds *DataStore) SaveImageCache(cache *ImageCache) error {
 				"action", "cache_species_thumbnail")
 		}
 		return nil
-	})
+	}, ds.getMetrics())
 
 	if err != nil {
 		GetLogger().Error("Failed to save image cache",
@@ -2532,229 +2484,4 @@ func (ds *DataStore) getCachedSunTimes(dateStr string) (suncalc.SunEventTimes, b
 // cacheSunTimes caches sun times
 func (ds *DataStore) cacheSunTimes(dateStr string, sunTimes *suncalc.SunEventTimes) {
 	ds.sunTimesCache.Store(dateStr, *sunTimes)
-}
-
-// Helper functions for Save method to reduce cognitive complexity
-
-// saveNoteInTransaction saves a note within a transaction
-func (ds *DataStore) saveNoteInTransaction(tx *gorm.DB, note *Note, txID string, attempt int, txLogger logger.Logger) error {
-	// Omit Results to prevent GORM auto-save of associations.
-	// Results are saved separately in saveResultsInTransaction for explicit error handling.
-	if err := tx.Omit("Results").Create(note).Error; err != nil {
-		enhancedErr := errors.New(err).
-			Component("datastore").
-			Category(errors.CategoryDatabase).
-			Context("operation", "save_note").
-			Context("table", "notes").
-			Context("note_id", fmt.Sprintf("%d", note.ID)).
-			Context("tx_id", txID).
-			Context("attempt", fmt.Sprintf("%d", attempt)).
-			Build()
-
-		txLogger.Error("Failed to save note",
-			logger.Error(enhancedErr),
-			logger.Any("note_id", note.ID),
-			logger.String("scientific_name", note.ScientificName))
-
-		// Record error metric
-		ds.metricsMu.RLock()
-		metricsInstance := ds.metrics
-		ds.metricsMu.RUnlock()
-		if metricsInstance != nil {
-			metricsInstance.RecordNoteOperation("save", "error")
-			metricsInstance.RecordDbOperationError("create", "notes", categorizeError(err))
-		}
-
-		return enhancedErr
-	}
-
-	// Record success metric for note
-	ds.metricsMu.RLock()
-	metricsInstance := ds.metrics
-	ds.metricsMu.RUnlock()
-	if metricsInstance != nil {
-		metricsInstance.RecordNoteOperation("save", "success")
-	}
-
-	return nil
-}
-
-// saveResultsInTransaction saves results within a transaction
-func (ds *DataStore) saveResultsInTransaction(tx *gorm.DB, results []Results, noteID uint, txID string, attempt int, txLogger logger.Logger) error {
-	for i, result := range results {
-		result.NoteID = noteID
-		if err := tx.Create(&result).Error; err != nil {
-			enhancedErr := errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "save_result").
-				Context("note_id", fmt.Sprintf("%d", noteID)).
-				Context("result_index", fmt.Sprintf("%d", i)).
-				Context("tx_id", txID).
-				Context("attempt", fmt.Sprintf("%d", attempt)).
-				Build()
-
-			txLogger.Error("Failed to save result",
-				logger.Error(enhancedErr),
-				logger.Any("note_id", noteID),
-				logger.Int("result_index", i))
-
-			ds.metricsMu.RLock()
-			metricsInstance := ds.metrics
-			ds.metricsMu.RUnlock()
-			if metricsInstance != nil {
-				metricsInstance.RecordDbOperationError("create", "results", categorizeError(err))
-			}
-
-			return enhancedErr
-		}
-	}
-	return nil
-}
-
-// commitTransactionWithMetrics commits a transaction and records metrics
-func (ds *DataStore) commitTransactionWithMetrics(tx *gorm.DB, txID string, attempt int, txLogger logger.Logger) error {
-	if err := tx.Commit().Error; err != nil {
-		// Commit failures are critical as they can lead to data loss
-		priority := errors.PriorityHigh
-		if isDatabaseCorruption(err) {
-			priority = errors.PriorityCritical
-		}
-
-		enhancedErr := dbError(err, "commit_transaction", priority,
-			"tx_id", txID,
-			"attempt", fmt.Sprintf("%d", attempt),
-			"action", "finalize_detection_save")
-
-		txLogger.Error("Failed to commit transaction",
-			logger.Error(enhancedErr))
-
-		ds.metricsMu.RLock()
-		metricsInstance := ds.metrics
-		ds.metricsMu.RUnlock()
-		if metricsInstance != nil {
-			metricsInstance.RecordTransaction("rollback")
-			metricsInstance.RecordTransactionError("save_note", categorizeError(err))
-		}
-
-		return enhancedErr
-	}
-
-	// Record commit success
-	ds.metricsMu.RLock()
-	metricsInstance := ds.metrics
-	ds.metricsMu.RUnlock()
-	if metricsInstance != nil {
-		metricsInstance.RecordTransaction("committed")
-	}
-
-	return nil
-}
-
-// handleDatabaseLockError handles database lock errors with backoff
-func (ds *DataStore) handleDatabaseLockError(attempt, maxRetries int, baseDelay time.Duration, txLogger logger.Logger) {
-	// Calculate exponential backoff with jitter to avoid thundering herd
-	baseBackoff := baseDelay * time.Duration(attempt+1)
-	// Add 0-25% jitter to the base backoff
-	jitter := time.Duration(rand.Float64() * 0.25 * float64(baseBackoff)) //nolint:gosec // G404: math/rand is fine for jitter, not security-critical
-	delay := baseBackoff + jitter
-
-	txLogger.Warn("Database locked, scheduling retry",
-		logger.Int("attempt", attempt+1),
-		logger.Int("max_attempts", maxRetries),
-		logger.Int64("backoff_ms", delay.Milliseconds()),
-		logger.Int64("jitter_ms", jitter.Milliseconds()))
-
-	// Record retry metric
-	ds.metricsMu.RLock()
-	metricsInstance := ds.metrics
-	ds.metricsMu.RUnlock()
-	if metricsInstance != nil {
-		metricsInstance.RecordTransactionRetry("save_note", "database_locked")
-	}
-
-	time.Sleep(delay)
-}
-
-// executeTransaction executes the save operations within a transaction
-func (ds *DataStore) executeTransaction(tx *gorm.DB, note *Note, results []Results, txID string, attempt int, txLogger logger.Logger) error {
-	// Set up panic recovery with rollback
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	// Save the note
-	if err := ds.saveNoteInTransaction(tx, note, txID, attempt, txLogger); err != nil {
-		tx.Rollback()
-		if isDatabaseLocked(err) {
-			return err
-		}
-		return err
-	}
-
-	// Save the results
-	if err := ds.saveResultsInTransaction(tx, results, note.ID, txID, attempt, txLogger); err != nil {
-		tx.Rollback()
-		if isDatabaseLocked(err) {
-			return err
-		}
-		return err
-	}
-
-	// Commit the transaction
-	if err := ds.commitTransactionWithMetrics(tx, txID, attempt, txLogger); err != nil {
-		if isDatabaseLocked(err) {
-			return err
-		}
-		return err
-	}
-
-	return nil
-}
-
-// recordTransactionSuccess records success metrics for a transaction
-func (ds *DataStore) recordTransactionSuccess(txStart time.Time, attempts, resultsCount int, txLogger logger.Logger) {
-	duration := time.Since(txStart)
-	txLogger.Info("Transaction completed",
-		logger.Duration("duration", duration),
-		logger.Int("attempts", attempts),
-		logger.Int("rows_affected", 1+resultsCount))
-
-	// Record success metrics
-	ds.metricsMu.RLock()
-	metricsInstance := ds.metrics
-	ds.metricsMu.RUnlock()
-	if metricsInstance != nil {
-		metricsInstance.RecordTransactionDuration("save_note", duration.Seconds())
-		if attempts > 1 {
-			metricsInstance.RecordLockContention("database", "retry_succeeded")
-		}
-	}
-}
-
-// handleMaxRetriesExhausted handles the case when all retries are exhausted
-func (ds *DataStore) handleMaxRetriesExhausted(lastErr error, txID string, txStart time.Time, txLogger logger.Logger) error {
-	enhancedErr := stateError(lastErr, "save_transaction", "transaction_retry_exhausted",
-		"tx_id", txID,
-		"max_retries_exhausted", "true",
-		"action", "save_detection_data",
-		"total_duration_ms", time.Since(txStart).Milliseconds())
-
-	txLogger.Error("Transaction failed after max retries",
-		logger.Error(enhancedErr),
-		logger.Duration("total_duration", time.Since(txStart)))
-
-	// Record failure metrics
-	ds.metricsMu.RLock()
-	metricsInstance := ds.metrics
-	ds.metricsMu.RUnlock()
-	if metricsInstance != nil {
-		metricsInstance.RecordTransaction("timeout")
-		metricsInstance.RecordTransactionError("save_note", "max_retries_exhausted")
-		metricsInstance.RecordLockContention("database", "max_retries_exhausted")
-	}
-
-	return enhancedErr
 }
