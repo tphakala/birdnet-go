@@ -231,10 +231,10 @@
   "about": {
     "title": "BirdNET-Go",
     "subtitle": "Een moderne interface voor real-time vogelgeluids herkenning en classificatie",
-    "logoAlt": "BirdNET-Go Logo",
+    "logoAlt": "BirdNET-Go-logo",
     "overview": "Overzicht",
     "overviewText": "BirdNET-Go is een Go-gebaseerde implementatie voor real-time vogelgeluids herkenning en classificatie, gebouwd op de basis van het BirdNET project. Deze applicatie biedt een gebruiksvriendelijke interface voor continue vogelgeluids monitoring en analyse.",
-    "birdnetProject": "BirdNET Project",
+    "birdnetProject": "BirdNET-project",
     "birdnetDescription": "BirdNET-Go zou niet mogelijk zijn zonder het baanbrekende werk van het BirdNET project. Het kunstmatige intelligentie model dat de herkenningsmogelijkheden van BirdNET-Go aandrijft is het resultaat van het innovatieve onderzoek en ontwikkeling van het BirdNET project.",
     "developedBy": "Ontwikkeld door",
     "developersText": "Het K. Lisa Yang Center for Conservation Bioacoustics van het Cornell Lab of Ornithology in samenwerking met de Technische Universiteit Chemnitz:",
@@ -252,12 +252,12 @@
     "testing": "Testen en validatie",
     "documentation": "Documentatie verbeteringen",
     "additionalCredits": "Aanvullende Credits",
-    "birdnetPiProject": "BirdNET-Pi Project",
+    "birdnetPiProject": "BirdNET-Pi-project",
     "birdnetPiDescription": "Speciale dank aan Patrick McGuire voor zijn inspirerende werk aan BirdNET-Pi, dat de ontwikkeling van BirdNET-Go heeft beïnvloed. BirdNET-Pi demonstreert het potentieel van vogelgeluids herkenning op embedded apparaten en heeft een hoge standaard gezet voor community-gedreven ontwikkeling.",
     "visitBirdnetPi": "Bezoek BirdNET-Pi Project",
     "labelTranslations": "BirdNET Label Vertalingen",
     "labelTranslationsBy": "Aangeleverd door Patrick Levin voor het BirdNET-Pi project van Patrick McGuire",
-    "patrickLevinGithub": "Patrick Levin's GitHub",
+    "patrickLevinGithub": "GitHub van Patrick Levin",
     "versionInformation": "Versie Informatie",
     "currentVersion": "Huidige Versie",
     "buildDate": "Build Datum",
@@ -377,8 +377,8 @@
         "application": "Applicatiefout",
         "imageProvider": "Melding afbeeldingprovider",
         "categoryError": "{category}-fout",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Meerdere {component}-fouten",
+        "burstMessage": "{count} fouten in de laatste {window_minutes} minuten: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Nieuwe analyse-instellingen worden toegepast...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "BirdWeather-integratie wordt bijgewerkt...",
         "reconfiguringStreams": "Audiostreams worden bijgewerkt...",
         "reconfiguringTelemetry": "Telemetrie-instellingen worden bijgewerkt...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Pushmeldingsproviders herconfigureren...",
         "reconfiguringSpeciesTracking": "Soortentracering wordt bijgewerkt...",
         "recalculatingThresholds": "Dynamische drempels worden herberekend voor nieuwe basiswaarde",
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
@@ -790,17 +790,17 @@
       "showing": "Toont {from} tot {to} van {total} resultaten"
     },
     "weather": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "title": "Weerinformatie",
+      "noData": "Geen weergegevens",
+      "noDataAvailable": "Geen weergegevens beschikbaar",
+      "loading": "Weerinformatie laden...",
       "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
+        "temperature": "Temperatuur",
+        "weather": "Weer",
         "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
+        "humidity": "Luchtvochtigheid",
+        "pressure": "Luchtdruk",
+        "cloudCover": "Bewolking"
       },
       "units": {
         "temperature": "°C",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frequentiebereik",
+      "colorMap": "Kleurenkaart",
+      "gain": "Versterking",
       "gainTooltip": "Spectrogram visualisatieversterking",
       "mute": "Audio-uitvoer dempen",
       "unmute": "Audio-uitvoer inschakelen",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimale frequentie",
+      "frequencyRangeMax": "Maximale frequentie"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Je browser ondersteunt geen audio-analyse",
+      "connectionFailed": "Kan geen verbinding maken met de live audiostream",
+      "accessDenied": "Toegang tot live audio vereist authenticatie. Log in om deze functie te gebruiken."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Live spectrogram",
+      "audioToggle": "Audio inschakelen"
     },
     "gain": {
       "muted": "Gedempt",
       "level": "Versterking: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Live audio",
+      "sourceLabel": "Audiobron",
       "connected": "Verbonden",
       "enterFullscreen": "Volledig scherm",
       "exitFullscreen": "Volledig scherm sluiten"
@@ -962,7 +962,7 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Grijstinten"
     },
     "labels": {
       "toggle": "Detectielabels aan/uit"
@@ -1199,7 +1199,7 @@
               "name": "MySQL Max Packet"
             },
             "mysql_timeout": {
-              "name": "MySQL Timeout"
+              "name": "MySQL-timeout"
             }
           },
           "passedCount": "{passed}/{total} geslaagd",
@@ -1287,82 +1287,82 @@
         "fetchFailed": "Ophalen van databasestatistieken mislukt"
       },
       "dashboard": {
-        "title": "Database Dashboard",
-        "fetchFailed": "Failed to fetch database overview",
+        "title": "Database-dashboard",
+        "fetchFailed": "Kan database-overzicht niet ophalen",
         "metrics": {
-          "readLatency": "Read Latency",
-          "writeLatency": "Write Latency",
-          "queriesPerSec": "Queries/sec",
+          "readLatency": "Leeslatentie",
+          "writeLatency": "Schrijflatentie",
+          "queriesPerSec": "Query's/sec",
           "database": "Database",
-          "avg": "avg",
+          "avg": "gem",
           "max": "max",
-          "lastHour": "{count} last hour",
-          "slowQueries": "{count} slow"
+          "lastHour": "{count} afgelopen uur",
+          "slowQueries": "{count} traag"
         },
         "details": {
-          "title": "Database Details",
+          "title": "Databasedetails",
           "engine": "Engine",
-          "journal": "Journal",
-          "pageSize": "Page size",
-          "cacheHit": "Cache hit",
-          "integrity": "Integrity",
-          "lastVacuum": "Last VACUUM"
+          "journal": "Logboek",
+          "pageSize": "Paginagrootte",
+          "cacheHit": "Cache-treffer",
+          "integrity": "Integriteit",
+          "lastVacuum": "Laatste VACUUM"
         },
         "locksWal": {
-          "title": "Locks & WAL",
-          "lockWaits": "Lock waits",
-          "lockTimeouts": "Lock timeouts",
-          "avgWait": "Avg wait",
-          "busyTimeouts": "Busy timeouts",
-          "walSize": "WAL size",
-          "checkpoints": "Checkpoints",
-          "freelistPages": "Freelist pages",
-          "cacheSize": "Cache size"
+          "title": "Vergrendelingen en WAL",
+          "lockWaits": "Vergrendelingswachttijden",
+          "lockTimeouts": "Vergrendelingstimeouts",
+          "avgWait": "Gem. wachttijd",
+          "busyTimeouts": "Bezet-timeouts",
+          "walSize": "WAL-grootte",
+          "checkpoints": "Controlepunten",
+          "freelistPages": "Vrije-lijstpagina's",
+          "cacheSize": "Cachegrootte"
         },
         "connectionPool": {
-          "title": "Connection Pool",
-          "poolUsage": "Pool Usage",
-          "active": "active",
-          "idle": "idle",
-          "waiting": "waiting",
-          "totalCreated": "Total created",
-          "connErrors": "Conn errors",
+          "title": "Verbindingspool",
+          "poolUsage": "Poolgebruik",
+          "active": "actief",
+          "idle": "inactief",
+          "waiting": "wachtend",
+          "totalCreated": "Totaal aangemaakt",
+          "connErrors": "Verbindingsfouten",
           "threads": "Threads",
-          "running": "running",
-          "cached": "cached"
+          "running": "actief",
+          "cached": "gecached"
         },
         "innodb": {
-          "title": "InnoDB & Locks",
-          "bufferPoolHitRate": "Buffer pool hit rate",
-          "bufferPoolSize": "Buffer pool size",
-          "lockWaits": "Lock waits",
+          "title": "InnoDB en vergrendelingen",
+          "bufferPoolHitRate": "Buffer pool-trefpercentage",
+          "bufferPoolSize": "Buffer pool-grootte",
+          "lockWaits": "Vergrendelingswachttijden",
           "deadlocks": "Deadlocks",
-          "avgLockWait": "Avg lock wait",
-          "tableLocksWaited": "Table locks waited",
-          "tableLocksImmediate": "Table locks immediate"
+          "avgLockWait": "Gem. wachttijd vergrendeling",
+          "tableLocksWaited": "Gewachte tabelvergrendelingen",
+          "tableLocksImmediate": "Directe tabelvergrendelingen"
         },
         "detectionRate": {
-          "title": "Detection Rate (24h)",
-          "perHour": "/hr",
+          "title": "Detectiefrequentie (24u)",
+          "perHour": "/uur",
           "min": "min",
-          "avg": "avg",
+          "avg": "gem",
           "max": "max",
-          "lastBackup": "Last backup",
-          "backupSize": "Backup size",
-          "createBackup": "Create Backup",
+          "lastBackup": "Laatste back-up",
+          "backupSize": "Back-upgrootte",
+          "createBackup": "Back-up maken",
           "mysqlHost": "Host",
           "mysqlBackupNote": "MySQL-back-ups moeten worden beheerd via mysqldump of uw MySQL-beheertools.",
           "chartLabel": "Detectiepercentage over 24 uur",
           "detectionsTooltip": "{count} detecties"
         },
         "tables": {
-          "title": "Tables",
-          "total": "Total",
-          "table": "Table",
+          "title": "Tabellen",
+          "total": "Totaal",
+          "table": "Tabel",
           "engine": "Engine",
-          "rows": "Rows",
-          "size": "Size",
-          "usage": "Usage"
+          "rows": "Rijen",
+          "size": "Grootte",
+          "usage": "Gebruik"
         },
         "loading": "Laden..."
       },
@@ -1768,7 +1768,7 @@
           },
           "mysql": {
             "host": {
-              "label": "MySQL Host",
+              "label": "MySQL-host",
               "placeholder": "Voer MySQL host in",
               "helpText": "MySQL database host (IP of hostnaam)"
             },
@@ -1787,7 +1787,7 @@
               "helpText": "MySQL database wachtwoord"
             },
             "database": {
-              "label": "MySQL Database",
+              "label": "MySQL-database",
               "placeholder": "Voer MySQL database naam in",
               "helpText": "MySQL database naam"
             },
@@ -1968,7 +1968,7 @@
           "helpText": "Taalregio voor vertaalde soorten algemene namen."
         },
         "tensorflowThreads": {
-          "label": "TensorFlow CPU Threads",
+          "label": "TensorFlow CPU-threads",
           "helpText": "Aantal CPU threads. Zet op 0 om alle beschikbare threads te gebruiken."
         }
       },
@@ -2139,10 +2139,10 @@
         }
       },
       "push": {
-        "title": "Push Notifications",
-        "description": "Send notifications to external services like Discord, Telegram, Slack, and more",
-        "enable": "Enable Push Notifications",
-        "disabled": "Push notifications are disabled",
+        "title": "Pushmeldingen",
+        "description": "Meldingen verzenden naar externe diensten zoals Discord, Telegram, Slack en meer",
+        "enable": "Pushmeldingen inschakelen",
+        "disabled": "Pushmeldingen zijn uitgeschakeld",
         "enabledDescription": "Push-notificaties worden naar alle ingeschakelde providers hieronder verzonden",
         "filters": {
           "title": "Detectiefilters",
@@ -2158,48 +2158,48 @@
           }
         },
         "noProviders": "Geen providers geconfigureerd",
-        "noProvidersDescription": "Add a provider to start receiving push notifications",
+        "noProvidersDescription": "Voeg een provider toe om pushmeldingen te ontvangen",
         "providers": {
-          "title": "Notification Providers",
-          "addButton": "Add Provider",
-          "editButton": "Edit",
-          "deleteButton": "Delete",
-          "enableToggle": "Enable provider",
-          "urlsPreview": "{count} URL(s) configured",
-          "deleteConfirm": "Delete provider \"{name}\"? This action cannot be undone.",
+          "title": "Meldingsproviders",
+          "addButton": "Provider toevoegen",
+          "editButton": "Bewerken",
+          "deleteButton": "Verwijderen",
+          "enableToggle": "Provider inschakelen",
+          "urlsPreview": "{count} URL('s) geconfigureerd",
+          "deleteConfirm": "Provider \"{name}\" verwijderen? Deze actie kan niet ongedaan worden gemaakt.",
           "typeBadge": {
             "shoutrrr": "Shoutrrr",
             "webhook": "Webhook"
           }
         },
         "form": {
-          "addTitle": "Add Notification Provider",
-          "editTitle": "Edit Notification Provider",
+          "addTitle": "Meldingsprovider toevoegen",
+          "editTitle": "Meldingsprovider bewerken",
           "name": {
-            "label": "Provider Name",
-            "placeholder": "e.g., Discord Alerts",
-            "helpText": "A friendly name to identify this provider"
+            "label": "Providernaam",
+            "placeholder": "bijv. Discord Meldingen",
+            "helpText": "Een herkenbare naam om deze provider te identificeren"
           },
           "urls": {
-            "label": "Service URL(s)",
+            "label": "Service-URL('s)",
             "placeholder": "discord://token@webhookid",
-            "helpText": "Enter one Shoutrrr URL per line. Multiple URLs send to multiple services.",
+            "helpText": "Voer één Shoutrrr-URL per regel in. Meerdere URL's verzenden naar meerdere diensten.",
             "validation": {
-              "required": "At least one URL is required",
-              "invalidFormat": "Invalid URL format. URLs should start with a service prefix (e.g., discord://, telegram://)"
+              "required": "Er is ten minste één URL vereist",
+              "invalidFormat": "Ongeldig URL-formaat. URL's moeten beginnen met een serviceprefix (bijv. discord://, telegram://)"
             }
           },
           "notificationTypes": {
-            "label": "Notification Types",
-            "helpText": "Select which types of notifications to send to this provider",
-            "detection": "Bird detections",
-            "error": "Errors",
-            "warning": "Warnings",
-            "info": "Information",
-            "system": "System events"
+            "label": "Meldingstypen",
+            "helpText": "Selecteer welke typen meldingen naar deze provider verzonden moeten worden",
+            "detection": "Vogeldetecties",
+            "error": "Fouten",
+            "warning": "Waarschuwingen",
+            "info": "Informatie",
+            "system": "Systeemgebeurtenissen"
           },
           "urlFormats": {
-            "title": "Common URL Formats",
+            "title": "Veelgebruikte URL-formaten",
             "discord": "Discord",
             "discordFormat": "discord://token@webhookid",
             "telegram": "Telegram",
@@ -2212,27 +2212,27 @@
             "gotifyFormat": "gotify://hostname/token",
             "ntfy": "ntfy",
             "ntfyFormat": "ntfy://ntfy.sh/mytopic",
-            "moreServices": "View all supported services",
+            "moreServices": "Alle ondersteunde diensten bekijken",
             "shoutrrrDocs": "https://github.com/nicholas-fedor/shoutrrr?tab=readme-ov-file#supported-services"
           },
-          "saveButton": "Save Provider",
-          "savingButton": "Saving...",
-          "cancelButton": "Cancel",
+          "saveButton": "Provider opslaan",
+          "savingButton": "Opslaan...",
+          "cancelButton": "Annuleren",
           "testButton": "Test",
-          "testingButton": "Testing..."
+          "testingButton": "Testen..."
         },
         "test": {
-          "button": "Test Provider",
-          "description": "Send a test notification to verify this provider is working",
-          "success": "Test notification sent successfully!",
-          "error": "Test failed: {message}",
-          "requiresUrl": "Enter a URL to test",
-          "requiresEnabled": "Enable the provider to test"
+          "button": "Provider testen",
+          "description": "Stuur een testmelding om te controleren of deze provider werkt",
+          "success": "Testmelding succesvol verzonden!",
+          "error": "Test mislukt: {message}",
+          "requiresUrl": "Voer een URL in om te testen",
+          "requiresEnabled": "Schakel de provider in om te testen"
         },
         "validation": {
-          "nameRequired": "Provider name is required",
-          "urlRequired": "At least one URL is required",
-          "invalidUrl": "Invalid URL format"
+          "nameRequired": "Providernaam is vereist",
+          "urlRequired": "Er is ten minste één URL vereist",
+          "invalidUrl": "Ongeldig URL-formaat"
         },
         "autoName": {
           "discord": "Discord",
@@ -2241,42 +2241,42 @@
           "pushover": "Pushover",
           "gotify": "Gotify",
           "ntfy": "ntfy",
-          "email": "Email",
+          "email": "E-mail",
           "generic": "Shoutrrr",
           "numbered": "{service} #{number}"
         },
         "services": {
-          "selectLabel": "Service",
-          "selectHelpText": "Choose a notification service to configure",
+          "selectLabel": "Dienst",
+          "selectHelpText": "Kies een meldingsdienst om te configureren",
           "discord": {
             "name": "Discord",
             "webhookUrl": {
-              "label": "Discord Webhook URL",
+              "label": "Discord Webhook-URL",
               "placeholder": "https://discord.com/api/webhooks/...",
-              "helpText": "Paste your full Discord webhook URL"
+              "helpText": "Plak je volledige Discord webhook-URL"
             },
-            "invalidUrl": "Invalid Discord webhook URL. URL should contain discord.com/api/webhooks/"
+            "invalidUrl": "Ongeldige Discord webhook-URL. URL moet discord.com/api/webhooks/ bevatten"
           },
           "telegram": {
             "name": "Telegram",
             "botToken": {
-              "label": "Bot Token",
+              "label": "Bot-token",
               "placeholder": "123456789:ABCdef...",
-              "helpText": "Token from @BotFather"
+              "helpText": "Token van @BotFather"
             },
             "chatId": {
-              "label": "Chat ID",
-              "placeholder": "-1001234567890 or @channel",
-              "helpText": "Chat ID, group ID, or @username"
+              "label": "Chat-ID",
+              "placeholder": "-1001234567890 of @channel",
+              "helpText": "Chat-ID, groeps-ID of @gebruikersnaam"
             },
-            "incomplete": "Both bot token and chat ID are required"
+            "incomplete": "Zowel bot-token als chat-ID zijn vereist"
           },
           "ntfy": {
             "name": "ntfy",
             "server": {
               "label": "Server",
               "placeholder": "ntfy.sh",
-              "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
+              "helpText": "Laat ntfy.sh staan voor de publieke server of voer je eigen server in"
             },
             "protocol": {
               "label": "Protocol"
@@ -2301,107 +2301,107 @@
             "topic": {
               "label": "Topic",
               "placeholder": "my-bird-alerts",
-              "helpText": "Topic name for your notifications"
+              "helpText": "Topicnaam voor je meldingen"
             },
-            "incomplete": "Topic is required"
+            "incomplete": "Topic is vereist"
           },
           "gotify": {
             "name": "Gotify",
             "server": {
-              "label": "Server URL",
+              "label": "Server-URL",
               "placeholder": "gotify.example.com",
-              "helpText": "Your Gotify server hostname (without https://)"
+              "helpText": "Je Gotify-server hostnaam (zonder https://)"
             },
             "token": {
-              "label": "Application Token",
+              "label": "Applicatietoken",
               "placeholder": "A...",
-              "helpText": "Token from Gotify Apps page"
+              "helpText": "Token van de Gotify Apps-pagina"
             },
-            "incomplete": "Server and token are required"
+            "incomplete": "Server en token zijn vereist"
           },
           "pushover": {
             "name": "Pushover",
             "apiToken": {
-              "label": "API Token",
+              "label": "API-token",
               "placeholder": "az...",
-              "helpText": "Application API token"
+              "helpText": "Applicatie API-token"
             },
             "userKey": {
-              "label": "User Key",
+              "label": "Gebruikerssleutel",
               "placeholder": "u...",
-              "helpText": "Your user or group key"
+              "helpText": "Je gebruikers- of groepssleutel"
             },
-            "incomplete": "API token and user key are required"
+            "incomplete": "API-token en gebruikerssleutel zijn vereist"
           },
           "slack": {
             "name": "Slack",
             "webhookUrl": {
-              "label": "Slack Webhook URL",
+              "label": "Slack Webhook-URL",
               "placeholder": "https://hooks.slack.com/services/...",
-              "helpText": "Paste your full Slack webhook URL"
+              "helpText": "Plak je volledige Slack webhook-URL"
             },
-            "invalidUrl": "Invalid Slack webhook URL. URL should contain hooks.slack.com/services/"
+            "invalidUrl": "Ongeldige Slack webhook-URL. URL moet hooks.slack.com/services/ bevatten"
           },
           "ifttt": {
             "name": "IFTTT",
             "webhookKey": {
-              "label": "Webhook Key",
+              "label": "Webhook-sleutel",
               "placeholder": "abc123xyz...",
-              "helpText": "Your IFTTT Webhook key from Maker Webhooks settings"
+              "helpText": "Je IFTTT Webhook-sleutel uit de Maker Webhooks-instellingen"
             },
             "eventName": {
-              "label": "Event Name",
+              "label": "Gebeurtenisnaam",
               "placeholder": "bird_detected",
-              "helpText": "The event name to trigger in your IFTTT applet"
+              "helpText": "De gebeurtenisnaam om te activeren in je IFTTT-applet"
             },
-            "incomplete": "Webhook key and event name are required"
+            "incomplete": "Webhook-sleutel en gebeurtenisnaam zijn vereist"
           },
           "webhook": {
             "name": "Webhook",
             "url": {
-              "label": "Webhook URL",
+              "label": "Webhook-URL",
               "placeholder": "https://api.example.com/webhook",
-              "helpText": "The HTTP(S) endpoint to send notifications to"
+              "helpText": "Het HTTP(S)-eindpunt om meldingen naar te verzenden"
             },
             "method": {
-              "label": "HTTP Method",
-              "helpText": "HTTP method to use for the request (default: POST)"
+              "label": "HTTP-methode",
+              "helpText": "HTTP-methode voor het verzoek (standaard: POST)"
             },
             "auth": {
-              "label": "Authentication",
-              "none": "None",
-              "bearer": "Bearer Token",
-              "basic": "Basic Auth",
-              "helpText": "Optional authentication for the webhook endpoint"
+              "label": "Authenticatie",
+              "none": "Geen",
+              "bearer": "Bearer-token",
+              "basic": "Basisauthenticatie",
+              "helpText": "Optionele authenticatie voor het webhook-eindpunt"
             },
             "bearerToken": {
-              "label": "Bearer Token",
+              "label": "Bearer-token",
               "placeholder": "your-api-token",
-              "helpText": "Token sent in Authorization: Bearer header"
+              "helpText": "Token verzonden in Authorization: Bearer-header"
             },
             "basicUser": {
-              "label": "Username",
-              "placeholder": "username"
+              "label": "Gebruikersnaam",
+              "placeholder": "gebruikersnaam"
             },
             "basicPass": {
-              "label": "Password",
-              "placeholder": "password"
+              "label": "Wachtwoord",
+              "placeholder": "wachtwoord"
             },
             "basicAuth": {
-              "helpText": "Credentials sent using HTTP Basic Authentication"
+              "helpText": "Inloggegevens verzonden via HTTP Basic Authentication"
             },
-            "invalidUrl": "Invalid URL. Must start with http:// or https://",
-            "tokenRequired": "Bearer token is required when using Bearer authentication",
-            "credentialsRequired": "Username and password are required when using Basic authentication"
+            "invalidUrl": "Ongeldige URL. Moet beginnen met http:// of https://",
+            "tokenRequired": "Bearer-token is vereist bij Bearer-authenticatie",
+            "credentialsRequired": "Gebruikersnaam en wachtwoord zijn vereist bij basisauthenticatie"
           },
           "custom": {
-            "name": "Custom URL",
+            "name": "Aangepaste URL",
             "url": {
-              "label": "Shoutrrr URL",
+              "label": "Shoutrrr-URL",
               "placeholder": "service://credentials@host",
-              "helpText": "Enter a raw Shoutrrr URL for any supported service"
+              "helpText": "Voer een ruwe Shoutrrr-URL in voor een ondersteunde dienst"
             },
-            "invalidUrl": "Invalid URL format. URL should start with service://"
+            "invalidUrl": "Ongeldig URL-formaat. URL moet beginnen met service://"
           }
         }
       },
@@ -2491,7 +2491,7 @@
         },
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
-          "label": "BirdWeather token",
+          "label": "BirdWeather-token",
           "helpText": "Jouw unieke BirdWeather token."
         },
         "threshold": {
@@ -2512,11 +2512,11 @@
         "description": "Configureer MQTT broker verbinding",
         "enable": "Schakel MQTT Integratie in",
         "broker": {
-          "label": "MQTT Broker",
+          "label": "MQTT-broker",
           "placeholder": "mqtt://localhost:1883"
         },
         "topic": {
-          "label": "MQTT Topic",
+          "label": "MQTT-topic",
           "placeholder": "birdnet/detections"
         },
         "authentication": {
@@ -2535,25 +2535,25 @@
           "skipVerify": "Sla Certificaat Verificatie over",
           "configNote": "<strong>TLS Configuratie:</strong><br />• Standaard TLS: Laat certificaten leeg voor publieke brokers<br />• Self-signed certificaten: Geef CA Certificaat<br />• Wederzijdse TLS (mTLS): Geef alle drie certificaten",
           "certificates": {
-            "title": "Certificate Management",
-            "description": "Upload certificates for secure MQTT broker connections",
-            "caLabel": "CA Certificate",
+            "title": "Certificaatbeheer",
+            "description": "Upload certificaten voor beveiligde MQTT-brokerverbindingen",
+            "caLabel": "CA-certificaat",
             "caPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
-            "clientCertLabel": "Client Certificate",
+            "caHelpText": "Certificaatautoriteit-certificaat om de identiteit van de broker te verifiëren",
+            "clientCertLabel": "Clientcertificaat",
             "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "clientCertHelpText": "Client certificate for mutual TLS authentication",
-            "clientKeyLabel": "Client Private Key",
+            "clientCertHelpText": "Clientcertificaat voor wederzijdse TLS-authenticatie",
+            "clientKeyLabel": "Privésleutel client",
             "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
-            "clientKeyHelpText": "Private key matching the client certificate",
-            "uploadButton": "Upload Certificates",
-            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
-            "uploadError": "Failed to upload MQTT TLS certificates",
-            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
-            "deleteSuccess": "MQTT TLS certificates removed",
-            "deleteError": "Failed to remove MQTT TLS certificates",
-            "loadError": "Failed to load certificate information",
-            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+            "clientKeyHelpText": "Privésleutel die overeenkomt met het clientcertificaat",
+            "uploadButton": "Certificaten uploaden",
+            "uploadSuccess": "MQTT TLS-certificaten succesvol geüpload. Gebruik Test verbinding om te verifiëren.",
+            "uploadError": "Kan MQTT TLS-certificaten niet uploaden",
+            "deleteConfirm": "Alle MQTT TLS-certificaten verwijderen? De MQTT-client zal opnieuw moeten verbinden.",
+            "deleteSuccess": "MQTT TLS-certificaten verwijderd",
+            "deleteError": "Kan MQTT TLS-certificaten niet verwijderen",
+            "loadError": "Kan certificaatinformatie niet laden",
+            "reconnectNote": "Gebruik de knop Test verbinding hieronder om de nieuwe TLS-configuratie te verifiëren."
           }
         },
         "homeAssistant": {
@@ -2561,7 +2561,7 @@
           "enable": "Schakel Home Assistant MQTT Discovery in",
           "description": "Wanneer ingeschakeld, registreert BirdNET-Go automatisch apparaten en sensoren bij Home Assistant via het MQTT discovery protocol. Apparaten verschijnen in het Home Assistant apparatenregister zonder handmatige YAML-configuratie.",
           "discoveryPrefix": {
-            "label": "Discovery Prefix",
+            "label": "Discovery-prefix",
             "helpText": "Het MQTT topic prefix voor Home Assistant discovery berichten. Standaard is 'homeassistant'. Wijzig dit alleen als je een aangepast discovery prefix hebt geconfigureerd in Home Assistant."
           },
           "deviceName": {
@@ -2623,11 +2623,11 @@
             "helpText": "Voer jouw Weather Underground API sleutel in. Vereist voor weer gegevens."
           },
           "stationId": {
-            "label": "Station ID",
+            "label": "Station-ID",
             "helpText": "Jouw Weather Underground PWS station ID (bijv., KCAOAKLA12)."
           },
           "endpoint": {
-            "label": "API Endpoint",
+            "label": "API-eindpunt",
             "helpText": "Overschrijf het standaard Weather Underground API endpoint indien nodig. Standaard https://api.weather.com/v2/pws/observations/current indien leeg gelaten."
           },
           "units": {
@@ -2653,8 +2653,8 @@
           "options": {
             "standard": "Standaard",
             "metric": "Metrisch",
-            "imperial": "Imperial",
-            "ukhybrid": "UK Hybrid"
+            "imperial": "Imperiaal",
+            "ukhybrid": "UK Hybride"
           }
         },
         "test": {
@@ -2697,14 +2697,14 @@
           "helpText": "Hoe lang taxonomiegegevens van eBird in de cache worden bewaard. Taxonomie verandert zelden, dus langere cachetijden verminderen API-aanroepen."
         },
         "note": "eBird levert taxonomische gegevens voor soortclassificatie en inzichten. De API-sleutel is gratis verkrijgbaar bij het Cornell Lab of Ornithology.",
-        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "apiKeyInfo": "Een persoonlijke eBird API-sleutel is vereist voor deze integratie. Je kunt een gratis sleutel aanvragen op <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "test": {
-          "button": "Test eBird Connection",
-          "loading": "Testing...",
-          "enabledRequired": "Enable eBird integration first",
-          "apiKeyRequired": "API key is required",
-          "inProgress": "Test in progress...",
-          "description": "Test eBird API connectivity and authentication"
+          "button": "eBird-verbinding testen",
+          "loading": "Testen...",
+          "enabledRequired": "Schakel eerst eBird-integratie in",
+          "apiKeyRequired": "API-sleutel is vereist",
+          "inProgress": "Test wordt uitgevoerd...",
+          "description": "Test eBird API-connectiviteit en authenticatie"
         }
       }
     },
@@ -2725,9 +2725,9 @@
         "audioSourceHelp": "Selecteer het audio invoer apparaat voor vogelgeluid detectie. Wijzigingen vereisen applicatie herstart om effect te hebben.",
         "noSoundCardCapture": "Geen geluidskaart opname",
         "rtspSource": "RTSP Bron",
-        "rtspTransportLabel": "RTSP Transport Protocol",
+        "rtspTransportLabel": "RTSP-transportprotocol",
         "rtspTransportHelp": "TCP is betrouwbaarder maar kan hogere latentie hebben. UDP is sneller maar kan pakketverlies ervaren op slechte netwerken.",
-        "rtspUrlsLabel": "RTSP Stream URLs",
+        "rtspUrlsLabel": "RTSP-stream-URL's",
         "rtspUrlsHelp": "Voer één of meer RTSP stream URLs in voor netwerk audio bronnen. Formaat: rtsp://ip:port/stream. Note: Authenticatie gegevens moeten apart worden geconfigureerd in jouw RTSP server instellingen voor beveiliging.",
         "noDeviceSelected": "Geen audio apparaat geselecteerd",
         "refreshDevices": "Vernieuwen",
@@ -2768,7 +2768,7 @@
         "frequencyResponse": "Frequentie Respons",
         "cutoffFrequency": "Afsnij Frequentie",
         "cutoffFrequencyHelp": "Frequentie waarbij de filter signalen begint te verzwakken. Vogelroepen variëren typisch van 1-10 kHz.",
-        "qFactor": "Q Factor",
+        "qFactor": "Q-factor",
         "qFactorHelp": "Kwaliteits factor bepaalt de scherpte van de filter. Lagere waarden (0.1-1) creëren zachtere hellingen, hogere waarden (1-10) creëren steilere afsnijdingen.",
         "gain": "Versterking",
         "gainHelp": "Versterking of verzwakking niveau in decibels (dB).",
@@ -2797,10 +2797,10 @@
         "intervalHelp": "Hoe vaak geluidsniveaus worden gemeten en gerapporteerd. Lagere waarden geven meer gedetailleerde gegevens maar gebruiken meer bronnen. Minimum 5 seconden, aanbevolen 60 seconden.",
         "dataOutputTitle": "Geluidsniveau Gegevens Output",
         "dataOutputDescription": "Wanneer ingeschakeld, worden geluidsniveau metingen gepubliceerd via:",
-        "mqttTopic": "MQTT topic:",
-        "sseEndpoint": "SSE endpoint:",
-        "prometheusMetrics": "Prometheus metrics:",
-        "disabled": "Sound level monitoring is disabled"
+        "mqttTopic": "MQTT-topic:",
+        "sseEndpoint": "SSE-eindpunt:",
+        "prometheusMetrics": "Prometheus-metrics:",
+        "disabled": "Geluidsniveaubewaking is uitgeschakeld"
       },
       "clipSettings": {
         "title": "Clip Instellingen",
@@ -2838,8 +2838,8 @@
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio compressie bitrate voor lossy formaten. Bereik: {min}-{max} kbps. Hogere waarden geven betere kwaliteit maar grotere bestanden.",
         "losslessNote": "Lossless formaten behouden originele audio kwaliteit zonder compressie artefacten.",
-        "normalizationDisabled": "Audio normalization is disabled",
-        "disabledInfo": "Enable clip recording above to configure clip settings, file format, and storage options."
+        "normalizationDisabled": "Audionormalisatie is uitgeschakeld",
+        "disabledInfo": "Schakel fragmentopname hierboven in om fragmentinstellingen, bestandsformaat en opslagopties te configureren."
       },
       "extendedCapture": {
         "title": "Uitgebreide opname",
@@ -2922,7 +2922,7 @@
         "lowpass": "Laagorlaat Filter",
         "highpass": "Hoogdoorlaat Filter",
         "bandpass": "Banddoorlaat Filter",
-        "bandstop": "Bandstop Filter"
+        "bandstop": "Bandsperfilter"
       },
       "errors": {
         "devicesLoadFailed": "Laden van audio apparaten mislukt. Controleer systeem permissies.",
@@ -3082,7 +3082,7 @@
         "enableLabel": "Schakel Wachtwoord Authenticatie In",
         "passwordLabel": "Wachtwoord",
         "passwordHelpText": "Beperk toegang tot instellingen met een wachtwoord.",
-        "disabled": "Password authentication is disabled"
+        "disabled": "Wachtwoordauthenticatie is uitgeschakeld"
       },
       "oauth": {
         "title": "Externe authenticatie",
@@ -3107,10 +3107,10 @@
         "noProvidersDescription": "Voeg een provider toe om inloggen met Google, GitHub, Microsoft, LINE, Kakao of een aangepaste OIDC-provider mogelijk te maken.",
         "enableProviderLabel": "Deze provider inschakelen",
         "getCredentialsLabel": "Verkrijg uw inloggegevens van {provider}",
-        "redirectUriTitle": "Redirect URI:",
+        "redirectUriTitle": "Omleidings-URI:",
         "clientIdLabel": "Client-ID",
         "clientIdHelpText": "De OAuth 2.0 Client-ID van de ontwikkelaarsconsole van uw provider",
-        "clientSecretLabel": "Client Secret",
+        "clientSecretLabel": "Clientgeheim",
         "clientSecretHelpText": "Het OAuth 2.0 Client Secret van de ontwikkelaarsconsole van uw provider",
         "userIdLabel": "Gebruikers-ID (optioneel)",
         "userIdHelpText": "Beperk toegang tot een specifiek gebruikersaccount via e-mail of ID",
@@ -3119,9 +3119,9 @@
           "enableLabel": "Sta OAuth2 Inloggen via Google toe",
           "redirectUriTitle": "Redirect URI voor Google Cloud Console:",
           "getCredentialsLabel": "Verkrijg uw inloggegevens van Google Cloud Console",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Client-ID",
           "clientIdHelpText": "Het OAuth 2.0 Client ID verkregen van Google Cloud Console bij het instellen van OAuth inloggegevens.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Clientgeheim",
           "clientSecretHelpText": "Het OAuth 2.0 Client Secret verkregen van Google Cloud Console bij het instellen van OAuth inloggegevens.",
           "userIdLabel": "Gebruikers ID"
         },
@@ -3130,9 +3130,9 @@
           "enableLabel": "Sta OAuth2 Inloggen via GitHub toe",
           "redirectUriTitle": "Redirect URI voor GitHub Developer Settings:",
           "getCredentialsLabel": "Verkrijg uw inloggegevens van GitHub Developer Settings",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Client-ID",
           "clientIdHelpText": "Het OAuth 2.0 Client ID verkregen van GitHub Developer Settings bij het instellen van OAuth inloggegevens.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Clientgeheim",
           "clientSecretHelpText": "Het OAuth 2.0 Client Secret verkregen van GitHub Developer Settings bij het instellen van OAuth inloggegevens.",
           "userIdLabel": "Gebruikers ID"
         },
@@ -3152,9 +3152,9 @@
           "enableLabel": "OAuth2-aanmelding via LINE toestaan",
           "redirectUriTitle": "Omleidings-URI voor LINE Developers Console:",
           "getCredentialsLabel": "Haal uw referenties op uit de LINE Developers Console",
-          "clientIdLabel": "Channel ID",
+          "clientIdLabel": "Kanaal-ID",
           "clientIdHelpText": "De Channel ID verkregen uit LINE Developers Console bij het instellen van LINE Login.",
-          "clientSecretLabel": "Channel Secret",
+          "clientSecretLabel": "Kanaalgeheim",
           "clientSecretHelpText": "Het Channel Secret verkregen uit LINE Developers Console bij het instellen van LINE Login.",
           "userIdLabel": "Gebruikers-ID"
         },
@@ -3163,46 +3163,46 @@
           "enableLabel": "OAuth2-aanmelding via Kakao toestaan",
           "redirectUriTitle": "Omleidings-URI voor Kakao Developers Console:",
           "getCredentialsLabel": "Haal uw referenties op uit de Kakao Developers Console",
-          "clientIdLabel": "REST API Key",
+          "clientIdLabel": "REST API-sleutel",
           "clientIdHelpText": "De REST API Key verkregen uit Kakao Developers Console bij het instellen van Kakao Login.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Clientgeheim",
           "clientSecretHelpText": "Het Client Secret verkregen uit Kakao Developers Console bij het instellen van Kakao Login.",
           "userIdLabel": "Gebruikers-ID"
         },
         "oidc": {
-          "title": "OIDC Provider",
-          "enableLabel": "Enable OIDC authentication",
-          "redirectUriTitle": "Redirect URI",
-          "getCredentialsLabel": "Configure in your Identity Provider",
-          "clientIdLabel": "Client ID",
-          "clientIdHelpText": "The client ID from your OIDC identity provider",
-          "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "The client secret from your OIDC identity provider",
-          "userIdLabel": "Allowed User (email or sub claim)",
-          "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "title": "OIDC-provider",
+          "enableLabel": "OIDC-authenticatie inschakelen",
+          "redirectUriTitle": "Omleidings-URI",
+          "getCredentialsLabel": "Configureer in je identiteitsprovider",
+          "clientIdLabel": "Client-ID",
+          "clientIdHelpText": "De client-ID van je OIDC-identiteitsprovider",
+          "clientSecretLabel": "Clientgeheim",
+          "clientSecretHelpText": "Het clientgeheim van je OIDC-identiteitsprovider",
+          "userIdLabel": "Toegestane gebruiker (e-mail of sub claim)",
+          "issuerUrlLabel": "Uitgever-URL",
+          "issuerUrlHelpText": "De uitgever-URL van je OpenID Connect-identiteitsprovider (bijv. https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
-          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
-          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "issuerUrlRequired": "Uitgever-URL is vereist voor OIDC-providers",
+          "issuerUrlInvalid": "Uitgever-URL moet een geldige HTTP- of HTTPS-URL zijn",
           "scopesLabel": "Scopes",
-          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesHelpText": "Kommagescheiden lijst van OIDC-scopes (standaard: openid, profile, email)",
           "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
         "title": "Omzeil Authenticatie",
         "description": "Sta toegang tot instellingen toe zonder authenticatie",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Subnet-bypass is uitgeschakeld"
       },
       "exceptions": {
-        "title": "Exceptions"
+        "title": "Uitzonderingen"
       },
       "publicAccess": {
-        "title": "Public Access",
-        "description": "Allow specific features to be accessible without authentication.",
-        "liveAudioLabel": "Allow public live audio playback",
-        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
-        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+        "title": "Openbare toegang",
+        "description": "Sta toe dat specifieke functies toegankelijk zijn zonder authenticatie.",
+        "liveAudioLabel": "Sta openbare live audio-weergave toe",
+        "liveAudioHelp": "Wanneer ingeschakeld, kan iedereen luisteren naar live audiostreams zonder in te loggen. Instellingen en verwijderen vereisen nog steeds authenticatie.",
+        "warningText": "Het inschakelen van openbare toegangsfuncties maakt ze beschikbaar voor iedereen die deze server kan bereiken. Schakel alleen in als je je netwerkomgeving vertrouwt."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -3219,64 +3219,64 @@
       },
       "tls": {
         "title": "TLS / HTTPS",
-        "description": "Configure TLS/HTTPS encryption for secure connections",
-        "modeLabel": "TLS Mode",
-        "modeNone": "None (HTTP)",
+        "description": "Configureer TLS/HTTPS-versleuteling voor beveiligde verbindingen",
+        "modeLabel": "TLS-modus",
+        "modeNone": "Geen (HTTP)",
         "modeLetsEncrypt": "Let's Encrypt",
-        "modeManual": "Manual Certificate",
-        "modeSelfSigned": "Self-Signed",
-        "modeNoneDescription": "Plain HTTP without encryption",
-        "modeAutoTLSDescription": "Automatic certificate via Let's Encrypt",
-        "modeManualDescription": "Upload your own certificate and key",
-        "modeSelfSignedDescription": "Generate a self-signed certificate",
-        "portLabel": "HTTPS Port",
-        "portHelpText": "Port for HTTPS connections (default: 8443)",
-        "redirectToHttps": "Redirect HTTP to HTTPS",
-        "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
-        "validityLabel": "Certificate Validity",
-        "validityHelpText": "How long the certificate should be valid",
-        "validity365d": "1 year",
-        "validity730d": "2 years",
-        "generateButton": "Generate Certificate",
-        "regenerateButton": "Regenerate Certificate",
-        "generating": "Generating...",
-        "certificateLabel": "Certificate (PEM)",
-        "privateKeyLabel": "Private Key (PEM)",
-        "caCertificateLabel": "CA Certificate (PEM, optional)",
-        "uploadButton": "Upload Certificate",
-        "uploading": "Uploading...",
-        "browseFile": "Browse...",
-        "plaintextWarning": "Warning: Your private key will be transmitted in plaintext over HTTP. Only upload certificates when connected via a trusted network or localhost.",
-        "certificateInstalled": "Installed Certificate",
-        "subject": "Subject",
-        "issuer": "Issuer",
-        "validFrom": "Valid From",
-        "validUntil": "Valid Until",
-        "daysRemaining": "Days Remaining",
-        "sans": "Subject Alternative Names",
-        "fingerprint": "Fingerprint",
-        "expiryWarning": "Certificate is expiring soon",
-        "loading": "Loading certificate info...",
-        "loadError": "Failed to load certificate info",
-        "generateSuccess": "Self-signed certificate generated successfully",
-        "generateError": "Failed to generate certificate",
-        "uploadSuccess": "Certificate uploaded successfully",
-        "uploadError": "Failed to upload certificate",
-        "deleteSuccess": "Certificate removed successfully",
-        "deleteError": "Failed to delete certificate",
-        "removeCertificate": "Remove Certificate",
-        "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
-        "restartRequired": "TLS changes require a server restart to take effect.",
-        "noCertificate": "No certificate installed",
-        "validity1825d": "5 years",
-        "autoTLSHostRequired": "A hostname is required for Let’s Encrypt. Enter your public domain name in the Host field above.",
-        "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
-        "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
-        "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
-        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
-        "downloadCertificate": "Download Certificate",
-        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
-        "fileReadError": "Failed to read the selected file"
+        "modeManual": "Handmatig certificaat",
+        "modeSelfSigned": "Zelfondertekend",
+        "modeNoneDescription": "Gewoon HTTP zonder versleuteling",
+        "modeAutoTLSDescription": "Automatisch certificaat via Let's Encrypt",
+        "modeManualDescription": "Upload je eigen certificaat en sleutel",
+        "modeSelfSignedDescription": "Een zelfondertekend certificaat genereren",
+        "portLabel": "HTTPS-poort",
+        "portHelpText": "Poort voor HTTPS-verbindingen (standaard: 8443)",
+        "redirectToHttps": "HTTP naar HTTPS omleiden",
+        "autoTLSRequirements": "Vereist dat poorten 80 en 443 toegankelijk zijn. Op Linux heeft het proces root of CAP_NET_BIND_SERVICE nodig.",
+        "validityLabel": "Certificaatgeldigheid",
+        "validityHelpText": "Hoe lang het certificaat geldig moet zijn",
+        "validity365d": "1 jaar",
+        "validity730d": "2 jaar",
+        "generateButton": "Certificaat genereren",
+        "regenerateButton": "Certificaat opnieuw genereren",
+        "generating": "Genereren...",
+        "certificateLabel": "Certificaat (PEM)",
+        "privateKeyLabel": "Privésleutel (PEM)",
+        "caCertificateLabel": "CA-certificaat (PEM, optioneel)",
+        "uploadButton": "Certificaat uploaden",
+        "uploading": "Uploaden...",
+        "browseFile": "Bladeren...",
+        "plaintextWarning": "Waarschuwing: je privésleutel wordt in platte tekst via HTTP verzonden. Upload certificaten alleen via een vertrouwd netwerk of localhost.",
+        "certificateInstalled": "Geïnstalleerd certificaat",
+        "subject": "Onderwerp",
+        "issuer": "Uitgever",
+        "validFrom": "Geldig vanaf",
+        "validUntil": "Geldig tot",
+        "daysRemaining": "Resterende dagen",
+        "sans": "Alternatieve onderwerpnamen",
+        "fingerprint": "Vingerafdruk",
+        "expiryWarning": "Certificaat verloopt binnenkort",
+        "loading": "Certificaatinformatie laden...",
+        "loadError": "Kan certificaatinformatie niet laden",
+        "generateSuccess": "Zelfondertekend certificaat succesvol gegenereerd",
+        "generateError": "Kan certificaat niet genereren",
+        "uploadSuccess": "Certificaat succesvol geüpload",
+        "uploadError": "Kan certificaat niet uploaden",
+        "deleteSuccess": "Certificaat succesvol verwijderd",
+        "deleteError": "Kan certificaat niet verwijderen",
+        "removeCertificate": "Certificaat verwijderen",
+        "deleteConfirm": "Weet je zeker dat je het geïnstalleerde TLS-certificaat wilt verwijderen? De TLS-modus wordt gereset naar Geen.",
+        "restartRequired": "TLS-wijzigingen vereisen een herstart van de server.",
+        "noCertificate": "Geen certificaat geïnstalleerd",
+        "validity1825d": "5 jaar",
+        "autoTLSHostRequired": "Een hostnaam is vereist voor Let’s Encrypt. Voer je publieke domeinnaam in het Host-veld hierboven in.",
+        "autoTLSNoIP": "Let’s Encrypt vereist een domeinnaam, geen IP-adres. Voer een publiek domein in zoals birds.example.com.",
+        "autoTLSNeedsFQDN": "Let’s Encrypt vereist een volledig gekwalificeerde domeinnaam (bijv. birds.example.com), geen kale hostnaam.",
+        "autoTLSNoLocalhost": "Let’s Encrypt kan geen certificaten uitgeven voor localhost.",
+        "autoTLSPrivateTLD": "Let’s Encrypt kan geen certificaten uitgeven voor privédomeinen ({tld} is niet publiek oplosbaar).",
+        "downloadCertificate": "Certificaat downloaden",
+        "downloadCertificateHelp": "Installeer dit certificaat in het vertrouwensarchief van je besturingssysteem om beveiligingswaarschuwingen van de browser te voorkomen.",
+        "fileReadError": "Kan het geselecteerde bestand niet lezen"
       }
     },
     "species": {
@@ -3433,14 +3433,14 @@
           "availableTitle": "Beschikbare Parameters",
           "buttons": {
             "commonName": "CommonName",
-            "scientificName": "ScientificName",
-            "confidence": "Confidence",
-            "time": "Time",
-            "source": "Source",
+            "scientificName": "WetenschappelijkeNaam",
+            "confidence": "Betrouwbaarheid",
+            "time": "Tijd",
+            "source": "Bron",
             "clearParameters": "Wis Parameters"
           },
-          "placeholder": "Click buttons below to add parameters or type manually",
-          "tooltip": "Use buttons below or type directly (comma-separated)"
+          "placeholder": "Klik op de knoppen hieronder om parameters toe te voegen of typ handmatig",
+          "tooltip": "Gebruik de knoppen hieronder of typ direct (kommagescheiden)"
         },
         "executeDefaults": {
           "label": "Voer ook standaard acties uit (database opslag, meldingen, etc.)",
@@ -3592,7 +3592,7 @@
         "expand": "Gebeurtenisgeschiedenis tonen",
         "collapse": "Gebeurtenisgeschiedenis verbergen"
       },
-      "suggestions": "Species suggestions"
+      "suggestions": "Soortsuggesties"
     },
     "database": {
       "sqlitePlaceholder": "Voer SQLite database pad in",
@@ -3838,7 +3838,7 @@
         "appearance": "Uiterlijk",
         "language": "Taal en regionaal",
         "visualContent": "Visuele inhoud",
-        "audioPlayback": "Audio Playback"
+        "audioPlayback": "Audioweergave"
       },
       "appearance": {
         "title": "Uiterlijk",
@@ -3853,14 +3853,14 @@
         "description": "Configureer vogelafbeeldingen en spectrogramweergave-instellingen"
       },
       "audioPlayback": {
-        "title": "Audio Playback",
-        "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "title": "Audioweergave",
+        "description": "Standaardinstellingen voor het afspelen van vogelopnames.",
+        "defaultGain": "Standaard volumeversterking",
+        "defaultGainHelpText": "Initiële versterking bij het afspelen van opnames. Vogelgeluiden zijn vaak zacht, dus een versterking van 6-12 dB wordt aanbevolen.",
         "defaultGainUnit": "dB"
       }
     },
-    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
+    "restartRequired": "Sommige wijzigingen vereisen een herstart van de server. Herstart BirdNET-Go."
   },
   "auth": {
     "login": "Aanmelden",
@@ -3881,7 +3881,7 @@
     "continueWithMicrosoft": "Doorgaan met Microsoft",
     "continueWithLine": "Doorgaan met LINE",
     "continueWithKakao": "Doorgaan met Kakao",
-    "continueWithOidc": "Continue with OIDC",
+    "continueWithOidc": "Doorgaan met OIDC",
     "errors": {
       "loginFailed": "Aanmelding mislukt. Controleer je wachtwoord en probeer het opnieuw.",
       "passwordRequired": "Wachtwoord is verplicht.",
@@ -4029,7 +4029,7 @@
       "seekProgress": "Voortgang verder spoelen: {current} / {total} seconden",
       "playbackSpeed": "Afspeelsnelheid",
       "speed": "Snelheid",
-      "loop": "Toggle loop",
+      "loop": "Herhaling aan/uit",
       "player": "Audiospeler"
     },
     "spectrogram": {
@@ -4108,36 +4108,36 @@
         "spectrogramFailed": "Spectrogram kon niet worden gegenereerd"
       },
       "clipExtraction": {
-        "selectRange": "Click and drag to select a range",
-        "playSelection": "Play selected range",
-        "pauseSelection": "Pause playback",
-        "reviewSelection": "Jump to start of selection",
-        "selectionStart": "Selection start handle",
-        "selectionEnd": "Selection end handle",
-        "lossless": "Lossless",
-        "lossy": "Lossy",
-        "extractClip": "Download selected clip",
-        "clearSelection": "Clear selection",
-        "extracting": "Extracting clip...",
-        "extractError": "Failed to extract clip",
-        "formatLabel": "Format",
+        "selectRange": "Klik en sleep om een bereik te selecteren",
+        "playSelection": "Geselecteerd bereik afspelen",
+        "pauseSelection": "Afspelen pauzeren",
+        "reviewSelection": "Ga naar begin van selectie",
+        "selectionStart": "Handgreep begin selectie",
+        "selectionEnd": "Handgreep einde selectie",
+        "lossless": "Verliesvrij",
+        "lossy": "Met verlies",
+        "extractClip": "Geselecteerd fragment downloaden",
+        "clearSelection": "Selectie wissen",
+        "extracting": "Fragment extraheren...",
+        "extractError": "Kan fragment niet extraheren",
+        "formatLabel": "Formaat",
         "rangeLabel": "{start}s – {end}s"
       },
       "processing": {
-        "playSelection": "Play selection",
-        "skipToStart": "Skip to selection start",
-        "clearSelection": "Clear selection",
-        "gain": "Gain (dB)",
-        "denoise": "Denoise",
-        "denoiseOff": "Off",
-        "denoiseLight": "Light",
-        "denoiseMedium": "Medium",
-        "denoiseHeavy": "Heavy",
-        "normalize": "Normalize audio",
-        "normalizeTooltip": "EBU R128 Normalization",
-        "export": "Export",
+        "playSelection": "Selectie afspelen",
+        "skipToStart": "Ga naar begin van selectie",
+        "clearSelection": "Selectie wissen",
+        "gain": "Versterking (dB)",
+        "denoise": "Ruisonderdrukking",
+        "denoiseOff": "Uit",
+        "denoiseLight": "Licht",
+        "denoiseMedium": "Gemiddeld",
+        "denoiseHeavy": "Zwaar",
+        "normalize": "Audio normaliseren",
+        "normalizeTooltip": "EBU R128-normalisatie",
+        "export": "Exporteren",
         "exportOriginal": "Origineel",
-        "processingActive": "Processing active"
+        "processingActive": "Verwerking actief"
       }
     },
     "weatherInfo": {
@@ -4146,20 +4146,20 @@
       }
     },
     "tls": {
-      "certificateInstalled": "Certificate Installed",
-      "browseFile": "Browse",
-      "subject": "Subject",
-      "issuer": "Issuer",
-      "sans": "Subject Alternative Names",
-      "validUntil": "Valid Until",
-      "daysRemaining": "Days Remaining",
-      "fingerprint": "Fingerprint",
-      "expiryWarning": "This certificate expires soon. Consider renewing it.",
-      "downloadCertificate": "Download Certificate",
-      "regenerateButton": "Regenerate",
-      "removeCertificate": "Remove Certificate",
-      "fileReadError": "Failed to read file",
-      "loading": "Loading certificate information..."
+      "certificateInstalled": "Certificaat geïnstalleerd",
+      "browseFile": "Bladeren",
+      "subject": "Onderwerp",
+      "issuer": "Uitgever",
+      "sans": "Alternatieve onderwerpnamen",
+      "validUntil": "Geldig tot",
+      "daysRemaining": "Resterende dagen",
+      "fingerprint": "Vingerafdruk",
+      "expiryWarning": "Dit certificaat verloopt binnenkort. Overweeg het te vernieuwen.",
+      "downloadCertificate": "Certificaat downloaden",
+      "regenerateButton": "Opnieuw genereren",
+      "removeCertificate": "Certificaat verwijderen",
+      "fileReadError": "Kan bestand niet lezen",
+      "loading": "Certificaatinformatie laden..."
     }
   },
   "connectivity": {
@@ -4332,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Welkom",
+        "heading": "Welkom bij BirdNET-Go!",
+        "description": "BirdNET-Go is een realtime systeem voor het identificeren van vogelgeluiden. Het luistert naar audio van je microfoon of audiostream en gebruikt het BirdNET AI-model om vogelsoorten te identificeren.",
+        "credit": "Aangedreven door de BirdNET Analyzer, ontwikkeld door het K. Lisa Yang Center for Conservation Bioacoustics aan het Cornell Lab of Ornithology en de Chemnitz University of Technology.",
+        "cta": "Laten we je vogelmonitoringstation instellen."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Locatie en taal",
+        "uiLanguageLabel": "Interfacetaal",
+        "uiLanguageHelp": "Taal die wordt gebruikt voor de webinterface",
+        "speciesLanguageLabel": "Taal van soortnamen",
+        "speciesLanguageHelp": "Taal die wordt gebruikt voor vogelsoortnamen bij detecties",
+        "locationLabel": "Stationlocatie",
+        "locationHelp": "Je locatie helpt om soorten te filteren naar die waarschijnlijk in je omgeving voorkomen",
+        "latitudeLabel": "Breedtegraad",
+        "longitudeLabel": "Lengtegraad",
+        "useMyLocation": "Gebruik mijn locatie",
+        "locationDetected": "Locatie gedetecteerd",
+        "locationError": "Locatie kon niet worden gedetecteerd. Voer de coördinaten handmatig in.",
+        "locationDenied": "Locatietoegang geweigerd. Voer de coördinaten handmatig in."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Audiobron",
+        "sourceTypeLabel": "Brontype",
+        "soundcard": "Microfoon / Geluidskaart",
+        "rtspStream": "RTSP-stream",
+        "deviceLabel": "Audioapparaat",
+        "deviceLoading": "Audioapparaten laden...",
+        "noDevicesFound": "Geen audioapparaten gedetecteerd. Probeer een RTSP-stream te configureren.",
+        "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Voer de URL van je RTSP-audiostream in",
+        "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Detectiedrempel",
+        "description": "Kies hoe streng de vogelidentificatie moet zijn. Je kunt dit later aanpassen in Instellingen.",
+        "balanced": "Gebalanceerd",
+        "balancedDesc": "Goede balans tussen nauwkeurigheid en gevoeligheid",
+        "balancedRecommended": "Aanbevolen",
+        "highAccuracy": "Hoge nauwkeurigheid",
+        "highAccuracyDesc": "Minder fout-positieven, kan sommige vogels missen",
+        "highSensitivity": "Hoge gevoeligheid",
+        "highSensitivityDesc": "Meer detecties, meer fout-positieven",
+        "threshold": "Betrouwbaarheidsdrempel",
+        "fpFilterNote": "Zodra je systeem draait en bewezen is, kun je het fout-positievenfilter inschakelen in Instellingen om onjuiste detecties verder te verminderen."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Privacy en integratie",
+        "privacyFilterLabel": "Privacyfilter inschakelen",
+        "privacyFilterHelp": "Filtert detecties uit wanneer menselijke stemmen worden gedetecteerd bij de microfoon",
+        "birdweatherLabel": "Detecties delen met BirdWeather",
+        "birdweatherHelp": "Draag je vogeldetecties bij aan het BirdWeather-gemeenschapsnetwerk",
+        "birdweatherIdLabel": "BirdWeather Station-ID",
+        "birdweatherIdPlaceholder": "Voer je BirdWeather station-ID in",
+        "errorReportingLabel": "Anonieme foutrapporten verzenden",
+        "errorReportingHelp": "Help BirdNET-Go te verbeteren door anonieme foutrapporten te verzenden wanneer er iets misgaat"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "Verantwoord gebruik van BirdNET-Go",
+        "intro": "BirdNET-Go is een krachtig hulpmiddel dat je vogelervaring verbetert door AI-ondersteunde identificatie. Om de beste resultaten voor zowel vogelen als natuurbehoud te waarborgen:",
+        "point1": "Controleer en verifieer detecties voordat je waarnemingen deelt",
+        "point2": "Gebruik de betrouwbaarheidsscores als richtlijn, niet als absolute waarheid",
+        "point3": "Vergelijk met veldgidsen en lokale expertise",
+        "point4": "Houd rekening met seizoenspatronen en geschiktheid van het leefgebied",
+        "citizenScienceHeading": "Bij het bijdragen aan burgerwetenschap:",
+        "citizenPoint1": "Dien alleen waarnemingen in die je persoonlijk hebt geverifieerd",
+        "citizenPoint2": "Voeg notities toe over visuele of gedragsbevestiging",
+        "citizenPoint3": "Gebruik AI-detecties als startpunt voor je eigen waarnemingen",
+        "outro": "Deze aanpak waarborgt gegevenskwaliteit voor wetenschappelijk onderzoek en maximaliseert tegelijk je leerervaring en plezier bij het vogelen.",
+        "acknowledge": "Ik begrijp het"
       }
     }
   },

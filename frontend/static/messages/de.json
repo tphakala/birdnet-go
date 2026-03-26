@@ -377,8 +377,8 @@
         "application": "Anwendungsfehler",
         "imageProvider": "Bildanbieter-Hinweis",
         "categoryError": "{category}-Fehler",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Mehrere {component}-Fehler",
+        "burstMessage": "{count} Fehler in den letzten {window_minutes} Minuten: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Neue Analyseeinstellungen werden angewendet...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "BirdWeather-Integration wird aktualisiert...",
         "reconfiguringStreams": "Audiostreams werden aktualisiert...",
         "reconfiguringTelemetry": "Telemetrieeinstellungen werden aktualisiert...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Push-Benachrichtigungsanbieter werden neu konfiguriert...",
         "reconfiguringSpeciesTracking": "Artenverfolgung wird aktualisiert...",
         "recalculatingThresholds": "Dynamische Schwellenwerte werden für neuen Basiswert neu berechnet",
         "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
@@ -790,17 +790,17 @@
       "showing": "Zeige {from} bis {to} von {total} Ergebnissen"
     },
     "weather": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "title": "Wetterinformationen",
+      "noData": "Keine Wetterdaten",
+      "noDataAvailable": "Keine Wetterdaten verfügbar",
+      "loading": "Wetterinformationen werden geladen...",
       "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
+        "temperature": "Temperatur",
+        "weather": "Wetter",
         "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
+        "humidity": "Luftfeuchtigkeit",
+        "pressure": "Luftdruck",
+        "cloudCover": "Bewölkung"
       },
       "units": {
         "temperature": "°C",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frequenzbereich",
+      "colorMap": "Farbkarte",
+      "gain": "Verstärkung",
       "gainTooltip": "Spektrogramm-Visualisierungsverstärkung",
       "mute": "Audioausgabe stummschalten",
       "unmute": "Audioausgabe aktivieren",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimale Frequenz",
+      "frequencyRangeMax": "Maximale Frequenz"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Ihr Browser unterstützt keine Audioanalyse",
+      "connectionFailed": "Verbindung zum Live-Audiostream fehlgeschlagen",
+      "accessDenied": "Der Zugriff auf Live-Audio erfordert eine Authentifizierung. Bitte melden Sie sich an, um diese Funktion zu nutzen."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Live-Spektrogramm",
+      "audioToggle": "Audio aktivieren"
     },
     "gain": {
       "muted": "Stumm",
       "level": "Verstärkung: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Live-Audio",
+      "sourceLabel": "Audioquelle",
       "connected": "Verbunden",
       "enterFullscreen": "Vollbild",
       "exitFullscreen": "Vollbild beenden"
@@ -962,7 +962,7 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Graustufen"
     },
     "labels": {
       "toggle": "Erkennungslabels umschalten"
@@ -1287,82 +1287,82 @@
         "fetchFailed": "Fehler beim Abrufen der Datenbankstatistiken"
       },
       "dashboard": {
-        "title": "Database Dashboard",
-        "fetchFailed": "Failed to fetch database overview",
+        "title": "Datenbank-Dashboard",
+        "fetchFailed": "Datenbankübersicht konnte nicht abgerufen werden",
         "metrics": {
-          "readLatency": "Read Latency",
-          "writeLatency": "Write Latency",
-          "queriesPerSec": "Queries/sec",
-          "database": "Database",
-          "avg": "avg",
-          "max": "max",
-          "lastHour": "{count} last hour",
-          "slowQueries": "{count} slow"
+          "readLatency": "Leselatenz",
+          "writeLatency": "Schreiblatenz",
+          "queriesPerSec": "Abfragen/Sek",
+          "database": "Datenbank",
+          "avg": "Durchschn.",
+          "max": "Max",
+          "lastHour": "{count} letzte Stunde",
+          "slowQueries": "{count} langsam"
         },
         "details": {
-          "title": "Database Details",
+          "title": "Datenbankdetails",
           "engine": "Engine",
           "journal": "Journal",
-          "pageSize": "Page size",
-          "cacheHit": "Cache hit",
-          "integrity": "Integrity",
-          "lastVacuum": "Last VACUUM"
+          "pageSize": "Seitengröße",
+          "cacheHit": "Cache-Treffer",
+          "integrity": "Integrität",
+          "lastVacuum": "Letztes VACUUM"
         },
         "locksWal": {
-          "title": "Locks & WAL",
-          "lockWaits": "Lock waits",
-          "lockTimeouts": "Lock timeouts",
-          "avgWait": "Avg wait",
-          "busyTimeouts": "Busy timeouts",
-          "walSize": "WAL size",
+          "title": "Sperren & WAL",
+          "lockWaits": "Sperrwartezeiten",
+          "lockTimeouts": "Sperr-Timeouts",
+          "avgWait": "Durchschn. Wartezeit",
+          "busyTimeouts": "Busy-Timeouts",
+          "walSize": "WAL-Größe",
           "checkpoints": "Checkpoints",
-          "freelistPages": "Freelist pages",
-          "cacheSize": "Cache size"
+          "freelistPages": "Freelist-Seiten",
+          "cacheSize": "Cache-Größe"
         },
         "connectionPool": {
-          "title": "Connection Pool",
-          "poolUsage": "Pool Usage",
-          "active": "active",
-          "idle": "idle",
-          "waiting": "waiting",
-          "totalCreated": "Total created",
-          "connErrors": "Conn errors",
+          "title": "Verbindungspool",
+          "poolUsage": "Pool-Auslastung",
+          "active": "aktiv",
+          "idle": "inaktiv",
+          "waiting": "wartend",
+          "totalCreated": "Gesamt erstellt",
+          "connErrors": "Verbindungsfehler",
           "threads": "Threads",
-          "running": "running",
-          "cached": "cached"
+          "running": "laufend",
+          "cached": "gecacht"
         },
         "innodb": {
-          "title": "InnoDB & Locks",
-          "bufferPoolHitRate": "Buffer pool hit rate",
-          "bufferPoolSize": "Buffer pool size",
-          "lockWaits": "Lock waits",
+          "title": "InnoDB & Sperren",
+          "bufferPoolHitRate": "Buffer-Pool-Trefferrate",
+          "bufferPoolSize": "Buffer-Pool-Größe",
+          "lockWaits": "Sperrwartezeiten",
           "deadlocks": "Deadlocks",
-          "avgLockWait": "Avg lock wait",
-          "tableLocksWaited": "Table locks waited",
-          "tableLocksImmediate": "Table locks immediate"
+          "avgLockWait": "Durchschn. Sperrwartezeit",
+          "tableLocksWaited": "Tabellensperren gewartet",
+          "tableLocksImmediate": "Tabellensperren sofort"
         },
         "detectionRate": {
-          "title": "Detection Rate (24h)",
-          "perHour": "/hr",
-          "min": "min",
-          "avg": "avg",
-          "max": "max",
-          "lastBackup": "Last backup",
-          "backupSize": "Backup size",
-          "createBackup": "Create Backup",
+          "title": "Erkennungsrate (24h)",
+          "perHour": "/Std",
+          "min": "Min",
+          "avg": "Durchschn.",
+          "max": "Max",
+          "lastBackup": "Letzte Sicherung",
+          "backupSize": "Sicherungsgröße",
+          "createBackup": "Sicherung erstellen",
           "mysqlHost": "Host",
           "mysqlBackupNote": "MySQL-Backups sollten über mysqldump oder Ihre MySQL-Administrationswerkzeuge verwaltet werden.",
           "chartLabel": "Erkennungsrate über 24 Stunden",
           "detectionsTooltip": "{count} Erkennungen"
         },
         "tables": {
-          "title": "Tables",
-          "total": "Total",
-          "table": "Table",
+          "title": "Tabellen",
+          "total": "Gesamt",
+          "table": "Tabelle",
           "engine": "Engine",
-          "rows": "Rows",
-          "size": "Size",
-          "usage": "Usage"
+          "rows": "Zeilen",
+          "size": "Größe",
+          "usage": "Nutzung"
         },
         "loading": "Laden..."
       },
@@ -2275,7 +2275,7 @@
           "pushover": "Pushover",
           "gotify": "Gotify",
           "ntfy": "ntfy",
-          "email": "Email",
+          "email": "E-Mail",
           "generic": "Shoutrrr",
           "numbered": "{service} #{number}"
         },
@@ -2535,29 +2535,29 @@
           "skipVerify": "Zertifikatsüberprüfung überspringen",
           "configNote": "<strong>TLS-Konfiguration:</strong><br />• Standard-TLS: Zertifikate für öffentliche Broker leer lassen<br />• Selbstsignierte Zertifikate: CA-Zertifikat bereitstellen<br />• Mutual TLS (mTLS): Alle drei Zertifikate bereitstellen",
           "certificates": {
-            "title": "Certificate Management",
-            "description": "Upload certificates for secure MQTT broker connections",
-            "caLabel": "CA Certificate",
+            "title": "Zertifikatsverwaltung",
+            "description": "Zertifikate für sichere MQTT-Broker-Verbindungen hochladen",
+            "caLabel": "CA-Zertifikat",
             "caPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
-            "clientCertLabel": "Client Certificate",
+            "caHelpText": "Zertifizierungsstellenzertifikat zur Überprüfung der Broker-Identität",
+            "clientCertLabel": "Client-Zertifikat",
             "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "clientCertHelpText": "Client certificate for mutual TLS authentication",
-            "clientKeyLabel": "Client Private Key",
+            "clientCertHelpText": "Client-Zertifikat für gegenseitige TLS-Authentifizierung",
+            "clientKeyLabel": "Privater Client-Schlüssel",
             "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
-            "clientKeyHelpText": "Private key matching the client certificate",
-            "uploadButton": "Upload Certificates",
-            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
-            "uploadError": "Failed to upload MQTT TLS certificates",
-            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
-            "deleteSuccess": "MQTT TLS certificates removed",
-            "deleteError": "Failed to remove MQTT TLS certificates",
-            "loadError": "Failed to load certificate information",
-            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+            "clientKeyHelpText": "Zum Client-Zertifikat passender privater Schlüssel",
+            "uploadButton": "Zertifikate hochladen",
+            "uploadSuccess": "MQTT-TLS-Zertifikate erfolgreich hochgeladen. Verwenden Sie Verbindung testen zur Überprüfung.",
+            "uploadError": "Hochladen der MQTT-TLS-Zertifikate fehlgeschlagen",
+            "deleteConfirm": "Alle MQTT-TLS-Zertifikate entfernen? Der MQTT-Client muss sich neu verbinden.",
+            "deleteSuccess": "MQTT-TLS-Zertifikate entfernt",
+            "deleteError": "Entfernen der MQTT-TLS-Zertifikate fehlgeschlagen",
+            "loadError": "Laden der Zertifikatsinformationen fehlgeschlagen",
+            "reconnectNote": "Verwenden Sie die Schaltfläche Verbindung testen unten, um die neue TLS-Konfiguration zu überprüfen."
           }
         },
         "homeAssistant": {
-          "title": "Home Assistant Auto-Discovery",
+          "title": "Home Assistant Auto-Erkennung",
           "enable": "Home Assistant MQTT Discovery aktivieren",
           "description": "Wenn aktiviert, registriert BirdNET-Go automatisch Geräte und Sensoren bei Home Assistant über das MQTT-Discovery-Protokoll. Geräte erscheinen ohne manuelle YAML-Konfiguration in der Home Assistant-Geräteregistrierung.",
           "discoveryPrefix": {
@@ -2697,14 +2697,14 @@
           "helpText": "Wie lange Taxonomie-Daten von eBird zwischengespeichert werden. Da sich die Taxonomie selten ändert, reduzieren längere Cache-Zeiten die API-Aufrufe."
         },
         "note": "eBird stellt taxonomische Daten zur Artklassifizierung und für Einblicke bereit. Der API-Schlüssel ist kostenlos beim Cornell Lab of Ornithology erhältlich.",
-        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "apiKeyInfo": "Ein persönlicher eBird-API-Schlüssel ist erforderlich, um diese Integration zu nutzen. Sie können einen kostenlosen Schlüssel unter <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a> anfordern.",
         "test": {
-          "button": "Test eBird Connection",
-          "loading": "Testing...",
-          "enabledRequired": "Enable eBird integration first",
-          "apiKeyRequired": "API key is required",
-          "inProgress": "Test in progress...",
-          "description": "Test eBird API connectivity and authentication"
+          "button": "eBird-Verbindung testen",
+          "loading": "Wird getestet...",
+          "enabledRequired": "Aktivieren Sie zuerst die eBird-Integration",
+          "apiKeyRequired": "API-Schlüssel ist erforderlich",
+          "inProgress": "Test läuft...",
+          "description": "eBird-API-Konnektivität und Authentifizierung testen"
         }
       }
     },
@@ -3210,8 +3210,8 @@
             "source": "Quelle",
             "clearParameters": "Parameter löschen"
           },
-          "placeholder": "Click buttons below to add parameters or type manually",
-          "tooltip": "Use buttons below or type directly (comma-separated)"
+          "placeholder": "Klicken Sie auf die Schaltflächen unten, um Parameter hinzuzufügen, oder geben Sie sie manuell ein",
+          "tooltip": "Verwenden Sie die Schaltflächen unten oder geben Sie direkt ein (kommagetrennt)"
         },
         "executeDefaults": {
           "label": "Auch Standardaktionen ausführen (Datenbankspeicherung, Benachrichtigungen usw.)",
@@ -3363,7 +3363,7 @@
         "expand": "Ereignisverlauf anzeigen",
         "collapse": "Ereignisverlauf ausblenden"
       },
-      "suggestions": "Species suggestions"
+      "suggestions": "Artvorschläge"
     },
     "security": {
       "pageLabel": "Sicherheitseinstellungen",
@@ -3485,39 +3485,39 @@
           "userIdLabel": "Benutzer-ID"
         },
         "oidc": {
-          "title": "OIDC Provider",
-          "enableLabel": "Enable OIDC authentication",
-          "redirectUriTitle": "Redirect URI",
-          "getCredentialsLabel": "Configure in your Identity Provider",
+          "title": "OIDC-Anbieter",
+          "enableLabel": "OIDC-Authentifizierung aktivieren",
+          "redirectUriTitle": "Weiterleitungs-URI",
+          "getCredentialsLabel": "Bei Ihrem Identitätsanbieter konfigurieren",
           "clientIdLabel": "Client ID",
-          "clientIdHelpText": "The client ID from your OIDC identity provider",
+          "clientIdHelpText": "Die Client-ID von Ihrem OIDC-Identitätsanbieter",
           "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "The client secret from your OIDC identity provider",
-          "userIdLabel": "Allowed User (email or sub claim)",
-          "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "clientSecretHelpText": "Das Client-Secret von Ihrem OIDC-Identitätsanbieter",
+          "userIdLabel": "Erlaubter Benutzer (E-Mail oder Sub-Claim)",
+          "issuerUrlLabel": "Aussteller-URL",
+          "issuerUrlHelpText": "Die Aussteller-URL Ihres OpenID Connect-Identitätsanbieters (z.B. https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
-          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
-          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
+          "issuerUrlRequired": "Aussteller-URL ist für OIDC-Anbieter erforderlich",
+          "issuerUrlInvalid": "Aussteller-URL muss eine gültige HTTP- oder HTTPS-URL sein",
           "scopesLabel": "Scopes",
-          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "scopesHelpText": "Kommagetrennte Liste von OIDC-Scopes (Standard: openid, profile, email)",
           "scopesPlaceholder": "openid, profile, email"
         }
       },
       "bypassAuthentication": {
         "title": "Authentifizierung umgehen",
         "description": "Zugriff auf Einstellungen ohne Authentifizierung erlauben",
-        "disabled": "Subnet bypass is disabled"
+        "disabled": "Subnetz-Umgehung ist deaktiviert"
       },
       "exceptions": {
-        "title": "Exceptions"
+        "title": "Ausnahmen"
       },
       "publicAccess": {
-        "title": "Public Access",
-        "description": "Allow specific features to be accessible without authentication.",
-        "liveAudioLabel": "Allow public live audio playback",
-        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
-        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+        "title": "Öffentlicher Zugang",
+        "description": "Bestimmte Funktionen ohne Authentifizierung zugänglich machen.",
+        "liveAudioLabel": "Öffentliche Live-Audio-Wiedergabe erlauben",
+        "liveAudioHelp": "Wenn aktiviert, kann jeder Live-Audiostreams ohne Anmeldung anhören. Einstellungen und Löschungen erfordern weiterhin eine Authentifizierung.",
+        "warningText": "Die Aktivierung öffentlicher Zugangs-Funktionen macht diese für jeden zugänglich, der diesen Server erreichen kann. Aktivieren Sie dies nur, wenn Sie Ihrer Netzwerkumgebung vertrauen."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -3534,64 +3534,64 @@
       },
       "tls": {
         "title": "TLS / HTTPS",
-        "description": "Configure TLS/HTTPS encryption for secure connections",
-        "modeLabel": "TLS Mode",
-        "modeNone": "None (HTTP)",
+        "description": "TLS/HTTPS-Verschlüsselung für sichere Verbindungen konfigurieren",
+        "modeLabel": "TLS-Modus",
+        "modeNone": "Keiner (HTTP)",
         "modeLetsEncrypt": "Let's Encrypt",
-        "modeManual": "Manual Certificate",
-        "modeSelfSigned": "Self-Signed",
-        "modeNoneDescription": "Plain HTTP without encryption",
-        "modeAutoTLSDescription": "Automatic certificate via Let's Encrypt",
-        "modeManualDescription": "Upload your own certificate and key",
-        "modeSelfSignedDescription": "Generate a self-signed certificate",
-        "portLabel": "HTTPS Port",
-        "portHelpText": "Port for HTTPS connections (default: 8443)",
-        "redirectToHttps": "Redirect HTTP to HTTPS",
-        "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
-        "validityLabel": "Certificate Validity",
-        "validityHelpText": "How long the certificate should be valid",
-        "validity365d": "1 year",
-        "validity730d": "2 years",
-        "generateButton": "Generate Certificate",
-        "regenerateButton": "Regenerate Certificate",
-        "generating": "Generating...",
-        "certificateLabel": "Certificate (PEM)",
-        "privateKeyLabel": "Private Key (PEM)",
-        "caCertificateLabel": "CA Certificate (PEM, optional)",
-        "uploadButton": "Upload Certificate",
-        "uploading": "Uploading...",
-        "browseFile": "Browse...",
-        "plaintextWarning": "Warning: Your private key will be transmitted in plaintext over HTTP. Only upload certificates when connected via a trusted network or localhost.",
-        "certificateInstalled": "Installed Certificate",
-        "subject": "Subject",
-        "issuer": "Issuer",
-        "validFrom": "Valid From",
-        "validUntil": "Valid Until",
-        "daysRemaining": "Days Remaining",
-        "sans": "Subject Alternative Names",
-        "fingerprint": "Fingerprint",
-        "expiryWarning": "Certificate is expiring soon",
-        "loading": "Loading certificate info...",
-        "loadError": "Failed to load certificate info",
-        "generateSuccess": "Self-signed certificate generated successfully",
-        "generateError": "Failed to generate certificate",
-        "uploadSuccess": "Certificate uploaded successfully",
-        "uploadError": "Failed to upload certificate",
-        "deleteSuccess": "Certificate removed successfully",
-        "deleteError": "Failed to delete certificate",
-        "removeCertificate": "Remove Certificate",
-        "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
-        "restartRequired": "TLS changes require a server restart to take effect.",
-        "noCertificate": "No certificate installed",
-        "validity1825d": "5 years",
-        "autoTLSHostRequired": "A hostname is required for Let’s Encrypt. Enter your public domain name in the Host field above.",
-        "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
-        "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
-        "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
-        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
-        "downloadCertificate": "Download Certificate",
-        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
-        "fileReadError": "Failed to read the selected file"
+        "modeManual": "Manuelles Zertifikat",
+        "modeSelfSigned": "Selbstsigniert",
+        "modeNoneDescription": "Einfaches HTTP ohne Verschlüsselung",
+        "modeAutoTLSDescription": "Automatisches Zertifikat über Let's Encrypt",
+        "modeManualDescription": "Eigenes Zertifikat und Schlüssel hochladen",
+        "modeSelfSignedDescription": "Ein selbstsigniertes Zertifikat generieren",
+        "portLabel": "HTTPS-Port",
+        "portHelpText": "Port für HTTPS-Verbindungen (Standard: 8443)",
+        "redirectToHttps": "HTTP zu HTTPS umleiten",
+        "autoTLSRequirements": "Erfordert, dass die Ports 80 und 443 erreichbar sind. Unter Linux benötigt der Prozess Root-Rechte oder die CAP_NET_BIND_SERVICE-Fähigkeit.",
+        "validityLabel": "Zertifikatsgültigkeit",
+        "validityHelpText": "Wie lange das Zertifikat gültig sein soll",
+        "validity365d": "1 Jahr",
+        "validity730d": "2 Jahre",
+        "generateButton": "Zertifikat generieren",
+        "regenerateButton": "Zertifikat neu generieren",
+        "generating": "Wird generiert...",
+        "certificateLabel": "Zertifikat (PEM)",
+        "privateKeyLabel": "Privater Schlüssel (PEM)",
+        "caCertificateLabel": "CA-Zertifikat (PEM, optional)",
+        "uploadButton": "Zertifikat hochladen",
+        "uploading": "Wird hochgeladen...",
+        "browseFile": "Durchsuchen...",
+        "plaintextWarning": "Warnung: Ihr privater Schlüssel wird im Klartext über HTTP übertragen. Laden Sie Zertifikate nur hoch, wenn Sie über ein vertrauenswürdiges Netzwerk oder localhost verbunden sind.",
+        "certificateInstalled": "Installiertes Zertifikat",
+        "subject": "Betreff",
+        "issuer": "Aussteller",
+        "validFrom": "Gültig ab",
+        "validUntil": "Gültig bis",
+        "daysRemaining": "Verbleibende Tage",
+        "sans": "Alternative Antragstellernamen",
+        "fingerprint": "Fingerabdruck",
+        "expiryWarning": "Zertifikat läuft bald ab",
+        "loading": "Zertifikatsinformationen werden geladen...",
+        "loadError": "Laden der Zertifikatsinformationen fehlgeschlagen",
+        "generateSuccess": "Selbstsigniertes Zertifikat erfolgreich generiert",
+        "generateError": "Zertifikat konnte nicht generiert werden",
+        "uploadSuccess": "Zertifikat erfolgreich hochgeladen",
+        "uploadError": "Zertifikat konnte nicht hochgeladen werden",
+        "deleteSuccess": "Zertifikat erfolgreich entfernt",
+        "deleteError": "Zertifikat konnte nicht gelöscht werden",
+        "removeCertificate": "Zertifikat entfernen",
+        "deleteConfirm": "Möchten Sie das installierte TLS-Zertifikat wirklich entfernen? Der TLS-Modus wird auf Keiner zurückgesetzt.",
+        "restartRequired": "TLS-Änderungen erfordern einen Neustart des Servers.",
+        "noCertificate": "Kein Zertifikat installiert",
+        "validity1825d": "5 Jahre",
+        "autoTLSHostRequired": "Ein Hostname ist für Let's Encrypt erforderlich. Geben Sie Ihren öffentlichen Domainnamen im Host-Feld oben ein.",
+        "autoTLSNoIP": "Let's Encrypt benötigt einen Domainnamen, keine IP-Adresse. Geben Sie eine öffentliche Domain wie birds.example.com ein.",
+        "autoTLSNeedsFQDN": "Let's Encrypt benötigt einen vollqualifizierten Domainnamen (z.B. birds.example.com), keinen einfachen Hostnamen.",
+        "autoTLSNoLocalhost": "Let's Encrypt kann keine Zertifikate für localhost ausstellen.",
+        "autoTLSPrivateTLD": "Let's Encrypt kann keine Zertifikate für private Domains ausstellen ({tld} ist nicht öffentlich auflösbar).",
+        "downloadCertificate": "Zertifikat herunterladen",
+        "downloadCertificateHelp": "Installieren Sie dieses Zertifikat im Vertrauensspeicher Ihres Betriebssystems, um Browser-Sicherheitswarnungen zu vermeiden.",
+        "fileReadError": "Ausgewählte Datei konnte nicht gelesen werden"
       }
     },
     "database": {
@@ -3838,7 +3838,7 @@
         "appearance": "Erscheinungsbild",
         "language": "Sprache & Region",
         "visualContent": "Visuelle Inhalte",
-        "audioPlayback": "Audio Playback"
+        "audioPlayback": "Audiowiedergabe"
       },
       "appearance": {
         "title": "Erscheinungsbild",
@@ -3853,14 +3853,14 @@
         "description": "Konfigurieren Sie Vogelbilder und Spektrogramm-Anzeigeeinstellungen"
       },
       "audioPlayback": {
-        "title": "Audio Playback",
-        "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "title": "Audiowiedergabe",
+        "description": "Standardeinstellungen für die Wiedergabe von Vogelaufnahmen.",
+        "defaultGain": "Standard-Lautstärkeverstärkung",
+        "defaultGainHelpText": "Anfangsverstärkung bei der Wiedergabe von Aufnahmen. Vogelstimmen sind oft leise, daher wird eine Verstärkung von 6-12 dB empfohlen.",
         "defaultGainUnit": "dB"
       }
     },
-    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
+    "restartRequired": "Einige Änderungen erfordern einen Neustart des Servers. Bitte starten Sie BirdNET-Go neu."
   },
   "auth": {
     "login": "Anmelden",
@@ -3881,7 +3881,7 @@
     "continueWithMicrosoft": "Weiter mit Microsoft",
     "continueWithLine": "Weiter mit LINE",
     "continueWithKakao": "Weiter mit Kakao",
-    "continueWithOidc": "Continue with OIDC",
+    "continueWithOidc": "Weiter mit OIDC",
     "errors": {
       "loginFailed": "Anmeldung fehlgeschlagen. Bitte überprüfen Sie Ihr Passwort und versuchen Sie es erneut.",
       "passwordRequired": "Passwort ist erforderlich.",
@@ -4029,7 +4029,7 @@
       "seekProgress": "Audio-Fortschritt: {current} / {total} Sekunden",
       "playbackSpeed": "Wiedergabegeschwindigkeit",
       "speed": "Tempo",
-      "loop": "Toggle loop",
+      "loop": "Wiederholung umschalten",
       "player": "Audioplayer"
     },
     "spectrogram": {
@@ -4108,36 +4108,36 @@
         "spectrogramFailed": "Spektrogramm konnte nicht erzeugt werden"
       },
       "clipExtraction": {
-        "selectRange": "Click and drag to select a range",
-        "playSelection": "Play selected range",
-        "pauseSelection": "Pause playback",
-        "reviewSelection": "Jump to start of selection",
-        "selectionStart": "Selection start handle",
-        "selectionEnd": "Selection end handle",
-        "lossless": "Lossless",
-        "lossy": "Lossy",
-        "extractClip": "Download selected clip",
-        "clearSelection": "Clear selection",
-        "extracting": "Extracting clip...",
-        "extractError": "Failed to extract clip",
+        "selectRange": "Klicken und ziehen, um einen Bereich auszuwählen",
+        "playSelection": "Ausgewählten Bereich abspielen",
+        "pauseSelection": "Wiedergabe pausieren",
+        "reviewSelection": "Zum Anfang der Auswahl springen",
+        "selectionStart": "Griff für Auswahlanfang",
+        "selectionEnd": "Griff für Auswahlende",
+        "lossless": "Verlustfrei",
+        "lossy": "Verlustbehaftet",
+        "extractClip": "Ausgewählten Clip herunterladen",
+        "clearSelection": "Auswahl löschen",
+        "extracting": "Clip wird extrahiert...",
+        "extractError": "Clip konnte nicht extrahiert werden",
         "formatLabel": "Format",
         "rangeLabel": "{start}s – {end}s"
       },
       "processing": {
-        "playSelection": "Play selection",
-        "skipToStart": "Skip to selection start",
-        "clearSelection": "Clear selection",
-        "gain": "Gain (dB)",
-        "denoise": "Denoise",
-        "denoiseOff": "Off",
-        "denoiseLight": "Light",
-        "denoiseMedium": "Medium",
-        "denoiseHeavy": "Heavy",
-        "normalize": "Normalize audio",
-        "normalizeTooltip": "EBU R128 Normalization",
-        "export": "Export",
+        "playSelection": "Auswahl abspielen",
+        "skipToStart": "Zum Auswahlanfang springen",
+        "clearSelection": "Auswahl löschen",
+        "gain": "Verstärkung (dB)",
+        "denoise": "Entrauschen",
+        "denoiseOff": "Aus",
+        "denoiseLight": "Leicht",
+        "denoiseMedium": "Mittel",
+        "denoiseHeavy": "Stark",
+        "normalize": "Audio normalisieren",
+        "normalizeTooltip": "EBU R128 Normalisierung",
+        "export": "Exportieren",
         "exportOriginal": "Original",
-        "processingActive": "Processing active"
+        "processingActive": "Verarbeitung aktiv"
       }
     },
     "weatherInfo": {
@@ -4146,20 +4146,20 @@
       }
     },
     "tls": {
-      "certificateInstalled": "Certificate Installed",
-      "browseFile": "Browse",
-      "subject": "Subject",
-      "issuer": "Issuer",
-      "sans": "Subject Alternative Names",
-      "validUntil": "Valid Until",
-      "daysRemaining": "Days Remaining",
-      "fingerprint": "Fingerprint",
-      "expiryWarning": "This certificate expires soon. Consider renewing it.",
-      "downloadCertificate": "Download Certificate",
-      "regenerateButton": "Regenerate",
-      "removeCertificate": "Remove Certificate",
-      "fileReadError": "Failed to read file",
-      "loading": "Loading certificate information..."
+      "certificateInstalled": "Zertifikat installiert",
+      "browseFile": "Durchsuchen",
+      "subject": "Betreff",
+      "issuer": "Aussteller",
+      "sans": "Alternative Antragstellernamen",
+      "validUntil": "Gültig bis",
+      "daysRemaining": "Verbleibende Tage",
+      "fingerprint": "Fingerabdruck",
+      "expiryWarning": "Dieses Zertifikat läuft bald ab. Erwägen Sie eine Erneuerung.",
+      "downloadCertificate": "Zertifikat herunterladen",
+      "regenerateButton": "Neu generieren",
+      "removeCertificate": "Zertifikat entfernen",
+      "fileReadError": "Datei konnte nicht gelesen werden",
+      "loading": "Zertifikatsinformationen werden geladen..."
     }
   },
   "connectivity": {
@@ -4332,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Willkommen",
+        "heading": "Willkommen bei BirdNET-Go!",
+        "description": "BirdNET-Go ist ein Echtzeit-Vogelstimmen-Erkennungssystem. Es lauscht dem Audio Ihres Mikrofons oder Audiostreams und verwendet das BirdNET-KI-Modell, um Vogelarten zu identifizieren.",
+        "credit": "Unterstützt vom BirdNET Analyzer, entwickelt vom K. Lisa Yang Center for Conservation Bioacoustics am Cornell Lab of Ornithology und der Technischen Universität Chemnitz.",
+        "cta": "Richten wir Ihre Vogelbeobachtungsstation ein."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Standort & Sprache",
+        "uiLanguageLabel": "Oberflächensprache",
+        "uiLanguageHelp": "Sprache für die Weboberfläche",
+        "speciesLanguageLabel": "Sprache für Artnamen",
+        "speciesLanguageHelp": "Sprache für Vogelartnamen in Erkennungen",
+        "locationLabel": "Stationsstandort",
+        "locationHelp": "Ihr Standort hilft, Arten zu filtern, die in Ihrer Gegend wahrscheinlich vorkommen",
+        "latitudeLabel": "Breitengrad",
+        "longitudeLabel": "Längengrad",
+        "useMyLocation": "Meinen Standort verwenden",
+        "locationDetected": "Standort erkannt",
+        "locationError": "Standort konnte nicht ermittelt werden. Bitte geben Sie die Koordinaten manuell ein.",
+        "locationDenied": "Standortzugriff verweigert. Bitte geben Sie die Koordinaten manuell ein."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Audioquelle",
+        "sourceTypeLabel": "Quellentyp",
+        "soundcard": "Mikrofon / Soundkarte",
+        "rtspStream": "RTSP-Stream",
+        "deviceLabel": "Audiogerät",
+        "deviceLoading": "Audiogeräte werden geladen...",
+        "noDevicesFound": "Keine Audiogeräte erkannt. Versuchen Sie, stattdessen einen RTSP-Stream zu konfigurieren.",
+        "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Geben Sie die URL Ihres RTSP-Audiostreams ein",
+        "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Erkennungsschwelle",
+        "description": "Wählen Sie, wie streng die Vogelidentifizierung sein soll. Sie können dies später in den Einstellungen anpassen.",
+        "balanced": "Ausgewogen",
+        "balancedDesc": "Gute Balance zwischen Genauigkeit und Empfindlichkeit",
+        "balancedRecommended": "Empfohlen",
+        "highAccuracy": "Hohe Genauigkeit",
+        "highAccuracyDesc": "Weniger Fehlerkennungen, kann einige Vögel verpassen",
+        "highSensitivity": "Hohe Empfindlichkeit",
+        "highSensitivityDesc": "Mehr Erkennungen, mehr Fehlerkennungen",
+        "threshold": "Konfidenzschwelle",
+        "fpFilterNote": "Sobald Ihr System läuft und sich bewährt hat, können Sie den Falsch-Positiv-Filter in den Einstellungen aktivieren, um fehlerhafte Erkennungen weiter zu reduzieren."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Datenschutz & Integration",
+        "privacyFilterLabel": "Datenschutzfilter aktivieren",
+        "privacyFilterHelp": "Filtert Erkennungen heraus, wenn menschliche Stimmen in der Nähe des Mikrofons erkannt werden",
+        "birdweatherLabel": "Erkennungen mit BirdWeather teilen",
+        "birdweatherHelp": "Tragen Sie Ihre Vogelerkennungen zum BirdWeather-Community-Netzwerk bei",
+        "birdweatherIdLabel": "BirdWeather-Stations-ID",
+        "birdweatherIdPlaceholder": "Geben Sie Ihre BirdWeather-Stations-ID ein",
+        "errorReportingLabel": "Anonyme Fehlerberichte senden",
+        "errorReportingHelp": "Helfen Sie, BirdNET-Go zu verbessern, indem Sie anonyme Fehlerberichte senden, wenn etwas schiefgeht"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "Verantwortungsvolle Nutzung von BirdNET-Go",
+        "intro": "BirdNET-Go ist ein leistungsstarkes Werkzeug, das Ihre Vogelbeobachtungserfahrung durch KI-gestützte Identifizierung verbessert. Um die besten Ergebnisse sowohl für die Vogelbeobachtung als auch für den Naturschutz zu erzielen:",
+        "point1": "Überprüfen und verifizieren Sie Erkennungen, bevor Sie Beobachtungen teilen",
+        "point2": "Verwenden Sie die Konfidenzwerte als Orientierung, nicht als absolute Wahrheit",
+        "point3": "Vergleichen Sie mit Feldführern und lokalem Fachwissen",
+        "point4": "Berücksichtigen Sie saisonale Muster und Habitateignung",
+        "citizenScienceHeading": "Bei Beiträgen zur Bürgerwissenschaft:",
+        "citizenPoint1": "Reichen Sie nur Beobachtungen ein, die Sie persönlich verifiziert haben",
+        "citizenPoint2": "Fügen Sie Anmerkungen zur visuellen oder verhaltensbasierten Bestätigung hinzu",
+        "citizenPoint3": "Verwenden Sie KI-Erkennungen als Ausgangspunkt für Ihre eigenen Beobachtungen",
+        "outro": "Dieser Ansatz gewährleistet die Datenqualität für die wissenschaftliche Forschung und maximiert gleichzeitig Ihr Lernen und Ihre Freude an Vögeln.",
+        "acknowledge": "Ich verstehe"
       }
     }
   },

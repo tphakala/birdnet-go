@@ -377,8 +377,8 @@
         "application": "Applikationsfejl",
         "imageProvider": "Billedudbydermeddelelse",
         "categoryError": "{category}-fejl",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Flere {component}-fejl",
+        "burstMessage": "{count} fejl i de sidste {window_minutes} minutter: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Anvender nye analyseindstillinger...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "Opdaterer BirdWeather-integration...",
         "reconfiguringStreams": "Opdaterer lydstreams...",
         "reconfiguringTelemetry": "Opdaterer telemetriindstillinger...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Omkonfigurerer push-notifikationsudbydere...",
         "reconfiguringSpeciesTracking": "Opdaterer artssporing...",
         "recalculatingThresholds": "Genberegner dynamiske tærskler for ny basisværdi",
         "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frekvensområde",
+      "colorMap": "Farvekort",
+      "gain": "Forstærkning",
       "gainTooltip": "Spektrogram visualiseringsforstærkning",
       "mute": "Slå lydudgang fra",
       "unmute": "Slå lydudgang til",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimumfrekvens",
+      "frequencyRangeMax": "Maksimumfrekvens"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Din browser understøtter ikke lydanalyse",
+      "connectionFailed": "Kunne ikke oprette forbindelse til live-lydstream",
+      "accessDenied": "Adgang til live-lyd kræver godkendelse. Log venligst ind for at bruge denne funktion."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Live spektrogram",
+      "audioToggle": "Aktivér lyd"
     },
     "gain": {
       "muted": "Lydløs",
       "level": "Forstærkning: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Live-lyd",
+      "sourceLabel": "Lydkilde",
       "connected": "Forbundet",
       "enterFullscreen": "Fuld skærm",
       "exitFullscreen": "Afslut fuld skærm"
@@ -962,7 +962,10 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Gråtone"
+    },
+    "labels": {
+      "toggle": "Skift detekteringsetiketter"
     }
   },
   "system": {
@@ -1265,7 +1268,7 @@
           "recordsInLegacy": "{count} poster i ældre database",
           "comparingRecords": "Sammenligner antal poster...",
           "validationFailed": "Validering mislykkedes",
-          "rate": "Rate",
+          "rate": "Hastighed",
           "recPerSec": "{rate} post/s",
           "dayAvg": "~{count} / dag gns.",
           "dayHistory": "30 dages historik"
@@ -3963,7 +3966,11 @@
       "hidePassword": "Skjul adgangskode",
       "copyToClipboard": "Kopiér til udklipsholder",
       "clearSelection": "Ryd valg",
-      "selectOption": "Vælg en mulighed"
+      "selectOption": "Vælg en mulighed",
+      "secretSet": "Indstillet",
+      "changeSecret": "Skift",
+      "cancelChange": "Annuller",
+      "enterNewSecret": "Indtast ny værdi"
     },
     "help": {
       "passwordStrength": "Adgangskodestyrke: {strength}",
@@ -4046,7 +4053,8 @@
       "seekProgress": "Søg i lydforløb: {current} / {total} sekunder",
       "playbackSpeed": "Afspilningshastighed",
       "speed": "Hastighed",
-      "loop": "Skift gentag"
+      "loop": "Skift gentag",
+      "player": "Lydafspiller"
     },
     "spectrogram": {
       "notGenerated": "Spektrogram er endnu ikke genereret",
@@ -4066,7 +4074,8 @@
       "spectrogramGeneratingAria": "Genererer spektrogram",
       "generating": "Genererer...",
       "queuePosition": "Kø: {position}",
-      "loadError": "Kunne ikke indlæse lyd"
+      "loadError": "Kunne ikke indlæse lyd",
+      "spectrogramAlt": "Lydspektrogram"
     },
     "forms": {
       "numberField": {
@@ -4323,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Velkommen",
+        "heading": "Velkommen til BirdNET-Go!",
+        "description": "BirdNET-Go er et realtids fuglelydsidentifikationssystem. Det lytter til lyd fra din mikrofon eller lydstream og bruger BirdNET AI-modellen til at identificere fuglearter.",
+        "credit": "Drevet af BirdNET Analyzer, udviklet af K. Lisa Yang Center for Conservation Bioacoustics ved Cornell Lab of Ornithology og Chemnitz University of Technology.",
+        "cta": "Lad os opsætte din fugleovervågningsstation."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Placering og sprog",
+        "uiLanguageLabel": "Grænsefladesprog",
+        "uiLanguageHelp": "Sprog brugt til webgrænsefladen",
+        "speciesLanguageLabel": "Artsnavnsprog",
+        "speciesLanguageHelp": "Sprog brugt til fugleartnavne i detekteringer",
+        "locationLabel": "Stationsplacering",
+        "locationHelp": "Din placering hjælper med at filtrere arter til dem, der sandsynligvis findes i dit område",
+        "latitudeLabel": "Breddegrad",
+        "longitudeLabel": "Længdegrad",
+        "useMyLocation": "Brug min placering",
+        "locationDetected": "Placering registreret",
+        "locationError": "Kunne ikke registrere placering. Indtast venligst koordinater manuelt.",
+        "locationDenied": "Adgang til placering nægtet. Indtast venligst koordinater manuelt."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Lydkilde",
+        "sourceTypeLabel": "Kildetype",
+        "soundcard": "Mikrofon / Lydkort",
+        "rtspStream": "RTSP-stream",
+        "deviceLabel": "Lydenhed",
+        "deviceLoading": "Indlæser lydenheder...",
+        "noDevicesFound": "Ingen lydenheder fundet. Prøv at konfigurere en RTSP-stream i stedet.",
+        "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Indtast URL'en til din RTSP-lydstream",
+        "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Detekteringsgrænse",
+        "description": "Vælg hvor streng fugleidentifikationen skal være. Du kan justere dette senere under Indstillinger.",
+        "balanced": "Balanceret",
+        "balancedDesc": "God balance mellem nøjagtighed og følsomhed",
+        "balancedRecommended": "Anbefalet",
+        "highAccuracy": "Høj nøjagtighed",
+        "highAccuracyDesc": "Færre falske positiver, kan overse nogle fugle",
+        "highSensitivity": "Høj følsomhed",
+        "highSensitivityDesc": "Flere detekteringer, flere falske positiver",
+        "threshold": "Konfidensgrænse",
+        "fpFilterNote": "Når dit system kører og er afprøvet, kan du aktivere filteret for falske positiver under Indstillinger for yderligere at reducere forkerte detekteringer."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Privatliv og integration",
+        "privacyFilterLabel": "Aktivér privatlivsfilter",
+        "privacyFilterHelp": "Filtrerer detekteringer fra, når menneskestemmer registreres nær mikrofonen",
+        "birdweatherLabel": "Del detekteringer med BirdWeather",
+        "birdweatherHelp": "Bidrag med dine fugledetekteringer til BirdWeather-fællesskabsnetværket",
+        "birdweatherIdLabel": "BirdWeather stations-ID",
+        "birdweatherIdPlaceholder": "Indtast dit BirdWeather stations-ID",
+        "errorReportingLabel": "Send anonyme fejlrapporter",
+        "errorReportingHelp": "Hjælp med at forbedre BirdNET-Go ved at sende anonyme fejlrapporter, når noget går galt"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "Ansvarlig brug af BirdNET-Go",
+        "intro": "BirdNET-Go er et kraftfuldt værktøj, der forbedrer din fugleoplevelse gennem AI-assisteret identifikation. For at sikre de bedste resultater for både fuglekiggeri og naturbevarelse:",
+        "point1": "Gennemgå og verificér detekteringer, før du deler observationer",
+        "point2": "Brug konfidensscore som en vejledning, ikke som absolut sandhed",
+        "point3": "Krydsreferencér med felthåndbøger og lokal ekspertise",
+        "point4": "Overvej sæsonmønstre og habitategnethed",
+        "citizenScienceHeading": "Når du bidrager til borgervidenskab:",
+        "citizenPoint1": "Indsend kun observationer, du personligt har verificeret",
+        "citizenPoint2": "Medtag noter om visuel eller adfærdsmæssig bekræftelse",
+        "citizenPoint3": "Brug AI-detekteringer som udgangspunkt for dine egne observationer",
+        "outro": "Denne tilgang sikrer datakvalitet til videnskabelig forskning, samtidig med at den maksimerer din læring og glæde ved fugle.",
+        "acknowledge": "Jeg forstår"
       }
     }
   },

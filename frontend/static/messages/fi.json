@@ -377,8 +377,8 @@
         "application": "Sovellusvirhe",
         "imageProvider": "Kuvantarjoajan ilmoitus",
         "categoryError": "{category}-virhe",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Useita {component}-virheitä",
+        "burstMessage": "{count} virhettä viimeisen {window_minutes} minuutin aikana: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Otetaan uusia analyysiasetuksia käyttöön...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "Päivitetään BirdWeather-integraatiota...",
         "reconfiguringStreams": "Päivitetään äänistriimejä...",
         "reconfiguringTelemetry": "Päivitetään telemetria-asetuksia...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Määritetään push-ilmoitusten tarjoajia uudelleen...",
         "reconfiguringSpeciesTracking": "Päivitetään lajiseurantaa...",
         "recalculatingThresholds": "Lasketaan dynaamisia kynnysarvoja uudelleen uudelle perusarvolle",
         "reconfiguringDynamicThresholds": "Määritetään dynaamisia kynnysarvoja uudelleen...",
@@ -678,19 +678,19 @@
       "configFetch": "Etusivun asetusten haku epäonnistui: {status}"
     },
     "banner": {
-      "title": "Title",
-      "titlePlaceholder": "My Bird Station",
-      "description": "Description",
-      "descriptionPlaceholder": "A brief description of your bird monitoring station...",
-      "subElements": "Sub-elements",
-      "showImage": "Show custom image",
-      "imageUrl": "Image URL or path",
+      "title": "Otsikko",
+      "titlePlaceholder": "Oma lintuasema",
+      "description": "Kuvaus",
+      "descriptionPlaceholder": "Lyhyt kuvaus lintuseuranta-asemastasi...",
+      "subElements": "Alaelementit",
+      "showImage": "Näytä mukautettu kuva",
+      "imageUrl": "Kuvan URL tai polku",
       "imageUrlPlaceholder": "https://example.com/station-photo.jpg",
-      "imageUrlHelp": "Enter a URL to an image. Image upload will be available in a future update.",
-      "showLocationMap": "Show location map",
-      "showLocationMapHelp": "Displays a small map using the latitude/longitude from your main settings",
-      "showWeather": "Show current weather",
-      "showWeatherHelp": "Displays current weather conditions (requires weather integration to be enabled)",
+      "imageUrlHelp": "Syötä kuvan URL. Kuvan lataus tulee saataville tulevassa päivityksessä.",
+      "showLocationMap": "Näytä sijaintikartta",
+      "showLocationMapHelp": "Näyttää pienen kartan käyttäen pää-asetusten leveysaste- ja pituusastearvoja",
+      "showWeather": "Näytä nykyinen sää",
+      "showWeatherHelp": "Näyttää nykyiset säätiedot (edellyttää sääintegraation käyttöönottoa)",
       "timeFormat": "Aikamuoto",
       "mapZoom": "Kartan zoomaus",
       "showPin": "Näytä sijaintimerkki",
@@ -702,8 +702,8 @@
     "videoEmbed": {
       "youtubeUrl": "YouTube URL",
       "youtubeUrlPlaceholder": "https://www.youtube.com/watch?v=...",
-      "youtubeUrlHelp": "Paste any YouTube URL (watch, embed, or short link). It will be converted to a privacy-enhanced embed.",
-      "titleLabel": "Title (optional)",
+      "youtubeUrlHelp": "Liitä mikä tahansa YouTube-URL (katselu-, upotus- tai lyhytlinkki). Se muunnetaan yksityisyyttä suojaavaksi upotukseksi.",
+      "titleLabel": "Otsikko (valinnainen)",
       "titlePlaceholder": "Syötä videon otsikko (valinnainen)"
     },
     "editMode": {
@@ -737,12 +737,12 @@
       "resetting": "Palautetaan..."
     },
     "elements": {
-      "banner": "Dashboard Banner",
-      "dailySummary": "Daily Summary",
-      "currentlyHearing": "Currently Hearing",
-      "detectionsGrid": "Recent Detections",
+      "banner": "Kojelaudan banneri",
+      "dailySummary": "Päivittäinen yhteenveto",
+      "currentlyHearing": "Juuri nyt kuuluu",
+      "detectionsGrid": "Viimeisimmät havainnot",
       "liveSpectrogram": "Reaaliaikainen spektrogrammi",
-      "videoEmbed": "Video Embed"
+      "videoEmbed": "Videoupotus"
     }
   },
   "detections": {
@@ -799,17 +799,17 @@
       "fetchFailed": "Havaintojen hakeminen epäonnistui"
     },
     "weather": {
-      "title": "Weather Information",
-      "noData": "No weather data",
-      "noDataAvailable": "No weather data available",
-      "loading": "Loading weather information...",
+      "title": "Säätiedot",
+      "noData": "Ei säätietoja",
+      "noDataAvailable": "Säätietoja ei saatavilla",
+      "loading": "Ladataan säätietoja...",
       "labels": {
-        "temperature": "Temperature",
-        "weather": "Weather",
-        "wind": "Wind",
-        "humidity": "Humidity",
-        "pressure": "Pressure",
-        "cloudCover": "Cloud Cover"
+        "temperature": "Lämpötila",
+        "weather": "Sää",
+        "wind": "Tuuli",
+        "humidity": "Kosteus",
+        "pressure": "Ilmanpaine",
+        "cloudCover": "Pilvisyys"
       },
       "units": {
         "temperature": "°C",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Taajuusalue",
+      "colorMap": "Värikartta",
+      "gain": "Vahvistus",
       "gainTooltip": "Spektrogrammin visualisoinnin vahvistus",
       "mute": "Mykistä äänilähtö",
       "unmute": "Palauta äänilähtö",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimitaajuus",
+      "frequencyRangeMax": "Maksimitaajuus"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Selaimesi ei tue äänianalyysiä",
+      "connectionFailed": "Yhteys reaaliaikaiseen äänilähetykseen epäonnistui",
+      "accessDenied": "Reaaliaikaisen äänen käyttö vaatii kirjautumisen. Kirjaudu sisään käyttääksesi tätä ominaisuutta."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Reaaliaikainen spektrogrammi",
+      "audioToggle": "Ota ääni käyttöön"
     },
     "gain": {
       "muted": "Mykistetty",
       "level": "Vahvistus: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Reaaliaikainen ääni",
+      "sourceLabel": "Äänilähde",
       "connected": "Yhdistetty",
       "enterFullscreen": "Koko näyttö",
       "exitFullscreen": "Poistu koko näytöstä"
@@ -962,7 +962,7 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Harmaasävy"
     },
     "labels": {
       "toggle": "Näytä/piilota tunnistusmerkinnät"
@@ -1287,82 +1287,82 @@
         "fetchFailed": "Tietokantatilastojen haku epäonnistui"
       },
       "dashboard": {
-        "title": "Database Dashboard",
-        "fetchFailed": "Failed to fetch database overview",
+        "title": "Tietokantapaneeli",
+        "fetchFailed": "Tietokannan yleiskatsauksen haku epäonnistui",
         "metrics": {
-          "readLatency": "Read Latency",
-          "writeLatency": "Write Latency",
-          "queriesPerSec": "Queries/sec",
-          "database": "Database",
-          "avg": "avg",
-          "max": "max",
-          "lastHour": "{count} last hour",
-          "slowQueries": "{count} slow"
+          "readLatency": "Lukuviive",
+          "writeLatency": "Kirjoitusviive",
+          "queriesPerSec": "Kyselyt/s",
+          "database": "Tietokanta",
+          "avg": "keskim.",
+          "max": "maks.",
+          "lastHour": "{count} viime tunti",
+          "slowQueries": "{count} hitaita"
         },
         "details": {
-          "title": "Database Details",
-          "engine": "Engine",
+          "title": "Tietokannan tiedot",
+          "engine": "Moottori",
           "journal": "Journal",
-          "pageSize": "Page size",
-          "cacheHit": "Cache hit",
-          "integrity": "Integrity",
-          "lastVacuum": "Last VACUUM"
+          "pageSize": "Sivukoko",
+          "cacheHit": "Välimuistiosumat",
+          "integrity": "Eheys",
+          "lastVacuum": "Viimeisin VACUUM"
         },
         "locksWal": {
-          "title": "Locks & WAL",
-          "lockWaits": "Lock waits",
-          "lockTimeouts": "Lock timeouts",
-          "avgWait": "Avg wait",
-          "busyTimeouts": "Busy timeouts",
-          "walSize": "WAL size",
-          "checkpoints": "Checkpoints",
-          "freelistPages": "Freelist pages",
-          "cacheSize": "Cache size"
+          "title": "Lukot ja WAL",
+          "lockWaits": "Lukitusodotukset",
+          "lockTimeouts": "Lukituksen aikakatkaisut",
+          "avgWait": "Keskim. odotus",
+          "busyTimeouts": "Varattuna-aikakatkaisut",
+          "walSize": "WAL-koko",
+          "checkpoints": "Tarkistuspisteet",
+          "freelistPages": "Vapaalistasivut",
+          "cacheSize": "Välimuistin koko"
         },
         "connectionPool": {
-          "title": "Connection Pool",
-          "poolUsage": "Pool Usage",
-          "active": "active",
-          "idle": "idle",
-          "waiting": "waiting",
-          "totalCreated": "Total created",
-          "connErrors": "Conn errors",
-          "threads": "Threads",
-          "running": "running",
-          "cached": "cached"
+          "title": "Yhteysvaranto",
+          "poolUsage": "Varannon käyttö",
+          "active": "aktiiviset",
+          "idle": "jouten",
+          "waiting": "odottavat",
+          "totalCreated": "Luotu yhteensä",
+          "connErrors": "Yhteysvirheet",
+          "threads": "Säikeet",
+          "running": "käynnissä",
+          "cached": "välimuistissa"
         },
         "innodb": {
-          "title": "InnoDB & Locks",
-          "bufferPoolHitRate": "Buffer pool hit rate",
-          "bufferPoolSize": "Buffer pool size",
-          "lockWaits": "Lock waits",
-          "deadlocks": "Deadlocks",
-          "avgLockWait": "Avg lock wait",
-          "tableLocksWaited": "Table locks waited",
-          "tableLocksImmediate": "Table locks immediate"
+          "title": "InnoDB ja lukot",
+          "bufferPoolHitRate": "Puskurialtaan osumataajuus",
+          "bufferPoolSize": "Puskurialtaan koko",
+          "lockWaits": "Lukitusodotukset",
+          "deadlocks": "Lukkiumat",
+          "avgLockWait": "Keskim. lukitusodotus",
+          "tableLocksWaited": "Taulukkolukitusten odotukset",
+          "tableLocksImmediate": "Välittömät taulukkolukitukset"
         },
         "detectionRate": {
-          "title": "Detection Rate (24h)",
-          "perHour": "/hr",
+          "title": "Havaintotaajuus (24h)",
+          "perHour": "/t",
           "min": "min",
-          "avg": "avg",
-          "max": "max",
-          "lastBackup": "Last backup",
-          "backupSize": "Backup size",
-          "createBackup": "Create Backup",
-          "mysqlHost": "Host",
+          "avg": "keskim.",
+          "max": "maks.",
+          "lastBackup": "Viimeisin varmuuskopio",
+          "backupSize": "Varmuuskopion koko",
+          "createBackup": "Luo varmuuskopio",
+          "mysqlHost": "Palvelin",
           "mysqlBackupNote": "MySQL-varmuuskopiot tulee hallita mysqldump-työkalulla tai MySQL-hallintatyökaluillasi.",
           "chartLabel": "Tunnistusmäärä 24 tunnin ajalta",
           "detectionsTooltip": "{count} tunnistusta"
         },
         "tables": {
-          "title": "Tables",
-          "total": "Total",
-          "table": "Table",
-          "engine": "Engine",
-          "rows": "Rows",
-          "size": "Size",
-          "usage": "Usage"
+          "title": "Taulukot",
+          "total": "Yhteensä",
+          "table": "Taulukko",
+          "engine": "Moottori",
+          "rows": "Rivit",
+          "size": "Koko",
+          "usage": "Käyttö"
         },
         "loading": "Ladataan..."
       },
@@ -2241,7 +2241,7 @@
           "pushover": "Pushover",
           "gotify": "Gotify",
           "ntfy": "ntfy",
-          "email": "Email",
+          "email": "Sähköposti",
           "generic": "Shoutrrr",
           "numbered": "{service} #{number}"
         },
@@ -2251,32 +2251,32 @@
           "discord": {
             "name": "Discord",
             "webhookUrl": {
-              "label": "Discord Webhook URL",
+              "label": "Discordin webhook-URL",
               "placeholder": "https://discord.com/api/webhooks/...",
-              "helpText": "Paste your full Discord webhook URL"
+              "helpText": "Liitä Discordin webhook-URL kokonaisuudessaan"
             },
-            "invalidUrl": "Invalid Discord webhook URL. URL should contain discord.com/api/webhooks/"
+            "invalidUrl": "Virheellinen Discordin webhook-URL. URL:n tulee sisältää discord.com/api/webhooks/"
           },
           "telegram": {
             "name": "Telegram",
             "botToken": {
-              "label": "Bot Token",
+              "label": "Botin token",
               "placeholder": "123456789:ABCdef...",
-              "helpText": "Token from @BotFather"
+              "helpText": "Token @BotFatherilta"
             },
             "chatId": {
-              "label": "Chat ID",
-              "placeholder": "-1001234567890 or @channel",
-              "helpText": "Chat ID, group ID, or @username"
+              "label": "Keskustelu-ID",
+              "placeholder": "-1001234567890 tai @channel",
+              "helpText": "Keskustelu-ID, ryhmä-ID tai @käyttäjänimi"
             },
-            "incomplete": "Both bot token and chat ID are required"
+            "incomplete": "Sekä botin token että keskustelu-ID vaaditaan"
           },
           "ntfy": {
             "name": "ntfy",
             "server": {
-              "label": "Server",
+              "label": "Palvelin",
               "placeholder": "ntfy.sh",
-              "helpText": "Leave as ntfy.sh for public server or enter your self-hosted server"
+              "helpText": "Jätä ntfy.sh julkiselle palvelimelle tai syötä oma palvelimesi"
             },
             "protocol": {
               "label": "Protokolla"
@@ -2299,109 +2299,109 @@
               }
             },
             "topic": {
-              "label": "Topic",
+              "label": "Aihe",
               "placeholder": "my-bird-alerts",
-              "helpText": "Topic name for your notifications"
+              "helpText": "Ilmoitustesi aiheen nimi"
             },
-            "incomplete": "Topic is required"
+            "incomplete": "Aihe vaaditaan"
           },
           "gotify": {
             "name": "Gotify",
             "server": {
-              "label": "Server URL",
+              "label": "Palvelimen URL",
               "placeholder": "gotify.example.com",
-              "helpText": "Your Gotify server hostname (without https://)"
+              "helpText": "Gotify-palvelimesi isäntänimi (ilman https://)"
             },
             "token": {
-              "label": "Application Token",
+              "label": "Sovelluksen token",
               "placeholder": "A...",
-              "helpText": "Token from Gotify Apps page"
+              "helpText": "Token Gotifyn sovellussivulta"
             },
-            "incomplete": "Server and token are required"
+            "incomplete": "Palvelin ja token vaaditaan"
           },
           "pushover": {
             "name": "Pushover",
             "apiToken": {
-              "label": "API Token",
+              "label": "API-token",
               "placeholder": "az...",
-              "helpText": "Application API token"
+              "helpText": "Sovelluksen API-token"
             },
             "userKey": {
-              "label": "User Key",
+              "label": "Käyttäjäavain",
               "placeholder": "u...",
-              "helpText": "Your user or group key"
+              "helpText": "Käyttäjä- tai ryhmäavaimesi"
             },
-            "incomplete": "API token and user key are required"
+            "incomplete": "API-token ja käyttäjäavain vaaditaan"
           },
           "slack": {
             "name": "Slack",
             "webhookUrl": {
-              "label": "Slack Webhook URL",
+              "label": "Slackin webhook-URL",
               "placeholder": "https://hooks.slack.com/services/...",
-              "helpText": "Paste your full Slack webhook URL"
+              "helpText": "Liitä Slackin webhook-URL kokonaisuudessaan"
             },
-            "invalidUrl": "Invalid Slack webhook URL. URL should contain hooks.slack.com/services/"
+            "invalidUrl": "Virheellinen Slackin webhook-URL. URL:n tulee sisältää hooks.slack.com/services/"
           },
           "ifttt": {
             "name": "IFTTT",
             "webhookKey": {
-              "label": "Webhook Key",
+              "label": "Webhook-avain",
               "placeholder": "abc123xyz...",
-              "helpText": "Your IFTTT Webhook key from Maker Webhooks settings"
+              "helpText": "IFTTT:n webhook-avaimesi Maker Webhooks -asetuksista"
             },
             "eventName": {
-              "label": "Event Name",
+              "label": "Tapahtuman nimi",
               "placeholder": "bird_detected",
-              "helpText": "The event name to trigger in your IFTTT applet"
+              "helpText": "IFTTT-appletin käynnistettävän tapahtuman nimi"
             },
-            "incomplete": "Webhook key and event name are required"
+            "incomplete": "Webhook-avain ja tapahtuman nimi vaaditaan"
           },
           "webhook": {
             "name": "Webhook",
             "url": {
-              "label": "Webhook URL",
+              "label": "Webhook-URL",
               "placeholder": "https://api.example.com/webhook",
-              "helpText": "The HTTP(S) endpoint to send notifications to"
+              "helpText": "HTTP(S)-päätepiste ilmoitusten lähettämistä varten"
             },
             "method": {
-              "label": "HTTP Method",
-              "helpText": "HTTP method to use for the request (default: POST)"
+              "label": "HTTP-metodi",
+              "helpText": "Pyynnössä käytettävä HTTP-metodi (oletus: POST)"
             },
             "auth": {
-              "label": "Authentication",
-              "none": "None",
-              "bearer": "Bearer Token",
-              "basic": "Basic Auth",
-              "helpText": "Optional authentication for the webhook endpoint"
+              "label": "Tunnistautuminen",
+              "none": "Ei mitään",
+              "bearer": "Bearer-token",
+              "basic": "Perustunnistautuminen",
+              "helpText": "Valinnainen tunnistautuminen webhook-päätepisteelle"
             },
             "bearerToken": {
-              "label": "Bearer Token",
+              "label": "Bearer-token",
               "placeholder": "your-api-token",
-              "helpText": "Token sent in Authorization: Bearer header"
+              "helpText": "Token lähetetään Authorization: Bearer -otsikossa"
             },
             "basicUser": {
-              "label": "Username",
+              "label": "Käyttäjänimi",
               "placeholder": "username"
             },
             "basicPass": {
-              "label": "Password",
+              "label": "Salasana",
               "placeholder": "password"
             },
             "basicAuth": {
-              "helpText": "Credentials sent using HTTP Basic Authentication"
+              "helpText": "Tunnistetiedot lähetetään HTTP-perustunnistautumisella"
             },
-            "invalidUrl": "Invalid URL. Must start with http:// or https://",
-            "tokenRequired": "Bearer token is required when using Bearer authentication",
-            "credentialsRequired": "Username and password are required when using Basic authentication"
+            "invalidUrl": "Virheellinen URL. Tulee alkaa http:// tai https://",
+            "tokenRequired": "Bearer-token vaaditaan käytettäessä Bearer-tunnistautumista",
+            "credentialsRequired": "Käyttäjänimi ja salasana vaaditaan käytettäessä perustunnistautumista"
           },
           "custom": {
             "name": "Mukautettu URL",
             "url": {
-              "label": "Shoutrrr URL",
+              "label": "Shoutrrr-URL",
               "placeholder": "service://credentials@host",
-              "helpText": "Enter a raw Shoutrrr URL for any supported service"
+              "helpText": "Syötä Shoutrrr-URL mille tahansa tuetulle palvelulle"
             },
-            "invalidUrl": "Invalid URL format. URL should start with service://"
+            "invalidUrl": "Virheellinen URL-muoto. URL:n tulee alkaa service://"
           }
         }
       },
@@ -2485,7 +2485,7 @@
       "loading": "Ladataan äänilaitteita...",
       "tabs": {
         "soundCard": "Äänikortti",
-        "streams": "Striimit",
+        "streams": "Lähetykset",
         "processing": "Käsittely",
         "recording": "Tallennus",
         "retention": "Säilytys"
@@ -2753,7 +2753,7 @@
         "noStreamsConfigured": "Striimejä ei ole määritetty"
       },
       "streams": {
-        "streamLabel": "Striimi",
+        "streamLabel": "Lähetys",
         "nameLabel": "Striimin nimi",
         "namePlaceholder": "esim. Etupihan ruokinta",
         "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
@@ -2800,7 +2800,7 @@
           "error": "Virhe",
           "noHistory": "Ei tila- tai virhehistoriaa saatavilla.",
           "stateChange": "Tilamuutos",
-          "host": "Isäntä",
+          "host": "Palvelin",
           "troubleshooting": "Vianmääritys",
           "from": "Mistä",
           "to": "Mihin",
@@ -2877,29 +2877,29 @@
           "skipVerify": "Ohita varmenteen tarkistus",
           "configNote": "<strong>TLS-asetukset:</strong><br />• Vakio TLS: Jätä varmenteet tyhjäksi julkisille välittäjille<br />• Itse allekirjoitetut varmenteet: Anna CA-varmenne<br />• Molemminpuolinen TLS (mTLS): Anna kaikki kolme varmennetta",
           "certificates": {
-            "title": "Certificate Management",
-            "description": "Upload certificates for secure MQTT broker connections",
-            "caLabel": "CA Certificate",
+            "title": "Sertifikaattien hallinta",
+            "description": "Lataa sertifikaatit suojattuja MQTT-välittäjäyhteyksiä varten",
+            "caLabel": "CA-sertifikaatti",
             "caPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
-            "clientCertLabel": "Client Certificate",
+            "caHelpText": "Varmenneviranomaisen sertifikaatti välittäjän identiteetin todentamiseksi",
+            "clientCertLabel": "Asiakassertifikaatti",
             "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "clientCertHelpText": "Client certificate for mutual TLS authentication",
-            "clientKeyLabel": "Client Private Key",
+            "clientCertHelpText": "Asiakassertifikaatti molemminpuolista TLS-tunnistautumista varten",
+            "clientKeyLabel": "Asiakkaan yksityinen avain",
             "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
-            "clientKeyHelpText": "Private key matching the client certificate",
-            "uploadButton": "Upload Certificates",
-            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
-            "uploadError": "Failed to upload MQTT TLS certificates",
-            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
-            "deleteSuccess": "MQTT TLS certificates removed",
-            "deleteError": "Failed to remove MQTT TLS certificates",
-            "loadError": "Failed to load certificate information",
-            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+            "clientKeyHelpText": "Yksityinen avain, joka vastaa asiakassertifikaattia",
+            "uploadButton": "Lataa sertifikaatit",
+            "uploadSuccess": "MQTT TLS -sertifikaatit ladattu onnistuneesti. Käytä yhteyden testausta varmistaaksesi.",
+            "uploadError": "MQTT TLS -sertifikaattien lataus epäonnistui",
+            "deleteConfirm": "Poistetaanko kaikki MQTT TLS -sertifikaatit? MQTT-asiakas tarvitsee uudelleenyhteyden.",
+            "deleteSuccess": "MQTT TLS -sertifikaatit poistettu",
+            "deleteError": "MQTT TLS -sertifikaattien poisto epäonnistui",
+            "loadError": "Sertifikaattitietojen lataus epäonnistui",
+            "reconnectNote": "Käytä alla olevaa yhteyden testauspainiketta varmistaaksesi uuden TLS-konfiguraation."
           }
         },
         "homeAssistant": {
-          "title": "Home Assistant Auto-Discovery",
+          "title": "Home Assistant -automaattitunnistus",
           "enable": "Ota käyttöön Home Assistant MQTT Discovery",
           "description": "Kun käytössä, BirdNET-Go rekisteröi automaattisesti laitteet ja anturit Home Assistantiin MQTT-discovery-protokollan kautta. Laitteet ilmestyvät Home Assistantin laiterekisteriin ilman manuaalista YAML-konfiguraatiota.",
           "discoveryPrefix": {
@@ -2995,7 +2995,7 @@
           "options": {
             "standard": "Vakio",
             "metric": "Metrinen",
-            "imperial": "Brittiläinen",
+            "imperial": "Imperiaalinen",
             "ukhybrid": "UK-hybridi"
           }
         },
@@ -3039,14 +3039,14 @@
           "helpText": "Kuinka kauan eBirdin taksonomiatietoja säilytetään välimuistissa. Taksonomia muuttuu harvoin, joten pidempi välimuistiaika vähentää API-kutsuja."
         },
         "note": "eBird tarjoaa taksonomiatietoja lajien luokitteluun ja analyyseihin. API-avain on saatavilla ilmaiseksi Cornellin ornitologian laboratoriosta.",
-        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "apiKeyInfo": "Henkilökohtainen eBird API -avain vaaditaan tämän integraation käyttöön. Voit pyytää ilmaisen avaimen osoitteesta <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "test": {
-          "button": "Test eBird Connection",
-          "loading": "Testing...",
-          "enabledRequired": "Enable eBird integration first",
-          "apiKeyRequired": "API key is required",
-          "inProgress": "Test in progress...",
-          "description": "Test eBird API connectivity and authentication"
+          "button": "Testaa eBird-yhteys",
+          "loading": "Testataan...",
+          "enabledRequired": "Ota ensin eBird-integraatio käyttöön",
+          "apiKeyRequired": "API-avain vaaditaan",
+          "inProgress": "Testi käynnissä...",
+          "description": "Testaa eBird API:n yhteyttä ja tunnistautumista"
         }
       }
     },
@@ -3210,8 +3210,8 @@
             "source": "Lähde",
             "clearParameters": "Tyhjennä parametrit"
           },
-          "placeholder": "Click buttons below to add parameters or type manually",
-          "tooltip": "Use buttons below or type directly (comma-separated)"
+          "placeholder": "Napsauta alla olevia painikkeita lisätäksesi parametreja tai kirjoita manuaalisesti",
+          "tooltip": "Käytä alla olevia painikkeita tai kirjoita suoraan (pilkuilla eroteltuina)"
         },
         "executeDefaults": {
           "label": "Suorita myös oletustoiminnot (tietokantatallennus, ilmoitukset jne.)",
@@ -3363,7 +3363,7 @@
         "expand": "Näytä tapahtumahistoria",
         "collapse": "Piilota tapahtumahistoria"
       },
-      "suggestions": "Species suggestions"
+      "suggestions": "Lajiehdotukset"
     },
     "security": {
       "pageLabel": "Turva-asetukset",
@@ -3467,9 +3467,9 @@
           "enableLabel": "Salli OAuth2-kirjautuminen LINE:llä",
           "redirectUriTitle": "Uudelleenohjaus-URI LINE Developers Consolea varten:",
           "getCredentialsLabel": "Hae tunnukset LINE Developers Consolesta",
-          "clientIdLabel": "Channel ID",
+          "clientIdLabel": "Kanava-ID",
           "clientIdHelpText": "LINE Developers Consolesta saatu Channel ID LINE Login -määrityksen yhteydessä.",
-          "clientSecretLabel": "Channel Secret",
+          "clientSecretLabel": "Kanavan salaisuus",
           "clientSecretHelpText": "LINE Developers Consolesta saatu Channel Secret LINE Login -määrityksen yhteydessä.",
           "userIdLabel": "Käyttäjätunnus"
         },
@@ -3478,29 +3478,29 @@
           "enableLabel": "Salli OAuth2-kirjautuminen Kakaolla",
           "redirectUriTitle": "Uudelleenohjaus-URI Kakao Developers Consolea varten:",
           "getCredentialsLabel": "Hae tunnukset Kakao Developers Consolesta",
-          "clientIdLabel": "REST API Key",
+          "clientIdLabel": "REST API -avain",
           "clientIdHelpText": "Kakao Developers Consolesta saatu REST API Key Kakao Login -määrityksen yhteydessä.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Asiakkaan salaisuus",
           "clientSecretHelpText": "Kakao Developers Consolesta saatu Client Secret Kakao Login -määrityksen yhteydessä.",
           "userIdLabel": "Käyttäjätunnus"
         },
         "oidc": {
-          "title": "OIDC Provider",
-          "enableLabel": "Enable OIDC authentication",
-          "redirectUriTitle": "Redirect URI",
-          "getCredentialsLabel": "Configure in your Identity Provider",
-          "clientIdLabel": "Client ID",
-          "clientIdHelpText": "The client ID from your OIDC identity provider",
-          "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "The client secret from your OIDC identity provider",
-          "userIdLabel": "Allowed User (email or sub claim)",
-          "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "title": "OIDC-palveluntarjoaja",
+          "enableLabel": "Ota OIDC-tunnistautuminen käyttöön",
+          "redirectUriTitle": "Uudelleenohjaus-URI",
+          "getCredentialsLabel": "Määritä identiteettipalveluntarjoajassasi",
+          "clientIdLabel": "Asiakas-ID",
+          "clientIdHelpText": "Asiakas-ID OIDC-identiteettipalveluntarjoajaltasi",
+          "clientSecretLabel": "Asiakkaan salaisuus",
+          "clientSecretHelpText": "Asiakkaan salaisuus OIDC-identiteettipalveluntarjoajaltasi",
+          "userIdLabel": "Sallittu käyttäjä (sähköposti tai sub-väite)",
+          "issuerUrlLabel": "Myöntäjän URL",
+          "issuerUrlHelpText": "OpenID Connect -identiteettipalveluntarjoajasi myöntäjä-URL (esim. https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
-          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
-          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
-          "scopesLabel": "Scopes",
-          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "issuerUrlRequired": "Myöntäjän URL vaaditaan OIDC-palveluntarjoajille",
+          "issuerUrlInvalid": "Myöntäjän URL:n tulee olla kelvollinen HTTP- tai HTTPS-URL",
+          "scopesLabel": "Laajuudet",
+          "scopesHelpText": "Pilkuilla eroteltu lista OIDC-laajuuksista (oletus: openid, profile, email)",
           "scopesPlaceholder": "openid, profile, email"
         }
       },
@@ -3510,14 +3510,14 @@
         "disabled": "Aliverkon ohitus on poistettu käytöstä"
       },
       "exceptions": {
-        "title": "Exceptions"
+        "title": "Poikkeukset"
       },
       "publicAccess": {
-        "title": "Public Access",
-        "description": "Allow specific features to be accessible without authentication.",
-        "liveAudioLabel": "Allow public live audio playback",
-        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
-        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+        "title": "Julkinen pääsy",
+        "description": "Salli tiettyjen ominaisuuksien käyttö ilman tunnistautumista.",
+        "liveAudioLabel": "Salli julkinen reaaliaikaisen äänen toisto",
+        "liveAudioHelp": "Kun käytössä, kuka tahansa voi kuunnella reaaliaikaisia äänilähetyksiä kirjautumatta. Asetukset ja poistaminen vaativat edelleen tunnistautumisen.",
+        "warningText": "Julkisen pääsyn ominaisuuksien käyttöönotto altistaa ne kaikille, jotka pääsevät tälle palvelimelle. Ota käyttöön vain, jos luotat verkkoympäristöösi."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.example.com:5500",
@@ -3534,64 +3534,64 @@
       },
       "tls": {
         "title": "TLS / HTTPS",
-        "description": "Configure TLS/HTTPS encryption for secure connections",
-        "modeLabel": "TLS Mode",
-        "modeNone": "None (HTTP)",
+        "description": "Määritä TLS/HTTPS-salaus suojattuja yhteyksiä varten",
+        "modeLabel": "TLS-tila",
+        "modeNone": "Ei mitään (HTTP)",
         "modeLetsEncrypt": "Let's Encrypt",
-        "modeManual": "Manual Certificate",
-        "modeSelfSigned": "Self-Signed",
-        "modeNoneDescription": "Plain HTTP without encryption",
-        "modeAutoTLSDescription": "Automatic certificate via Let's Encrypt",
-        "modeManualDescription": "Upload your own certificate and key",
-        "modeSelfSignedDescription": "Generate a self-signed certificate",
-        "portLabel": "HTTPS Port",
-        "portHelpText": "Port for HTTPS connections (default: 8443)",
-        "redirectToHttps": "Redirect HTTP to HTTPS",
-        "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
-        "validityLabel": "Certificate Validity",
-        "validityHelpText": "How long the certificate should be valid",
-        "validity365d": "1 year",
-        "validity730d": "2 years",
-        "generateButton": "Generate Certificate",
-        "regenerateButton": "Regenerate Certificate",
-        "generating": "Generating...",
-        "certificateLabel": "Certificate (PEM)",
-        "privateKeyLabel": "Private Key (PEM)",
-        "caCertificateLabel": "CA Certificate (PEM, optional)",
-        "uploadButton": "Upload Certificate",
-        "uploading": "Uploading...",
-        "browseFile": "Browse...",
-        "plaintextWarning": "Warning: Your private key will be transmitted in plaintext over HTTP. Only upload certificates when connected via a trusted network or localhost.",
-        "certificateInstalled": "Installed Certificate",
-        "subject": "Subject",
-        "issuer": "Issuer",
-        "validFrom": "Valid From",
-        "validUntil": "Valid Until",
-        "daysRemaining": "Days Remaining",
-        "sans": "Subject Alternative Names",
-        "fingerprint": "Fingerprint",
-        "expiryWarning": "Certificate is expiring soon",
-        "loading": "Loading certificate info...",
-        "loadError": "Failed to load certificate info",
-        "generateSuccess": "Self-signed certificate generated successfully",
-        "generateError": "Failed to generate certificate",
-        "uploadSuccess": "Certificate uploaded successfully",
-        "uploadError": "Failed to upload certificate",
-        "deleteSuccess": "Certificate removed successfully",
-        "deleteError": "Failed to delete certificate",
-        "removeCertificate": "Remove Certificate",
-        "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
-        "restartRequired": "TLS changes require a server restart to take effect.",
-        "noCertificate": "No certificate installed",
-        "validity1825d": "5 years",
-        "autoTLSHostRequired": "A hostname is required for Let’s Encrypt. Enter your public domain name in the Host field above.",
-        "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
-        "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
-        "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
-        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
-        "downloadCertificate": "Download Certificate",
-        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
-        "fileReadError": "Failed to read the selected file"
+        "modeManual": "Manuaalinen sertifikaatti",
+        "modeSelfSigned": "Itseallekirjoitettu",
+        "modeNoneDescription": "Tavallinen HTTP ilman salausta",
+        "modeAutoTLSDescription": "Automaattinen sertifikaatti Let's Encryptin kautta",
+        "modeManualDescription": "Lataa oma sertifikaattisi ja avaimesi",
+        "modeSelfSignedDescription": "Luo itseallekirjoitettu sertifikaatti",
+        "portLabel": "HTTPS-portti",
+        "portHelpText": "HTTPS-yhteyksien portti (oletus: 8443)",
+        "redirectToHttps": "Ohjaa HTTP HTTPS:ään",
+        "autoTLSRequirements": "Vaatii porttien 80 ja 443 olevan saavutettavissa. Linuxissa prosessi tarvitsee root-oikeudet tai CAP_NET_BIND_SERVICE-kyvykkyyden.",
+        "validityLabel": "Sertifikaatin voimassaolo",
+        "validityHelpText": "Kuinka kauan sertifikaatin tulee olla voimassa",
+        "validity365d": "1 vuosi",
+        "validity730d": "2 vuotta",
+        "generateButton": "Luo sertifikaatti",
+        "regenerateButton": "Luo sertifikaatti uudelleen",
+        "generating": "Luodaan...",
+        "certificateLabel": "Sertifikaatti (PEM)",
+        "privateKeyLabel": "Yksityinen avain (PEM)",
+        "caCertificateLabel": "CA-sertifikaatti (PEM, valinnainen)",
+        "uploadButton": "Lataa sertifikaatti",
+        "uploading": "Ladataan...",
+        "browseFile": "Selaa...",
+        "plaintextWarning": "Varoitus: Yksityinen avaimesi lähetetään selkotekstinä HTTP:n yli. Lataa sertifikaatteja vain luotetun verkon tai localhosting kautta.",
+        "certificateInstalled": "Asennettu sertifikaatti",
+        "subject": "Kohde",
+        "issuer": "Myöntäjä",
+        "validFrom": "Voimassa alkaen",
+        "validUntil": "Voimassa asti",
+        "daysRemaining": "Päiviä jäljellä",
+        "sans": "Vaihtoehtoiset nimet",
+        "fingerprint": "Sormenjälki",
+        "expiryWarning": "Sertifikaatti vanhenee pian",
+        "loading": "Ladataan sertifikaattitietoja...",
+        "loadError": "Sertifikaattitietojen lataus epäonnistui",
+        "generateSuccess": "Itseallekirjoitettu sertifikaatti luotu onnistuneesti",
+        "generateError": "Sertifikaatin luonti epäonnistui",
+        "uploadSuccess": "Sertifikaatti ladattu onnistuneesti",
+        "uploadError": "Sertifikaatin lataus epäonnistui",
+        "deleteSuccess": "Sertifikaatti poistettu onnistuneesti",
+        "deleteError": "Sertifikaatin poisto epäonnistui",
+        "removeCertificate": "Poista sertifikaatti",
+        "deleteConfirm": "Haluatko varmasti poistaa asennetun TLS-sertifikaatin? TLS-tila palautetaan arvoon Ei mitään.",
+        "restartRequired": "TLS-muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan.",
+        "noCertificate": "Ei asennettua sertifikaattia",
+        "validity1825d": "5 vuotta",
+        "autoTLSHostRequired": "Let's Encrypt vaatii isäntänimen. Syötä julkinen verkkotunnuksesi yllä olevaan Host-kenttään.",
+        "autoTLSNoIP": "Let's Encrypt vaatii verkkotunnuksen, ei IP-osoitetta. Syötä julkinen verkkotunnus kuten birds.example.com.",
+        "autoTLSNeedsFQDN": "Let's Encrypt vaatii täydellisen verkkotunnuksen (esim. birds.example.com), ei pelkkää isäntänimeä.",
+        "autoTLSNoLocalhost": "Let's Encrypt ei voi myöntää sertifikaatteja localhostille.",
+        "autoTLSPrivateTLD": "Let's Encrypt ei voi myöntää sertifikaatteja yksityisille verkkotunnuksille ({tld} ei ole julkisesti selvitettävissä).",
+        "downloadCertificate": "Lataa sertifikaatti",
+        "downloadCertificateHelp": "Asenna tämä sertifikaatti käyttöjärjestelmäsi luottamusvarastoon välttääksesi selaimen turvallisuusvaroitukset.",
+        "fileReadError": "Valitun tiedoston lukeminen epäonnistui"
       }
     },
     "database": {
@@ -3838,7 +3838,7 @@
         "appearance": "Appearance",
         "language": "Language & Regional",
         "visualContent": "Visual Content",
-        "audioPlayback": "Audio Playback"
+        "audioPlayback": "Äänentoisto"
       },
       "appearance": {
         "title": "Appearance",
@@ -3853,14 +3853,14 @@
         "description": "Configure bird images and spectrogram display settings"
       },
       "audioPlayback": {
-        "title": "Audio Playback",
-        "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "title": "Äänentoisto",
+        "description": "Oletusasetukset lintuäänitteiden toistoon.",
+        "defaultGain": "Oletusäänenvahvistus",
+        "defaultGainHelpText": "Alkuvahvistus äänitteiden toistossa. Lintujen äänet ovat usein hiljaisia, joten 6-12 dB:n vahvistus on suositeltavaa.",
         "defaultGainUnit": "dB"
       }
     },
-    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
+    "restartRequired": "Jotkin muutokset vaativat palvelimen uudelleenkäynnistyksen astuakseen voimaan. Käynnistä BirdNET-Go uudelleen."
   },
   "auth": {
     "login": "Kirjaudu",
@@ -3881,7 +3881,7 @@
     "continueWithMicrosoft": "Jatka Microsoftilla",
     "continueWithLine": "Jatka LINE:llä",
     "continueWithKakao": "Jatka Kakaolla",
-    "continueWithOidc": "Continue with OIDC",
+    "continueWithOidc": "Jatka OIDC:llä",
     "errors": {
       "loginFailed": "Kirjautuminen epäonnistui. Tarkista salasanasi ja yritä uudelleen.",
       "passwordRequired": "Salasana vaaditaan.",
@@ -4029,7 +4029,7 @@
       "seekProgress": "Äänen eteneminen: {current} / {total} sekuntia",
       "playbackSpeed": "Toistonopeus",
       "speed": "Nopeus",
-      "loop": "Toggle loop",
+      "loop": "Vaihda silmukka",
       "player": "Äänisoitin"
     },
     "spectrogram": {
@@ -4073,7 +4073,7 @@
         "addNewStream": "Lisää uusi RTSP-striimi",
         "maxStreamsReached": "RTSP-striimien enimmäismäärä ({max}) saavutettu.",
         "cameraPlaceholder": "Kamera 1",
-        "urlPlaceholder": "rtsp://käyttäjänimi:salasana@192.168.1.100:554/stream"
+        "urlPlaceholder": "rtsp://username:password@192.168.1.100:554/stream"
       },
       "subnet": {
         "maxSubnetsReached": "Aliverkkojen enimmäismäärä ({max}) saavutettu."
@@ -4108,36 +4108,36 @@
         "spectrogramFailed": "Spektrogrammin luonti epäonnistui"
       },
       "clipExtraction": {
-        "selectRange": "Click and drag to select a range",
-        "playSelection": "Play selected range",
-        "pauseSelection": "Pause playback",
-        "reviewSelection": "Jump to start of selection",
-        "selectionStart": "Selection start handle",
-        "selectionEnd": "Selection end handle",
-        "lossless": "Lossless",
-        "lossy": "Lossy",
-        "extractClip": "Download selected clip",
-        "clearSelection": "Clear selection",
-        "extracting": "Extracting clip...",
-        "extractError": "Failed to extract clip",
-        "formatLabel": "Format",
+        "selectRange": "Napsauta ja vedä valitaksesi alueen",
+        "playSelection": "Toista valittu alue",
+        "pauseSelection": "Keskeytä toisto",
+        "reviewSelection": "Siirry valinnan alkuun",
+        "selectionStart": "Valinnan aloituskahva",
+        "selectionEnd": "Valinnan lopetuskahva",
+        "lossless": "Häviötön",
+        "lossy": "Häviöllinen",
+        "extractClip": "Lataa valittu leike",
+        "clearSelection": "Tyhjennä valinta",
+        "extracting": "Puretaan leikettä...",
+        "extractError": "Leikkeen purku epäonnistui",
+        "formatLabel": "Muoto",
         "rangeLabel": "{start}s – {end}s"
       },
       "processing": {
-        "playSelection": "Play selection",
-        "skipToStart": "Skip to selection start",
-        "clearSelection": "Clear selection",
-        "gain": "Gain (dB)",
-        "denoise": "Denoise",
-        "denoiseOff": "Off",
-        "denoiseLight": "Light",
-        "denoiseMedium": "Medium",
-        "denoiseHeavy": "Heavy",
-        "normalize": "Normalize audio",
-        "normalizeTooltip": "EBU R128 Normalization",
-        "export": "Export",
+        "playSelection": "Toista valinta",
+        "skipToStart": "Siirry valinnan alkuun",
+        "clearSelection": "Tyhjennä valinta",
+        "gain": "Vahvistus (dB)",
+        "denoise": "Kohinanpoisto",
+        "denoiseOff": "Pois",
+        "denoiseLight": "Kevyt",
+        "denoiseMedium": "Keskitaso",
+        "denoiseHeavy": "Voimakas",
+        "normalize": "Normalisoi ääni",
+        "normalizeTooltip": "EBU R128 -normalisointi",
+        "export": "Vie",
         "exportOriginal": "Alkuperäinen",
-        "processingActive": "Processing active"
+        "processingActive": "Käsittely käynnissä"
       }
     },
     "weatherInfo": {
@@ -4146,20 +4146,20 @@
       }
     },
     "tls": {
-      "certificateInstalled": "Certificate Installed",
-      "browseFile": "Browse",
-      "subject": "Subject",
-      "issuer": "Issuer",
-      "sans": "Subject Alternative Names",
-      "validUntil": "Valid Until",
-      "daysRemaining": "Days Remaining",
-      "fingerprint": "Fingerprint",
-      "expiryWarning": "This certificate expires soon. Consider renewing it.",
-      "downloadCertificate": "Download Certificate",
-      "regenerateButton": "Regenerate",
-      "removeCertificate": "Remove Certificate",
-      "fileReadError": "Failed to read file",
-      "loading": "Loading certificate information..."
+      "certificateInstalled": "Sertifikaatti asennettu",
+      "browseFile": "Selaa",
+      "subject": "Kohde",
+      "issuer": "Myöntäjä",
+      "sans": "Vaihtoehtoiset nimet",
+      "validUntil": "Voimassa asti",
+      "daysRemaining": "Päiviä jäljellä",
+      "fingerprint": "Sormenjälki",
+      "expiryWarning": "Tämä sertifikaatti vanhenee pian. Harkitse sen uusimista.",
+      "downloadCertificate": "Lataa sertifikaatti",
+      "regenerateButton": "Luo uudelleen",
+      "removeCertificate": "Poista sertifikaatti",
+      "fileReadError": "Tiedoston lukeminen epäonnistui",
+      "loading": "Ladataan sertifikaattitietoja..."
     }
   },
   "connectivity": {
@@ -4173,7 +4173,7 @@
     }
   },
   "terminal": {
-    "title": "Terminaali",
+    "title": "Pääte",
     "disabled": "Terminaali on poistettu käytöstä",
     "disabledDescription": "Selainpääte on poistettu käytöstä. Ota se käyttöön Asetukset → Turvallisuus -kohdassa käyttääksesi tätä ominaisuutta.",
     "connected": "Yhdistetty",
@@ -4332,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Tervetuloa",
+        "heading": "Tervetuloa BirdNET-Go:hon!",
+        "description": "BirdNET-Go on reaaliaikainen lintulajien tunnistusjärjestelmä. Se kuuntelee ääntä mikrofonistasi tai äänilähetyksestä ja käyttää BirdNET-tekoälymallia lintulajien tunnistamiseen.",
+        "credit": "Perustuu BirdNET Analyzeriin, jonka on kehittänyt K. Lisa Yang Center for Conservation Bioacoustics Cornellin yliopiston ornitologian laboratoriossa ja Chemnitzin teknillisessä yliopistossa.",
+        "cta": "Määritetään lintuseuranta-asemasi."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Sijainti ja kieli",
+        "uiLanguageLabel": "Käyttöliittymän kieli",
+        "uiLanguageHelp": "Verkkoliittymässä käytettävä kieli",
+        "speciesLanguageLabel": "Lajinimien kieli",
+        "speciesLanguageHelp": "Lajinimissä havainnoissa käytettävä kieli",
+        "locationLabel": "Aseman sijainti",
+        "locationHelp": "Sijaintisi auttaa suodattamaan alueellasi todennäköiset lajit",
+        "latitudeLabel": "Leveysaste",
+        "longitudeLabel": "Pituusaste",
+        "useMyLocation": "Käytä sijaintiani",
+        "locationDetected": "Sijainti havaittu",
+        "locationError": "Sijaintia ei voitu havaita. Syötä koordinaatit manuaalisesti.",
+        "locationDenied": "Sijainnin käyttö estetty. Syötä koordinaatit manuaalisesti."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Äänilähde",
+        "sourceTypeLabel": "Lähteen tyyppi",
+        "soundcard": "Mikrofoni / äänikortti",
+        "rtspStream": "RTSP-lähetys",
+        "deviceLabel": "Äänilaite",
+        "deviceLoading": "Ladataan äänilaitteita...",
+        "noDevicesFound": "Äänilaitteita ei havaittu. Kokeile RTSP-lähetyksen määritystä.",
+        "rtspUrlLabel": "Lähetyksen URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
+        "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Tunnistuskynnys",
+        "description": "Valitse, kuinka tarkka lintutunnistuksen tulee olla. Voit säätää tätä myöhemmin Asetuksissa.",
+        "balanced": "Tasapainoinen",
+        "balancedDesc": "Hyvä tasapaino tarkkuuden ja herkkyyden välillä",
+        "balancedRecommended": "Suositeltu",
+        "highAccuracy": "Korkea tarkkuus",
+        "highAccuracyDesc": "Vähemmän vääriä havaintoja, saattaa ohittaa joitakin lintuja",
+        "highSensitivity": "Korkea herkkyys",
+        "highSensitivityDesc": "Enemmän havaintoja, enemmän vääriä positiivisia",
+        "threshold": "Luottamuskynnys",
+        "fpFilterNote": "Kun järjestelmäsi on toiminnassa ja todettu toimivaksi, voit ottaa väärien positiivisten suodattimen käyttöön Asetuksissa vähentääksesi virheellisiä havaintoja entisestään."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Yksityisyys ja integraatiot",
+        "privacyFilterLabel": "Ota yksityisyyssuodatin käyttöön",
+        "privacyFilterHelp": "Suodattaa havainnot, kun mikrofonin lähellä havaitaan ihmisen puhetta",
+        "birdweatherLabel": "Jaa havainnot BirdWeatheriin",
+        "birdweatherHelp": "Osallistu lintuhavainnoillasi BirdWeather-yhteisöverkkoon",
+        "birdweatherIdLabel": "BirdWeather-aseman ID",
+        "birdweatherIdPlaceholder": "Syötä BirdWeather-asemasi ID",
+        "errorReportingLabel": "Lähetä nimettömiä virheilmoituksia",
+        "errorReportingHelp": "Auta parantamaan BirdNET-Go:ta lähettämällä nimettömiä virheilmoituksia ongelmatilanteissa"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "BirdNET-Go:n vastuullinen käyttö",
+        "intro": "BirdNET-Go on tehokas työkalu, joka parantaa lintuhavaintokokemustasi tekoälyavusteisen tunnistuksen avulla. Parhaiden tulosten saavuttamiseksi sekä lintuharrastuksessa että luonnonsuojelussa:",
+        "point1": "Tarkista ja varmista havainnot ennen jakamista",
+        "point2": "Käytä luottamuspisteitä ohjeena, ei ehdottomana totuutena",
+        "point3": "Vertaa kenttäoppaisiin ja paikalliseen asiantuntemukseen",
+        "point4": "Huomioi vuodenaikaiset mallit ja elinympäristön sopivuus",
+        "citizenScienceHeading": "Kansalaistieteeseen osallistuessa:",
+        "citizenPoint1": "Lähetä vain henkilökohtaisesti varmistamasi havainnot",
+        "citizenPoint2": "Lisää huomioita visuaalisesta tai käyttäytymisen vahvistuksesta",
+        "citizenPoint3": "Käytä tekoälyhavaintoja omien havaintojesi lähtökohtana",
+        "outro": "Tämä lähestymistapa varmistaa tiedon laadun tieteelliseen tutkimukseen ja maksimoi lintuharrastuksesi oppimisen ja nautinnon.",
+        "acknowledge": "Ymmärrän"
       }
     }
   },

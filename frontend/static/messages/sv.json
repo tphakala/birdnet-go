@@ -377,8 +377,8 @@
         "application": "Applikationsfel",
         "imageProvider": "Bildleverantörsmeddelande",
         "categoryError": "{category}-fel",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Flera {component}-fel",
+        "burstMessage": "{count} fel de senaste {window_minutes} minuterna: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Tillämpar nya analysinställningar...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "Uppdaterar BirdWeather-integration...",
         "reconfiguringStreams": "Uppdaterar ljudströmmar...",
         "reconfiguringTelemetry": "Uppdaterar telemetriinställningar...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Omkonfigurerar push-aviseringsleverantörer...",
         "reconfiguringSpeciesTracking": "Uppdaterar artspårning...",
         "recalculatingThresholds": "Beräknar om dynamiska tröskelvärden för nytt basvärde",
         "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frekvensomfång",
+      "colorMap": "Färgkarta",
+      "gain": "Förstärkning",
       "gainTooltip": "Spektrogramvisualisering förstärkning",
       "mute": "Stäng av ljudutgång",
       "unmute": "Aktivera ljudutgång",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minsta frekvens",
+      "frequencyRangeMax": "Högsta frekvens"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Din webbläsare stöder inte ljudanalys",
+      "connectionFailed": "Kunde inte ansluta till live-ljudströmmen",
+      "accessDenied": "Åtkomst till live-ljud kräver autentisering. Logga in för att använda denna funktion."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Live-spektrogram",
+      "audioToggle": "Aktivera ljud"
     },
     "gain": {
       "muted": "Tystad",
       "level": "Förstärkning: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Live-ljud",
+      "sourceLabel": "Ljudkälla",
       "connected": "Ansluten",
       "enterFullscreen": "Helskärm",
       "exitFullscreen": "Avsluta helskärm"
@@ -962,7 +962,10 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Gråskala"
+    },
+    "labels": {
+      "toggle": "Växla detekteringsetiketter"
     }
   },
   "system": {
@@ -2590,7 +2593,7 @@
           }
         },
         "homeAssistant": {
-          "title": "Home Assistant automatisk identifiering",
+          "title": "Home Assistant Auto-Discovery",
           "enable": "Aktivera Home Assistant MQTT-identifiering",
           "description": "När aktiverat registrerar BirdNET-Go automatiskt enheter och sensorer hos Home Assistant genom MQTT-identifieringsprotokollet. Enheter visas i Home Assistants enhetsregister utan manuell YAML-konfiguration.",
           "discoveryPrefix": {
@@ -2603,7 +2606,7 @@
           },
           "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline.",
           "discovery": {
-            "button": "Skicka identifiering",
+            "button": "Skicka Discovery",
             "success": "Identifieringsmeddelanden skickade till Home Assistant",
             "error": "Kunde inte skicka identifieringsmeddelanden",
             "saveFirst": "Spara inställningar innan identifiering skickas"
@@ -3181,7 +3184,7 @@
           "userIdLabel": "Användar-ID"
         },
         "line": {
-          "title": "LINE-inloggning",
+          "title": "LINE Login",
           "enableLabel": "Tillåt OAuth2-inloggning via LINE",
           "redirectUriTitle": "Omdirigerings-URI för LINE Developers Console:",
           "getCredentialsLabel": "Hämta dina uppgifter från LINE Developers Console",
@@ -3192,7 +3195,7 @@
           "userIdLabel": "Användar-ID"
         },
         "kakao": {
-          "title": "Kakao-inloggning",
+          "title": "Kakao Login",
           "enableLabel": "Tillåt OAuth2-inloggning via Kakao",
           "redirectUriTitle": "Omdirigerings-URI för Kakao Developers Console:",
           "getCredentialsLabel": "Hämta dina uppgifter från Kakao Developers Console",
@@ -3963,7 +3966,11 @@
       "hidePassword": "Dölj lösenord",
       "copyToClipboard": "Kopiera till urklipp",
       "clearSelection": "Rensa val",
-      "selectOption": "Välj ett alternativ"
+      "selectOption": "Välj ett alternativ",
+      "secretSet": "Inställd",
+      "changeSecret": "Ändra",
+      "cancelChange": "Avbryt",
+      "enterNewSecret": "Ange nytt värde"
     },
     "help": {
       "passwordStrength": "Lösenordsstyrka: {strength}",
@@ -4046,7 +4053,8 @@
       "seekProgress": "Sök i ljudet: {current} / {total} sekunder",
       "playbackSpeed": "Uppspelningshastighet",
       "speed": "Hastighet",
-      "loop": "Växla upprepning"
+      "loop": "Växla upprepning",
+      "player": "Ljudspelare"
     },
     "spectrogram": {
       "notGenerated": "Spektrogrammet har inte genererats ännu",
@@ -4066,7 +4074,8 @@
       "spectrogramGeneratingAria": "Genererar spektrogram",
       "generating": "Genererar...",
       "queuePosition": "Kö: {position}",
-      "loadError": "Kunde inte ladda ljud"
+      "loadError": "Kunde inte ladda ljud",
+      "spectrogramAlt": "Ljudspektrogram"
     },
     "forms": {
       "numberField": {
@@ -4323,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Välkommen",
+        "heading": "Välkommen till BirdNET-Go!",
+        "description": "BirdNET-Go är ett realtidssystem för identifiering av fågelljud. Det lyssnar på ljud från din mikrofon eller ljudström och använder BirdNET AI-modellen för att identifiera fågelarter.",
+        "credit": "Drivs av BirdNET Analyzer, utvecklad av K. Lisa Yang Center for Conservation Bioacoustics vid Cornell Lab of Ornithology och Chemnitz University of Technology.",
+        "cta": "Låt oss konfigurera din fågelövervakningsstation."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Plats och språk",
+        "uiLanguageLabel": "Gränssnittsspråk",
+        "uiLanguageHelp": "Språk som används för webbgränssnittet",
+        "speciesLanguageLabel": "Artnamnsspråk",
+        "speciesLanguageHelp": "Språk som används för fågelartnamn i detekteringar",
+        "locationLabel": "Stationsplats",
+        "locationHelp": "Din plats hjälper till att filtrera arter till de som troligen finns i ditt område",
+        "latitudeLabel": "Latitud",
+        "longitudeLabel": "Longitud",
+        "useMyLocation": "Använd min plats",
+        "locationDetected": "Plats identifierad",
+        "locationError": "Kunde inte identifiera plats. Ange koordinater manuellt.",
+        "locationDenied": "Platsåtkomst nekad. Ange koordinater manuellt."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Ljudkälla",
+        "sourceTypeLabel": "Källtyp",
+        "soundcard": "Mikrofon / Ljudkort",
+        "rtspStream": "RTSP-ström",
+        "deviceLabel": "Ljudenhet",
+        "deviceLoading": "Laddar ljudenheter...",
+        "noDevicesFound": "Inga ljudenheter hittades. Prova att konfigurera en RTSP-ström istället.",
+        "rtspUrlLabel": "Ström-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Ange URL:en till din RTSP-ljudström",
+        "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Detekteringströskel",
+        "description": "Välj hur strikt fågelidentifieringen ska vara. Du kan justera detta senare under Inställningar.",
+        "balanced": "Balanserad",
+        "balancedDesc": "Bra balans mellan noggrannhet och känslighet",
+        "balancedRecommended": "Rekommenderad",
+        "highAccuracy": "Hög noggrannhet",
+        "highAccuracyDesc": "Färre falska positiva, kan missa vissa fåglar",
+        "highSensitivity": "Hög känslighet",
+        "highSensitivityDesc": "Fler detekteringar, fler falska positiva",
+        "threshold": "Konfidenströskel",
+        "fpFilterNote": "När ditt system är igång och beprövat kan du aktivera filtret för falska positiva under Inställningar för att ytterligare minska felaktiga detekteringar."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Integritet och integration",
+        "privacyFilterLabel": "Aktivera integritetsfilter",
+        "privacyFilterHelp": "Filtrerar bort detekteringar när mänskliga röster upptäcks nära mikrofonen",
+        "birdweatherLabel": "Dela detekteringar med BirdWeather",
+        "birdweatherHelp": "Bidra med dina fågeldetekteringar till BirdWeather-gemenskapsnätverket",
+        "birdweatherIdLabel": "BirdWeather stations-ID",
+        "birdweatherIdPlaceholder": "Ange ditt BirdWeather stations-ID",
+        "errorReportingLabel": "Skicka anonyma felrapporter",
+        "errorReportingHelp": "Hjälp till att förbättra BirdNET-Go genom att skicka anonyma felrapporter när något går fel"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "Ansvarsfull användning av BirdNET-Go",
+        "intro": "BirdNET-Go är ett kraftfullt verktyg som förbättrar din fågelskådning genom AI-assisterad identifiering. För att säkerställa bästa resultat för både fågelskådning och naturvård:",
+        "point1": "Granska och verifiera detekteringar innan du delar observationer",
+        "point2": "Använd konfidenspoängen som vägledning, inte som absolut sanning",
+        "point3": "Korskontrollera med fälthandböcker och lokal expertis",
+        "point4": "Beakta säsongsmönster och habitatlämplighet",
+        "citizenScienceHeading": "När du bidrar till medborgarforskning:",
+        "citizenPoint1": "Skicka bara in observationer du personligen har verifierat",
+        "citizenPoint2": "Inkludera anteckningar om visuell eller beteendemässig bekräftelse",
+        "citizenPoint3": "Använd AI-detekteringar som utgångspunkt för dina egna observationer",
+        "outro": "Detta tillvägagångssätt säkerställer datakvalitet för vetenskaplig forskning samtidigt som det maximerar ditt lärande och din glädje av fåglar.",
+        "acknowledge": "Jag förstår"
       }
     }
   },

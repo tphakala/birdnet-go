@@ -265,7 +265,7 @@
     "unknown": "Neznáme",
     "licenseInformation": "Informácie o licencii",
     "licenseText": "Model BirdNET AI aj BirdNET-Go sú licencované pod",
-    "ccLicense": "Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International License",
+    "ccLicense": "Creative Commons Uvedenie autora-Nekomerčné použitie-Zachovanie licencie 4.0 Medzinárodná licencia",
     "licenseDescription": "Táto licencia umožňuje ostatným upravovať, prispôsobovať a stavať na tomto diele nekomerčne, pokiaľ je uvedený náležitý kredit a nové výtvory sú licencované pod identickými podmienkami.",
     "dependencyLicenses": "Licencie závislostí",
     "taxonomyDataTitle": "Taxonomické údaje",
@@ -377,8 +377,8 @@
         "application": "Chyba aplikácie",
         "imageProvider": "Oznámenie poskytovateľa obrázkov",
         "categoryError": "Chyba {category}",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Viaceré chyby {component}",
+        "burstMessage": "{count} chýb za posledných {window_minutes} minút: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Aplikovanie nových nastavení analýzy...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "Aktualizácia integrácie BirdWeather...",
         "reconfiguringStreams": "Aktualizácia audio streamov...",
         "reconfiguringTelemetry": "Aktualizácia nastavení telemetrie...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Rekonfigurácia poskytovateľov push notifikácií...",
         "reconfiguringSpeciesTracking": "Aktualizácia sledovania druhov...",
         "recalculatingThresholds": "Prepočítavanie dynamických prahov pre novú základnú hodnotu",
         "reconfiguringDynamicThresholds": "Prekonfigurovanie dynamických prahov...",
@@ -560,7 +560,7 @@
     },
     "generic": {
       "errorDetails": "Podrobnosti o chybe",
-      "stackTrace": "Stack Trace",
+      "stackTrace": "Zásobník volaní",
       "goToDashboard": "Prejsť na prehľad",
       "reportIssue": "Nahlásiť problém",
       "loginToViewDetails": "Prihláste sa pre podrobnosti",
@@ -872,6 +872,11 @@
       "loadFailed": "Nepodarilo sa načítať detekciu (Chyba {status}). Skúste obnoviť stránku.",
       "noIdProvided": "Nebolo poskytnuté žiadne ID detekcie.",
       "fetchFailed": "Nepodarilo sa načítať detekcie"
+    },
+    "viewToggle": {
+      "label": "Režim zobrazenia",
+      "table": "Zobrazenie tabuľky",
+      "cards": "Zobrazenie kariet"
     }
   },
   "species": {
@@ -925,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frekvenčný rozsah",
+      "colorMap": "Farebná mapa",
+      "gain": "Zosilnenie",
       "gainTooltip": "Zosilnenie vizualizácie spektrogramu",
       "mute": "Stlmiť zvukový výstup",
       "unmute": "Zapnúť zvukový výstup",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimálna frekvencia",
+      "frequencyRangeMax": "Maximálna frekvencia"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Váš prehliadač nepodporuje analýzu zvuku",
+      "connectionFailed": "Nepodarilo sa pripojiť k živému audio streamu",
+      "accessDenied": "Prístup k živému zvuku vyžaduje overenie. Prihláste sa na používanie tejto funkcie."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Živý spektrogram",
+      "audioToggle": "Povoliť zvuk"
     },
     "gain": {
       "muted": "Stlmené",
       "level": "Zosilnenie: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Živý zvuk",
+      "sourceLabel": "Zdroj zvuku",
       "connected": "Pripojené",
       "enterFullscreen": "Celá obrazovka",
       "exitFullscreen": "Ukončiť celú obrazovku"
@@ -957,7 +962,7 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Odtiene šedej"
     },
     "labels": {
       "toggle": "Prepnúť štítky detekcie"
@@ -973,7 +978,7 @@
     "systemInfo": {
       "title": "Informácie o systéme",
       "os": "Operačný systém",
-      "hostname": "Hostname",
+      "hostname": "Názov hostiteľa",
       "uptime": "Doba prevádzky",
       "cpus": "Procesory (CPU)",
       "model": "Model systému",
@@ -1088,7 +1093,28 @@
         "creating": "Vytvára sa záloha...",
         "cancel": "Zrušiť",
         "retry": "Skúsiť zálohovanie znova",
-        "mysqlNote": "Záloha MySQL vyžaduje externé nástroje (mysqldump)"
+        "mysqlNote": "Záloha MySQL vyžaduje externé nástroje (mysqldump)",
+        "history": {
+          "title": "História záloh",
+          "creating": "Vytváranie...",
+          "createBackup": "Vytvoriť zálohu",
+          "noBackups": "Zatiaľ žiadne zálohy",
+          "download": "Stiahnuť",
+          "failed": "Zlyhané",
+          "columns": {
+            "date": "Dátum",
+            "database": "Databáza",
+            "size": "Veľkosť",
+            "status": "Stav",
+            "actions": "Akcie"
+          },
+          "status": {
+            "pending": "Čakajúce",
+            "in_progress": "Prebieha",
+            "completed": "Dokončené",
+            "failed": "Zlyhané"
+          }
+        }
       },
       "notInitialized": "Neinicializované",
       "migration": {
@@ -1107,7 +1133,8 @@
           "paused": "Pozastavené",
           "validating": "Overuje sa",
           "cutover": "Prebieha prepnutie",
-          "completed": "Migrácia dokončená"
+          "completed": "Migrácia dokončená",
+          "failed": "Validácia zlyhala"
         },
         "progress": {
           "title": "Priebeh migrácie",
@@ -1118,7 +1145,30 @@
           "rateValue": "{rate} záz./s",
           "remaining": "Odhadovaný zostávajúci čas: {time}",
           "eta": "Odhadovaný zostávajúci čas",
-          "dirtyIds": "{count} záznamov čaká na opätovnú synchronizáciu"
+          "dirtyIds": "{count} záznamov čaká na opätovnú synchronizáciu",
+          "completedTitle": "Migrácia dokončená",
+          "completedBody": "Všetkých {count} záznamov bolo úspešne migrovaných do databázy V2. Aplikácia bude po reštarte používať V2 ako primárnu databázu.",
+          "restartTitle": "Vyžaduje sa reštart",
+          "restartBody": "Reštartujte aplikáciu pre prepnutie na databázu V2. Vyčistenie starej databázy bude dostupné po reštarte.",
+          "fallbackError": "Nesúlad počtu záznamov medzi starou a V2 databázou. Niektoré záznamy sa možno nemigrovali správne.",
+          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Režim dvojitého zápisu zabezpečuje nulovú stratu dát počas migrácie.",
+          "sourceLegacy": "Zdroj (Legacy)",
+          "targetV2": "Cieľ (V2)",
+          "recordsLabel": "Záznamy",
+          "sizeLabel": "Veľkosť",
+          "prerequisitesNotMet": "Predpoklady nesplnené — vyriešte kritické problémy nižšie",
+          "validatingTitle": "Validácia dát",
+          "validatingBody": "Porovnávanie {count} starých záznamov s databázou V2...",
+          "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov — bude sa pokúšať o dodatočnú rekonciliáciu",
+          "cutoverTitle": "Dokončovanie prechodu",
+          "cutoverBody": "Dokončovanie prechodu na databázu V2...",
+          "migratingPhase": "Migrácia {phase}",
+          "progressLabel": "Priebeh",
+          "ofRecords": "/ {count} záznamov",
+          "percentComplete": "{percent}% dokončené",
+          "recordsPerSec": "{rate} záznamov/s",
+          "calculating": "Výpočet...",
+          "dirtyWriteFailed": "{count} záznamov sa nepodarilo zapísať — budú zosúladené počas validácie"
         },
         "phase": {
           "indicator": "Fáza {current} z {total}: ",
@@ -1141,7 +1191,8 @@
           "pause": "Pozastaviť",
           "resume": "Pokračovať",
           "cancel": "Zrušiť",
-          "rollback": "Rollback"
+          "rollback": "Vrátenie späť",
+          "retryValidation": "Zopakovať validáciu"
         },
         "confirmDialog": {
           "title": "Spustiť migráciu databázy",
@@ -1167,7 +1218,8 @@
           "resumeFailed": "Nepodarilo sa pokračovať v migrácii",
           "cancelFailed": "Nepodarilo sa zrušiť migráciu",
           "rollbackFailed": "Nepodarilo sa vykonať rollback migrácie",
-          "fetchFailed": "Nepodarilo sa získať stav migrácie"
+          "fetchFailed": "Nepodarilo sa získať stav migrácie",
+          "retryValidationFailed": "Nepodarilo sa zopakovať validáciu"
         },
         "worker": {
           "running": "Worker beží",
@@ -1226,7 +1278,123 @@
             "mysql_timeout": {
               "name": "MySQL Timeout"
             }
+          },
+          "passedCount": "{passed}/{total} úspešných",
+          "criticalCount": "{count} kritických",
+          "warningCount": "{count} upozornení",
+          "rerun": "Spustiť znova",
+          "showDetails": "Zobraziť podrobnosti",
+          "hideDetails": "Skryť podrobnosti",
+          "status": {
+            "passed": "Úspešné",
+            "failed": "Zlyhané",
+            "error": "Chyba",
+            "warning": "Upozornenie",
+            "skipped": "Preskočené"
           }
+        },
+        "details": {
+          "title": "Podrobnosti databázy",
+          "detections": "{count} detekcií",
+          "lastBackup": "Posledná záloha: {date}",
+          "noBackups": "Žiadne zálohy",
+          "integrity": "Integrita: {status}"
+        },
+        "strip": {
+          "legacy": "Legacy",
+          "v2Target": "V2 (Cieľ)",
+          "active": "Aktívny",
+          "migration": "Migrácia",
+          "complete": "Dokončené",
+          "recordsMigrated": "{count} záznamov migrovaných",
+          "readyToMigrate": "Pripravené na migráciu",
+          "recordsInLegacy": "{count} záznamov v legacy",
+          "comparingRecords": "Porovnávanie počtu záznamov...",
+          "validationFailed": "Validácia zlyhala",
+          "rate": "Frekvencia",
+          "recPerSec": "{rate} záz/s",
+          "dayAvg": "~{count} / denný priemer",
+          "dayHistory": "História za 30 dní"
+        }
+      },
+      "dashboard": {
+        "title": "Prehľad databázy",
+        "fetchFailed": "Nepodarilo sa načítať prehľad databázy",
+        "loading": "Načítavanie...",
+        "metrics": {
+          "readLatency": "Latencia čítania",
+          "writeLatency": "Latencia zápisu",
+          "queriesPerSec": "Dotazy/sek",
+          "database": "Databáza",
+          "avg": "priemer",
+          "max": "max",
+          "lastHour": "{count} za poslednú hodinu",
+          "slowQueries": "{count} pomalých"
+        },
+        "details": {
+          "title": "Podrobnosti databázy",
+          "engine": "Motor",
+          "journal": "Denník",
+          "pageSize": "Veľkosť stránky",
+          "cacheHit": "Zásah cache",
+          "integrity": "Integrita",
+          "lastVacuum": "Posledný VACUUM"
+        },
+        "locksWal": {
+          "title": "Zámky a WAL",
+          "lockWaits": "Čakania na zámok",
+          "lockTimeouts": "Časové limity zámkov",
+          "avgWait": "Priemer čakania",
+          "busyTimeouts": "Časové limity zaneprázdnenia",
+          "walSize": "Veľkosť WAL",
+          "checkpoints": "Kontrolné body",
+          "freelistPages": "Stránky voľného zoznamu",
+          "cacheSize": "Veľkosť cache"
+        },
+        "connectionPool": {
+          "title": "Pool pripojení",
+          "poolUsage": "Využitie poolu",
+          "active": "aktívny",
+          "idle": "nečinný",
+          "waiting": "čakajúci",
+          "totalCreated": "Celkom vytvorené",
+          "connErrors": "Chyby pripojenia",
+          "threads": "Vlákna",
+          "running": "beží",
+          "cached": "v cache"
+        },
+        "innodb": {
+          "title": "InnoDB a zámky",
+          "bufferPoolHitRate": "Úspešnosť buffer poolu",
+          "bufferPoolSize": "Veľkosť buffer poolu",
+          "lockWaits": "Čakania na zámok",
+          "deadlocks": "Deadlocky",
+          "avgLockWait": "Priemer čakania na zámok",
+          "tableLocksWaited": "Čakané zámky tabuliek",
+          "tableLocksImmediate": "Okamžité zámky tabuliek"
+        },
+        "detectionRate": {
+          "title": "Miera detekcií (24h)",
+          "chartLabel": "Miera detekcií za 24 hodín",
+          "detectionsTooltip": "{count} detekcií",
+          "perHour": "/hod",
+          "min": "min",
+          "avg": "priemer",
+          "max": "max",
+          "lastBackup": "Posledná záloha",
+          "backupSize": "Veľkosť zálohy",
+          "createBackup": "Vytvoriť zálohu",
+          "mysqlHost": "Hostiteľ",
+          "mysqlBackupNote": "MySQL zálohy by mali byť spravované cez mysqldump alebo vaše MySQL administračné nástroje."
+        },
+        "tables": {
+          "title": "Tabuľky",
+          "total": "Celkom",
+          "table": "Tabuľka",
+          "engine": "Motor",
+          "rows": "Riadky",
+          "size": "Veľkosť",
+          "usage": "Využitie"
         }
       }
     },
@@ -1243,7 +1411,7 @@
       "tempUnavailable": "Nedostupná",
       "online": "Online",
       "uptime": "Doba behu",
-      "host": "Host",
+      "host": "Hostiteľ",
       "model": "Model",
       "limit": "Limit",
       "inference": "Inferencia",
@@ -1431,7 +1599,8 @@
         "startDate": "Dátum začiatku",
         "endDate": "Dátum konca",
         "loadingAnalytics": "Načítavajú sa analytické dáta",
-        "loadingTrends": "Načítavajú sa dáta trendov"
+        "loadingTrends": "Načítavajú sa dáta trendov",
+        "loadingDiversity": "Načítavanie dát o diverzite"
       }
     },
     "errors": {
@@ -1613,7 +1782,7 @@
             "title": "Konfigurácia MySQL",
             "description": "Konfigurácia nastavení pripojenia pre databázový server MySQL",
             "host": {
-              "label": "MySQL Host",
+              "label": "MySQL Hostiteľ",
               "placeholder": "Zadajte MySQL host",
               "helpText": "Hostiteľ databázy MySQL (IP alebo hostname)"
             },
@@ -1622,12 +1791,12 @@
               "helpText": "Port databázy MySQL (predvolené 3306/TCP)"
             },
             "username": {
-              "label": "MySQL Username",
+              "label": "MySQL Používateľ",
               "placeholder": "Zadajte MySQL meno používateľa",
               "helpText": "Meno používateľa databázy MySQL"
             },
             "password": {
-              "label": "MySQL Password",
+              "label": "MySQL Heslo",
               "placeholder": "Zadajte MySQL heslo",
               "helpText": "Heslo databázy MySQL"
             },
@@ -2122,7 +2291,7 @@
           "discord": {
             "name": "Discord",
             "webhookUrl": {
-              "label": "Discord Webhook URL",
+              "label": "URL Discord Webhooku",
               "placeholder": "https://discord.com/api/webhooks/...",
               "helpText": "Vložte svoju plnú Discord webhook URL"
             },
@@ -2131,12 +2300,12 @@
           "telegram": {
             "name": "Telegram",
             "botToken": {
-              "label": "Bot Token",
+              "label": "Token bota",
               "placeholder": "123456789:ABCdef...",
               "helpText": "Token od @BotFather"
             },
             "chatId": {
-              "label": "Chat ID",
+              "label": "ID chatu",
               "placeholder": "-1001234567890 alebo @channel",
               "helpText": "Chat ID, ID skupiny alebo @username"
             },
@@ -2198,7 +2367,7 @@
               "helpText": "API token aplikácie"
             },
             "userKey": {
-              "label": "User Key",
+              "label": "Kľúč používateľa",
               "placeholder": "u...",
               "helpText": "Váš používateľský alebo skupinový kľúč"
             },
@@ -2230,7 +2399,7 @@
           "webhook": {
             "name": "Webhook",
             "url": {
-              "label": "Webhook URL",
+              "label": "URL webhooku",
               "placeholder": "https://api.example.com/webhook",
               "helpText": "Koncový bod HTTP(S), na ktorý sa majú odosielať upozornenia"
             },
@@ -2242,7 +2411,7 @@
               "label": "Autentifikácia",
               "none": "Žiadna",
               "bearer": "Bearer Token",
-              "basic": "Basic Auth",
+              "basic": "Základné overenie",
               "helpText": "Voliteľná autentifikácia pre koncový bod webhooku"
             },
             "bearerToken": {
@@ -2256,7 +2425,7 @@
             },
             "basicPass": {
               "label": "Heslo",
-              "placeholder": "password"
+              "placeholder": "heslo"
             },
             "basicAuth": {
               "helpText": "Prihlasovacie údaje odoslané pomocou HTTP Basic Authentication"
@@ -2372,25 +2541,25 @@
           "skipVerify": "Preskočiť overenie certifikátu",
           "configNote": "<strong>Konfigurácia TLS:</strong><br />• Štandardné TLS: Nechajte certifikáty prázdne pre verejných brokerov<br />• Self-signed certifikáty: Poskytnite CA certifikát<br />• Mutual TLS (mTLS): Poskytnite všetky tri certifikáty",
           "certificates": {
-            "title": "Certificate Management",
-            "description": "Upload certificates for secure MQTT broker connections",
-            "caLabel": "CA Certificate",
+            "title": "Správa certifikátov",
+            "description": "Nahrať certifikáty pre bezpečné pripojenia k MQTT brokeru",
+            "caLabel": "CA certifikát",
             "caPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "caHelpText": "Certificate Authority certificate to verify the broker's identity",
-            "clientCertLabel": "Client Certificate",
+            "caHelpText": "Certifikát certifikačnej autority na overenie identity brokera",
+            "clientCertLabel": "Klientský certifikát",
             "clientCertPlaceholder": "-----BEGIN CERTIFICATE-----",
-            "clientCertHelpText": "Client certificate for mutual TLS authentication",
-            "clientKeyLabel": "Client Private Key",
+            "clientCertHelpText": "Klientský certifikát pre vzájomné TLS overenie",
+            "clientKeyLabel": "Súkromný kľúč klienta",
             "clientKeyPlaceholder": "-----BEGIN PRIVATE KEY-----",
-            "clientKeyHelpText": "Private key matching the client certificate",
-            "uploadButton": "Upload Certificates",
-            "uploadSuccess": "MQTT TLS certificates uploaded successfully. Use Test Connection to verify.",
-            "uploadError": "Failed to upload MQTT TLS certificates",
-            "deleteConfirm": "Remove all MQTT TLS certificates? The MQTT client will need to reconnect.",
-            "deleteSuccess": "MQTT TLS certificates removed",
-            "deleteError": "Failed to remove MQTT TLS certificates",
-            "loadError": "Failed to load certificate information",
-            "reconnectNote": "Use the Test Connection button below to verify the new TLS configuration."
+            "clientKeyHelpText": "Súkromný kľúč zodpovedajúci klientskému certifikátu",
+            "uploadButton": "Nahrať certifikáty",
+            "uploadSuccess": "MQTT TLS certifikáty úspešne nahrané. Použi Test pripojenia na overenie.",
+            "uploadError": "Nepodarilo sa nahrať MQTT TLS certifikáty",
+            "deleteConfirm": "Odstrániť všetky MQTT TLS certifikáty? MQTT klient sa bude musieť znova pripojiť.",
+            "deleteSuccess": "MQTT TLS certifikáty odstránené",
+            "deleteError": "Nepodarilo sa odstrániť MQTT TLS certifikáty",
+            "loadError": "Nepodarilo sa načítať informácie o certifikáte",
+            "reconnectNote": "Použite tlačidlo Test pripojenia nižšie na overenie novej TLS konfigurácie."
           }
         },
         "homeAssistant": {
@@ -2491,7 +2660,7 @@
             "standard": "Štandardné",
             "metric": "Metrické",
             "imperial": "Imperiálne",
-            "ukhybrid": "UK Hybrid"
+            "ukhybrid": "UK hybridný"
           }
         },
         "test": {
@@ -2534,14 +2703,14 @@
           "helpText": "Ako dlho uchovávať taxonomické údaje z eBird vo vyrovnávacej pamäti. Taxonómia sa mení zriedkavo, preto dlhšie doby cache znižujú počet volaní API."
         },
         "note": "eBird poskytuje taxonomické údaje používané na klasifikáciu druhov a analýzy. API kľúč je bezplatný a dostupný z Cornell Lab of Ornithology.",
-        "apiKeyInfo": "A personal eBird API key is required to use this integration. You can request a free key from <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
+        "apiKeyInfo": "Na použitie tejto integrácie je potrebný osobný kľúč API eBird. Bezplatný kľúč si môžete vyžiadať na <a href=\"https://ebird.org/api/keygen\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">ebird.org/api/keygen</a>.",
         "test": {
-          "button": "Test eBird Connection",
-          "loading": "Testing...",
-          "enabledRequired": "Enable eBird integration first",
-          "apiKeyRequired": "API key is required",
-          "inProgress": "Test in progress...",
-          "description": "Test eBird API connectivity and authentication"
+          "button": "Test pripojenia eBird",
+          "loading": "Testovanie...",
+          "enabledRequired": "Najprv povoľte integráciu eBird",
+          "apiKeyRequired": "API kľúč je povinný",
+          "inProgress": "Test prebieha...",
+          "description": "Otestovať pripojenie a overenie API eBird"
         }
       }
     },
@@ -2944,10 +3113,10 @@
         "noProvidersDescription": "Pridajte poskytovateľa na povolenie prihlásenia cez Google, GitHub, Microsoft, LINE, Kakao alebo vlastného poskytovateľa OIDC.",
         "enableProviderLabel": "Povoliť tohto poskytovateľa",
         "getCredentialsLabel": "Získajte svoje prihlasovacie údaje od {provider}",
-        "redirectUriTitle": "Redirect URI:",
-        "clientIdLabel": "Client ID",
+        "redirectUriTitle": "URI presmerovania:",
+        "clientIdLabel": "ID klienta",
         "clientIdHelpText": "OAuth 2.0 Client ID z vývojárskej konzoly vášho poskytovateľa",
-        "clientSecretLabel": "Client Secret",
+        "clientSecretLabel": "Tajný kľúč klienta",
         "clientSecretHelpText": "OAuth 2.0 Client Secret z vývojárskej konzoly vášho poskytovateľa",
         "userIdLabel": "ID používateľa (voliteľné)",
         "userIdHelpText": "Obmedziť prístup ku konkrétnemu používateľskému účtu podľa e-mailu alebo ID",
@@ -2956,9 +3125,9 @@
           "enableLabel": "Povoliť prihlásenie OAuth2 cez Google",
           "redirectUriTitle": "Redirect URI pre Google Cloud Console:",
           "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Google Cloud Console",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "ID klienta",
           "clientIdHelpText": "OAuth 2.0 Client ID získané z Google Cloud Console pri nastavovaní poverení OAuth.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Tajný kľúč klienta",
           "clientSecretHelpText": "OAuth 2.0 Client Secret získané z Google Cloud Console pri nastavovaní poverení OAuth.",
           "userIdLabel": "ID používateľa"
         },
@@ -2967,9 +3136,9 @@
           "enableLabel": "Povoliť prihlásenie OAuth2 cez GitHub",
           "redirectUriTitle": "Redirect URI pre GitHub Developer Settings:",
           "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z GitHub Developer Settings",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "ID klienta",
           "clientIdHelpText": "OAuth 2.0 Client ID získané z GitHub Developer Settings pri nastavovaní poverení OAuth.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Tajný kľúč klienta",
           "clientSecretHelpText": "OAuth 2.0 Client Secret získané z GitHub Developer Settings pri nastavovaní poverení OAuth.",
           "userIdLabel": "ID používateľa"
         },
@@ -2978,51 +3147,51 @@
           "enableLabel": "Povoliť prihlásenie OAuth2 cez Microsoft účet",
           "redirectUriTitle": "Redirect URI pre Azure App Registration:",
           "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Azure Portal",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "ID klienta",
           "clientIdHelpText": "Application (client) ID získané z Azure App Registration.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Tajný kľúč klienta",
           "clientSecretHelpText": "Hodnota kľúča klienta (client secret) získaná z Azure App Registration.",
           "userIdLabel": "ID používateľa"
         },
         "line": {
-          "title": "LINE Login",
+          "title": "Prihlásenie LINE",
           "enableLabel": "Povoliť prihlásenie OAuth2 cez LINE",
           "redirectUriTitle": "Redirect URI pre LINE Developers Console:",
           "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z LINE Developers Console",
-          "clientIdLabel": "Channel ID",
+          "clientIdLabel": "ID kanála",
           "clientIdHelpText": "Channel ID získané z LINE Developers Console pri nastavovaní LINE Login.",
-          "clientSecretLabel": "Channel Secret",
+          "clientSecretLabel": "Tajný kľúč kanála",
           "clientSecretHelpText": "Channel Secret získané z LINE Developers Console pri nastavovaní LINE Login.",
           "userIdLabel": "ID používateľa"
         },
         "kakao": {
-          "title": "Kakao Login",
+          "title": "Prihlásenie Kakao",
           "enableLabel": "Povoliť prihlásenie OAuth2 cez Kakao",
           "redirectUriTitle": "Redirect URI pre Kakao Developers Console:",
           "getCredentialsLabel": "Získajte svoje prihlasovacie údaje z Kakao Developers Console",
-          "clientIdLabel": "REST API Key",
+          "clientIdLabel": "REST API kľúč",
           "clientIdHelpText": "REST API kľúč získaný z Kakao Developers Console pri nastavovaní Kakao Login.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Tajný kľúč klienta",
           "clientSecretHelpText": "Client Secret získaný z Kakao Developers Console pri nastavovaní Kakao Login.",
           "userIdLabel": "ID používateľa"
         },
         "oidc": {
-          "title": "OIDC Provider",
-          "enableLabel": "Enable OIDC authentication",
-          "redirectUriTitle": "Redirect URI",
-          "getCredentialsLabel": "Configure in your Identity Provider",
-          "clientIdLabel": "Client ID",
-          "clientIdHelpText": "The client ID from your OIDC identity provider",
-          "clientSecretLabel": "Client Secret",
-          "clientSecretHelpText": "The client secret from your OIDC identity provider",
-          "userIdLabel": "Allowed User (email or sub claim)",
-          "issuerUrlLabel": "Issuer URL",
-          "issuerUrlHelpText": "The issuer URL of your OpenID Connect identity provider (e.g., https://auth.example.com)",
+          "title": "OIDC Poskytovateľ",
+          "enableLabel": "Povoliť OIDC overenie",
+          "redirectUriTitle": "URI presmerovania",
+          "getCredentialsLabel": "Nakonfigurujte vo svojom poskytovateľovi identity",
+          "clientIdLabel": "ID klienta",
+          "clientIdHelpText": "ID klienta z vášho OIDC poskytovateľa identity",
+          "clientSecretLabel": "Tajný kľúč klienta",
+          "clientSecretHelpText": "Tajný kľúč klienta z vášho OIDC poskytovateľa identity",
+          "userIdLabel": "Povolený používateľ (email alebo sub claim)",
+          "issuerUrlLabel": "URL vydavateľa",
+          "issuerUrlHelpText": "URL vydavateľa vášho OpenID Connect poskytovateľa identity (napr. https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
-          "issuerUrlRequired": "Issuer URL is required for OIDC providers",
-          "issuerUrlInvalid": "Issuer URL must be a valid HTTP or HTTPS URL",
-          "scopesLabel": "Scopes",
-          "scopesHelpText": "Comma-separated list of OIDC scopes (default: openid, profile, email)",
+          "issuerUrlRequired": "URL vydavateľa je povinná pre OIDC poskytovateľov",
+          "issuerUrlInvalid": "URL vydavateľa musí byť platná HTTP alebo HTTPS URL",
+          "scopesLabel": "Rozsahy",
+          "scopesHelpText": "Zoznam OIDC rozsahov oddelených čiarkou (predvolené: openid, profile, email)",
           "scopesPlaceholder": "openid, profile, email"
         }
       },
@@ -3032,14 +3201,14 @@
         "disabled": "Obídenie subnetu je vypnuté"
       },
       "exceptions": {
-        "title": "Exceptions"
+        "title": "Výnimky"
       },
       "publicAccess": {
-        "title": "Public Access",
-        "description": "Allow specific features to be accessible without authentication.",
-        "liveAudioLabel": "Allow public live audio playback",
-        "liveAudioHelp": "When enabled, anyone can listen to live audio streams without logging in. Settings and deletion still require authentication.",
-        "warningText": "Enabling public access features exposes them to anyone who can reach this server. Only enable if you trust your network environment."
+        "title": "Verejný prístup",
+        "description": "Povoliť prístup k špecifickým funkciám bez overenia.",
+        "liveAudioLabel": "Povoliť verejné prehrávanie zvuku naživo",
+        "liveAudioHelp": "Keď je povolené, ktokoľvek môže počúvať živé audio streamy bez prihlásenia. Nastavenia a mazanie stále vyžadujú overenie.",
+        "warningText": "Povolenie funkcií verejného prístupu ich sprístupní komukoľvek, kto sa môže pripojiť k tomuto serveru. Povoľte iba ak dôverujete svojmu sieťovému prostrediu."
       },
       "placeholders": {
         "baseUrl": "https://birdnet.priklad.sk:5500",
@@ -3056,64 +3225,64 @@
       },
       "tls": {
         "title": "TLS / HTTPS",
-        "description": "Configure TLS/HTTPS encryption for secure connections",
-        "modeLabel": "TLS Mode",
-        "modeNone": "None (HTTP)",
+        "description": "Konfigurácia šifrovania TLS/HTTPS pre bezpečné pripojenia",
+        "modeLabel": "Režim TLS",
+        "modeNone": "Žiadny (HTTP)",
         "modeLetsEncrypt": "Let's Encrypt",
-        "modeManual": "Manual Certificate",
-        "modeSelfSigned": "Self-Signed",
-        "modeNoneDescription": "Plain HTTP without encryption",
-        "modeAutoTLSDescription": "Automatic certificate via Let's Encrypt",
-        "modeManualDescription": "Upload your own certificate and key",
-        "modeSelfSignedDescription": "Generate a self-signed certificate",
+        "modeManual": "Manuálny certifikát",
+        "modeSelfSigned": "Samopodpísaný",
+        "modeNoneDescription": "Obyčajné HTTP bez šifrovania",
+        "modeAutoTLSDescription": "Automatický certifikát cez Let's Encrypt",
+        "modeManualDescription": "Nahrať vlastný certifikát a kľúč",
+        "modeSelfSignedDescription": "Vygenerovať samopodpísaný certifikát",
         "portLabel": "HTTPS Port",
-        "portHelpText": "Port for HTTPS connections (default: 8443)",
-        "redirectToHttps": "Redirect HTTP to HTTPS",
-        "autoTLSRequirements": "Requires ports 80 and 443 to be accessible. On Linux, the process needs root or CAP_NET_BIND_SERVICE capability.",
-        "validityLabel": "Certificate Validity",
-        "validityHelpText": "How long the certificate should be valid",
-        "validity365d": "1 year",
-        "validity730d": "2 years",
-        "generateButton": "Generate Certificate",
-        "regenerateButton": "Regenerate Certificate",
-        "generating": "Generating...",
-        "certificateLabel": "Certificate (PEM)",
-        "privateKeyLabel": "Private Key (PEM)",
-        "caCertificateLabel": "CA Certificate (PEM, optional)",
-        "uploadButton": "Upload Certificate",
-        "uploading": "Uploading...",
-        "browseFile": "Browse...",
-        "plaintextWarning": "Warning: Your private key will be transmitted in plaintext over HTTP. Only upload certificates when connected via a trusted network or localhost.",
-        "certificateInstalled": "Installed Certificate",
-        "subject": "Subject",
-        "issuer": "Issuer",
-        "validFrom": "Valid From",
-        "validUntil": "Valid Until",
-        "daysRemaining": "Days Remaining",
-        "sans": "Subject Alternative Names",
-        "fingerprint": "Fingerprint",
-        "expiryWarning": "Certificate is expiring soon",
-        "loading": "Loading certificate info...",
-        "loadError": "Failed to load certificate info",
-        "generateSuccess": "Self-signed certificate generated successfully",
-        "generateError": "Failed to generate certificate",
-        "uploadSuccess": "Certificate uploaded successfully",
-        "uploadError": "Failed to upload certificate",
-        "deleteSuccess": "Certificate removed successfully",
-        "deleteError": "Failed to delete certificate",
-        "removeCertificate": "Remove Certificate",
-        "deleteConfirm": "Are you sure you want to remove the installed TLS certificate? The TLS mode will be reset to None.",
-        "restartRequired": "TLS changes require a server restart to take effect.",
-        "noCertificate": "No certificate installed",
-        "validity1825d": "5 years",
-        "autoTLSHostRequired": "A hostname is required for Let’s Encrypt. Enter your public domain name in the Host field above.",
-        "autoTLSNoIP": "Let’s Encrypt requires a domain name, not an IP address. Enter a public domain like birds.example.com.",
-        "autoTLSNeedsFQDN": "Let’s Encrypt requires a fully qualified domain name (e.g., birds.example.com), not a bare hostname.",
-        "autoTLSNoLocalhost": "Let’s Encrypt cannot issue certificates for localhost.",
-        "autoTLSPrivateTLD": "Let’s Encrypt cannot issue certificates for private domains ({tld} is not publicly resolvable).",
-        "downloadCertificate": "Download Certificate",
-        "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
-        "fileReadError": "Failed to read the selected file"
+        "portHelpText": "Port pre HTTPS pripojenia (predvolený: 8443)",
+        "redirectToHttps": "Presmerovať HTTP na HTTPS",
+        "autoTLSRequirements": "Vyžaduje dostupnosť portov 80 a 443. Na Linuxe proces potrebuje root alebo schopnosť CAP_NET_BIND_SERVICE.",
+        "validityLabel": "Platnosť certifikátu",
+        "validityHelpText": "Ako dlho by mal byť certifikát platný",
+        "validity365d": "1 rok",
+        "validity730d": "2 roky",
+        "generateButton": "Vygenerovať certifikát",
+        "regenerateButton": "Regenerovať certifikát",
+        "generating": "Generovanie...",
+        "certificateLabel": "Certifikát (PEM)",
+        "privateKeyLabel": "Súkromný kľúč (PEM)",
+        "caCertificateLabel": "CA certifikát (PEM, voliteľný)",
+        "uploadButton": "Nahrať certifikát",
+        "uploading": "Nahrávanie...",
+        "browseFile": "Prehľadávať...",
+        "plaintextWarning": "Upozornenie: Váš súkromný kľúč bude prenášaný v nešifrovanej forme cez HTTP. Nahrávajte certifikáty len cez dôveryhodnú sieť alebo localhost.",
+        "certificateInstalled": "Nainštalovaný certifikát",
+        "subject": "Predmet",
+        "issuer": "Vydavateľ",
+        "validFrom": "Platný od",
+        "validUntil": "Platný do",
+        "daysRemaining": "Zostávajúce dni",
+        "sans": "Alternatívne mená subjektu",
+        "fingerprint": "Odtlačok",
+        "expiryWarning": "Certifikát čoskoro vyprší",
+        "loading": "Načítavanie informácií o certifikáte...",
+        "loadError": "Nepodarilo sa načítať informácie o certifikáte",
+        "generateSuccess": "Samopodpísaný certifikát úspešne vygenerovaný",
+        "generateError": "Nepodarilo sa vygenerovať certifikát",
+        "uploadSuccess": "Certifikát úspešne nahraný",
+        "uploadError": "Nepodarilo sa nahrať certifikát",
+        "deleteSuccess": "Certifikát úspešne odstránený",
+        "deleteError": "Nepodarilo sa odstrániť certifikát",
+        "removeCertificate": "Odstrániť certifikát",
+        "deleteConfirm": "Ste si istí, že chcete odstrániť nainštalovaný TLS certifikát? Režim TLS bude obnovený na Žiadny.",
+        "restartRequired": "Zmeny TLS vyžadujú reštart servera.",
+        "noCertificate": "Žiadny nainštalovaný certifikát",
+        "validity1825d": "5 rokov",
+        "autoTLSHostRequired": "Pre Let’s Encrypt je potrebný názov hostiteľa. Zadajte svoj verejný názov domény do poľa Hostiteľ vyššie.",
+        "autoTLSNoIP": "Let’s Encrypt vyžaduje názov domény, nie IP adresu. Zadajte verejnú doménu ako birds.example.com.",
+        "autoTLSNeedsFQDN": "Let’s Encrypt vyžaduje plne kvalifikovaný názov domény (napr. birds.example.com), nie jednoduchý názov hostiteľa.",
+        "autoTLSNoLocalhost": "Let’s Encrypt nemôže vydávať certifikáty pre localhost.",
+        "autoTLSPrivateTLD": "Let’s Encrypt nemôže vydávať certifikáty pre súkromné domény ({tld} nie je verejne riešiteľná).",
+        "downloadCertificate": "Stiahnuť certifikát",
+        "downloadCertificateHelp": "Nainštalujte tento certifikát do úložiska dôveryhodných certifikátov vášho operačného systému, aby ste sa vyhli bezpečnostným upozorneniam prehliadača.",
+        "fileReadError": "Nepodarilo sa prečítať vybraný súbor"
       }
     },
     "species": {
@@ -3270,14 +3439,14 @@
           "availableTitle": "Dostupné parametre",
           "buttons": {
             "commonName": "CommonName",
-            "scientificName": "ScientificName",
-            "confidence": "Confidence",
-            "time": "Time",
-            "source": "Source",
+            "scientificName": "VedeckýNázov",
+            "confidence": "Spoľahlivosť",
+            "time": "Čas",
+            "source": "Zdroj",
             "clearParameters": "Vymazať parametre"
           },
-          "placeholder": "Click buttons below to add parameters or type manually",
-          "tooltip": "Use buttons below or type directly (comma-separated)"
+          "placeholder": "Kliknite na tlačidlá nižšie pre pridanie parametrov alebo zadajte ručne",
+          "tooltip": "Použite tlačidlá nižšie alebo zadajte priamo (oddelené čiarkou)"
         },
         "executeDefaults": {
           "label": "Spustiť aj predvolené akcie (uloženie do databázy, upozornenia atď.)",
@@ -3429,7 +3598,7 @@
         "expand": "Zobraziť históriu udalostí",
         "collapse": "Skryť históriu udalostí"
       },
-      "suggestions": "Species suggestions"
+      "suggestions": "Návrhy druhov"
     },
     "database": {
       "sqlitePlaceholder": "Zadajte cestu k databáze SQLite",
@@ -3669,7 +3838,7 @@
         "appearance": "Vzhľad",
         "language": "Jazyk a regionálne",
         "visualContent": "Vizuálny obsah",
-        "audioPlayback": "Audio Playback"
+        "audioPlayback": "Prehrávanie zvuku"
       },
       "appearance": {
         "title": "Vzhľad",
@@ -3684,14 +3853,14 @@
         "description": "Nakonfigurujte obrázky vtákov a nastavenia zobrazenia spektrogramu"
       },
       "audioPlayback": {
-        "title": "Audio Playback",
-        "description": "Default settings for playing bird recordings.",
-        "defaultGain": "Default Volume Boost",
-        "defaultGainHelpText": "Initial gain applied when playing recordings. Bird sounds are often quiet, so a boost of 6-12 dB is recommended.",
+        "title": "Prehrávanie zvuku",
+        "description": "Predvolené nastavenia pre prehrávanie nahrávok vtákov.",
+        "defaultGain": "Predvolené zosilnenie hlasitosti",
+        "defaultGainHelpText": "Počiatočné zosilnenie pri prehrávaní nahrávok. Zvuky vtákov sú často tiché, preto sa odporúča zosilnenie 6-12 dB.",
         "defaultGainUnit": "dB"
       }
     },
-    "restartRequired": "Some changes require a server restart to take effect. Please restart BirdNET-Go."
+    "restartRequired": "Niektoré zmeny vyžadujú reštart servera. Reštartujte BirdNET-Go."
   },
   "auth": {
     "login": "Prihlásenie",
@@ -3712,7 +3881,7 @@
     "continueWithMicrosoft": "Pokračovať cez Microsoft",
     "continueWithLine": "Pokračovať cez LINE",
     "continueWithKakao": "Pokračovať cez Kakao",
-    "continueWithOidc": "Continue with OIDC",
+    "continueWithOidc": "Pokračovať s OIDC",
     "errors": {
       "loginFailed": "Prihlásenie zlyhalo. Skontrolujte svoje heslo a skúste to znova.",
       "passwordRequired": "Heslo je povinné.",
@@ -3773,7 +3942,11 @@
       "hidePassword": "Skryť heslo",
       "copyToClipboard": "Kopírovať do schránky",
       "clearSelection": "Vymazať výber",
-      "selectOption": "Vyberte možnosť"
+      "selectOption": "Vyberte možnosť",
+      "secretSet": "Nastaviť",
+      "changeSecret": "Zmeniť",
+      "cancelChange": "Zrušiť",
+      "enterNewSecret": "Zadajte novú hodnotu"
     },
     "help": {
       "passwordStrength": "Sila hesla: {strength}",
@@ -3856,7 +4029,7 @@
       "seekProgress": "Posun v nahrávke: {current} / {total} sekúnd",
       "playbackSpeed": "Rýchlosť prehrávania",
       "speed": "Rýchlosť",
-      "loop": "Toggle loop",
+      "loop": "Prepnúť opakovanie",
       "player": "Prehrávač zvuku"
     },
     "spectrogram": {
@@ -3935,36 +4108,36 @@
         "spectrogramFailed": "Nepodarilo sa vygenerovať spektrogram"
       },
       "clipExtraction": {
-        "selectRange": "Click and drag to select a range",
-        "playSelection": "Play selected range",
-        "pauseSelection": "Pause playback",
-        "reviewSelection": "Jump to start of selection",
-        "selectionStart": "Selection start handle",
-        "selectionEnd": "Selection end handle",
-        "lossless": "Lossless",
-        "lossy": "Lossy",
-        "extractClip": "Download selected clip",
-        "clearSelection": "Clear selection",
-        "extracting": "Extracting clip...",
-        "extractError": "Failed to extract clip",
-        "formatLabel": "Format",
+        "selectRange": "Kliknite a ťahajte pre výber rozsahu",
+        "playSelection": "Prehrať vybraný rozsah",
+        "pauseSelection": "Pozastaviť prehrávanie",
+        "reviewSelection": "Preskočiť na začiatok výberu",
+        "selectionStart": "Rukoväť začiatku výberu",
+        "selectionEnd": "Rukoväť konca výberu",
+        "lossless": "Bezstratový",
+        "lossy": "Stratový",
+        "extractClip": "Stiahnuť vybraný klip",
+        "clearSelection": "Zrušiť výber",
+        "extracting": "Extrahovanie klipu...",
+        "extractError": "Nepodarilo sa extrahovať klip",
+        "formatLabel": "Formát",
         "rangeLabel": "{start}s – {end}s"
       },
       "processing": {
-        "playSelection": "Play selection",
-        "skipToStart": "Skip to selection start",
-        "clearSelection": "Clear selection",
-        "gain": "Gain (dB)",
-        "denoise": "Denoise",
-        "denoiseOff": "Off",
-        "denoiseLight": "Light",
-        "denoiseMedium": "Medium",
-        "denoiseHeavy": "Heavy",
-        "normalize": "Normalize audio",
-        "normalizeTooltip": "EBU R128 Normalization",
-        "export": "Export",
+        "playSelection": "Prehrať výber",
+        "skipToStart": "Preskočiť na začiatok výberu",
+        "clearSelection": "Zrušiť výber",
+        "gain": "Zosilnenie (dB)",
+        "denoise": "Odšumenie",
+        "denoiseOff": "Vypnuté",
+        "denoiseLight": "Ľahký",
+        "denoiseMedium": "Stredný",
+        "denoiseHeavy": "Ťažký",
+        "normalize": "Normalizovať zvuk",
+        "normalizeTooltip": "Normalizácia EBU R128",
+        "export": "Exportovať",
         "exportOriginal": "Originál",
-        "processingActive": "Processing active"
+        "processingActive": "Spracovanie aktívne"
       }
     },
     "weatherInfo": {
@@ -3973,20 +4146,20 @@
       }
     },
     "tls": {
-      "certificateInstalled": "Certificate Installed",
-      "browseFile": "Browse",
-      "subject": "Subject",
-      "issuer": "Issuer",
-      "sans": "Subject Alternative Names",
-      "validUntil": "Valid Until",
-      "daysRemaining": "Days Remaining",
-      "fingerprint": "Fingerprint",
-      "expiryWarning": "This certificate expires soon. Consider renewing it.",
-      "downloadCertificate": "Download Certificate",
-      "regenerateButton": "Regenerate",
-      "removeCertificate": "Remove Certificate",
-      "fileReadError": "Failed to read file",
-      "loading": "Loading certificate information..."
+      "certificateInstalled": "Certifikát nainštalovaný",
+      "browseFile": "Prehľadávať",
+      "subject": "Predmet",
+      "issuer": "Vydavateľ",
+      "sans": "Alternatívne mená subjektu",
+      "validUntil": "Platný do",
+      "daysRemaining": "Zostávajúce dni",
+      "fingerprint": "Odtlačok",
+      "expiryWarning": "Tento certifikát čoskoro vyprší. Zvážte jeho obnovenie.",
+      "downloadCertificate": "Stiahnuť certifikát",
+      "regenerateButton": "Regenerovať",
+      "removeCertificate": "Odstrániť certifikát",
+      "fileReadError": "Nepodarilo sa prečítať súbor",
+      "loading": "Načítavanie informácií o certifikáte..."
     }
   },
   "connectivity": {
@@ -4159,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Vitajte",
+        "heading": "Vitajte v BirdNET-Go!",
+        "description": "BirdNET-Go je systém na identifikáciu zvukov vtákov v reálnom čase. Počúva zvuk z mikrofónu alebo audio streamu a používa AI model BirdNET na identifikáciu druhov vtákov.",
+        "credit": "Založené na BirdNET Analyzer vyvinutom v K. Lisa Yang Center for Conservation Bioacoustics na Cornell Lab of Ornithology a Chemnitz University of Technology.",
+        "cta": "Poďme nastaviť vašu stanicu na monitorovanie vtákov."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Poloha a jazyk",
+        "uiLanguageLabel": "Jazyk rozhrania",
+        "uiLanguageHelp": "Jazyk používaný pre webové rozhranie",
+        "speciesLanguageLabel": "Jazyk názvov druhov",
+        "speciesLanguageHelp": "Jazyk používaný pre názvy druhov vtákov v detekciách",
+        "locationLabel": "Poloha stanice",
+        "locationHelp": "Vaša poloha pomáha filtrovať druhy na tie, ktoré sú pravdepodobné vo vašej oblasti",
+        "latitudeLabel": "Zemepisná šírka",
+        "longitudeLabel": "Zemepisná dĺžka",
+        "useMyLocation": "Použiť moju polohu",
+        "locationDetected": "Poloha zistená",
+        "locationError": "Nepodarilo sa zistiť polohu. Zadajte súradnice ručne.",
+        "locationDenied": "Prístup k polohe zamietnutý. Zadajte súradnice ručne."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
+        "title": "Zdroj zvuku",
+        "sourceTypeLabel": "Typ zdroja",
+        "soundcard": "Mikrofón / Zvuková karta",
         "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "deviceLabel": "Zvukové zariadenie",
+        "deviceLoading": "Načítavanie zvukových zariadení...",
+        "noDevicesFound": "Neboli detegované žiadne zvukové zariadenia. Skúste namiesto toho nakonfigurovať RTSP stream.",
+        "rtspUrlLabel": "URL streamu",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Zadajte URL vášho RTSP audio streamu",
+        "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Prah detekcie",
+        "description": "Vyberte, aká prísna má byť identifikácia vtákov. Toto môžete neskôr zmeniť v Nastaveniach.",
+        "balanced": "Vyvážený",
+        "balancedDesc": "Dobrý pomer presnosti a citlivosti",
+        "balancedRecommended": "Odporúčané",
+        "highAccuracy": "Vysoká presnosť",
+        "highAccuracyDesc": "Menej falošných detekcií, môže vynechať niektoré vtáky",
+        "highSensitivity": "Vysoká citlivosť",
+        "highSensitivityDesc": "Viac detekcií, viac falošných detekcií",
+        "threshold": "Prahová hodnota spoľahlivosti",
+        "fpFilterNote": "Keď váš systém beží a je overený, môžete povoliť filter falošných detekcií v Nastaveniach na ďalšie zníženie nesprávnych detekcií."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Súkromie a integrácie",
+        "privacyFilterLabel": "Povoliť filter súkromia",
+        "privacyFilterHelp": "Odfiltruje detekcie, keď sú pri mikrofóne detegované ľudské hlasy",
+        "birdweatherLabel": "Zdieľať detekcie s BirdWeather",
+        "birdweatherHelp": "Prispievajte svojimi detekciami vtákov do komunitnej siete BirdWeather",
+        "birdweatherIdLabel": "ID stanice BirdWeather",
+        "birdweatherIdPlaceholder": "Zadajte ID vašej stanice BirdWeather",
+        "errorReportingLabel": "Odosielať anonymné hlásenia o chybách",
+        "errorReportingHelp": "Pomôžte zlepšiť BirdNET-Go odosielaním anonymných hlásení o chybách, keď niečo zlyhá"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "Zodpovedné používanie BirdNET-Go",
+        "intro": "BirdNET-Go je výkonný nástroj, ktorý vylepšuje váš zážitok z pozorovania vtákov prostredníctvom identifikácie pomocou AI. Pre zabezpečenie najlepších výsledkov pre pozorovanie aj ochranu:",
+        "point1": "Skontrolujte a overte detekcie pred zdieľaním pozorovaní",
+        "point2": "Použite skóre spoľahlivosti ako vodítko, nie absolútnu pravdu",
+        "point3": "Krížové overenie s poľnými sprievodcami a miestnymi odborníkmi",
+        "point4": "Zvážte sezónne vzorce a vhodnosť biotopu",
+        "citizenScienceHeading": "Pri prispievaní do občianskej vedy:",
+        "citizenPoint1": "Odosielafjte iba pozorovania, ktoré ste osobne overili",
+        "citizenPoint2": "Zahrňte poznámky o vizuálnom alebo behaviorálnom potvrdení",
+        "citizenPoint3": "Použite AI detekcie ako východiskový bod pre vaše vlastné pozorovania",
+        "outro": "Tento prístup zabezpečuje kvalitu dát pre vedecký výskum a zároveň maximalizuje vaše učenie a radosť z pozorovania vtákov.",
+        "acknowledge": "Rozumiem"
       }
     }
   },

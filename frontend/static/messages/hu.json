@@ -226,7 +226,7 @@
     "analyticsSubmenu": "Elemzés almenü",
     "settingsSubmenu": "Beállítások almenü",
     "systemSubmenu": "Rendszer almenü",
-    "systemTerminal": "Terminal"
+    "systemTerminal": "Terminál"
   },
   "about": {
     "title": "BirdNET-Go",
@@ -397,7 +397,10 @@
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",
         "savedSuccessfully": "Beállítások sikeresen mentve",
-        "saveFailed": "A beállítások mentése sikertelen"
+        "saveFailed": "A beállítások mentése sikertelen",
+        "recalculatingThresholds": "Dinamikus küszöbértékek újraszámítása az új alapértékhez",
+        "reconfiguringDynamicThresholds": "Dinamikus küszöbértékek újrakonfigurálása...",
+        "rebuildingExtendedCapture": "Kiterjesztett rögzítési szűrő újraépítése..."
       },
       "migration": {
         "startedTitle": "Adatbázis migráció elkezdődött",
@@ -528,6 +531,15 @@
       "page": "{current}. oldal / {total}",
       "goToPrevious": "Előző oldal",
       "goToNext": "Következő oldal"
+    },
+    "review": {
+      "review": "Ellenőrzés",
+      "reviewDetection": "Detektálás ellenőrzése: {species}",
+      "markCorrect": "Megjelölés helyesként",
+      "markFalsePositive": "Megjelölés téves pozitívként",
+      "markedCorrect": "Detektálás helyesként megjelölve",
+      "markedFalsePositive": "Detektálás téves pozitívként megjelölve",
+      "failed": "Az ellenőrzési állapot frissítése sikertelen"
     }
   },
   "error": {
@@ -924,7 +936,8 @@
       "mute": "Némítás",
       "unmute": "Némítás feloldása",
       "frequencyRangeMin": "Minimum frekvencia",
-      "frequencyRangeMax": "Maximum frekvencia"
+      "frequencyRangeMax": "Maximum frekvencia",
+      "gainTooltip": "Spektrogram megjelenítési erősítés"
     },
     "error": {
       "unsupported": "A böngészője nem támogatja a hang elemzést",
@@ -965,7 +978,7 @@
     "systemInfo": {
       "title": "Rendszer információ",
       "os": "Operációs rendszer",
-      "hostname": "Hostname",
+      "hostname": "Gépnév",
       "uptime": "Üzemidő",
       "cpus": "CPU-k",
       "model": "Rendszer modell",
@@ -1030,7 +1043,7 @@
     "sections": {
       "overview": "Áttekintés",
       "database": "Adatbázis",
-      "terminal": "Terminal"
+      "terminal": "Terminál"
     },
     "database": {
       "title": "Adatbázis kezelés",
@@ -1140,7 +1153,7 @@
           "lastBackup": "Utolsó biztonsági mentés",
           "backupSize": "Mentés méret",
           "createBackup": "Biztonsági mentés létrehozása",
-          "mysqlHost": "Host",
+          "mysqlHost": "Gazdagép",
           "mysqlBackupNote": "A MySQL biztonsági mentéseket a mysqldump vagy a MySQL admin eszközökkel kell kezelni."
         },
         "tables": {
@@ -1395,11 +1408,11 @@
       "available": "elérhető",
       "min": "Min",
       "max": "Max",
-      "limit": "Limit",
+      "limit": "Korlát",
       "tempUnavailable": "Nem elérhető",
       "online": "Online",
       "uptime": "Üzemidő",
-      "host": "Host",
+      "host": "Gazdagép",
       "model": "Modell",
       "inference": "Következtetés",
       "avgTime": "Átlag",
@@ -1416,7 +1429,7 @@
     }
   },
   "terminal": {
-    "title": "Terminal",
+    "title": "Terminál",
     "disabled": "A terminal le van tiltva",
     "disabledDescription": "A böngésző terminal le van tiltva. Engedélyezze a Beállítások → Biztonság menüpontban a funkció használatához.",
     "connected": "Csatlakoztatva",
@@ -2299,7 +2312,7 @@
           "pushover": "Pushover",
           "gotify": "Gotify",
           "ntfy": "ntfy",
-          "email": "Email",
+          "email": "E-mail",
           "generic": "Shoutrrr",
           "numbered": "{service} #{number}"
         },
@@ -2830,11 +2843,11 @@
         "noStreamsConfigured": "Nincs stream konfigurálva"
       },
       "streams": {
-        "streamLabel": "Stream",
+        "streamLabel": "Adatfolyam",
         "nameLabel": "Stream neve",
         "namePlaceholder": "pl., Elülső kert etető",
         "nameHelp": "Egy leíró név a hang stream azonosításához",
-        "urlLabel": "Stream URL",
+        "urlLabel": "Adatfolyam URL",
         "urlHelp": "Adja meg a stream URL-t opcionális hitelesítéssel (pl. rtsp://host:port/path). A hitelesítéshez használjon környezeti változókat.",
         "typeLabel": "Stream típus",
         "typeHelp": "Stream protokoll - automatikusan észlelve az URL-ből",
@@ -2877,7 +2890,7 @@
           "error": "Hiba",
           "noHistory": "Nincs elérhető állapot vagy hiba előzmény.",
           "stateChange": "Állapot változás",
-          "host": "Host",
+          "host": "Gazdagép",
           "troubleshooting": "Hibaelhárítás",
           "from": "Ebből",
           "to": "Ebbe",
@@ -3132,9 +3145,9 @@
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",
         "getCredentialsLabel": "Szerezze be a hitelesítési adatait a {provider}-tól",
         "redirectUriTitle": "Átirányítási URI:",
-        "clientIdLabel": "Client ID",
+        "clientIdLabel": "Kliens azonosító",
         "clientIdHelpText": "Az OAuth 2.0 Client ID a szolgáltató fejlesztői konzoljáról",
-        "clientSecretLabel": "Client Secret",
+        "clientSecretLabel": "Kliens titok",
         "clientSecretHelpText": "Az OAuth 2.0 Client Secret a szolgáltató fejlesztői konzoljáról",
         "userIdLabel": "Felhasználói ID (opcionális)",
         "userIdHelpText": "Korlátozza a hozzáférést egy adott felhasználói fiókhoz e-mail vagy ID szerint",
@@ -3143,9 +3156,9 @@
           "enableLabel": "Google OAuth2 bejelentkezés engedélyezése",
           "redirectUriTitle": "Átirányítási URI a Google Cloud Console-hoz:",
           "getCredentialsLabel": "Szerezze be a hitelesítési adatait a Google Cloud Console-ból",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Kliens azonosító",
           "clientIdHelpText": "Az OAuth 2.0 Client ID, amelyet a Google Cloud Console-ban az OAuth hitelesítési adatok beállításakor kapott.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Kliens titok",
           "clientSecretHelpText": "Az OAuth 2.0 Client Secret, amelyet a Google Cloud Console-ban az OAuth hitelesítési adatok beállításakor kapott.",
           "userIdLabel": "Felhasználói ID"
         },
@@ -3154,9 +3167,9 @@
           "enableLabel": "GitHub OAuth2 bejelentkezés engedélyezése",
           "redirectUriTitle": "Átirányítási URI a GitHub Developer Settings-hez:",
           "getCredentialsLabel": "Szerezze be a hitelesítési adatait a GitHub Developer Settings-ből",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Kliens azonosító",
           "clientIdHelpText": "Az OAuth 2.0 Client ID, amelyet a GitHub Developer Settings-ben az OAuth hitelesítési adatok beállításakor kapott.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Kliens titok",
           "clientSecretHelpText": "Az OAuth 2.0 Client Secret, amelyet a GitHub Developer Settings-ben az OAuth hitelesítési adatok beállításakor kapott.",
           "userIdLabel": "Felhasználói ID"
         },
@@ -3165,9 +3178,9 @@
           "enableLabel": "Microsoft fiók OAuth2 bejelentkezés engedélyezése",
           "redirectUriTitle": "Átirányítási URI az Azure App Registration-hez:",
           "getCredentialsLabel": "Szerezze be a hitelesítési adatait az Azure Portal-ból",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Kliens azonosító",
           "clientIdHelpText": "Az Application (client) ID, amelyet az Azure App Registration-ből kapott.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Kliens titok",
           "clientSecretHelpText": "A client secret érték, amelyet az Azure App Registration-ből kapott.",
           "userIdLabel": "Felhasználói ID"
         },
@@ -3176,9 +3189,9 @@
           "enableLabel": "LINE OAuth2 bejelentkezés engedélyezése",
           "redirectUriTitle": "Átirányítási URI a LINE Developers Console-hoz:",
           "getCredentialsLabel": "Szerezze be a hitelesítési adatait a LINE Developers Console-ból",
-          "clientIdLabel": "Channel ID",
+          "clientIdLabel": "Csatorna azonosító",
           "clientIdHelpText": "A Channel ID, amelyet a LINE Developers Console-ban a LINE bejelentkezés beállításakor kapott.",
-          "clientSecretLabel": "Channel Secret",
+          "clientSecretLabel": "Csatorna titok",
           "clientSecretHelpText": "A Channel Secret, amelyet a LINE Developers Console-ban a LINE bejelentkezés beállításakor kapott.",
           "userIdLabel": "Felhasználói ID"
         },
@@ -3189,7 +3202,7 @@
           "getCredentialsLabel": "Szerezze be a hitelesítési adatait a Kakao Developers Console-ból",
           "clientIdLabel": "REST API kulcs",
           "clientIdHelpText": "A REST API kulcs, amelyet a Kakao Developers Console-ban a Kakao bejelentkezés beállításakor kapott.",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Kliens titok",
           "clientSecretHelpText": "A Client Secret, amelyet a Kakao Developers Console-ban a Kakao bejelentkezés beállításakor kapott.",
           "userIdLabel": "Felhasználói ID"
         },
@@ -3198,12 +3211,12 @@
           "enableLabel": "OIDC hitelesítés engedélyezése",
           "redirectUriTitle": "Átirányítási URI",
           "getCredentialsLabel": "Konfigurálja az Identitás szolgáltatójában",
-          "clientIdLabel": "Client ID",
+          "clientIdLabel": "Kliens azonosító",
           "clientIdHelpText": "A client ID az OpenID Connect identitás szolgáltatójától",
-          "clientSecretLabel": "Client Secret",
+          "clientSecretLabel": "Kliens titok",
           "clientSecretHelpText": "A client secret az OpenID Connect identitás szolgáltatójától",
           "userIdLabel": "Engedélyezett felhasználó (e-mail vagy sub claim)",
-          "issuerUrlLabel": "Issuer URL",
+          "issuerUrlLabel": "Kibocsátó URL",
           "issuerUrlHelpText": "Az OpenID Connect identitás szolgáltatójának issuer URL-je (pl., https://auth.example.com)",
           "issuerUrlPlaceholder": "https://auth.example.com",
           "issuerUrlRequired": "Az Issuer URL kötelező OIDC szolgáltatókhoz",
@@ -3277,7 +3290,7 @@
         "validFrom": "Érvényes ettől",
         "validUntil": "Érvényes eddig",
         "daysRemaining": "Hátralévő napok",
-        "sans": "Subject Alternative Names",
+        "sans": "Alternatív nevek (SAN)",
         "fingerprint": "Ujjlenyomat",
         "expiryWarning": "A tanúsítvány hamarosan lejár",
         "loading": "Tanúsítvány információ betöltése...",
@@ -3308,7 +3321,7 @@
       "saveError": "A konfiguráció mentése sikertelen \"{species}\" számára. Kérjük, próbálja újra.",
       "configUpdated": "Konfiguráció frissítve \"{species}\" számára",
       "configAdded": "Konfiguráció hozzáadva \"{species}\" számára",
-      "duplicateConfigError": "\"Faj\" már rendelkezik konfigurációval. Kérjük, válasszon más nevet.",
+      "duplicateConfigError": "A(z) \"{species}\" faj már rendelkezik konfigurációval. Kérjük, válasszon más nevet.",
       "activeSpecies": {
         "title": "Aktív fajok",
         "tabLabel": "Aktív",
@@ -3641,7 +3654,7 @@
       "builtIn": "Beépített",
       "enabled": "Engedélyezve",
       "disabled": "Letiltva",
-      "trigger": "Trigger",
+      "trigger": "Eseményindító",
       "conditions": "Feltételek",
       "actions": "Műveletek",
       "cooldown": "Lehűlési idő",
@@ -3698,7 +3711,7 @@
         "description": "Leírás",
         "descriptionPlaceholder": "Opcionális leírás",
         "enabled": "Engedélyezve",
-        "triggerSection": "Trigger",
+        "triggerSection": "Eseményindító",
         "objectType": "Objektum típus",
         "triggerType": "Trigger típus",
         "triggerEvent": "Esemény",
@@ -3770,7 +3783,7 @@
           "confidence": "Megbízhatóság",
           "location": "Helyszín",
           "stream_name": "Stream neve",
-          "stream_url": "Stream URL",
+          "stream_url": "Adatfolyam URL",
           "device_name": "Eszköz neve",
           "error": "Hibaüzenet",
           "broker": "Broker"
@@ -3828,7 +3841,8 @@
           "name": "BirdWeather feltöltés sikertelen",
           "description": "Értesít, amikor egy BirdWeather feltöltés sikertelen"
         }
-      }
+      },
+      "v2RequiredLink": "Rendszer adatbázis oldal."
     },
     "appearance": {
       "colorScheme": "Szín séma",
@@ -3952,7 +3966,11 @@
       "hidePassword": "Jelszó elrejtése",
       "copyToClipboard": "Másolás vágólapra",
       "clearSelection": "Kijelölés törlése",
-      "selectOption": "Opció kiválasztása"
+      "selectOption": "Opció kiválasztása",
+      "secretSet": "Beállítva",
+      "changeSecret": "Módosítás",
+      "cancelChange": "Mégse",
+      "enterNewSecret": "Új érték megadása"
     },
     "help": {
       "passwordStrength": "Jelszó erőssége: {strength}",
@@ -4343,7 +4361,7 @@
         "deviceLabel": "Hang eszköz",
         "deviceLoading": "Hang eszközök betöltése...",
         "noDevicesFound": "Nem észlelhető hang eszköz. Próbálja meg az RTSP stream konfigurálását.",
-        "rtspUrlLabel": "Stream URL",
+        "rtspUrlLabel": "Adatfolyam URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
         "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban."

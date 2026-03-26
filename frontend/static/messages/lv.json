@@ -377,8 +377,8 @@
         "application": "Lietotnes kļūda",
         "imageProvider": "Attēlu nodrošinātāja paziņojums",
         "categoryError": "{category} kļūda",
-        "burstTitle": "Multiple {component} errors",
-        "burstMessage": "{count} errors in the last {window_minutes} minutes: {sample_error}"
+        "burstTitle": "Vairākas {component} kļūdas",
+        "burstMessage": "{count} kļūdas pēdējās {window_minutes} minūtēs: {sample_error}"
       },
       "settings": {
         "reloadingBirdnet": "Piemēro jaunos analīzes iestatījumus...",
@@ -388,7 +388,7 @@
         "reconfiguringBirdweather": "Atjaunina BirdWeather integrāciju...",
         "reconfiguringStreams": "Atjaunina audio straumes...",
         "reconfiguringTelemetry": "Atjaunina telemetrijas iestatījumus...",
-        "reconfiguringPushNotifications": "Reconfiguring push notification providers...",
+        "reconfiguringPushNotifications": "Pārkonfigurē push paziņojumu pakalpojumu sniedzējus...",
         "reconfiguringSpeciesTracking": "Atjaunina sugu izsekošanu...",
         "recalculatingThresholds": "Pārrēķina dinamiskos sliekšņus jaunai bāzes vērtībai",
         "reconfiguringDynamicThresholds": "Pārkonfigurē dinamiskos sliekšņus...",
@@ -930,31 +930,31 @@
   },
   "spectrogram": {
     "controls": {
-      "frequencyRange": "Frequency Range",
-      "colorMap": "Color Map",
-      "gain": "Gain",
+      "frequencyRange": "Frekvenču diapazons",
+      "colorMap": "Krāsu karte",
+      "gain": "Pastiprinājums",
       "gainTooltip": "Spektrogrammas vizualizācijas pastiprināšana",
       "mute": "Izslēgt audio izvadi",
       "unmute": "Ieslēgt audio izvadi",
-      "frequencyRangeMin": "Minimum frequency",
-      "frequencyRangeMax": "Maximum frequency"
+      "frequencyRangeMin": "Minimālā frekvence",
+      "frequencyRangeMax": "Maksimālā frekvence"
     },
     "error": {
-      "unsupported": "Your browser does not support audio analysis",
-      "connectionFailed": "Failed to connect to live audio stream",
-      "accessDenied": "Live audio access requires authentication. Please log in to use this feature."
+      "unsupported": "Jūsu pārlūkprogramma neatbalsta audio analīzi",
+      "connectionFailed": "Neizdevās izveidot savienojumu ar tiešraides audio straumi",
+      "accessDenied": "Tiešraides audio piekļuvei nepieciešama autentifikācija. Lūdzu, piesakieties, lai izmantotu šo funkciju."
     },
     "dashboard": {
-      "toggle": "Live Spectrogram",
-      "audioToggle": "Enable audio"
+      "toggle": "Tiešraides spektrogramma",
+      "audioToggle": "Ieslēgt audio"
     },
     "gain": {
       "muted": "Izslēgts",
       "level": "Pastiprinājums: {value} dB"
     },
     "page": {
-      "title": "Live Audio",
-      "sourceLabel": "Audio Source",
+      "title": "Tiešraides audio",
+      "sourceLabel": "Audio avots",
       "connected": "Savienots",
       "enterFullscreen": "Pilnekrāna režīms",
       "exitFullscreen": "Iziet no pilnekrāna"
@@ -962,7 +962,10 @@
     "colorMaps": {
       "inferno": "Inferno",
       "viridis": "Viridis",
-      "grayscale": "Grayscale"
+      "grayscale": "Pelēktoņu"
+    },
+    "labels": {
+      "toggle": "Pārslēgt noteikšanas etiķetes"
     }
   },
   "system": {
@@ -3963,7 +3966,11 @@
       "hidePassword": "Slēpt paroli",
       "copyToClipboard": "Kopēt starpliktuvē",
       "clearSelection": "Notīrīt atlasi",
-      "selectOption": "Izvēlieties opciju"
+      "selectOption": "Izvēlieties opciju",
+      "secretSet": "Iestatīts",
+      "changeSecret": "Mainīt",
+      "cancelChange": "Atcelt",
+      "enterNewSecret": "Ievadiet jaunu vērtību"
     },
     "help": {
       "passwordStrength": "Paroles stiprums: {strength}",
@@ -4046,7 +4053,8 @@
       "seekProgress": "Audio pārtīšanas progress: {current} / {total} sekundes",
       "playbackSpeed": "Atskaņošanas ātrums",
       "speed": "Ātrums",
-      "loop": "Pārslēgt cilpu"
+      "loop": "Pārslēgt cilpu",
+      "player": "Audio atskaņotājs"
     },
     "spectrogram": {
       "notGenerated": "Spektrogramma vēl nav ģenerēta",
@@ -4066,7 +4074,8 @@
       "spectrogramGeneratingAria": "Ģenerē spektrogrammu",
       "generating": "Ģenerē...",
       "queuePosition": "Rinda: {position}",
-      "loadError": "Neizdevās ielādēt audio"
+      "loadError": "Neizdevās ielādēt audio",
+      "spectrogramAlt": "Audio spektrogramma"
     },
     "forms": {
       "numberField": {
@@ -4323,77 +4332,77 @@
     },
     "steps": {
       "welcome": {
-        "title": "Welcome",
-        "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
-        "cta": "Let's set up your bird monitoring station."
+        "title": "Sveicināti",
+        "heading": "Laipni lūdzam BirdNET-Go!",
+        "description": "BirdNET-Go ir reāllaika putnu skaņu identificēšanas sistēma. Tā klausās audio no jūsu mikrofona vai audio straumes un izmanto BirdNET mākslīgā intelekta modeli, lai identificētu putnu sugas.",
+        "credit": "Darbina BirdNET Analyzer, ko izstrādājis K. Lisa Yang Center for Conservation Bioacoustics Kornela Ornitoloģijas laboratorijā un Kemnicas Tehnoloģiju universitātē.",
+        "cta": "Iestatīsim jūsu putnu novērošanas staciju."
       },
       "locationLanguage": {
-        "title": "Location & Language",
-        "uiLanguageLabel": "Interface Language",
-        "uiLanguageHelp": "Language used for the web interface",
-        "speciesLanguageLabel": "Species Name Language",
-        "speciesLanguageHelp": "Language used for bird species names in detections",
-        "locationLabel": "Station Location",
-        "locationHelp": "Your location helps filter species to those likely in your area",
-        "latitudeLabel": "Latitude",
-        "longitudeLabel": "Longitude",
-        "useMyLocation": "Use my location",
-        "locationDetected": "Location detected",
-        "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "title": "Atrašanās vieta un valoda",
+        "uiLanguageLabel": "Saskarnes valoda",
+        "uiLanguageHelp": "Valoda, kas tiek izmantota tīmekļa saskarnē",
+        "speciesLanguageLabel": "Sugu nosaukumu valoda",
+        "speciesLanguageHelp": "Valoda, kas tiek izmantota putnu sugu nosaukumiem noteikšanā",
+        "locationLabel": "Stacijas atrašanās vieta",
+        "locationHelp": "Jūsu atrašanās vieta palīdz filtrēt sugas, kas, visticamāk, ir jūsu apkārtnē",
+        "latitudeLabel": "Platums",
+        "longitudeLabel": "Garums",
+        "useMyLocation": "Izmantot manu atrašanās vietu",
+        "locationDetected": "Atrašanās vieta noteikta",
+        "locationError": "Neizdevās noteikt atrašanās vietu. Lūdzu, ievadiet koordinātas manuāli.",
+        "locationDenied": "Piekļuve atrašanās vietai liegta. Lūdzu, ievadiet koordinātas manuāli."
       },
       "audioSource": {
-        "title": "Audio Source",
-        "sourceTypeLabel": "Source Type",
-        "soundcard": "Microphone / Soundcard",
-        "rtspStream": "RTSP Stream",
-        "deviceLabel": "Audio Device",
-        "deviceLoading": "Loading audio devices...",
-        "noDevicesFound": "No audio devices detected. Try configuring an RTSP stream instead.",
-        "rtspUrlLabel": "Stream URL",
+        "title": "Audio avots",
+        "sourceTypeLabel": "Avota tips",
+        "soundcard": "Mikrofons / Skaņas karte",
+        "rtspStream": "RTSP straume",
+        "deviceLabel": "Audio ierīce",
+        "deviceLoading": "Ielādē audio ierīces...",
+        "noDevicesFound": "Nav atrasta neviena audio ierīce. Mēģiniet konfigurēt RTSP straumi.",
+        "rtspUrlLabel": "Straumes URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
-        "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "rtspUrlHelp": "Ievadiet RTSP audio straumes URL",
+        "additionalSourcesHint": "Papildu audio avotus varēsiet pievienot vēlāk iestatījumos."
       },
       "detection": {
-        "title": "Detection Threshold",
-        "description": "Choose how strict the bird identification should be. You can adjust this later in Settings.",
-        "balanced": "Balanced",
-        "balancedDesc": "Good balance of accuracy and sensitivity",
-        "balancedRecommended": "Recommended",
-        "highAccuracy": "High Accuracy",
-        "highAccuracyDesc": "Fewer false positives, may miss some birds",
-        "highSensitivity": "High Sensitivity",
-        "highSensitivityDesc": "More detections, more false positives",
-        "threshold": "Confidence threshold",
-        "fpFilterNote": "Once your system is running and proven, you can enable the false positive filter in Settings to further reduce incorrect detections."
+        "title": "Noteikšanas slieksnis",
+        "description": "Izvēlieties, cik stingrai jābūt putnu identificēšanai. Vēlāk to varēsiet pielāgot iestatījumos.",
+        "balanced": "Līdzsvarots",
+        "balancedDesc": "Labs precizitātes un jutīguma līdzsvars",
+        "balancedRecommended": "Ieteicams",
+        "highAccuracy": "Augsta precizitāte",
+        "highAccuracyDesc": "Mazāk kļūdaini pozitīvu, var palaist garām dažus putnus",
+        "highSensitivity": "Augsts jutīgums",
+        "highSensitivityDesc": "Vairāk noteikšanu, vairāk kļūdaini pozitīvu",
+        "threshold": "Ticamības slieksnis",
+        "fpFilterNote": "Kad sistēma darbojas un ir pierādījusi sevi, varat ieslēgt kļūdaini pozitīvo filtru iestatījumos, lai vēl vairāk samazinātu nepareizas noteikšanas."
       },
       "integration": {
-        "title": "Privacy & Integration",
-        "privacyFilterLabel": "Enable privacy filter",
-        "privacyFilterHelp": "Filters out detections when human voices are detected near the microphone",
-        "birdweatherLabel": "Share detections with BirdWeather",
-        "birdweatherHelp": "Contribute your bird detections to the BirdWeather community network",
-        "birdweatherIdLabel": "BirdWeather Station ID",
-        "birdweatherIdPlaceholder": "Enter your BirdWeather station ID",
-        "errorReportingLabel": "Send anonymous error reports",
-        "errorReportingHelp": "Help improve BirdNET-Go by sending anonymous error reports when something goes wrong"
+        "title": "Privātums un integrācija",
+        "privacyFilterLabel": "Ieslēgt privātuma filtru",
+        "privacyFilterHelp": "Filtrē noteikšanas, kad pie mikrofona tiek noteiktas cilvēku balsis",
+        "birdweatherLabel": "Dalīties ar noteikšanām BirdWeather",
+        "birdweatherHelp": "Sniedziet savu putnu noteikšanu ieguldījumu BirdWeather kopienas tīklā",
+        "birdweatherIdLabel": "BirdWeather stacijas ID",
+        "birdweatherIdPlaceholder": "Ievadiet savu BirdWeather stacijas ID",
+        "errorReportingLabel": "Sūtīt anonīmus kļūdu ziņojumus",
+        "errorReportingHelp": "Palīdziet uzlabot BirdNET-Go, sūtot anonīmus kļūdu ziņojumus, kad kaut kas noiet greizi"
       },
       "responsibleUse": {
-        "title": "Using BirdNET-Go Responsibly",
-        "intro": "BirdNET-Go is a powerful tool that enhances your birding experience through AI-assisted identification. To ensure the best outcomes for both birding and conservation:",
-        "point1": "Review and verify detections before sharing observations",
-        "point2": "Use the confidence scores as a guide, not absolute truth",
-        "point3": "Cross-reference with field guides and local expertise",
-        "point4": "Consider seasonal patterns and habitat suitability",
-        "citizenScienceHeading": "When contributing to citizen science:",
-        "citizenPoint1": "Only submit observations you have personally verified",
-        "citizenPoint2": "Include notes about visual or behavioral confirmation",
-        "citizenPoint3": "Use AI detections as a starting point for your own observations",
-        "outro": "This approach ensures data quality for scientific research while maximizing your learning and enjoyment of birds.",
-        "acknowledge": "I understand"
+        "title": "BirdNET-Go atbildīga lietošana",
+        "intro": "BirdNET-Go ir jaudīgs rīks, kas uzlabo jūsu putnu vērošanas pieredzi ar MI atbalstītu identifikāciju. Lai nodrošinātu labākos rezultātus gan putnu vērošanai, gan dabas aizsardzībai:",
+        "point1": "Pārskatiet un pārbaudiet noteikšanas pirms novērojumu kopīgošanas",
+        "point2": "Izmantojiet ticamības rādītājus kā vadlīniju, nevis absolūtu patiesību",
+        "point3": "Salīdziniet ar lauka noteicējiem un vietējo pieredzi",
+        "point4": "Ņemiet vērā sezonālos modeļus un biotopu piemērotību",
+        "citizenScienceHeading": "Sniedzot ieguldījumu pilsoņzinātnē:",
+        "citizenPoint1": "Iesniedziet tikai tādus novērojumus, kurus esat personīgi pārbaudījuši",
+        "citizenPoint2": "Iekļaujiet piezīmes par vizuālo vai uzvedības apstiprinājumu",
+        "citizenPoint3": "Izmantojiet MI noteikšanas kā sākumpunktu saviem novērojumiem",
+        "outro": "Šī pieeja nodrošina datu kvalitāti zinātniskiem pētījumiem, vienlaikus maksimāli palielinot jūsu mācīšanos un prieku par putniem.",
+        "acknowledge": "Es saprotu"
       }
     }
   },
