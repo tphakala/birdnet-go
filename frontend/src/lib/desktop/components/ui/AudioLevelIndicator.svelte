@@ -224,15 +224,22 @@
     }
   }
 
-  // Show status message
+  // Show status message.
+  // Use queueMicrotask to defer state mutations so they never occur
+  // synchronously inside a $derived or $effect evaluation, which would
+  // trigger Svelte 5's state_unsafe_mutation error.
   function showStatusMessage(message: string) {
-    statusMessage = message;
-    showStatus = true;
+    queueMicrotask(() => {
+      statusMessage = message;
+      showStatus = true;
+    });
   }
 
-  // Hide status message
+  // Hide status message (deferred for the same reason as showStatusMessage).
   function hideStatusMessage() {
-    showStatus = false;
+    queueMicrotask(() => {
+      showStatus = false;
+    });
   }
 
   // PERFORMANCE OPTIMIZATION: Use cached audio element from $derived
