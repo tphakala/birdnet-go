@@ -3,12 +3,13 @@ package datastore
 
 import (
 	"fmt"
+	"net"
 	"regexp"
-	"strings"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"gorm.io/gorm"
 )
 
 var (
@@ -251,13 +252,49 @@ func getUserFriendlyMessage(operation string, err error) string {
 		return "The database is currently busy. Please try again in a moment."
 	case constraintPattern.MatchString(err.Error()):
 		return "This operation conflicts with existing data. Please check for duplicates."
-	case strings.Contains(strings.ToLower(err.Error()), "timeout"):
+	case isTimeoutError(err):
 		return "The operation took too long. Please try again or contact support if the issue persists."
-	case strings.Contains(strings.ToLower(err.Error()), "not found"):
+	case isNotFoundError(err):
 		return "The requested item could not be found."
 	case corruptionPattern.MatchString(err.Error()):
 		return "Database integrity issue detected. Please contact support immediately."
 	default:
 		return fmt.Sprintf("Failed to %s. Please try again or contact support if the issue persists.", operation)
 	}
+}
+
+// isTimeoutError checks if an error represents a timeout condition using typed
+// checks. It walks the error chain looking for the net.Error interface (which
+// exposes a Timeout() method) and for EnhancedErrors with CategoryTimeout.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for net.Error interface which has a Timeout() method.
+	// Most Go standard library timeout errors implement this interface.
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+
+	// Check for internal EnhancedError with timeout category.
+	return errors.IsCategory(err, errors.CategoryTimeout)
+}
+
+// isNotFoundError checks if an error represents a "not found" condition using
+// typed checks. It looks for gorm.ErrRecordNotFound and for EnhancedErrors
+// with CategoryNotFound.
+func isNotFoundError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	// Check for GORM's standard record-not-found sentinel.
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return true
+	}
+
+	// Check for internal EnhancedError with not-found category.
+	return errors.IsNotFound(err)
 }

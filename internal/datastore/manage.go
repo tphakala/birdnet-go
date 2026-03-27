@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	gomysql "github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -182,8 +183,9 @@ func hasCorrectImageCacheIndexMySQL(db *gorm.DB, dbName string, debug bool) (boo
 	          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?`
 
 	if err := db.Raw(query, dbName, targetTableName).Scan(&stats).Error; err != nil {
-		// Handle case where information_schema might not be accessible or table doesn't exist yet
-		if strings.Contains(err.Error(), "doesn't exist") {
+		// Handle case where information_schema might not be accessible or table doesn't exist yet.
+		// MySQL error 1146 (ER_NO_SUCH_TABLE) indicates the table doesn't exist.
+		if isMySQLError(err, mysqlErrNoSuchTable) {
 			return false, nil // Treat as schema incorrect/incomplete if table/schema info missing
 		}
 		return false, fmt.Errorf("failed to query index info from information_schema for %s.%s: %w", dbName, targetTableName, err)
@@ -555,12 +557,16 @@ func createOptimizedIndexes(db *gorm.DB, dbType string, log logger.Logger) error
 	// Create the optimized composite index using GORM's built-in index management
 	// Column order (scientific_name, date) is critical for query performance
 	if err := db.Migrator().CreateIndex(&Note{}, indexName); err != nil {
-		// Handle duplicate index errors gracefully
-		errMsg := strings.ToLower(err.Error())
-		isDuplicateIndex := strings.Contains(errMsg, "duplicate key name") ||
-			strings.Contains(errMsg, "already exists") ||
-			strings.Contains(errMsg, "duplicate") ||
-			strings.Contains(errMsg, "index") && strings.Contains(errMsg, "exist")
+		// Handle duplicate index errors gracefully.
+		// MySQL: typed check for error 1061 (ER_DUP_KEYNAME).
+		// SQLite: no typed error for duplicate indexes; the driver returns a plain
+		// error with "already exists" in the message, so string matching is the
+		// only reliable option here.
+		isDuplicateIndex := isMySQLError(err, mysqlErrDupKeyName)
+		if !isDuplicateIndex {
+			errMsg := strings.ToLower(err.Error())
+			isDuplicateIndex = strings.Contains(errMsg, "already exists")
+		}
 
 		if isDuplicateIndex {
 			GetLogger().Debug("Index already exists, continuing",
@@ -605,4 +611,32 @@ func logTableMigration(log logger.Logger, tableName, action string, addedColumns
 	}
 
 	GetLogger().Debug("Table migration completed", logFields...)
+}
+
+// MySQL error numbers used for typed error checking instead of string matching.
+// See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+const (
+	// mysqlErrNoSuchTable is MySQL error 1146 (ER_NO_SUCH_TABLE):
+	// "Table '%s.%s' doesn't exist"
+	mysqlErrNoSuchTable uint16 = 1146
+
+	// mysqlErrDupKeyName is MySQL error 1061 (ER_DUP_KEYNAME):
+	// "Duplicate key name '%s'"
+	mysqlErrDupKeyName uint16 = 1061
+
+	// mysqlErrIllegalHA is MySQL error 1031 (ER_ILLEGAL_HA):
+	// "Table storage engine for '%s' doesn't have this option"
+	// Returned when running OPTIMIZE TABLE on InnoDB tables.
+	mysqlErrIllegalHA uint16 = 1031
+)
+
+// isMySQLError checks if an error (or any error in its unwrap chain) is a MySQL
+// driver error with the specified error number. Returns false for non-MySQL errors,
+// making it safe to call regardless of the active database driver.
+func isMySQLError(err error, number uint16) bool {
+	var mysqlErr *gomysql.MySQLError
+	if errors.As(err, &mysqlErr) {
+		return mysqlErr.Number == number
+	}
+	return false
 }
