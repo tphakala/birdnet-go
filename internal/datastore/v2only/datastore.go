@@ -346,12 +346,22 @@ func (ds *Datastore) GetDBCounters() *dbstats.Counters {
 // Close closes the datastore.
 func (ds *Datastore) Close() error {
 	if ds.manager != nil {
+		log := logger.Global().Module("datastore")
+
 		// Stop periodic WAL checkpoint before the final TRUNCATE checkpoint.
 		if sqliteMgr, ok := ds.manager.(*v2.SQLiteManager); ok {
 			sqliteMgr.StopPeriodicCheckpoint()
 		}
 		if !ds.manager.IsMySQL() {
-			_ = ds.manager.CheckpointWAL()
+			log.Info("performing SQLite WAL checkpoint",
+				logger.String("operation", "wal_checkpoint_before_shutdown"),
+				logger.String("mode", "v2only"))
+			if err := ds.manager.CheckpointWAL(); err != nil {
+				log.Warn("WAL checkpoint failed",
+					logger.Error(err),
+					logger.String("operation", "wal_checkpoint"),
+					logger.Bool("continuing_shutdown", true))
+			}
 		}
 		return ds.manager.Close()
 	}
