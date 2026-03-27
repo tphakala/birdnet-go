@@ -1134,7 +1134,10 @@ func (s *Stream) handleEarlyErrorDetection() error {
 	if errCtx.ShouldOpenCircuit() {
 		getStreamLogger().Error("early error triggers circuit breaker",
 			logger.String("url", s.config.safeURL()),
+			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", errCtx.ErrorType),
+			logger.String("primary_message", errCtx.PrimaryMessage),
+			logger.String("user_message", errCtx.UserFacingMsg),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "early_error_circuit_break"))
 
@@ -1157,7 +1160,10 @@ func (s *Stream) handleEarlyErrorDetection() error {
 	if errCtx.ShouldRestart() {
 		getStreamLogger().Warn("early error triggers restart",
 			logger.String("url", s.config.safeURL()),
+			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", errCtx.ErrorType),
+			logger.String("primary_message", errCtx.PrimaryMessage),
+			logger.String("user_message", errCtx.UserFacingMsg),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "early_error_restart"))
 
@@ -1821,16 +1827,39 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 		}
 	}
 
-	getStreamLogger().Error("FFmpeg error detected",
+	log := getStreamLogger()
+	log.Error("FFmpeg error detected",
 		logger.String("url", s.config.safeURL()),
+		logger.String("source_id", s.config.SourceID),
 		logger.String("error_type", ctx.ErrorType),
 		logger.String("primary_message", ctx.PrimaryMessage),
+		logger.String("user_message", ctx.UserFacingMsg),
 		logger.String("target_host", targetHost),
 		logger.Int("target_port", ctx.TargetPort),
 		logger.Bool("should_open_circuit", ctx.ShouldOpenCircuit()),
 		logger.Bool("should_restart", ctx.ShouldRestart()),
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "error_detection"))
+
+	// Log troubleshooting steps and raw FFmpeg output at Debug level
+	// so operators can diagnose issues from console logs alone.
+	if len(ctx.TroubleShooting) > 0 {
+		log.Info("FFmpeg troubleshooting steps",
+			logger.String("url", s.config.safeURL()),
+			logger.String("source_id", s.config.SourceID),
+			logger.String("error_type", ctx.ErrorType),
+			logger.String("steps", strings.Join(ctx.TroubleShooting, "; ")),
+			logger.String("component", "ffmpeg-stream"),
+			logger.String("operation", "error_troubleshooting"))
+	}
+	if ctx.RawFFmpegOutput != "" {
+		log.Debug("FFmpeg raw error output",
+			logger.String("source_id", s.config.SourceID),
+			logger.String("error_type", ctx.ErrorType),
+			logger.String("ffmpeg_output", ctx.RawFFmpegOutput),
+			logger.String("component", "ffmpeg-stream"),
+			logger.String("operation", "error_raw_output"))
+	}
 }
 
 // getErrorContexts returns a copy of the error history.
