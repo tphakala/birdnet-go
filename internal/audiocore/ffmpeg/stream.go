@@ -1841,8 +1841,8 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 		logger.String("component", "ffmpeg-stream"),
 		logger.String("operation", "error_detection"))
 
-	// Log troubleshooting steps and raw FFmpeg output at Debug level
-	// so operators can diagnose issues from console logs alone.
+	// Log troubleshooting steps at Info so operators see them without debug mode.
+	// Raw FFmpeg output is logged at Debug to avoid noise in production.
 	if len(ctx.TroubleShooting) > 0 {
 		log.Info("FFmpeg troubleshooting steps",
 			logger.String("url", s.config.safeURL()),
