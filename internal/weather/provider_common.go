@@ -25,6 +25,12 @@ var (
 	// The station exists but has no current data available.
 	ErrWeatherNoData = errors.Newf("weather station has no data available").
 				Component("weather").Category(errors.CategoryNotFound).Build()
+
+	// ErrWeatherDisabled indicates that weather functionality is disabled
+	// because the provider is empty or unrecognized. This is an expected
+	// configuration state, not a bug, so it must not be reported to Sentry.
+	ErrWeatherDisabled = errors.Newf("weather service disabled").
+				Component("weather").Category(errors.CategoryConfiguration).Build()
 )
 
 // Backoff constants for the polling service

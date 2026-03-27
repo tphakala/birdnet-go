@@ -616,6 +616,10 @@ func (p *AudioPipelineService) buildSourceConfigs() []*audiocore.SourceConfig {
 func (p *AudioPipelineService) startWeatherPolling(metrics *observability.Metrics) {
 	weatherService, err := weather.NewService(p.settings, p.dbService.DataStore(), metrics.Weather)
 	if err != nil {
+		// ErrWeatherDisabled is expected when provider is empty/unrecognized
+		if errors.Is(err, weather.ErrWeatherDisabled) {
+			return
+		}
 		GetLogger().Error("failed to initialize weather service",
 			logger.Error(err),
 			logger.String("operation", "initialize_weather_service"))

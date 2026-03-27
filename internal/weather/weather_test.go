@@ -26,15 +26,16 @@ func (m *mockProvider) FetchWeather(settings *conf.Settings) (*WeatherData, erro
 
 func TestNewService(t *testing.T) {
 	tests := []struct {
-		name     string
-		provider string
-		wantErr  bool
+		name         string
+		provider     string
+		wantDisabled bool // true when provider returns ErrWeatherDisabled
 	}{
 		{"yrno_provider", "yrno", false},
 		{"openweather_provider", "openweather", false},
 		{"wunderground_provider", "wunderground", false},
-		{"invalid_provider", "invalid", true},
-		{"empty_provider", "", true},
+		{"invalid_provider_disabled", "invalid", true},
+		{"empty_provider_disabled", "", true},
+		{"none_provider_disabled", "none", true},
 	}
 
 	for _, tt := range tests {
@@ -43,10 +44,12 @@ func TestNewService(t *testing.T) {
 
 			service, err := NewService(settings, nil, nil)
 
-			if tt.wantErr {
-				require.Error(t, err)
+			switch {
+			case tt.wantDisabled:
+				require.ErrorIs(t, err, ErrWeatherDisabled,
+					"empty/unrecognized provider should return ErrWeatherDisabled")
 				assert.Nil(t, service)
-			} else {
+			default:
 				require.NoError(t, err)
 				require.NotNil(t, service)
 			}

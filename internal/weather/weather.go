@@ -148,7 +148,9 @@ type Precipitation struct {
 	Type   string // rain, snow, etc.
 }
 
-// NewService creates a new weather service with the specified provider
+// NewService creates a new weather service with the specified provider.
+// Returns ErrWeatherDisabled when the provider is empty or unrecognized,
+// which the caller should treat as "weather disabled" (no service to start).
 func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics *metrics.WeatherMetrics) (*Service, error) {
 	var provider Provider
 
@@ -160,12 +162,16 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 		provider = NewOpenWeatherProvider()
 	case "wunderground":
 		provider = NewWundergroundProvider(nil)
+	case "", "none":
+		// Explicitly disabled or not configured — treat as disabled
+		getLogger().Info("Weather provider not configured, weather service disabled")
+		return nil, ErrWeatherDisabled
 	default:
-		return nil, errors.Newf("invalid weather provider: %s", settings.Realtime.Weather.Provider).
-			Component("weather").
-			Category(errors.CategoryConfiguration).
-			Context("provider", settings.Realtime.Weather.Provider).
-			Build()
+		// Unrecognized provider — log and treat as disabled rather than
+		// raising an error to Sentry (this is a user configuration issue)
+		getLogger().Info("Unrecognized weather provider, weather service disabled",
+			logger.String("provider", settings.Realtime.Weather.Provider))
+		return nil, ErrWeatherDisabled
 	}
 
 	return &Service{
@@ -433,7 +439,36 @@ func (s *Service) fetchAndSave() error {
 	// FetchWeather should now internally log its start/end/errors
 	data, err := s.provider.FetchWeather(s.settings)
 
-	// Record fetch metrics
+	if err != nil {
+		// Handle "not modified" as a success case — no new data to save.
+		// Check before recording metrics so these expected conditions are
+		// not counted as errors.
+		if errors.Is(err, ErrWeatherDataNotModified) {
+			if s.metrics != nil {
+				s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "not_modified")
+			}
+			getLogger().Debug("Weather data not modified since last fetch",
+				logger.String("provider", s.settings.Realtime.Weather.Provider))
+			s.backoff.reset()
+			return nil
+		}
+
+		// Handle "no data" (HTTP 204) — station exists but has no observations.
+		// This is a valid API response, not an error condition.
+		if errors.Is(err, ErrWeatherNoData) {
+			if s.metrics != nil {
+				s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "no_data")
+			}
+			getLogger().Debug("Weather station has no data available, will retry next cycle",
+				logger.String("provider", s.settings.Realtime.Weather.Provider))
+			// Don't backoff — this is a normal condition for inactive stations
+			return nil
+		}
+	}
+
+	// Record fetch metrics for real errors and successes
 	if s.metrics != nil {
 		s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
 		if err != nil {
@@ -445,22 +480,6 @@ func (s *Service) fetchAndSave() error {
 	}
 
 	if err != nil {
-		// Handle "not modified" as a success case — no new data to save
-		if errors.Is(err, ErrWeatherDataNotModified) {
-			getLogger().Debug("Weather data not modified since last fetch",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
-			s.backoff.reset()
-			return nil
-		}
-
-		// Handle "no data" (HTTP 204) — station exists but has no observations
-		if errors.Is(err, ErrWeatherNoData) {
-			getLogger().Info("Weather station has no data available, will retry next cycle",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
-			// Don't backoff — this is a normal condition for inactive stations
-			return nil
-		}
-
 		// Handle authentication failure (HTTP 401)
 		if errors.Is(err, ErrWeatherAuthFailed) {
 			stopped := s.backoff.recordAuthFailure()
