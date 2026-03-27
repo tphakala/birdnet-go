@@ -25,10 +25,10 @@ const (
 	// Worker pool size - conservative for background processing
 	defaultWorkers = 2
 
-	// Job queue size - minimal buffer for memory efficiency
-	// Size of 3 = 2 workers busy + 1 waiting (~4 MB worst case for 15s clips)
+	// Job queue size - large enough to absorb detection bursts without dropping jobs.
+	// Each queued job holds ~4 MB of PCM data (15s clip), so 100 jobs ≈ 400 MB worst case.
 	// On queue full: drop job (spectrogram generated on-demand when accessed)
-	defaultQueueSize = 3
+	defaultQueueSize = 100
 
 	// Timeout for individual spectrogram generation
 	generationTimeout = 60 * time.Second
@@ -316,7 +316,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 		// This provides visibility into the pre-rendering pipeline without debug mode
 		pr.logger.Info("Spectrogram generation queued",
 			logger.Any("note_id", job.NoteID),
-			logger.Int("queue_depth", currentQueueDepth), // Current backlog (0-3 for default queue size)
+			logger.Int("queue_depth", currentQueueDepth), // Current backlog
 			logger.Int64("total_queued", totalQueued),    // Lifetime counter
 			logger.String("operation", "spectrogram_queued"))
 		return nil
