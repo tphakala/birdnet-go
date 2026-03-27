@@ -25,9 +25,10 @@ const (
 	// MQTTPublishTimeout is the timeout for MQTT publish operations
 	MQTTPublishTimeout = 10 * time.Second
 
-	// CompositeActionTimeout is the default timeout for each action in a composite action
-	// This is generous to accommodate slow hardware (e.g., Raspberry Pi with SD cards)
-	CompositeActionTimeout = 30 * time.Second
+	// CompositeActionTimeout is the default timeout for each action in a composite action.
+	// After audio export was decoupled, CompositeAction only runs Database, SSE, and MQTT
+	// which are fast operations even on slow hardware.
+	CompositeActionTimeout = 10 * time.Second
 
 	// ExecuteCommandTimeout is the timeout for external command execution
 	ExecuteCommandTimeout = 5 * time.Minute

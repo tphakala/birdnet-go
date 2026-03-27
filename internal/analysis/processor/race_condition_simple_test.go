@@ -464,7 +464,7 @@ func TestCompositeAction_DefaultTimeout(t *testing.T) {
 	compositeAction := &CompositeAction{
 		Actions:     []Action{simpleAction},
 		Description: "Test default timeout",
-		// Timeout is nil, so should use CompositeActionTimeout (30s)
+		// Timeout is nil, so should use CompositeActionTimeout (10s)
 	}
 
 	detection := createSimpleDetection()

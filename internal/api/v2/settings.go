@@ -166,12 +166,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	// Verify the request body contains valid data
-	if err := validateSettingsData(&updatedSettings); err != nil {
-		c.logAPIRequest(ctx, logger.LogLevelError, "Invalid settings data received", logger.Error(err))
-		return c.HandleError(ctx, err, "Invalid settings data", http.StatusBadRequest)
-	}
-
 	// Restore redacted secret fields to their current values so the
 	// update logic does not overwrite real secrets with the placeholder.
 	if err := restoreRedactedSecrets(settings, &updatedSettings); err != nil {
@@ -236,51 +230,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		"message":       "Settings updated successfully",
 		"skippedFields": skippedFields,
 	})
-}
-
-// validateSettingsData performs basic validation on the settings data
-func validateSettingsData(settings *conf.Settings) error {
-	// Check for null settings
-	if settings == nil {
-		return fmt.Errorf("settings cannot be null")
-	}
-
-	// Validate BirdNET settings
-	if settings.BirdNET.Latitude < -90 || settings.BirdNET.Latitude > 90 {
-		return fmt.Errorf("latitude must be between -90 and 90")
-	}
-
-	if settings.BirdNET.Longitude < -180 || settings.BirdNET.Longitude > 180 {
-		return fmt.Errorf("longitude must be between -180 and 180")
-	}
-
-	// Validate WebServer settings - fix for port type
-	// Check if we can convert the port to an integer
-	var (
-		portInt int
-		err     error
-	)
-
-	// If the port is a string (as indicated by the linter error), convert it to int
-	switch v := any(settings.WebServer.Port).(type) {
-	case int:
-		portInt = v
-	case string:
-		portInt, err = strconv.Atoi(v)
-		if err != nil {
-			return fmt.Errorf("invalid port number: %v", v)
-		}
-	default:
-		return fmt.Errorf("port has an unsupported type: %T", v)
-	}
-
-	if portInt < 1 || portInt > 65535 {
-		return fmt.Errorf("port must be between 1 and 65535")
-	}
-
-	// Add additional validation for other fields as needed
-
-	return nil
 }
 
 // updateAllowedSettingsWithTracking updates only the allowed fields and returns a list of skipped fields
