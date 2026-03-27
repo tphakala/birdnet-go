@@ -134,6 +134,7 @@ type BirdImageCache struct {
 	store        datastore.Interface
 	fileCache    *ImageFileCache
 	quit         chan struct{}                         // Channel to signal shutdown
+	closeMu      sync.Mutex                            // Guards closed + wg.Go atomicity in tryGo to prevent Add-after-Wait panic
 	closed       atomic.Bool                           // Set during shutdown to reject new DB operations
 	wg           sync.WaitGroup                        // Tracks in-flight DB and background operations
 	Initializing sync.Map                              // Track which species are being initialized
@@ -597,8 +598,12 @@ func (c *BirdImageCache) Close() error {
 	log := GetLogger().With(logger.String("provider", c.providerName))
 	log.Info("Closing image provider cache")
 
-	// Set closed flag first to reject new DB operations.
+	// Set closed flag under mutex to prevent tryGo from racing with wg.Wait.
+	// The atomic store lets fast-path checks (saveToDB, etc.) bail out without
+	// the mutex. The mutex ensures tryGo sees the flag before wg.Wait runs.
+	c.closeMu.Lock()
 	c.closed.Store(true)
+	c.closeMu.Unlock()
 
 	if c.quit != nil {
 		select {
@@ -620,12 +625,16 @@ func (c *BirdImageCache) Close() error {
 }
 
 // tryGo safely spawns a tracked goroutine. It returns false (and does not spawn)
-// if the cache is shutting down, preventing Add-after-Wait panics on wg.
+// if the cache is shutting down. The mutex ensures the closed check and wg.Go are
+// atomic with respect to Close(), preventing Add-after-Wait panics.
 func (c *BirdImageCache) tryGo(fn func()) bool {
+	c.closeMu.Lock()
 	if c.closed.Load() {
+		c.closeMu.Unlock()
 		return false
 	}
 	c.wg.Go(fn)
+	c.closeMu.Unlock()
 	return true
 }
 
