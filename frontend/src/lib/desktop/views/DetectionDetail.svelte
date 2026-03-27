@@ -237,6 +237,7 @@
       logger.error('Error fetching detection:', error);
     } finally {
       isLoadingDetection = false;
+      detectionController = null;
     }
   }
 
