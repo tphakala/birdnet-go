@@ -20,6 +20,24 @@ type TaxonomyMap map[string]string
 // ScientificNameIndex maps scientific names to their corresponding codes
 type ScientificNameIndex map[string]string
 
+// legacyCodeRemappings maps retired eBird species codes to their current replacements.
+// These arise from taxonomic splits where eBird retires a code and assigns new ones.
+// For example, "hergul" (Herring Gull) was retired after the American/European split;
+// eBird now uses "amhgul1" (American Herring Gull) for North American populations.
+var legacyCodeRemappings = map[string]string{
+	"hergul": "amhgul1", // Herring Gull → American Herring Gull (eBird taxonomic split)
+}
+
+// RemapLegacyCode returns the current eBird species code for a given code,
+// applying any known legacy-to-current remappings. If the code has no remapping,
+// it is returned unchanged.
+func RemapLegacyCode(code string) string {
+	if remapped, ok := legacyCodeRemappings[code]; ok {
+		return remapped
+	}
+	return code
+}
+
 // LoadTaxonomyData loads the eBird taxonomy data from the embedded file
 // or from a custom file if provided.
 func LoadTaxonomyData(customPath string) (TaxonomyMap, ScientificNameIndex, error) {
@@ -130,7 +148,7 @@ func GetSpeciesCodeFromName(taxonomyMap TaxonomyMap, scientificIndex ScientificN
 
 	// Look up in the scientific name index (O(1) operation)
 	if code, exists := scientificIndex[scientificName]; exists {
-		return code, true
+		return RemapLegacyCode(code), true
 	}
 
 	// If not found in taxonomy, create a placeholder code
