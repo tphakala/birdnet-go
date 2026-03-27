@@ -463,7 +463,7 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 
 	oldNotif, exists := s.notifications[notification.ID]
 	if !exists {
-		return errors.Newf("notification not found: %s", notification.ID).Component("notification").Category(errors.CategoryNotFound).Build()
+		return ErrNotificationNotFound
 	}
 
 	// Update unread count if status changed

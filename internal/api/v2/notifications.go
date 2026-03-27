@@ -120,7 +120,7 @@ func (c *Controller) executeNotificationAction(ctx echo.Context, action notifica
 
 	service := notification.GetService()
 	if err := action.operation(service, id); err != nil {
-		if errors.Is(err, notification.ErrNotificationNotFound) {
+		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
 			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
 		c.logErrorIfEnabled(action.errorLogMsg,
@@ -731,7 +731,7 @@ func (c *Controller) GetNotification(ctx echo.Context) error {
 	service := notification.GetService()
 	notif, err := service.Get(id)
 	if err != nil {
-		if errors.Is(err, notification.ErrNotificationNotFound) {
+		if errors.Is(err, notification.ErrNotificationNotFound) || errors.IsNotFound(err) {
 			return c.HandleErrorWithKey(ctx, err, "Notification not found", http.StatusNotFound, notification.MsgErrNotifNotFound, nil)
 		}
 		c.logErrorIfEnabled("failed to get notification",
