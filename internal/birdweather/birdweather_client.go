@@ -861,12 +861,13 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 		switch {
 		case errors.IsNotFound(err):
 			// CategoryNotFound (e.g., invalid species on Birdweather)
-			// Log at debug level for expected validation failures
+			// Expected — not all BirdNET species exist in BirdWeather. Skip without error.
 			log.Debug("Publish skipped: species not recognized by Birdweather",
 				logger.String("soundscape_id", soundscapeID),
 				logger.String("common_name", note.CommonName),
 				logger.String("scientific_name", note.ScientificName),
 				logger.Error(err))
+			return nil
 		case errors.IsTransientNetworkError(err):
 			// Transient network errors during detection post are expected
 			// external failures. Log at warn level and skip alerting.

@@ -189,10 +189,11 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	}
 
 	// Filter out network infrastructure errors (user's network/DNS issues).
-	// CategoryIntegration is included because external service errors (e.g., BirdWeather)
-	// often wrap transient network failures that are not code bugs.
+	// Filter network infrastructure noise. CategoryIntegration is deliberately excluded
+	// to avoid suppressing legitimate non-transient integration errors; transient network
+	// failures in integrations should use CategoryNetwork instead.
 	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
-	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP, CategoryIntegration:
+	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:
 		for _, pattern := range networkNoisePatterns {
 			if strings.Contains(errorMsg, pattern) {
 				return false
