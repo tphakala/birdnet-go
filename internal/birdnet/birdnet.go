@@ -438,22 +438,12 @@ func (bn *BirdNET) loadEmbeddedLabels() error {
 			Build()
 	}
 
-	// Check if fallback occurred and report to telemetry
+	// Check if fallback occurred and log at debug level
+	// Locale fallback is expected behavior (e.g., "en" -> "en-uk") and not an error
 	if result.FallbackOccurred {
 		bn.Debug("Label file fallback occurred: requested '%s', using '%s'", result.RequestedLocale, result.ActualLocale)
 
-		// ALWAYS report locale fallback to telemetry as a warning
-		// This is critical for tracking configuration issues
-		// Use deferred capture since BirdNET initializes before Sentry
-		telemetry.CaptureMessageDeferred(
-			fmt.Sprintf("Label file fallback: requested locale '%s' not available for model %s, using '%s'",
-				result.RequestedLocale, bn.ModelInfo.ID, result.ActualLocale),
-			sentry.LevelError,
-			"birdnet-label-loading",
-		)
-
-		// Also log so users see it immediately
-		GetLogger().Warn("Label file locale not available, using fallback",
+		GetLogger().Debug("Label file locale not available, using fallback",
 			logger.String("requested_locale", result.RequestedLocale),
 			logger.String("actual_locale", result.ActualLocale))
 	}

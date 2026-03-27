@@ -690,16 +690,11 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 			Build()
 	}
 
-	// Handle warnings (side effects: logging + storing in settings)
+	// Handle warnings (side effects: logging)
+	// Locale fallback warnings are debug-level since the fallback works correctly
+	// and common locales like "en" or "en-US" always resolve to "en-uk"
 	for _, warning := range result.Warnings {
-		GetLogger().Warn("Configuration warning", logger.String("message", warning))
-
-		// Store the validation warning for telemetry reporting
-		if settings.ValidationWarnings == nil {
-			settings.ValidationWarnings = make([]string, 0)
-		}
-		settings.ValidationWarnings = append(settings.ValidationWarnings,
-			fmt.Sprintf("config-locale-validation: %s", warning))
+		GetLogger().Debug("Configuration notice", logger.String("message", warning))
 	}
 
 	// Return errors if validation failed
