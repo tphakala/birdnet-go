@@ -68,6 +68,7 @@ Performance Optimizations:
   import { birdnetSettings, dashboardLayout, settingsStore } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
+  import { guestDashboardLayout, saveGuestLayout } from '$lib/stores/guestDashboardLayout';
   import BannerCard from '$lib/desktop/features/dashboard/components/BannerCard.svelte';
   import VideoEmbedCard from '$lib/desktop/features/dashboard/components/VideoEmbedCard.svelte';
   import MiniSpectrogram from '$lib/desktop/features/dashboard/components/MiniSpectrogram.svelte';
@@ -171,9 +172,12 @@ Performance Optimizations:
   // When settings failed to load (e.g. guest/unauthenticated), skip the
   // settings-derived layout so we fall through to the public app config.
   let settingsLoaded = $derived(!$settingsStore.isLoading && !$settingsStore.error);
-  // Priority: authenticated settings > public app config > hardcoded defaults
+  // Guest detection: security is on but user has no access (not authenticated)
+  let isGuest = $derived(appState.security.enabled && !appState.security.accessAllowed);
+  // Priority: authenticated settings > guest localStorage > public app config > hardcoded defaults
   let layoutElements = $derived(
     (settingsLoaded ? $dashboardLayout?.elements : null) ??
+      (isGuest ? $guestDashboardLayout?.elements : null) ??
       (appState.layout?.elements as DashboardElement[] | undefined) ??
       defaultElements
   );
@@ -192,6 +196,13 @@ Performance Optimizations:
   }
 
   function handleLayoutChange(newLayout: DashboardLayout) {
+    if (isGuest) {
+      // Guest users: update the reactive store so the derived layoutElements reacts immediately.
+      // localStorage persistence is handled by saveGuestLayout inside the store module.
+      saveGuestLayout(newLayout);
+      return;
+    }
+
     // Update settings store directly for immediate reactivity
     const defaultDashboard: Dashboard = {
       thumbnails: { summary: true, recent: true, imageProvider: '', fallbackPolicy: '' },
@@ -1297,6 +1308,7 @@ Performance Optimizations:
   <DashboardEditMode
     layout={currentLayout}
     editMode={isEditing}
+    {isGuest}
     onLayoutChange={handleLayoutChange}
     onEditModeChange={handleEditModeChange}
   >
