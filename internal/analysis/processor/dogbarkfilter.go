@@ -9,14 +9,18 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// Assuming a predefined time limit for filtering detections after a dog bark.
-var DogBarkFilterTimeLimit = time.Duration(conf.Setting().Realtime.DogBarkFilter.Remember) * time.Minute
+// dogBarkFilterTimeLimit returns the current time limit for filtering
+// detections after a dog bark. The value is read from live settings on
+// every call so that hot-reload changes take effect immediately.
+func dogBarkFilterTimeLimit() time.Duration {
+	return time.Duration(conf.Setting().Realtime.DogBarkFilter.Remember) * time.Minute
+}
 
-// Check if the species should be filtered based on the last dog bark timestamp.
+// CheckDogBarkFilter checks if the species should be filtered based on the last dog bark timestamp.
 func (p *Processor) CheckDogBarkFilter(species string, lastDogBark time.Time) bool {
 	species = strings.ToLower(species)
 	if slices.Contains(p.Settings.Realtime.DogBarkFilter.Species, species) {
-		return time.Since(lastDogBark) <= DogBarkFilterTimeLimit
+		return time.Since(lastDogBark) <= dogBarkFilterTimeLimit()
 	}
 	return false
 }

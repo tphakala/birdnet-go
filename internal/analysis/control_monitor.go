@@ -85,7 +85,9 @@ func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, re
 	return cm
 }
 
-// Start begins monitoring control signals
+// Start begins monitoring control signals.
+// The monitor goroutine is tracked by the pipeline WaitGroup so that
+// shutdown waits for it to drain before proceeding.
 func (cm *ControlMonitor) Start() {
 	// Initialize telemetry endpoint if enabled
 	cm.initializeTelemetryIfEnabled()
@@ -93,7 +95,9 @@ func (cm *ControlMonitor) Start() {
 	// Initialize sound level monitoring if enabled
 	cm.initializeSoundLevelIfEnabled()
 
-	go cm.monitor()
+	cm.wg.Go(func() {
+		cm.monitor()
+	})
 }
 
 // Stop stops the control monitor and cleans up resources
