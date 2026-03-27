@@ -93,21 +93,23 @@ describe('beforeSend privacy filtering', () => {
   });
 
   it('scrubs main event request URL query params', () => {
+    const origin = globalThis.location.origin;
     const event = {
       type: undefined,
-      request: { url: 'https://birdnet.local/settings?apiKey=secret&token=abc' },
+      request: { url: `${origin}/settings?apiKey=secret&token=abc` },
     } as Sentry.ErrorEvent;
     const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
     expect(result.request?.url).toBe('/settings');
   });
 
   it('scrubs breadcrumb fetch URLs to path only', () => {
+    const origin = globalThis.location.origin;
     const event = {
       type: undefined,
       breadcrumbs: [
         {
           category: 'fetch',
-          data: { url: 'https://birdnet.local/api/v2/settings?id=secret' },
+          data: { url: `${origin}/api/v2/settings?id=secret` },
         },
         {
           category: 'ui.click',

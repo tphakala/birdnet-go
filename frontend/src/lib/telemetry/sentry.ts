@@ -70,15 +70,10 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
     scope.setTag('error.type', 'api');
 
     if (context) {
-      // Scrub endpoint URL to path only
+      // Scrub endpoint URL — strip query params; preserve domain for external APIs
       const scrubbed = { ...context };
       if (scrubbed.endpoint) {
-        try {
-          const url = new URL(scrubbed.endpoint, globalThis.location.origin);
-          scrubbed.endpoint = url.pathname;
-        } catch {
-          scrubbed.endpoint = '[scrubbed]';
-        }
+        scrubbed.endpoint = scrubUrl(scrubbed.endpoint);
       }
       scope.setContext('api', scrubbed);
     }
@@ -124,6 +119,21 @@ export function captureError(
 }
 
 /**
+ * Scrub a URL for privacy. For same-origin URLs, strip to pathname only.
+ * For external URLs (e.g., api.github.com), preserve origin + pathname
+ * so the domain context is retained, but still drop query params/fragments.
+ */
+function scrubUrl(raw: string): string {
+  try {
+    const url = new URL(raw, globalThis.location.origin);
+    const isLocal = url.origin === globalThis.location.origin;
+    return isLocal ? url.pathname : `${url.origin}${url.pathname}`;
+  } catch {
+    return '[scrubbed]';
+  }
+}
+
+/**
  * Privacy-first event filtering. Scrubs PII before events leave the browser.
  * Also drops auth errors (401/403) which are expected when users aren't logged in.
  */
@@ -141,12 +151,7 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
   // 3. Scrub main event request — remove query params, headers, cookies, body
   if (event.request) {
     if (event.request.url) {
-      try {
-        const url = new URL(event.request.url, globalThis.location.origin);
-        event.request.url = url.pathname;
-      } catch {
-        event.request.url = '[scrubbed]';
-      }
+      event.request.url = scrubUrl(event.request.url);
     }
     delete event.request.data;
     delete event.request.cookies;
@@ -158,12 +163,7 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
     for (const breadcrumb of event.breadcrumbs) {
       if (breadcrumb.category === 'fetch' || breadcrumb.category === 'xhr') {
         if (breadcrumb.data?.url) {
-          try {
-            const url = new URL(breadcrumb.data.url, globalThis.location.origin);
-            breadcrumb.data.url = url.pathname;
-          } catch {
-            breadcrumb.data.url = '[scrubbed]';
-          }
+          breadcrumb.data.url = scrubUrl(breadcrumb.data.url);
         }
       }
       // 5. Strip request/response bodies from breadcrumb data

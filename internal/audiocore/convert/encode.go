@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -210,7 +209,12 @@ func EncodePCMtoWAVWithContext(ctx context.Context, pcmData []byte) (*bytes.Buff
 		if b, ok := elem.([]byte); ok {
 			// Ensure all byte slices are properly converted before writing
 			if _, err := buffer.Write(b); err != nil {
-				return nil, fmt.Errorf("failed to write byte slice to buffer: %w", err)
+				return nil, errors.New(err).
+					Component("audiocore/convert").
+					Category(errors.CategorySystem).
+					Context("operation", "encode_pcm_to_wav_context").
+					Context("stage", "write_header_bytes").
+					Build()
 			}
 		} else {
 			// Handle all other data types
