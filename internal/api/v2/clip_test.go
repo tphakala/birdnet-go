@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
-	"github.com/tphakala/birdnet-go/internal/errors"
+	"gorm.io/gorm"
 )
 
 func TestExtractAudioClipByID(t *testing.T) {
@@ -29,7 +29,7 @@ func TestExtractAudioClipByID(t *testing.T) {
 	// Configure mock datastore
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetNoteClipPath", "clip-test-1").Return(testFilename, nil)
-	mockDS.On("GetNoteClipPath", "nonexistent-999").Return("", errors.NewStd("record not found"))
+	mockDS.On("GetNoteClipPath", "nonexistent-999").Return("", gorm.ErrRecordNotFound)
 	controller.DS = mockDS
 
 	testCases := []struct {

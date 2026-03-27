@@ -19,12 +19,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"golang.org/x/sync/singleflight"
+	"gorm.io/gorm"
 )
 
 // Non-standard HTTP status codes
@@ -51,6 +53,16 @@ const (
 	MimeTypeM4A  = "audio/mp4"
 	MimeTypeOGG  = "audio/ogg"
 )
+
+// isClipNotFoundErr reports whether err indicates the audio clip or its parent
+// detection does not exist. It checks sentinel errors from the v2 repository
+// layer, GORM's record-not-found, and the standard os.ErrNotExist.
+func isClipNotFoundErr(err error) bool {
+	return errors.Is(err, os.ErrNotExist) ||
+		errors.Is(err, gorm.ErrRecordNotFound) ||
+		errors.Is(err, repository.ErrDetectionNotFound) ||
+		errors.Is(err, repository.ErrNoClipPath)
+}
 
 // isValidFilename checks if a filename is valid for use in Content-Disposition header
 func isValidFilename(filename string) bool {
@@ -535,7 +547,7 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
 		// Check if error is due to record not found
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") { // Adapt based on datastore error type
+		if isClipNotFoundErr(err) {
 			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
@@ -650,7 +662,7 @@ func (c *Controller) ExtractAudioClipByID(ctx echo.Context) error {
 	// Resolve clip path from datastore
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if isClipNotFoundErr(err) {
 			return c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path for note", http.StatusInternalServerError)
@@ -782,7 +794,7 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	// Resolve clip path (reuse same pattern as existing handlers like ServeAudioByID)
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if isClipNotFoundErr(err) {
 			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
@@ -881,7 +893,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	// Resolve clip path
 	clipPath, err := c.DS.GetNoteClipPath(noteID)
 	if err != nil {
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if isClipNotFoundErr(err) {
 			return c.HandleError(ctx, err, "No audio clip available", http.StatusNotFound)
 		}
 		return c.HandleError(ctx, err, "Failed to get clip path", http.StatusInternalServerError)
@@ -1083,7 +1095,7 @@ func (c *Controller) validateNoteIDAndGetClipPath(ctx echo.Context) (noteID, cli
 			logger.Error(err),
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()))
-		if errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "not found") {
+		if isClipNotFoundErr(err) {
 			_ = c.HandleError(ctx, err, "No audio clip available for this note", http.StatusNotFound)
 			return
 		}

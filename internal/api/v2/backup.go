@@ -19,10 +19,27 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"gorm.io/gorm"
 )
+
+// errBackupAlreadyInProgress is returned when a backup job is requested but one
+// is already running for the same database type.
+var errBackupAlreadyInProgress = errors.NewStd("backup already in progress")
+
+// isSQLiteLockError reports whether err indicates a SQLite database or table
+// lock (SQLITE_BUSY / SQLITE_LOCKED). SQLite's C driver surfaces these as
+// plain strings, so string matching is the standard detection approach.
+func isSQLiteLockError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "locked") ||
+		strings.Contains(msg, "sqlite_busy")
+}
 
 // Backup job status constants
 const (
@@ -238,7 +255,7 @@ func (m *BackupJobManager) CreateJob(dbType string, totalBytes int64, dbPath str
 	// Check for existing active job
 	for _, job := range m.jobs {
 		if job.DBType == dbType && (job.Status == BackupStatusPending || job.Status == BackupStatusInProgress) {
-			return nil, fmt.Errorf("backup already in progress: %s", job.ID)
+			return nil, fmt.Errorf("%w: %s", errBackupAlreadyInProgress, job.ID)
 		}
 	}
 
@@ -429,7 +446,7 @@ func (c *Controller) StartBackupJob(ctx echo.Context) error {
 		// Job already exists
 		// NOTE: Ad-hoc response kept because the frontend reads existing_job_id
 		// to resume polling (see DatabaseStatsCard.svelte).
-		if strings.Contains(err.Error(), "already in progress") {
+		if errors.Is(err, errBackupAlreadyInProgress) {
 			existingJob, _ := backupJobManager.GetActiveJobByType(dbType)
 			return ctx.JSON(http.StatusConflict, map[string]any{
 				"error":           "Backup already in progress",
@@ -581,7 +598,7 @@ func (c *Controller) runBackupJob(job *BackupJob, gormDB *gorm.DB) {
 		}
 
 		// Check if it's a lock error
-		if !strings.Contains(lastErr.Error(), "locked") {
+		if !isSQLiteLockError(lastErr) {
 			break // Non-recoverable error
 		}
 

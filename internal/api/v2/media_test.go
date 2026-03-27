@@ -22,6 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/securefs"
+	"gorm.io/gorm"
 )
 
 // assertPartialContentHeaders checks headers for partial content responses.
@@ -915,7 +916,7 @@ func TestServeAudioByID(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 	// Mock the GetNoteClipPath method to return our test filename
 	mockDS.On("GetNoteClipPath", "123").Return(testFilename, nil)
-	mockDS.On("GetNoteClipPath", "999").Return("", errors.New("record not found"))
+	mockDS.On("GetNoteClipPath", "999").Return("", gorm.ErrRecordNotFound)
 	controller.DS = mockDS
 
 	// Test cases for different scenarios
