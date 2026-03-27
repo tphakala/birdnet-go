@@ -177,6 +177,15 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
+	// Filter out "note not found" errors — these are expected transient conditions caused by
+	// race between write commit and read, or retention cleanup deleting records between
+	// ID assignment and lookup. Not code bugs.
+	if ee.Category == CategoryNotFound {
+		if strings.Contains(errorMsg, "note not found") {
+			return false
+		}
+	}
+
 	// Filter out network infrastructure errors (user's network/DNS issues)
 	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
 	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:

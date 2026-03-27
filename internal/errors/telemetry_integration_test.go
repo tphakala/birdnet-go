@@ -96,6 +96,16 @@ func TestShouldReportToSentry_AllowsCodeErrors(t *testing.T) {
 	assert.True(t, shouldReportToSentry(ee))
 }
 
+func TestShouldReportToSentry_FiltersNoteNotFound(t *testing.T) {
+	t.Parallel()
+	// "note not found" with CategoryNotFound is a transient race condition, not a code bug
+	ee := New(fmt.Errorf("note not found")).
+		Component("datastore").
+		Category(CategoryNotFound).
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
 func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	t.Parallel()
 	// Network category error that is NOT environmental noise should still report

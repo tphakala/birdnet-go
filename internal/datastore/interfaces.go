@@ -1249,7 +1249,7 @@ func (ds *DataStore) UpdateNote(id string, updates map[string]any) error {
 	if rowsAffected == 0 {
 		return errors.Newf("note not found").
 			Component("datastore").
-			Category(errors.CategoryValidation).
+			Category(errors.CategoryNotFound).
 			Context("operation", "update_note").
 			Context("note_id", id).
 			Build()
