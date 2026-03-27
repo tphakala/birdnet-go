@@ -137,6 +137,7 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		DefaultModelID:     defaultModel.ID,
 		SpeciesLabelTypeID: speciesLabelType.ID,
 		AvesClassID:        &avesClassID,
+		Labels:             settings.BirdNET.Labels, // Required for locale-specific common name resolution
 		SpeciesCodeMap:     speciesCodeMap,
 	})
 	if err != nil {
