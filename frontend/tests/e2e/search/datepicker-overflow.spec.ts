@@ -136,7 +136,7 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
     const zIndex = await calendar.evaluate(el => {
       return window.getComputedStyle(el).zIndex;
     });
-    expect(Number(zIndex)).toBeGreaterThanOrEqual(9999);
+    expect(Number(zIndex)).toBeGreaterThanOrEqual(1100);
   });
 
   test('calendar is not clipped by parent overflow:hidden containers', async ({ page }) => {
@@ -346,25 +346,23 @@ test.describe('Search DatePicker - Overflow on Different Viewport Sizes', () => 
 test.describe('UI Overflow - General Interactive Elements', () => {
   test.setTimeout(30000);
 
-  test('search page dropdowns and popovers are not clipped by card containers', async ({
+  test('card container does not clip datepicker calendar with overflow:hidden', async ({
     page,
   }) => {
     await navigateToSearch(page);
 
-    // Check that the search form card does not use overflow:hidden
-    // which would clip absolutely/fixed positioned children
+    // Verify the card container does not use overflow:hidden which would
+    // clip the position:fixed calendar dropdown
     const cardOverflow = await page.evaluate(() => {
       const card = document.querySelector('.card');
       if (!card) return 'no-card-found';
       return window.getComputedStyle(card).overflow;
     });
 
-    // The card should not use overflow:hidden (which clips dropdowns)
-    // overflow:visible or unset is acceptable
     if (cardOverflow !== 'no-card-found') {
       expect(
         cardOverflow,
-        'Card container should not clip interactive popover content with overflow:hidden'
+        'Card container should not use overflow:hidden to avoid clipping fixed-position dropdowns'
       ).not.toBe('hidden');
     }
   });

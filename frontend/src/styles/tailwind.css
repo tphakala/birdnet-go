@@ -1057,7 +1057,6 @@
   .card {
     background-color: var(--color-base-100);
     border-radius: var(--radius-box);
-    overflow: hidden;
   }
 
   .card-bordered {
