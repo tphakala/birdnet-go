@@ -219,16 +219,15 @@ func (nt *NotificationTelemetry) WebhookRequestError(
 		return
 	}
 
-	// Don't report connection-level errors - these are user configuration issues
-	// (service not running, wrong URL, DNS misconfiguration, firewall, etc.)
-	// not code quality problems that need telemetry alerts
+	// Don't report connection-level errors to Sentry - these are user
+	// configuration issues (service not running, wrong URL, DNS
+	// misconfiguration, firewall, etc.) not code quality problems.
+	// We still call RecordFailure so the sample error is captured, but we
+	// intentionally avoid ShouldReport which would increment
+	// consecutiveFailures and suppress the next real (non-connection) error.
 	if isConnectionError(err) {
-		// Still track the failure for suppression state even if we don't report
-		if nt.suppressor != nil {
-			_ = nt.suppressor.ShouldReport(providerName)
-			if err != nil {
-				nt.suppressor.RecordFailure(providerName, err.Error())
-			}
+		if nt.suppressor != nil && err != nil {
+			nt.suppressor.RecordFailure(providerName, err.Error())
 		}
 		return
 	}

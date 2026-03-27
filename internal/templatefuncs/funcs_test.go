@@ -16,7 +16,7 @@ func TestFuncs_RegisteredFunctions(t *testing.T) {
 	expectedFuncs := []string{
 		"title", "upper", "lower", "trim",
 		"contains", "replace", "hasPrefix", "hasSuffix",
-		"formatTime",
+		"formatTime", "jsonEscape",
 	}
 
 	for _, name := range expectedFuncs {

@@ -449,9 +449,12 @@ func (w *WebhookProvider) Send(ctx context.Context, n *Notification) error {
 // Uses custom template if configured, otherwise uses default structure.
 func (w *WebhookProvider) buildPayload(n *Notification) ([]byte, error) {
 	if w.template != nil {
-		// Use custom template
+		// Use custom template with JSON-escaped values so that special
+		// characters in species names, notes, or localized strings do
+		// not produce invalid JSON when interpolated by text/template.
+		templateData := jsonEscapeTemplateMap(n.ToTemplateMap())
 		var buf bytes.Buffer
-		err := w.template.Execute(&buf, n.ToTemplateMap())
+		err := w.template.Execute(&buf, templateData)
 		if err != nil {
 			return nil, errors.New(err).Component("notification").Category(errors.CategoryProcessing).Context("operation", "execute_webhook_template").Build()
 		}
