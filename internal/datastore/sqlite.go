@@ -32,6 +32,10 @@ type SQLiteStore struct {
 	// dbstatAvailable caches whether the dbstat virtual table exists.
 	// 0 = unchecked, 1 = available, -1 = not available.
 	dbstatAvailable int32
+
+	// Guards to prevent starting monitoring loops more than once.
+	integrityOnce     sync.Once
+	walCheckpointOnce sync.Once
 }
 
 func validateSQLiteConfig() error {
@@ -324,28 +328,30 @@ const integrityCheckInterval = 24 * time.Hour
 // startIntegrityCheckLoop runs PRAGMA quick_check at startup and every 24 hours.
 // Uses the monitoring context for clean shutdown.
 func (s *SQLiteStore) startIntegrityCheckLoop() {
-	// Ensure monitoring context exists
-	s.monitoringMu.Lock()
-	if s.monitoringCtx == nil {
-		s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
-	}
-	ctx := s.monitoringCtx
-	s.monitoringMu.Unlock()
-
-	// Run initial check immediately, then on interval
-	s.monitoringWg.Go(func() {
-		s.RunIntegrityCheck()
-
-		ticker := time.NewTicker(integrityCheckInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				s.RunIntegrityCheck()
-			}
+	s.integrityOnce.Do(func() {
+		// Ensure monitoring context exists
+		s.monitoringMu.Lock()
+		if s.monitoringCtx == nil {
+			s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
 		}
+		ctx := s.monitoringCtx
+		s.monitoringMu.Unlock()
+
+		// Run initial check immediately, then on interval
+		s.monitoringWg.Go(func() {
+			s.RunIntegrityCheck()
+
+			ticker := time.NewTicker(integrityCheckInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					s.RunIntegrityCheck()
+				}
+			}
+		})
 	})
 }
 
@@ -356,34 +362,36 @@ const legacyWALCheckpointInterval = 5 * time.Minute
 // startWALCheckpointLoop runs a passive WAL checkpoint periodically to prevent
 // unbounded WAL growth. Uses the monitoring context for clean shutdown.
 func (s *SQLiteStore) startWALCheckpointLoop() {
-	// Ensure monitoring context exists
-	s.monitoringMu.Lock()
-	if s.monitoringCtx == nil {
-		s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
-	}
-	ctx := s.monitoringCtx
-	s.monitoringMu.Unlock()
+	s.walCheckpointOnce.Do(func() {
+		// Ensure monitoring context exists
+		s.monitoringMu.Lock()
+		if s.monitoringCtx == nil {
+			s.monitoringCtx, s.monitoringCancel = context.WithCancel(context.Background())
+		}
+		ctx := s.monitoringCtx
+		s.monitoringMu.Unlock()
 
-	s.monitoringWg.Go(func() {
-		ticker := time.NewTicker(legacyWALCheckpointInterval)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-ticker.C:
-				if err := s.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
-					GetLogger().Warn("periodic WAL checkpoint failed",
-						logger.Error(err),
-						logger.String("operation", "periodic_wal_checkpoint"))
+		s.monitoringWg.Go(func() {
+			ticker := time.NewTicker(legacyWALCheckpointInterval)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case <-ticker.C:
+					if err := s.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
+						GetLogger().Warn("periodic WAL checkpoint failed",
+							logger.Error(err),
+							logger.String("operation", "periodic_wal_checkpoint"))
+					}
 				}
 			}
-		}
-	})
+		})
 
-	GetLogger().Debug("started periodic WAL checkpoint",
-		logger.String("interval", legacyWALCheckpointInterval.String()),
-		logger.String("mode", "PASSIVE"))
+		GetLogger().Debug("started periodic WAL checkpoint",
+			logger.String("interval", legacyWALCheckpointInterval.String()),
+			logger.String("mode", "PASSIVE"))
+	})
 }
 
 // Close closes the SQLite database connection
