@@ -26,6 +26,10 @@ const MAX_REQUEST_SIZE = 10 * 1024 * 1024; // 10MB
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
 const CSRF_HEADER_NAME = 'X-CSRF-Token';
 
+// Guard: prevents multiple concurrent 401 redirects when parallel API calls
+// all receive expired-session responses at the same time.
+let _redirectingToLogin = false;
+
 // Lazy Sentry capture — only loaded when telemetry is enabled.
 // Uses ApiErrorLike interface to avoid coupling to the ApiError class.
 type ApiErrorLike = { message: string; status: number; isNetworkError: boolean };
@@ -67,6 +71,35 @@ export class ApiError extends Error {
     this.userMessage = message;
     this.isNetworkError = isNetworkError;
   }
+}
+
+/**
+ * Redirect to the login page on 401 Unauthorized.
+ *
+ * When a session expires mid-use, every in-flight API call returns 401.
+ * Instead of throwing ApiError (which floods Sentry with expected
+ * expired-session errors), we redirect the whole page to the login URL.
+ * The full-page navigation clears all in-memory state (stores, etc.).
+ *
+ * Returns a Promise that never resolves, so callers awaiting fetchWithCSRF
+ * simply hang until the browser navigates away.
+ */
+function redirectToLogin(): Promise<never> {
+  if (!_redirectingToLogin) {
+    _redirectingToLogin = true;
+    logger.info('Session expired (401) — redirecting to login');
+    window.location.href = buildAppUrl('/ui/');
+  }
+  // Return a never-resolving promise so callers don't continue
+  return new Promise<never>(() => {});
+}
+
+/**
+ * Reset the 401 redirect guard.
+ * Exported only for testing; production code should not call this.
+ */
+export function resetRedirectGuard(): void {
+  _redirectingToLogin = false;
 }
 
 /**
@@ -391,6 +424,13 @@ export async function fetchWithCSRF<T = unknown>(
 
     // Any HTTP response (even 4xx/5xx) proves the backend is reachable
     markOnline();
+
+    // 401 Unauthorized means the session has expired.  Redirect to login
+    // instead of throwing an ApiError (which would flood Sentry with
+    // expected expired-session errors across every locale).
+    if (response.status === 401) {
+      return redirectToLogin();
+    }
 
     // If 403 on a state-changing request, the CSRF token may have expired.
     // Refresh the token and retry once.

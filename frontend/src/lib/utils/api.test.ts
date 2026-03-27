@@ -11,7 +11,7 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
 
-import { getCsrfToken, fetchWithCSRF, api } from './api';
+import { getCsrfToken, fetchWithCSRF, api, resetRedirectGuard } from './api';
 
 describe('API utilities', () => {
   beforeEach(() => {
@@ -180,6 +180,99 @@ describe('API utilities', () => {
 
       const result = await fetchWithCSRF('/api/test');
       expect(result).toBe('Plain text response');
+    });
+  });
+
+  describe('401 redirect to login', () => {
+    let mockFetch: ReturnType<typeof vi.fn>;
+    const originalLocation = window.location;
+
+    beforeEach(() => {
+      mockFetch = vi.fn();
+      global.fetch = mockFetch as unknown as typeof fetch;
+
+      // Reset the redirect guard before each test
+      resetRedirectGuard();
+
+      // Mock window.location.href as writable
+      Object.defineProperty(window, 'location', {
+        value: { ...originalLocation, href: originalLocation.href },
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    afterEach(() => {
+      // Restore original window.location
+      Object.defineProperty(window, 'location', {
+        value: originalLocation,
+        writable: true,
+        configurable: true,
+      });
+    });
+
+    it('redirects to login on 401 response', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      // The promise should never resolve (hangs until page navigates away).
+      // Use Promise.race with a short timeout to verify it does not reject.
+      const result = await Promise.race([
+        fetchWithCSRF('/api/test').then(() => 'resolved'),
+        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 50)),
+      ]);
+
+      expect(result).toBe('pending');
+      expect(window.location.href).toBe('/ui/');
+    });
+
+    it('does not throw ApiError on 401', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      // The call should NOT reject — it should hang.
+      let threw = false;
+      const raceResult = await Promise.race([
+        fetchWithCSRF('/api/test').catch(() => {
+          threw = true;
+          return 'rejected';
+        }),
+        new Promise<string>(resolve => setTimeout(() => resolve('pending'), 50)),
+      ]);
+
+      expect(threw).toBe(false);
+      expect(raceResult).toBe('pending');
+    });
+
+    it('only redirects once for multiple concurrent 401s', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      // Fire multiple requests that all get 401
+      const promises = [
+        fetchWithCSRF('/api/test1'),
+        fetchWithCSRF('/api/test2'),
+        fetchWithCSRF('/api/test3'),
+      ];
+
+      // Wait a tick for all to process
+      await Promise.race([Promise.all(promises), new Promise(resolve => setTimeout(resolve, 50))]);
+
+      // window.location.href should have been set exactly once
+      // (the guard prevents subsequent assignments)
+      expect(window.location.href).toBe('/ui/');
     });
   });
 
