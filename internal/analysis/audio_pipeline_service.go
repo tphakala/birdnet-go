@@ -352,8 +352,9 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	var sourceIDs []string
 	for _, cfg := range sourceConfigs {
 		if addErr := p.engine.AddSource(cfg); addErr != nil {
-			log.Warn("failed to add audio source",
+			log.Error("failed to add audio source",
 				logger.String("source_id", cfg.ID),
+				logger.String("source_type", string(cfg.Type)),
 				logger.String("connection", privacy.SanitizeStreamUrl(cfg.ConnectionString)),
 				logger.Error(addErr),
 				logger.String("operation", operation))

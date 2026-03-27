@@ -188,11 +188,22 @@ func startCapture(
 	// Find the device matching deviceID.
 	var selectedInfo *malgo.DeviceInfo
 	var selectedDevInfo DeviceInfo
+	log.Info("enumerating capture devices",
+		logger.String("source_id", sourceID),
+		logger.String("requested_device", deviceID),
+		logger.Int("device_count", len(infos)))
 	for i := range infos {
 		decodedID, decErr := hexToASCII(infos[i].ID.String())
 		if decErr != nil {
+			log.Warn("failed to decode device ID",
+				logger.Int("device_index", i),
+				logger.Error(decErr))
 			continue
 		}
+		log.Debug("found capture device",
+			logger.Int("index", i),
+			logger.String("name", infos[i].Name()),
+			logger.String("decoded_id", decodedID))
 		if matchesDevice(decodedID, &infos[i], deviceID) {
 			selectedInfo = &infos[i]
 			selectedDevInfo = DeviceInfo{

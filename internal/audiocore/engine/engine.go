@@ -295,7 +295,17 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 			BitDepth:   cfg.BitDepth,
 			Channels:   cfg.Channels,
 		}
+		e.logger.Info("starting audio card capture",
+			logger.String("source_id", sourceID),
+			logger.String("device_id", cfg.ConnectionString),
+			logger.Int("sample_rate", sampleRate),
+			logger.Int("bit_depth", cfg.BitDepth),
+			logger.Int("channels", cfg.Channels))
 		if err := e.deviceMgr.StartCapture(sourceID, cfg.ConnectionString, devCfg); err != nil {
+			e.logger.Error("audio card capture failed",
+				logger.String("source_id", sourceID),
+				logger.String("device_id", cfg.ConnectionString),
+				logger.Error(err))
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
 			return fmt.Errorf("start device capture for %s: %w", sourceID, err)
