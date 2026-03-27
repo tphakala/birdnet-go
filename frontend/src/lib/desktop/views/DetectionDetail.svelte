@@ -194,11 +194,11 @@
         signal: detectionController.signal,
       });
 
-      if (detectionController.signal.aborted) return;
+      if (detectionController?.signal.aborted) return;
 
       if (response.ok) {
         const data = (await response.json()) as Detection;
-        if (detectionController.signal.aborted) return;
+        if (detectionController?.signal.aborted) return;
         detection = data;
       } else {
         let errorMessage: string;
@@ -251,11 +251,11 @@
       const url = buildAppUrl(
         `/api/v2/media/species-image/info?name=${encodeURIComponent(detection.scientificName)}`
       );
-      const response = await fetch(url, { signal: attributionController.signal });
-      if (attributionController.signal.aborted) return;
+      const response = await fetch(url, { signal: attributionController?.signal });
+      if (attributionController?.signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (attributionController.signal.aborted) return;
+        if (attributionController?.signal.aborted) return;
         imageAttribution = data as ImageAttribution;
       }
     } catch (error) {
@@ -278,12 +278,12 @@
         buildAppUrl(
           `/api/v2/species?scientific_name=${encodeURIComponent(detection.scientificName)}`
         ),
-        { signal: speciesController.signal }
+        { signal: speciesController?.signal }
       );
-      if (speciesController.signal.aborted) return;
+      if (speciesController?.signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (speciesController.signal.aborted) return;
+        if (speciesController?.signal.aborted) return;
         speciesInfo = data;
       }
     } catch (error) {
@@ -309,12 +309,12 @@
         buildAppUrl(
           `/api/v2/species/taxonomy?scientific_name=${encodeURIComponent(detection.scientificName)}`
         ),
-        { signal: taxonomyController.signal }
+        { signal: taxonomyController?.signal }
       );
-      if (taxonomyController.signal.aborted) return;
+      if (taxonomyController?.signal.aborted) return;
       if (response.ok) {
         const data = await response.json();
-        if (taxonomyController.signal.aborted) return;
+        if (taxonomyController?.signal.aborted) return;
         taxonomyInfo = data;
       }
     } catch (error) {
