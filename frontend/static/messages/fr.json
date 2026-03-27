@@ -937,7 +937,8 @@
       "mute": "Couper la sortie audio",
       "unmute": "Activer la sortie audio",
       "frequencyRangeMin": "Fréquence minimale",
-      "frequencyRangeMax": "Fréquence maximale"
+      "frequencyRangeMax": "Fréquence maximale",
+      "audioMonitor": "Moniteur audio"
     },
     "error": {
       "unsupported": "Votre navigateur ne prend pas en charge l'analyse audio",

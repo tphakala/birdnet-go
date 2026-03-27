@@ -937,7 +937,8 @@
       "mute": "Slå lydudgang fra",
       "unmute": "Slå lydudgang til",
       "frequencyRangeMin": "Minimumfrekvens",
-      "frequencyRangeMax": "Maksimumfrekvens"
+      "frequencyRangeMax": "Maksimumfrekvens",
+      "audioMonitor": "Lydmonitor"
     },
     "error": {
       "unsupported": "Din browser understøtter ikke lydanalyse",

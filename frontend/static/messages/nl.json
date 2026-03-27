@@ -937,7 +937,8 @@
       "mute": "Audio-uitvoer dempen",
       "unmute": "Audio-uitvoer inschakelen",
       "frequencyRangeMin": "Minimale frequentie",
-      "frequencyRangeMax": "Maximale frequentie"
+      "frequencyRangeMax": "Maximale frequentie",
+      "audioMonitor": "Audiomonitor"
     },
     "error": {
       "unsupported": "Je browser ondersteunt geen audio-analyse",

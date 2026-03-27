@@ -937,7 +937,8 @@
       "mute": "Silenciar salida de audio",
       "unmute": "Activar salida de audio",
       "frequencyRangeMin": "Frecuencia mínima",
-      "frequencyRangeMax": "Frecuencia máxima"
+      "frequencyRangeMax": "Frecuencia máxima",
+      "audioMonitor": "Monitor de audio"
     },
     "error": {
       "unsupported": "Tu navegador no soporta el análisis de audio",

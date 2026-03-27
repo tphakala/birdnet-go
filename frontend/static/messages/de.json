@@ -937,7 +937,8 @@
       "mute": "Audioausgabe stummschalten",
       "unmute": "Audioausgabe aktivieren",
       "frequencyRangeMin": "Minimale Frequenz",
-      "frequencyRangeMax": "Maximale Frequenz"
+      "frequencyRangeMax": "Maximale Frequenz",
+      "audioMonitor": "Audio-Monitor"
     },
     "error": {
       "unsupported": "Ihr Browser unterstützt keine Audioanalyse",

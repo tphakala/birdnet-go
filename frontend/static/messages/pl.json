@@ -937,7 +937,8 @@
       "mute": "Wycisz wyjście audio",
       "unmute": "Włącz wyjście audio",
       "frequencyRangeMin": "Częstotliwość minimalna",
-      "frequencyRangeMax": "Częstotliwość maksymalna"
+      "frequencyRangeMax": "Częstotliwość maksymalna",
+      "audioMonitor": "Monitor audio"
     },
     "error": {
       "unsupported": "Twoja przeglądarka nie obsługuje analizy audio",

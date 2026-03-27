@@ -937,7 +937,8 @@
       "mute": "Disattiva uscita audio",
       "unmute": "Attiva uscita audio",
       "frequencyRangeMin": "Frequenza minima",
-      "frequencyRangeMax": "Frequenza massima"
+      "frequencyRangeMax": "Frequenza massima",
+      "audioMonitor": "Monitor audio"
     },
     "error": {
       "unsupported": "Il tuo browser non supporta l'analisi audio",

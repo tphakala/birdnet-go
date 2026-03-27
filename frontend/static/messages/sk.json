@@ -937,7 +937,8 @@
       "mute": "Stlmiť zvukový výstup",
       "unmute": "Zapnúť zvukový výstup",
       "frequencyRangeMin": "Minimálna frekvencia",
-      "frequencyRangeMax": "Maximálna frekvencia"
+      "frequencyRangeMax": "Maximálna frekvencia",
+      "audioMonitor": "Audio monitor"
     },
     "error": {
       "unsupported": "Váš prehliadač nepodporuje analýzu zvuku",

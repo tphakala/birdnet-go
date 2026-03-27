@@ -937,7 +937,8 @@
       "mute": "Stäng av ljudutgång",
       "unmute": "Aktivera ljudutgång",
       "frequencyRangeMin": "Minsta frekvens",
-      "frequencyRangeMax": "Högsta frekvens"
+      "frequencyRangeMax": "Högsta frekvens",
+      "audioMonitor": "Ljudmonitor"
     },
     "error": {
       "unsupported": "Din webbläsare stöder inte ljudanalys",

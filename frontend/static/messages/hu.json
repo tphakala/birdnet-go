@@ -937,7 +937,8 @@
       "unmute": "Némítás feloldása",
       "frequencyRangeMin": "Minimum frekvencia",
       "frequencyRangeMax": "Maximum frekvencia",
-      "gainTooltip": "Spektrogram megjelenítési erősítés"
+      "gainTooltip": "Spektrogram megjelenítési erősítés",
+      "audioMonitor": "Hangmonitor"
     },
     "error": {
       "unsupported": "A böngészője nem támogatja a hang elemzést",

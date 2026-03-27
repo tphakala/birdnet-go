@@ -937,7 +937,8 @@
       "mute": "Izslēgt audio izvadi",
       "unmute": "Ieslēgt audio izvadi",
       "frequencyRangeMin": "Minimālā frekvence",
-      "frequencyRangeMax": "Maksimālā frekvence"
+      "frequencyRangeMax": "Maksimālā frekvence",
+      "audioMonitor": "Audio monitors"
     },
     "error": {
       "unsupported": "Jūsu pārlūkprogramma neatbalsta audio analīzi",

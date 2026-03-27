@@ -937,7 +937,8 @@
       "mute": "Mykistä äänilähtö",
       "unmute": "Palauta äänilähtö",
       "frequencyRangeMin": "Minimitaajuus",
-      "frequencyRangeMax": "Maksimitaajuus"
+      "frequencyRangeMax": "Maksimitaajuus",
+      "audioMonitor": "Äänimonitori"
     },
     "error": {
       "unsupported": "Selaimesi ei tue äänianalyysiä",

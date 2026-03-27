@@ -206,22 +206,27 @@
     </div>
   {/if}
 
-  <!-- Mute/Unmute toggle -->
-  <button
-    type="button"
-    onclick={onAudioOutputToggle}
-    class="rounded p-1.5 transition-colors {audioOutput
-      ? 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
-      : 'bg-[var(--color-error)]/20 text-[var(--color-error)]'}"
-    aria-label={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
-    title={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
-  >
-    {#if audioOutput}
-      <Volume2 class="size-4" />
-    {:else}
-      <VolumeX class="size-4" />
-    {/if}
-  </button>
+  <!-- Audio monitor toggle -->
+  <div class="flex items-center gap-1">
+    <span class="text-[var(--color-base-content)]/70 whitespace-nowrap">
+      {t('spectrogram.controls.audioMonitor')}
+    </span>
+    <button
+      type="button"
+      onclick={onAudioOutputToggle}
+      class="rounded p-1.5 transition-colors {audioOutput
+        ? 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'
+        : 'bg-[var(--color-error)]/20 text-[var(--color-error)]'}"
+      aria-label={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
+      title={audioOutput ? t('spectrogram.controls.mute') : t('spectrogram.controls.unmute')}
+    >
+      {#if audioOutput}
+        <Volume2 class="size-4" />
+      {:else}
+        <VolumeX class="size-4" />
+      {/if}
+    </button>
+  </div>
 
   <!-- Detection labels toggle -->
   {#if onDetectionLabelsToggle}
