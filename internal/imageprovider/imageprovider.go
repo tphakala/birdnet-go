@@ -601,19 +601,18 @@ func (c *BirdImageCache) Close() error {
 	// Set closed flag under mutex to prevent tryGo from racing with wg.Wait.
 	// The atomic store lets fast-path checks (saveToDB, etc.) bail out without
 	// the mutex. The mutex ensures tryGo sees the flag before wg.Wait runs.
+	// Early return if already closed prevents double-close of quit channel.
 	c.closeMu.Lock()
+	if c.closed.Load() {
+		c.closeMu.Unlock()
+		return nil
+	}
 	c.closed.Store(true)
 	c.closeMu.Unlock()
 
 	if c.quit != nil {
-		select {
-		case <-c.quit:
-			// Already closed
-			log.Debug("Quit channel already closed")
-		default:
-			log.Debug("Closing quit channel")
-			close(c.quit)
-		}
+		log.Debug("Closing quit channel")
+		close(c.quit)
 	}
 
 	// Wait for in-flight DB and background operations to finish.

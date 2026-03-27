@@ -31,43 +31,41 @@ func jsonEscapeString(s string) string {
 	return string(b[1 : len(b)-1])
 }
 
-// jsonEscapeTemplateMap returns a shallow copy of the map with every string
-// value (including strings nested one level inside map[string]any) replaced
-// by its JSON-escaped equivalent. This ensures that when a text/template
-// interpolates {{.Title}} into a JSON payload, special characters such as
-// quotes, newlines, and backslashes do not break the JSON syntax.
-// NOTE: Only escapes strings up to one level of map nesting. This is
-// sufficient for the current ToTemplateMap() shape where Metadata is flat.
+// jsonEscapeTemplateMap returns a deep copy of the map with every string
+// value recursively replaced by its JSON-escaped equivalent. This ensures
+// that when a text/template interpolates {{.Title}} into a JSON payload,
+// special characters such as quotes, newlines, and backslashes do not
+// break the JSON syntax.
 func jsonEscapeTemplateMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {
-		switch val := v.(type) {
-		case string:
-			out[k] = jsonEscapeString(val)
-		case map[string]any:
-			out[k] = jsonEscapeNestedMap(val)
-		default:
-			// Non-string scalars (int, float64, bool, time.Time, etc.)
-			// are safe to interpolate as-is; their fmt representation
-			// does not contain JSON-breaking characters.
-			out[k] = v
-		}
+		out[k] = jsonEscapeValue(v)
 	}
 	return out
 }
 
-// jsonEscapeNestedMap escapes string values one level deep inside a nested map.
-// This handles metadata maps like Metadata["bg_common_name"] = "Vögel \"Test\"".
-func jsonEscapeNestedMap(m map[string]any) map[string]any {
-	out := make(map[string]any, len(m))
-	for k, v := range m {
-		if s, ok := v.(string); ok {
-			out[k] = jsonEscapeString(s)
-		} else {
-			out[k] = v
+// jsonEscapeValue recursively escapes string values within maps, slices, and
+// plain strings. Non-string scalars (int, float64, bool, time.Time, etc.)
+// are returned as-is since their fmt representation cannot break JSON syntax.
+func jsonEscapeValue(v any) any {
+	switch val := v.(type) {
+	case string:
+		return jsonEscapeString(val)
+	case map[string]any:
+		out := make(map[string]any, len(val))
+		for k, nested := range val {
+			out[k] = jsonEscapeValue(nested)
 		}
+		return out
+	case []any:
+		out := make([]any, len(val))
+		for i, nested := range val {
+			out[i] = jsonEscapeValue(nested)
+		}
+		return out
+	default:
+		return v
 	}
-	return out
 }
 
 // ToTemplateMap converts a Notification into a map for template execution.
