@@ -1494,3 +1494,154 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 			"Should serve the file successfully after grace wait")
 	}
 }
+
+// TestBuildStyleSuffix tests that spectrogram style and dynamic range are correctly
+// encoded in the filename suffix to prevent serving stale cached spectrograms.
+func TestBuildStyleSuffix(t *testing.T) {
+	tests := []struct {
+		name         string
+		style        string
+		dynamicRange string
+		expected     string
+	}{
+		{
+			name:         "default style and default DR produce no suffix",
+			style:        "default",
+			dynamicRange: "100",
+			expected:     "",
+		},
+		{
+			name:         "empty style and empty DR produce no suffix",
+			style:        "",
+			dynamicRange: "",
+			expected:     "",
+		},
+		{
+			name:         "default style with empty DR produces no suffix",
+			style:        "default",
+			dynamicRange: "",
+			expected:     "",
+		},
+		{
+			name:         "scientific_dark style with default DR",
+			style:        "scientific_dark",
+			dynamicRange: "100",
+			expected:     "-scientific_dark",
+		},
+		{
+			name:         "high_contrast_dark style with default DR",
+			style:        "high_contrast_dark",
+			dynamicRange: "100",
+			expected:     "-high_contrast_dark",
+		},
+		{
+			name:         "scientific style with default DR",
+			style:        "scientific",
+			dynamicRange: "100",
+			expected:     "-scientific",
+		},
+		{
+			name:         "default style with non-default DR",
+			style:        "default",
+			dynamicRange: "80",
+			expected:     "-dr80",
+		},
+		{
+			name:         "scientific_dark style with non-default DR",
+			style:        "scientific_dark",
+			dynamicRange: "120",
+			expected:     "-scientific_dark-dr120",
+		},
+		{
+			name:         "empty style with non-default DR",
+			style:        "",
+			dynamicRange: "80",
+			expected:     "-dr80",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildStyleSuffix(tt.style, tt.dynamicRange)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildSpectrogramPathsWithStyle tests that spectrogram paths include the visual
+// style in the filename, preventing stale cached spectrograms from being served
+// after the user changes the spectrogram style setting.
+func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
+	tests := []struct {
+		name             string
+		relAudioPath     string
+		width            int
+		raw              bool
+		style            string
+		dynamicRange     string
+		expectedFilename string
+	}{
+		{
+			name:             "default style raw",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              true,
+			style:            "default",
+			dynamicRange:     "100",
+			expectedFilename: "bird_1026px.png",
+		},
+		{
+			name:             "default style with legend",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              false,
+			style:            "default",
+			dynamicRange:     "100",
+			expectedFilename: "bird_1026px-legend.png",
+		},
+		{
+			name:             "scientific_dark style raw",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              true,
+			style:            "scientific_dark",
+			dynamicRange:     "100",
+			expectedFilename: "bird_1026px-scientific_dark.png",
+		},
+		{
+			name:             "scientific_dark style with legend",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              false,
+			style:            "scientific_dark",
+			dynamicRange:     "100",
+			expectedFilename: "bird_1026px-scientific_dark-legend.png",
+		},
+		{
+			name:             "high_contrast_dark with non-default DR raw",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            514,
+			raw:              true,
+			style:            "high_contrast_dark",
+			dynamicRange:     "80",
+			expectedFilename: "bird_514px-high_contrast_dark-dr80.png",
+		},
+		{
+			name:             "empty style and DR produce backward-compatible filename",
+			relAudioPath:     "clips/2025/01/bird.wav",
+			width:            1026,
+			raw:              true,
+			style:            "",
+			dynamicRange:     "",
+			expectedFilename: "bird_1026px.png",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, filename, fullPath := buildSpectrogramPaths(tt.relAudioPath, tt.width, tt.raw, tt.style, tt.dynamicRange)
+			assert.Equal(t, tt.expectedFilename, filename)
+			assert.Equal(t, filepath.Join("clips", "2025", "01", tt.expectedFilename), fullPath)
+		})
+	}
+}

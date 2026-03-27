@@ -947,7 +947,7 @@ func (c *Controller) ProcessedSpectrogramByID(ctx echo.Context) error {
 	_ = tmpSpectrogramFile.Close()
 	defer func() { _ = os.Remove(tmpSpectrogramPath) }()
 
-	params := parseSpectrogramParameters(ctx)
+	params := c.parseSpectrogramParameters(ctx)
 	if err := c.spectrogramGenerator.GenerateFromFile(ctx.Request().Context(), tmpPath, tmpSpectrogramPath, params.width, params.raw); err != nil {
 		if ctx.Request().Context().Err() != nil {
 			return nil
@@ -1006,9 +1006,11 @@ func (c *Controller) spectrogramHTTPError(ctx echo.Context, err error) error {
 // spectrogramParameters holds parsed query parameters for spectrogram requests.
 // This struct is reusable across multiple endpoints.
 type spectrogramParameters struct {
-	width   int    // Pixel width for spectrogram
-	sizeStr string // Size parameter value (for URL generation)
-	raw     bool   // Whether to generate raw spectrogram without axes
+	width        int    // Pixel width for spectrogram
+	sizeStr      string // Size parameter value (for URL generation)
+	raw          bool   // Whether to generate raw spectrogram without axes
+	style        string // Visual style preset (from settings, used in filename to prevent stale cache)
+	dynamicRange string // Dynamic range in dB (from settings, used in filename to prevent stale cache)
 }
 
 // parseSpectrogramParameters extracts and validates spectrogram parameters from the request.
@@ -1018,11 +1020,17 @@ type spectrogramParameters struct {
 //   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
 //   - width: Legacy parameter for custom width (1-2000px). Ignored if 'size' is present.
 //   - raw: Whether to generate raw spectrogram without axes/legends
-func parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
+//
+// Style and dynamic range are read from settings (not query params) because they are
+// global settings that affect the visual appearance of all spectrograms. Including them
+// in the filename prevents serving stale cached spectrograms when these settings change.
+func (c *Controller) parseSpectrogramParameters(ctx echo.Context) spectrogramParameters {
 	params := spectrogramParameters{
-		width:   SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
-		sizeStr: ctx.QueryParam("size"),
-		raw:     parseRawParameter(ctx.QueryParam("raw")),
+		width:        SpectrogramSizeLg, // Default width (lg) - single render size for all contexts
+		sizeStr:      ctx.QueryParam("size"),
+		raw:          parseRawParameter(ctx.QueryParam("raw")),
+		style:        c.Settings.Realtime.Dashboard.Spectrogram.Style,
+		dynamicRange: c.Settings.Realtime.Dashboard.Spectrogram.DynamicRange,
 	}
 
 	// Parse size parameter
@@ -1106,7 +1114,7 @@ func (c *Controller) handleUserRequestedMode(ctx echo.Context, noteID, clipPath 
 
 	if err == nil {
 		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
 
 		// Check if spectrogram already exists and is non-empty
 		if statInfo, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil && statInfo.Size() > 0 {
@@ -1176,7 +1184,7 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 func (c *Controller) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters) error {
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange)
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
@@ -1299,7 +1307,7 @@ func (c *Controller) ServeSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Parse query parameters
-	params := parseSpectrogramParameters(ctx)
+	params := c.parseSpectrogramParameters(ctx)
 
 	// Log request details
 	c.logDebugIfEnabled("Spectrogram requested by ID",
@@ -1378,8 +1386,12 @@ func (c *Controller) ServeSpectrogram(ctx echo.Context) error {
 	// Parse raw spectrogram parameter
 	raw := parseRawParameter(ctx.QueryParam("raw"))
 
+	// Read style settings for filename generation (prevents serving stale cached spectrograms)
+	style := c.Settings.Realtime.Dashboard.Spectrogram.Style
+	dynamicRange := c.Settings.Realtime.Dashboard.Spectrogram.DynamicRange
+
 	// Pass the request context for cancellation/timeout
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, width, raw, style, dynamicRange)
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -1438,7 +1450,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Parse query parameters using shared helper
-	params := parseSpectrogramParameters(ctx)
+	params := c.parseSpectrogramParameters(ctx)
 
 	// Build spectrogram path and key for status lookup
 	// Must compute relSpectrogramPath BEFORE checking queue to ensure consistent key format
@@ -1460,7 +1472,7 @@ func (c *Controller) GetSpectrogramStatus(ctx echo.Context) error {
 	}
 
 	// Build spectrogram path and key
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
 	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
 	// Check queue status first (more volatile state)
@@ -1546,7 +1558,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Parse query parameters using shared helper
-	params := parseSpectrogramParameters(ctx)
+	params := c.parseSpectrogramParameters(ctx)
 
 	// Log request details
 	c.logDebugIfEnabled("Spectrogram generation requested by user",
@@ -1574,7 +1586,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 	}
 
 	// Build spectrogram paths and key (path is validated at this point)
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw)
+	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange)
 	spectrogramKey := buildSpectrogramKey(relSpectrogramPath, params.width, params.raw)
 
 	// Check if file already exists on disk and is non-empty
@@ -1643,7 +1655,7 @@ func (c *Controller) GenerateSpectrogramByID(ctx echo.Context) error {
 		bgCtx, cancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer cancel()
 
-		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw)
+		spectrogramPath, err := c.generateSpectrogram(bgCtx, clipPath, params.width, params.raw, params.style, params.dynamicRange)
 
 		if err != nil {
 			// Update queue status so polling clients see the failure
@@ -1782,18 +1794,28 @@ func getSpectrogramLogger() logger.Logger {
 
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
 // It returns the base filename, audio directory, spectrogram filename, and full relative spectrogram path.
-func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
+//
+// The style and dynamicRange parameters are embedded in the filename to prevent serving
+// stale cached spectrograms when visual settings change. For backward compatibility,
+// the default style ("default") and default dynamic range ("100"/empty) produce the same
+// filename format as before (no style/DR suffix).
+func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dynamicRange string) (relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath string) {
 	// Get the base filename and directory relative to the secure root
 	relBaseFilename = strings.TrimSuffix(filepath.Base(relAudioPath), filepath.Ext(relAudioPath))
 	relAudioDir = filepath.Dir(relAudioPath)
 
-	// Generate spectrogram filename compatible with old HTMX API format
+	// Build style suffix for non-default visual settings.
+	// Default style ("default" or empty) and default dynamic range ("100" or empty)
+	// produce no suffix for backward compatibility with existing cached spectrograms.
+	styleSuffix := buildStyleSuffix(style, dynamicRange)
+
+	// Generate spectrogram filename with style suffix
 	if raw {
-		// Raw spectrograms use format: filename_1026px.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx.png", relBaseFilename, width)
+		// Raw spectrograms use format: filename_1026px.png (default) or filename_1026px-scientific_dark.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx%s.png", relBaseFilename, width, styleSuffix)
 	} else {
-		// Spectrograms with legends use suffix: filename_1026px-legend.png
-		spectrogramFilename = fmt.Sprintf("%s_%dpx-legend.png", relBaseFilename, width)
+		// Spectrograms with legends: filename_1026px-legend.png (default) or filename_1026px-scientific_dark-legend.png
+		spectrogramFilename = fmt.Sprintf("%s_%dpx%s-legend.png", relBaseFilename, width, styleSuffix)
 	}
 
 	// Since we're constructing the spectrogram path from an already-validated audio path
@@ -1802,6 +1824,27 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool) (relBaseFil
 	relSpectrogramPath = filepath.Join(relAudioDir, spectrogramFilename)
 
 	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
+}
+
+// buildStyleSuffix returns a filename suffix encoding visual style settings.
+// Returns empty string for default settings (backward compatibility).
+// Examples: "" (default), "-scientific_dark", "-scientific_dark-dr80"
+func buildStyleSuffix(style, dynamicRange string) string {
+	isDefaultStyle := style == "" || style == conf.SpectrogramStyleDefault
+	isDefaultDR := dynamicRange == "" || dynamicRange == conf.SpectrogramDynamicRangeStandard
+
+	if isDefaultStyle && isDefaultDR {
+		return ""
+	}
+
+	var suffix string
+	if !isDefaultStyle {
+		suffix = "-" + style
+	}
+	if !isDefaultDR {
+		suffix += "-dr" + dynamicRange
+	}
+	return suffix
 }
 
 // buildSpectrogramKey generates a consistent unique key for spectrogram queue management.
@@ -2488,12 +2531,14 @@ func (c *Controller) generateWithFallback(ctx context.Context, absAudioPath, abs
 // It accepts a context for cancellation and timeout.
 // It returns the relative path to the generated spectrogram, suitable for use with c.SFS.ServeFile.
 // Optimized: Fast path check happens before expensive audio validation.
-func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool) (string, error) {
+func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange string) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
 		logger.String("audio_path", audioPath),
 		logger.Int("width", width),
 		logger.Bool("raw", raw),
+		logger.String("style", style),
+		logger.String("dynamic_range", dynamicRange),
 		logger.String("request_time", start.Format(time.DateTime)))
 
 	// Step 1: Normalize and validate path
@@ -2503,7 +2548,7 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 	}
 
 	// Step 2: Calculate spectrogram paths early (needed for fast path check)
-	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw)
+	relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange)
 
 	getSpectrogramLogger().Debug("Spectrogram path constructed",
 		logger.String("audio_path", audioPath),
