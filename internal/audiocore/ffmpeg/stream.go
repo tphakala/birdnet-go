@@ -1848,6 +1848,8 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 			logger.String("url", s.config.safeURL()),
 			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", ctx.ErrorType),
+			logger.String("target_host", targetHost),
+			logger.Int("target_port", ctx.TargetPort),
 			logger.String("steps", strings.Join(ctx.TroubleShooting, "; ")),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_troubleshooting"))
@@ -1856,6 +1858,8 @@ func (s *Stream) recordErrorContext(ctx *ErrorContext) {
 		log.Debug("FFmpeg raw error output",
 			logger.String("source_id", s.config.SourceID),
 			logger.String("error_type", ctx.ErrorType),
+			logger.String("target_host", targetHost),
+			logger.Int("target_port", ctx.TargetPort),
 			logger.String("ffmpeg_output", ctx.RawFFmpegOutput),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "error_raw_output"))
