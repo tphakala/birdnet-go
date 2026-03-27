@@ -260,11 +260,13 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 // resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
 // Returns the absolute path and any error encountered.
 func resolveAndValidateMediaPath(configPath string) (string, error) {
-	if configPath == "" {
-		return "", fmt.Errorf("settings.realtime.audio.export.path must not be empty")
-	}
-
 	mediaPath := configPath
+	if mediaPath == "" {
+		mediaPath = defaultExportPath
+		GetLogger().Warn("Audio export path is empty, using default",
+			logger.String("default_path", defaultExportPath),
+		)
+	}
 
 	// Resolve relative path to absolute based on working directory
 	if !filepath.IsAbs(mediaPath) {
