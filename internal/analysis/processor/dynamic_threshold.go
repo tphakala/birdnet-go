@@ -304,12 +304,17 @@ func (p *Processor) cleanUpDynamicThresholds() {
 // This removes both the in-memory threshold and the database records.
 // The error return is always nil as database errors are logged internally
 // and the operation is best-effort for database cleanup.
+//
+// The mutex is held for the entire operation (memory clear + DB delete) to
+// prevent a race where a new detection inserts data between the memory clear
+// and the DB delete, causing the DB delete to wipe the newly-inserted record.
 func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	log := GetLogger()
 	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
 	speciesName = strings.ToLower(speciesName)
 
-	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
+	// Lock the mutex for the entire operation to prevent races between
+	// memory clear and DB delete. See drainPendingResets for the pattern.
 	p.thresholdsMutex.Lock()
 
 	// Remove from in-memory map and mark as pending reset so the periodic
@@ -318,9 +323,9 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	if p.pendingResets != nil {
 		p.pendingResets[speciesName] = struct{}{}
 	}
-	p.thresholdsMutex.Unlock()
 
-	// Delete from database
+	// Delete from database while still holding the lock to prevent a concurrent
+	// detection from inserting new data that this delete would then wipe.
 	if p.Ds != nil {
 		// Delete the threshold record
 		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
@@ -333,6 +338,7 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 			log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(err))
 		}
 	}
+	p.thresholdsMutex.Unlock()
 
 	log.Info("reset dynamic threshold", logger.String("species", speciesName))
 	return nil
@@ -342,9 +348,14 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 // Returns the count of reset thresholds. The error return is always nil as database
 // errors are logged internally and the operation is best-effort for database cleanup;
 // in-memory reset is always successful.
+//
+// The mutex is held for the entire operation (memory clear + DB delete) to
+// prevent a race where a new detection inserts data between the memory clear
+// and the DB delete, causing the DB delete to wipe the newly-inserted record.
 func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	log := GetLogger()
-	// Lock the mutex to ensure thread-safe access to the DynamicThresholds map
+	// Lock the mutex for the entire operation to prevent races between
+	// memory clear and DB delete. See drainPendingResets for the pattern.
 	p.thresholdsMutex.Lock()
 
 	// Count in-memory thresholds
@@ -358,9 +369,9 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	if p.pendingResets != nil {
 		p.pendingResets = make(map[string]struct{})
 	}
-	p.thresholdsMutex.Unlock()
 
-	// Delete all from database
+	// Delete all from database while still holding the lock to prevent a
+	// concurrent detection from inserting new data that this delete would wipe.
 	if p.Ds != nil {
 		dbCount, err := p.Ds.DeleteAllDynamicThresholds()
 		if err != nil {
@@ -378,6 +389,7 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 			log.Warn("failed to delete all threshold events from database", logger.Error(err))
 		}
 	}
+	p.thresholdsMutex.Unlock()
 
 	log.Info("reset all dynamic thresholds", logger.Int64("count", count))
 	return count, nil

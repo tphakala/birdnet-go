@@ -21,6 +21,12 @@ const (
 	// while errors are still being suppressed. This provides periodic visibility
 	// without flooding.
 	suppressionReminderInterval = 5 * time.Minute
+
+	// defaultStaleEntryMaxAge is the default duration after which an error state
+	// entry with no recent activity is considered stale and eligible for eviction.
+	// This prevents the states map from growing unbounded when providers are
+	// abandoned (removed from config, renamed, etc.) without a RecordSuccess call.
+	defaultStaleEntryMaxAge = 24 * time.Hour
 )
 
 // providerErrorState tracks the suppression state for a single provider.
@@ -44,16 +50,24 @@ type providerErrorState struct {
 	sampleError string
 }
 
+// cleanupInterval controls how often the stale-entry cleanup runs
+// within ShouldReport. This avoids scanning on every single call.
+const cleanupInterval = 1 * time.Hour
+
 // ErrorSuppressor tracks per-provider error state and suppresses repeated
 // identical errors from flooding Sentry and logs. It allows the first error
 // through, then suppresses until recovery or a periodic reminder interval.
 //
+// Stale entries (from providers that were abandoned without recovery) are
+// periodically evicted to prevent unbounded map growth.
+//
 // Thread-safe for concurrent use.
 type ErrorSuppressor struct {
-	mu       sync.Mutex
-	states   map[string]*providerErrorState
-	log      logger.Logger
-	reporter TelemetryReporter
+	mu          sync.Mutex
+	states      map[string]*providerErrorState
+	lastCleanup time.Time // last time stale entries were evicted
+	log         logger.Logger
+	reporter    TelemetryReporter
 }
 
 // NewErrorSuppressor creates a new ErrorSuppressor instance.
@@ -69,10 +83,15 @@ func NewErrorSuppressor(log logger.Logger, reporter TelemetryReporter) *ErrorSup
 // reported to telemetry/logs. Returns true for the first failure and for
 // periodic reminders. Returns false when the error should be suppressed.
 //
+// Also periodically evicts stale entries to bound map growth.
+//
 // The caller should only report to Sentry/log when this returns true.
 func (es *ErrorSuppressor) ShouldReport(providerName string) bool {
 	es.mu.Lock()
 	defer es.mu.Unlock()
+
+	// Periodically evict stale entries to prevent unbounded map growth
+	es.cleanupStaleEntriesLocked(defaultStaleEntryMaxAge)
 
 	state := es.getOrCreateState(providerName)
 	state.consecutiveFailures++
@@ -154,6 +173,48 @@ func (es *ErrorSuppressor) GetSuppressedCount(providerName string) int {
 		return 0
 	}
 	return state.consecutiveFailures
+}
+
+// CleanupStaleEntries removes provider error states that have had no activity
+// (no failures recorded) for longer than maxAge. This prevents the states map
+// from growing unbounded when providers are abandoned without a RecordSuccess call.
+//
+// Can be called explicitly for testing or external coordination. For normal
+// operation, stale entries are also evicted automatically during ShouldReport.
+func (es *ErrorSuppressor) CleanupStaleEntries(maxAge time.Duration) int {
+	es.mu.Lock()
+	defer es.mu.Unlock()
+
+	return es.doCleanupStaleEntries(maxAge)
+}
+
+// cleanupStaleEntriesLocked runs the stale-entry eviction at most once per
+// cleanupInterval. Must be called with es.mu held.
+func (es *ErrorSuppressor) cleanupStaleEntriesLocked(maxAge time.Duration) {
+	now := time.Now()
+	if now.Sub(es.lastCleanup) < cleanupInterval {
+		return
+	}
+	es.lastCleanup = now
+	removed := es.doCleanupStaleEntries(maxAge)
+	if removed > 0 && es.log != nil {
+		es.log.Debug("evicted stale error suppressor entries",
+			logger.Int("removed", removed),
+			logger.Int("remaining", len(es.states)))
+	}
+}
+
+// doCleanupStaleEntries removes entries older than maxAge. Must be called with es.mu held.
+func (es *ErrorSuppressor) doCleanupStaleEntries(maxAge time.Duration) int {
+	now := time.Now()
+	removed := 0
+	for name, state := range es.states {
+		if now.Sub(state.lastFailureTime) > maxAge {
+			delete(es.states, name)
+			removed++
+		}
+	}
+	return removed
 }
 
 // getOrCreateState returns the error state for a provider, creating one if needed.
