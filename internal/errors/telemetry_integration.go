@@ -51,10 +51,12 @@ var (
 		"no route to host",
 		"connection refused",
 		"connection reset by peer",
-		"server misbehaving", // DNS failure
-		"no such host",       // DNS failure
+		"server misbehaving",    // DNS failure
+		"no such host",          // DNS failure
+		"dns resolution failed", // DNS failure (BirdWeather wrapper)
 		"network is unreachable",
 		"i/o timeout",
+		"context deadline exceeded", // Upload/request timeout
 		"tls handshake timeout",
 		"eof", // Connection lost (e.g., MQTT broker disconnect)
 	}
@@ -186,9 +188,11 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
-	// Filter out network infrastructure errors (user's network/DNS issues)
+	// Filter out network infrastructure errors (user's network/DNS issues).
+	// CategoryIntegration is included because external service errors (e.g., BirdWeather)
+	// often wrap transient network failures that are not code bugs.
 	switch ee.Category { //nolint:exhaustive // only network-related categories need this filter
-	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP:
+	case CategoryNetwork, CategoryMQTTConnection, CategoryMQTTPublish, CategoryRTSP, CategoryHTTP, CategoryIntegration:
 		for _, pattern := range networkNoisePatterns {
 			if strings.Contains(errorMsg, pattern) {
 				return false
