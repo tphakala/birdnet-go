@@ -3,6 +3,7 @@ package dbstats
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
@@ -69,15 +70,18 @@ func RegisterCallbacks(db *gorm.DB, counters *Counters) {
 	_ = db.Callback().Row().After("*").Register("dbstats:after_row", afterFn(counters.RecordRead))
 }
 
-// isBusyError checks if a GORM error is a SQLite SQLITE_BUSY or SQLITE_LOCKED
-// error using the mattn/go-sqlite3 typed error. This avoids brittle string
-// matching against error messages.
+// isBusyError checks if a GORM error is a SQLite SQLITE_BUSY or SQLITE_LOCKED error.
+// Prefers typed sqlite3.Error check but falls back to string matching because GORM's
+// SQLite driver may not preserve the original error type in the error chain.
 func isBusyError(err error) bool {
 	if err == nil {
 		return false
 	}
+	// Typed check: works when the original sqlite3.Error is preserved in the chain.
 	if sqliteErr, ok := errors.AsType[sqlite3.Error](err); ok {
 		return sqliteErr.Code == sqlite3.ErrBusy || sqliteErr.Code == sqlite3.ErrLocked
 	}
-	return false
+	// String fallback: GORM may wrap the error without preserving sqlite3.Error.
+	errStr := strings.ToLower(err.Error())
+	return strings.Contains(errStr, "database is locked") || strings.Contains(errStr, "sqlite_busy")
 }
