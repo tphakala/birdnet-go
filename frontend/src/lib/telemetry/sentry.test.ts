@@ -92,7 +92,7 @@ describe('beforeSend privacy filtering', () => {
     expect((result as Sentry.ErrorEvent).server_name).toBeUndefined();
   });
 
-  it('scrubs main event request URL query params', () => {
+  it('scrubs same-origin request URL to path only', () => {
     const origin = globalThis.location.origin;
     const event = {
       type: undefined,
@@ -102,7 +102,16 @@ describe('beforeSend privacy filtering', () => {
     expect(result.request?.url).toBe('/settings');
   });
 
-  it('scrubs breadcrumb fetch URLs to path only', () => {
+  it('preserves external origin in request URL', () => {
+    const event = {
+      type: undefined,
+      request: { url: 'https://api.example.com/v1/data?key=secret' },
+    } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, {} as Sentry.EventHint) as Sentry.ErrorEvent;
+    expect(result.request?.url).toBe('https://api.example.com/v1/data');
+  });
+
+  it('scrubs same-origin breadcrumb URLs to path only', () => {
     const origin = globalThis.location.origin;
     const event = {
       type: undefined,
@@ -232,5 +241,84 @@ describe('captureError', () => {
 
     expect(() => captureError(error)).not.toThrow();
     expect(Sentry.captureException).toHaveBeenCalledWith(error);
+  });
+
+  it('scrubs URL-like string values in context', () => {
+    const error = new Error('test error');
+    const mockScope = {
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation(((callback: (scope: unknown) => void) => {
+      callback(mockScope);
+    }) as typeof Sentry.withScope);
+
+    captureError(error, {
+      category: 'ui',
+      endpoint: 'https://birdnet.local/api/v2/settings?apiKey=secret',
+      path: '/api/v2/detections?token=abc',
+      action: 'save',
+    });
+
+    expect(mockScope.setContext).toHaveBeenCalledWith('logger', {
+      endpoint: 'https://birdnet.local/api/v2/settings',
+      path: '/api/v2/detections',
+      action: 'save',
+    });
+  });
+
+  it('redacts sensitive key names in context', () => {
+    const error = new Error('test error');
+    const mockScope = {
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation(((callback: (scope: unknown) => void) => {
+      callback(mockScope);
+    }) as typeof Sentry.withScope);
+
+    captureError(error, {
+      category: 'auth',
+      token: 'my-secret-token',
+      password: 'hunter2',
+      email: 'user@example.com',
+      ip: '192.168.1.1',
+      action: 'login',
+    });
+
+    expect(mockScope.setContext).toHaveBeenCalledWith('logger', {
+      token: '[redacted]',
+      password: '[redacted]',
+      email: '[redacted]',
+      ip: '[redacted]',
+      action: 'login',
+    });
+  });
+
+  it('passes non-sensitive non-URL values through unchanged', () => {
+    const error = new Error('test error');
+    const mockScope = {
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation(((callback: (scope: unknown) => void) => {
+      callback(mockScope);
+    }) as typeof Sentry.withScope);
+
+    captureError(error, {
+      category: 'ui',
+      component: 'Dashboard',
+      count: 42,
+      enabled: true,
+    });
+
+    expect(mockScope.setContext).toHaveBeenCalledWith('logger', {
+      component: 'Dashboard',
+      count: 42,
+      enabled: true,
+    });
   });
 });

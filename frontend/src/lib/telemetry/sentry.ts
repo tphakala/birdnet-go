@@ -111,18 +111,44 @@ export function captureError(
         Object.entries(context).filter(([key]) => key !== 'category')
       );
       if (Object.keys(rest).length > 0) {
-        scope.setContext('logger', rest);
+        scope.setContext('logger', scrubContext(rest));
       }
     }
     Sentry.captureException(error);
   });
 }
 
+/** Property names whose values are always redacted (case-insensitive match). */
+const SENSITIVE_KEYS =
+  /^(token|password|secret|apikey|api_key|authorization|cookie|session|sessionid|session_id|ip|ip_address|email|credentials?)$/i;
+
+/** Heuristic: does a string value look like a URL? */
+function looksLikeUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value) || (value.startsWith('/') && value.includes('/', 1));
+}
+
 /**
- * Scrub a URL for privacy. For same-origin URLs, strip to pathname only.
- * For external URLs (e.g., api.github.com), preserve origin + pathname
- * so the domain context is retained, but still drop query params/fragments.
+ * Scrub a single context entry for PII.
+ * - Sensitive key names are redacted entirely.
+ * - String values that look like URLs are run through scrubUrl().
+ * - Everything else passes through unchanged.
  */
+function scrubContextValue(key: string, value: unknown): unknown {
+  if (SENSITIVE_KEYS.test(key)) return '[redacted]';
+  if (typeof value === 'string' && looksLikeUrl(value)) return scrubUrl(value);
+  return value;
+}
+
+/** Scrub all entries in a context record for PII before sending to Sentry. */
+function scrubContext(context: Record<string, unknown>): Record<string, unknown> {
+  const scrubbed: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(context)) {
+    scrubbed[key] = scrubContextValue(key, value); // eslint-disable-line security/detect-object-injection -- iterating own Record entries
+  }
+  return scrubbed;
+}
+
+/** Scrub a URL for privacy: strip query params and fragments, keep path. */
 function scrubUrl(raw: string): string {
   try {
     const url = new URL(raw, globalThis.location.origin);
