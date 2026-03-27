@@ -248,8 +248,8 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 		orderSet := make(map[string]struct{})
 
 		for _, sp := range speciesList {
-			_, meta, err := c.TaxonomyDB.GetGenusByScientificName(sp.ScientificName)
-			if err != nil {
+			_, meta, ok := c.TaxonomyDB.LookupGenusByScientificName(sp.ScientificName)
+			if !ok {
 				continue // Species not in taxonomy DB — skip gracefully
 			}
 

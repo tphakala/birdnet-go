@@ -311,14 +311,14 @@ func applyBirdNETSynonyms(speciesIndex map[string]string) {
 		logger.Int("count", applied))
 }
 
-// GetGenusByScientificName retrieves genus metadata by scientific name
-// Returns the genus name and metadata, or error if not found
-func (db *TaxonomyDatabase) GetGenusByScientificName(scientificName string) (string, *GenusMetadata, error) {
+// LookupGenusByScientificName retrieves genus metadata by scientific name without
+// generating telemetry errors for missing species. This is the preferred method for
+// batch lookups where not-found results are expected (e.g., non-bird species in
+// BirdNET labels like frogs, insects, or mammals).
+// Returns the genus name, metadata, and a boolean indicating whether the lookup succeeded.
+func (db *TaxonomyDatabase) LookupGenusByScientificName(scientificName string) (string, *GenusMetadata, bool) {
 	if db == nil || db.SpeciesIndex == nil {
-		return "", nil, errors.Newf("taxonomy database not initialized").
-			Category(errors.CategorySystem).
-			Component("birdnet-genus").
-			Build()
+		return "", nil, false
 	}
 
 	// Normalize the scientific name (lowercase for case-insensitive lookup)
@@ -327,16 +327,43 @@ func (db *TaxonomyDatabase) GetGenusByScientificName(scientificName string) (str
 	// Look up genus from species index
 	genusName, exists := db.SpeciesIndex[normalized]
 	if !exists {
-		return "", nil, errors.Newf("species '%s' not found in taxonomy database", scientificName).
-			Category(errors.CategoryNotFound).
-			Context("scientific_name", scientificName).
-			Component("birdnet-genus").
-			Build()
+		return "", nil, false
 	}
 
 	// Get genus metadata
 	genusMetadata, exists := db.Genera[genusName]
 	if !exists {
+		return "", nil, false
+	}
+
+	return genusName, genusMetadata, true
+}
+
+// GetGenusByScientificName retrieves genus metadata by scientific name.
+// Returns the genus name and metadata, or a telemetry-reported error if not found.
+// For batch lookups where not-found is expected, use LookupGenusByScientificName instead.
+func (db *TaxonomyDatabase) GetGenusByScientificName(scientificName string) (string, *GenusMetadata, error) {
+	genusName, meta, ok := db.LookupGenusByScientificName(scientificName)
+	if !ok {
+		if db == nil || db.SpeciesIndex == nil {
+			return "", nil, errors.Newf("taxonomy database not initialized").
+				Category(errors.CategorySystem).
+				Component("birdnet-genus").
+				Build()
+		}
+
+		// Normalize for error context
+		normalized := strings.ToLower(strings.TrimSpace(scientificName))
+		if _, exists := db.SpeciesIndex[normalized]; !exists {
+			return "", nil, errors.Newf("species '%s' not found in taxonomy database", scientificName).
+				Category(errors.CategoryNotFound).
+				Context("scientific_name", scientificName).
+				Component("birdnet-genus").
+				Build()
+		}
+
+		// Species found but genus metadata missing (data integrity issue)
+		genusName := db.SpeciesIndex[normalized]
 		return "", nil, errors.Newf("genus '%s' metadata not found", genusName).
 			Category(errors.CategoryNotFound).
 			Context("genus", genusName).
@@ -345,11 +372,35 @@ func (db *TaxonomyDatabase) GetGenusByScientificName(scientificName string) (str
 			Build()
 	}
 
-	return genusName, genusMetadata, nil
+	return genusName, meta, nil
 }
 
-// GetAllSpeciesInGenus returns all species in a given genus
+// LookupAllSpeciesInGenus returns all species in a given genus without generating
+// telemetry errors. Returns nil if the genus is not found or the database is not initialized.
+// This is the preferred method when not-found results are expected.
+func (db *TaxonomyDatabase) LookupAllSpeciesInGenus(genusName string) []string {
+	if db == nil || db.Genera == nil {
+		return nil
+	}
+
+	normalized := strings.ToLower(strings.TrimSpace(genusName))
+
+	genusMetadata, exists := db.Genera[normalized]
+	if !exists {
+		return nil
+	}
+
+	return slices.Clone(genusMetadata.Species)
+}
+
+// GetAllSpeciesInGenus returns all species in a given genus.
+// For batch lookups where not-found is expected, use LookupAllSpeciesInGenus instead.
 func (db *TaxonomyDatabase) GetAllSpeciesInGenus(genusName string) ([]string, error) {
+	species := db.LookupAllSpeciesInGenus(genusName)
+	if species != nil {
+		return species, nil
+	}
+
 	if db == nil || db.Genera == nil {
 		return nil, errors.Newf("taxonomy database not initialized").
 			Category(errors.CategorySystem).
@@ -357,45 +408,28 @@ func (db *TaxonomyDatabase) GetAllSpeciesInGenus(genusName string) ([]string, er
 			Build()
 	}
 
-	// Normalize genus name (lowercase)
-	normalized := strings.ToLower(strings.TrimSpace(genusName))
-
-	genusMetadata, exists := db.Genera[normalized]
-	if !exists {
-		return nil, errors.Newf("genus '%s' not found in taxonomy database", genusName).
-			Category(errors.CategoryNotFound).
-			Context("genus", genusName).
-			Component("birdnet-genus").
-			Build()
-	}
-
-	// Return a copy to prevent mutation of internal state
-	return slices.Clone(genusMetadata.Species), nil
+	return nil, errors.Newf("genus '%s' not found in taxonomy database", genusName).
+		Category(errors.CategoryNotFound).
+		Context("genus", genusName).
+		Component("birdnet-genus").
+		Build()
 }
 
-// GetAllSpeciesInFamily returns all species in a given family
-func (db *TaxonomyDatabase) GetAllSpeciesInFamily(familyName string) ([]string, error) {
+// LookupAllSpeciesInFamily returns all species in a given family without generating
+// telemetry errors. Returns nil if the family is not found or the database is not initialized.
+// This is the preferred method when not-found results are expected.
+func (db *TaxonomyDatabase) LookupAllSpeciesInFamily(familyName string) []string {
 	if db == nil || db.Families == nil || db.Genera == nil {
-		return nil, errors.Newf("taxonomy database not initialized").
-			Category(errors.CategorySystem).
-			Component("birdnet-genus").
-			Build()
+		return nil
 	}
 
-	// Normalize family name (lowercase)
 	normalized := strings.ToLower(strings.TrimSpace(familyName))
 
 	familyMetadata, exists := db.Families[normalized]
 	if !exists {
-		return nil, errors.Newf("family '%s' not found in taxonomy database", familyName).
-			Category(errors.CategoryNotFound).
-			Context("family", familyName).
-			Component("birdnet-genus").
-			Build()
+		return nil
 	}
 
-	// Collect all species from all genera in the family
-	// Preallocate with known species count for efficiency
 	allSpecies := make([]string, 0, familyMetadata.SpeciesCount)
 	for _, genusName := range familyMetadata.Genera {
 		genusMetadata, exists := db.Genera[genusName]
@@ -404,12 +438,17 @@ func (db *TaxonomyDatabase) GetAllSpeciesInFamily(familyName string) ([]string, 
 		}
 	}
 
-	return allSpecies, nil
+	return allSpecies
 }
 
-// GetAllSpeciesInOrder returns all species belonging to a taxonomic order.
-// This iterates over all families to find those matching the order.
-func (db *TaxonomyDatabase) GetAllSpeciesInOrder(orderName string) ([]string, error) {
+// GetAllSpeciesInFamily returns all species in a given family.
+// For batch lookups where not-found is expected, use LookupAllSpeciesInFamily instead.
+func (db *TaxonomyDatabase) GetAllSpeciesInFamily(familyName string) ([]string, error) {
+	species := db.LookupAllSpeciesInFamily(familyName)
+	if species != nil {
+		return species, nil
+	}
+
 	if db == nil || db.Families == nil || db.Genera == nil {
 		return nil, errors.Newf("taxonomy database not initialized").
 			Category(errors.CategorySystem).
@@ -417,29 +456,57 @@ func (db *TaxonomyDatabase) GetAllSpeciesInOrder(orderName string) ([]string, er
 			Build()
 	}
 
+	return nil, errors.Newf("family '%s' not found in taxonomy database", familyName).
+		Category(errors.CategoryNotFound).
+		Context("family", familyName).
+		Component("birdnet-genus").
+		Build()
+}
+
+// LookupAllSpeciesInOrder returns all species belonging to a taxonomic order without
+// generating telemetry errors. Returns nil if the order is not found or the database
+// is not initialized. This is the preferred method when not-found results are expected.
+func (db *TaxonomyDatabase) LookupAllSpeciesInOrder(orderName string) []string {
+	if db == nil || db.Families == nil || db.Genera == nil {
+		return nil
+	}
+
 	normalized := strings.ToLower(strings.TrimSpace(orderName))
 	var allSpecies []string
-	found := false
 
 	for familyName, familyMeta := range db.Families {
 		if strings.EqualFold(familyMeta.Order, normalized) {
-			found = true
-			species, err := db.GetAllSpeciesInFamily(familyName)
-			if err == nil {
+			species := db.LookupAllSpeciesInFamily(familyName)
+			if species != nil {
 				allSpecies = append(allSpecies, species...)
 			}
 		}
 	}
 
-	if !found {
-		return nil, errors.Newf("order '%s' not found in taxonomy database", orderName).
-			Category(errors.CategoryNotFound).
-			Context("order", orderName).
+	return allSpecies
+}
+
+// GetAllSpeciesInOrder returns all species belonging to a taxonomic order.
+// This iterates over all families to find those matching the order.
+// For batch lookups where not-found is expected, use LookupAllSpeciesInOrder instead.
+func (db *TaxonomyDatabase) GetAllSpeciesInOrder(orderName string) ([]string, error) {
+	species := db.LookupAllSpeciesInOrder(orderName)
+	if species != nil {
+		return species, nil
+	}
+
+	if db == nil || db.Families == nil || db.Genera == nil {
+		return nil, errors.Newf("taxonomy database not initialized").
+			Category(errors.CategorySystem).
 			Component("birdnet-genus").
 			Build()
 	}
 
-	return allSpecies, nil
+	return nil, errors.Newf("order '%s' not found in taxonomy database", orderName).
+		Category(errors.CategoryNotFound).
+		Context("order", orderName).
+		Component("birdnet-genus").
+		Build()
 }
 
 // GetSpeciesTree builds a complete taxonomic tree for a species
