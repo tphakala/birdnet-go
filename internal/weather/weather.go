@@ -167,9 +167,9 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 		getLogger().Info("Weather provider not configured, weather service disabled")
 		return nil, ErrWeatherDisabled
 	default:
-		// Unrecognized provider — log and treat as disabled rather than
+		// Unrecognized provider — warn and treat as disabled rather than
 		// raising an error to Sentry (this is a user configuration issue)
-		getLogger().Info("Unrecognized weather provider, weather service disabled",
+		getLogger().Warn("Unrecognized weather provider, weather service disabled",
 			logger.String("provider", settings.Realtime.Weather.Provider))
 		return nil, ErrWeatherDisabled
 	}

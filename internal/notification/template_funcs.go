@@ -36,6 +36,8 @@ func jsonEscapeString(s string) string {
 // by its JSON-escaped equivalent. This ensures that when a text/template
 // interpolates {{.Title}} into a JSON payload, special characters such as
 // quotes, newlines, and backslashes do not break the JSON syntax.
+// NOTE: Only escapes strings up to one level of map nesting. This is
+// sufficient for the current ToTemplateMap() shape where Metadata is flat.
 func jsonEscapeTemplateMap(m map[string]any) map[string]any {
 	out := make(map[string]any, len(m))
 	for k, v := range m {

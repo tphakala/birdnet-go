@@ -123,7 +123,8 @@ func (b *BirdImage) GetTTL() time.Duration {
 // Shutdown Safety: The closed flag and wg WaitGroup coordinate graceful shutdown.
 // closed is set first to prevent new DB operations, then Close waits for in-flight
 // operations to complete via wg before returning. This prevents "database is closed"
-// errors from goroutines that outlive the DB connection.
+// errors from goroutines that outlive the DB connection. All goroutine spawns MUST use
+// tryGo() instead of bare wg.Go() to prevent Add-after-Wait panics.
 type BirdImageCache struct {
 	provider     atomic.Pointer[ImageProvider] // Atomic pointer for lock-free concurrent access
 	providerName string                        // Added: Name of the provider (e.g., "wikimedia")
@@ -314,7 +315,7 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 		logger.Duration("ttl", defaultCacheTTL),
 		logger.Duration("interval", refreshInterval))
 
-	go func() {
+	c.wg.Go(func() {
 		ticker := time.NewTicker(refreshInterval)
 		defer ticker.Stop()
 
@@ -332,7 +333,7 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 				c.refreshStaleEntries()
 			}
 		}
-	}()
+	})
 }
 
 // refreshStaleEntries refreshes cache entries that are older than TTL
@@ -509,8 +510,8 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				c.metrics.IncrementImageDownloads()
 			}
 			// Download fallback image to file cache using dbCopy which has the corrected SourceProvider
-			if c.fileCache != nil && !c.closed.Load() {
-				c.wg.Go(func() {
+			if c.fileCache != nil {
+				c.tryGo(func() {
 					c.downloadImageToFileCache(scientificName, &dbCopy)
 				})
 			}
@@ -527,8 +528,8 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	c.saveToDB(&birdImage)
 
 	// Download refreshed image to file cache
-	if c.fileCache != nil && birdImage.URL != "" && !birdImage.IsNegativeEntry() && !c.closed.Load() {
-		c.wg.Go(func() {
+	if c.fileCache != nil && birdImage.URL != "" && !birdImage.IsNegativeEntry() {
+		c.tryGo(func() {
 			c.downloadImageToFileCache(scientificName, &birdImage)
 		})
 	}
@@ -616,6 +617,16 @@ func (c *BirdImageCache) Close() error {
 	log.Info("All in-flight operations completed, image provider cache closed")
 
 	return nil
+}
+
+// tryGo safely spawns a tracked goroutine. It returns false (and does not spawn)
+// if the cache is shutting down, preventing Add-after-Wait panics on wg.
+func (c *BirdImageCache) tryGo(fn func()) bool {
+	if c.closed.Load() {
+		return false
+	}
+	c.wg.Go(fn)
+	return true
 }
 
 // initCache initializes a new BirdImageCache with the given ImageProvider.
@@ -1195,16 +1206,11 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 
 	// Regular positive entry - check staleness
 	if isCacheEntryStale(dbImage.CachedAt, false) {
-		// Check if shutdown was signaled before spawning new goroutine
-		if c.shouldQuit() || c.closed.Load() {
-			log.Debug("Skipping background refresh - shutdown in progress")
-		} else {
-			log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
-				logger.Time("cached_at", dbImage.CachedAt))
-			c.wg.Go(func() {
-				c.refreshEntry(scientificName)
-			})
-		}
+		log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
+			logger.Time("cached_at", dbImage.CachedAt))
+		c.tryGo(func() {
+			c.refreshEntry(scientificName)
+		})
 	} else {
 		log.Debug("Image loaded from DB cache")
 	}
@@ -1378,8 +1384,8 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 	c.saveToDB(fetchedImage)
 
 	// Download image to disk cache
-	if c.fileCache != nil && fetchedImage.URL != "" && !fetchedImage.IsNegativeEntry() && !c.closed.Load() {
-		c.wg.Go(func() {
+	if c.fileCache != nil && fetchedImage.URL != "" && !fetchedImage.IsNegativeEntry() {
+		c.tryGo(func() {
 			c.downloadImageToFileCache(scientificName, fetchedImage)
 		})
 	}

@@ -32,8 +32,8 @@ const (
 	RetentionPolicyUsage = "usage" // Disk usage-based retention cleanup
 )
 
-// ValidRetentionPolicies contains all valid retention policy values
-var ValidRetentionPolicies = []string{
+// validRetentionPolicies contains all valid retention policy values
+var validRetentionPolicies = []string{
 	RetentionPolicyNone,
 	RetentionPolicyAge,
 	RetentionPolicyUsage,
@@ -1246,8 +1246,8 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 	}
 
 	// Validate policy against known values
-	if !slices.Contains(ValidRetentionPolicies, settings.Policy) {
-		return errors.Newf("retention policy must be one of %v, got %q", ValidRetentionPolicies, settings.Policy).
+	if !slices.Contains(validRetentionPolicies, settings.Policy) {
+		return errors.Newf("retention policy must be one of %v, got %q", validRetentionPolicies, settings.Policy).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "retention-policy").
 			Context("policy", settings.Policy).
