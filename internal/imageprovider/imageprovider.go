@@ -119,6 +119,11 @@ func (b *BirdImage) GetTTL() time.Duration {
 // changed at runtime using SetImageProvider/SetNonBirdImageProvider methods, and is
 // protected using atomic operations. This is necessary because a background refresh
 // goroutine may be accessing the provider while tests or other code changes it.
+//
+// Shutdown Safety: The closed flag and wg WaitGroup coordinate graceful shutdown.
+// closed is set first to prevent new DB operations, then Close waits for in-flight
+// operations to complete via wg before returning. This prevents "database is closed"
+// errors from goroutines that outlive the DB connection.
 type BirdImageCache struct {
 	provider     atomic.Pointer[ImageProvider] // Atomic pointer for lock-free concurrent access
 	providerName string                        // Added: Name of the provider (e.g., "wikimedia")
@@ -128,6 +133,8 @@ type BirdImageCache struct {
 	store        datastore.Interface
 	fileCache    *ImageFileCache
 	quit         chan struct{}                         // Channel to signal shutdown
+	closed       atomic.Bool                           // Set during shutdown to reject new DB operations
+	wg           sync.WaitGroup                        // Tracks in-flight DB and background operations
 	Initializing sync.Map                              // Track which species are being initialized
 	registry     atomic.Pointer[ImageProviderRegistry] // Use atomic pointer
 }
@@ -332,6 +339,11 @@ func (c *BirdImageCache) startCacheRefresh(quit chan struct{}) {
 func (c *BirdImageCache) refreshStaleEntries() {
 	log := GetLogger().With(logger.String("provider", c.providerName))
 
+	if c.closed.Load() {
+		log.Debug("Cache is shutting down, skipping cache refresh")
+		return
+	}
+
 	if c.store == nil {
 		log.Debug("DB store is nil, skipping cache refresh")
 		return
@@ -415,6 +427,12 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
+
+	if c.closed.Load() {
+		log.Debug("Skipping cache entry refresh: cache is shutting down")
+		return
+	}
+
 	log.Debug("Refreshing cache entry")
 
 	// Check if provider is set
@@ -491,8 +509,10 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 				c.metrics.IncrementImageDownloads()
 			}
 			// Download fallback image to file cache using dbCopy which has the corrected SourceProvider
-			if c.fileCache != nil {
-				go c.downloadImageToFileCache(scientificName, &dbCopy)
+			if c.fileCache != nil && !c.closed.Load() {
+				c.wg.Go(func() {
+					c.downloadImageToFileCache(scientificName, &dbCopy)
+				})
 			}
 		}
 		return
@@ -507,8 +527,10 @@ func (c *BirdImageCache) refreshEntry(scientificName string) {
 	c.saveToDB(&birdImage)
 
 	// Download refreshed image to file cache
-	if c.fileCache != nil && birdImage.URL != "" && !birdImage.IsNegativeEntry() {
-		go c.downloadImageToFileCache(scientificName, &birdImage)
+	if c.fileCache != nil && birdImage.URL != "" && !birdImage.IsNegativeEntry() && !c.closed.Load() {
+		c.wg.Go(func() {
+			c.downloadImageToFileCache(scientificName, &birdImage)
+		})
 	}
 
 	if c.metrics != nil {
@@ -537,7 +559,7 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 	}
 
 	// Tier 1: Check fallback providers' DB cache (no network)
-	if c.store != nil {
+	if c.store != nil && !c.closed.Load() {
 		for _, providerName := range fallbackProviders {
 			if providerName == c.providerName {
 				continue
@@ -565,20 +587,34 @@ func (c *BirdImageCache) tryRefreshFallback(scientificName string) (BirdImage, b
 	return c.tryFallbackProviders(scientificName, triedProviders)
 }
 
-// Close stops the cache refresh routine and performs cleanup
+// Close stops the cache refresh routine, waits for in-flight DB operations to
+// finish, and performs cleanup. The closed flag is set first so that new DB
+// operations are rejected, then the quit channel is closed to stop the
+// background refresh goroutine, and finally we wait for any in-flight
+// operations tracked by the WaitGroup to drain.
 func (c *BirdImageCache) Close() error {
-	GetLogger().Info("Closing image provider cache",
-		logger.String("provider", c.providerName))
+	log := GetLogger().With(logger.String("provider", c.providerName))
+	log.Info("Closing image provider cache")
+
+	// Set closed flag first to reject new DB operations.
+	c.closed.Store(true)
+
 	if c.quit != nil {
 		select {
 		case <-c.quit:
 			// Already closed
-			GetLogger().Debug("Quit channel already closed")
+			log.Debug("Quit channel already closed")
 		default:
-			GetLogger().Debug("Closing quit channel")
+			log.Debug("Closing quit channel")
 			close(c.quit)
 		}
 	}
+
+	// Wait for in-flight DB and background operations to finish.
+	log.Debug("Waiting for in-flight operations to complete")
+	c.wg.Wait()
+	log.Info("All in-flight operations completed, image provider cache closed")
+
 	return nil
 }
 
@@ -631,6 +667,11 @@ func (c *BirdImageCache) loadFromDBCache(scientificName string) (*BirdImage, err
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 	log.Debug("Attempting to load image from DB cache")
+	// Reject DB reads after shutdown to avoid "database is closed" errors
+	if c.closed.Load() {
+		log.Debug("Skipping DB load: cache is shutting down")
+		return nil, ErrCacheMiss
+	}
 	// Check if store is nil to prevent nil pointer dereference
 	if c.store == nil {
 		log.Warn("Cannot load from DB cache: DB store is nil")
@@ -687,6 +728,12 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 		logger.Int("batch_size", len(scientificNames)))
 	log.Debug("Attempting batch load from DB cache")
 
+	// Reject DB reads after shutdown to avoid "database is closed" errors
+	if c.closed.Load() {
+		log.Debug("Skipping batch DB load: cache is shutting down")
+		return nil, ErrCacheMiss
+	}
+
 	if c.store == nil {
 		log.Warn("Cannot batch load from DB cache: DB store is nil")
 		return nil, ErrCacheMiss
@@ -707,6 +754,13 @@ func (c *BirdImageCache) batchLoadFromDB(scientificNames []string) (map[string]B
 // fetchFromDBWithFallback fetches images from DB, trying fallback providers if needed.
 func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[string]*datastore.ImageCache, error) {
 	log := GetLogger().With(logger.String("provider", c.providerName))
+
+	// Reject DB reads after shutdown to avoid "database is closed" errors
+	if c.closed.Load() {
+		log.Debug("Skipping batch DB load: cache is shutting down")
+		return nil, ErrCacheMiss
+	}
+
 	settings := conf.Setting()
 	debug := settings.Realtime.Dashboard.Thumbnails.Debug
 
@@ -740,6 +794,11 @@ func (c *BirdImageCache) fetchFromDBWithFallback(scientificNames []string) (map[
 // tryBatchFallbackProviders attempts to load images from fallback providers for batch operations.
 func (c *BirdImageCache) tryBatchFallbackProviders(scientificNames []string, debug bool) map[string]*datastore.ImageCache {
 	log := GetLogger().With(logger.String("provider", c.providerName))
+
+	if c.closed.Load() {
+		return nil
+	}
+
 	settings := conf.Setting()
 
 	if settings.Realtime.Dashboard.Thumbnails.FallbackPolicy != fallbackPolicyAll {
@@ -806,6 +865,11 @@ func (c *BirdImageCache) saveToDB(image *BirdImage) {
 	log := GetLogger().With(
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", image.ScientificName))
+	// Reject DB writes after shutdown to avoid "database is closed" errors
+	if c.closed.Load() {
+		log.Debug("Skipping DB save: cache is shutting down")
+		return
+	}
 	// Check if store is nil
 	if c.store == nil {
 		log.Warn("Cannot save to DB cache: DB store is nil")
@@ -1132,12 +1196,14 @@ func (c *BirdImageCache) handleDBCacheHit(scientificName string, dbImage *BirdIm
 	// Regular positive entry - check staleness
 	if isCacheEntryStale(dbImage.CachedAt, false) {
 		// Check if shutdown was signaled before spawning new goroutine
-		if c.shouldQuit() {
+		if c.shouldQuit() || c.closed.Load() {
 			log.Debug("Skipping background refresh - shutdown in progress")
 		} else {
 			log.Debug("DB cache entry is stale, returning stale data and triggering background refresh",
 				logger.Time("cached_at", dbImage.CachedAt))
-			go c.refreshEntry(scientificName)
+			c.wg.Go(func() {
+				c.refreshEntry(scientificName)
+			})
 		}
 	} else {
 		log.Debug("Image loaded from DB cache")
@@ -1312,8 +1378,10 @@ func (c *BirdImageCache) storeSuccessfulFetch(scientificName string, fetchedImag
 	c.saveToDB(fetchedImage)
 
 	// Download image to disk cache
-	if c.fileCache != nil && fetchedImage.URL != "" && !fetchedImage.IsNegativeEntry() {
-		go c.downloadImageToFileCache(scientificName, fetchedImage)
+	if c.fileCache != nil && fetchedImage.URL != "" && !fetchedImage.IsNegativeEntry() && !c.closed.Load() {
+		c.wg.Go(func() {
+			c.downloadImageToFileCache(scientificName, fetchedImage)
+		})
 	}
 
 	if c.metrics != nil {
