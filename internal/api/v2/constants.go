@@ -130,7 +130,7 @@ const (
 
 // Default path constants
 const (
-	// defaultExportPath is the default audio clip export directory, matching conf/defaults.go.
+	// defaultExportPath is the default audio clip export directory, matching internal/conf/defaults.go.
 	defaultExportPath = "clips/"
 )
 

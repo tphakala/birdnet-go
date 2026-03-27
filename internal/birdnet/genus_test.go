@@ -846,7 +846,7 @@ func TestLookupConsistencyWithGet(t *testing.T) {
 	orderLookup := db.LookupAllSpeciesInOrder("Strigiformes")
 	orderGet, err := db.GetAllSpeciesInOrder("Strigiformes")
 	require.NoError(t, err)
-	assert.Len(t, orderLookup, len(orderGet))
+	assert.ElementsMatch(t, orderGet, orderLookup)
 }
 
 // BenchmarkLookupGenusByScientificName benchmarks the non-telemetry lookup
