@@ -146,7 +146,7 @@
     };
 
     media.addEventListener('change', handler);
-    return () => media.removeEventListener('change', handler);
+    return () => media?.removeEventListener('change', handler);
   });
 
   // Update canvas buffer dimensions when size or DPR changes.

@@ -40,7 +40,7 @@
     };
 
     mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
+    return () => mediaQuery?.removeEventListener('change', handleChange);
   });
 
   // Animation parameters - slide up from below

@@ -144,7 +144,7 @@
       };
 
       const timeout = globalThis.setTimeout(() => {
-        signal.removeEventListener('abort', onAbort);
+        signal?.removeEventListener('abort', onAbort);
         sse.close();
         resolve(null);
       }, SOURCE_DISCOVERY_TIMEOUT);
@@ -161,7 +161,7 @@
             const sourceIds = Object.keys(data.levels);
             if (sourceIds.length > 0) {
               globalThis.clearTimeout(timeout);
-              signal.removeEventListener('abort', onAbort);
+              signal?.removeEventListener('abort', onAbort);
               sse.close();
               resolve(sourceIds[0]);
             }
