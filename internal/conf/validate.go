@@ -1240,6 +1240,11 @@ func validateAudioSettings(settings *AudioSettings) error {
 // This catches invalid values early instead of failing silently at runtime when the
 // disk manager first attempts cleanup.
 func validateRetentionSettings(settings *RetentionSettings) error {
+	// Empty policy means retention is disabled — treat as "none"
+	if settings.Policy == "" {
+		return nil
+	}
+
 	// Validate policy against known values
 	if !slices.Contains(ValidRetentionPolicies, settings.Policy) {
 		return errors.Newf("retention policy must be one of %v, got %q", ValidRetentionPolicies, settings.Policy).
