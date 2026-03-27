@@ -589,7 +589,7 @@ func (t *SFTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	err := t.withRetry(ctx, func(client *sftp.Client) error {
 		entries, err := client.ReadDir(t.config.BasePath)
 		if err != nil {
-			if strings.Contains(err.Error(), "no such file") {
+			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
 			return errors.New(err).

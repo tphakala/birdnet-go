@@ -8,6 +8,7 @@ import (
 	"io"
 	"maps"
 	"net"
+	"net/textproto"
 	"os"
 	"path"
 	"path/filepath"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/jlaffaye/ftp"
 	"github.com/tphakala/birdnet-go/internal/backup"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -413,7 +415,10 @@ func (t *FTPTarget) List(ctx context.Context) ([]backup.BackupInfo, error) {
 	err := t.withRetry(ctx, func(conn *ftp.ServerConn) error {
 		entries, err := conn.List(t.config.BasePath)
 		if err != nil {
-			if strings.Contains(err.Error(), "No such file or directory") {
+			// The jlaffaye/ftp library returns *textproto.Error for protocol errors.
+			// FTP 550 (StatusFileUnavailable) indicates the directory does not exist.
+			var protoErr *textproto.Error
+			if errors.As(err, &protoErr) && protoErr.Code == ftp.StatusFileUnavailable {
 				return nil
 			}
 			return backup.NewError(backup.ErrIO, "ftp: failed to list backups", err)
