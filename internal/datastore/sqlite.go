@@ -310,6 +310,10 @@ func (s *SQLiteStore) Open() error {
 		s.StartMonitoring(30*time.Second, 5*time.Minute)
 	}
 
+	// Reset guards so loops can restart after a Close/Open cycle.
+	s.integrityOnce = sync.Once{}
+	s.walCheckpointOnce = sync.Once{}
+
 	// Start daily integrity check in the background (runs initial check immediately)
 	GetLogger().Debug("Starting daily integrity check loop")
 	s.startIntegrityCheckLoop()
