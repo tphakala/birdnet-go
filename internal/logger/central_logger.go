@@ -291,8 +291,11 @@ func (cl *CentralLogger) Module(name string) Logger {
 		}
 
 		// Also log to console if requested - USE TEXT FORMAT
+		// Use the console's configured level (not the module's) so that
+		// modules with debug-level file output don't flood stdout.
 		if moduleConfig.ConsoleAlso && cl.config.Console != nil && cl.config.Console.Enabled {
-			handlers = append(handlers, newTextHandler(os.Stdout, moduleLevel, cl.timezone))
+			consoleLevel := parseLogLevel(cl.config.Console.Level)
+			handlers = append(handlers, newTextHandler(os.Stdout, consoleLevel, cl.timezone))
 		}
 	} else {
 		// Use base handler (console + main file)
