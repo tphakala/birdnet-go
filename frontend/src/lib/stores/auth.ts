@@ -113,8 +113,9 @@ function createAuthStore() {
           headers,
         });
 
-        // The v2 logout endpoint returns 200 OK on success
-        if (response.ok) {
+        // Treat 401 as a successful logout: the session is already expired,
+        // so the user is effectively logged out.
+        if (response.ok || response.status === 401) {
           // Clear auth state
           set({
             isLoggedIn: false,
@@ -125,28 +126,31 @@ function createAuthStore() {
           });
 
           // Check if provider returned an end-session URL for RP-Initiated Logout
+          // (only possible on a 200 OK response with a JSON body)
           let providerLogoutUrl: string | null = null;
-          try {
-            const data: unknown = await response.json();
-            if (
-              typeof data === 'object' &&
-              data !== null &&
-              'providerLogoutUrl' in data &&
-              typeof (data as Record<string, unknown>).providerLogoutUrl === 'string'
-            ) {
-              const candidate = (data as Record<string, unknown>).providerLogoutUrl as string;
-              // Validate URL is HTTPS before redirecting
-              try {
-                const parsed = new URL(candidate);
-                if (parsed.protocol === 'https:' && parsed.host.length > 0) {
-                  providerLogoutUrl = candidate;
+          if (response.ok) {
+            try {
+              const data: unknown = await response.json();
+              if (
+                typeof data === 'object' &&
+                data !== null &&
+                'providerLogoutUrl' in data &&
+                typeof (data as Record<string, unknown>).providerLogoutUrl === 'string'
+              ) {
+                const candidate = (data as Record<string, unknown>).providerLogoutUrl as string;
+                // Validate URL is HTTPS before redirecting
+                try {
+                  const parsed = new URL(candidate);
+                  if (parsed.protocol === 'https:' && parsed.host.length > 0) {
+                    providerLogoutUrl = candidate;
+                  }
+                } catch {
+                  // Invalid URL, fall through to default redirect
                 }
-              } catch {
-                // Invalid URL, fall through to default redirect
               }
+            } catch {
+              // JSON parse failed, fall through to default redirect
             }
-          } catch {
-            // JSON parse failed, fall through to default redirect
           }
 
           if (providerLogoutUrl) {

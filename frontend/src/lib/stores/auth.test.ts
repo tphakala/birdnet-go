@@ -156,14 +156,37 @@ describe('Auth Store', () => {
       expect(window.location.href).toBe('https://idp.example.com/logout?id_token_hint=abc');
     });
 
-    it('should throw error on failed logout', async () => {
+    it('should treat 401 as successful logout (expired session)', async () => {
+      // Set initial logged in state
+      auth.setLoggedIn(true);
+      auth.setSecurity(true, true);
+
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
         statusText: 'Unauthorized',
       });
 
-      await expect(auth.logout()).rejects.toThrow('Logout failed: Unauthorized');
+      await auth.logout();
+
+      // Auth state should be cleared
+      const state = get(auth);
+      expect(state.isLoggedIn).toBe(false);
+      expect(state.security.enabled).toBe(true);
+      expect(state.security.accessAllowed).toBe(false);
+
+      // Should redirect to /ui/
+      expect(window.location.href).toBe('/ui/');
+    });
+
+    it('should throw error on non-401 failed logout', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        statusText: 'Internal Server Error',
+      });
+
+      await expect(auth.logout()).rejects.toThrow('Logout failed: Internal Server Error');
     });
 
     it('should throw error on network failure', async () => {
