@@ -234,7 +234,7 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 	var dailyEventsFailed bool
 	if err := s.db.SaveDailyEvents(dailyEvents); err != nil {
 		dailyEventsFailed = true
-		getLogger().Error("Failed to save daily events to database",
+		getLogger().Warn("Failed to save daily events to database, will attempt fallback",
 			logger.Error(err),
 			logger.String("date", dailyEvents.Date),
 			logger.String("city", dailyEvents.CityName))
@@ -256,18 +256,16 @@ func (s *Service) SaveWeatherData(data *WeatherData) error {
 				logger.String("date", localDate))
 			time.Sleep(100 * time.Millisecond)
 			if retryErr := s.db.SaveDailyEvents(dailyEvents); retryErr != nil {
-				getLogger().Error("Retry of SaveDailyEvents also failed",
+				// Retry also failed — skip saving weather data for this cycle.
+				// The next hourly poll will try again. Log at debug level to
+				// avoid flooding Sentry with transient errors.
+				getLogger().Debug("Skipping weather save: daily events record unavailable after retry",
 					logger.Error(retryErr),
 					logger.String("date", localDate))
 				if s.metrics != nil {
 					s.metrics.RecordWeatherDbError("save_daily_events_retry", "database_error")
 				}
-				return errors.New(retryErr).
-					Component("weather").
-					Category(errors.CategoryDatabase).
-					Context("operation", "save_daily_events_retry").
-					Context("date", localDate).
-					Build()
+				return nil
 			}
 			getLogger().Info("Retry of SaveDailyEvents succeeded",
 				logger.String("date", localDate),

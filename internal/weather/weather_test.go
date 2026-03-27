@@ -520,8 +520,8 @@ func TestService_SaveWeatherData(t *testing.T) {
 
 		err := service.SaveWeatherData(testData)
 
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "database is locked")
+		// Graceful skip: no error returned, next poll will retry
+		require.NoError(t, err)
 
 		// SaveHourlyWeather should NOT be called
 		mockDB.AssertNotCalled(t, "SaveHourlyWeather", mock.Anything)
