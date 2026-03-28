@@ -752,10 +752,17 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic during HLS cleanup: %v", r)
 				// Log panic but don't block shutdown
 				GetLogger().Error("panic during HLS cleanup",
 					logger.Any("panic", r))
-				cleanupDone <- fmt.Errorf("panic during HLS cleanup: %v", r)
+				_ = errors.New(panicErr).
+					Component("analysis.audio_pipeline").
+					Category(errors.CategorySystem).
+					Context("operation", "hls_cleanup_panic").
+					Priority(errors.PriorityCritical).
+					Build()
+				cleanupDone <- panicErr
 			}
 		}()
 		cleanupDone <- cleanupHLSStreamingFiles()

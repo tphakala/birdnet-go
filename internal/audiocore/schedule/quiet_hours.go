@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -151,8 +152,15 @@ func (s *QuietHoursScheduler) Stop() {
 func (s *QuietHoursScheduler) run() {
 	defer func() {
 		if r := recover(); r != nil {
+			panicErr := fmt.Errorf("panic in quiet hours scheduler: %v", r)
 			s.log.Error("panic in quiet hours scheduler",
 				logger.Any("panic", r))
+			_ = errors.New(panicErr).
+				Component("audiocore.schedule").
+				Category(errors.CategorySystem).
+				Context("operation", "quiet_hours_scheduler_panic").
+				Priority(errors.PriorityCritical).
+				Build()
 		}
 	}()
 	ticker := time.NewTicker(evaluationInterval)
