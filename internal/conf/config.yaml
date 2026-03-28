@@ -220,7 +220,12 @@ realtime:
       recent: true        # show thumbnails on recent table
       imageprovider: avicommons # preferred image provider: avicommons, wikimedia, auto
       fallbackpolicy: none # fallback policy: none (no fallback), all (try all available providers)
- 
+
+    speciesguide:
+      enabled: true       # true to enable species guide text (description, attribution)
+      provider: wikipedia # preferred guide provider: wikipedia, auto
+      fallbackpolicy: all # fallback policy: none (primary only), all (try all providers)
+
   dynamicthreshold:
     enabled: true         # true to enable dynamic confidence threshold
     trigger: 0.90         # dynamic threshold is activated on detections at this confidence level

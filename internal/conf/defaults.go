@@ -140,6 +140,11 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.dashboard.thumbnails.recent", true)
 	viper.SetDefault("realtime.dashboard.thumbnails.imageprovider", "avicommons")
 	viper.SetDefault("realtime.dashboard.thumbnails.fallbackpolicy", "none")
+	// Species guide provider configuration
+	viper.SetDefault("realtime.dashboard.speciesguide.enabled", true)
+	viper.SetDefault("realtime.dashboard.speciesguide.provider", "wikipedia")
+	viper.SetDefault("realtime.dashboard.speciesguide.fallbackpolicy", "all")
+
 	viper.SetDefault("realtime.dashboard.summarylimit", 30)
 	viper.SetDefault("realtime.dashboard.locale", "en")               // Default UI locale
 	viper.SetDefault("realtime.dashboard.temperatureunit", "celsius") // Temperature display unit: "celsius" or "fahrenheit"

@@ -4,6 +4,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -96,6 +98,9 @@ func (c *Controller) initSpeciesRoutes() {
 
 	// RESTful thumbnail endpoint - uses species code from path
 	c.Group.GET("/species/:code/thumbnail", c.GetSpeciesThumbnail)
+
+	// Species guide endpoint
+	c.Group.GET("/species/:scientific_name/guide", c.GetSpeciesGuide)
 
 	// New taxonomy endpoints using local database
 	c.Group.GET("/taxonomy/genus/:genus", c.GetGenusSpecies)
@@ -627,4 +632,99 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	ctx.SetParamNames("scientific_name")
 	ctx.SetParamValues(scientificName)
 	return c.ServeSpeciesImageProxy(ctx)
+}
+
+// SpeciesGuideResponse represents the API response for a species guide.
+type SpeciesGuideResponse struct {
+	ScientificName     string                `json:"scientific_name"`
+	CommonName         string                `json:"common_name"`
+	Description        string                `json:"description"`
+	ConservationStatus string                `json:"conservation_status"`
+	Source             SpeciesGuideSource    `json:"source"`
+	Partial            bool                  `json:"partial"`
+	CachedAt           time.Time             `json:"cached_at"`
+}
+
+// SpeciesGuideSource represents the attribution for the guide data.
+type SpeciesGuideSource struct {
+	Provider   string `json:"provider"`
+	URL        string `json:"url"`
+	License    string `json:"license"`
+	LicenseURL string `json:"license_url"`
+}
+
+// GetSpeciesGuide retrieves guide text for a species.
+// @Summary Get species guide information
+// @Description Returns textual guide information (description, conservation status) for a species
+// @Tags species
+// @Produce json
+// @Param scientific_name path string true "Scientific name (URL-encoded)"
+// @Success 200 {object} SpeciesGuideResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 503 {object} ErrorResponse
+// @Router /api/v2/species/{scientific_name}/guide [get]
+func (c *Controller) GetSpeciesGuide(ctx echo.Context) error {
+	// Check if guide feature is enabled
+	if !c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled {
+		return c.HandleError(ctx, errors.Newf("species guide feature is disabled").
+			Category(errors.CategoryConfiguration).
+			Component("api-species").
+			Build(), "Species guide feature is disabled", http.StatusNotFound)
+	}
+
+	// Check if guide cache is available
+	if c.GuideCache == nil {
+		return c.HandleError(ctx, errors.Newf("species guide not available").
+			Category(errors.CategoryConfiguration).
+			Component("api-species").
+			Build(), "Species guide service not available", http.StatusServiceUnavailable)
+	}
+
+	// Get and validate scientific name from path parameter
+	rawName := ctx.Param("scientific_name")
+	scientificName, err := url.PathUnescape(rawName)
+	if err != nil {
+		return c.HandleError(ctx, errors.Newf("invalid scientific name encoding").
+			Category(errors.CategoryValidation).
+			Component("api-species").
+			Build(), "Invalid scientific name", http.StatusBadRequest)
+	}
+
+	scientificName = strings.TrimSpace(scientificName)
+	if scientificName == "" {
+		return c.HandleError(ctx, errors.Newf("scientific_name parameter is required").
+			Category(errors.CategoryValidation).
+			Component("api-species").
+			Build(), "Missing required parameter", http.StatusBadRequest)
+	}
+
+	// Fetch guide from cache (memory → DB → providers)
+	guide, err := c.GuideCache.Get(ctx.Request().Context(), scientificName)
+	if err != nil {
+		if errors.Is(err, guideprovider.ErrGuideNotFound) {
+			return c.HandleError(ctx, err, "Species guide not found", http.StatusNotFound)
+		}
+		if errors.Is(err, guideprovider.ErrAllProvidersUnavailable) {
+			return c.HandleError(ctx, err, "Guide service temporarily unavailable", http.StatusServiceUnavailable)
+		}
+		return c.HandleError(ctx, err, "Failed to retrieve species guide", http.StatusInternalServerError)
+	}
+
+	response := SpeciesGuideResponse{
+		ScientificName:     guide.ScientificName,
+		CommonName:         guide.CommonName,
+		Description:        guide.Description,
+		ConservationStatus: guide.ConservationStatus,
+		Source: SpeciesGuideSource{
+			Provider:   guide.SourceProvider,
+			URL:        guide.SourceURL,
+			License:    guide.LicenseName,
+			LicenseURL: guide.LicenseURL,
+		},
+		Partial:  guide.Partial,
+		CachedAt: guide.CachedAt,
+	}
+
+	return ctx.JSON(http.StatusOK, response)
 }

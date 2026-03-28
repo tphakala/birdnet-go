@@ -29,7 +29,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
+	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/monitor"
@@ -353,6 +355,12 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 	// Initialize bird image cache if needed
 	birdImageCache := initializeBirdImageCacheIfNeeded(settings, dataStore, metrics)
 
+	// Initialize species guide cache if enabled
+	guideCache := initializeGuideCacheIfNeeded(settings, dataStore)
+	if guideCache != nil {
+		defer guideCache.Close()
+	}
+
 	// Initialize processor with analysis logger for hierarchical logging
 	proc := processor.New(settings, dataStore, bn, metrics, birdImageCache, GetLogger())
 
@@ -418,6 +426,7 @@ func realtimeAnalysisInternal(settings *conf.Settings, quitChan chan struct{}) e
 		settings,
 		api.WithDataStore(dataStore),
 		api.WithBirdImageCache(birdImageCache),
+		api.WithGuideCache(guideCache),
 		api.WithProcessor(proc),
 		api.WithMetrics(metrics),
 		api.WithControlChannel(controlChan),
@@ -1729,6 +1738,56 @@ func initializeBirdImageCacheIfNeeded(settings *conf.Settings, dataStore datasto
 	// even when thumbnails are disabled - the cache will just not be used for actual image fetching
 	GetLogger().Debug("initializing bird image cache for settings UI (thumbnails disabled)")
 	return initBirdImageCache(dataStore, metrics)
+}
+
+// initializeGuideCacheIfNeeded initializes the species guide cache if the feature is enabled.
+func initializeGuideCacheIfNeeded(settings *conf.Settings, dataStore datastore.Interface) *guideprovider.GuideCache {
+	if !settings.Realtime.Dashboard.SpeciesGuide.Enabled {
+		GetLogger().Debug("species guide feature disabled, skipping guide cache initialization")
+		return nil
+	}
+
+	log := GetLogger()
+
+	// Get the GORM DB from the datastore for the guide cache store
+	ds, ok := dataStore.(*datastore.DataStore)
+	if !ok {
+		log.Warn("cannot initialize guide cache: datastore is not a *DataStore")
+		return nil
+	}
+
+	store, err := guideprovider.NewGORMGuideStore(ds.DB)
+	if err != nil {
+		log.Error("failed to initialize guide cache store", logger.Any("error", err))
+		return nil
+	}
+
+	cache := guideprovider.NewGuideCache(store)
+
+	// Register Wikipedia provider (always available, no API key needed)
+	wikiProvider := guideprovider.NewWikipediaGuideProvider()
+	cache.RegisterProvider(guideprovider.WikipediaProviderName, wikiProvider)
+
+	// Register eBird provider if API key is configured
+	if settings.Realtime.EBird.Enabled && settings.Realtime.EBird.APIKey != "" {
+		ebirdClient, clientErr := ebird.NewClient(ebird.Config{
+			APIKey: settings.Realtime.EBird.APIKey,
+		})
+		if clientErr == nil {
+			ebirdProvider, provErr := guideprovider.NewEBirdGuideProvider(ebirdClient)
+			if provErr == nil {
+				cache.RegisterProvider(guideprovider.EBirdProviderName, ebirdProvider)
+				log.Info("registered eBird guide provider")
+			}
+		}
+	}
+
+	cache.Start()
+	log.Info("species guide cache initialized",
+		logger.String("provider", settings.Realtime.Dashboard.SpeciesGuide.Provider),
+		logger.String("fallback_policy", settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy))
+
+	return cache
 }
 
 // initializeAudioSources prepares and validates audio sources

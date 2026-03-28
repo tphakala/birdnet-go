@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/myaudio"
@@ -53,6 +54,7 @@ type Server struct {
 	dataStore      datastore.Interface
 	v2Manager      datastoreV2.Manager
 	birdImageCache *imageprovider.BirdImageCache
+	guideCache     *guideprovider.GuideCache
 	sunCalc        *suncalc.SunCalc
 	processor      *processor.Processor
 	oauth2Server   *security.OAuth2Server
@@ -115,6 +117,13 @@ func WithDataStore(ds datastore.Interface) ServerOption {
 func WithBirdImageCache(cache *imageprovider.BirdImageCache) ServerOption {
 	return func(s *Server) {
 		s.birdImageCache = cache
+	}
+}
+
+// WithGuideCache sets the species guide cache for the server.
+func WithGuideCache(gc *guideprovider.GuideCache) ServerOption {
+	return func(s *Server) {
+		s.guideCache = gc
 	}
 }
 
@@ -323,6 +332,7 @@ func (s *Server) setupRoutes() error {
 		apiv2.WithAuthMiddleware(s.authMiddleware),
 		apiv2.WithAuthService(s.authService),
 		apiv2.WithV2Manager(s.v2Manager),
+		apiv2.WithGuideCache(s.guideCache),
 		apiv2.WithMetricsStore(observability.NewMemoryStore(apiv2.MetricsHistoryMaxPoints)),
 	)
 	if err != nil {

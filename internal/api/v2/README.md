@@ -216,6 +216,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | GET    | `/species/all`             | `GetAllSpecies`       | ❌   | Get all BirdNET species labels (not filtered by location)         |
 | GET    | `/species/taxonomy`        | `GetSpeciesTaxonomy`  | ❌   | Get detailed taxonomy data with subspecies and hierarchy          |
 | GET    | `/species/:code/thumbnail` | `GetSpeciesThumbnail` | ❌   | Get bird thumbnail image by species code (redirects to image URL) |
+| GET    | `/species/:scientific_name/guide` | `GetSpeciesGuide` | ❌   | Get species guide text (description, conservation status, attribution) |
 
 ### Server-Sent Events (`sse.go`)
 

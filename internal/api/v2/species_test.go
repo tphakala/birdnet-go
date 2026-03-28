@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/guideprovider"
 )
 
 // TestCalculateRarityStatus tests the calculateRarityStatus helper function.
@@ -411,6 +413,132 @@ func TestTaxonomyInfoJSONSerialization(t *testing.T) {
 	subspecies, ok := parsed["subspecies"].([]any)
 	require.True(t, ok)
 	assert.Len(t, subspecies, 1)
+}
+
+// TestGetSpeciesGuide tests the GetSpeciesGuide endpoint.
+func TestGetSpeciesGuide(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "species")
+	t.Attr("type", "unit")
+	t.Attr("feature", "species-guide")
+
+	tests := []struct {
+		name           string
+		scientificName string
+		setupCtrl      func(*Controller)
+		expectedStatus int
+		expectedBody   string
+	}{
+		{
+			name:           "feature disabled",
+			scientificName: "Turdus merula",
+			setupCtrl: func(c *Controller) {
+				c.Settings = &conf.Settings{}
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled = false
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedBody:   "Species guide feature is disabled",
+		},
+		{
+			name:           "nil guide cache",
+			scientificName: "Turdus merula",
+			setupCtrl: func(c *Controller) {
+				c.Settings = &conf.Settings{}
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+				c.GuideCache = nil
+			},
+			expectedStatus: http.StatusServiceUnavailable,
+			expectedBody:   "Species guide service not available",
+		},
+		{
+			name:           "empty scientific name",
+			scientificName: "",
+			setupCtrl: func(c *Controller) {
+				c.Settings = &conf.Settings{}
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+				c.GuideCache = guideprovider.NewGuideCache(nil)
+			},
+			expectedStatus: http.StatusBadRequest,
+			expectedBody:   "Missing required parameter",
+		},
+		{
+			name:           "species not found returns 404",
+			scientificName: "Nonexistent species",
+			setupCtrl: func(c *Controller) {
+				c.Settings = &conf.Settings{}
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Provider = guideprovider.WikipediaProviderName
+				c.Settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy = "none"
+				cache := guideprovider.NewGuideCache(nil)
+				// Register a provider that always returns not found
+				cache.RegisterProvider(guideprovider.WikipediaProviderName, &stubGuideProvider{
+					err: guideprovider.ErrGuideNotFound,
+				})
+				c.GuideCache = cache
+			},
+			expectedStatus: http.StatusNotFound,
+			expectedBody:   "Species guide not found",
+		},
+		{
+			name:           "success returns guide data",
+			scientificName: "Turdus merula",
+			setupCtrl: func(c *Controller) {
+				c.Settings = &conf.Settings{}
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Enabled = true
+				c.Settings.Realtime.Dashboard.SpeciesGuide.Provider = guideprovider.WikipediaProviderName
+				c.Settings.Realtime.Dashboard.SpeciesGuide.FallbackPolicy = "none"
+				cache := guideprovider.NewGuideCache(nil)
+				cache.RegisterProvider(guideprovider.WikipediaProviderName, &stubGuideProvider{
+					guide: guideprovider.SpeciesGuide{
+						ScientificName: "Turdus merula",
+						CommonName:     "Common Blackbird",
+						Description:    "A species of true thrush.",
+						SourceProvider: guideprovider.WikipediaProviderName,
+						SourceURL:      "https://en.wikipedia.org/wiki/Common_blackbird",
+						LicenseName:    "CC BY-SA 4.0",
+						LicenseURL:     "https://creativecommons.org/licenses/by-sa/4.0/",
+						Partial:        true,
+					},
+				})
+				c.GuideCache = cache
+			},
+			expectedStatus: http.StatusOK,
+			expectedBody:   "Common Blackbird",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/species/"+tt.scientificName+"/guide", http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("scientific_name")
+			ctx.SetParamValues(tt.scientificName)
+
+			c := &Controller{Echo: e, Group: e.Group("/api/v2")}
+			tt.setupCtrl(c)
+
+			err := c.GetSpeciesGuide(ctx)
+			require.NoError(t, err, tt.name)
+			assert.Equal(t, tt.expectedStatus, rec.Code, tt.name)
+			assert.Contains(t, rec.Body.String(), tt.expectedBody, tt.name)
+		})
+	}
+}
+
+// stubGuideProvider is a test double for guideprovider.GuideProvider.
+type stubGuideProvider struct {
+	guide guideprovider.SpeciesGuide
+	err   error
+}
+
+func (s *stubGuideProvider) Fetch(_ context.Context, _ string) (guideprovider.SpeciesGuide, error) {
+	if s.err != nil {
+		return guideprovider.SpeciesGuide{}, s.err
+	}
+	return s.guide, nil
 }
 
 // TestGetAllSpecies tests the GetAllSpecies endpoint returns all BirdNET labels.
