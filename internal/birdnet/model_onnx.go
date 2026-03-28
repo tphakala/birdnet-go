@@ -49,6 +49,15 @@ func (bn *BirdNET) initializeONNXModel() error {
 func (bn *BirdNET) initializeONNXMetaModel() error {
 	start := time.Now()
 
+	// Ensure ONNX Runtime is initialized (idempotent — may already be init from classifier)
+	if err := inference.InitONNXRuntime(bn.Settings.BirdNET.ONNXRuntimePath); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryModelInit).
+			Context("onnx_runtime_path", bn.Settings.BirdNET.ONNXRuntimePath).
+			Timing("onnx-init", time.Since(start)).
+			Build()
+	}
+
 	rangeFilter, err := inference.NewONNXRangeFilter(
 		bn.Settings.BirdNET.RangeFilter.ModelPath,
 		inference.ONNXRangeFilterOptions{

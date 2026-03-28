@@ -4,9 +4,15 @@ package inference
 
 import (
 	"fmt"
+	"sync"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	ortlib "github.com/yalue/onnxruntime_go"
+)
+
+var (
+	ortInitOnce sync.Once
+	errORTInit  error
 )
 
 // ONNXClassifierOptions configures the ONNX species classifier.
@@ -121,15 +127,18 @@ func (r *onnxRangeFilter) Close() {
 }
 
 // InitONNXRuntime initializes the ONNX Runtime with the given shared library path.
+// Safe to call multiple times — initialization happens only once.
 // Must be called before creating any ONNX classifiers or range filters.
-func InitONNXRuntime(libraryPath string) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
-		}
-	}()
-	ort.MustInitORT(libraryPath)
-	return nil
+func InitONNXRuntime(libraryPath string) error {
+	ortInitOnce.Do(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errORTInit = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
+			}
+		}()
+		ort.MustInitORT(libraryPath)
+	})
+	return errORTInit
 }
 
 // DestroyONNXRuntime tears down the ONNX Runtime environment.
