@@ -469,13 +469,16 @@ func TestEvaluate_SoundCardQuietHours(t *testing.T) {
 	mock := &mockManager{activeStreams: []string{}}
 
 	settings := conf.GetTestSettings()
-	settings.Realtime.Audio.Source = "default"
-	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{
-		Enabled:   true,
-		Mode:      "fixed",
-		StartTime: "00:00",
-		EndTime:   "23:59", // always in quiet hours
-	}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
+		Name:   "Test Sound Card",
+		Device: "default",
+		QuietHours: conf.QuietHoursConfig{
+			Enabled:   true,
+			Mode:      "fixed",
+			StartTime: "00:00",
+			EndTime:   "23:59", // always in quiet hours
+		},
+	}}
 	setTestSettings(t, settings)
 
 	s := newTestScheduler(t, mock)
@@ -491,8 +494,11 @@ func TestEvaluate_SoundCardRestoredWhenDisabled(t *testing.T) {
 	mock := &mockManager{activeStreams: []string{}}
 
 	settings := conf.GetTestSettings()
-	settings.Realtime.Audio.Source = "default"
-	settings.Realtime.Audio.QuietHours = conf.QuietHoursConfig{Enabled: false}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
+		Name:       "Test Sound Card",
+		Device:     "default",
+		QuietHours: conf.QuietHoursConfig{Enabled: false},
+	}}
 	setTestSettings(t, settings)
 
 	s := newTestScheduler(t, mock)

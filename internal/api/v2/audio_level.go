@@ -380,8 +380,8 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 		return levels
 	}
 
-	// Add configured audio device if set
-	if source := c.getAudioCardSource(registry); source != nil {
+	// Add configured audio devices
+	for _, source := range c.getAudioCardSources(registry) {
 		displayName := source.DisplayName
 		if !isAuthenticated {
 			displayName = audioSourceDefaultName
@@ -395,16 +395,19 @@ func (c *Controller) initializeAudioLevels(isAuthenticated bool) map[string]audi
 	return levels
 }
 
-// getAudioCardSource retrieves the audio card source from the registry if configured.
-func (c *Controller) getAudioCardSource(registry *audiocore.SourceRegistry) *audiocore.AudioSource {
-	if c.Settings.Realtime.Audio.Source == "" {
-		return nil
+// getAudioCardSources retrieves all configured audio card sources from the registry.
+func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*audiocore.AudioSource {
+	var sources []*audiocore.AudioSource
+	for i := range c.Settings.Realtime.Audio.Sources {
+		src := &c.Settings.Realtime.Audio.Sources[i]
+		if src.Device == "" {
+			continue
+		}
+		if audioSrc, ok := registry.GetByConnection(src.Device); ok {
+			sources = append(sources, audioSrc)
+		}
 	}
-	src, ok := registry.GetByConnection(c.Settings.Realtime.Audio.Source)
-	if !ok {
-		return nil
-	}
-	return src
+	return sources
 }
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.

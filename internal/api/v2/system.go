@@ -885,8 +885,11 @@ func (c *Controller) GetActiveAudioDevice(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Get active audio device from settings
-	deviceName := c.Settings.Realtime.Audio.Source
+	// Get active audio device from settings (first configured source)
+	var deviceName string
+	if len(c.Settings.Realtime.Audio.Sources) > 0 {
+		deviceName = c.Settings.Realtime.Audio.Sources[0].Device
+	}
 
 	// Check if no device is configured
 	if deviceName == "" {

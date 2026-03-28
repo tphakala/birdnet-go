@@ -154,7 +154,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	if len(sourceIDs) == 0 {
 		GetLogger().Warn("starting without active audio sources",
 			logger.Int("rtsp_streams", len(settings.Realtime.RTSP.Streams)),
-			logger.String("audio_source", settings.Realtime.Audio.Source),
+			logger.Int("audio_sources", len(settings.Realtime.Audio.Sources)),
 			logger.String("operation", "startup_audio_check"))
 	}
 
@@ -598,11 +598,16 @@ func (p *AudioPipelineService) buildSourceConfigs() []*audiocore.SourceConfig {
 		})
 	}
 
-	// Local audio card.
-	if settings.Realtime.Audio.Source != "" {
+	// Local audio cards (multi-source).
+	for i := range settings.Realtime.Audio.Sources {
+		src := &settings.Realtime.Audio.Sources[i]
+		if src.Device == "" {
+			continue
+		}
 		configs = append(configs, &audiocore.SourceConfig{
+			DisplayName:      src.Name,
 			Type:             audiocore.SourceTypeAudioCard,
-			ConnectionString: settings.Realtime.Audio.Source,
+			ConnectionString: src.Device,
 			SampleRate:       conf.SampleRate,
 			BitDepth:         conf.BitDepth,
 			Channels:         1,

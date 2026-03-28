@@ -10,7 +10,7 @@ import (
 
 // audioDeviceSettingChanged checks if audio device settings have changed
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return oldSettings.Realtime.Audio.Source != currentSettings.Realtime.Audio.Source
+	return !reflect.DeepEqual(oldSettings.Realtime.Audio.Sources, currentSettings.Realtime.Audio.Sources)
 }
 
 // soundLevelSettingsChanged checks if sound level monitoring settings have changed
@@ -133,11 +133,23 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 }
 
 // quietHoursSettingsChanged checks if any quiet hours settings have changed
-// across streams or the sound card
+// across streams, audio sources, or the global sound card setting.
 func quietHoursSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
-	// Check sound card quiet hours
+	// Check global sound card quiet hours (legacy fallback)
 	if !reflect.DeepEqual(oldSettings.Realtime.Audio.QuietHours, currentSettings.Realtime.Audio.QuietHours) {
 		return true
+	}
+
+	// Check per-audio-source quiet hours
+	oldSources := oldSettings.Realtime.Audio.Sources
+	newSources := currentSettings.Realtime.Audio.Sources
+	if len(oldSources) != len(newSources) {
+		return true
+	}
+	for i := range oldSources {
+		if !reflect.DeepEqual(oldSources[i].QuietHours, newSources[i].QuietHours) {
+			return true
+		}
 	}
 
 	// Check stream quiet hours (compare each stream's QuietHours field)

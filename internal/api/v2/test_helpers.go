@@ -67,7 +67,10 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.BirdNET.RangeFilter.Threshold = 0.03
 
 	// Audio settings
-	settings.Realtime.Audio.Source = "default"
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{{
+		Name:   "Test Sound Card",
+		Device: "default",
+	}}
 	settings.Realtime.Audio.Export.Enabled = true
 	settings.Realtime.Audio.Export.Type = "wav"
 	settings.Realtime.Audio.Export.Path = "/clips"

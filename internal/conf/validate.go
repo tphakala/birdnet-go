@@ -60,8 +60,18 @@ const (
 
 // Stream validation constants
 const (
-	MaxStreamNameLength = 64
+	MaxStreamNameLength      = 64
+	MaxAudioSourceNameLength = 100
 )
+
+// ValidAudioModels contains recognized AI model identifiers.
+// Empty string is also valid (defaults to birdnet).
+var ValidAudioModels = map[string]bool{
+	"":         true, // default (birdnet)
+	"birdnet":  true,
+	"perch_v2": true,
+	"bat":      true,
+}
 
 // Quiet hours validation constants
 const (
@@ -298,6 +308,79 @@ func (r *RTSPSettings) ValidateStreams() error {
 			return fmt.Errorf("stream '%s' has a duplicate URL: '%s'", stream.Name, stream.URL)
 		}
 		urls[urlTrimmed] = true
+	}
+
+	return nil
+}
+
+// Validate validates a single audio source configuration.
+func (a *AudioSourceConfig) Validate() error {
+	// Name is required
+	name := strings.TrimSpace(a.Name)
+	if name == "" {
+		return fmt.Errorf("audio source name is required")
+	}
+	if len(name) > MaxAudioSourceNameLength {
+		return fmt.Errorf("audio source name '%s' exceeds maximum length of %d characters", name, MaxAudioSourceNameLength)
+	}
+
+	// Device is required
+	if strings.TrimSpace(a.Device) == "" {
+		return fmt.Errorf("audio source device is required for '%s'", a.Name)
+	}
+
+	// Validate gain range
+	if a.Gain < MinAudioGain || a.Gain > MaxAudioGain {
+		return fmt.Errorf("audio source '%s': gain %.1f dB out of range [%.0f, +%.0f]", a.Name, a.Gain, MinAudioGain, MaxAudioGain)
+	}
+
+	// Validate model identifier
+	if !ValidAudioModels[a.Model] {
+		return fmt.Errorf("audio source '%s': unknown model '%s'", a.Name, a.Model)
+	}
+
+	// Validate per-source EQ if set
+	if a.Equalizer != nil {
+		for i, f := range a.Equalizer.Filters {
+			if f.Frequency <= 0 {
+				return fmt.Errorf("audio source '%s': equalizer filter %d has invalid frequency %.1f", a.Name, i+1, f.Frequency)
+			}
+		}
+	}
+
+	// Validate quiet hours
+	if err := ValidateQuietHours(&a.QuietHours, fmt.Sprintf("audio source '%s'", a.Name)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateSources validates all audio source configurations, including
+// duplicate name and device detection.
+func (a *AudioSettings) ValidateSources() error {
+	names := make(map[string]bool)
+	devices := make(map[string]bool)
+
+	for i := range a.Sources {
+		src := &a.Sources[i]
+		if err := src.Validate(); err != nil {
+			return fmt.Errorf("audio source %d: %w", i+1, err)
+		}
+
+		// Check for duplicate names (case-insensitive)
+		nameLower := strings.ToLower(strings.TrimSpace(src.Name))
+		if names[nameLower] {
+			return fmt.Errorf("duplicate audio source name: '%s'", src.Name)
+		}
+		names[nameLower] = true
+
+		// Check for duplicate devices (trimmed for consistency)
+		deviceTrimmed := strings.TrimSpace(src.Device)
+		if devices[deviceTrimmed] {
+			return fmt.Errorf("audio source '%s' has a duplicate device: '%s'", src.Name, src.Device)
+		}
+		devices[deviceTrimmed] = true
 	}
 
 	return nil
@@ -1102,7 +1185,15 @@ func validateAudioSettings(settings *AudioSettings) error {
 		settings.SoxAudioTypes = formats
 	}
 
-	// Validate quiet hours for sound card
+	// Validate audio sources
+	if err := settings.ValidateSources(); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-sources").
+			Build()
+	}
+
+	// Validate global quiet hours (legacy fallback)
 	if err := ValidateQuietHours(&settings.QuietHours, "sound card"); err != nil {
 		return errors.New(err).
 			Category(errors.CategoryValidation).

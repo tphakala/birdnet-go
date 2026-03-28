@@ -87,20 +87,31 @@ type SoundLevelSettings struct {
 	DebugRealtimeLogging bool `yaml:"debug_realtime_logging" mapstructure:"debug_realtime_logging" json:"debugRealtimeLogging"` // true to log debug messages for every realtime update, false to log only at configured interval
 }
 
-type AudioSettings struct {
-	Source          string             `yaml:"source" mapstructure:"source" json:"source"`             // audio source to use for analysis
-	FfmpegPath      string             `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"` // path to ffmpeg, runtime value
-	FfmpegVersion   string             `yaml:"-" json:"ffmpegVersion,omitempty"`                       // ffmpeg version string, runtime value
-	FfmpegMajor     int                `yaml:"-" json:"ffmpegMajor,omitempty"`                         // ffmpeg major version number, runtime value
-	FfmpegMinor     int                `yaml:"-" json:"ffmpegMinor,omitempty"`                         // ffmpeg minor version number, runtime value
-	SoxPath         string             `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`          // path to sox, runtime value
-	SoxAudioTypes   []string           `yaml:"-" json:"-"`                                             // supported audio types of sox, runtime value
-	StreamTransport string             `yaml:"streamtransport" json:"streamTransport"`                 // preferred transport for audio streaming: "auto", "sse", or "ws"
-	Export          ExportSettings     `yaml:"export" json:"export"`                                   // export settings
-	SoundLevel      SoundLevelSettings `yaml:"soundlevel" json:"soundLevel"`                           // sound level monitoring settings
+// AudioSourceConfig represents a single audio capture device with per-source settings.
+type AudioSourceConfig struct {
+	Name       string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard Mic"
+	Device     string             `yaml:"device" json:"device" mapstructure:"device"`                              // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
+	Gain       float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
+	Model      string             `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`             // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
+	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-source EQ (nil = use global)
+	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Per-source quiet hours
+}
 
-	Equalizer  EqualizerSettings `yaml:"equalizer" json:"equalizer"`                             // equalizer settings
-	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours for sound card
+type AudioSettings struct {
+	Sources         []AudioSourceConfig `yaml:"sources" json:"sources" mapstructure:"sources"`                  // Audio capture devices
+	Source          string              `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"` // Legacy: migrated to Sources on load
+	FfmpegPath      string              `yaml:"ffmpegpath" mapstructure:"ffmpegpath" json:"ffmpegPath"`         // path to ffmpeg, runtime value
+	FfmpegVersion   string              `yaml:"-" json:"ffmpegVersion,omitempty"`                               // ffmpeg version string, runtime value
+	FfmpegMajor     int                 `yaml:"-" json:"ffmpegMajor,omitempty"`                                 // ffmpeg major version number, runtime value
+	FfmpegMinor     int                 `yaml:"-" json:"ffmpegMinor,omitempty"`                                 // ffmpeg minor version number, runtime value
+	SoxPath         string              `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                  // path to sox, runtime value
+	SoxAudioTypes   []string            `yaml:"-" json:"-"`                                                     // supported audio types of sox, runtime value
+	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
+	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
+	SoundLevel      SoundLevelSettings  `yaml:"soundlevel" json:"soundLevel"`                                   // sound level monitoring settings
+
+	Equalizer  EqualizerSettings `yaml:"equalizer" json:"equalizer"`                             // equalizer settings (global default)
+	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours (global default, legacy)
 }
 
 // NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
@@ -1540,6 +1551,18 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Migrate legacy single audio source to new multi-source format
+	if settings.MigrateAudioSourceConfig() {
+		configFile := viper.ConfigFileUsed()
+		if configFile != "" {
+			if err := SaveYAMLConfig(configFile, settings); err != nil {
+				GetLogger().Warn("Failed to save migrated audio source config", logger.Error(err))
+			} else {
+				GetLogger().Info("Saved migrated audio source configuration", logger.String("path", configFile))
+			}
+		}
+	}
+
 	// Migrate dashboard layout for existing installations
 	if settings.MigrateDashboardLayout() {
 		configFile := viper.ConfigFileUsed()
@@ -1977,6 +2000,36 @@ func (s *Settings) MigrateRTSPConfig() bool {
 
 	GetLogger().Info("Migrated RTSP configuration to new streams format",
 		logger.Int("stream_count", len(rtsp.Streams)))
+
+	return true
+}
+
+// MigrateAudioSourceConfig migrates the legacy single audio source string
+// (realtime.audio.source) to the new multi-source array format (realtime.audio.sources).
+// This follows the same pattern as MigrateRTSPConfig.
+func (s *Settings) MigrateAudioSourceConfig() bool {
+	audio := &s.Realtime.Audio
+
+	// Skip if already migrated (new format has sources) OR nothing to migrate.
+	// Note: Viper unmarshals explicit `sources: []` as empty slice (not nil),
+	// so we check both conditions to avoid re-migrating.
+	if len(audio.Sources) > 0 || strings.TrimSpace(audio.Source) == "" {
+		return false
+	}
+
+	// Create one AudioSourceConfig from the legacy scalar
+	audio.Sources = []AudioSourceConfig{{
+		Name:       "Sound Card 1",
+		Device:     strings.TrimSpace(audio.Source),
+		Gain:       0,
+		QuietHours: audio.QuietHours, // Carry over global quiet hours
+	}}
+
+	// Clear legacy field
+	audio.Source = ""
+
+	GetLogger().Info("Migrated audio source to new multi-source format",
+		logger.Int("source_count", 1))
 
 	return true
 }

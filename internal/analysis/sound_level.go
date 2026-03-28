@@ -624,11 +624,15 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	successCount := 0
 	totalSources := 0
 
-	// Register for audio device source if active
-	if settings.Realtime.Audio.Source != "" {
+	// Register for audio device sources if active
+	for i := range settings.Realtime.Audio.Sources {
+		src := &settings.Realtime.Audio.Sources[i]
+		if src.Device == "" {
+			continue
+		}
 		totalSources++
 		successCount++
-		LogSoundLevelProcessorRegistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
+		LogSoundLevelProcessorRegistered(src.Name, "audio_device", "analysis.soundlevel")
 	}
 
 	// Register for each configured RTSP source
@@ -655,9 +659,13 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 // Sound level processing is now handled by SoundLevelConsumer via the AudioRouter;
 // the legacy myaudio unregistration calls have been removed.
 func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
-	// Log audio source unregistration
-	if settings.Realtime.Audio.Source != "" {
-		LogSoundLevelProcessorUnregistered(settings.Realtime.Audio.Source, "audio_device", "analysis.soundlevel")
+	// Log audio source unregistrations
+	for i := range settings.Realtime.Audio.Sources {
+		src := &settings.Realtime.Audio.Sources[i]
+		if src.Device == "" {
+			continue
+		}
+		LogSoundLevelProcessorUnregistered(src.Name, "audio_device", "analysis.soundlevel")
 	}
 
 	// Log stream source unregistrations

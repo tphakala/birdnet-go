@@ -176,7 +176,13 @@ realtime:
   processingtime: false   # true to report processing time for each prediction
   
   audio:
-    source: "sysdefault"  # audio source to use for analysis
+    sources:              # audio capture devices (multiple supported)
+      - name: "Sound Card 1"
+        device: "sysdefault"  # ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
+        gain: 0               # input gain in dB (0 = no adjustment)
+        # model: ""           # AI model: "birdnet" (default), "perch_v2", "bat" (future)
+        # equalizer:          # per-source EQ (omit to use global)
+        # quiethours:         # per-source quiet hours
     soundlevel:
       enabled: false      # true to enable sound level monitoring
       interval: 10        # measurement interval in seconds (min 5 recommended, lower values increase CPU load)

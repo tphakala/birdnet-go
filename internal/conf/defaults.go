@@ -83,8 +83,14 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)
 
-	// Audio source configuration
-	viper.SetDefault("realtime.audio.source", "sysdefault")
+	// Audio source configuration (multi-source array)
+	viper.SetDefault("realtime.audio.sources", []map[string]any{
+		{
+			"name":   "Sound Card 1",
+			"device": "sysdefault",
+			"gain":   0.0,
+		},
+	})
 	viper.SetDefault("realtime.audio.streamtransport", "sse")
 
 	// Sound level monitoring configuration
