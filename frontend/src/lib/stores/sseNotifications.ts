@@ -126,17 +126,12 @@ class SSENotificationManager {
       };
 
       this.eventSource.onerror = () => {
-        // EventSource onerror receives an Event, not an Error.
-        // Passing the raw Event to the logger (or Sentry) produces an
-        // opaque "callback" error title. Create a proper Error instead.
-        logger.error(
-          'SSE notification connection error',
-          new Error('SSE notification connection lost'),
-          {
-            component: 'sseNotifications',
-            action: 'connection',
-          }
-        );
+        // EventSource onerror receives an Event (not an Error); log a descriptive
+        // message at warn level since SSE auto-reconnects handle recovery.
+        logger.warn('SSE notification connection error, will auto-reconnect', null, {
+          component: 'sseNotifications',
+          action: 'connection',
+        });
         this.isConnected = false;
         onSSEError();
         // ReconnectingEventSource handles reconnection automatically

@@ -62,12 +62,7 @@ export function initSentry(config: SentryConfig): void {
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip expected-flow errors — auth (401/403) and conflict (409, e.g. v2 database not available)
-  if (
-    error.status === HTTP_UNAUTHORIZED ||
-    error.status === HTTP_FORBIDDEN ||
-    error.status === HTTP_CONFLICT
-  )
-    return;
+  if (isExpectedApiError(error)) return;
 
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 
