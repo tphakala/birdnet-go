@@ -881,6 +881,19 @@ func (bn *BirdNET) ReloadModel() error {
 	}
 	bn.Debug("Taxonomy data reloaded successfully")
 
+	// Reload labels before model initialization — ONNX models require labels
+	// at construction time for output dimension validation.
+	if err := bn.loadLabels(); err != nil {
+		rollback()
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "load_labels").
+			Build()
+	}
+	bn.Debug("Labels loaded successfully")
+
 	// Initialize new model
 	if err := bn.initializeModel(); err != nil {
 		rollback()
@@ -904,18 +917,6 @@ func (bn *BirdNET) ReloadModel() error {
 			Build()
 	}
 	bn.Debug("Meta model initialized successfully")
-
-	// Reload labels
-	if err := bn.loadLabels(); err != nil {
-		rollback()
-		return errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "reload_model").
-			Context("step", "load_labels").
-			Build()
-	}
-	bn.Debug("Labels loaded successfully")
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
