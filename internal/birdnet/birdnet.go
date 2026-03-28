@@ -154,8 +154,24 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	return bn, nil
 }
 
+// isONNXModel returns true if the model path points to an ONNX model file.
+func isONNXModel(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".onnx")
+}
+
 // initializeModel loads and initializes the primary BirdNET model.
+// Dispatches to ONNX or TFLite backend based on the model file extension.
 func (bn *BirdNET) initializeModel() error {
+	// If model path ends with .onnx, use the ONNX backend
+	if isONNXModel(bn.Settings.BirdNET.ModelPath) {
+		return bn.initializeONNXModel()
+	}
+
+	return bn.initializeTFLiteModel()
+}
+
+// initializeTFLiteModel loads and initializes a TFLite model as the classifier backend.
+func (bn *BirdNET) initializeTFLiteModel() error {
 	start := time.Now()
 
 	modelData, err := bn.loadModel()
@@ -306,6 +322,16 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 
 // initializeMetaModel loads and initializes the meta model used for range filtering.
 func (bn *BirdNET) initializeMetaModel() error {
+	// If range filter model path ends with .onnx, use the ONNX backend
+	if isONNXModel(bn.Settings.BirdNET.RangeFilter.ModelPath) {
+		return bn.initializeONNXMetaModel()
+	}
+
+	return bn.initializeTFLiteMetaModel()
+}
+
+// initializeTFLiteMetaModel loads and initializes a TFLite range filter model.
+func (bn *BirdNET) initializeTFLiteMetaModel() error {
 	start := time.Now()
 
 	metaModelData, err := bn.getMetaModelData()
