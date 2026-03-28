@@ -165,7 +165,7 @@ vi.mock('$lib/stores/settings', async () => {
     mode: 'fixed',
     startTime: '22:00',
     endTime: '06:00',
-    startEvent: 'sunrise',
+    startEvent: 'sunset',
     startOffset: 0,
     endEvent: 'sunrise',
     endOffset: 0,

@@ -642,8 +642,9 @@
       />
     {:else if audioDevices.loading && audioDevices.data.length === 0 && settings.audio.sources.length === 0}
       <!-- Initial Loading State (only when no data yet) -->
-      <div class="flex items-center justify-center py-12">
+      <div role="status" class="flex items-center justify-center py-12">
         <span
+          aria-hidden="true"
           class="inline-block w-10 h-10 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
         ></span>
         <span class="ml-3 text-[var(--color-base-content)] opacity-90"
