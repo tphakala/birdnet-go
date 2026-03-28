@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	ortInitOnce sync.Once
-	errORTInit  error
+	ortInitMu      sync.Mutex
+	ortInitialized bool
 )
 
 // ONNXClassifierOptions configures the ONNX species classifier.
@@ -41,16 +41,25 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 		ort.WithTopK(0),          // We handle topK in BirdNET-Go's post-processing
 		ort.WithMinConfidence(0), // No filtering, return all raw scores
 	}
+	var configErr error
 	if opts.Threads > 0 {
 		threads := opts.Threads
 		classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
-			_ = so.SetIntraOpNumThreads(threads)
-			_ = so.SetInterOpNumThreads(threads)
+			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+			}
+			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+			}
 		}))
 	}
 	classifier, err := ort.NewClassifier(modelPath, classifierOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX classifier: %w", err)
+	}
+	if configErr != nil {
+		_ = classifier.Close()
+		return nil, fmt.Errorf("failed to configure ONNX session options: %w", configErr)
 	}
 
 	return &onnxClassifier{
@@ -127,21 +136,32 @@ func (r *onnxRangeFilter) Close() {
 }
 
 // InitONNXRuntime initializes the ONNX Runtime with the given shared library path.
-// Safe to call multiple times — initialization happens only once.
-// Must be called before creating any ONNX classifiers or range filters.
-func InitONNXRuntime(libraryPath string) error {
-	ortInitOnce.Do(func() {
-		defer func() {
-			if r := recover(); r != nil {
-				errORTInit = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
-			}
-		}()
-		ort.MustInitORT(libraryPath)
-	})
-	return errORTInit
+// Safe to call multiple times — skips if already initialized successfully.
+// On failure, allows retry with a corrected path (supports hot-reload recovery).
+func InitONNXRuntime(libraryPath string) (err error) {
+	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
+
+	if ortInitialized {
+		return nil
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("failed to initialize ONNX Runtime: %v", r)
+		}
+	}()
+
+	ort.MustInitORT(libraryPath)
+	ortInitialized = true
+	return nil
 }
 
 // DestroyONNXRuntime tears down the ONNX Runtime environment.
+// Resets initialization state so InitONNXRuntime can be called again.
 func DestroyONNXRuntime() error {
+	ortInitMu.Lock()
+	ortInitialized = false
+	ortInitMu.Unlock()
 	return ort.DestroyORT()
 }

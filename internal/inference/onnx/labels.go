@@ -67,7 +67,7 @@ func loadLabelsCSV(data []byte) ([]string, error) {
 		return nil, err
 	}
 	if len(records) < 2 {
-		return nil, nil
+		return nil, fmt.Errorf("invalid CSV: need header plus at least one data row, got %d rows", len(records))
 	}
 
 	header := records[0]
