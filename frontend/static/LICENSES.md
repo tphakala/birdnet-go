@@ -407,6 +407,11 @@ Source: Unknown
 License: https://github.com/tphakala/flac/blob/20d6d98f5ee3/LICENSE
 Source: MIT
 
+### github.com/tphakala/go-audio-resampler
+
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.2.0/LICENSE
+Source: LGPL-3.0
+
 ### github.com/tphakala/go-tflite
 
 License: https://github.com/tphakala/go-tflite/blob/v0.2.1/LICENSE
@@ -505,6 +510,11 @@ Source: BSD-3-Clause
 ### golang.org/x/time/rate
 
 License: https://cs.opensource.google/go/x/time/+/v0.15.0:LICENSE
+Source: BSD-3-Clause
+
+### gonum.org/v1/gonum/dsp/fourier
+
+License: Unknown
 Source: BSD-3-Clause
 
 ### google.golang.org/api
