@@ -160,12 +160,24 @@ vi.mock('$lib/stores/settings', async () => {
   // Create hasUnsavedChanges store for SettingsPageActions
   const hasUnsavedChanges = writable(false);
 
+  const defaultQuietHoursConfig = {
+    enabled: false,
+    mode: 'fixed',
+    startTime: '22:00',
+    endTime: '06:00',
+    startEvent: 'sunrise',
+    startOffset: 0,
+    endEvent: 'sunrise',
+    endOffset: 0,
+  };
+
   return {
     settingsStore,
     audioSettings,
     rtspSettings,
     settingsActions,
     hasUnsavedChanges,
+    defaultQuietHoursConfig,
   };
 });
 
