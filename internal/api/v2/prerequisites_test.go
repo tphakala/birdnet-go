@@ -302,7 +302,7 @@ func TestCheckMemoryAvailable(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	controller := &Controller{}
+	controller := &Controller{Settings: newValidTestSettings()}
 
 	check := controller.checkMemoryAvailable()
 

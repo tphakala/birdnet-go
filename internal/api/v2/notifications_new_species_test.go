@@ -69,7 +69,7 @@ func TestCreateTestNewSpeciesNotification_Success(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	controller := &Controller{}
+	controller := &Controller{Settings: newValidTestSettings()}
 	controller.Settings = &conf.Settings{}
 	controller.Settings.Security.Host = "localhost"
 	controller.Settings.WebServer.Port = "8080"

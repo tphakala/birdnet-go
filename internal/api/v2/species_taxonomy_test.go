@@ -25,6 +25,7 @@ func TestGetGenusSpecies(t *testing.T) {
 
 	// Create a minimal controller with taxonomy DB
 	c := &Controller{
+		Settings:   newValidTestSettings(),
 		TaxonomyDB: taxonomyDB,
 	}
 
@@ -124,6 +125,7 @@ func TestGetFamilySpecies(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{
+		Settings:   newValidTestSettings(),
 		TaxonomyDB: taxonomyDB,
 	}
 
@@ -204,6 +206,7 @@ func TestGetSpeciesTree(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{
+		Settings:   newValidTestSettings(),
 		TaxonomyDB: taxonomyDB,
 	}
 
@@ -308,6 +311,7 @@ func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{
+		Settings:   newValidTestSettings(),
 		TaxonomyDB: taxonomyDB,
 		// No EBirdClient - testing local DB only
 		EBirdClient: nil,
@@ -364,6 +368,7 @@ func TestGetSpeciesTaxonomyWithoutLocalDB(t *testing.T) {
 	t.Parallel()
 
 	c := &Controller{
+		Settings: newValidTestSettings(),
 		// No TaxonomyDB and no EBirdClient
 		TaxonomyDB:  nil,
 		EBirdClient: nil,

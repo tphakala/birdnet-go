@@ -41,7 +41,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("empty entries returns empty response", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		result := c.aggregateDetectionEvents(nil, baseTime)
 
@@ -56,7 +56,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("single approve creates one bucket and one species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{
@@ -94,7 +94,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple operations same bucket same species accumulate", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Sparrow", map[string]any{"confidence": 0.7, "match_count": float64(1)}),
@@ -123,7 +123,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple species same bucket grouped correctly", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{"confidence": 0.9, "match_count": float64(2)}),
@@ -139,7 +139,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("multiple buckets separated by hour and sorted newest first", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		hour10 := time.Date(2024, 6, 15, 10, 15, 0, 0, time.UTC)
 		hour14 := time.Date(2024, 6, 15, 14, 45, 0, 0, time.UTC)
@@ -159,7 +159,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("pre-filters counted in bucket but not in species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "dog_bark_filter", "", nil),
@@ -184,7 +184,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("pending count from create_pending_detection hourly array", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(time.Date(2024, 6, 15, 8, 0, 0, 0, time.UTC), "create_pending_detection", "", nil),
@@ -201,7 +201,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("species sorting approved first then by total descending", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			// Crow: 3 discards (no approvals)
@@ -228,7 +228,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("top discarded species top 3", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			// 5 discards for Alpha
@@ -261,7 +261,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("audio clip matching attached to correct species", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{"confidence": 0.9, "match_count": float64(1)}),
@@ -293,7 +293,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("peak confidence tracks highest value", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{"confidence": 0.7, "match_count": float64(1)}),
@@ -310,7 +310,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("max match count tracks highest value", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "Robin", map[string]any{"confidence": 0.8, "match_count": float64(2)}),
@@ -327,7 +327,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("empty species name entries are skipped", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			makeEntry(baseTime, "approve_detection", "", map[string]any{"confidence": 0.9, "match_count": float64(1)}),
@@ -347,7 +347,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("approved per hour metric calculated correctly", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		hour10 := time.Date(2024, 6, 15, 10, 15, 0, 0, time.UTC)
 		hour14 := time.Date(2024, 6, 15, 14, 45, 0, 0, time.UTC)
@@ -367,7 +367,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("timestamps are recorded for approve and discard", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		approveTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
 		discardTime := time.Date(2024, 6, 15, 10, 35, 0, 0, time.UTC)
@@ -388,7 +388,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 
 	t.Run("species summary sorted by total descending", func(t *testing.T) {
 		t.Parallel()
-		c := &Controller{}
+		c := &Controller{Settings: newValidTestSettings()}
 
 		entries := []reader.LogEntry{
 			// Robin: 3 total
