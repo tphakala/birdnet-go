@@ -898,7 +898,13 @@ func (bn *BirdNET) ReloadModel() error {
 			Build()
 	}
 
-	// Old interpreters will be cleaned up by GC now that they're unreferenced
+	// Explicitly close old backends to release resources promptly
+	if oldClassifier != nil {
+		oldClassifier.Close()
+	}
+	if oldRangeFilter != nil {
+		oldRangeFilter.Close()
+	}
 
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
