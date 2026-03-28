@@ -70,6 +70,8 @@ This folder contains **shared components** used across the application. Feature-
 - `SliderField.svelte` - Slider input field
 - `SpeciesInput.svelte` - Species selection input
 - `SpeciesManager.svelte` - Species management interface
+- `SoundCardCard.svelte` - Individual sound card source card with device, gain, model, equalizer, quiet hours
+- `SoundCardManager.svelte` - Manage multiple sound card audio sources
 - `StreamCard.svelte` - Individual stream card for stream management
 - `StreamManager.svelte` - Manage multiple video/audio streams
 - `SubnetInput.svelte` - Subnet input with validation

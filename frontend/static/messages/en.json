@@ -2799,6 +2799,42 @@
         "warning": "No Audio Sources Configured",
         "description": "BirdNET-Go needs an audio input to detect birds. Please configure at least one source in the Sound Card or Streams tab."
       },
+      "soundCards": {
+        "summary": "{count} sound card source(s)",
+        "addSource": "Add Sound Card",
+        "nameLabel": "Source Name",
+        "namePlaceholder": "e.g., Front Yard Microphone",
+        "nameHelp": "A descriptive name for this audio source",
+        "deviceLabel": "Audio Device",
+        "devicePlaceholder": "Select an audio device",
+        "gainLabel": "Gain (dB)",
+        "gainHelp": "Audio input gain adjustment (-40 to +40 dB)",
+        "modelLabel": "Detection Model",
+        "modelHelp": "BirdNET model to use for this source",
+        "deleteConfirm": "Remove this sound card source?",
+        "emptyState": {
+          "title": "No Sound Card Sources Configured",
+          "description": "Add a sound card source to start capturing audio for bird detection.",
+          "hintsTitle": "Getting Started",
+          "hints": {
+            "device": "Select from available audio input devices on your system",
+            "multiple": "You can configure multiple sound cards for different locations",
+            "model": "Each source can use a different detection model (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Default)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Bat Detection"
+        },
+        "errors": {
+          "nameRequired": "Source name is required",
+          "deviceRequired": "Audio device is required",
+          "duplicateName": "A source with this name already exists",
+          "duplicateDevice": "This device is already configured"
+        }
+      },
       "audioCapture": {
         "title": "Sound Card Configuration",
         "description": "Select the audio input device for bird sound detection. Changes require application restart.",

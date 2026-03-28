@@ -2748,6 +2748,42 @@
         "warning": "No hay fuentes de audio configuradas",
         "description": "BirdNET-Go necesita una entrada de audio para detectar aves. Por favor configure al menos una fuente en la pestaña Tarjeta de Sonido o Streams."
       },
+      "soundCards": {
+        "summary": "{count} fuente(s) de tarjeta de sonido",
+        "addSource": "Agregar Tarjeta de Sonido",
+        "nameLabel": "Nombre de la Fuente",
+        "namePlaceholder": "ej. Micrófono del Jardín Delantero",
+        "nameHelp": "Un nombre descriptivo para esta fuente de audio",
+        "deviceLabel": "Dispositivo de Audio",
+        "devicePlaceholder": "Seleccionar un dispositivo de audio",
+        "gainLabel": "Ganancia (dB)",
+        "gainHelp": "Ajuste de ganancia de entrada de audio (-40 a +40 dB)",
+        "modelLabel": "Modelo de Detección",
+        "modelHelp": "Modelo BirdNET a usar para esta fuente",
+        "deleteConfirm": "¿Eliminar esta fuente de tarjeta de sonido?",
+        "emptyState": {
+          "title": "No Hay Tarjetas de Sonido Configuradas",
+          "description": "Agregue una tarjeta de sonido para comenzar a capturar audio para la detección de aves.",
+          "hintsTitle": "Primeros Pasos",
+          "hints": {
+            "device": "Seleccione entre los dispositivos de entrada de audio disponibles en su sistema",
+            "multiple": "Puede configurar múltiples tarjetas de sonido para diferentes ubicaciones",
+            "model": "Cada fuente puede usar un modelo de detección diferente (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Predeterminado)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Detección de murciélagos"
+        },
+        "errors": {
+          "nameRequired": "El nombre de la fuente es obligatorio",
+          "deviceRequired": "El dispositivo de audio es obligatorio",
+          "duplicateName": "Ya existe una fuente con este nombre",
+          "duplicateDevice": "Este dispositivo ya está configurado"
+        }
+      },
       "rtspStreams": {
         "title": "Configuración de Flujos de Audio",
         "description": "Configura flujos de audio de red para captura de audio remota. Soporta protocolos RTSP, HTTP, HLS, RTMP y UDP.",

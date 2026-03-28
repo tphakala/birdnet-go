@@ -125,8 +125,19 @@ export interface OutputSettings {
   mysql: MySQLSettings;
 }
 
+// AudioSourceConfig represents a single sound card audio source
+export interface AudioSourceConfig {
+  name: string;
+  device: string;
+  gain: number;
+  model: string; // "birdnet" | "perch_v2" | "bat" | "" (empty = default birdnet)
+  equalizer?: EqualizerSettings;
+  quietHours?: QuietHoursConfig;
+}
+
 export interface AudioSettings {
-  source: string;
+  sources: AudioSourceConfig[];
+  source: string; // legacy single source, kept for backward compat
   ffmpegPath?: string;
   soxPath?: string;
   streamTransport?: string;
@@ -830,6 +841,7 @@ function createEmptySettings(): SettingsFormData {
         level: 0,
       },
       audio: {
+        sources: [],
         source: '',
         ffmpegPath: '',
         soxPath: '',

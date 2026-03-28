@@ -2981,6 +2981,42 @@
         "warning": "Brak Skonfigurowanych Źródeł Audio",
         "description": "BirdNET-Go potrzebuje wejścia audio do wykrywania ptaków. Proszę skonfigurować co najmniej jedno źródło w karcie Karta Dźwiękowa lub Strumienie."
       },
+      "soundCards": {
+        "summary": "{count} źródło/źródeł kart dźwiękowych",
+        "addSource": "Dodaj Kartę Dźwiękową",
+        "nameLabel": "Nazwa Źródła",
+        "namePlaceholder": "np. Mikrofon na Podwórku",
+        "nameHelp": "Opisowa nazwa dla tego źródła audio",
+        "deviceLabel": "Urządzenie Audio",
+        "devicePlaceholder": "Wybierz urządzenie audio",
+        "gainLabel": "Wzmocnienie (dB)",
+        "gainHelp": "Regulacja wzmocnienia wejścia audio (-40 do +40 dB)",
+        "modelLabel": "Model Detekcji",
+        "modelHelp": "Model BirdNET używany dla tego źródła",
+        "deleteConfirm": "Usunąć to źródło karty dźwiękowej?",
+        "emptyState": {
+          "title": "Brak Skonfigurowanych Źródeł Kart Dźwiękowych",
+          "description": "Dodaj źródło karty dźwiękowej, aby rozpocząć przechwytywanie audio do wykrywania ptaków.",
+          "hintsTitle": "Pierwsze Kroki",
+          "hints": {
+            "device": "Wybierz spośród dostępnych urządzeń wejścia audio w systemie",
+            "multiple": "Możesz skonfigurować wiele kart dźwiękowych dla różnych lokalizacji",
+            "model": "Każde źródło może używać innego modelu detekcji (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Domyślny)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Wykrywanie nietoperzy"
+        },
+        "errors": {
+          "nameRequired": "Nazwa źródła jest wymagana",
+          "deviceRequired": "Urządzenie audio jest wymagane",
+          "duplicateName": "Źródło o tej nazwie już istnieje",
+          "duplicateDevice": "To urządzenie jest już skonfigurowane"
+        }
+      },
       "rtspStreams": {
         "title": "Konfiguracja Strumieni Audio",
         "description": "Konfiguruj sieciowe strumienie audio do zdalnego przechwytywania audio. Obsługuje protokoły RTSP, HTTP, HLS, RTMP i UDP.",

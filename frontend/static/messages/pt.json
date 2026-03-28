@@ -2748,6 +2748,42 @@
         "warning": "Nenhuma fonte de áudio configurada",
         "description": "BirdNET-Go precisa de uma entrada de áudio para detectar pássaros. Por favor, configure pelo menos uma fonte na aba Placa de Som ou Fluxos."
       },
+      "soundCards": {
+        "summary": "{count} fonte(s) de placa de som",
+        "addSource": "Adicionar Placa de Som",
+        "nameLabel": "Nome da Fonte",
+        "namePlaceholder": "ex. Microfone do Jardim da Frente",
+        "nameHelp": "Um nome descritivo para esta fonte de áudio",
+        "deviceLabel": "Dispositivo de Áudio",
+        "devicePlaceholder": "Selecionar um dispositivo de áudio",
+        "gainLabel": "Ganho (dB)",
+        "gainHelp": "Ajuste de ganho de entrada de áudio (-40 a +40 dB)",
+        "modelLabel": "Modelo de Detecção",
+        "modelHelp": "Modelo BirdNET a usar para esta fonte",
+        "deleteConfirm": "Remover esta fonte de placa de som?",
+        "emptyState": {
+          "title": "Nenhuma Fonte de Placa de Som Configurada",
+          "description": "Adicione uma fonte de placa de som para começar a capturar áudio para detecção de pássaros.",
+          "hintsTitle": "Primeiros Passos",
+          "hints": {
+            "device": "Selecione entre os dispositivos de entrada de áudio disponíveis no seu sistema",
+            "multiple": "Pode configurar várias placas de som para diferentes localizações",
+            "model": "Cada fonte pode usar um modelo de detecção diferente (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Padrão)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Deteção de morcegos"
+        },
+        "errors": {
+          "nameRequired": "O nome da fonte é obrigatório",
+          "deviceRequired": "O dispositivo de áudio é obrigatório",
+          "duplicateName": "Já existe uma fonte com este nome",
+          "duplicateDevice": "Este dispositivo já está configurado"
+        }
+      },
       "rtspStreams": {
         "title": "Configuração de Fluxos de Áudio",
         "description": "Configure fluxos de áudio de rede para captura de áudio remota. Suporta protocolos RTSP, HTTP, HLS, RTMP e UDP.",

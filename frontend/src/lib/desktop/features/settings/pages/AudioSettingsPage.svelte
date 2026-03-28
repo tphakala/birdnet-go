@@ -28,11 +28,11 @@
 <script lang="ts">
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import StreamManager from '$lib/desktop/components/forms/StreamManager.svelte';
+  import SoundCardManager from '$lib/desktop/components/forms/SoundCardManager.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import InlineSlider from '$lib/desktop/components/forms/InlineSlider.svelte';
-  import QuietHoursEditor from '$lib/desktop/components/forms/QuietHoursEditor.svelte';
   import {
     settingsStore,
     settingsActions,
@@ -40,9 +40,8 @@
     rtspSettings,
     realtimeSettings,
     extendedCaptureSettings,
-    defaultQuietHoursConfig,
+    type AudioSourceConfig,
     type EqualizerFilterType,
-    type QuietHoursConfig,
     type StreamConfig,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -112,21 +111,11 @@
     { value: '95%', label: '95%' },
   ]);
 
-  // Audio source options derived from audio devices
-  let audioSourceOptions = $derived.by(() => {
-    getLocale();
-    const noCapture = { value: '', label: t('settings.audio.audioCapture.noSoundCardCapture') };
-    const deviceOptions = audioDevices.data.map(device => ({
-      value: device.id,
-      label: device.name,
-    }));
-    return [noCapture, ...deviceOptions];
-  });
-
   // PERFORMANCE OPTIMIZATION: Reactive settings with proper defaults
   let settings = $derived(
     (() => {
       const audioBase = $audioSettings || {
+        sources: [],
         source: '',
         soundLevel: {
           enabled: false,
@@ -173,6 +162,7 @@
       return {
         audio: {
           ...audioBase,
+          sources: audioBase.sources ?? [],
           equalizer: {
             enabled: audioBase.equalizer?.enabled ?? false,
             filters: audioBase.equalizer?.filters ?? [], // Always ensures filters is an array
@@ -191,14 +181,8 @@
   // Sound Card tab changes
   let soundCardTabHasChanges = $derived(
     hasSettingsChanged(
-      {
-        source: store.originalData.realtime?.audio?.source,
-        quietHours: store.originalData.realtime?.audio?.quietHours,
-      },
-      {
-        source: store.formData.realtime?.audio?.source,
-        quietHours: store.formData.realtime?.audio?.quietHours,
-      }
+      store.originalData.realtime?.audio?.sources,
+      store.formData.realtime?.audio?.sources
     )
   );
 
@@ -429,15 +413,9 @@
   });
 
   // Update handlers
-  function updateAudioSource(source: string) {
+  function updateAudioSources(sources: AudioSourceConfig[]) {
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, source },
-    });
-  }
-
-  function updateSoundCardQuietHours(quietHours: QuietHoursConfig) {
-    settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, quietHours },
+      audio: { ...$audioSettings!, sources },
     });
   }
 
@@ -607,10 +585,6 @@
     });
   }
 
-  // Empty state helpers
-  let hasAudioDevices = $derived(!audioDevices.loading && audioDevices.data.length > 0);
-  let hasSelectedSoundCard = $derived(settings.audio.source && settings.audio.source.length > 0);
-
   // Tab definitions - Processing moved to last as advanced settings
   let tabs: TabDefinition[] = $derived([
     {
@@ -676,89 +650,23 @@
           onclick: loadAudioDevices,
         }}
       />
-    {:else if !hasAudioDevices}
-      <!-- Empty State: No Sound Cards Found -->
-      <EmptyState
-        icon={Volume2}
-        title={t('settings.audio.emptyStates.soundCard.title')}
-        description={t('settings.audio.emptyStates.soundCard.description')}
-        hints={[
-          t('settings.audio.emptyStates.soundCard.hints.container'),
-          t('settings.audio.emptyStates.soundCard.hints.streams'),
-          t('settings.audio.emptyStates.soundCard.hints.usb'),
-        ]}
-        hintsTitle={t('settings.audio.emptyStates.soundCard.hintsTitle')}
-        primaryAction={{
-          label: t('settings.audio.emptyStates.soundCard.refresh'),
-          icon: RefreshCw,
-          onclick: loadAudioDevices,
-        }}
-      />
     {:else}
-      <!-- Sound Card Selection -->
+      <!-- Sound Card Source Manager -->
       <SettingsSection
         title={t('settings.audio.audioCapture.title')}
         description={t('settings.audio.audioCapture.description')}
-        originalData={{ source: store.originalData.realtime?.audio?.source }}
-        currentData={{ source: store.formData.realtime?.audio?.source }}
+        originalData={store.originalData.realtime?.audio?.sources}
+        currentData={store.formData.realtime?.audio?.sources}
       >
-        <div class="space-y-4">
-          <SelectDropdown
-            value={settings.audio.source}
-            label={t('settings.audio.audioCapture.audioSourceLabel')}
-            placeholder={t('settings.audio.audioCapture.noSoundCardCapture')}
-            helpText={t('settings.audio.audioCapture.audioSourceHelp')}
-            disabled={store.isLoading || store.isSaving}
-            onChange={value => updateAudioSource(value as string)}
-            options={audioSourceOptions}
-            groupBy={false}
-            menuSize="sm"
-          />
-
-          <!-- Status indicator -->
-          <div class="flex items-center justify-between">
-            {#if hasSelectedSoundCard}
-              <div class="flex items-center gap-2 text-sm text-[var(--color-success)]">
-                <Volume2 class="size-4" />
-                <span>{t('settings.audio.audioCapture.deviceSelected')}</span>
-              </div>
-            {:else}
-              <div
-                class="flex items-center gap-2 text-sm text-[var(--color-base-content)] opacity-60"
-              >
-                <Volume2 class="size-4" />
-                <span>{t('settings.audio.audioCapture.noDeviceSelected')}</span>
-              </div>
-            {/if}
-            <button
-              type="button"
-              class="inline-flex items-center justify-center gap-1.5 px-2 py-1 text-xs font-medium rounded-md cursor-pointer transition-all bg-transparent hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
-              onclick={loadAudioDevices}
-              disabled={audioDevices.loading}
-            >
-              <RefreshCw class={`size-3.5 ${audioDevices.loading ? 'animate-spin' : ''}`} />
-              {t('settings.audio.audioCapture.refreshDevices')}
-            </button>
-          </div>
-        </div>
+        <SoundCardManager
+          sources={settings.audio.sources}
+          audioDevices={audioDevices.data}
+          audioDevicesLoading={audioDevices.loading}
+          disabled={store.isLoading || store.isSaving}
+          onUpdateSources={updateAudioSources}
+          onRefreshDevices={loadAudioDevices}
+        />
       </SettingsSection>
-
-      <!-- Sound Card Quiet Hours -->
-      {#if hasSelectedSoundCard}
-        <SettingsSection
-          title={t('settings.audio.quietHours.sectionTitle')}
-          description={t('settings.audio.quietHours.sectionDescription')}
-          originalData={store.originalData.realtime?.audio?.quietHours}
-          currentData={store.formData.realtime?.audio?.quietHours}
-        >
-          <QuietHoursEditor
-            config={settings.audio.quietHours ?? defaultQuietHoursConfig}
-            onChange={updateSoundCardQuietHours}
-            disabled={store.isLoading || store.isSaving}
-            idPrefix="soundcard-qh"
-          />
-        </SettingsSection>
-      {/if}
     {/if}
   </div>
 {/snippet}

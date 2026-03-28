@@ -2748,6 +2748,42 @@
         "warning": "Äänilähteita ei ole määritetty",
         "description": "BirdNET-Go tarvitsee äänen syötteen lintujen havaitsemiseen. Määritä vähintään yksi lähde Äänikortti- tai Striimit-välilehdellä."
       },
+      "soundCards": {
+        "summary": "{count} äänikorttilähdettä",
+        "addSource": "Lisää äänikortti",
+        "nameLabel": "Lähteen nimi",
+        "namePlaceholder": "esim. Etupihan mikrofoni",
+        "nameHelp": "Kuvaava nimi tälle äänilähteelle",
+        "deviceLabel": "Äänilaite",
+        "devicePlaceholder": "Valitse äänilaite",
+        "gainLabel": "Vahvistus (dB)",
+        "gainHelp": "Äänen tulovahvistuksen säätö (-40 - +40 dB)",
+        "modelLabel": "Tunnistusmalli",
+        "modelHelp": "Tälle lähteelle käytettävä BirdNET-malli",
+        "deleteConfirm": "Poistetaanko tämä äänikorttilähtö?",
+        "emptyState": {
+          "title": "Äänikorttilähteitä ei ole määritetty",
+          "description": "Lisää äänikorttilähtö aloittaaksesi äänen tallennuksen lintujen tunnistamista varten.",
+          "hintsTitle": "Alkuun pääseminen",
+          "hints": {
+            "device": "Valitse järjestelmän käytettävissä olevista äänen syöttölaitteista",
+            "multiple": "Voit määrittää useita äänikortteja eri sijainneille",
+            "model": "Jokainen lähde voi käyttää eri tunnistusmallia (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Oletus)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Lepakkotunnistus"
+        },
+        "errors": {
+          "nameRequired": "Lähteen nimi on pakollinen",
+          "deviceRequired": "Äänilaite on pakollinen",
+          "duplicateName": "Tämänniminen lähde on jo olemassa",
+          "duplicateDevice": "Tämä laite on jo määritetty"
+        }
+      },
       "rtspStreams": {
         "title": "Äänistriimien määritys",
         "description": "Määritä verkkoäänistriimejä etäänen tallennukseen. Tukee RTSP-, HTTP-, HLS-, RTMP- ja UDP-protokollia.",

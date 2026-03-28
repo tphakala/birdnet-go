@@ -2975,6 +2975,42 @@
         "warning": "Aucune source audio configurée",
         "description": "BirdNET-Go a besoin d'une entrée audio pour détecter les oiseaux. Veuillez configurer au moins une source dans l'onglet Carte Son ou Flux."
       },
+      "soundCards": {
+        "summary": "{count} source(s) de carte son",
+        "addSource": "Ajouter une Carte Son",
+        "nameLabel": "Nom de la Source",
+        "namePlaceholder": "ex. Microphone Jardin Avant",
+        "nameHelp": "Un nom descriptif pour cette source audio",
+        "deviceLabel": "Périphérique Audio",
+        "devicePlaceholder": "Sélectionner un périphérique audio",
+        "gainLabel": "Gain (dB)",
+        "gainHelp": "Réglage du gain d'entrée audio (-40 à +40 dB)",
+        "modelLabel": "Modèle de Détection",
+        "modelHelp": "Modèle BirdNET à utiliser pour cette source",
+        "deleteConfirm": "Supprimer cette source de carte son ?",
+        "emptyState": {
+          "title": "Aucune Source de Carte Son Configurée",
+          "description": "Ajoutez une source de carte son pour commencer la capture audio pour la détection d'oiseaux.",
+          "hintsTitle": "Pour Commencer",
+          "hints": {
+            "device": "Sélectionnez parmi les périphériques d'entrée audio disponibles sur votre système",
+            "multiple": "Vous pouvez configurer plusieurs cartes son pour différents emplacements",
+            "model": "Chaque source peut utiliser un modèle de détection différent (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Par défaut)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Détection de chauves-souris"
+        },
+        "errors": {
+          "nameRequired": "Le nom de la source est requis",
+          "deviceRequired": "Le périphérique audio est requis",
+          "duplicateName": "Une source avec ce nom existe déjà",
+          "duplicateDevice": "Ce périphérique est déjà configuré"
+        }
+      },
       "rtspStreams": {
         "title": "Configuration des Flux Audio",
         "description": "Configurez les flux audio réseau pour la capture audio à distance. Supporte les protocoles RTSP, HTTP, HLS, RTMP et UDP.",

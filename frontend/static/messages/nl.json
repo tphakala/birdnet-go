@@ -2975,6 +2975,42 @@
         "warning": "Geen Audio Bronnen Geconfigureerd",
         "description": "BirdNET-Go heeft een audio invoer nodig om vogels te detecteren. Configureer alstublieft tenminste één bron in het Geluidskaart of Streams tabblad."
       },
+      "soundCards": {
+        "summary": "{count} geluidskaartbron(nen)",
+        "addSource": "Geluidskaart Toevoegen",
+        "nameLabel": "Bronnaam",
+        "namePlaceholder": "bijv. Microfoon Voortuin",
+        "nameHelp": "Een beschrijvende naam voor deze audiobron",
+        "deviceLabel": "Audioapparaat",
+        "devicePlaceholder": "Selecteer een audioapparaat",
+        "gainLabel": "Versterking (dB)",
+        "gainHelp": "Aanpassing van de audio-ingangsversterking (-40 tot +40 dB)",
+        "modelLabel": "Detectiemodel",
+        "modelHelp": "BirdNET-model voor deze bron",
+        "deleteConfirm": "Deze geluidskaartbron verwijderen?",
+        "emptyState": {
+          "title": "Geen Geluidskaartbronnen Geconfigureerd",
+          "description": "Voeg een geluidskaartbron toe om te beginnen met het opnemen van audio voor vogeldetectie.",
+          "hintsTitle": "Aan de Slag",
+          "hints": {
+            "device": "Kies uit de beschikbare audio-invoerapparaten op uw systeem",
+            "multiple": "U kunt meerdere geluidskaarten configureren voor verschillende locaties",
+            "model": "Elke bron kan een ander detectiemodel gebruiken (BirdNET, Perch, Bat)"
+          }
+        },
+        "models": {
+          "birdnetDefault": "BirdNET (Standaard)",
+          "birdnet": "BirdNET",
+          "perchV2": "Google Perch v2",
+          "bat": "Vleermuisdetectie"
+        },
+        "errors": {
+          "nameRequired": "Bronnaam is verplicht",
+          "deviceRequired": "Audioapparaat is verplicht",
+          "duplicateName": "Er bestaat al een bron met deze naam",
+          "duplicateDevice": "Dit apparaat is al geconfigureerd"
+        }
+      },
       "rtspStreams": {
         "title": "Audio Stream Configuratie",
         "description": "Configureer netwerk audio streams voor audio opname op afstand. Ondersteunt RTSP, HTTP, HLS, RTMP en UDP protocollen.",
