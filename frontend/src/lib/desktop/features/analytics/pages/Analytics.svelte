@@ -668,6 +668,12 @@
       return;
     }
 
+    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
+    const existingSpecies = Chart.getChart(canvas);
+    if (existingSpecies) {
+      existingSpecies.destroy();
+    }
+
     // Create new chart only if it doesn't exist
     charts.species = new Chart(ctx, {
       type: 'bar',
@@ -784,6 +790,12 @@
       return;
     }
 
+    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
+    const existingTimeOfDay = Chart.getChart(canvas);
+    if (existingTimeOfDay) {
+      existingTimeOfDay.destroy();
+    }
+
     // Create new chart only if it doesn't exist
     charts.timeOfDay = new Chart(ctx, {
       type: 'bar',
@@ -890,6 +902,12 @@
       // PERFORMANCE: Skip animations for faster line chart updates
       charts.trend.update('none');
       return;
+    }
+
+    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
+    const existingTrend = Chart.getChart(canvas);
+    if (existingTrend) {
+      existingTrend.destroy();
     }
 
     // Create new chart only if it doesn't exist
@@ -1057,6 +1075,12 @@
 
     if (maxDate) {
       maxDate = maxDate + 24 * 60 * 60 * 1000; // Add one day in milliseconds
+    }
+
+    // Destroy any orphaned Chart.js instance still bound to this canvas (e.g. after re-mount)
+    const existingNewSpecies = Chart.getChart(canvas);
+    if (existingNewSpecies) {
+      existingNewSpecies.destroy();
     }
 
     charts.newSpecies = new Chart(ctx, {

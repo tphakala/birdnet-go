@@ -28,6 +28,7 @@ type SoundLevelConsumer struct {
 	outCh     chan soundlevel.SoundLevelData
 	closed    atomic.Bool
 	closeOnce sync.Once
+	sampleBuf []float64 // reusable buffer for PCM-to-float64 conversion (Write is sequential per consumer)
 }
 
 // NewSoundLevelConsumer creates a SoundLevelConsumer that wraps the given
@@ -104,7 +105,14 @@ func (c *SoundLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:
 	}
 
 	// Convert PCM bytes to float64 samples normalized to [-1, 1].
-	samples := convert.BytesToFloat64PCM16(frame.Data)
+	// Reuse sampleBuf to avoid allocating a new slice every frame.
+	evenLen := len(frame.Data) &^ 1
+	sampleCount := evenLen / 2
+	if cap(c.sampleBuf) < sampleCount {
+		c.sampleBuf = make([]float64, sampleCount)
+	}
+	samples := c.sampleBuf[:sampleCount]
+	convert.BytesToFloat64PCM16Into(samples, frame.Data[:evenLen])
 	if len(samples) == 0 {
 		return nil
 	}

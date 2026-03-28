@@ -235,6 +235,11 @@
       await api.put(`/api/v2/notifications/${notificationId}/read`);
       notifications = notifications.map(n => (n.id === notificationId ? { ...n, read: true } : n));
     } catch (error) {
+      // Treat 404 as success: notification was already deleted/expired server-side
+      if (error instanceof ApiError && error.status === 404) {
+        notifications = notifications.filter(n => n.id !== notificationId);
+        return;
+      }
       // Show user feedback for failed mark-as-read since this is a user action
       if (error instanceof ApiError) {
         toastActions.error(t('notifications.errors.markReadFailed'));

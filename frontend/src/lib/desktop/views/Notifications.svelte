@@ -17,7 +17,7 @@
   } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
-  import { safeGet, safeArrayAccess } from '$lib/utils/security';
+  import { safeGet } from '$lib/utils/security';
   import {
     deduplicateNotifications,
     sanitizeNotificationMessage,
@@ -29,7 +29,7 @@
   import NotificationGroup from '$lib/desktop/components/ui/NotificationGroup.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import { toastActions } from '$lib/stores/toast';
-  import { api } from '$lib/utils/api';
+  import { api, ApiError } from '$lib/utils/api';
   import { navigation } from '$lib/stores/navigation.svelte';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
@@ -170,8 +170,14 @@
         notification.status = 'read';
         hasUnread = notifications.some(n => !n.read);
       }
-    } catch {
-      // Handle error silently for now
+    } catch (error) {
+      // Treat 404 as success: notification was already deleted/expired server-side
+      if (error instanceof ApiError && error.status === 404) {
+        notifications = notifications.filter(n => n.id !== id);
+        hasUnread = notifications.some(n => !n.read);
+        return;
+      }
+      // Handle other errors silently for now
     }
   }
 
@@ -226,7 +232,11 @@
           try {
             await api.delete(`/api/v2/notifications/${id}`);
             return { id, ok: true };
-          } catch {
+          } catch (error) {
+            // Treat 404 as success: notification was already deleted/expired server-side
+            if (error instanceof ApiError && error.status === 404) {
+              return { id, ok: true };
+            }
             return { id, ok: false };
           }
         })
@@ -273,8 +283,14 @@
       if (notification) {
         notification.status = 'acknowledged';
       }
-    } catch {
-      // Handle error silently for now
+    } catch (error) {
+      // Treat 404 as success: notification was already deleted/expired server-side
+      if (error instanceof ApiError && error.status === 404) {
+        notifications = notifications.filter(n => n.id !== id);
+        hasUnread = notifications.some(n => !n.read);
+        return;
+      }
+      // Handle other errors silently for now
     }
   }
 
@@ -297,33 +313,37 @@
 
     try {
       await api.delete(`/api/v2/notifications/${id}`);
-      deleteModal?.close();
-
-      const index = notifications.findIndex(n => n.id === id);
-      if (index !== -1) {
-        const notification = safeArrayAccess(notifications, index);
-        const wasUnread = notification ? !notification.read : false;
-        notifications.splice(index, 1);
-        hasUnread = notifications.some(n => !n.read);
-
-        // Dispatch event for notification bell update
-        window.dispatchEvent(
-          new CustomEvent('notification-deleted', {
-            detail: { id, wasUnread },
-          })
-        );
-
-        // If page is empty, go to previous page
-        if (notifications.length === 0 && currentPage > 1) {
-          currentPage--;
-          await loadNotifications();
-        }
-      }
     } catch (error) {
-      deleteModal?.close();
-      const errorMessage =
-        error instanceof Error ? error.message : t('notifications.errors.deleteFailed');
-      toastActions.error(errorMessage);
+      // Treat 404 as success: notification was already deleted/expired server-side
+      if (!(error instanceof ApiError && error.status === 404)) {
+        deleteModal?.close();
+        const errorMessage =
+          error instanceof Error ? error.message : t('notifications.errors.deleteFailed');
+        toastActions.error(errorMessage);
+        return;
+      }
+    }
+
+    deleteModal?.close();
+
+    const notification = notifications.find(n => n.id === id);
+    if (notification) {
+      const wasUnread = !notification.read;
+      notifications = notifications.filter(n => n.id !== id);
+      hasUnread = notifications.some(n => !n.read);
+
+      // Dispatch event for notification bell update
+      window.dispatchEvent(
+        new CustomEvent('notification-deleted', {
+          detail: { id, wasUnread },
+        })
+      );
+
+      // If page is empty, go to previous page
+      if (notifications.length === 0 && currentPage > 1) {
+        currentPage--;
+        await loadNotifications();
+      }
     }
   }
 
