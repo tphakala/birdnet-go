@@ -9,8 +9,8 @@ import (
 )
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
-// Only compares device-affecting fields (Device, Gain), not display-only fields
-// (Name, Model, Equalizer, QuietHours) which are handled separately.
+// Only compares device-affecting fields (Device, Gain, Model), not display-only
+// fields (Name, Equalizer, QuietHours) which are handled separately.
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldSources := oldSettings.Realtime.Audio.Sources
 	newSources := currentSettings.Realtime.Audio.Sources
@@ -19,7 +19,9 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 		return true
 	}
 	for i := range oldSources {
-		if oldSources[i].Device != newSources[i].Device || oldSources[i].Gain != newSources[i].Gain {
+		if oldSources[i].Device != newSources[i].Device ||
+			oldSources[i].Gain != newSources[i].Gain ||
+			oldSources[i].Model != newSources[i].Model {
 			return true
 		}
 	}
