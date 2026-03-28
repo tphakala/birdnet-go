@@ -197,6 +197,9 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		settings.BirdNET.LocationConfigured = true
 	}
 
+	// Migrate legacy single audio source if a cached frontend sent it
+	settings.MigrateAudioSourceConfig()
+
 	// Run full settings validation after field updates
 	if err := conf.ValidateSettings(settings); err != nil {
 		*settings = oldSettings
@@ -517,6 +520,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			settings.BirdNET.LocationConfigured = true
 		}
 	}
+
+	// Migrate legacy single audio source if a cached frontend sent it
+	settings.MigrateAudioSourceConfig()
 
 	// Run full settings validation after section merge to catch invalid values
 	// (e.g., malformed telemetry listen address, invalid port ranges, etc.)

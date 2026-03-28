@@ -314,18 +314,23 @@ func (r *RTSPSettings) ValidateStreams() error {
 }
 
 // Validate validates a single audio source configuration.
+// It normalizes whitespace on Name, Device, and Model in-place.
 func (a *AudioSourceConfig) Validate() error {
+	// Normalize fields in-place so downstream code sees trimmed values.
+	a.Name = strings.TrimSpace(a.Name)
+	a.Device = strings.TrimSpace(a.Device)
+	a.Model = strings.TrimSpace(a.Model)
+
 	// Name is required
-	name := strings.TrimSpace(a.Name)
-	if name == "" {
+	if a.Name == "" {
 		return fmt.Errorf("audio source name is required")
 	}
-	if len(name) > MaxAudioSourceNameLength {
-		return fmt.Errorf("audio source name '%s' exceeds maximum length of %d characters", name, MaxAudioSourceNameLength)
+	if len(a.Name) > MaxAudioSourceNameLength {
+		return fmt.Errorf("audio source name '%s' exceeds maximum length of %d characters", a.Name, MaxAudioSourceNameLength)
 	}
 
 	// Device is required
-	if strings.TrimSpace(a.Device) == "" {
+	if a.Device == "" {
 		return fmt.Errorf("audio source device is required for '%s'", a.Name)
 	}
 

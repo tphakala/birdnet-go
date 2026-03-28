@@ -339,18 +339,29 @@ func (s *QuietHoursScheduler) getLog() logger.Logger {
 // per-source quiet hours (falling back to global quiet hours).
 // Must be called with s.mu held.
 func (s *QuietHoursScheduler) evaluateSoundCardQuietHours(settings *conf.Settings, now time.Time) string {
-	// Check per-source quiet hours first.
+	// Check per-source quiet hours: suppress if ANY source is in quiet hours,
+	// unsuppress only when ALL enabled sources are out of quiet hours.
+	anyPerSourceQuietHours := false
+	anyInQuietHours := false
 	for i := range settings.Realtime.Audio.Sources {
 		src := &settings.Realtime.Audio.Sources[i]
-		if src.Device != "" && src.QuietHours.Enabled {
-			inQuietHours := s.isInQuietHours(&src.QuietHours, now)
-			if inQuietHours && !s.soundCardSuppressed {
-				return SignalQuietHoursStopSoundCard
-			} else if !inQuietHours && s.soundCardSuppressed {
-				return SignalQuietHoursStartSoundCard
-			}
-			return ""
+		if src.Device == "" || !src.QuietHours.Enabled {
+			continue
 		}
+		anyPerSourceQuietHours = true
+		if s.isInQuietHours(&src.QuietHours, now) {
+			anyInQuietHours = true
+			break
+		}
+	}
+	if anyPerSourceQuietHours {
+		if anyInQuietHours && !s.soundCardSuppressed {
+			return SignalQuietHoursStopSoundCard
+		}
+		if !anyInQuietHours && s.soundCardSuppressed {
+			return SignalQuietHoursStartSoundCard
+		}
+		return ""
 	}
 
 	// Fall back to global quiet hours if no per-source quiet hours configured.

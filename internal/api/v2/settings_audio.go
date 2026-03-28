@@ -8,9 +8,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// audioDeviceSettingChanged checks if audio device settings have changed
+// audioDeviceSettingChanged checks if audio device pipeline settings have changed.
+// Only compares device-affecting fields (Device, Gain), not display-only fields
+// (Name, Model, Equalizer, QuietHours) which are handled separately.
 func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool {
-	return !reflect.DeepEqual(oldSettings.Realtime.Audio.Sources, currentSettings.Realtime.Audio.Sources)
+	oldSources := oldSettings.Realtime.Audio.Sources
+	newSources := currentSettings.Realtime.Audio.Sources
+
+	if len(oldSources) != len(newSources) {
+		return true
+	}
+	for i := range oldSources {
+		if oldSources[i].Device != newSources[i].Device || oldSources[i].Gain != newSources[i].Gain {
+			return true
+		}
+	}
+	return false
 }
 
 // soundLevelSettingsChanged checks if sound level monitoring settings have changed
