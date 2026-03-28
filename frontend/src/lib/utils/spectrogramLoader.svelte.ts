@@ -352,7 +352,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
               detectionId,
               attempt: pollAttempts,
             });
-            currentPollInterval = Math.min(currentPollInterval * 2, config.maxPollIntervalMs);
+            currentPollInterval = Math.min(
+              config.initialPollIntervalMs * Math.pow(2, Math.min(pollAttempts, 4)),
+              config.maxPollIntervalMs
+            );
             pollTimer = setTimeout(() => {
               if (isStale(detectionId)) return;
               void triggerGeneration(detectionId);
