@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -882,6 +883,7 @@ func (bn *BirdNET) ReloadModel() error {
 	oldModelInfo := bn.ModelInfo
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
+	oldLabels := slices.Clone(bn.Settings.BirdNET.Labels)
 
 	rollback := func() {
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
@@ -889,6 +891,7 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
+		bn.Settings.BirdNET.Labels = oldLabels
 	}
 
 	// Re-determine model info if using a custom model path
