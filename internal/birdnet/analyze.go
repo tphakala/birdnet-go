@@ -9,7 +9,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	tflite "github.com/tphakala/go-tflite"
 )
 
 // Filter structure is used for filtering predictions based on certain criteria.
@@ -21,7 +20,7 @@ type Filter struct {
 // DetectionsMap maps species names to a list of their detection results.
 type DetectionsMap map[string][]datastore.Results
 
-// Predict performs inference on a given sample using the TensorFlow Lite interpreter.
+// Predict performs inference on a given sample using the classifier backend.
 // It processes the sample to predict species and their confidence levels.
 func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
 	return bn.PredictWithContext(context.Background(), sample)
@@ -39,54 +38,35 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 		span.SetData("sample_size", len(sample[0]))
 	}
 
-	// implement locking to prevent concurrent access to the interpreter, not
-	// necessarily best way to manage multiple audio sources but works for now
-	bn.mu.Lock()
-	defer bn.mu.Unlock()
-
-	// Get the input tensor from the interpreter
-	inputTensor := bn.AnalysisInterpreter.GetInputTensor(0)
-	if inputTensor == nil {
-		err := errors.Newf("cannot get input tensor").
-			Category(errors.CategoryModelInit).
+	// Guard against empty sample slice
+	if len(sample) == 0 || len(sample[0]) == 0 {
+		err := errors.Newf("empty audio sample").
+			Category(errors.CategoryValidation).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Context("interpreter_state", "initialized").
 			Build()
-
-		// Record error in metrics via span finish
 		span.SetTag("error", "true")
-		span.SetData("error_type", "input_tensor_nil")
-
-		// Record error in metrics directly
-		if globalMetrics != nil {
-			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
-		}
-
+		span.SetData("error_type", "empty_sample")
 		return nil, err
 	}
 
-	// Preparing input tensor with the sample data
-	copy(inputTensor.Float32s(), sample[0])
+	// Lock to prevent concurrent access to the classifier backend and shared buffers
+	bn.mu.Lock()
+	defer bn.mu.Unlock()
 
-	// DEBUG: Log the length of the sample data
-	//log.Printf("Invoking tensor with sample length: %d", len(sample[0]))
-
-	// Invoke the interpreter to perform inference
+	// Run inference via classifier backend
 	invokeStart := time.Now()
-	if status := bn.AnalysisInterpreter.Invoke(); status != tflite.OK {
-		err := errors.Newf("tensor invoke failed: %v", status).
+	predictions, err := bn.classifier.Predict(sample[0])
+	if err != nil {
+		err = errors.New(err).
 			Category(errors.CategoryAudio).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("sample_length", len(sample[0])).
-			Context("status_code", status).
 			Timing("prediction-invoke", time.Since(start)).
 			Build()
 
 		span.SetTag("error", "true")
 		span.SetData("error_type", "invoke_failed")
-		span.SetData("status_code", status)
 
-		// Record error in metrics
 		if globalMetrics != nil {
 			globalMetrics.RecordPrediction(bn.ModelInfo.ID, time.Since(start).Seconds(), err)
 		}
@@ -104,10 +84,6 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 
 	// Record to atomic counters for ring buffer metrics
 	globalInferenceCounters.RecordInvoke(invokeDuration.Microseconds())
-
-	// Read the results from the output tensor
-	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
-	predictions := extractPredictions(outputTensor)
 
 	// Use optimized sigmoid function with buffer reuse
 	confidence := applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
@@ -223,14 +199,6 @@ func EstimateTimeRemaining(start time.Time, current, total int) string {
 	estimatedTotal := elapsed / time.Duration(current) * time.Duration(total)
 	remaining := estimatedTotal - elapsed
 	return fmt.Sprintf("(Estimated time remaining: %s)", FormatDuration(remaining))
-}
-
-// extractPredictions extracts prediction results from a TensorFlow Lite tensor.
-func extractPredictions(tensor *tflite.Tensor) []float32 {
-	predSize := tensor.Dim(tensor.NumDims() - 1)
-	predictions := make([]float32, predSize)
-	copy(predictions, tensor.Float32s())
-	return predictions
 }
 
 // applySigmoidToPredictions applies the sigmoid function to a slice of predictions.

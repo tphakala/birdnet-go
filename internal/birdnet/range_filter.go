@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	tflite "github.com/tphakala/go-tflite"
 )
 
 // SpeciesScore holds a species label and its associated score.
@@ -87,8 +86,12 @@ func BuildRangeFilter(bn *BirdNET) error {
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
 
-	// Skip filtering if range interpreter is not initialized
-	if bn.RangeInterpreter == nil {
+	// Skip filtering if range filter backend is not initialized.
+	// Read under lock to avoid data race with Delete().
+	bn.mu.Lock()
+	hasRangeFilter := bn.rangeFilter != nil
+	bn.mu.Unlock()
+	if !hasRangeFilter {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
 		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels, bn.Settings.Realtime.Species.Exclude), nil
 	}
@@ -203,49 +206,35 @@ func matchesSpecies(label, speciesName string) bool {
 	return strings.EqualFold(sp.ScientificName, speciesName) || strings.EqualFold(sp.CommonName, speciesName)
 }
 
-// predictFilter applies a TensorFlow Lite model to predict species based on the context.
+// predictFilter applies the range filter model to predict species based on location and date.
 func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
 	start := time.Now()
-
-	input := bn.RangeInterpreter.GetInputTensor(0)
-	if input == nil {
-		return nil, errors.Newf("cannot get input tensor").
-			Category(errors.CategoryModelInit).
-			Context("model_type", "range_filter").
-			Context("interpreter_state", "initialized").
-			Build()
-	}
 
 	// If week is not set, use current date to get week
 	if week == 0 {
 		week = getWeekForFilter(date)
 	}
 
-	// Prepare the input data
-	data := []float32{float32(bn.Settings.BirdNET.Latitude), float32(bn.Settings.BirdNET.Longitude), week}
-
-	// Retrieve the input tensor's underlying data slice
-	float32s := input.Float32s()
-
-	// Ensure the input tensor has enough capacity
-	if len(float32s) < len(data) {
-		return nil, errors.Newf("input tensor does not have enough capacity: need %d, have %d", len(data), len(float32s)).
-			Category(errors.CategoryValidation).
-			Context("required_size", len(data)).
-			Context("actual_size", len(float32s)).
-			Build()
+	// Lock to prevent concurrent access to the range filter backend.
+	// The TFLite interpreter is not goroutine-safe. Also re-check nil
+	// under lock in case Delete() raced between the caller's nil check
+	// and this point.
+	bn.mu.Lock()
+	if bn.rangeFilter == nil {
+		bn.mu.Unlock()
+		return nil, fmt.Errorf("range filter was closed during prediction")
 	}
+	scores, err := bn.rangeFilter.Predict(
+		float32(bn.Settings.BirdNET.Latitude),
+		float32(bn.Settings.BirdNET.Longitude),
+		week,
+	)
+	bn.mu.Unlock()
 
-	// Copy the data into the input tensor
-	copy(float32s, data)
-
-	// Execute the model inference
-	status := bn.RangeInterpreter.Invoke()
-	if status != tflite.OK {
-		return nil, errors.Newf("tensor invoke failed: %v", status).
+	if err != nil {
+		return nil, errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
-			Context("status_code", status).
 			Context("latitude", bn.Settings.BirdNET.Latitude).
 			Context("longitude", bn.Settings.BirdNET.Longitude).
 			Context("week", week).
@@ -253,17 +242,9 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 			Build()
 	}
 
-	// Retrieve the output tensor
-	output := bn.RangeInterpreter.GetOutputTensor(0)
-	outputSize := output.Dim(output.NumDims() - 1)
-
-	// Collect the prediction results
-	filter := make([]float32, outputSize)
-	copy(filter, output.Float32s())
-
 	// Filter and label the results, but only for indices that exist in bn.Labels
 	var results []Filter
-	for i, score := range filter {
+	for i, score := range scores {
 		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.Labels) {
 			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.Labels[i]})
 		}

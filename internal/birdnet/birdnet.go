@@ -20,10 +20,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/cpuspec"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
-	tflite "github.com/tphakala/go-tflite"
-	"github.com/tphakala/go-tflite/delegates/xnnpack"
 )
 
 // Default model version for the embedded model
@@ -41,16 +40,16 @@ type speciesCacheEntry struct {
 
 // BirdNET struct represents the BirdNET model with interpreters and configuration.
 type BirdNET struct {
-	AnalysisInterpreter *tflite.Interpreter
-	RangeInterpreter    *tflite.Interpreter
-	Settings            *conf.Settings
-	ModelInfo           ModelInfo           // Information about the current model
-	TaxonomyMap         TaxonomyMap         // Mapping of species codes to names and vice versa
-	ScientificIndex     ScientificNameIndex // Index for fast scientific name lookups
-	TaxonomyPath        string              // Path to custom taxonomy file, if used
-	mu                  sync.Mutex
-	resultsBuffer       []datastore.Results // Pre-allocated buffer for results to reduce allocations
-	confidenceBuffer    []float32           // Pre-allocated buffer for confidence values to reduce allocations
+	classifier       inference.Classifier  // species classification backend
+	rangeFilter      inference.RangeFilter // geographic range filter backend (may be nil)
+	Settings         *conf.Settings
+	ModelInfo        ModelInfo           // Information about the current model
+	TaxonomyMap      TaxonomyMap         // Mapping of species codes to names and vice versa
+	ScientificIndex  ScientificNameIndex // Index for fast scientific name lookups
+	TaxonomyPath     string              // Path to custom taxonomy file, if used
+	mu               sync.Mutex
+	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
+	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
 
 	// Species occurrence cache to avoid repeated GetProbableSpecies calls within same day
 	speciesCacheMu sync.RWMutex
@@ -168,9 +167,19 @@ func (bn *BirdNET) initializeModel() error {
 			Build()
 	}
 
-	model := tflite.NewModel(modelData)
-	if model == nil {
-		return errors.Newf("cannot load TensorFlow Lite model").
+	log := GetLogger()
+	classifier, threads, err := inference.NewTFLiteClassifier(modelData, inference.TFLiteClassifierOptions{
+		Threads:    bn.Settings.BirdNET.Threads,
+		UseXNNPACK: bn.Settings.BirdNET.UseXNNPACK,
+		ErrorFunc: func(msg string) {
+			log.Error("TFLite error", logger.String("message", msg))
+		},
+		WarnFunc: func(msg string) {
+			log.Warn(msg, logger.String("tflite_download", "https://github.com/tphakala/tflite_c/releases/tag/v2.17.1"))
+		},
+	})
+	if err != nil {
+		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("model_size_mb", len(modelData)/1024/1024).
@@ -179,44 +188,7 @@ func (bn *BirdNET) initializeModel() error {
 			Build()
 	}
 
-	// Determine the number of threads for the interpreter based on settings and system capacity.
-	threads := bn.determineThreadCount(bn.Settings.BirdNET.Threads)
-
-	// Configure interpreter options.
-	options := tflite.NewInterpreterOptions()
-
-	// Try to use XNNPACK delegate if enabled in settings
-	log := GetLogger()
-	if bn.Settings.BirdNET.UseXNNPACK {
-		delegate := xnnpack.New(xnnpack.DelegateOptions{NumThreads: int32(max(1, threads-1))}) //nolint:gosec // G115: thread count bounded by CPU count, safe conversion
-		if delegate == nil {
-			log.Warn("Failed to create XNNPACK delegate, falling back to default CPU",
-				logger.String("tflite_download", "https://github.com/tphakala/tflite_c/releases/tag/v2.17.1"))
-			options.SetNumThread(threads)
-		} else {
-			options.AddDelegate(delegate)
-			options.SetNumThread(1)
-		}
-	} else {
-		options.SetNumThread(threads)
-	}
-
-	options.SetErrorReporter(func(msg string, user_data any) {
-		GetLogger().Error("TFLite error", logger.String("message", msg))
-	}, nil)
-
-	// Create and allocate the TensorFlow Lite interpreter.
-	bn.AnalysisInterpreter = tflite.NewInterpreter(model, options)
-	if bn.AnalysisInterpreter == nil {
-		return fmt.Errorf("cannot create interpreter")
-	}
-	if status := bn.AnalysisInterpreter.AllocateTensors(); status != tflite.OK {
-		return fmt.Errorf("tensor allocation failed")
-	}
-
-	// Force garbage collection to reclaim memory from model loading
-	// The model data is no longer needed as TFLite has created its own internal copy
-	runtime.GC()
+	bn.classifier = classifier
 
 	// Update model version based on custom model path if provided
 	if bn.Settings.BirdNET.ModelPath != "" {
@@ -341,71 +313,20 @@ func (bn *BirdNET) initializeMetaModel() error {
 		return err
 	}
 
-	model := tflite.NewModel(metaModelData)
-	if model == nil {
-		return errors.Newf("cannot load meta model from embedded data").
-			Category(errors.CategoryModelLoad).
-			Context("model_type", "range_filter").
-			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
-			Timing("meta-model-load", time.Since(start)).
-			Build()
-	}
-
-	// Meta model requires only one CPU.
-	options := tflite.NewInterpreterOptions()
-	options.SetNumThread(1)
-	options.SetErrorReporter(func(msg string, user_data any) {
+	rangeFilter, err := inference.NewTFLiteRangeFilter(metaModelData, func(msg string) {
 		GetLogger().Error("TFLite meta model error", logger.String("message", msg))
-	}, nil)
-
-	// Create and allocate the TensorFlow Lite interpreter for the meta model.
-	bn.RangeInterpreter = tflite.NewInterpreter(model, options)
-	if bn.RangeInterpreter == nil {
-		return errors.Newf("cannot create meta model interpreter").
+	})
+	if err != nil {
+		return errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
 			Context("range_filter_model", bn.Settings.BirdNET.RangeFilter.Model).
 			Timing("meta-model-init", time.Since(start)).
 			Build()
 	}
-	if status := bn.RangeInterpreter.AllocateTensors(); status != tflite.OK {
-		return errors.Newf("tensor allocation failed for meta model: %v", status).
-			Category(errors.CategoryModelInit).
-			Context("model_type", "range_filter").
-			Context("status_code", status).
-			Timing("meta-model-allocate", time.Since(start)).
-			Build()
-	}
 
-	// Force garbage collection to reclaim memory from meta model loading
-	// The model data is no longer needed as TFLite has created its own internal copy
-	runtime.GC()
-
+	bn.rangeFilter = rangeFilter
 	return nil
-}
-
-// determineThreadCount calculates the appropriate number of threads to use based on settings and system capabilities.
-func (bn *BirdNET) determineThreadCount(configuredThreads int) int {
-	systemCpuCount := runtime.NumCPU()
-
-	// If threads are configured to 0, try to get optimal count from cpuspec
-	if configuredThreads == 0 {
-		spec := cpuspec.GetCPUSpec()
-		optimalThreads := spec.GetOptimalThreadCount()
-		if optimalThreads > 0 {
-			return min(optimalThreads, systemCpuCount)
-		}
-
-		// If cpuspec doesn't know the CPU, use all available cores
-		return systemCpuCount
-	}
-
-	// If threads are configured but exceed system CPU count, limit to system CPU count
-	if configuredThreads > systemCpuCount {
-		return systemCpuCount
-	}
-
-	return configuredThreads
 }
 
 // loadLabels extracts and loads labels from either the embedded files or an external file
@@ -622,11 +543,18 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	return out, nil
 }
 
-// Delete releases resources used by the TensorFlow Lite interpreters.
-// Note: With go-tflite v0.2.0+, interpreter cleanup is handled automatically by GC.
+// Delete releases resources used by the inference backends.
 func (bn *BirdNET) Delete() {
-	bn.AnalysisInterpreter = nil
-	bn.RangeInterpreter = nil
+	bn.mu.Lock()
+	if bn.classifier != nil {
+		bn.classifier.Close()
+		bn.classifier = nil
+	}
+	if bn.rangeFilter != nil {
+		bn.rangeFilter.Close()
+		bn.rangeFilter = nil
+	}
+	bn.mu.Unlock()
 	bn.clearSpeciesCache()
 }
 
@@ -824,18 +752,8 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 
 // validateModelAndLabels checks if the number of labels matches the model's output size
 func (bn *BirdNET) validateModelAndLabels() error {
-	// Get the output tensor to check its dimensions
-	outputTensor := bn.AnalysisInterpreter.GetOutputTensor(0)
-	if outputTensor == nil {
-		return errors.Newf("cannot get output tensor from model").
-			Category(errors.CategoryValidation).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
-			Context("interpreter_status", "failed").
-			Build()
-	}
-
-	// Get the number of classes from the model's output tensor
-	modelOutputSize := outputTensor.Dim(outputTensor.NumDims() - 1)
+	// Get the number of classes from the classifier backend
+	modelOutputSize := bn.classifier.NumSpecies()
 	labelCount := len(bn.Settings.BirdNET.Labels)
 
 	// Compare with the number of labels
@@ -878,8 +796,8 @@ func (bn *BirdNET) ReloadModel() error {
 	bn.Debug("Acquired mutex for model reload")
 
 	// Snapshot all mutable state for transactional rollback on failure.
-	oldAnalysisInterpreter := bn.AnalysisInterpreter
-	oldRangeInterpreter := bn.RangeInterpreter
+	oldClassifier := bn.classifier
+	oldRangeFilter := bn.rangeFilter
 	oldModelInfo := bn.ModelInfo
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
@@ -887,8 +805,8 @@ func (bn *BirdNET) ReloadModel() error {
 	oldLocale := bn.Settings.BirdNET.Locale
 
 	rollback := func() {
-		bn.AnalysisInterpreter = oldAnalysisInterpreter
-		bn.RangeInterpreter = oldRangeInterpreter
+		bn.classifier = oldClassifier
+		bn.rangeFilter = oldRangeFilter
 		bn.ModelInfo = oldModelInfo
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
@@ -1007,8 +925,12 @@ func (bn *BirdNET) GetSpeciesOccurrence(species string) float64 {
 
 // GetSpeciesOccurrenceAtTime returns the occurrence probability for a species at a specific time
 func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time.Time) float64 {
-	// Fast-path: if range interpreter is not initialized, return 0
-	if bn.RangeInterpreter == nil {
+	// Fast-path: if range filter is not initialized, return 0.
+	// Read under lock to avoid data race with Delete().
+	bn.mu.Lock()
+	hasRangeFilter := bn.rangeFilter != nil
+	bn.mu.Unlock()
+	if !hasRangeFilter {
 		return 0.0
 	}
 
