@@ -76,7 +76,11 @@ func (store *MySQLStore) Open() error {
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{Logger: gormLogger})
 	if err != nil {
 		GetLogger().Error("Failed to open MySQL database", logger.Error(err))
-		return fmt.Errorf("failed to open MySQL database: %w", err)
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "mysql_open").
+			Build()
 	}
 
 	// Configure connection pool for MySQL.

@@ -3,7 +3,6 @@ package v2only
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,6 +11,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -39,12 +39,21 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		// Fresh install: use configured path directly, NO _v2 suffix
 		dbPath := settings.Output.SQLite.Path
 		if dbPath == "" {
-			return nil, fmt.Errorf("sqlite path is empty")
+			return nil, errors.Newf("sqlite path is empty").
+				Component("datastore").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "fresh_install").
+				Build()
 		}
 
 		// Ensure directory exists
 		if err := os.MkdirAll(filepath.Dir(dbPath), 0o750); err != nil {
-			return nil, fmt.Errorf("failed to create database directory: %w", err)
+			return nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryConfiguration).
+				Context("operation", "fresh_install").
+				Context("step", "create_database_directory").
+				Build()
 		}
 
 		manager, err = v2.NewSQLiteManager(v2.Config{
@@ -66,23 +75,42 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 		})
 
 	default:
-		return nil, fmt.Errorf("no database configured")
+		return nil, errors.Newf("no database configured").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "fresh_install").
+			Build()
 	}
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to create database manager: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "create_database_manager").
+			Build()
 	}
 
 	// Initialize database schema (creates v2 tables)
 	if err := manager.Initialize(); err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to initialize database schema: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "initialize_schema").
+			Build()
 	}
 
 	// Set migration state to COMPLETED (no migration needed for fresh install)
 	if err := initializeMigrationStateAsCompleted(manager); err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to set migration state: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "set_migration_state").
+			Build()
 	}
 
 	// Create repositories (no v2 prefix for fresh installs)
@@ -105,13 +133,23 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	speciesLabelType, err := labelTypeRepo.GetOrCreate(ctx, "species")
 	if err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to get/create species label type: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "get_species_label_type").
+			Build()
 	}
 
 	avesClass, err := taxClassRepo.GetOrCreate(ctx, "Aves")
 	if err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to get/create Aves taxonomic class: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "get_aves_taxonomic_class").
+			Build()
 	}
 	avesClassID := avesClass.ID
 
@@ -119,7 +157,12 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	defaultModel, err := modelRepo.GetByNameVersionVariant(ctx, "BirdNET", "2.4", "default")
 	if err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to get default model: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "get_default_model").
+			Build()
 	}
 
 	ds, err := New(&Config{
@@ -142,7 +185,12 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 	})
 	if err != nil {
 		_ = manager.Close()
-		return nil, fmt.Errorf("failed to create datastore: %w", err)
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "fresh_install").
+			Context("step", "create_datastore").
+			Build()
 	}
 
 	// Set global enhanced database flag

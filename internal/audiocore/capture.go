@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gen2brain/malgo"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -178,13 +179,23 @@ func startCapture(
 
 	malgoCtx, err := malgo.InitContext([]malgo.Backend{backend}, malgo.ContextConfig{}, nil)
 	if err != nil {
-		return DeviceInfo{}, nil, fmt.Errorf("audio context init failed: %w", err)
+		return DeviceInfo{}, nil, errors.New(err).
+			Component("audiocore.capture").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "audio_context_init").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	infos, err := malgoCtx.Devices(malgo.Capture)
 	if err != nil {
 		uninitAndFreeContext(malgoCtx, log)
-		return DeviceInfo{}, nil, fmt.Errorf("enumerate capture devices: %w", err)
+		return DeviceInfo{}, nil, errors.New(err).
+			Component("audiocore.capture").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "enumerate_capture_devices").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	// Find the device matching deviceID.
@@ -219,7 +230,13 @@ func startCapture(
 
 	if selectedInfo == nil {
 		uninitAndFreeContext(malgoCtx, log)
-		return DeviceInfo{}, nil, fmt.Errorf("no device found matching %q", deviceID)
+		return DeviceInfo{}, nil, errors.Newf("no device found matching %q", deviceID).
+			Component("audiocore.capture").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "find_device").
+			Context("source_id", sourceID).
+			Context("device_id", deviceID).
+			Build()
 	}
 
 	deviceCfg := malgo.DefaultDeviceConfig(malgo.Capture)
@@ -261,7 +278,13 @@ func startCapture(
 	captureDevice, err = malgo.InitDevice(malgoCtx.Context, deviceCfg, callbacks)
 	if err != nil {
 		uninitAndFreeContext(malgoCtx, log)
-		return DeviceInfo{}, nil, fmt.Errorf("device init failed for %q: %w", selectedDevInfo.Name, err)
+		return DeviceInfo{}, nil, errors.New(err).
+			Component("audiocore.capture").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "device_init").
+			Context("source_id", sourceID).
+			Context("device_name", selectedDevInfo.Name).
+			Build()
 	}
 
 	// Capture the actual format reported by the device after init.
@@ -271,7 +294,13 @@ func startCapture(
 		// Device.Uninit() handles both ma_device_uninit and ma_free internally.
 		captureDevice.Uninit()
 		uninitAndFreeContext(malgoCtx, log)
-		return DeviceInfo{}, nil, fmt.Errorf("device start failed for %q: %w", selectedDevInfo.Name, err)
+		return DeviceInfo{}, nil, errors.New(err).
+			Component("audiocore.capture").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "device_start").
+			Context("source_id", sourceID).
+			Context("device_name", selectedDevInfo.Name).
+			Build()
 	}
 
 	log.Info("malgo capture device started",
@@ -289,9 +318,17 @@ func startCapture(
 		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in capture goroutine: %v", r)
 				log.Error("panic in capture goroutine",
 					logger.String("source_id", sourceID),
 					logger.Any("panic", r))
+				_ = errors.New(panicErr).
+					Component("audiocore.capture").
+					Category(errors.CategoryAudio).
+					Context("operation", "capture_goroutine_panic").
+					Context("source_id", sourceID).
+					Priority(errors.PriorityCritical).
+					Build()
 			}
 		}()
 		defer func() {

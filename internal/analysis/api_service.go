@@ -175,7 +175,7 @@ func (s *APIServerService) Start(_ context.Context) error {
 	if err != nil {
 		return errors.New(err).
 			Component("analysis.api_service").
-			Category(errors.CategorySystem).
+			Category(errors.CategoryHTTP).
 			Context("operation", "create_http_server").
 			Build()
 	}

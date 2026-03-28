@@ -18,7 +18,10 @@ import (
 
 // Sentinel errors for stable error checking
 var (
-	ErrQueueFull = errors.Newf("pre-render queue full").Build()
+	ErrQueueFull = errors.Newf("pre-render queue full").
+		Component("spectrogram").
+		Category(errors.CategoryLimit).
+		Build()
 )
 
 const (

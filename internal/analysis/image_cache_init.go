@@ -122,6 +122,13 @@ func warmUpImageCache(cache *imageprovider.BirdImageCache, species []string) {
 		wg.Add(1)
 		go func(sciName string) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.Error("panic in image cache warm-up",
+						logger.String("species", sciName),
+						logger.Any("panic", r))
+				}
+			}()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 

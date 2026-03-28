@@ -595,7 +595,10 @@ func startSoundLevelMetricsPublisherWithDone(wg *sync.WaitGroup, doneChan chan s
 			case <-doneChan:
 				lg.Info("stopping sound level metrics publisher")
 				return
-			case soundData := <-soundLevelChan:
+			case soundData, ok := <-soundLevelChan:
+				if !ok {
+					return // channel closed
+				}
 				// Log received sound level data if debug is enabled
 				if conf.Setting().Realtime.Audio.SoundLevel.Debug {
 					lg := getSoundLevelLogger()

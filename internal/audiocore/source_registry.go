@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
@@ -256,9 +257,17 @@ func (r *SourceRegistry) notify(e SourceEvent) {
 		func() {
 			defer func() {
 				if p := recover(); p != nil {
+					panicErr := fmt.Errorf("source event listener panicked: %v", p)
 					r.log.Error("source event listener panicked",
 						logger.Any("panic", p),
 						logger.String("source_id", e.SourceID))
+					_ = errors.New(panicErr).
+						Component("audiocore.registry").
+						Category(errors.CategoryState).
+						Context("operation", "event_listener_panic").
+						Context("source_id", e.SourceID).
+						Priority(errors.PriorityCritical).
+						Build()
 				}
 			}()
 			l(e)

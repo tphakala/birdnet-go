@@ -237,7 +237,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	// 1. Register the source.
 	src, err := e.registry.Register(cfg)
 	if err != nil {
-		return fmt.Errorf("register source %s: %w", cfg.ID, err)
+		return errors.New(err).
+			Component("audiocore.engine").
+			Category(errors.CategoryAudioSource).
+			Context("operation", "register_source").
+			Context("source_id", cfg.ID).
+			Build()
 	}
 
 	sourceID := src.ID
@@ -249,7 +254,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		defaultAnalysisOverlap,
 		defaultAnalysisReadSize,
 	); err != nil {
-		return fmt.Errorf("allocate analysis buffer for %s: %w", sourceID, err)
+		return errors.New(err).
+			Component("audiocore.engine").
+			Category(errors.CategoryBuffer).
+			Context("operation", "allocate_analysis_buffer").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	// 3. Allocate capture buffer.
@@ -265,7 +275,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	); err != nil {
 		// Roll back analysis buffer on failure.
 		e.bufferMgr.DeallocateSource(sourceID)
-		return fmt.Errorf("allocate capture buffer for %s: %w", sourceID, err)
+		return errors.New(err).
+			Component("audiocore.engine").
+			Category(errors.CategoryBuffer).
+			Context("operation", "allocate_capture_buffer").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	// 4. Start capture based on source type.
@@ -287,7 +302,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
-			return fmt.Errorf("start stream for %s: %w", sourceID, err)
+			return errors.New(err).
+				Component("audiocore.engine").
+				Category(errors.CategoryRTSP).
+				Context("operation", "start_stream").
+				Context("source_id", sourceID).
+				Build()
 		}
 	} else if cfg.Type == audiocore.SourceTypeAudioCard {
 		devCfg := audiocore.DeviceConfig{
@@ -308,7 +328,12 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 				logger.Error(err))
 			e.bufferMgr.DeallocateSource(sourceID)
 			_ = e.registry.Unregister(sourceID)
-			return fmt.Errorf("start device capture for %s: %w", sourceID, err)
+			return errors.New(err).
+				Component("audiocore.engine").
+				Category(errors.CategoryAudioSource).
+				Context("operation", "start_device_capture").
+				Context("source_id", sourceID).
+				Build()
 		}
 	}
 	// File-type sources: registered + buffers allocated, but no long-running capture.
@@ -330,11 +355,17 @@ func (e *AudioEngine) RemoveSource(sourceID string) error {
 
 	// 1. Stop capture.
 	if isStreamType(src.Type) {
-		// StopStream returns an error if not found, which is safe to ignore
-		// since the stream may not have been started.
-		_ = e.ffmpegMgr.StopStream(sourceID)
+		if err := e.ffmpegMgr.StopStream(sourceID); err != nil {
+			e.logger.Warn("failed to stop stream during removal",
+				logger.String("source_id", sourceID),
+				logger.Error(err))
+		}
 	} else if src.Type == audiocore.SourceTypeAudioCard {
-		_ = e.deviceMgr.StopCapture(sourceID)
+		if err := e.deviceMgr.StopCapture(sourceID); err != nil {
+			e.logger.Warn("failed to stop capture during removal",
+				logger.String("source_id", sourceID),
+				logger.Error(err))
+		}
 	}
 
 	// 2. Remove all routes for this source.
@@ -383,7 +414,12 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultAnalysisOverlap,
 		defaultAnalysisReadSize,
 	); err != nil {
-		return fmt.Errorf("reallocate analysis buffer for %s: %w", sourceID, err)
+		return errors.New(err).
+			Component("audiocore.engine").
+			Category(errors.CategoryBuffer).
+			Context("operation", "reallocate_analysis_buffer").
+			Context("source_id", sourceID).
+			Build()
 	}
 	if err := e.bufferMgr.AllocateCapture(
 		sourceID,
@@ -392,7 +428,12 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		defaultBytesPerSample,
 	); err != nil {
 		e.bufferMgr.DeallocateSource(sourceID)
-		return fmt.Errorf("reallocate capture buffer for %s: %w", sourceID, err)
+		return errors.New(err).
+			Component("audiocore.engine").
+			Category(errors.CategoryBuffer).
+			Context("operation", "reallocate_capture_buffer").
+			Context("source_id", sourceID).
+			Build()
 	}
 
 	// 4. Restart capture with new config.
@@ -419,7 +460,12 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		if err := e.ffmpegMgr.StartStream(streamCfg); err != nil {
 			// Source stays registered — mark it as errored so callers can see the failure.
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
-			return fmt.Errorf("restart stream for %s: %w", sourceID, err)
+			return errors.New(err).
+				Component("audiocore.engine").
+				Category(errors.CategoryRTSP).
+				Context("operation", "restart_stream").
+				Context("source_id", sourceID).
+				Build()
 		}
 	} else if newType == audiocore.SourceTypeAudioCard {
 		devCfg := audiocore.DeviceConfig{
@@ -430,7 +476,12 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 		if err := e.deviceMgr.StartCapture(sourceID, newCfg.ConnectionString, devCfg); err != nil {
 			// Source stays registered — mark it as errored so callers can see the failure.
 			_ = e.registry.UpdateState(sourceID, audiocore.SourceError)
-			return fmt.Errorf("restart device capture for %s: %w", sourceID, err)
+			return errors.New(err).
+				Component("audiocore.engine").
+				Category(errors.CategoryAudioSource).
+				Context("operation", "restart_device_capture").
+				Context("source_id", sourceID).
+				Build()
 		}
 	}
 

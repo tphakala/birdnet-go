@@ -96,12 +96,26 @@ func (cm *ControlMonitor) Start() {
 	cm.initializeSoundLevelIfEnabled()
 
 	cm.wg.Go(func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicErr := fmt.Errorf("panic in control monitor: %v", r)
+				GetLogger().Error("panic in control monitor", logger.Any("panic", r))
+				_ = errors.New(panicErr).
+					Component("analysis").
+					Category(errors.CategorySystem).
+					Context("operation", "control_monitor_panic").
+					Priority(errors.PriorityCritical).
+					Build()
+			}
+		}()
 		cm.monitor()
 	})
 }
 
 // Stop stops the control monitor and cleans up resources
 func (cm *ControlMonitor) Stop() {
+	GetLogger().Info("stopping control monitor")
+
 	// Stop sound level monitoring if running
 	if cm.soundLevelManager != nil {
 		cm.soundLevelManager.Stop()

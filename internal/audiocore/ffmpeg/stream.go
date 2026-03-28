@@ -918,6 +918,8 @@ func (s *Stream) processAudio() error {
 	s.cmdMu.Unlock()
 
 	if stdout == nil {
+		getStreamLogger().Warn("stdout nil after successful process start, restarting",
+			logger.String("source_id", s.config.SourceID))
 		return nil
 	}
 
@@ -1721,6 +1723,17 @@ func (s *Stream) recordFailure(runtime time.Duration) {
 			logger.String("cooldown_period", formatDuration(circuitBreakerCooldown)),
 			logger.String("component", "ffmpeg-stream"),
 			logger.String("operation", "circuit_breaker_open"))
+
+		// Report circuit breaker activation to Sentry for visibility into
+		// streams that are entering a degraded state.
+		_ = errors.Newf("stream circuit breaker activated: %s", reason).
+			Component("ffmpeg-stream").
+			Category(errors.CategoryRTSP).
+			Context("operation", "circuit_breaker").
+			Context("source_id", s.config.SourceID).
+			Context("consecutive_failures", currentFailures).
+			Context("runtime", formatDuration(runtime)).
+			Build()
 	}
 }
 

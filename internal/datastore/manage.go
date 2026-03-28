@@ -400,7 +400,11 @@ func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log lo
 				GetLogger().Debug("Incorrect schema detected for 'image_caches'. Dropping table")
 			}
 			if err := migrator.DropTable(&ImageCache{}); err != nil {
-				return fmt.Errorf("failed to drop existing 'image_caches' table with incorrect schema: %w", err)
+				return errors.New(err).
+					Component("datastore").
+					Category(errors.CategoryDatabase).
+					Context("operation", "drop_image_cache_table").
+					Build()
 			}
 		} else if debug {
 			GetLogger().Debug("'image_caches' table does not exist. AutoMigrate will create it")

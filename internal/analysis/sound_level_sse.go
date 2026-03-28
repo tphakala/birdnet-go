@@ -35,7 +35,10 @@ func startSoundLevelSSEPublisher(wg *sync.WaitGroup, ctx context.Context, apiCon
 			case <-ctx.Done():
 				GetLogger().Info("Stopping sound level SSE publisher")
 				return
-			case soundData := <-soundLevelChan:
+			case soundData, ok := <-soundLevelChan:
+				if !ok {
+					return // channel closed
+				}
 				// Sanitize sound level data before SSE publishing
 				sanitizedData := sanitizeSoundLevelData(soundData)
 				// Publish sound level data via SSE

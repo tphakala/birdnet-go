@@ -125,8 +125,14 @@ func (a *App) Shutdown(ctx context.Context) error {
 
 // shutdownRange stops a slice of services in reverse order.
 func (a *App) shutdownRange(ctx context.Context, services []Service) {
+	log := getLogger()
 	for _, svc := range slices.Backward(services) {
-		_ = svc.Stop(ctx) // best-effort during rollback
+		if err := svc.Stop(ctx); err != nil {
+			// Log but continue -- best-effort during rollback
+			log.Warn("service stop failed during rollback",
+				logger.String("service", svc.Name()),
+				logger.Error(err))
+		}
 	}
 }
 

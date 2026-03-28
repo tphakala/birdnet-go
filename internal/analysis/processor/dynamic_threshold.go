@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -137,6 +138,11 @@ func (p *Processor) recordThresholdEvent(speciesName, scientificName string, pre
 		if err := p.Ds.SaveThresholdEvent(event); err != nil {
 			log := GetLogger()
 			log.Error("Failed to save threshold event", logger.String("species", speciesName), logger.Error(err))
+			_ = errors.New(err).
+				Component("analysis.processor").
+				Category(errors.CategoryDatabase).
+				Context("operation", "save_threshold_event").
+				Build()
 		}
 	}()
 }

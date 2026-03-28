@@ -450,7 +450,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	_, scientificIndex, taxonomyErr := birdnet.LoadTaxonomyData("")
 	if taxonomyErr != nil {
 		log.Warn("failed to load taxonomy data for species codes",
-			logger.String("error", taxonomyErr.Error()))
+			logger.Error(taxonomyErr))
 	}
 
 	// Create V2OnlyDatastore

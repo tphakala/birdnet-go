@@ -303,9 +303,19 @@ func (r *AudioRouter) stopRoute(route *Route) {
 	case <-route.stopped:
 		// Drainer exited cleanly — safe to close resources.
 		if route.resampler != nil {
-			_ = route.resampler.Close()
+			if err := route.resampler.Close(); err != nil {
+				r.log.Debug("resampler close error",
+					logger.String("source_id", route.SourceID),
+					logger.String("consumer_id", route.Consumer.ID()),
+					logger.Error(err))
+			}
 		}
-		_ = route.Consumer.Close()
+		if err := route.Consumer.Close(); err != nil {
+			r.log.Debug("consumer close error",
+				logger.String("source_id", route.SourceID),
+				logger.String("consumer_id", route.Consumer.ID()),
+				logger.Error(err))
+		}
 	case <-time.After(drainerStopTimeout):
 		// Drainer is leaked and may still reference the resampler/consumer.
 		// Do NOT close them — leave for GC to reclaim.
@@ -333,7 +343,8 @@ func (r *AudioRouter) drainRoute(route *Route) {
 						r.log.Warn("resampler error",
 							logger.String("source_id", route.SourceID),
 							logger.String("consumer_id", route.Consumer.ID()),
-							logger.Int64("total_errors", errCount))
+							logger.Int64("total_errors", errCount),
+							logger.Error(err))
 					}
 					continue
 				}
@@ -357,7 +368,8 @@ func (r *AudioRouter) drainRoute(route *Route) {
 					r.log.Warn("consumer write error",
 						logger.String("source_id", route.SourceID),
 						logger.String("consumer_id", route.Consumer.ID()),
-						logger.Int64("total_errors", errCount))
+						logger.Int64("total_errors", errCount),
+						logger.Error(err))
 				}
 			}
 		case <-route.done:

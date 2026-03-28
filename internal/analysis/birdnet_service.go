@@ -7,6 +7,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // birdNETAnalyzerName is the service name used for logging and diagnostics.
@@ -69,6 +70,9 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 // or multiple times.
 func (a *BirdNETAnalyzer) Stop(_ context.Context) error {
 	if a.bn != nil {
+		log := GetLogger()
+		log.Info("stopping BirdNET model",
+			logger.String("service", birdNETAnalyzerName))
 		a.bn.Delete()
 		a.bn = nil
 	}

@@ -12,6 +12,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -97,6 +98,11 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
 			datastoreLog.Error("database consolidation failed", logger.Error(err))
+			_ = errors.New(err).
+				Component("analysis.database").
+				Category(errors.CategoryDatabase).
+				Context("operation", "database_consolidation").
+				Build()
 			// Continue with normal startup - consolidation can be retried
 		} else if consolidated {
 			datastoreLog.Info("database consolidation completed, continuing startup")
@@ -203,11 +209,17 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		// This prevents startup failures due to insufficient disk space
 		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
 		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			GetLogger().Error("disk space validation failed",
+				logger.Error(err),
+				logger.String("operation", "validate_startup_disk_space"))
 			return err
 		}
 
 		// Open a connection to the database and handle possible errors.
 		if err := d.dataStore.Open(); err != nil {
+			GetLogger().Error("failed to open database",
+				logger.Error(err),
+				logger.String("operation", "open_database"))
 			return err // Return error to stop execution if database connection fails.
 		}
 	}

@@ -384,6 +384,12 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 					m.logger.Error("error processing data",
 						logger.String("source_id", sourceID),
 						logger.Error(processErr))
+					_ = errors.New(processErr).
+						Component("analysis").
+						Category(errors.CategoryAudioAnalysis).
+						Context("operation", "analysis_pipeline_processing").
+						Context("source_id", sourceID).
+						Build()
 				}
 			}
 		}

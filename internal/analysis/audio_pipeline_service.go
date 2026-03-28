@@ -750,6 +750,14 @@ func cleanupHLSWithTimeout(ctx context.Context) {
 
 	// Run cleanup in a goroutine
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				// Log panic but don't block shutdown
+				GetLogger().Error("panic during HLS cleanup",
+					logger.Any("panic", r))
+				cleanupDone <- fmt.Errorf("panic during HLS cleanup: %v", r)
+			}
+		}()
 		cleanupDone <- cleanupHLSStreamingFiles()
 	}()
 

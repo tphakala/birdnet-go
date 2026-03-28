@@ -78,10 +78,11 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	var err error
 	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
 	if err != nil {
-		return nil, errors.Newf("BirdNET: failed to determine model information: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("operation", "determine_model_info").
 			Context("model_identifier", modelIdentifier).
 			Build()
 	}
@@ -89,33 +90,37 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	// Load taxonomy data
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
-		return nil, errors.Newf("BirdNET: failed to load taxonomy data: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
+			Context("operation", "load_taxonomy").
 			Context("taxonomy_path", bn.TaxonomyPath).
 			Build()
 	}
 
 	if err := bn.initializeModel(); err != nil {
-		return nil, errors.Newf("BirdNET: failed to initialize analysis model: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
+			Context("operation", "initialize_model").
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
 			Build()
 	}
 
 	if err := bn.initializeMetaModel(); err != nil {
-		return nil, errors.Newf("BirdNET: failed to initialize range filter model: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
+			Context("operation", "initialize_range_filter").
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
 			Build()
 	}
 
 	if err := bn.loadLabels(); err != nil {
-		return nil, errors.Newf("BirdNET: failed to load species labels: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
+			Context("operation", "load_labels").
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
 			Context("locale", settings.BirdNET.Locale).
 			Build()
@@ -138,9 +143,10 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 
 	// Validate model and labels, which will also allocate the results buffer
 	if err := bn.validateModelAndLabels(); err != nil {
-		return nil, errors.Newf("BirdNET: model validation failed: %w", err).
+		return nil, errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
+			Context("operation", "validate_model_and_labels").
 			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 	}
@@ -865,10 +871,10 @@ func (bn *BirdNET) validateModelAndLabels() error {
 
 // ReloadModel safely reloads the BirdNET model and labels while handling ongoing analysis
 func (bn *BirdNET) ReloadModel() error {
-	bn.Debug("\033[33m🔒 Acquiring mutex for model reload\033[0m")
+	bn.Debug("Acquiring mutex for model reload")
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
-	bn.Debug("\033[32m✅ Acquired mutex for model reload\033[0m")
+	bn.Debug("Acquired mutex for model reload")
 
 	// Store old interpreters to clean up after successful reload
 	oldAnalysisInterpreter := bn.AnalysisInterpreter
@@ -879,7 +885,12 @@ func (bn *BirdNET) ReloadModel() error {
 		var err error
 		bn.ModelInfo, err = DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
 		if err != nil {
-			return fmt.Errorf("\033[31m❌ failed to determine model information: %w\033[0m", err)
+			return errors.New(err).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Context("operation", "reload_model").
+				Context("step", "determine_model_info").
+				Build()
 		}
 	}
 
@@ -887,40 +898,65 @@ func (bn *BirdNET) ReloadModel() error {
 	var err error
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
-		return fmt.Errorf("\033[31m❌ failed to reload taxonomy data: %w\033[0m", err)
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "reload_taxonomy").
+			Build()
 	}
-	bn.Debug("\033[32m✅ Taxonomy data reloaded successfully\033[0m")
+	bn.Debug("Taxonomy data reloaded successfully")
 
 	// Initialize new model
 	if err := bn.initializeModel(); err != nil {
-		return fmt.Errorf("\033[31m❌ failed to reload model: %w\033[0m", err)
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "initialize_model").
+			Build()
 	}
-	bn.Debug("\033[32m✅ Model initialized successfully\033[0m")
+	bn.Debug("Model initialized successfully")
 
 	// Initialize new meta model
 	if err := bn.initializeMetaModel(); err != nil {
 		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		return fmt.Errorf("\033[31m❌ failed to reload meta model: %w\033[0m", err)
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "initialize_meta_model").
+			Build()
 	}
-	bn.Debug("\033[32m✅ Meta model initialized successfully\033[0m")
+	bn.Debug("Meta model initialized successfully")
 
 	// Reload labels
 	if err := bn.loadLabels(); err != nil {
 		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		return fmt.Errorf("\033[31m❌ failed to reload labels: %w\033[0m", err)
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "load_labels").
+			Build()
 	}
-	bn.Debug("\033[32m✅ Labels loaded successfully\033[0m")
+	bn.Debug("Labels loaded successfully")
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
 		// Restore the old interpreters (new ones will be GC'd)
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		bn.RangeInterpreter = oldRangeInterpreter
-		return fmt.Errorf("\033[31m❌ model validation failed: %w\033[0m", err)
+		return errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "reload_model").
+			Context("step", "validate_model_labels").
+			Build()
 	}
 
 	// Old interpreters will be cleaned up by GC now that they're unreferenced
@@ -928,7 +964,7 @@ func (bn *BirdNET) ReloadModel() error {
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
 
-	bn.Debug("\033[32m✅ Model reload completed successfully\033[0m")
+	bn.Debug("Model reload completed successfully")
 	return nil
 }
 

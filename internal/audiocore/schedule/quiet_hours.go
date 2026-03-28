@@ -149,6 +149,12 @@ func (s *QuietHoursScheduler) Stop() {
 
 // run is the main scheduler loop.
 func (s *QuietHoursScheduler) run() {
+	defer func() {
+		if r := recover(); r != nil {
+			s.log.Error("panic in quiet hours scheduler",
+				logger.Any("panic", r))
+		}
+	}()
 	ticker := time.NewTicker(evaluationInterval)
 	defer ticker.Stop()
 
