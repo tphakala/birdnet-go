@@ -884,6 +884,7 @@ func (bn *BirdNET) ReloadModel() error {
 	oldTaxonomyMap := bn.TaxonomyMap
 	oldScientificIndex := bn.ScientificIndex
 	oldLabels := slices.Clone(bn.Settings.BirdNET.Labels)
+	oldLocale := bn.Settings.BirdNET.Locale
 
 	rollback := func() {
 		bn.AnalysisInterpreter = oldAnalysisInterpreter
@@ -892,6 +893,7 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.TaxonomyMap = oldTaxonomyMap
 		bn.ScientificIndex = oldScientificIndex
 		bn.Settings.BirdNET.Labels = oldLabels
+		bn.Settings.BirdNET.Locale = oldLocale
 	}
 
 	// Re-determine model info if using a custom model path
