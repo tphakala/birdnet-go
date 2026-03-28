@@ -177,6 +177,11 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	// Create mock metrics for testing
 	mockMetrics, _ := observability.NewMetrics()
 
+	// Sync controller settings with the global conf.settingsInstance so that
+	// functions like conf.SaveSettings() (called by toggleSpeciesInIgnoredList)
+	// operate on the same instance the controller uses.
+	conf.SetTestSettings(settings)
+
 	// Create API controller without initializing routes to avoid starting background goroutines
 	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
 	if err != nil {
