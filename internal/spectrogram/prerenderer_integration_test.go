@@ -195,9 +195,9 @@ func TestPreRenderer_QueueOverflow(t *testing.T) {
 	// Generate synthetic PCM data using shared helper
 	pcmData := generateTestPCMData(nil)
 
-	// Submit more jobs than queue size to trigger overflow
-	// Queue size is 3 (2 workers + 1 waiting), submit 20 jobs rapidly
-	numJobs := 20
+	// Submit more jobs than queue size (100) to trigger overflow.
+	// Workers will be busy with the first jobs, filling the buffered channel.
+	numJobs := 150
 	queueFull := 0
 	submitted := 0
 
