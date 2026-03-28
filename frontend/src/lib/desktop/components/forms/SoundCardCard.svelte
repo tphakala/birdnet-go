@@ -127,9 +127,9 @@
       editEqualizer.enabled || editEqualizer.filters.length > 0
         ? {
             enabled: editEqualizer.enabled,
-            filters: editEqualizer.filters.map((f, i) => ({
+            filters: editEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || `filter-${Date.now()}-${i}`,
+              id: f.id || crypto.randomUUID(),
             })),
           }
         : undefined;

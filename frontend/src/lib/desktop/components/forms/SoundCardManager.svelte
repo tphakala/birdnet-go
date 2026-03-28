@@ -146,9 +146,9 @@
       newEqualizer.enabled || newEqualizer.filters.length > 0
         ? {
             enabled: newEqualizer.enabled,
-            filters: newEqualizer.filters.map((f, i) => ({
+            filters: newEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || `filter-${Date.now()}-${i}`,
+              id: f.id || crypto.randomUUID(),
             })),
           }
         : undefined;
@@ -210,9 +210,9 @@
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
     newEqualizer = {
       enabled: updated.enabled,
-      filters: updated.filters.map((filter, i) => ({
+      filters: updated.filters.map(filter => ({
         ...filter,
-        id: filter.id || `filter-${Date.now()}-${i}`,
+        id: filter.id || crypto.randomUUID(),
       })),
     };
   }
