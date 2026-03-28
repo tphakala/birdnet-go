@@ -909,6 +909,8 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Initialize new model
 	if err := bn.initializeModel(); err != nil {
+		// Restore the old interpreters on failure
+		bn.AnalysisInterpreter = oldAnalysisInterpreter
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
