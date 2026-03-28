@@ -53,6 +53,17 @@ func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) (
 	bn.mu.Lock()
 	defer bn.mu.Unlock()
 
+	// Guard against nil classifier (e.g., after Delete() is called concurrently)
+	if bn.classifier == nil {
+		err := errors.Newf("classifier backend is not initialized").
+			Category(errors.CategoryModelInit).
+			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			Build()
+		span.SetTag("error", "true")
+		span.SetData("error_type", "classifier_nil")
+		return nil, err
+	}
+
 	// Run inference via classifier backend
 	invokeStart := time.Now()
 	predictions, err := bn.classifier.Predict(sample[0])

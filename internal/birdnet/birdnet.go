@@ -805,6 +805,14 @@ func (bn *BirdNET) ReloadModel() error {
 	oldLocale := bn.Settings.BirdNET.Locale
 
 	rollback := func() {
+		// Close any newly created backends that differ from the originals
+		// to avoid leaking resources during failed reloads
+		if bn.classifier != nil && bn.classifier != oldClassifier {
+			bn.classifier.Close()
+		}
+		if bn.rangeFilter != nil && bn.rangeFilter != oldRangeFilter {
+			bn.rangeFilter.Close()
+		}
 		bn.classifier = oldClassifier
 		bn.rangeFilter = oldRangeFilter
 		bn.ModelInfo = oldModelInfo
