@@ -191,7 +191,7 @@ func (c *Controller) DebugSystemStatus(ctx echo.Context) error {
 	}
 
 	// Get telemetry status
-	if telemetryStatus := getTelemetryStatus(); telemetryStatus != nil {
+	if telemetryStatus := getTelemetryStatus(c.Settings); telemetryStatus != nil {
 		status.Telemetry = telemetryStatus
 	}
 
@@ -225,14 +225,14 @@ func mapErrorCategory(category string) errors.ErrorCategory {
 	}
 }
 
-func getTelemetryStatus() map[string]any {
+func getTelemetryStatus(settings *conf.Settings) map[string]any {
 	// Get more detailed telemetry status
 	status := map[string]any{
 		"enabled": false, // Default to false for safety
 	}
 
-	// Check if settings are available via global conf
-	if settings := conf.GetSettings(); settings != nil {
+	// Check if settings are available
+	if settings != nil {
 		status["enabled"] = settings.Sentry.Enabled
 	}
 

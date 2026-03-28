@@ -83,8 +83,8 @@ func (c *Controller) GenerateSupportDump(ctx echo.Context) error {
 		c.logDebugIfEnabled("Set default options for support dump")
 	}
 
-	// Get current settings
-	settings := conf.GetSettings()
+	// Get current settings via dependency injection
+	settings := c.Settings
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}
@@ -245,7 +245,7 @@ func (c *Controller) DownloadSupportDump(ctx echo.Context) error {
 
 // GetSupportStatus returns the current support/telemetry configuration status
 func (c *Controller) GetSupportStatus(ctx echo.Context) error {
-	settings := conf.GetSettings()
+	settings := c.Settings
 	if settings == nil {
 		return c.HandleError(ctx, nil, "Settings not available", http.StatusInternalServerError)
 	}

@@ -1139,7 +1139,7 @@ func (c *Controller) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool,
 	// Flow: <img> element's onerror handler triggers -> frontend makes fetch() call to same URL
 	// -> this JSON response is parsed by frontend -> mode field triggers UI to show "Generate" button
 	// Note: The <img> element doesn't parse this JSON; the error handler's fetch() call does.
-	errorResp := NewErrorResponse(
+	errorResp := c.newErrorResponse(
 		fmt.Errorf("spectrogram not generated"),
 		"Spectrogram has not been generated yet. Click 'Generate Spectrogram' to create it.",
 		http.StatusNotFound,

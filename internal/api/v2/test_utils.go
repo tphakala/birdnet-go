@@ -27,8 +27,11 @@ const (
 
 // newMinimalController creates a Controller for simple validation tests.
 // Use this for tests that only need to call handler methods without database or full infrastructure.
+// Includes default settings to prevent nil pointer panics if a handler accesses c.Settings.
 func newMinimalController() *Controller {
-	return &Controller{}
+	return &Controller{
+		Settings: newValidTestSettings(),
+	}
 }
 
 // safeSlice is a helper for mock methods returning slices.
@@ -94,10 +97,12 @@ func setupAnalyticsTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterfa
 	// Create a test datastore
 	mockDS := mocks.NewMockInterface(t)
 
-	// Create a controller with the test datastore
+	// Create a controller with the test datastore and default settings
+	// to prevent nil pointer panics if a handler accesses c.Settings.
 	controller := &Controller{
-		Group: e.Group("/api/v2"),
-		DS:    mockDS,
+		Group:    e.Group("/api/v2"),
+		DS:       mockDS,
+		Settings: newValidTestSettings(),
 	}
 
 	// Don't initialize routes as it causes nil pointer dereference in tests
@@ -192,6 +197,9 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 // newValidTestSettings returns a *conf.Settings populated with minimal values
 // that pass conf.ValidateSettings(). Tests that create inline Controller structs
 // should call this and then override the fields they care about.
+//
+// Debug defaults to false to match production behavior. Tests that specifically
+// need debug mode should set controller.Settings.WebServer.Debug = true.
 func newValidTestSettings() *conf.Settings {
 	return &conf.Settings{
 		BirdNET: conf.BirdNETConfig{
@@ -200,7 +208,7 @@ func newValidTestSettings() *conf.Settings {
 			Locale:      "en",
 		},
 		WebServer: conf.WebServerSettings{
-			Debug: true,
+			Debug: false,
 			LiveStream: conf.LiveStreamSettings{
 				BitRate:       128,
 				SegmentLength: 5,

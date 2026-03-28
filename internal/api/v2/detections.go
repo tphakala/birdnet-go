@@ -1451,7 +1451,7 @@ func (c *Controller) IgnoreSpecies(ctx echo.Context) error {
 
 // GetExcludedSpecies returns the list of excluded species
 func (c *Controller) GetExcludedSpecies(ctx echo.Context) error {
-	settings := conf.GetSettings()
+	settings := c.Settings
 
 	// Create a copy of the slice to avoid race conditions
 	c.speciesExcludeMutex.Lock()
@@ -1485,8 +1485,8 @@ func (c *Controller) toggleSpeciesInIgnoredList(species string) (action string, 
 	c.speciesExcludeMutex.Lock()
 	defer c.speciesExcludeMutex.Unlock()
 
-	// Access the latest settings using the settings accessor function
-	settings := conf.GetSettings()
+	// Access settings via dependency injection (not the global singleton)
+	settings := c.Settings
 
 	// Check if species is already in the excluded list
 	wasExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)
@@ -1531,8 +1531,8 @@ func (c *Controller) addSpeciesToIgnoredList(species string) error {
 	c.speciesExcludeMutex.Lock()
 	defer c.speciesExcludeMutex.Unlock()
 
-	// Access the latest settings using the settings accessor function
-	settings := conf.GetSettings()
+	// Access settings via dependency injection (not the global singleton)
+	settings := c.Settings
 
 	// Check if species is already in the excluded list
 	isExcluded := slices.Contains(settings.Realtime.Species.Exclude, species)

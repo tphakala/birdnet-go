@@ -731,8 +731,9 @@ type ErrorResponse struct {
 	ErrorParams   map[string]any `json:"error_params,omitempty"` // Interpolation parameters for error_key
 }
 
-// NewErrorResponse creates a new API error response
-func NewErrorResponse(err error, message string, code int) *ErrorResponse {
+// newErrorResponse creates a new API error response using the controller's
+// injected settings to decide whether to expose raw error details.
+func (c *Controller) newErrorResponse(err error, message string, code int) *ErrorResponse {
 	// Generate a random correlation ID (8 characters should be sufficient)
 	correlationID := generateCorrelationID()
 
@@ -740,8 +741,7 @@ func NewErrorResponse(err error, message string, code int) *ErrorResponse {
 	// paths, SQL errors, stack traces, etc. In production, use the
 	// sanitized message parameter instead.
 	var errorStr string
-	settings := conf.GetSettings()
-	if err != nil && settings != nil && settings.WebServer.Debug {
+	if err != nil && c.Settings != nil && c.Settings.WebServer.Debug {
 		errorStr = err.Error()
 	} else {
 		errorStr = message
@@ -776,7 +776,7 @@ func generateCorrelationID() string {
 
 // handleErrorInternal is the shared implementation for HandleError and HandleErrorWithKey.
 func (c *Controller) handleErrorInternal(ctx echo.Context, err error, message string, code int, errorKey string, errorParams map[string]any) error {
-	errorResp := NewErrorResponse(err, message, code)
+	errorResp := c.newErrorResponse(err, message, code)
 	errorResp.ErrorKey = errorKey
 	errorResp.ErrorParams = errorParams
 
