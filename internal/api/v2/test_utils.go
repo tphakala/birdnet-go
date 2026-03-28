@@ -172,6 +172,10 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	// Create mock metrics for testing
 	mockMetrics, _ := observability.NewMetrics()
 
+	// Set test settings globally so helpers like clearExcludedSpeciesList can use conf.GetSettings().
+	oldSettings := conf.GetSettings()
+	conf.SetTestSettings(settings)
+
 	// Create API controller without initializing routes to avoid starting background goroutines
 	controller, err := NewWithOptions(e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics, false)
 	if err != nil {
@@ -184,6 +188,8 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 		controller.Shutdown()
 		// Close control channel to signal goroutines to exit
 		close(controlChan)
+		// Restore previous global settings
+		conf.SetTestSettings(oldSettings)
 	})
 
 	return e, mockDS, controller
