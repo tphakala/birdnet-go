@@ -197,7 +197,27 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
             return;
 
           case 'failed':
-            logger.warn('Spectrogram generation failed on server', { detectionId });
+            // Treat as transient if we still have poll budget — the audio file
+            // may not have been written yet when generation was attempted.
+            // Retry the full generation cycle after a delay.
+            if (pollAttempts < config.maxPollAttempts) {
+              pollAttempts++;
+              logger.debug('Spectrogram generation failed, retrying (audio may not be ready)', {
+                detectionId,
+                attempt: pollAttempts,
+              });
+              currentPollInterval = Math.min(
+                config.initialPollIntervalMs * Math.pow(2, Math.min(pollAttempts, 4)),
+                config.maxPollIntervalMs
+              );
+              pollTimer = setTimeout(() => {
+                if (isStale(detectionId)) return;
+                void triggerGeneration(detectionId);
+              }, currentPollInterval);
+              state = 'polling';
+              return;
+            }
+            logger.warn('Spectrogram generation failed on server after retries', { detectionId });
             state = 'error';
             hasError = true;
             showSpinner = false;
@@ -276,7 +296,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     state = 'polling';
     currentPollInterval = config.initialPollIntervalMs;
-    pollAttempts = 0;
+    // Note: pollAttempts is NOT reset here — it accumulates across the entire
+    // start() lifecycle so that failed-status retries properly count toward
+    // the maxPollAttempts budget. It is reset in resetInternalState() when
+    // start() is called with a new detection or after a fresh user action.
     schedulePoll(detectionId);
   }
 
@@ -295,6 +318,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     if (pollAttempts > config.maxPollAttempts) {
       logger.warn('Spectrogram polling timed out', { detectionId, attempts: pollAttempts });
+      serverStatus = 'failed';
       state = 'error';
       hasError = true;
       showSpinner = false;
@@ -321,7 +345,21 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         }
 
         if (status === 'failed') {
-          logger.warn('Spectrogram generation failed', { detectionId });
+          // Don't give up immediately — audio file may not have been ready.
+          // Re-trigger generation if we still have poll budget.
+          if (pollAttempts < config.maxPollAttempts) {
+            logger.debug('Spectrogram failed during poll, re-triggering generation', {
+              detectionId,
+              attempt: pollAttempts,
+            });
+            currentPollInterval = Math.min(currentPollInterval * 2, config.maxPollIntervalMs);
+            pollTimer = setTimeout(() => {
+              if (isStale(detectionId)) return;
+              void triggerGeneration(detectionId);
+            }, currentPollInterval);
+            return;
+          }
+          logger.warn('Spectrogram generation failed after retries', { detectionId });
           state = 'error';
           hasError = true;
           showSpinner = false;

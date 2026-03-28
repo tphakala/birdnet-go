@@ -2253,6 +2253,46 @@ func (c *Controller) checkAudioFileExists(relAudioPath string) error {
 	return nil
 }
 
+// waitForAudioFileCtx polls for an audio file to appear on disk, using a context
+// for cancellation. This covers the race window where the detection DB record is
+// committed and SSE is broadcast before the async SaveAudioAction writes the file.
+// It uses the same timeout and poll interval as the audio serving wait logic
+// (audioWaitTimeout / audioWaitPollInterval).
+// Returns nil if the file appeared, or the original not-found error otherwise.
+func (c *Controller) waitForAudioFileCtx(ctx context.Context, relAudioPath string) error {
+	// Immediate check — avoid waiting if file already exists.
+	if _, err := c.SFS.StatRel(relAudioPath); err == nil {
+		return nil
+	}
+
+	waitCtx, cancel := context.WithTimeout(ctx, audioWaitTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(audioWaitPollInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			// Final check before giving up — the file may have appeared
+			// between the last tick and the deadline.
+			if _, err := c.SFS.StatRel(relAudioPath); err == nil {
+				return nil
+			}
+			getSpectrogramLogger().Debug("Audio file did not appear within wait timeout",
+				logger.String("relative_audio_path", relAudioPath),
+				logger.Duration("timeout", audioWaitTimeout))
+			return fmt.Errorf("%w: %w (path: %s)", ErrAudioFileNotFound, os.ErrNotExist, relAudioPath)
+		case <-ticker.C:
+			if _, err := c.SFS.StatRel(relAudioPath); err == nil {
+				getSpectrogramLogger().Debug("Audio file appeared after waiting",
+					logger.String("relative_audio_path", relAudioPath))
+				return nil
+			}
+		}
+	}
+}
+
 // initializeQueueStatus initializes the queue tracking for a spectrogram request
 // Optimized to minimize lock hold time - calculation done outside lock, only write is locked
 func (c *Controller) initializeQueueStatus(spectrogramKey string) {
@@ -2614,8 +2654,11 @@ func (c *Controller) generateSpectrogram(ctx context.Context, audioPath string, 
 		sharedCtx, sharedCancel := context.WithTimeout(c.ctx, spectrogramGenerationTimeout)
 		defer sharedCancel()
 
-		// Step 4: Check if audio file exists (inside singleflight to avoid redundant stat calls)
-		if err := c.checkAudioFileExists(relAudioPath); err != nil {
+		// Step 4: Wait for audio file to appear on disk. The detection DB record and
+		// SSE broadcast happen before the async SaveAudioAction writes the file, so
+		// we poll instead of doing an instant check. This uses the same timeout and
+		// interval as the audio serving endpoint (audioWaitTimeout / audioWaitPollInterval).
+		if err := c.waitForAudioFileCtx(sharedCtx, relAudioPath); err != nil {
 			return nil, err
 		}
 

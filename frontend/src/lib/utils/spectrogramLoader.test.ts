@@ -221,15 +221,41 @@ describe('spectrogramLoader', () => {
       loader.destroy();
     });
 
-    it('transitions to error on failed status', async () => {
+    it('retries on failed status then errors after max attempts', async () => {
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
 
-      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      const loader = createSpectrogramLoader({
+        initialPollIntervalMs: 100,
+        maxPollIntervalMs: 200,
+        maxPollAttempts: 2,
+      });
       loader.start(42);
       await flushAll();
 
+      // First failed — retries by re-triggering generation
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
       vi.advanceTimersByTime(100);
+      await flushAll();
+      expect(loader.state).toBe('polling');
+
+      // Generation trigger returns queued, poll again
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
+      await vi.advanceTimersByTimeAsync(200);
+      await flushAll();
+
+      // Second failed — still within budget, retries again
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
+      await vi.advanceTimersByTimeAsync(200);
+      await flushAll();
+
+      // Generation trigger returns queued
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
+      await vi.advanceTimersByTimeAsync(200);
+      await flushAll();
+
+      // Third poll — exceeds maxPollAttempts, gives up
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
+      await vi.advanceTimersByTimeAsync(200);
       await flushAll();
 
       expect(loader.state).toBe('error');
@@ -267,16 +293,36 @@ describe('spectrogramLoader', () => {
   });
 
   describe('permanent failure handling', () => {
-    it('does not restart for same detection after server-reported failure', async () => {
+    it('does not restart for same detection after server-reported failure exhausts retries', async () => {
+      // Use maxPollAttempts: 1 so the first failed status during checkStatus
+      // triggers a retry, then the second failed during polling exhausts budget.
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
 
-      const loader = createSpectrogramLoader();
+      const loader = createSpectrogramLoader({
+        initialPollIntervalMs: 10,
+        maxPollIntervalMs: 10,
+        maxPollAttempts: 1,
+      });
       loader.start(42);
+      await flushAll();
+
+      // First failed — retries (poll budget allows 1 attempt)
+      expect(loader.state).toBe('polling');
+
+      // Generation trigger
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
+      await vi.advanceTimersByTimeAsync(20);
+      await flushAll();
+
+      // Poll returns failed again — budget exhausted
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
+      await vi.advanceTimersByTimeAsync(20);
       await flushAll();
 
       expect(loader.state).toBe('error');
       const fetchCallCount = mockFetch.mock.calls.length;
 
+      // Re-starting same detection should be a no-op (permanent failure)
       loader.start(42);
       await flushAll();
 
