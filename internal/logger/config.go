@@ -77,7 +77,7 @@ func ensureModuleOutput(cfg *LoggingConfig, module, filePath string) {
 		cfg.ModuleOutputs[module] = ModuleOutput{
 			Enabled:     true,
 			FilePath:    filePath,
-			ConsoleAlso: true,
+			ConsoleAlso: false,
 		}
 	}
 }

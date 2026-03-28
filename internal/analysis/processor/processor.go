@@ -2119,25 +2119,15 @@ func (p *Processor) logDetectionResults(source string, rawCount, filteredCount i
 	shouldLog, reason := p.logDedup.ShouldLog(source, rawCount, filteredCount)
 
 	if shouldLog {
-		// Only log at INFO level when there are actual filtered detections
-		// This prevents log spam from empty analysis cycles
-		if filteredCount > 0 {
-			GetLogger().Info("Detection processing results",
-				logger.String("source", p.getDisplayNameForSource(source)),
-				logger.Int("raw_results_count", rawCount),
-				logger.Int("filtered_detections_count", filteredCount),
-				logger.String("log_reason", reason),
-				logger.String("operation", "process_detections_summary"))
-		} else {
-			// Log zero-detection cycles at DEBUG level for troubleshooting
-			// without flooding INFO logs with noise
-			GetLogger().Debug("Detection processing results",
-				logger.String("source", p.getDisplayNameForSource(source)),
-				logger.Int("raw_results_count", rawCount),
-				logger.Int("filtered_detections_count", 0),
-				logger.String("log_reason", reason),
-				logger.String("operation", "process_detections_summary"))
-		}
+		// Log all processing results at DEBUG level to avoid flooding console.
+		// Actual detections are logged at INFO when they become pending/confirmed
+		// detections (see "Created new pending detection" log message).
+		GetLogger().Debug("Detection processing results",
+			logger.String("source", p.getDisplayNameForSource(source)),
+			logger.Int("raw_results_count", rawCount),
+			logger.Int("filtered_detections_count", filteredCount),
+			logger.String("log_reason", reason),
+			logger.String("operation", "process_detections_summary"))
 	}
 }
 

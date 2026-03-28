@@ -419,5 +419,5 @@ func setModuleLogDefaults(module string, enabled bool) {
 	viper.SetDefault(prefix+".enabled", enabled)
 	viper.SetDefault(prefix+".file_path", "logs/"+module+".log")
 	viper.SetDefault(prefix+".level", "debug")
-	viper.SetDefault(prefix+".console_also", true)
+	viper.SetDefault(prefix+".console_also", false)
 }
