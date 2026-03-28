@@ -54,6 +54,17 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 		return nil, err
 	}
 
+	// Validate label count against model output dimension
+	if len(outputInfos) > 0 {
+		outDims := outputInfos[0].Dimensions
+		if len(outDims) >= 2 {
+			modelSpecies := int(outDims[len(outDims)-1])
+			if modelSpecies > 0 && len(labels) != modelSpecies {
+				return nil, &LabelCountError{Expected: modelSpecies, Got: len(labels)}
+			}
+		}
+	}
+
 	// Create session options
 	sessOpts, err := ort.NewSessionOptions()
 	if err != nil {

@@ -7,9 +7,9 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 )
 
@@ -71,7 +71,10 @@ func loadLabelsCSV(data []byte) ([]string, error) {
 	}
 
 	header := records[0]
-	colIdx := findLabelColumn(header)
+	colIdx, err := findLabelColumn(header)
+	if err != nil {
+		return nil, err
+	}
 
 	var labels []string
 	for _, row := range records[1:] {
@@ -85,22 +88,17 @@ func loadLabelsCSV(data []byte) ([]string, error) {
 	return labels, nil
 }
 
-func findLabelColumn(header []string) int {
+func findLabelColumn(header []string) (int, error) {
 	priorities := []string{"sci_name", "com_name", "name", "label"}
 	for _, name := range priorities {
 		for i, h := range header {
 			if strings.EqualFold(strings.TrimSpace(h), name) {
-				return i
+				return i, nil
 			}
 		}
 	}
-	for i, h := range header {
-		h = strings.TrimSpace(h)
-		if _, err := strconv.Atoi(h); err != nil {
-			return i
-		}
-	}
-	return 0
+	// No known label column found — return error instead of guessing
+	return -1, fmt.Errorf("CSV has no recognized label column (expected one of: sci_name, com_name, name, label); found headers: %v", header)
 }
 
 func loadLabelsJSON(data []byte) ([]string, error) {

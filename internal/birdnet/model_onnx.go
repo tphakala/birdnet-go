@@ -25,7 +25,8 @@ func (bn *BirdNET) initializeONNXModel() error {
 	}
 
 	classifier, err := inference.NewONNXClassifier(bn.Settings.BirdNET.ModelPath, inference.ONNXClassifierOptions{
-		Labels: bn.Settings.BirdNET.Labels,
+		Labels:  bn.Settings.BirdNET.Labels,
+		Threads: bn.Settings.BirdNET.Threads,
 	})
 	if err != nil {
 		return errors.New(err).

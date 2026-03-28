@@ -171,8 +171,8 @@ func resolveModelType(cfg *classifierConfig, inputShapes [][]int64, numOutputs i
 
 // validateLabelCount checks that the label count matches the model's logits output dimension.
 func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo, labelCount int) error {
-	if modelCfg.LogitsIndex >= len(outputInfos) {
-		return nil
+	if modelCfg.LogitsIndex < 0 || modelCfg.LogitsIndex >= len(outputInfos) {
+		return fmt.Errorf("birdnet: LogitsIndex %d is out of range for model with %d outputs", modelCfg.LogitsIndex, len(outputInfos))
 	}
 	logitsDims := outputInfos[modelCfg.LogitsIndex].Dimensions
 	if len(logitsDims) < 2 {
@@ -223,7 +223,10 @@ func resolveLabels(cfg *classifierConfig) ([]string, error) {
 
 // Config returns the model configuration.
 func (c *Classifier) Config() ModelConfig {
-	return c.config
+	cfg := c.config
+	cfg.InputShape = make([]int64, len(c.config.InputShape))
+	copy(cfg.InputShape, c.config.InputShape)
+	return cfg
 }
 
 // Labels returns a copy of the species labels.

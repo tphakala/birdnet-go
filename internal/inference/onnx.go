@@ -6,12 +6,15 @@ import (
 	"fmt"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
+	ortlib "github.com/yalue/onnxruntime_go"
 )
 
 // ONNXClassifierOptions configures the ONNX species classifier.
 type ONNXClassifierOptions struct {
 	// Labels is the species label list. Required.
 	Labels []string
+	// Threads is the number of CPU threads for ONNX inference. 0 = use ONNX defaults.
+	Threads int
 }
 
 // onnxClassifier implements Classifier using an ONNX Runtime session.
@@ -27,11 +30,19 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 		return nil, fmt.Errorf("ONNX classifier requires labels")
 	}
 
-	classifier, err := ort.NewClassifier(modelPath,
+	classifierOpts := []ort.ClassifierOption{
 		ort.WithLabels(opts.Labels),
 		ort.WithTopK(0),          // We handle topK in BirdNET-Go's post-processing
 		ort.WithMinConfidence(0), // No filtering, return all raw scores
-	)
+	}
+	if opts.Threads > 0 {
+		threads := opts.Threads
+		classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
+			_ = so.SetIntraOpNumThreads(threads)
+			_ = so.SetInterOpNumThreads(threads)
+		}))
+	}
+	classifier, err := ort.NewClassifier(modelPath, classifierOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX classifier: %w", err)
 	}

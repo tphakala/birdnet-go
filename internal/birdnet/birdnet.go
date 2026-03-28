@@ -98,6 +98,18 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Build()
 	}
 
+	// Load labels before model initialization — ONNX models require labels
+	// at construction time for output dimension validation.
+	if err := bn.loadLabels(); err != nil {
+		return nil, errors.New(err).
+			Component("birdnet").
+			Category(errors.CategoryModelInit).
+			Context("operation", "load_labels").
+			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			Context("locale", settings.BirdNET.Locale).
+			Build()
+	}
+
 	if err := bn.initializeModel(); err != nil {
 		return nil, errors.New(err).
 			Component("birdnet").
@@ -113,16 +125,6 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Category(errors.CategoryModelInit).
 			Context("operation", "initialize_range_filter").
 			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
-			Build()
-	}
-
-	if err := bn.loadLabels(); err != nil {
-		return nil, errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			Context("operation", "load_labels").
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
-			Context("locale", settings.BirdNET.Locale).
 			Build()
 	}
 
@@ -155,8 +157,10 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 }
 
 // isONNXModel returns true if the model path points to an ONNX model file.
+// Expands environment variables before checking the extension.
 func isONNXModel(path string) bool {
-	return strings.HasSuffix(strings.ToLower(path), ".onnx")
+	expanded := os.ExpandEnv(path)
+	return strings.HasSuffix(strings.ToLower(expanded), ".onnx")
 }
 
 // initializeModel loads and initializes the primary BirdNET model.
