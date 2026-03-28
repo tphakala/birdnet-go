@@ -256,7 +256,9 @@
       primaryAction={{
         label: t('settings.audio.soundCards.addSource'),
         icon: Plus,
-        onclick: () => (showAddForm = true),
+        onclick: () => {
+          if (!disabled) showAddForm = true;
+        },
       }}
     />
   {:else}
@@ -338,6 +340,7 @@
                 max={40}
                 step={1}
                 unit=" dB"
+                {disabled}
               />
 
               <SelectDropdown

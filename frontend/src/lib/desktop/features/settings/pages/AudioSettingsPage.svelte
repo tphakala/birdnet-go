@@ -628,17 +628,7 @@
 <!-- Tab Content Snippets -->
 {#snippet soundCardTabContent()}
   <div class="space-y-6">
-    {#if audioDevices.loading}
-      <!-- Loading State -->
-      <div class="flex items-center justify-center py-12">
-        <span
-          class="inline-block w-10 h-10 border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-        ></span>
-        <span class="ml-3 text-[var(--color-base-content)] opacity-90"
-          >{t('settings.audio.loading')}</span
-        >
-      </div>
-    {:else if audioDevices.error}
+    {#if audioDevices.error}
       <!-- Error State -->
       <EmptyState
         icon={Volume2}
@@ -646,6 +636,24 @@
         description={audioDevices.error}
         primaryAction={{
           label: t('settings.audio.emptyStates.soundCard.retry'),
+          icon: RefreshCw,
+          onclick: loadAudioDevices,
+        }}
+      />
+    {:else if !audioDevices.loading && audioDevices.data.length === 0}
+      <!-- Empty State: No Sound Cards Found -->
+      <EmptyState
+        icon={Volume2}
+        title={t('settings.audio.emptyStates.soundCard.title')}
+        description={t('settings.audio.emptyStates.soundCard.description')}
+        hints={[
+          t('settings.audio.emptyStates.soundCard.hints.container'),
+          t('settings.audio.emptyStates.soundCard.hints.streams'),
+          t('settings.audio.emptyStates.soundCard.hints.usb'),
+        ]}
+        hintsTitle={t('settings.audio.emptyStates.soundCard.hintsTitle')}
+        primaryAction={{
+          label: t('settings.audio.emptyStates.soundCard.refresh'),
           icon: RefreshCw,
           onclick: loadAudioDevices,
         }}

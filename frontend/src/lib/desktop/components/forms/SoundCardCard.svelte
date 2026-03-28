@@ -173,13 +173,7 @@
   }
 
   function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
-    editEqualizer = {
-      enabled: updated.enabled,
-      filters: updated.filters.map((filter, i) => ({
-        ...filter,
-        id: filter.id || `filter-${Date.now()}-${i}`,
-      })),
-    };
+    editEqualizer = updated;
   }
 </script>
 
@@ -270,6 +264,7 @@
             max={40}
             step={1}
             unit=" dB"
+            {disabled}
           />
 
           <SelectDropdown

@@ -12,6 +12,7 @@
     "refresh": "Aktualisieren",
     "delete": "Löschen",
     "edit": "Bearbeiten",
+    "enabled": "Aktiviert",
     "search": "Suchen",
     "filter": "Filtern",
     "sort": "Sortieren",
@@ -3002,7 +3003,7 @@
           "birdnetDefault": "BirdNET (Standard)",
           "birdnet": "BirdNET",
           "perchV2": "Google Perch v2",
-          "bat": "Fledermauerkennung"
+          "bat": "Fledermauserkennung"
         },
         "errors": {
           "nameRequired": "Quellenname ist erforderlich",
