@@ -4,8 +4,10 @@ package audiocore
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"runtime"
 	"strings"
 	"time"
@@ -234,15 +236,17 @@ func startCapture(
 			return
 		}
 
-		data := make([]byte, len(pSamples))
-		copy(data, pSamples)
+		// Convert non-S16 formats to S16 so the rest of the pipeline
+		// (capture buffer, BirdNET analysis) receives consistent 16-bit PCM.
+		// Devices like the Scarlett 2i2 capture at 32-bit natively.
+		data, bitDepth := convertToS16IfNeeded(pSamples, formatType, cfg.BitDepth)
 
 		frame := AudioFrame{
 			SourceID:   sourceID,
 			SourceName: selectedDevInfo.Name,
 			Data:       data,
 			SampleRate: cfg.SampleRate,
-			BitDepth:   formatBitDepth(formatType, cfg.BitDepth),
+			BitDepth:   bitDepth,
 			Channels:   cfg.Channels,
 			Timestamp:  time.Now(),
 		}
@@ -328,4 +332,105 @@ func formatBitDepth(format malgo.FormatType, requested int) int {
 	default:
 		return requested
 	}
+}
+
+// convertToS16IfNeeded converts audio samples from S24, S32, or F32 format to
+// S16 (16-bit signed PCM). If the source is already S16 or U8, the data is
+// copied as-is. This ensures the capture buffer and downstream pipeline always
+// receive consistent 16-bit PCM regardless of the hardware's native format.
+func convertToS16IfNeeded(samples []byte, format malgo.FormatType, requestedBitDepth int) (data []byte, bitDepth int) {
+	switch format {
+	case malgo.FormatS16:
+		// Already 16-bit — just copy.
+		out := make([]byte, len(samples))
+		copy(out, samples)
+		return out, 16
+
+	case malgo.FormatS24:
+		return convertS24ToS16(samples), 16
+
+	case malgo.FormatS32:
+		return convertS32ToS16(samples), 16
+
+	case malgo.FormatF32:
+		return convertF32ToS16(samples), 16
+
+	default:
+		// U8 or unknown — copy as-is with original bit depth.
+		out := make([]byte, len(samples))
+		copy(out, samples)
+		return out, formatBitDepth(format, requestedBitDepth)
+	}
+}
+
+// convertS24ToS16 converts 24-bit signed integer PCM to 16-bit signed PCM.
+func convertS24ToS16(samples []byte) []byte {
+	const srcBytes = 3
+	sampleCount := len(samples) / srcBytes
+	out := make([]byte, sampleCount*2)
+
+	for i := range sampleCount {
+		srcIdx := i * srcBytes
+		dstIdx := i * 2
+
+		// Read 24-bit little-endian, sign-extend to 32-bit.
+		val := int32(samples[srcIdx]) | int32(samples[srcIdx+1])<<8 | int32(samples[srcIdx+2])<<16
+		if val&0x800000 != 0 {
+			val |= -0x1000000
+		}
+		// Shift right 8 bits to get 16-bit range.
+		val >>= 8
+		if val > 32767 {
+			val = 32767
+		} else if val < -32768 {
+			val = -32768
+		}
+		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped to 16-bit range
+	}
+	return out
+}
+
+// convertS32ToS16 converts 32-bit signed integer PCM to 16-bit signed PCM.
+func convertS32ToS16(samples []byte) []byte {
+	const srcBytes = 4
+	sampleCount := len(samples) / srcBytes
+	out := make([]byte, sampleCount*2)
+
+	for i := range sampleCount {
+		srcIdx := i * srcBytes
+		dstIdx := i * 2
+
+		val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+srcBytes])) //nolint:gosec // G115: 32→32 bit
+		val >>= 16
+		if val > 32767 {
+			val = 32767
+		} else if val < -32768 {
+			val = -32768
+		}
+		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped
+	}
+	return out
+}
+
+// convertF32ToS16 converts 32-bit float PCM [-1.0, 1.0] to 16-bit signed PCM.
+func convertF32ToS16(samples []byte) []byte {
+	const srcBytes = 4
+	sampleCount := len(samples) / srcBytes
+	out := make([]byte, sampleCount*2)
+
+	for i := range sampleCount {
+		srcIdx := i * srcBytes
+		dstIdx := i * 2
+
+		bits := binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+srcBytes])
+		val := math.Float32frombits(bits)
+		val *= 32767.0
+		if val > 32767.0 {
+			val = 32767.0
+		} else if val < -32768.0 {
+			val = -32768.0
+		}
+		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(int16(val))) //nolint:gosec // G115: val clamped
+	}
+	return out
 }
