@@ -918,8 +918,15 @@ func (s *Stream) processAudio() error {
 	s.cmdMu.Unlock()
 
 	if stdout == nil {
-		getStreamLogger().Warn("stdout nil after successful process start, restarting",
-			logger.String("source_id", s.config.SourceID))
+		// During intentional stop, cleanupProcess clears stdout before Run checks —
+		// this is expected, not a warning condition.
+		s.stoppedMu.RLock()
+		stopped := s.stopped
+		s.stoppedMu.RUnlock()
+		if !stopped {
+			getStreamLogger().Warn("stdout nil after successful process start, restarting",
+				logger.String("source_id", s.config.SourceID))
+		}
 		return nil
 	}
 

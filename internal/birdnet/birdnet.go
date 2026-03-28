@@ -876,15 +876,27 @@ func (bn *BirdNET) ReloadModel() error {
 	defer bn.mu.Unlock()
 	bn.Debug("Acquired mutex for model reload")
 
-	// Store old interpreters to clean up after successful reload
+	// Snapshot all mutable state for transactional rollback on failure.
 	oldAnalysisInterpreter := bn.AnalysisInterpreter
 	oldRangeInterpreter := bn.RangeInterpreter
+	oldModelInfo := bn.ModelInfo
+	oldTaxonomyMap := bn.TaxonomyMap
+	oldScientificIndex := bn.ScientificIndex
+
+	rollback := func() {
+		bn.AnalysisInterpreter = oldAnalysisInterpreter
+		bn.RangeInterpreter = oldRangeInterpreter
+		bn.ModelInfo = oldModelInfo
+		bn.TaxonomyMap = oldTaxonomyMap
+		bn.ScientificIndex = oldScientificIndex
+	}
 
 	// Re-determine model info if using a custom model path
 	if bn.Settings.BirdNET.ModelPath != "" {
 		var err error
 		bn.ModelInfo, err = DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
 		if err != nil {
+			rollback()
 			return errors.New(err).
 				Component("birdnet").
 				Category(errors.CategoryModelInit).
@@ -898,6 +910,7 @@ func (bn *BirdNET) ReloadModel() error {
 	var err error
 	bn.TaxonomyMap, bn.ScientificIndex, err = LoadTaxonomyData(bn.TaxonomyPath)
 	if err != nil {
+		rollback()
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
@@ -909,8 +922,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Initialize new model
 	if err := bn.initializeModel(); err != nil {
-		// Restore the old interpreters on failure
-		bn.AnalysisInterpreter = oldAnalysisInterpreter
+		rollback()
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
@@ -922,9 +934,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Initialize new meta model
 	if err := bn.initializeMetaModel(); err != nil {
-		// Restore the old interpreters (new ones will be GC'd)
-		bn.AnalysisInterpreter = oldAnalysisInterpreter
-		bn.RangeInterpreter = oldRangeInterpreter
+		rollback()
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
@@ -936,9 +946,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Reload labels
 	if err := bn.loadLabels(); err != nil {
-		// Restore the old interpreters (new ones will be GC'd)
-		bn.AnalysisInterpreter = oldAnalysisInterpreter
-		bn.RangeInterpreter = oldRangeInterpreter
+		rollback()
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
@@ -950,9 +958,7 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Validate that the model and labels match
 	if err := bn.validateModelAndLabels(); err != nil {
-		// Restore the old interpreters (new ones will be GC'd)
-		bn.AnalysisInterpreter = oldAnalysisInterpreter
-		bn.RangeInterpreter = oldRangeInterpreter
+		rollback()
 		return errors.New(err).
 			Component("birdnet").
 			Category(errors.CategoryModelInit).

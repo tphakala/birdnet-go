@@ -6,6 +6,7 @@ package analysis
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/getsentry/sentry-go"
@@ -51,6 +52,9 @@ type bufferOverrunTracker struct {
 
 // overrunTracker is the package-level tracker instance.
 var overrunTracker bufferOverrunTracker
+
+// lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.
+var lastQueueOverflowReport atomic.Int64
 
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
 // when the tumbling window expires with enough accumulated overruns.
@@ -276,16 +280,21 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt ti
 		if pm != nil {
 			pm.RecordAudioQueueOperation(source, "enqueue", "dropped")
 		}
-		if telemetry.IsTelemetryEnabled() {
-			telemetry.FastCaptureMessageWithExtras(
-				"results queue full, detections dropped",
-				sentry.LevelWarning,
-				"analysis",
-				map[string]any{
-					"source":     source,
-					"queue_size": len(birdnet.ResultsQueue),
-				},
-			)
+		// Rate-limit queue overflow telemetry to prevent Sentry floods under sustained backpressure.
+		now := time.Now().Unix()
+		last := lastQueueOverflowReport.Load()
+		if telemetry.IsTelemetryEnabled() && (now-last >= int64(bufferOverrunReportCooldown.Seconds())) {
+			if lastQueueOverflowReport.CompareAndSwap(last, now) {
+				telemetry.FastCaptureMessageWithExtras(
+					"results queue full, detections dropped",
+					sentry.LevelWarning,
+					"analysis",
+					map[string]any{
+						"source":     source,
+						"queue_size": len(birdnet.ResultsQueue),
+					},
+				)
+			}
 		}
 	}
 	return nil

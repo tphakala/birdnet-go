@@ -503,16 +503,6 @@ func (m *Manager) checkForStuckStreams() {
 			logger.String("component", "ffmpeg-manager"),
 			logger.String("operation", "watchdog_force_reset"))
 
-		// Report watchdog force-reset to Sentry for visibility into streams
-		// that are stuck in an unhealthy state.
-		_ = errors.Newf("ffmpeg watchdog forced stream reset after %v unhealthy", unhealthyFor).
-			Component("ffmpeg-manager").
-			Category(errors.CategoryRTSP).
-			Context("operation", "watchdog_reset").
-			Context("source_id", id).
-			Context("restart_count", h.RestartCount).
-			Build()
-
 		if err := m.StopStream(id); err != nil {
 			m.logger.Error("watchdog: failed to stop stuck stream",
 				logger.String("source_id", id),
@@ -548,5 +538,14 @@ func (m *Manager) checkForStuckStreams() {
 			logger.Float64("unhealthy_seconds", unhealthyFor.Seconds()),
 			logger.String("component", "ffmpeg-manager"),
 			logger.String("operation", "watchdog_reset_complete"))
+
+		// Report successful watchdog force-reset to Sentry for visibility.
+		_ = errors.Newf("ffmpeg watchdog forced stream reset after %v unhealthy", unhealthyFor).
+			Component("ffmpeg-manager").
+			Category(errors.CategoryRTSP).
+			Context("operation", "watchdog_reset").
+			Context("source_id", id).
+			Context("restart_count", h.RestartCount).
+			Build()
 	}
 }
