@@ -15,9 +15,10 @@ export interface SentryConfig {
   version: string;
 }
 
-/** HTTP status codes for auth-related errors (expected flow, not bugs). */
+/** HTTP status codes for expected-flow errors (not bugs). */
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+const HTTP_CONFLICT = 409;
 
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
@@ -26,11 +27,11 @@ interface ApiErrorLike {
   isNetworkError: boolean;
 }
 
-/** Check whether an unknown value looks like an ApiError with an auth-related status. */
-function isAuthError(err: unknown): boolean {
+/** Check whether an unknown value looks like an ApiError with an expected-flow status. */
+function isExpectedApiError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const status = (err as Record<string, unknown>).status;
-  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN;
+  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN || status === HTTP_CONFLICT;
 }
 
 /**
@@ -57,11 +58,16 @@ export function initSentry(config: SentryConfig): void {
 
 /**
  * Capture an API error with structured context.
- * Skips auth errors (401/403) as they are expected flow, not bugs.
+ * Skips expected-flow errors (401/403/409) as they are not bugs.
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
-  // Skip auth-related errors — these are expected flow, not bugs
-  if (error.status === HTTP_UNAUTHORIZED || error.status === HTTP_FORBIDDEN) return;
+  // Skip expected-flow errors — auth (401/403) and conflict (409, e.g. v2 database not available)
+  if (
+    error.status === HTTP_UNAUTHORIZED ||
+    error.status === HTTP_FORBIDDEN ||
+    error.status === HTTP_CONFLICT
+  )
+    return;
 
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 
@@ -97,8 +103,8 @@ export function captureError(
   error: Error,
   context?: { category?: string; [key: string]: unknown }
 ): void {
-  // Skip auth errors — 401/403 are expected when user isn't logged in
-  if (isAuthError(error)) return;
+  // Skip expected-flow errors — 401/403/409 are not bugs
+  if (isExpectedApiError(error)) return;
 
   Sentry.withScope(scope => {
     scope.setLevel('error');
@@ -164,9 +170,8 @@ function scrubUrl(raw: string): string {
  * Also drops auth errors (401/403) which are expected when users aren't logged in.
  */
 function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
-  // Drop auth errors — 401/403 are expected flow, not bugs.
-  // These can arrive via unhandled rejections or logger.error() paths.
-  if (isAuthError(hint.originalException)) return null;
+  // Drop expected-flow errors — 401/403/409 can arrive via unhandled rejections or logger.error().
+  if (isExpectedApiError(hint.originalException)) return null;
 
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;

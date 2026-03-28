@@ -72,6 +72,13 @@ describe('beforeSend privacy filtering', () => {
     expect(result).toBeNull();
   });
 
+  it('drops events where originalException has status 409', () => {
+    const error = Object.assign(new Error('Conflict'), { status: 409 });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
   it('passes through non-auth errors', () => {
     const error = Object.assign(new Error('Server Error'), { status: 500 });
     const event = { type: undefined } as Sentry.ErrorEvent;
@@ -175,6 +182,14 @@ describe('captureApiError', () => {
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
+  it('skips 409 conflict errors', () => {
+    const error = new Error('Conflict') as Error & { status: number; isNetworkError: boolean };
+    error.status = 409;
+    error.isNetworkError = false;
+    captureApiError(error);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it('captures 500 errors with error severity', () => {
     const error = new Error('Server Error') as Error & { status: number; isNetworkError: boolean };
     error.status = 500;
@@ -206,6 +221,12 @@ describe('captureError', () => {
 
   it('skips errors with status 403', () => {
     const error = Object.assign(new Error('Forbidden'), { status: 403 });
+    captureError(error, { category: 'api' });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('skips errors with status 409', () => {
+    const error = Object.assign(new Error('Conflict'), { status: 409 });
     captureError(error, { category: 'api' });
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });

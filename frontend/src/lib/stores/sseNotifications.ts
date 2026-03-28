@@ -64,14 +64,22 @@ class SSENotificationManager {
   }
 
   /**
-   * Notify all registered callbacks of a new notification
+   * Notify all registered callbacks of a new notification.
+   * Each callback is isolated so one failure does not affect others.
    */
   private notifyCallbacks(notification: Notification): void {
     this.notificationCallbacks.forEach(callback => {
       try {
         callback(notification);
       } catch (error) {
-        logger.error('Error in notification callback', error, {
+        // Ensure the error sent to Sentry is always an Error instance
+        // with a descriptive message, not a raw non-Error value that
+        // would produce an opaque "callback" title in Sentry.
+        const wrappedError =
+          error instanceof Error
+            ? error
+            : new Error(`Notification callback failed: ${String(error)}`);
+        logger.error('Error in notification callback', wrappedError, {
           component: 'sseNotifications',
           action: 'notifyCallbacks',
         });
@@ -117,11 +125,18 @@ class SSENotificationManager {
         }
       };
 
-      this.eventSource.onerror = (error: Event) => {
-        logger.error('SSE notification error', error, {
-          component: 'sseNotifications',
-          action: 'connection',
-        });
+      this.eventSource.onerror = () => {
+        // EventSource onerror receives an Event, not an Error.
+        // Passing the raw Event to the logger (or Sentry) produces an
+        // opaque "callback" error title. Create a proper Error instead.
+        logger.error(
+          'SSE notification connection error',
+          new Error('SSE notification connection lost'),
+          {
+            component: 'sseNotifications',
+            action: 'connection',
+          }
+        );
         this.isConnected = false;
         onSSEError();
         // ReconnectingEventSource handles reconnection automatically

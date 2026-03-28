@@ -2,6 +2,9 @@
 import { easeQuadInOut } from 'd3-ease';
 import type { Selection, BaseType } from 'd3-selection';
 import type { Transition } from 'd3-transition';
+import { loggers } from '$lib/utils/logger';
+
+const logger = loggers.ui;
 
 export interface AxisTheme {
   color: string;
@@ -153,15 +156,37 @@ export class ThemeStore {
     if (typeof globalThis.requestAnimationFrame !== 'undefined') {
       globalThis.requestAnimationFrame(() => {
         this.currentTheme = getCurrentTheme();
-        this.callbacks.forEach(callback => callback(this.currentTheme));
+        this.notifySubscribers();
       });
     } else {
       // Fallback for environments without requestAnimationFrame
       setTimeout(() => {
         this.currentTheme = getCurrentTheme();
-        this.callbacks.forEach(callback => callback(this.currentTheme));
+        this.notifySubscribers();
       }, 0);
     }
+  }
+
+  /**
+   * Safely invoke all subscriber callbacks. Each callback is isolated
+   * so that a failing subscriber does not prevent others from running
+   * and does not surface as an unhandled exception (which Sentry would
+   * capture with an opaque "callback" title from the minified bundle).
+   */
+  private notifySubscribers(): void {
+    this.callbacks.forEach(callback => {
+      try {
+        callback(this.currentTheme);
+      } catch (error) {
+        // Log but do not rethrow -- keeps other subscribers running
+        // and prevents unhandled exceptions in requestAnimationFrame/setTimeout
+        logger.error(
+          'Error in theme subscriber callback',
+          error instanceof Error ? error : new Error(`Theme callback failed: ${String(error)}`),
+          { component: 'ThemeStore', action: 'notifySubscribers' }
+        );
+      }
+    });
   }
 
   get theme(): ChartTheme {

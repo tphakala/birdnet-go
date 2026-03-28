@@ -204,8 +204,12 @@
         }
       };
 
-      eventSource.onerror = (error: Event) => {
-        logger.error('Audio level SSE error:', error);
+      eventSource.onerror = () => {
+        // EventSource onerror receives an Event (not an Error); log a descriptive message
+        logger.warn('Audio level SSE error, will auto-reconnect', null, {
+          component: 'AudioLevelIndicator',
+          action: 'sseConnection',
+        });
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
       };

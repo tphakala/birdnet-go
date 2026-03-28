@@ -684,8 +684,12 @@ Performance Optimizations:
         }
       });
 
-      eventSource.onerror = (error: Event) => {
-        logger.error('SSE connection error:', error);
+      eventSource.onerror = () => {
+        // EventSource onerror receives an Event (not an Error); log a descriptive message
+        logger.warn('SSE connection error, will auto-reconnect', null, {
+          component: 'DashboardPage',
+          action: 'sseConnection',
+        });
         pendingDetections = []; // Clear pending on disconnect
         // ReconnectingEventSource handles reconnection automatically
         // No need for manual reconnection logic
