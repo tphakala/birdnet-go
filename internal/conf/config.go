@@ -1498,6 +1498,19 @@ var (
 	settingsMutex    sync.RWMutex
 )
 
+// persistMigration saves the config file after a successful migration.
+func persistMigration(settings *Settings, label string) {
+	configFile := viper.ConfigFileUsed()
+	if configFile == "" {
+		return
+	}
+	if err := SaveYAMLConfig(configFile, settings); err != nil {
+		GetLogger().Warn("Failed to save migrated "+label+" config", logger.Error(err))
+	} else {
+		GetLogger().Info("Saved migrated "+label+" configuration", logger.String("path", configFile))
+	}
+}
+
 // Load reads the configuration file and environment variables into GlobalConfig.
 //
 //nolint:gocognit // Config loading is inherently complex; splitting adds indirection without clarity.
@@ -1571,18 +1584,16 @@ func Load() (*Settings, error) {
 
 	// Migrate legacy single audio source to new multi-source format
 	if settings.MigrateAudioSourceConfig() {
-		configFile := viper.ConfigFileUsed()
-		if configFile != "" {
-			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				GetLogger().Warn("Failed to save migrated audio source config", logger.Error(err))
-			} else {
-				GetLogger().Info("Saved migrated audio source configuration", logger.String("path", configFile))
-			}
-		}
+		persistMigration(settings, "audio source")
 	}
 
 	// Migrate per-source model field (model -> models)
 	settings.MigrateSourceModels()
+
+	// Validate multi-model configuration
+	if err := settings.applyModelValidation(); err != nil {
+		return nil, err
+	}
 
 	// Migrate dashboard layout for existing installations
 	if settings.MigrateDashboardLayout() {
@@ -2086,6 +2097,76 @@ func (s *Settings) MigrateSourceModels() bool {
 	}
 
 	return migrated
+}
+
+// knownModelIDs lists the config-level model identifiers recognized by the system.
+var knownModelIDs = map[string]bool{
+	"birdnet":  true,
+	"perch_v2": true,
+}
+
+// ValidateModelConfig checks model-related configuration for errors and
+// warnings. Returns a slice of warning/error strings. Fatal errors are
+// prefixed with "error:"; non-fatal issues with "warning:".
+func (s *Settings) ValidateModelConfig() []string {
+	var issues []string
+
+	enabledSet := make(map[string]bool, len(s.Models.Enabled))
+	for _, id := range s.Models.Enabled {
+		enabledSet[id] = true
+	}
+
+	for _, id := range s.Models.Enabled {
+		if !knownModelIDs[id] {
+			issues = append(issues, "warning: unknown model ID in models.enabled: "+id)
+		}
+	}
+
+	if enabledSet["perch_v2"] && !s.Perch.Enabled {
+		issues = append(issues, "error: perch_v2 in models.enabled but perch.enabled is false")
+	}
+
+	if s.Perch.Enabled {
+		if s.Perch.ModelPath == "" {
+			issues = append(issues, "error: perch.enabled is true but perch.modelpath is empty")
+		}
+		if s.Perch.LabelPath == "" {
+			issues = append(issues, "error: perch.enabled is true but perch.labelpath is empty")
+		}
+	}
+
+	for i := range s.Realtime.Audio.Sources {
+		src := &s.Realtime.Audio.Sources[i]
+		for _, modelID := range src.Models {
+			if !enabledSet[modelID] {
+				issues = append(issues, "warning: source \""+src.Name+"\" references model \""+modelID+"\" not in models.enabled")
+			}
+		}
+	}
+	for i := range s.Realtime.RTSP.Streams {
+		stream := &s.Realtime.RTSP.Streams[i]
+		for _, modelID := range stream.Models {
+			if !enabledSet[modelID] {
+				issues = append(issues, "warning: stream \""+stream.Name+"\" references model \""+modelID+"\" not in models.enabled")
+			}
+		}
+	}
+
+	return issues
+}
+
+// applyModelValidation runs ValidateModelConfig and either returns an error
+// for fatal issues or appends warnings to ValidationWarnings.
+func (s *Settings) applyModelValidation() error {
+	modelIssues := s.ValidateModelConfig()
+	for _, issue := range modelIssues {
+		if strings.HasPrefix(issue, "error:") {
+			return fmt.Errorf("model configuration: %s", strings.TrimPrefix(issue, "error: "))
+		}
+		GetLogger().Warn("model configuration issue", logger.String("issue", issue))
+		s.ValidationWarnings = append(s.ValidationWarnings, issue)
+	}
+	return nil
 }
 
 // MigrateLocationConfigured sets LocationConfigured to true for existing configs

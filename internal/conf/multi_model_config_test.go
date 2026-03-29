@@ -86,3 +86,48 @@ func TestMigrateSourceModels_StreamConfigMigration(t *testing.T) {
 	require.True(t, migrated)
 	assert.Equal(t, []string{"birdnet"}, settings.Realtime.RTSP.Streams[0].Models)
 }
+
+func TestValidateModelConfig_PerchEnabledRequiresPaths(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Perch.Enabled = true
+	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
+	errs := settings.ValidateModelConfig()
+	assert.NotEmpty(t, errs, "should return errors when Perch enabled without paths")
+}
+
+func TestValidateModelConfig_PerchDisabledNoErrors(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet"}
+	errs := settings.ValidateModelConfig()
+	assert.Empty(t, errs, "should have no errors with just BirdNET")
+}
+
+func TestValidateModelConfig_PerchInModelsRequiresEnabled(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
+	settings.Perch.Enabled = false
+	errs := settings.ValidateModelConfig()
+	assert.NotEmpty(t, errs, "perch_v2 in models.enabled requires perch.enabled=true")
+}
+
+func TestValidateModelConfig_UnknownModelWarning(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
+	warnings := settings.ValidateModelConfig()
+	assert.NotEmpty(t, warnings, "unknown model ID should produce a warning")
+}
+
+func TestValidateModelConfig_SourceReferencesUnavailableModel(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Models.Enabled = []string{"birdnet"}
+	settings.Realtime.Audio.Sources = []AudioSourceConfig{
+		{Name: "Mic1", Device: "hw:0,0", Models: []string{"birdnet", "perch_v2"}},
+	}
+	warnings := settings.ValidateModelConfig()
+	assert.NotEmpty(t, warnings, "source referencing model not in models.enabled should warn")
+}
