@@ -35,6 +35,13 @@ var supportedModels = map[string]ModelInfo{
 		DefaultLocale: conf.DefaultFallbackLocale,
 		NumSpecies:    6523,
 	},
+	"Perch_V2": {
+		ID:          "Perch_V2",
+		Name:        "Google Perch V2",
+		Description: "Perch v2 model with ~14,795 species (scientific names only)",
+		Spec:        ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
+		NumSpecies:  14795,
+	},
 }
 
 // knownSpecs maps model family identifiers to their audio specifications.
@@ -64,6 +71,19 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 				customInfo := supportedModels[id]
 				customInfo.CustomPath = modelPathOrID
 				return customInfo, nil
+			}
+		}
+
+		// Check if filename matches a known spec pattern
+		for specID, spec := range knownSpecs {
+			if strings.Contains(strings.ToLower(baseName), strings.ToLower(specID)) {
+				return ModelInfo{
+					ID:          specID,
+					Name:        specID + " (Custom)",
+					Description: fmt.Sprintf("Custom model from %s", baseName),
+					Spec:        spec,
+					CustomPath:  modelPathOrID,
+				}, nil
 			}
 		}
 
