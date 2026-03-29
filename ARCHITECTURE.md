@@ -182,7 +182,7 @@ internal/classifier/
 
 The inference package defines `Classifier` and `RangeFilter` interfaces with backend-specific implementations in sub-packages:
 
-```
+```text
 internal/inference/
 ├── backend.go              # Classifier and RangeFilter interfaces
 ├── tflite/                 # TFLite backend (via go-tflite)
