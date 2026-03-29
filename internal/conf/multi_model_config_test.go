@@ -20,3 +20,23 @@ func TestModelsConfig_Defaults(t *testing.T) {
 	settings := &Settings{}
 	assert.Empty(t, settings.Models.Enabled)
 }
+
+func TestAudioSourceConfig_ModelsField(t *testing.T) {
+	t.Parallel()
+	src := AudioSourceConfig{
+		Name:   "Test Mic",
+		Device: "hw:0,0",
+		Models: []string{"birdnet", "perch_v2"},
+	}
+	assert.Equal(t, []string{"birdnet", "perch_v2"}, src.Models)
+}
+
+func TestStreamConfig_ModelsField(t *testing.T) {
+	t.Parallel()
+	stream := StreamConfig{
+		Name:   "Garden Cam",
+		URL:    "rtsp://192.168.1.100/audio",
+		Models: []string{"birdnet"},
+	}
+	assert.Equal(t, []string{"birdnet"}, stream.Models)
+}

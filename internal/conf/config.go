@@ -93,6 +93,7 @@ type AudioSourceConfig struct {
 	Device     string             `yaml:"device" json:"device" mapstructure:"device"`                              // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
 	Gain       float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
 	Model      string             `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`             // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
+	Models     []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this source (e.g., ["birdnet", "perch_v2"])
 	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-source EQ (nil = use global)
 	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Per-source quiet hours
 }
@@ -532,11 +533,12 @@ const DefaultTransport = "tcp"
 
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                   // Required: descriptive name like "Front Yard"
-	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                      // Required: stream URL
-	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                   // Stream type: rtsp, http, hls, rtmp, udp
-	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`    // Transport: tcp or udp (for RTSP/RTMP)
-	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // Quiet hours configuration
+	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                           // Required: descriptive name like "Front Yard"
+	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                              // Required: stream URL
+	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                           // Stream type: rtsp, http, hls, rtmp, udp
+	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`            // Transport: tcp or udp (for RTSP/RTMP)
+	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`         // Quiet hours configuration
+	Models     []string         `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"` // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
 }
 
 // RTSPSettings contains settings for audio streaming (supports multiple protocols).
