@@ -17,11 +17,13 @@
       // Immediately set the theme before any content loads to prevent flash
       (function () {
         try {
-          var theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
+          const theme = localStorage.getItem('theme') === 'dark' ? 'dark' : 'light';
           document.documentElement.setAttribute('data-theme', theme);
           document.documentElement.setAttribute('data-theme-controller', theme);
         } catch (e) {
           // localStorage may be unavailable in Safari private browsing
+          document.documentElement.setAttribute('data-theme', 'light');
+          document.documentElement.setAttribute('data-theme-controller', 'light');
         }
       })();
 

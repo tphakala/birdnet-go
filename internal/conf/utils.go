@@ -828,8 +828,18 @@ func getLocalInterfaceIP() (net.IP, error) {
 	return nil, fmt.Errorf("no suitable IP address found")
 }
 
+const (
+	// defaultIPv4SubnetPrefix is the standard LAN prefix length for IPv4 (/24 = 255.255.255.0).
+	defaultIPv4SubnetPrefix = 24
+	// defaultIPv6SubnetPrefix is the standard LAN prefix length for IPv6.
+	defaultIPv6SubnetPrefix = 64
+)
+
 // IsInHostSubnet checks if the given IP is in the same subnet as the host.
 // Supports both IPv4 (/24) and IPv6 (/64) subnet comparison.
+// Note: The IPv6 path requires GetHostIP() to return an IPv6 address, which
+// currently only happens if Docker host resolution returns IPv6. The common
+// getLocalInterfaceIP() path returns IPv4 only.
 func IsInHostSubnet(clientIP net.IP) bool {
 	if clientIP == nil {
 		return false
@@ -843,15 +853,15 @@ func IsInHostSubnet(clientIP net.IP) bool {
 	}
 
 	// Try IPv4 /24 subnet comparison
-	clientV4 := getIPv4Subnet(clientIP, 24)
-	hostV4 := getIPv4Subnet(hostIP, 24)
+	clientV4 := getIPv4Subnet(clientIP, defaultIPv4SubnetPrefix)
+	hostV4 := getIPv4Subnet(hostIP, defaultIPv4SubnetPrefix)
 	if clientV4 != nil && hostV4 != nil {
 		return clientV4.Equal(hostV4)
 	}
 
 	// Try IPv6 /64 subnet comparison (standard LAN prefix length)
-	clientV6 := getIPv6Subnet(clientIP, 64)
-	hostV6 := getIPv6Subnet(hostIP, 64)
+	clientV6 := getIPv6Subnet(clientIP, defaultIPv6SubnetPrefix)
+	hostV6 := getIPv6Subnet(hostIP, defaultIPv6SubnetPrefix)
 	if clientV6 != nil && hostV6 != nil {
 		return clientV6.Equal(hostV6)
 	}
