@@ -25,7 +25,9 @@ var (
 	processMetrics      *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
 	processMetricsMutex sync.RWMutex            // Mutex for thread-safe access to processMetrics
 	processMetricsOnce  sync.Once               // Ensures metrics are only set once
-	float32Pool         *Float32Pool            // Global pool for float32 conversion buffers
+	// float32Pool is a global pool for float32 conversion buffers.
+	// See float32_pool.go for a note on why this is separate from buffer.Manager's pool.
+	float32Pool *Float32Pool
 )
 
 const (
@@ -169,7 +171,9 @@ func ReturnFloat32Buffer(buffer []float32) {
 
 // ProcessData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
+// The ctx parameter is propagated to the model inference call, allowing upstream callers
+// to control cancellation and deadlines.
+func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
@@ -187,7 +191,7 @@ func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCaptu
 
 	// Run inference on the specified model via the Orchestrator.
 	inferenceStart := time.Now()
-	results, err := bn.PredictModel(context.Background(), modelID, sampleData)
+	results, err := bn.PredictModel(ctx, modelID, sampleData)
 	inferenceDuration := time.Since(inferenceStart)
 
 	// Return float32 buffer to pool after prediction
