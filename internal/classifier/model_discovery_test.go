@@ -1,4 +1,4 @@
-package birdnet
+package classifier
 
 import (
 	"os"

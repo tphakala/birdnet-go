@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/app"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -17,7 +17,7 @@ const birdNETAnalyzerName = "birdnet-analyzer"
 // and implements app.Analyzer for source-to-analyzer routing.
 type BirdNETAnalyzer struct {
 	settings *conf.Settings
-	bn       *birdnet.BirdNET
+	bn       *classifier.BirdNET
 }
 
 // NewBirdNETAnalyzer creates a new BirdNETAnalyzer with the given settings.
@@ -35,7 +35,7 @@ func (a *BirdNETAnalyzer) Name() string {
 // and initializes the audio conversion pool.
 // Model initialization failures are non-retryable (missing files, insufficient resources).
 func (a *BirdNETAnalyzer) Start(_ context.Context) error {
-	bn, err := birdnet.NewBirdNET(a.settings)
+	bn, err := classifier.NewBirdNET(a.settings)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
@@ -44,7 +44,7 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 			Build()
 	}
 
-	if err := birdnet.BuildRangeFilter(bn); err != nil {
+	if err := classifier.BuildRangeFilter(bn); err != nil {
 		bn.Delete()
 		return errors.New(err).
 			Component("analysis").
@@ -87,6 +87,6 @@ func (a *BirdNETAnalyzer) Compatible(source app.AudioSource) bool {
 
 // BirdNET returns the underlying BirdNET interpreter, or nil if the analyzer
 // has not been started. Callers must not use the returned pointer after Stop().
-func (a *BirdNETAnalyzer) BirdNET() *birdnet.BirdNET {
+func (a *BirdNETAnalyzer) BirdNET() *classifier.BirdNET {
 	return a.bn
 }

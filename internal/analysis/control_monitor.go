@@ -15,8 +15,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -35,7 +35,7 @@ type ControlMonitor struct {
 	proc           *processor.Processor
 	audioLevelChan chan audiocore.AudioLevelData
 	soundLevelChan chan soundlevel.SoundLevelData
-	bn             *birdnet.BirdNET
+	bn             *classifier.BirdNET
 	apiController  *apiv2.Controller
 	engine         *engine.AudioEngine
 
@@ -242,7 +242,7 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 
 // handleRebuildRangeFilter rebuilds the range filter
 func (cm *ControlMonitor) handleRebuildRangeFilter() {
-	if err := birdnet.BuildRangeFilter(cm.bn); err != nil {
+	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
 		GetLogger().Error("Failed to rebuild range filter", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {
@@ -274,7 +274,7 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	cm.notifySuccess("BirdNET model reloaded successfully")
 
 	// Rebuild range filter after model reload
-	if err := birdnet.BuildRangeFilter(cm.bn); err != nil {
+	if err := classifier.BuildRangeFilter(cm.bn); err != nil {
 		GetLogger().Error("Failed to rebuild range filter after model reload", logger.Error(err))
 		cm.notifyError("Failed to rebuild range filter", err)
 	} else {

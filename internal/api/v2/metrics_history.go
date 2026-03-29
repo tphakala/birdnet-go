@@ -10,7 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -226,7 +226,7 @@ func (c *Controller) initMetricsHistoryRoutes() {
 		}
 
 		// Wire BirdNET inference counters
-		collector.SetInferenceCounters(birdnet.GetInferenceCounters())
+		collector.SetInferenceCounters(classifier.GetInferenceCounters())
 
 		collector.Start(c.ctx)
 	})

@@ -11,8 +11,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -157,7 +157,7 @@ type MqttAction struct {
 }
 
 type UpdateRangeFilterAction struct {
-	Bn          *birdnet.BirdNET
+	Bn          *classifier.BirdNET
 	Settings    *conf.Settings
 	Description string
 	mu          sync.Mutex // Protect concurrent access to Settings

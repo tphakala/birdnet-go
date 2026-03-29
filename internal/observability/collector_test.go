@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/birdnet/inferencestats"
+	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 )
 
 func TestCollector_CollectsCPU(t *testing.T) {

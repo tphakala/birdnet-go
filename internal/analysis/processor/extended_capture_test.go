@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
@@ -126,7 +126,7 @@ func TestResolveExtendedCaptureFilter(t *testing.T) {
 func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	db, err := birdnet.LoadTaxonomyDatabase()
+	db, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err)
 
 	// Resolve "Strigidae" (owl family) via taxonomy DB
@@ -141,7 +141,7 @@ func TestResolveExtendedCaptureFilter_WithTaxonomy(t *testing.T) {
 func TestResolveExtendedCaptureFilter_WithGenus(t *testing.T) {
 	t.Parallel()
 
-	db, err := birdnet.LoadTaxonomyDatabase()
+	db, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err)
 
 	// Resolve "Strix" (genus) via taxonomy DB — should include Tawny Owl, Ural Owl, etc.

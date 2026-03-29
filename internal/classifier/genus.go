@@ -1,5 +1,5 @@
 // genus.go contains functions for working with local genus taxonomy data
-package birdnet
+package classifier
 
 import (
 	_ "embed" // For embedding data

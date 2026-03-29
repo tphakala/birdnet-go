@@ -20,8 +20,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -59,7 +59,7 @@ type Processor struct {
 	Settings            *conf.Settings
 	Ds                  datastore.Interface           // Legacy - to be removed after migration
 	Repo                datastore.DetectionRepository // New - preferred for detection operations
-	Bn                  *birdnet.BirdNET
+	Bn                  *classifier.BirdNET
 	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
 	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
@@ -136,7 +136,7 @@ type Processor struct {
 	sunCalc               *suncalc.SunCalc // Injected sun calculator for daylight determination
 
 	// Cached taxonomy database (lazy-loaded, shared across init functions)
-	taxonomyDB     *birdnet.TaxonomyDatabase
+	taxonomyDB     *classifier.TaxonomyDatabase
 	taxonomyDBOnce sync.Once
 }
 
@@ -385,7 +385,7 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *birdnet.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -543,7 +543,7 @@ func (p *Processor) startDetectionProcessor() {
 		logger.String("operation", "detection_processor_startup"))
 	go func() {
 		// ResultsQueue is fed by analysis.ProcessData()
-		for item := range birdnet.ResultsQueue {
+		for item := range classifier.ResultsQueue {
 			// Pass by value since we own the data (see queue.go ownership comment)
 			p.processDetections(item)
 		}
@@ -557,7 +557,7 @@ func (p *Processor) startDetectionProcessor() {
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) processDetections(item birdnet.Results) {
+func (p *Processor) processDetections(item classifier.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
 		logger.String("source", item.Source.DisplayName),
@@ -658,7 +658,7 @@ func (p *Processor) processDetections(item birdnet.Results) {
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) processResults(item birdnet.Results) []Detections {
+func (p *Processor) processResults(item classifier.Results) []Detections {
 	// Pre-allocate slice with capacity for all results
 	detections := make([]Detections, 0, len(item.Results))
 
@@ -714,7 +714,7 @@ func (p *Processor) processResults(item birdnet.Results) []Detections {
 // parseAndValidateSpecies parses species information and validates it
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) parseAndValidateSpecies(result datastore.Results, item birdnet.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
+func (p *Processor) parseAndValidateSpecies(result datastore.Results, item classifier.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
 	// Use BirdNET's EnrichResultWithTaxonomy to get species information
 	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
 
@@ -825,7 +825,7 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 // createDetection creates a detection object with all necessary information
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) createDetection(item birdnet.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
+func (p *Processor) createDetection(item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
 	// Create file name for audio clip
 	clipName := p.generateClipName(scientificName, result.Confidence)
 
@@ -1006,7 +1006,7 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleDogDetection(item classifier.Results, speciesLowercase string, result datastore.Results) {
 	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
 		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
 		GetLogger().Info("dog detection filtered",
@@ -1023,7 +1023,7 @@ func (p *Processor) handleDogDetection(item birdnet.Results, speciesLowercase st
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleHumanDetection(item birdnet.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(item classifier.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
 		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
@@ -1879,12 +1879,12 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 // GetBn returns the BirdNET instance
 //
 // Deprecated: Use GetBirdNET instead
-func (p *Processor) GetBn() *birdnet.BirdNET {
+func (p *Processor) GetBn() *classifier.BirdNET {
 	return p.Bn
 }
 
 // GetBirdNET returns the BirdNET instance
-func (p *Processor) GetBirdNET() *birdnet.BirdNET {
+func (p *Processor) GetBirdNET() *classifier.BirdNET {
 	return p.Bn
 }
 

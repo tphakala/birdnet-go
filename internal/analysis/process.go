@@ -11,7 +11,7 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -147,7 +147,7 @@ func ReturnFloat32Buffer(buffer []float32) {
 
 // ProcessData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt time.Time, source string) error {
+func ProcessData(bn *classifier.BirdNET, data []byte, startTime, audioCapturedAt time.Time, source string) error {
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
@@ -258,7 +258,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt ti
 	}
 
 	// Create a Results message to be sent through queue to processor
-	resultsMessage := birdnet.Results{
+	resultsMessage := classifier.Results{
 		StartTime:       startTime,
 		AudioCapturedAt: audioCapturedAt,
 		ElapsedTime:     elapsedTime,
@@ -270,7 +270,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt ti
 	// Send the results to the queue
 	// Note: No copy needed - ownership transfers to the queue consumer
 	select {
-	case birdnet.ResultsQueue <- resultsMessage:
+	case classifier.ResultsQueue <- resultsMessage:
 		if pm != nil {
 			pm.RecordAudioQueueOperation(source, "enqueue", "success")
 		}
@@ -291,7 +291,7 @@ func ProcessData(bn *birdnet.BirdNET, data []byte, startTime, audioCapturedAt ti
 					"analysis",
 					map[string]any{
 						"source":     source,
-						"queue_size": len(birdnet.ResultsQueue),
+						"queue_size": len(classifier.ResultsQueue),
 					},
 				)
 			}

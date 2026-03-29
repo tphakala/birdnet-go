@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -19,9 +19,9 @@ const (
 
 // getTaxonomyDB returns the cached taxonomy database, loading it on first call.
 // Returns nil if the database cannot be loaded (with a warning logged).
-func (p *Processor) getTaxonomyDB() *birdnet.TaxonomyDatabase {
+func (p *Processor) getTaxonomyDB() *classifier.TaxonomyDatabase {
 	p.taxonomyDBOnce.Do(func() {
-		db, err := birdnet.LoadTaxonomyDatabase()
+		db, err := classifier.LoadTaxonomyDatabase()
 		if err != nil {
 			GetLogger().Warn("Failed to load taxonomy database, genus/family/order filtering unavailable",
 				logger.Any("error", err),
@@ -100,7 +100,7 @@ func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.
-func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *birdnet.TaxonomyDatabase, operationName string) (isAll bool, resolvedSet map[string]bool) {
+func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier.TaxonomyDatabase, operationName string) (isAll bool, resolvedSet map[string]bool) {
 	if len(configSpecies) == 0 {
 		return true, nil
 	}

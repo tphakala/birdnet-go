@@ -1,6 +1,6 @@
 //go:build !onnx
 
-package birdnet
+package classifier
 
 import "fmt"
 

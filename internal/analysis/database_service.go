@@ -6,7 +6,7 @@ import (
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -173,7 +173,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	case freshInstall:
 		// Fresh install: create at configured path with v2 schema
 		// Load eBird taxonomy for species code lookups in analytics endpoints.
-		_, freshSciIndex, _ := birdnet.LoadTaxonomyData("")
+		_, freshSciIndex, _ := classifier.LoadTaxonomyData("")
 		var err error
 		v2OnlyDatastore, err = v2only.InitializeFreshInstall(settings, GetLogger(), freshSciIndex)
 		if err != nil {

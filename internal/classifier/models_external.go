@@ -1,6 +1,6 @@
 //go:build noembed
 
-package birdnet
+package classifier
 
 // This file is included when building with -tags noembed
 // It provides empty model data variables for a non-monolithic build

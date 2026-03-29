@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -15,7 +15,7 @@ func PrintCommand(settings *conf.Settings) *cobra.Command {
 		Use:   "print",
 		Short: "Print BirdNET range filter results",
 		Run: func(cmd *cobra.Command, args []string) {
-			bn, err := birdnet.NewBirdNET(settings)
+			bn, err := classifier.NewBirdNET(settings)
 			if err != nil {
 				fmt.Printf("Error initializing BirdNET: %v\n", err)
 				return

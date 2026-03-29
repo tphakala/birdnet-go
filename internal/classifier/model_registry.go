@@ -1,5 +1,5 @@
 // model_registry.go contains information about supported models and their properties
-package birdnet
+package classifier
 
 import (
 	"fmt"

@@ -1,6 +1,6 @@
 //go:build !noembed
 
-package birdnet
+package classifier
 
 import (
 	_ "embed" // Embedding data directly into the binary.

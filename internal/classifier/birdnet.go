@@ -1,5 +1,5 @@
 // birdnet.go BirdNET model specific code
-package birdnet
+package classifier
 
 import (
 	"bufio"

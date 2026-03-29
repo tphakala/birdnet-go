@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -376,7 +376,7 @@ func TestCheckDaylightFilterDisabled(t *testing.T) {
 func TestInitDaylightFilterWithTaxonomy(t *testing.T) {
 	t.Parallel()
 
-	db, err := birdnet.LoadTaxonomyDatabase()
+	db, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "failed to load taxonomy database")
 
 	// "Strigiformes" is the order containing all owls.

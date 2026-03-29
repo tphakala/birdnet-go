@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -63,7 +63,7 @@ func calculateWeek(date time.Time) float32 {
 }
 
 // getBirdNETInstance returns the BirdNET instance or an error if unavailable.
-func (c *Controller) getBirdNETInstance() (*birdnet.BirdNET, error) {
+func (c *Controller) getBirdNETInstance() (*classifier.BirdNET, error) {
 	if c.Processor == nil {
 		return nil, fmt.Errorf("BirdNET processor not available")
 	}
@@ -687,7 +687,7 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 	}
 
 	// Rebuild the range filter
-	err = birdnet.BuildRangeFilter(birdnetInstance)
+	err = classifier.BuildRangeFilter(birdnetInstance)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}

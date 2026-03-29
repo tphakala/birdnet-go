@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -85,7 +85,7 @@ type benchmarkResults struct {
 
 func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) error {
 	// Initialize BirdNET
-	bn, err := birdnet.NewBirdNET(settings)
+	bn, err := classifier.NewBirdNET(settings)
 	if err != nil {
 		return fmt.Errorf("failed to initialize BirdNET: %w", err)
 	}

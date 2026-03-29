@@ -9,7 +9,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -130,5 +130,5 @@ func (m *Metrics) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
 // initializeTracing sets up the birdnet tracing system with metrics
 func initializeTracing(birdnetMetrics *metrics.BirdNETMetrics) {
-	birdnet.SetMetrics(birdnetMetrics)
+	classifier.SetMetrics(birdnetMetrics)
 }

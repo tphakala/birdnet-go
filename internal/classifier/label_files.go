@@ -1,5 +1,5 @@
 // label_files.go contains embedded label files for various models and locales
-package birdnet
+package classifier
 
 import (
 	"embed"

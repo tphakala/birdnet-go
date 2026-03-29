@@ -1,5 +1,5 @@
 // taxonomy.go contains functions for working with eBird taxonomy codes
-package birdnet
+package classifier
 
 import (
 	"crypto/sha256"

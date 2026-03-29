@@ -1,6 +1,6 @@
 // rangefilter.go
 
-package birdnet
+package classifier
 
 import (
 	"encoding/csv"

@@ -113,9 +113,9 @@ func TestMatchesPathSegment(t *testing.T) {
 			want:    false,
 		},
 		{
-			name:    "birdnet should match birdnet package segment",
-			s:       "github.com/tphakala/birdnet-go/internal/birdnet.Predict",
-			pattern: "birdnet",
+			name:    "classifier should match classifier package segment",
+			s:       "github.com/tphakala/birdnet-go/internal/classifier.Predict",
+			pattern: "classifier",
 			want:    true,
 		},
 		{
@@ -173,9 +173,9 @@ func TestLookupComponentAvoidsMisdetection(t *testing.T) {
 	result := lookupComponent("github.com/tphakala/birdnet-go/internal/datastore.Save")
 	assert.Equal(t, "datastore", result, "should match datastore, not birdnet")
 
-	// A function in the actual birdnet package should match birdnet
-	result = lookupComponent("github.com/tphakala/birdnet-go/internal/birdnet.Predict")
-	assert.Equal(t, "birdnet", result, "should match birdnet package")
+	// A function in the actual classifier package should match birdnet (classifier is the renamed birdnet package)
+	result = lookupComponent("github.com/tphakala/birdnet-go/internal/classifier.Predict")
+	assert.Equal(t, "birdnet", result, "should match birdnet component via classifier package path")
 }
 
 func TestRegexPrecompilation(t *testing.T) {

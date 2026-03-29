@@ -22,7 +22,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -51,7 +51,7 @@ type Controller struct {
 	SunCalc             *suncalc.SunCalc
 	Processor           *processor.Processor
 	EBirdClient         *ebird.Client
-	TaxonomyDB          *birdnet.TaxonomyDatabase
+	TaxonomyDB          *classifier.TaxonomyDatabase
 	controlChan         chan string
 	shutdownRequester   ShutdownRequester // programmatic shutdown trigger (e.g., for restart)
 	shutdownMu          sync.RWMutex      // protects shutdownRequester
@@ -379,7 +379,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.apiLogger = logger.Global().Module("api")
 
 	// Load local taxonomy database for fast species lookups
-	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	if err != nil {
 		c.logWarnIfEnabled("Failed to load taxonomy database", logger.Error(err))
 		c.logWarnIfEnabled("Species taxonomy lookups will fall back to eBird API")

@@ -10,7 +10,7 @@
 //
 // The tests discovered some legitimate scientific name differences across certain locale files,
 // which are reported as informational warnings rather than test failures.
-package birdnet
+package classifier
 
 import (
 	"bufio"

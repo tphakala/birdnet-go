@@ -12,7 +12,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 )
 
 // TestGetGenusSpecies tests the GET /api/v2/taxonomy/genus/:genus endpoint
@@ -20,7 +20,7 @@ func TestGetGenusSpecies(t *testing.T) {
 	t.Parallel()
 
 	// Load taxonomy database
-	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	// Create a minimal controller with taxonomy DB
@@ -121,7 +121,7 @@ func TestGetGenusSpecies(t *testing.T) {
 func TestGetFamilySpecies(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{
@@ -202,7 +202,7 @@ func TestGetFamilySpecies(t *testing.T) {
 func TestGetSpeciesTree(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{
@@ -307,7 +307,7 @@ func TestGetSpeciesTree(t *testing.T) {
 func TestGetSpeciesTaxonomyLocalDB(t *testing.T) {
 	t.Parallel()
 
-	taxonomyDB, err := birdnet.LoadTaxonomyDatabase()
+	taxonomyDB, err := classifier.LoadTaxonomyDatabase()
 	require.NoError(t, err, "Failed to load taxonomy database")
 
 	c := &Controller{

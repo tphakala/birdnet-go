@@ -1,5 +1,5 @@
 // Package birdnet provides logging for the BirdNET package.
-package birdnet
+package classifier
 
 import (
 	"github.com/tphakala/birdnet-go/internal/logger"

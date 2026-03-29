@@ -1,7 +1,7 @@
 package analysis
 
 import (
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -13,7 +13,7 @@ const modelNameBirdNET = "birdnet"
 //
 // Note: This is only used in realtime mode as metrics are not used for
 // on-demand file/directory analysis operations.
-func UpdateBirdNETModelLoadedMetric(birdnetMetrics *metrics.BirdNETMetrics, bn *birdnet.BirdNET) {
+func UpdateBirdNETModelLoadedMetric(birdnetMetrics *metrics.BirdNETMetrics, bn *classifier.BirdNET) {
 	if birdnetMetrics != nil && bn != nil {
 		// Model is loaded successfully
 		birdnetMetrics.RecordModelLoad(modelNameBirdNET, nil)

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -242,7 +242,7 @@ func (c *Controller) getSpeciesInfo(ctx context.Context, scientificName string) 
 }
 
 // getSpeciesRarityInfo calculates the rarity status for a species
-func (c *Controller) getSpeciesRarityInfo(bn *birdnet.BirdNET, speciesLabel string) (*SpeciesRarityInfo, error) {
+func (c *Controller) getSpeciesRarityInfo(bn *classifier.BirdNET, speciesLabel string) (*SpeciesRarityInfo, error) {
 	// Get current date
 	today := time.Now().Truncate(HoursPerDay * time.Hour)
 
@@ -601,7 +601,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 
 	// Get species name from the taxonomy map using the species code
 	bn := c.Processor.Bn
-	speciesName, exists := birdnet.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
+	speciesName, exists := classifier.GetSpeciesNameFromCode(bn.TaxonomyMap, speciesCode)
 
 	if !exists {
 		return c.HandleError(ctx, errors.Newf("species code '%s' not found in taxonomy", speciesCode).
@@ -612,7 +612,7 @@ func (c *Controller) GetSpeciesThumbnail(ctx echo.Context) error {
 	}
 
 	// Split the species name to get scientific name
-	scientificName, _ := birdnet.SplitSpeciesName(speciesName)
+	scientificName, _ := classifier.SplitSpeciesName(speciesName)
 
 	if scientificName == "" {
 		return c.HandleError(ctx, errors.Newf("invalid species name format for code '%s'", speciesCode).

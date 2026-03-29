@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -15,7 +15,7 @@ import (
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
 	monitors  sync.Map
-	bn        *birdnet.BirdNET
+	bn        *classifier.BirdNET
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
 	wg        *sync.WaitGroup
@@ -36,7 +36,7 @@ type BufferManager struct {
 // Returns:
 //   - *BufferManager: New buffer manager instance
 //   - error: Validation error if any parameter is nil
-func NewBufferManager(bn *birdnet.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) (*BufferManager, error) {
+func NewBufferManager(bn *classifier.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) (*BufferManager, error) {
 	// Validate required parameters
 	if bn == nil {
 		return nil, errors.Newf("BirdNET instance cannot be nil").
@@ -93,7 +93,7 @@ func NewBufferManager(bn *birdnet.BirdNET, bufMgr *buffer.Manager, quitChan chan
 //
 // Panics:
 //   - If any parameter validation fails
-func MustNewBufferManager(bn *birdnet.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
+func MustNewBufferManager(bn *classifier.BirdNET, bufMgr *buffer.Manager, quitChan chan struct{}, wg *sync.WaitGroup) *BufferManager {
 	bm, err := NewBufferManager(bn, bufMgr, quitChan, wg)
 	if err != nil {
 		panic(fmt.Sprintf("MustNewBufferManager: %v", err))

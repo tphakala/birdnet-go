@@ -5,7 +5,7 @@ import (
 	"time"
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -447,7 +447,7 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 	notificationRepo := repository.NewNotificationHistoryRepository(v2DB, nil, labelRepo, useV2Prefix, isMySQL)
 
 	// Load eBird taxonomy for species code lookups in analytics endpoints.
-	_, scientificIndex, taxonomyErr := birdnet.LoadTaxonomyData("")
+	_, scientificIndex, taxonomyErr := classifier.LoadTaxonomyData("")
 	if taxonomyErr != nil {
 		log.Warn("failed to load taxonomy data for species codes",
 			logger.Error(taxonomyErr))

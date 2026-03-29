@@ -4,13 +4,13 @@ package serviceapi
 
 import (
 	"github.com/labstack/echo/v4"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 )
 
 // BirdNETProvider defines the minimal interface for accessing BirdNET functionality
 type BirdNETProvider interface {
 	// GetBirdNET returns the BirdNET service instance
-	GetBirdNET() *birdnet.BirdNET
+	GetBirdNET() *classifier.BirdNET
 }
 
 // ProcessorProvider defines the interface for accessing the analysis processor

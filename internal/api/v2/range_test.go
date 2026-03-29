@@ -14,21 +14,21 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/birdnet"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // MockBirdNET is a mock implementation of BirdNET for testing
 type MockBirdNET struct {
-	GetProbableSpeciesFunc func(date time.Time, week float32) ([]birdnet.SpeciesScore, error)
+	GetProbableSpeciesFunc func(date time.Time, week float32) ([]classifier.SpeciesScore, error)
 }
 
-func (m *MockBirdNET) GetProbableSpecies(date time.Time, week float32) ([]birdnet.SpeciesScore, error) {
+func (m *MockBirdNET) GetProbableSpecies(date time.Time, week float32) ([]classifier.SpeciesScore, error) {
 	if m.GetProbableSpeciesFunc != nil {
 		return m.GetProbableSpeciesFunc(date, week)
 	}
 	// Default mock response
-	return []birdnet.SpeciesScore{
+	return []classifier.SpeciesScore{
 		{Label: "Turdus merula_Eurasian Blackbird", Score: 0.85},
 		{Label: "Parus major_Great Tit", Score: 0.72},
 	}, nil
@@ -39,7 +39,7 @@ type MockProcessor struct {
 	BirdNETInstance *MockBirdNET
 }
 
-func (m *MockProcessor) GetBirdNET() *birdnet.BirdNET {
+func (m *MockProcessor) GetBirdNET() *classifier.BirdNET {
 	// Since we can't easily mock the actual BirdNET struct, we'll return nil
 	// and handle this in the test setup
 	return nil
