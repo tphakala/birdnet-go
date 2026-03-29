@@ -10,6 +10,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -36,6 +37,7 @@ type Orchestrator struct {
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
 	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
 	// is unaffected. Phase 3c should re-key models on reload.
+	mu      sync.RWMutex // protects the models map
 	models  map[string]*modelEntry
 	primary *BirdNET // Phase 3b: direct access to the single model
 }
@@ -67,6 +69,30 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 // Phase 3c+ will use modelEntry.mu for per-model serialization.
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	return o.primary.Predict(ctx, sample)
+}
+
+// PredictModel runs inference on a specific model identified by modelID.
+// It uses a two-level locking protocol: a read lock on the models map to fetch
+// the entry (fast), then a per-model lock for inference (slow). The map lock is
+// released before acquiring the model lock to prevent deadlocks with ReloadModel.
+func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
+	// Step 1: fetch entry under read lock (fast)
+	o.mu.RLock()
+	entry, ok := o.models[modelID]
+	o.mu.RUnlock() // release BEFORE acquiring model lock
+
+	if !ok {
+		return nil, errors.Newf("unknown model: %s", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
+
+	// Step 2: acquire per-model lock for inference (slow)
+	entry.mu.Lock()
+	defer entry.mu.Unlock()
+	return entry.instance.Predict(ctx, sample)
 }
 
 // GetProbableSpecies returns species scores from the range filter.
@@ -105,10 +131,15 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 }
 
 // ReloadModel reloads the primary model and re-syncs shared state.
+// It acquires a write lock on the models map to ensure safe concurrent access.
 func (o *Orchestrator) ReloadModel() error {
 	if err := o.primary.ReloadModel(); err != nil {
 		return err
 	}
+
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	// Re-sync shared state after reload
 	o.ModelInfo = o.primary.ModelInfo
 	o.TaxonomyMap = o.primary.TaxonomyMap
@@ -120,6 +151,9 @@ func (o *Orchestrator) ReloadModel() error {
 // Delete releases all resources held by the Orchestrator and its models.
 // After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
 	for _, entry := range o.models {
 		entry.mu.Lock()
 		if err := entry.instance.Close(); err != nil {
