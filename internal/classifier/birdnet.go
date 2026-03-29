@@ -29,8 +29,8 @@ import (
 // Default model version for the embedded model
 const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
 
-// Model version string, default is the embedded model version
-var modelVersion = "BirdNET GLOBAL 6K V2.4 FP32"
+// defaultModelVersionString is the default human-readable model version.
+const defaultModelVersionString = "BirdNET GLOBAL 6K V2.4 FP32"
 
 // speciesCacheEntry holds cached species scores for a composite cache key.
 // Scores are immutable once stored - callers must not mutate the returned map.
@@ -48,6 +48,7 @@ type BirdNET struct {
 	TaxonomyMap      TaxonomyMap         // Mapping of species codes to names and vice versa
 	ScientificIndex  ScientificNameIndex // Index for fast scientific name lookups
 	TaxonomyPath     string              // Path to custom taxonomy file, if used
+	modelVersion     string              // Human-readable model version string (per-instance to avoid shared global state)
 	mu               sync.Mutex
 	resultsBuffer    []datastore.Results // Pre-allocated buffer for results to reduce allocations
 	confidenceBuffer []float32           // Pre-allocated buffer for confidence values to reduce allocations
@@ -62,6 +63,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:     settings,
 		TaxonomyPath: "", // Default to embedded taxonomy
+		modelVersion: defaultModelVersionString,
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
@@ -221,7 +223,7 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 		} else {
 			bn.ModelInfo.ID = "Custom"
 		}
-		modelVersion = bn.Settings.BirdNET.ModelPath
+		bn.modelVersion = bn.Settings.BirdNET.ModelPath
 	}
 
 	// Log model initialization details
@@ -229,19 +231,19 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 		spec := cpuspec.GetCPUSpec()
 		if spec.PerformanceCores > 0 {
 			log.Info("BirdNET model initialized",
-				logger.String("model", modelVersion),
+				logger.String("model", bn.modelVersion),
 				logger.Int("threads", threads),
 				logger.Int("performance_cores", spec.PerformanceCores),
 				logger.Int("total_cpus", runtime.NumCPU()))
 		} else {
 			log.Info("BirdNET model initialized",
-				logger.String("model", modelVersion),
+				logger.String("model", bn.modelVersion),
 				logger.Int("threads", threads),
 				logger.Int("total_cpus", runtime.NumCPU()))
 		}
 	} else {
 		log.Info("BirdNET model initialized",
-			logger.String("model", modelVersion),
+			logger.String("model", bn.modelVersion),
 			logger.Int("threads", threads),
 			logger.Int("total_cpus", runtime.NumCPU()),
 			logger.Bool("threads_configured", true))
@@ -1047,7 +1049,7 @@ func (bn *BirdNET) ModelName() string {
 // ModelVersion returns the model version string.
 // Implements ModelInstance.
 func (bn *BirdNET) ModelVersion() string {
-	return modelVersion
+	return bn.modelVersion
 }
 
 // NumSpecies returns the number of species this model can classify.
