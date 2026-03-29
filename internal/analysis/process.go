@@ -185,9 +185,9 @@ func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCaptu
 			Build()
 	}
 
-	// run BirdNET inference
+	// Run inference on the specified model via the Orchestrator.
 	inferenceStart := time.Now()
-	results, err := bn.Predict(context.Background(), sampleData)
+	results, err := bn.PredictModel(context.Background(), modelID, sampleData)
 	inferenceDuration := time.Since(inferenceStart)
 
 	// Return float32 buffer to pool after prediction
