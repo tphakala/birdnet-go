@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +47,7 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 
 	spec := mi.Spec()
 	assert.Equal(t, 48000, spec.SampleRate)
-	assert.Equal(t, 3_000_000_000, int(spec.ClipLength))
+	assert.Equal(t, 3*time.Second, spec.ClipLength)
 }
 
 func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
