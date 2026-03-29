@@ -453,6 +453,9 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 				continue
 			}
 
+			// Exact equality is required: AnalysisBuffer.Read() returns
+			// overlapSize + readSize bytes or nil. A partial read means
+			// the buffer hasn't accumulated enough data yet.
 			if len(data) == analysisWindowBytes {
 				audioCapturedAt := time.Now()
 
@@ -468,13 +471,6 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 						logger.String("source_id", cfg.sourceID),
 						logger.String("model_id", cfg.modelID),
 						logger.Error(processErr))
-					_ = errors.New(processErr).
-						Component("analysis").
-						Category(errors.CategoryAudioAnalysis).
-						Context("operation", "analysis_pipeline_processing").
-						Context("source_id", cfg.sourceID).
-						Context("model_id", cfg.modelID).
-						Build()
 				}
 			}
 		}
@@ -483,6 +479,8 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 
 // buildPrimaryMonitorConfig builds a monitorConfig for the primary model.
 // This is used by AddMonitor and UpdateMonitors to create a config from ModelInfo.
+// Note: overlapSize is left at zero because it is only needed at buffer
+// allocation time (in audio_pipeline_service.go), not by the monitor goroutine.
 func buildPrimaryMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
 	clipLenSec := int(spec.ClipLength.Seconds())
