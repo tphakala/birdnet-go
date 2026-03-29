@@ -1581,6 +1581,9 @@ func Load() (*Settings, error) {
 		}
 	}
 
+	// Migrate per-source model field (model -> models)
+	settings.MigrateSourceModels()
+
 	// Migrate dashboard layout for existing installations
 	if settings.MigrateDashboardLayout() {
 		configFile := viper.ConfigFileUsed()
@@ -2050,6 +2053,39 @@ func (s *Settings) MigrateAudioSourceConfig() bool {
 		logger.Int("source_count", 1))
 
 	return true
+}
+
+// MigrateSourceModels migrates the legacy singular Model field to the new
+// Models list on AudioSourceConfig and StreamConfig. Sources with neither
+// Model nor Models set default to ["birdnet"]. Returns true if any migration
+// occurred.
+func (s *Settings) MigrateSourceModels() bool {
+	migrated := false
+
+	for i := range s.Realtime.Audio.Sources {
+		src := &s.Realtime.Audio.Sources[i]
+		if len(src.Models) > 0 {
+			continue
+		}
+		if src.Model != "" {
+			src.Models = []string{src.Model}
+			src.Model = ""
+		} else {
+			src.Models = []string{"birdnet"}
+		}
+		migrated = true
+	}
+
+	for i := range s.Realtime.RTSP.Streams {
+		stream := &s.Realtime.RTSP.Streams[i]
+		if len(stream.Models) > 0 {
+			continue
+		}
+		stream.Models = []string{"birdnet"}
+		migrated = true
+	}
+
+	return migrated
 }
 
 // MigrateLocationConfigured sets LocationConfigured to true for existing configs

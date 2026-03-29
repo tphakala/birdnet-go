@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPerchConfig_Defaults(t *testing.T) {
@@ -39,4 +40,49 @@ func TestStreamConfig_ModelsField(t *testing.T) {
 		Models: []string{"birdnet"},
 	}
 	assert.Equal(t, []string{"birdnet"}, stream.Models)
+}
+
+func TestMigrateSourceModels_SingularToPlural(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Realtime.Audio.Sources = []AudioSourceConfig{
+		{Name: "Mic1", Device: "hw:0,0", Model: "perch_v2"},
+	}
+	migrated := settings.MigrateSourceModels()
+	require.True(t, migrated)
+	assert.Equal(t, []string{"perch_v2"}, settings.Realtime.Audio.Sources[0].Models)
+	assert.Empty(t, settings.Realtime.Audio.Sources[0].Model, "legacy field should be cleared")
+}
+
+func TestMigrateSourceModels_DefaultToBirdNET(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Realtime.Audio.Sources = []AudioSourceConfig{
+		{Name: "Mic1", Device: "hw:0,0"},
+	}
+	migrated := settings.MigrateSourceModels()
+	require.True(t, migrated)
+	assert.Equal(t, []string{"birdnet"}, settings.Realtime.Audio.Sources[0].Models)
+}
+
+func TestMigrateSourceModels_SkipIfModelsAlreadySet(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Realtime.Audio.Sources = []AudioSourceConfig{
+		{Name: "Mic1", Device: "hw:0,0", Models: []string{"birdnet", "perch_v2"}},
+	}
+	migrated := settings.MigrateSourceModels()
+	assert.False(t, migrated, "should not migrate if Models already set")
+	assert.Equal(t, []string{"birdnet", "perch_v2"}, settings.Realtime.Audio.Sources[0].Models)
+}
+
+func TestMigrateSourceModels_StreamConfigMigration(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.Realtime.RTSP.Streams = []StreamConfig{
+		{Name: "Cam1", URL: "rtsp://host/audio"},
+	}
+	migrated := settings.MigrateSourceModels()
+	require.True(t, migrated)
+	assert.Equal(t, []string{"birdnet"}, settings.Realtime.RTSP.Streams[0].Models)
 }
