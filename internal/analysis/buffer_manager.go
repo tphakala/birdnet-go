@@ -12,9 +12,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// monitorKey identifies a unique monitor (one per source x model).
+type monitorKey struct {
+	sourceID string
+	modelID  string
+}
+
+// monitorConfig describes parameters for a single analysis buffer monitor.
+type monitorConfig struct {
+	sourceID    string
+	modelID     string
+	spec        classifier.ModelSpec
+	readSize    int // bytes = ClipLength * SampleRate * bytesPerSample
+	overlapSize int // bytes, scaled from user config, PCM-aligned
+}
+
 // BufferManager handles the lifecycle of analysis buffer monitors
 type BufferManager struct {
-	monitors  sync.Map
+	monitors  sync.Map // keyed by monitorKey → chan struct{}
 	bn        *classifier.Orchestrator
 	bufferMgr *buffer.Manager
 	quitChan  chan struct{}
@@ -101,7 +116,9 @@ func MustNewBufferManager(bn *classifier.Orchestrator, bufMgr *buffer.Manager, q
 	return bm
 }
 
-// AddMonitor safely adds a new analysis buffer monitor for a source
+// AddMonitor safely adds a single analysis buffer monitor for a source using
+// the primary model's configuration. This is a convenience wrapper around
+// AddMonitors for callers that don't have model details (e.g., watchdog reset).
 func (m *BufferManager) AddMonitor(source string) error {
 	// Validate source parameter
 	if source == "" {
@@ -124,54 +141,95 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Build()
 	}
 
-	// Create a monitor-specific quit channel
-	monitorQuit := make(chan struct{})
+	// Build a monitorConfig from the primary model info.
+	cfg := buildPrimaryMonitorConfig(source, &m.bn.ModelInfo)
+	return m.AddMonitors(source, []monitorConfig{cfg})
+}
 
-	// Use LoadOrStore to atomically check and store, preventing race conditions
-	actual, loaded := m.monitors.LoadOrStore(source, monitorQuit)
-	if loaded {
-		// Monitor already exists for this source - not an error
-		return nil
+// AddMonitors creates one analysis buffer monitor goroutine per monitorConfig
+// for the given source. Each monitor is stored under a composite
+// monitorKey{source, cfg.modelID} so that multiple models can watch the same
+// source simultaneously.
+func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error {
+	// Validate source parameter
+	if source == "" {
+		return errors.Newf("cannot add monitors for empty source").
+			Component("analysis.buffer").
+			Category(errors.CategoryValidation).
+			Context("operation", "add_monitors").
+			Context("retryable", false).
+			Build()
 	}
 
-	// Use the channel we just stored (actual is our monitorQuit channel)
-	monitorQuit = actual.(chan struct{})
+	// Check if BirdNET instance is available
+	if m.bn == nil {
+		return errors.Newf("BirdNET instance not initialized").
+			Component("analysis.buffer").
+			Category(errors.CategoryBuffer).
+			Context("operation", "add_monitors").
+			Context("source", source).
+			Context("retryable", false).
+			Build()
+	}
 
-	// Start the monitor with error handling
-	m.wg.Go(func() {
-		defer func() {
-			// Panic recovery for the monitor goroutine
-			if r := recover(); r != nil {
-				m.logger.Error("Monitor goroutine panicked",
-					logger.String("source", source),
-					logger.Any("panic", r),
-					logger.String("component", "analysis.buffer"))
-			}
+	for _, cfg := range models {
+		key := monitorKey{sourceID: source, modelID: cfg.modelID}
 
-			// Clean up monitor from map if it exits unexpectedly
-			if quitChanIface, exists := m.monitors.Load(source); exists {
-				// Safe type assertion
-				if quitChan, ok := quitChanIface.(chan struct{}); ok {
-					select {
-					case <-quitChan:
-						// Normal shutdown - quit channel was closed
-					default:
-						// Unexpected exit - safely close channel
-						m.safeCloseChannel(quitChan, source)
-					}
+		// Create a monitor-specific quit channel
+		monitorQuit := make(chan struct{})
+
+		// Use LoadOrStore to atomically check and store, preventing race conditions
+		actual, loaded := m.monitors.LoadOrStore(key, monitorQuit)
+		if loaded {
+			// Monitor already exists for this (source, model) - not an error
+			continue
+		}
+
+		// Use the channel we just stored (actual is our monitorQuit channel)
+		monitorQuit = actual.(chan struct{})
+
+		// Capture cfg for the goroutine closure
+		monitorCfg := cfg
+
+		// Start the monitor with error handling
+		m.wg.Go(func() {
+			defer func() {
+				// Panic recovery for the monitor goroutine
+				if r := recover(); r != nil {
+					m.logger.Error("Monitor goroutine panicked",
+						logger.String("source", source),
+						logger.String("model_id", monitorCfg.modelID),
+						logger.Any("panic", r),
+						logger.String("component", "analysis.buffer"))
 				}
-				m.monitors.Delete(source)
-			}
-		}()
 
-		// Run the monitor using audiocore buffer manager
-		m.analysisBufferMonitor(monitorQuit, source)
-	})
+				// Clean up monitor from map if it exits unexpectedly
+				if quitChanIface, exists := m.monitors.Load(key); exists {
+					// Safe type assertion
+					if quitChan, ok := quitChanIface.(chan struct{}); ok {
+						select {
+						case <-quitChan:
+							// Normal shutdown - quit channel was closed
+						default:
+							// Unexpected exit - safely close channel
+							m.safeCloseChannel(quitChan, source)
+						}
+					}
+					m.monitors.Delete(key)
+				}
+			}()
+
+			// Run the monitor using audiocore buffer manager
+			m.analysisBufferMonitor(monitorQuit, monitorCfg)
+		})
+	}
 
 	return nil
 }
 
-// RemoveMonitor safely stops and removes a monitor for a source
+// RemoveMonitor safely stops and removes all monitors for a source.
+// It iterates the monitors map and deletes every entry whose
+// monitorKey.sourceID matches the given source.
 func (m *BufferManager) RemoveMonitor(source string) error {
 	// Validate source parameter
 	if source == "" {
@@ -183,36 +241,48 @@ func (m *BufferManager) RemoveMonitor(source string) error {
 			Build()
 	}
 
-	// Get the monitor's quit channel
-	quitChan, exists := m.monitors.Load(source)
-	if !exists {
-		// Not an error - monitor doesn't exist
-		return nil
-	}
+	m.monitors.Range(func(key, value any) bool {
+		mk, ok := key.(monitorKey)
+		if !ok || mk.sourceID != source {
+			return true // continue iteration
+		}
 
-	// Signal the monitor to stop with safe type assertion
-	if quitChanTyped, ok := quitChan.(chan struct{}); ok {
-		m.safeCloseChannel(quitChanTyped, source)
-	} else {
-		m.logger.Warn("Invalid quit channel type during monitor removal",
-			logger.String("source", source),
-			logger.String("type", fmt.Sprintf("%T", quitChan)),
-			logger.String("component", "analysis.buffer"))
-	}
-	// Remove from the map
-	m.monitors.Delete(source)
+		// Signal the monitor to stop with safe type assertion
+		if quitChanTyped, okCh := value.(chan struct{}); okCh {
+			m.safeCloseChannel(quitChanTyped, source)
+		} else {
+			m.logger.Warn("Invalid quit channel type during monitor removal",
+				logger.String("source", source),
+				logger.String("model_id", mk.modelID),
+				logger.String("type", fmt.Sprintf("%T", value)),
+				logger.String("component", "analysis.buffer"))
+		}
+		// Remove from the map
+		m.monitors.Delete(key)
+
+		return true
+	})
 
 	return nil
 }
 
-// RemoveAllMonitors stops all running monitors
+// RemoveAllMonitors stops all running monitors.
 func (m *BufferManager) RemoveAllMonitors() []error {
 	var removalErrors []error
 
-	m.monitors.Range(func(key, value any) bool {
-		source := key.(string)
+	// Collect unique source IDs first, then remove each via RemoveMonitor.
+	// This avoids modifying the map inside Range which could interact poorly
+	// with the Range callback from RemoveMonitor.
+	sources := make(map[string]struct{})
+	m.monitors.Range(func(key, _ any) bool {
+		if mk, ok := key.(monitorKey); ok {
+			sources[mk.sourceID] = struct{}{}
+		}
+		return true
+	})
+
+	for source := range sources {
 		if err := m.RemoveMonitor(source); err != nil {
-			// Wrap the error with additional context
 			wrappedErr := errors.New(err).
 				Component("analysis.buffer").
 				Category(errors.CategoryBuffer).
@@ -221,13 +291,14 @@ func (m *BufferManager) RemoveAllMonitors() []error {
 				Build()
 			removalErrors = append(removalErrors, wrappedErr)
 		}
-		return true
-	})
+	}
 
 	return removalErrors
 }
 
-// UpdateMonitors ensures monitors are running for all given sources
+// UpdateMonitors ensures monitors are running for all given sources.
+// For Phase 3e it creates monitors for the primary model only (from m.bn.ModelInfo).
+// Future phases will accept model lists per source.
 func (m *BufferManager) UpdateMonitors(sources []string) error {
 	// Performance metrics logging pattern
 	startTime := time.Now()
@@ -244,11 +315,14 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 		sources = []string{}
 	}
 
-	// Track existing monitors that should be removed
+	// Track existing source IDs that should be removed. We collect unique
+	// sourceIDs from the composite monitorKey entries.
 	toRemove := make(map[string]bool)
 	currentCount := 0
 	m.monitors.Range(func(key, _ any) bool {
-		toRemove[key.(string)] = true
+		if mk, ok := key.(monitorKey); ok {
+			toRemove[mk.sourceID] = true
+		}
 		currentCount++
 		return true
 	})
@@ -263,6 +337,9 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	var removeErrors []error
 	addedCount := 0
 
+	// Build the primary model config for each source.
+	primaryModelInfo := &m.bn.ModelInfo
+
 	// Add new monitors and mark existing ones as still needed
 	for _, source := range sources {
 		if source != "" {
@@ -270,12 +347,13 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 			delete(toRemove, source)
 
 			if !wasExisting {
-				if err := m.AddMonitor(source); err != nil {
+				cfg := buildPrimaryMonitorConfig(source, primaryModelInfo)
+				if err := m.AddMonitors(source, []monitorConfig{cfg}); err != nil {
 					wrappedErr := errors.New(err).
 						Component("analysis.buffer").
 						Category(errors.CategoryBuffer).
 						Context("operation", "update_monitors").
-						Context("failed_operation", "add_monitor").
+						Context("failed_operation", "add_monitors").
 						Context("source", source).
 						Build()
 					addErrors = append(addErrors, wrappedErr)
@@ -341,13 +419,13 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 
 // analysisBufferMonitor reads from the audiocore analysis buffer and feeds
 // audio chunks to the BirdNET analysis pipeline.
-func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID string) {
+func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monitorConfig) {
 	const detectionOffset = 10 * time.Second
 	const pollInterval = 100 * time.Millisecond
-	// analysisWindowBytes is the expected size of a full analysis window
-	// returned by AnalysisBuffer.Read(): CaptureLength seconds of audio at
-	// SampleRate Hz, BitDepth bits, NumChannels channels.
-	const analysisWindowBytes = conf.SampleRate * conf.CaptureLength * conf.NumChannels * (conf.BitDepth / 8)
+
+	// Use the model-specific read size from the config instead of the
+	// hardcoded constant that assumed BirdNET v2.4 parameters.
+	analysisWindowBytes := cfg.readSize
 
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
@@ -357,17 +435,19 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 		case <-quitChan:
 			return
 		case <-ticker.C:
-			ab, err := m.bufferMgr.AnalysisBuffer(sourceID, m.bn.ModelInfo.ID)
+			ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 			if err != nil {
 				// Buffer removed, exit gracefully
 				m.logger.Info("analysis buffer removed, stopping monitor",
-					logger.String("source_id", sourceID))
+					logger.String("source_id", cfg.sourceID),
+					logger.String("model_id", cfg.modelID))
 				return
 			}
 			data, readErr := ab.Read()
 			if readErr != nil {
 				m.logger.Error("buffer read error",
-					logger.String("source_id", sourceID),
+					logger.String("source_id", cfg.sourceID),
+					logger.String("model_id", cfg.modelID),
 					logger.Error(readErr))
 				time.Sleep(1 * time.Second)
 				continue
@@ -380,19 +460,39 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 				startTime := time.Now().Add(-beginTimeOffset)
 
-				if processErr := ProcessData(m.bn, data, startTime, audioCapturedAt, sourceID); processErr != nil {
+				// For Phase 3e, ProcessData signature does NOT change — pass
+				// cfg.sourceID only. The cfg.modelID is available but not passed
+				// to ProcessData yet (that's PR 2 / Phase 3f).
+				if processErr := ProcessData(m.bn, data, startTime, audioCapturedAt, cfg.sourceID); processErr != nil {
 					m.logger.Error("error processing data",
-						logger.String("source_id", sourceID),
+						logger.String("source_id", cfg.sourceID),
+						logger.String("model_id", cfg.modelID),
 						logger.Error(processErr))
 					_ = errors.New(processErr).
 						Component("analysis").
 						Category(errors.CategoryAudioAnalysis).
 						Context("operation", "analysis_pipeline_processing").
-						Context("source_id", sourceID).
+						Context("source_id", cfg.sourceID).
+						Context("model_id", cfg.modelID).
 						Build()
 				}
 			}
 		}
+	}
+}
+
+// buildPrimaryMonitorConfig builds a monitorConfig for the primary model.
+// This is used by AddMonitor and UpdateMonitors to create a config from ModelInfo.
+func buildPrimaryMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
+	spec := info.Spec
+	clipLenSec := int(spec.ClipLength.Seconds())
+	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+
+	return monitorConfig{
+		sourceID: sourceID,
+		modelID:  info.ID,
+		spec:     spec,
+		readSize: readSize,
 	}
 }
 
