@@ -198,6 +198,9 @@ func (o *Orchestrator) ReloadModel() error {
 	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
 	newModels := make(map[string]*modelEntry, len(o.models))
 	for _, e := range o.models {
+		if e.instance == nil {
+			continue // skip entries closed by concurrent Delete
+		}
 		newModels[e.instance.ModelID()] = e
 	}
 	o.models = newModels
