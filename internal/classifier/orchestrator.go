@@ -95,9 +95,17 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 			Build()
 	}
 
-	// Step 2: acquire per-model lock for inference (slow)
+	// Step 2: acquire per-model lock for inference (slow).
+	// Guard against Delete having closed the instance between RUnlock and Lock.
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	if entry.instance == nil {
+		return nil, errors.Newf("model %s has been closed", modelID).
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Context("model_id", modelID).
+			Build()
+	}
 	return entry.instance.Predict(ctx, sample)
 }
 
@@ -153,11 +161,26 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 func (o *Orchestrator) ReloadModel() error {
 	// Step 1: acquire per-model lock to prevent concurrent inference during reload.
 	o.mu.RLock()
-	entry := o.models[o.primary.ModelInfo.ID]
+	primary := o.primary
+	if primary == nil {
+		o.mu.RUnlock()
+		return errors.Newf("primary model not available for reload").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+	entry := o.models[primary.ModelInfo.ID]
 	o.mu.RUnlock()
 
+	if entry == nil {
+		return errors.Newf("primary model entry not found for reload").
+			Component("classifier.orchestrator").
+			Category(errors.CategoryValidation).
+			Build()
+	}
+
 	entry.mu.Lock()
-	if err := o.primary.ReloadModel(); err != nil {
+	if err := primary.ReloadModel(); err != nil {
 		entry.mu.Unlock()
 		return err
 	}
@@ -190,10 +213,13 @@ func (o *Orchestrator) Delete() {
 
 	for _, entry := range o.models {
 		entry.mu.Lock()
-		if err := entry.instance.Close(); err != nil {
-			GetLogger().Warn("failed to close model instance",
-				logger.String("model_id", entry.instance.ModelID()),
-				logger.Error(err))
+		if entry.instance != nil {
+			if err := entry.instance.Close(); err != nil {
+				GetLogger().Warn("failed to close model instance",
+					logger.String("model_id", entry.instance.ModelID()),
+					logger.Error(err))
+			}
+			entry.instance = nil // nil out to signal closed state to PredictModel
 		}
 		entry.mu.Unlock()
 	}
