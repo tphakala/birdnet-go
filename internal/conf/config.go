@@ -2120,13 +2120,17 @@ func (s *Settings) ValidateModelConfig() []string {
 	}
 
 	for _, id := range s.Models.Enabled {
-		if !knownModelIDs[id] {
+		if !knownModelIDs[strings.ToLower(id)] {
 			issues = append(issues, "warning: unknown model ID in models.enabled: "+id)
 		}
 	}
 
 	if enabledSet["perch_v2"] && !s.Perch.Enabled {
 		issues = append(issues, "error: perch_v2 in models.enabled but perch.enabled is false")
+	}
+
+	if s.Perch.Enabled && !enabledSet["perch_v2"] {
+		issues = append(issues, "warning: perch.enabled is true but 'perch_v2' is not in models.enabled")
 	}
 
 	if s.Perch.Enabled {

@@ -3,8 +3,10 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -554,6 +556,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		if src, found := registry.GetByConnection(connStr); found {
 			// Source already running — keep it.
 			alreadyRunning[connStr] = src.ID
+			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
 		} else {
 			// New source — add it.
@@ -602,8 +605,14 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	if len(newSourceIDs) > 0 {
 		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, "reconfigure_diff")
 		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
+	}
 
-		monitorMap := p.buildMonitorConfigs(sourceModelMap, newSourceIDs)
+	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
+	// receives the full desired state and removes stale monitors correctly.
+	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
+	allActiveIDs = append(allActiveIDs, newSourceIDs...)
+	if len(allActiveIDs) > 0 {
+		monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
 		if monErr := p.bufferMgr.UpdateMonitors(monitorMap); monErr != nil {
 			log.Warn("buffer monitor update failed during reconfigure", logger.Error(monErr))
 		}
