@@ -47,10 +47,6 @@ const (
 	// Session store settings
 	MaxSessionSizeBytes = 1024 * 1024 // 1MB max size
 
-	// CIDR mask bits for IPv4 /24 subnet
-	IPv4SubnetMaskBits   = 24
-	IPv4TotalAddressBits = 32
-
 	// Provider capacity hint
 	InitialProviderCapacity = 6
 

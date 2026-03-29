@@ -190,3 +190,34 @@ func TestNewErrorResponseDebugMode(t *testing.T) {
 	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")
 	assert.Equal(t, "Safe message", resp.Message)
 }
+
+// TestParseIPFromHeader tests IP parsing with zone ID stripping.
+func TestParseIPFromHeader(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{name: "empty string", input: "", expected: ""},
+		{name: "valid IPv4", input: "192.168.1.1", expected: "192.168.1.1"},
+		{name: "valid IPv6", input: "2001:db8::1", expected: "2001:db8::1"},
+		{name: "IPv6 link-local with zone ID", input: "fe80::1%eth0", expected: "fe80::1"},
+		{name: "IPv6 link-local with wlan zone", input: "fe80::1cb6:63bc:5462:71c5%wlan0", expected: "fe80::1cb6:63bc:5462:71c5"},
+		{name: "IPv4 with spurious percent", input: "192.168.1.1%zone", expected: "192.168.1.1"},
+		{name: "just a percent sign", input: "%", expected: ""},
+		{name: "garbage with percent", input: "not_an_ip%zone", expected: ""},
+		{name: "multiple percent signs", input: "fe80::1%wlan0%extra", expected: "fe80::1"},
+		{name: "invalid IP", input: "999.999.999.999", expected: ""},
+		{name: "IPv6 loopback", input: "::1", expected: "::1"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			result := parseIPFromHeader(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

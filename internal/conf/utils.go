@@ -828,7 +828,8 @@ func getLocalInterfaceIP() (net.IP, error) {
 	return nil, fmt.Errorf("no suitable IP address found")
 }
 
-// IsInHostSubnet checks if the given IP is in the same subnet as the host
+// IsInHostSubnet checks if the given IP is in the same subnet as the host.
+// Supports both IPv4 (/24) and IPv6 (/64) subnet comparison.
 func IsInHostSubnet(clientIP net.IP) bool {
 	if clientIP == nil {
 		return false
@@ -841,20 +842,21 @@ func IsInHostSubnet(clientIP net.IP) bool {
 		return false
 	}
 
-	// Get the /24 subnet for client
-	clientSubnet := getIPv4Subnet(clientIP, 24)
-	if clientSubnet == nil {
-		return false
+	// Try IPv4 /24 subnet comparison
+	clientV4 := getIPv4Subnet(clientIP, 24)
+	hostV4 := getIPv4Subnet(hostIP, 24)
+	if clientV4 != nil && hostV4 != nil {
+		return clientV4.Equal(hostV4)
 	}
 
-	// Get the /24 subnet for host
-	hostSubnet := getIPv4Subnet(hostIP, 24)
-	if hostSubnet == nil {
-		return false
+	// Try IPv6 /64 subnet comparison (standard LAN prefix length)
+	clientV6 := getIPv6Subnet(clientIP, 64)
+	hostV6 := getIPv6Subnet(hostIP, 64)
+	if clientV6 != nil && hostV6 != nil {
+		return clientV6.Equal(hostV6)
 	}
 
-	// Compare subnets
-	return clientSubnet.Equal(hostSubnet)
+	return false
 }
 
 // getIPv4Subnet converts an IP address to its subnet address with specified mask bits
@@ -871,4 +873,23 @@ func getIPv4Subnet(ip net.IP, bits int) net.IP {
 
 	// Apply the subnet mask (e.g., for bits=24, this creates a 255.255.255.0 mask)
 	return ipv4.Mask(net.CIDRMask(bits, 32))
+}
+
+// getIPv6Subnet converts an IPv6 address to its subnet address with specified prefix bits.
+// Returns nil for IPv4 addresses or nil input.
+func getIPv6Subnet(ip net.IP, bits int) net.IP {
+	if ip == nil {
+		return nil
+	}
+
+	// Skip IPv4 addresses (including IPv4-mapped IPv6)
+	if ip.To4() != nil {
+		return nil
+	}
+	ipv6 := ip.To16()
+	if ipv6 == nil {
+		return nil
+	}
+
+	return ipv6.Mask(net.CIDRMask(bits, 128))
 }

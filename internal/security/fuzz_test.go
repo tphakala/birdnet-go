@@ -379,23 +379,17 @@ func FuzzIsValidUserId(f *testing.F) {
 // Fuzz Tests for IP/Subnet Handling
 // =============================================================================
 
-// FuzzGetIPv4Subnet tests IPv4 subnet extraction.
-func FuzzGetIPv4Subnet(f *testing.F) {
+// FuzzIsInLocalSubnetIPv6 tests local subnet detection with IPv6 addresses.
+func FuzzIsInLocalSubnetIPv6(f *testing.F) {
 	seedIPs := []string{
-		"192.168.1.1",
-		"10.0.0.1",
-		"172.16.0.1",
-		"127.0.0.1",
-		"0.0.0.0",
-		"255.255.255.255",
+		"fe80::1",
+		"fe80::1cb6:63bc:5462:71c5",
+		"fd00::1",
+		"2001:db8::1",
 		"::1",
 		"::ffff:192.168.1.1",
-		"fe80::1",
 		"invalid",
 		"",
-		"256.256.256.256",
-		"1.2.3.4.5",
-		"-1.0.0.0",
 	}
 
 	for _, ip := range seedIPs {
@@ -405,27 +399,10 @@ func FuzzGetIPv4Subnet(f *testing.F) {
 	f.Fuzz(func(t *testing.T, ipStr string) {
 		ip := net.ParseIP(ipStr)
 		// Should never panic even with nil
-		result := getIPv4Subnet(ip)
+		_ = IsInLocalSubnet(ip)
 
-		if ip == nil {
-			assert.Nil(t, result, "Nil IP should return nil subnet")
-			return
-		}
-
-		// If result is not nil, verify it's a valid /24 subnet
-		if result != nil {
-			// Result should be IPv4
-			assert.NotNil(t, result.To4(), "Subnet should be IPv4")
-			// Last octet should be 0 for /24
-			assert.Equal(t, byte(0), result[len(result)-1], "Last octet should be 0 for /24 subnet")
-		}
-
-		// Consistency check
-		result2 := getIPv4Subnet(ip)
-		if result == nil {
-			assert.Nil(t, result2)
-		} else {
-			assert.True(t, result.Equal(result2), "Inconsistent results")
+		if ip != nil && ip.IsLinkLocalUnicast() {
+			assert.True(t, IsInLocalSubnet(ip), "Link-local should be treated as local subnet")
 		}
 	})
 }
@@ -941,12 +918,6 @@ func TestAdvancedIPAddressEdgeCases(t *testing.T) {
 				}
 			} else {
 				assert.Nil(t, ip, "Should not parse: %q", tc.ip)
-			}
-
-			// Test subnet extraction doesn't panic
-			subnet := getIPv4Subnet(ip)
-			if ip != nil && ip.To4() != nil {
-				assert.NotNil(t, subnet, "IPv4 should have subnet")
 			}
 
 			// Test IsInLocalSubnet doesn't panic

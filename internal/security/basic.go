@@ -16,12 +16,20 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// IsInLocalSubnet checks if the given IP is in the same subnet as any local network interface
+// IsInLocalSubnet checks if the given IP is in the same subnet as any local network interface.
+// Supports both IPv4 and IPv6 addresses.
 func IsInLocalSubnet(clientIP net.IP) bool {
-	secLog := GetLogger().With(logger.String("ip", clientIP.String()))
 	if clientIP == nil {
-		secLog.Debug("IsInLocalSubnet check failed: client IP is nil")
+		GetLogger().Debug("IsInLocalSubnet check failed: client IP is nil")
 		return false
+	}
+	secLog := GetLogger().With(logger.String("ip", clientIP.String()))
+
+	// IPv6 link-local addresses (fe80::/10) are by definition on the local
+	// network segment; routers do not forward them (RFC 4291).
+	if clientIP.IsLinkLocalUnicast() {
+		secLog.Debug("Client IP is link-local unicast, treating as local subnet")
+		return true
 	}
 
 	// If running in container, check if client IP is in the same subnet as the host
@@ -37,48 +45,23 @@ func IsInLocalSubnet(clientIP net.IP) bool {
 		return false
 	}
 
-	// Get the client's /24 subnet
-	clientSubnet := getIPv4Subnet(clientIP)
-	if clientSubnet == nil {
-		secLog.Debug("Failed to get IPv4 /24 subnet for client IP")
-		return false
-	}
-	secLog = secLog.With(logger.String("client_subnet", clientSubnet.String()))
-
-	// Check each network interface
+	// Check each network interface using the actual subnet mask,
+	// supporting both IPv4 and IPv6 subnets.
 	for _, addr := range addrs {
 		ipnet, ok := addr.(*net.IPNet)
 		if !ok || ipnet.IP.IsLoopback() {
 			continue
 		}
 
-		serverSubnet := getIPv4Subnet(ipnet.IP)
-		if serverSubnet != nil {
-			secLog.Debug("Checking against server interface", logger.String("server_ip", ipnet.IP.String()), logger.String("server_subnet", serverSubnet.String()))
-			if clientSubnet.Equal(serverSubnet) {
-				secLog.Debug("Client IP is in local subnet")
-				return true
-			}
+		if ipnet.Contains(clientIP) {
+			secLog.Debug("Client IP is in local subnet",
+				logger.String("server_ip", ipnet.IP.String()),
+				logger.String("network", ipnet.String()))
+			return true
 		}
 	}
 	secLog.Debug("Client IP is not in any local subnet")
 	return false
-}
-
-// getIPv4Subnet converts an IP address to its /24 subnet address
-func getIPv4Subnet(ip net.IP) net.IP {
-	if ip == nil {
-		return nil
-	}
-
-	// Convert to IPv4 if possible
-	ipv4 := ip.To4()
-	if ipv4 == nil {
-		return nil
-	}
-
-	// Get the /24 subnet
-	return ipv4.Mask(net.CIDRMask(IPv4SubnetMaskBits, IPv4TotalAddressBits))
 }
 
 // buildSessionOptions creates session options with standard security settings.

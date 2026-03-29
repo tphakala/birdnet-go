@@ -30,6 +30,9 @@ const CSRF_HEADER_NAME = 'X-CSRF-Token';
 // all receive expired-session responses at the same time.
 let _redirectingToLogin = false;
 
+/** Minimum interval between 401 redirects (ms) to prevent infinite reload loops */
+const REDIRECT_COOLDOWN_MS = 5_000;
+
 // Lazy Sentry capture — only loaded when telemetry is enabled.
 // Uses ApiErrorLike interface to avoid coupling to the ApiError class.
 type ApiErrorLike = { message: string; status: number; isNetworkError: boolean };
@@ -87,6 +90,23 @@ export class ApiError extends Error {
 function redirectToLogin(): Promise<never> {
   if (!_redirectingToLogin) {
     _redirectingToLogin = true;
+
+    // Prevent infinite reload loops: if we redirected very recently (e.g., because
+    // the server keeps returning 401 due to IPv6 subnet bypass failure), stop and
+    // let the user see the current page rather than looping endlessly.
+    // sessionStorage survives page reloads but not tab close.
+    try {
+      const lastRedirect = sessionStorage.getItem('last_401_redirect');
+      if (lastRedirect && Date.now() - parseInt(lastRedirect, 10) < REDIRECT_COOLDOWN_MS) {
+        logger.warn('Suppressing rapid 401 redirect to prevent reload loop');
+        _redirectingToLogin = false; // Reset so future legitimate 401s can redirect
+        return new Promise<never>(() => {});
+      }
+      sessionStorage.setItem('last_401_redirect', Date.now().toString());
+    } catch {
+      // sessionStorage unavailable (e.g., Safari private browsing) — proceed with redirect
+    }
+
     logger.info('Session expired (401) — redirecting to login');
     window.location.href = buildAppUrl('/ui/');
   }

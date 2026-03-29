@@ -492,43 +492,51 @@ func TestIsInLocalSubnet(t *testing.T) {
 	}
 }
 
-// TestGetIPv4Subnet tests the IPv4 subnet extraction
-func TestGetIPv4Subnet(t *testing.T) {
+// TestIsInLocalSubnetIPv6LinkLocal tests IPv6 link-local detection
+func TestIsInLocalSubnetIPv6LinkLocal(t *testing.T) {
 	tests := []struct {
 		name     string
 		ip       net.IP
-		expected string
+		expected bool
 	}{
 		{
-			name:     "nil IP returns nil",
+			name:     "nil IP returns false",
 			ip:       nil,
-			expected: "",
+			expected: false,
 		},
 		{
-			name:     "IPv6 only returns nil",
+			name:     "IPv6 loopback is not link-local",
 			ip:       net.ParseIP("::1"),
-			expected: "",
+			expected: false,
 		},
 		{
-			name:     "valid IPv4 returns /24 subnet",
-			ip:       net.ParseIP("192.168.1.100"),
-			expected: "192.168.1.0",
+			name:     "IPv6 link-local returns true",
+			ip:       net.ParseIP("fe80::1"),
+			expected: true,
 		},
 		{
-			name:     "different subnet",
-			ip:       net.ParseIP("10.0.5.42"),
-			expected: "10.0.5.0",
+			name:     "IPv6 link-local with long address returns true",
+			ip:       net.ParseIP("fe80::1cb6:63bc:5462:71c5"),
+			expected: true,
+		},
+		{
+			name:     "IPv6 global unicast is not link-local",
+			ip:       net.ParseIP("2001:db8::1"),
+			expected: false,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			subnet := getIPv4Subnet(tt.ip)
-			var result string
-			if subnet != nil {
-				result = subnet.String()
+			t.Parallel()
+			result := IsInLocalSubnet(tt.ip)
+			if tt.ip == nil {
+				assert.False(t, result, "nil IP should always return false")
+			} else if tt.expected {
+				assert.True(t, result, "Expected link-local IP to be treated as local subnet")
 			}
-			assert.Equal(t, tt.expected, result)
+			// Note: for non-link-local IPs, result depends on actual network interfaces,
+			// so we only assert the positive cases here.
 		})
 	}
 }
