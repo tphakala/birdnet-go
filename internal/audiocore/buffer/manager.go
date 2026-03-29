@@ -164,12 +164,20 @@ func (m *Manager) BytePool() *BytePool {
 // needed. Thread-safe via a dedicated mutex separate from the Manager's main
 // RWMutex.
 func (m *Manager) Float32Pool(size int) *Float32Pool {
+	if size <= 0 {
+		return nil
+	}
 	m.float32PoolMu.Lock()
 	defer m.float32PoolMu.Unlock()
 	if pool, ok := m.float32Pools[size]; ok {
 		return pool
 	}
-	pool, _ := NewFloat32Pool(size) //nolint:errcheck // size > 0 guaranteed by callers
+	pool, err := NewFloat32Pool(size)
+	if err != nil {
+		m.logger.Error("failed to create Float32Pool",
+			logger.Int("size", size), logger.Error(err))
+		return nil
+	}
 	m.float32Pools[size] = pool
 	return pool
 }
