@@ -357,7 +357,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, sourceID s
 		case <-quitChan:
 			return
 		case <-ticker.C:
-			ab, err := m.bufferMgr.AnalysisBuffer(sourceID)
+			ab, err := m.bufferMgr.AnalysisBuffer(sourceID, m.bn.ModelInfo.ID)
 			if err != nil {
 				// Buffer removed, exit gracefully
 				m.logger.Info("analysis buffer removed, stopping monitor",

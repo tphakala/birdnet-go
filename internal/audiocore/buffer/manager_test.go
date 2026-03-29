@@ -18,19 +18,23 @@ const (
 	managerTestDurationSeconds = 60
 	managerTestSampleRate      = 48000
 	managerTestBytesPerSample  = 2
+
+	// managerTestModelID is the default model identifier used in single-model
+	// tests where a concrete model name is not relevant.
+	managerTestModelID = "birdnet-v2.4"
 )
 
 // TestBufferManager_AllocateAnalysis verifies that an analysis buffer can be
-// allocated and retrieved by sourceID.
+// allocated and retrieved by (sourceID, modelID).
 func TestBufferManager_AllocateAnalysis(t *testing.T) {
 	t.Parallel()
 
 	m := buffer.NewManager(newTestLogger())
 
-	err := m.AllocateAnalysis("source-1", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	err := m.AllocateAnalysis("source-1", managerTestModelID, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
 	require.NoError(t, err)
 
-	ab, err := m.AnalysisBuffer("source-1")
+	ab, err := m.AnalysisBuffer("source-1", managerTestModelID)
 	require.NoError(t, err)
 	assert.NotNil(t, ab)
 }
@@ -57,7 +61,7 @@ func TestBufferManager_DeallocateSource(t *testing.T) {
 
 	m := buffer.NewManager(newTestLogger())
 
-	err := m.AllocateAnalysis("source-3", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	err := m.AllocateAnalysis("source-3", managerTestModelID, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
 	require.NoError(t, err)
 
 	err = m.AllocateCapture("source-3", managerTestDurationSeconds, managerTestSampleRate, managerTestBytesPerSample)
@@ -65,7 +69,7 @@ func TestBufferManager_DeallocateSource(t *testing.T) {
 
 	m.DeallocateSource("source-3")
 
-	ab, err := m.AnalysisBuffer("source-3")
+	ab, err := m.AnalysisBuffer("source-3", managerTestModelID)
 	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
 	assert.Nil(t, ab)
 
@@ -87,21 +91,21 @@ func TestBufferManager_DeallocateNonExistent(t *testing.T) {
 }
 
 // TestBufferManager_DoubleAllocate verifies that allocating a second analysis or
-// capture buffer for the same sourceID returns an error.
+// capture buffer for the same (sourceID, modelID) returns an error.
 func TestBufferManager_DoubleAllocate(t *testing.T) {
 	t.Parallel()
 
 	m := buffer.NewManager(newTestLogger())
 
 	// First allocations should succeed.
-	err := m.AllocateAnalysis("source-4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	err := m.AllocateAnalysis("source-4", managerTestModelID, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
 	require.NoError(t, err)
 
 	err = m.AllocateCapture("source-4", managerTestDurationSeconds, managerTestSampleRate, managerTestBytesPerSample)
 	require.NoError(t, err)
 
-	// Second allocations for the same sourceID must return an error.
-	err = m.AllocateAnalysis("source-4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	// Second allocations for the same (sourceID, modelID) must return an error.
+	err = m.AllocateAnalysis("source-4", managerTestModelID, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
 	require.Error(t, err)
 
 	err = m.AllocateCapture("source-4", managerTestDurationSeconds, managerTestSampleRate, managerTestBytesPerSample)
@@ -117,4 +121,108 @@ func TestBufferManager_PoolAccessors(t *testing.T) {
 
 	assert.NotNil(t, m.BytePool())
 	assert.NotNil(t, m.Float32Pool())
+}
+
+// ---------------------------------------------------------------------------
+// Multi-model composite-key tests
+// ---------------------------------------------------------------------------
+
+// TestManager_AllocateAnalysis_MultiModel allocates two models for the same
+// source and verifies that distinct buffers are returned via AnalysisBuffer.
+func TestManager_AllocateAnalysis_MultiModel(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	const source = "mic1"
+
+	err := m.AllocateAnalysis(source, "birdnet-v2.4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	require.NoError(t, err)
+
+	err = m.AllocateAnalysis(source, "perch-v2", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	require.NoError(t, err)
+
+	ab1, err := m.AnalysisBuffer(source, "birdnet-v2.4")
+	require.NoError(t, err)
+	require.NotNil(t, ab1)
+
+	ab2, err := m.AnalysisBuffer(source, "perch-v2")
+	require.NoError(t, err)
+	require.NotNil(t, ab2)
+
+	// The two buffers must be distinct instances.
+	assert.NotSame(t, ab1, ab2, "buffers for different models must be distinct instances")
+}
+
+// TestManager_AllocateAnalysis_DuplicateModelError verifies that allocating the
+// same (source, model) pair twice returns an error.
+func TestManager_AllocateAnalysis_DuplicateModelError(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	const source = "mic1"
+	const model = "birdnet-v2.4"
+
+	err := m.AllocateAnalysis(source, model, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	require.NoError(t, err)
+
+	err = m.AllocateAnalysis(source, model, managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), source)
+	assert.Contains(t, err.Error(), model)
+}
+
+// TestManager_DeallocateSource_RemovesAllModels allocates two models and a
+// capture buffer for a source, deallocates the source, then verifies all
+// buffers are gone.
+func TestManager_DeallocateSource_RemovesAllModels(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	const source = "mic1"
+
+	require.NoError(t, m.AllocateAnalysis(source, "birdnet-v2.4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+	require.NoError(t, m.AllocateAnalysis(source, "perch-v2", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+	require.NoError(t, m.AllocateCapture(source, managerTestDurationSeconds, managerTestSampleRate, managerTestBytesPerSample))
+
+	m.DeallocateSource(source)
+
+	_, err := m.AnalysisBuffer(source, "birdnet-v2.4")
+	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+
+	_, err = m.AnalysisBuffer(source, "perch-v2")
+	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+
+	_, err = m.CaptureBuffer(source)
+	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+
+	// AnalysisBuffers should return an empty map.
+	assert.Empty(t, m.AnalysisBuffers(source))
+}
+
+// TestManager_AnalysisBuffers_ReturnsAllForSource allocates two models for
+// "mic1" and one model for "mic2", then verifies that AnalysisBuffers("mic1")
+// returns a map with exactly 2 entries and correct model keys.
+func TestManager_AnalysisBuffers_ReturnsAllForSource(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	require.NoError(t, m.AllocateAnalysis("mic1", "birdnet-v2.4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+	require.NoError(t, m.AllocateAnalysis("mic1", "perch-v2", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+	require.NoError(t, m.AllocateAnalysis("mic2", "birdnet-v2.4", managerTestCapacity, managerTestOverlapSize, managerTestReadSize))
+
+	mic1Buffers := m.AnalysisBuffers("mic1")
+	assert.Len(t, mic1Buffers, 2, "mic1 should have 2 analysis buffers")
+	assert.Contains(t, mic1Buffers, "birdnet-v2.4")
+	assert.Contains(t, mic1Buffers, "perch-v2")
+
+	mic2Buffers := m.AnalysisBuffers("mic2")
+	assert.Len(t, mic2Buffers, 1, "mic2 should have 1 analysis buffer")
+	assert.Contains(t, mic2Buffers, "birdnet-v2.4")
+
+	// Non-existent source should return empty map.
+	assert.Empty(t, m.AnalysisBuffers("mic3"))
 }

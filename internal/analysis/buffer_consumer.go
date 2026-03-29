@@ -96,18 +96,22 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 
 	sourceID := frame.SourceID
 
-	// Write to analysis buffer.
-	ab, err := c.bufferMgr.AnalysisBuffer(sourceID)
-	if err != nil {
-		GetLogger().Warn("analysis buffer not found for source",
+	// Write to all analysis buffers for this source (one per model).
+	analysisBuffers := c.bufferMgr.AnalysisBuffers(sourceID)
+	if len(analysisBuffers) == 0 {
+		GetLogger().Warn("no analysis buffers found for source",
 			logger.String("source_id", sourceID),
 			logger.String("consumer_id", c.id),
 			logger.String("operation", "buffer_consumer_write"))
-	} else if writeErr := ab.Write(frame.Data); writeErr != nil {
-		GetLogger().Warn("failed to write to analysis buffer",
-			logger.String("source_id", sourceID),
-			logger.Error(writeErr),
-			logger.String("operation", "buffer_consumer_write"))
+	}
+	for modelID, ab := range analysisBuffers {
+		if writeErr := ab.Write(frame.Data); writeErr != nil {
+			GetLogger().Warn("failed to write to analysis buffer",
+				logger.String("source_id", sourceID),
+				logger.String("model_id", modelID),
+				logger.Error(writeErr),
+				logger.String("operation", "buffer_consumer_write"))
+		}
 	}
 
 	// Write to capture buffer.

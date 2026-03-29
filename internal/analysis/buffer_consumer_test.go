@@ -13,6 +13,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// testDefaultModelID is the default model identifier used in buffer consumer
+// tests where a concrete model name is not relevant.
+const testDefaultModelID = "BirdNET_GLOBAL_6K_V2.4"
+
 // newTestBufferManager creates a buffer.Manager and allocates analysis and
 // capture buffers for the given sourceID. It uses reasonable defaults for
 // audio parameters (48 kHz, 16-bit, mono).
@@ -21,7 +25,7 @@ func newTestBufferManager(t *testing.T, sourceID string) *buffer.Manager {
 	mgr := buffer.NewManager(logger.Global().Module("test"))
 
 	// Analysis buffer: capacity 48000 bytes, overlap 0, read size 48000.
-	require.NoError(t, mgr.AllocateAnalysis(sourceID, 48000, 0, 48000))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, testDefaultModelID, 48000, 0, 48000))
 
 	// Capture buffer: 10 seconds, 48 kHz, 2 bytes per sample.
 	require.NoError(t, mgr.AllocateCapture(sourceID, 10, 48000, 2))
@@ -99,7 +103,7 @@ func TestBufferConsumer_WritesToBothBuffers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify analysis buffer received data by reading it back.
-	ab, abErr := mgr.AnalysisBuffer(sourceID)
+	ab, abErr := mgr.AnalysisBuffer(sourceID, testDefaultModelID)
 	require.NoError(t, abErr)
 	require.NotNil(t, ab)
 

@@ -15,13 +15,22 @@ const (
 	defaultFloat32PoolSize = 2048
 )
 
+// bufferKey is the composite key used to look up analysis buffers. Each
+// (sourceID, modelID) pair addresses a distinct AnalysisBuffer, allowing
+// multiple models to process the same audio source concurrently.
+type bufferKey struct {
+	sourceID string
+	modelID  string
+}
+
 // Manager coordinates the lifecycle of AnalysisBuffer and CaptureBuffer
-// instances keyed by source ID. It owns one shared BytePool and Float32Pool
-// that consumers of the package may use for buffer reuse.
+// instances. Analysis buffers are keyed by (sourceID, modelID) to support
+// multi-model analysis. Capture buffers are keyed by sourceID alone since
+// capture is model-independent.
 //
 // All exported methods are safe for concurrent use.
 type Manager struct {
-	analysisBuffers map[string]*AnalysisBuffer
+	analysisBuffers map[bufferKey]*AnalysisBuffer
 	captureBuffers  map[string]*CaptureBuffer
 	bytePool        *BytePool
 	float32Pool     *Float32Pool
@@ -39,7 +48,7 @@ func NewManager(log logger.Logger) *Manager {
 	float32Pool, _ := NewFloat32Pool(defaultFloat32PoolSize)
 
 	return &Manager{
-		analysisBuffers: make(map[string]*AnalysisBuffer),
+		analysisBuffers: make(map[bufferKey]*AnalysisBuffer),
 		captureBuffers:  make(map[string]*CaptureBuffer),
 		bytePool:        bytePool,
 		float32Pool:     float32Pool,
@@ -47,15 +56,16 @@ func NewManager(log logger.Logger) *Manager {
 	}
 }
 
-// AllocateAnalysis creates an AnalysisBuffer for the given sourceID and stores
-// it in the Manager. Returns an error if a buffer for sourceID already exists
-// or if NewAnalysisBuffer fails.
-func (m *Manager) AllocateAnalysis(sourceID string, capacity, overlapSize, readSize int) error {
+// AllocateAnalysis creates an AnalysisBuffer for the given (sourceID, modelID)
+// pair and stores it in the Manager. Returns an error if a buffer for that
+// composite key already exists or if NewAnalysisBuffer fails.
+func (m *Manager) AllocateAnalysis(sourceID, modelID string, capacity, overlapSize, readSize int) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if _, exists := m.analysisBuffers[sourceID]; exists {
-		return fmt.Errorf("analysis buffer already allocated for source %q", sourceID)
+	key := bufferKey{sourceID: sourceID, modelID: modelID}
+	if _, exists := m.analysisBuffers[key]; exists {
+		return fmt.Errorf("analysis buffer already allocated for source %q model %q", sourceID, modelID)
 	}
 
 	ab, err := NewAnalysisBuffer(capacity, overlapSize, readSize, sourceID, m.logger)
@@ -63,7 +73,7 @@ func (m *Manager) AllocateAnalysis(sourceID string, capacity, overlapSize, readS
 		return err
 	}
 
-	m.analysisBuffers[sourceID] = ab
+	m.analysisBuffers[key] = ab
 	return nil
 }
 
@@ -87,29 +97,50 @@ func (m *Manager) AllocateCapture(sourceID string, durationSeconds, sampleRate, 
 	return nil
 }
 
-// DeallocateSource removes both the AnalysisBuffer and the CaptureBuffer for
-// the given sourceID in a single atomic operation. It is safe to call for
-// sourceIDs that were never allocated; the method is a no-op in that case.
+// DeallocateSource removes all AnalysisBuffers (across all models) and the
+// CaptureBuffer for the given sourceID in a single atomic operation. It is
+// safe to call for sourceIDs that were never allocated; the method is a no-op
+// in that case.
 func (m *Manager) DeallocateSource(sourceID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	delete(m.analysisBuffers, sourceID)
+	for key := range m.analysisBuffers {
+		if key.sourceID == sourceID {
+			delete(m.analysisBuffers, key)
+		}
+	}
 	delete(m.captureBuffers, sourceID)
 }
 
-// AnalysisBuffer returns the AnalysisBuffer allocated for the given sourceID.
-// Returns audiocore.ErrBufferNotFound if no buffer has been allocated for
-// sourceID.
-func (m *Manager) AnalysisBuffer(sourceID string) (*AnalysisBuffer, error) {
+// AnalysisBuffer returns the AnalysisBuffer allocated for the given
+// (sourceID, modelID) pair. Returns audiocore.ErrBufferNotFound if no buffer
+// has been allocated for that composite key.
+func (m *Manager) AnalysisBuffer(sourceID, modelID string) (*AnalysisBuffer, error) {
 	m.mu.RLock()
-	ab, ok := m.analysisBuffers[sourceID]
+	ab, ok := m.analysisBuffers[bufferKey{sourceID: sourceID, modelID: modelID}]
 	m.mu.RUnlock()
 
 	if !ok {
 		return nil, audiocore.ErrBufferNotFound
 	}
 	return ab, nil
+}
+
+// AnalysisBuffers returns all AnalysisBuffers allocated for the given sourceID,
+// keyed by modelID. Returns an empty (non-nil) map if no buffers exist for the
+// source.
+func (m *Manager) AnalysisBuffers(sourceID string) map[string]*AnalysisBuffer {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make(map[string]*AnalysisBuffer)
+	for key, ab := range m.analysisBuffers {
+		if key.sourceID == sourceID {
+			result[key.modelID] = ab
+		}
+	}
+	return result
 }
 
 // CaptureBuffer returns the CaptureBuffer allocated for the given sourceID.
