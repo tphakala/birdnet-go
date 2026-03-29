@@ -31,10 +31,11 @@ func (m *mockModelInstance) ModelID() string { return m.id }
 func (m *mockModelInstance) ModelName() string {
 	return "mock-" + m.id
 }
-func (m *mockModelInstance) ModelVersion() string { return "1.0" }
-func (m *mockModelInstance) NumSpecies() int      { return 1 }
-func (m *mockModelInstance) Labels() []string     { return []string{"Turdus merula_Common Blackbird"} }
-func (m *mockModelInstance) Close() error         { return nil }
+func (m *mockModelInstance) ModelVersion() string   { return "1.0" }
+func (m *mockModelInstance) NumSpecies() int        { return 1 }
+func (m *mockModelInstance) Labels() []string       { return []string{"Turdus merula_Common Blackbird"} }
+func (m *mockModelInstance) SetThreads(_ int) error { return nil }
+func (m *mockModelInstance) Close() error           { return nil }
 
 // newTestOrchestrator creates an Orchestrator with mock models for unit testing.
 // It does not require real model files.
@@ -255,7 +256,7 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 		models:   map[string]*modelEntry{},
 	}
 
-	err := o.loadAdditionalModels()
+	err := o.loadAdditionalModels(map[string]int{})
 	assert.NoError(t, err)
 }
 

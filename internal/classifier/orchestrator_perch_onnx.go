@@ -8,13 +8,13 @@ import (
 )
 
 // loadPerch creates and registers a Perch v2 model instance from settings.
-func (o *Orchestrator) loadPerch() error {
+func (o *Orchestrator) loadPerch(threads int) error {
 	log := GetLogger()
 	cfg := PerchConfig{
 		ModelPath:       o.Settings.Perch.ModelPath,
 		LabelPath:       o.Settings.Perch.LabelPath,
 		ONNXRuntimePath: o.Settings.BirdNET.ONNXRuntimePath,
-		Threads:         0, // set by divideThreads after all models load
+		Threads:         threads,
 	}
 
 	perch, err := NewPerch(cfg)

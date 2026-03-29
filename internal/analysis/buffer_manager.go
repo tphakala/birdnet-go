@@ -309,128 +309,67 @@ func (m *BufferManager) RemoveAllMonitors() []error {
 	return removalErrors
 }
 
-// UpdateMonitors ensures monitors are running for all given sources.
-// It creates monitors for all loaded models (from m.bn.ModelInfos()),
-// falling back to the primary model for backward compatibility.
-func (m *BufferManager) UpdateMonitors(sources []string) error {
+// UpdateMonitors synchronizes the running monitors with the desired state from sourceModels.
+// It starts new monitors for models that are not already running for a given source,
+// stops monitors for sources/models that are no longer desired, and leaves
+// unchanged monitors running.
+func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) error {
 	// Performance metrics logging pattern
 	startTime := time.Now()
 	defer func() {
 		m.logger.Debug("Buffer monitors updated",
 			logger.Int64("duration_ms", time.Since(startTime).Milliseconds()),
-			logger.Int("source_count", len(sources)),
 			logger.String("component", "analysis.buffer"),
 			logger.String("operation", "update_monitors"))
 	}()
 
-	// Treat nil sources as empty slice to allow removing all monitors
-	if sources == nil {
-		sources = []string{}
+	desiredKeys := make(map[monitorKey]struct{})
+	for sourceID, configs := range sourceModels {
+		for _, config := range configs {
+			desiredKeys[monitorKey{sourceID: sourceID, modelID: config.modelID}] = struct{}{}
+		}
 	}
 
-	// Track existing source IDs that should be removed. We collect unique
-	// sourceIDs from the composite monitorKey entries.
-	toRemove := make(map[string]bool)
-	currentCount := 0
-	m.monitors.Range(func(key, _ any) bool {
-		if mk, ok := key.(monitorKey); ok {
-			toRemove[mk.sourceID] = true
+	// Stop monitors that are no longer in the desired state
+	var removedCount int
+	m.monitors.Range(func(key, value any) bool {
+		mk, ok := key.(monitorKey)
+		if !ok {
+			return true // Should not happen
 		}
-		currentCount++
+		if _, exists := desiredKeys[mk]; !exists {
+			if quitChan, ok := value.(chan struct{}); ok {
+				m.safeCloseChannel(quitChan, mk.sourceID)
+			}
+			m.monitors.Delete(key)
+			removedCount++
+		}
 		return true
 	})
 
-	// State transition logging pattern
-	m.logger.Info("Updating buffer monitors",
-		logger.Int("current_monitors", currentCount),
-		logger.Int("requested_sources", len(sources)),
-		logger.String("component", "analysis.buffer"))
-
+	// Add new monitors. AddMonitors has internal checks to prevent duplicates.
 	var addErrors []error
-	var removeErrors []error
-	addedCount := 0
-
-	// Build configs for all loaded models. Fallback to primary model
-	// for backward compatibility when no models are registered.
-	modelInfos := m.bn.ModelInfos()
-	if len(modelInfos) == 0 {
-		modelInfos = []classifier.ModelInfo{m.bn.ModelInfo}
-	}
-
-	// Add new monitors and mark existing ones as still needed
-	for _, source := range sources {
-		if source != "" {
-			wasExisting := toRemove[source]
-			delete(toRemove, source)
-
-			if !wasExisting {
-				configs := make([]monitorConfig, 0, len(modelInfos))
-				for i := range modelInfos {
-					configs = append(configs, buildMonitorConfig(source, &modelInfos[i]))
-				}
-				if err := m.AddMonitors(source, configs); err != nil {
-					wrappedErr := errors.New(err).
-						Component("analysis.buffer").
-						Category(errors.CategoryBuffer).
-						Context("operation", "update_monitors").
-						Context("failed_operation", "add_monitors").
-						Context("source", source).
-						Build()
-					addErrors = append(addErrors, wrappedErr)
-				} else {
-					addedCount++
-				}
-			}
-		}
-	}
-
-	// Remove monitors that are no longer needed
-	removedCount := 0
-	for source := range toRemove {
-		if err := m.RemoveMonitor(source); err != nil {
+	for sourceID, configs := range sourceModels {
+		if err := m.AddMonitors(sourceID, configs); err != nil {
 			wrappedErr := errors.New(err).
 				Component("analysis.buffer").
 				Category(errors.CategoryBuffer).
 				Context("operation", "update_monitors").
-				Context("failed_operation", "remove_monitor").
-				Context("source", source).
+				Context("failed_operation", "add_monitors").
+				Context("source", sourceID).
 				Build()
-			removeErrors = append(removeErrors, wrappedErr)
-		} else {
-			removedCount++
+			addErrors = append(addErrors, wrappedErr)
 		}
 	}
 
-	// State transition logging - final state
-	newCount := currentCount - removedCount + addedCount
-	m.logger.Info("Buffer monitor update completed",
-		logger.Int("monitors_added", addedCount),
-		logger.Int("monitors_removed", removedCount),
-		logger.Int("final_monitor_count", newCount),
-		logger.Int("add_errors", len(addErrors)),
-		logger.Int("remove_errors", len(removeErrors)),
-		logger.String("component", "analysis.buffer"))
-
-	// Return combined error if any operations failed
-	if len(addErrors) > 0 || len(removeErrors) > 0 {
-		// Create dedicated allErrors slice and use errors.Join to preserve individual errors
-		allErrors := make([]error, 0, len(addErrors)+len(removeErrors))
-		allErrors = append(allErrors, addErrors...)
-		allErrors = append(allErrors, removeErrors...)
-
-		// Join all errors to preserve individual error details
-		combinedErr := errors.Join(allErrors...)
-
-		// Wrap with structured metadata
+	// Final logging and error reporting
+	if len(addErrors) > 0 {
+		combinedErr := errors.Join(addErrors...)
 		return errors.New(combinedErr).
 			Component("analysis.buffer").
 			Category(errors.CategoryBuffer).
-			Context("operation", "update_monitors").
-			Context("total_errors", len(allErrors)).
-			Context("add_errors", len(addErrors)).
-			Context("remove_errors", len(removeErrors)).
-			Context("successful_adds", addedCount).
-			Context("successful_removes", removedCount).
+			Context("operation", "update_monitors_final").
+			Context("total_errors", len(addErrors)).
 			Build()
 	}
 

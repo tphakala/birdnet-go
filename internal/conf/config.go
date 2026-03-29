@@ -2102,6 +2102,7 @@ func (s *Settings) MigrateSourceModels() bool {
 }
 
 // knownModelIDs lists the config-level model identifiers recognized by the system.
+// SYNC: must match classifier.configToRegistryID keys in orchestrator.go.
 var knownModelIDs = map[string]bool{
 	"birdnet":  true,
 	"perch_v2": true,
@@ -2158,17 +2159,24 @@ func (s *Settings) ValidateModelConfig() []string {
 }
 
 // applyModelValidation runs ValidateModelConfig and either returns an error
-// for fatal issues or appends warnings to ValidationWarnings.
+// for fatal issues or appends warnings to ValidationWarnings. All fatal
+// errors are collected and returned together so the user can fix them in
+// one pass.
 func (s *Settings) applyModelValidation() error {
 	modelIssues := s.ValidateModelConfig()
+	var fatalErrors []string
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {
-			return errors.Newf("model configuration: %s", strings.TrimPrefix(issue, "error: ")).
-				Category(errors.CategoryValidation).
-				Build()
+			fatalErrors = append(fatalErrors, strings.TrimPrefix(issue, "error: "))
+		} else {
+			GetLogger().Warn("model configuration issue", logger.String("issue", issue))
+			s.ValidationWarnings = append(s.ValidationWarnings, issue)
 		}
-		GetLogger().Warn("model configuration issue", logger.String("issue", issue))
-		s.ValidationWarnings = append(s.ValidationWarnings, issue)
+	}
+	if len(fatalErrors) > 0 {
+		return errors.Newf("model configuration: %s", strings.Join(fatalErrors, "; ")).
+			Category(errors.CategoryValidation).
+			Build()
 	}
 	return nil
 }

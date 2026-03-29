@@ -382,7 +382,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 
 	// Update buffer monitors for the new sources.
 	if len(sourceIDs) > 0 {
-		if monErr := p.bufferMgr.UpdateMonitors(sourceIDs); monErr != nil {
+		sourceMonitorConfigs := p.buildMonitorConfigs(sourceModelMap, sourceIDs)
+		if monErr := p.bufferMgr.UpdateMonitors(sourceMonitorConfigs); monErr != nil {
 			log.Warn("buffer monitor update completed with errors",
 				logger.Error(monErr),
 				logger.Int("source_count", len(sourceIDs)),
@@ -468,16 +469,20 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	// Primary model fallback targets for sources with no model config.
 	primaryInfo := &p.bnAnalyzer.BirdNET().ModelInfo
-	primaryTargets := []ModelTarget{
-		{ModelID: primaryInfo.ID, SampleRate: primaryInfo.Spec.SampleRate},
-	}
+	primaryTargets := []classifier.ModelInfo{*primaryInfo}
 
 	for _, sid := range sourceIDs {
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
-		targets := resolveModelTargets(sourceModelMap[sid], allModelInfos)
-		if len(targets) == 0 {
-			targets = primaryTargets
+		modelInfos := resolveModelTargets(sourceModelMap[sid], allModelInfos)
+		if len(modelInfos) == 0 {
+			modelInfos = primaryTargets
+		}
+
+		// Convert to ModelTarget for the buffer consumer
+		targets := make([]ModelTarget, len(modelInfos))
+		for i := range modelInfos {
+			targets[i] = ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.SampleRate}
 		}
 
 		bc, bcErr := NewBufferConsumer(
@@ -598,7 +603,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerConsumersForSources(newSourceIDs, sourceModelMap, audioLevelChan, "reconfigure_diff")
 		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
 
-		if monErr := p.bufferMgr.UpdateMonitors(newSourceIDs); monErr != nil {
+		monitorMap := p.buildMonitorConfigs(sourceModelMap, newSourceIDs)
+		if monErr := p.bufferMgr.UpdateMonitors(monitorMap); monErr != nil {
 			log.Warn("buffer monitor update failed during reconfigure", logger.Error(monErr))
 		}
 	}
@@ -665,14 +671,62 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	return result
 }
 
+// buildMonitorConfigs builds the map[sourceID][]monitorConfig needed by
+// UpdateMonitors. It resolves per-source model IDs to full ModelInfo so that
+// monitorConfig gets the correct spec (sample rate + clip length).
+func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]string, sourceIDs []string) map[string][]monitorConfig {
+	// Build lookup of loaded models by registry ID.
+	modelInfoSlice := p.bnAnalyzer.BirdNET().ModelInfos()
+	loadedModels := make(map[string]classifier.ModelInfo, len(modelInfoSlice))
+	for i := range modelInfoSlice {
+		loadedModels[modelInfoSlice[i].ID] = modelInfoSlice[i]
+	}
+
+	primaryInfo := p.bnAnalyzer.BirdNET().ModelInfo
+	result := make(map[string][]monitorConfig, len(sourceIDs))
+
+	for _, sid := range sourceIDs {
+		// Resolve config-level model IDs to ModelInfo entries.
+		var infos []classifier.ModelInfo
+		for _, configID := range sourceModelMap[sid] {
+			registryID, known := classifier.ResolveConfigModelID(configID)
+			if !known {
+				continue
+			}
+			if info, loaded := loadedModels[registryID]; loaded {
+				infos = append(infos, info)
+			}
+		}
+		if len(infos) == 0 {
+			infos = []classifier.ModelInfo{primaryInfo}
+		}
+
+		configs := make([]monitorConfig, len(infos))
+		for i := range infos {
+			spec := infos[i].Spec
+			clipLenSec := int(spec.ClipLength.Seconds())
+			readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+			configs[i] = monitorConfig{
+				sourceID: sid,
+				modelID:  infos[i].ID,
+				spec:     spec,
+				readSize: readSize,
+			}
+		}
+		result[sid] = configs
+	}
+
+	return result
+}
+
 // resolveModelTargets converts config-level model IDs to ModelTarget entries
 // using the loaded model registry. Unknown or unloaded models are skipped
 // with a warning log.
-func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) []ModelTarget {
+func resolveModelTargets(configModelIDs []string, loadedModels map[string]classifier.ModelInfo) []classifier.ModelInfo {
 	if len(configModelIDs) == 0 {
 		return nil
 	}
-	targets := make([]ModelTarget, 0, len(configModelIDs))
+	targets := make([]classifier.ModelInfo, 0, len(configModelIDs))
 	for _, configID := range configModelIDs {
 		registryID, known := classifier.ResolveConfigModelID(configID)
 		if !known {
@@ -687,10 +741,7 @@ func resolveModelTargets(configModelIDs []string, loadedModels map[string]classi
 				logger.String("registry_id", registryID))
 			continue
 		}
-		targets = append(targets, ModelTarget{
-			ModelID:    info.ID,
-			SampleRate: info.Spec.SampleRate,
-		})
+		targets = append(targets, info)
 	}
 	return targets
 }

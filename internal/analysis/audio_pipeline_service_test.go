@@ -58,8 +58,8 @@ func TestResolveModelTargets_SingleModel(t *testing.T) {
 
 	targets := resolveModelTargets([]string{"birdnet"}, loaded)
 	require.Len(t, targets, 1)
-	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", targets[0].ModelID)
-	assert.Equal(t, 48000, targets[0].SampleRate)
+	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", targets[0].ID)
+	assert.Equal(t, 48000, targets[0].Spec.SampleRate)
 }
 
 func TestResolveModelTargets_MultiModel(t *testing.T) {
@@ -82,7 +82,7 @@ func TestResolveModelTargets_MultiModel(t *testing.T) {
 	// Collect results into a map for order-independent assertion.
 	targetMap := make(map[string]int, len(targets))
 	for _, tgt := range targets {
-		targetMap[tgt.ModelID] = tgt.SampleRate
+		targetMap[tgt.ID] = tgt.Spec.SampleRate
 	}
 	assert.Equal(t, 48000, targetMap["BirdNET_GLOBAL_6K_V2.4"])
 	assert.Equal(t, 32000, targetMap["Perch_V2"])
@@ -116,5 +116,5 @@ func TestResolveModelTargets_KnownButNotLoaded(t *testing.T) {
 
 	targets := resolveModelTargets([]string{"birdnet", "perch_v2"}, loaded)
 	require.Len(t, targets, 1, "only birdnet should resolve, perch_v2 is not loaded")
-	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", targets[0].ModelID)
+	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", targets[0].ID)
 }
