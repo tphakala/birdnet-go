@@ -68,18 +68,9 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	}
 
 	// Pre-compute thread allocation so model constructors receive their share.
+	// BirdNET already uses settings.BirdNET.Threads at construction; additional
+	// models get their allocated count passed to their constructor.
 	threadAlloc := o.computeThreadAllocation(settings, bn.ModelInfo.ID)
-
-	// Set the primary model's thread allocation.
-	if primaryThreads, ok := threadAlloc[bn.ModelInfo.ID]; ok {
-		if err := bn.SetThreads(primaryThreads); err != nil {
-			// Log a warning, but don't fail startup. The model will run with the total thread count.
-			GetLogger().Warn("failed to set primary model thread allocation",
-				logger.String("model_id", bn.ModelInfo.ID),
-				logger.Int("threads", primaryThreads),
-				logger.Error(err))
-		}
-	}
 
 	// Load additional models from configuration
 	if err := o.loadAdditionalModels(threadAlloc); err != nil {
