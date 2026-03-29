@@ -8,12 +8,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// defaultPoolSize is the size used when creating the shared BytePool and
-// Float32Pool. 4096 bytes / 2048 float32 samples covers a typical audio frame.
-const (
-	defaultBytePoolSize    = 4096
-	defaultFloat32PoolSize = 2048
-)
+// defaultBytePoolSize is the size used when creating the shared BytePool.
+// 4096 bytes covers a typical audio frame.
+const defaultBytePoolSize = 4096
 
 // bufferKey is the composite key used to look up analysis buffers. Each
 // (sourceID, modelID) pair addresses a distinct AnalysisBuffer, allowing
@@ -33,25 +30,26 @@ type Manager struct {
 	analysisBuffers map[bufferKey]*AnalysisBuffer
 	captureBuffers  map[string]*CaptureBuffer
 	bytePool        *BytePool
-	float32Pool     *Float32Pool
+	float32Pools    map[int]*Float32Pool
+	float32PoolMu   sync.Mutex // protects float32Pools; separate from mu to avoid contention
 	mu              sync.RWMutex
 	logger          logger.Logger
 }
 
-// NewManager creates a Manager with shared BytePool and Float32Pool
-// pre-allocated at default sizes. The provided logger is forwarded to each
+// NewManager creates a Manager with a shared BytePool pre-allocated at the
+// default size and an empty Float32Pool map that lazily creates pools on first
+// request for each size. The provided logger is forwarded to each
 // AnalysisBuffer created by AllocateAnalysis.
 func NewManager(log logger.Logger) *Manager {
 	// Errors from the pool constructors are only possible when size <= 0, which
 	// cannot happen with compile-time positive constants.
 	bytePool, _ := NewBytePool(defaultBytePoolSize)
-	float32Pool, _ := NewFloat32Pool(defaultFloat32PoolSize)
 
 	return &Manager{
 		analysisBuffers: make(map[bufferKey]*AnalysisBuffer),
 		captureBuffers:  make(map[string]*CaptureBuffer),
 		bytePool:        bytePool,
-		float32Pool:     float32Pool,
+		float32Pools:    make(map[int]*Float32Pool),
 		logger:          log,
 	}
 }
@@ -162,7 +160,16 @@ func (m *Manager) BytePool() *BytePool {
 	return m.bytePool
 }
 
-// Float32Pool returns the shared Float32Pool owned by this Manager.
-func (m *Manager) Float32Pool() *Float32Pool {
-	return m.float32Pool
+// Float32Pool returns a pool for the given buffer size, creating one lazily if
+// needed. Thread-safe via a dedicated mutex separate from the Manager's main
+// RWMutex.
+func (m *Manager) Float32Pool(size int) *Float32Pool {
+	m.float32PoolMu.Lock()
+	defer m.float32PoolMu.Unlock()
+	if pool, ok := m.float32Pools[size]; ok {
+		return pool
+	}
+	pool, _ := NewFloat32Pool(size) //nolint:errcheck // size > 0 guaranteed by callers
+	m.float32Pools[size] = pool
+	return pool
 }
