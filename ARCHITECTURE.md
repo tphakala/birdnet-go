@@ -178,20 +178,37 @@ internal/classifier/
 └── queue.go                # Analysis queue management
 ```
 
+**Inference Backend (`internal/inference/`):**
+
+The inference package defines `Classifier` and `RangeFilter` interfaces with backend-specific implementations in sub-packages:
+
+```
+internal/inference/
+├── backend.go              # Classifier and RangeFilter interfaces
+├── tflite/                 # TFLite backend (via go-tflite)
+│   ├── classifier.go       # Species classification
+│   ├── rangefilter.go      # Geographic range filtering
+│   └── threads.go          # Thread count auto-detection
+└── onnx/                   # ONNX backend (build tag: onnx)
+    ├── classifier.go       # ONNX species classification
+    └── rangefilter.go      # ONNX range filtering
+```
+
 **TensorFlow Lite Integration via go-tflite:**
 
 BirdNET-Go uses the `github.com/tphakala/go-tflite` library for TensorFlow Lite integration:
 
 ```go
-// internal/classifier/birdnet.go
+// internal/inference/tflite/classifier.go
 import (
-    tflite "github.com/tphakala/go-tflite"
+    tflitelib "github.com/tphakala/go-tflite"
     "github.com/tphakala/go-tflite/delegates/xnnpack"
 )
 
+// The BirdNET struct holds inference.Classifier and inference.RangeFilter interfaces
 type BirdNET struct {
-    AnalysisInterpreter *tflite.Interpreter  // Species identification model
-    RangeInterpreter    *tflite.Interpreter  // Geographic filtering model
+    classifier       inference.Classifier   // Species identification backend
+    rangeFilter      inference.RangeFilter  // Geographic filtering backend
     // ...
 }
 ```
