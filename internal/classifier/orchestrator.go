@@ -74,11 +74,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 
 	// Load additional models from configuration
 	if err := o.loadAdditionalModels(threadAlloc); err != nil {
-		// Clean up the primary model before returning
-		if closeErr := bn.Close(); closeErr != nil {
-			GetLogger().Warn("failed to close primary model during cleanup",
-				logger.Error(closeErr))
-		}
+		// Clean up all models registered so far (primary + any partially loaded)
+		o.Delete()
 		return nil, err
 	}
 
@@ -290,14 +287,16 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 // that will be loaded. This runs before loading additional models so
 // constructors receive their allocated thread count.
 func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings, primaryID string) map[string]int {
-	// Collect all model IDs that will be loaded.
-	var modelIDs []string
-	modelIDs = append(modelIDs, primaryID)
+	// Collect unique model IDs that will be loaded. Deduplicates
+	// case variants like ["perch_v2", "PERCH_V2"] that resolve to the same ID.
+	seen := map[string]bool{primaryID: true}
+	modelIDs := []string{primaryID}
 	for _, configID := range settings.Models.Enabled {
 		registryID, known := ResolveConfigModelID(configID)
-		if !known || registryID == primaryID {
+		if !known || seen[registryID] {
 			continue
 		}
+		seen[registryID] = true
 		modelIDs = append(modelIDs, registryID)
 	}
 

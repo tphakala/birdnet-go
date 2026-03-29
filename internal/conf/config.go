@@ -2116,7 +2116,7 @@ func (s *Settings) ValidateModelConfig() []string {
 
 	enabledSet := make(map[string]bool, len(s.Models.Enabled))
 	for _, id := range s.Models.Enabled {
-		enabledSet[id] = true
+		enabledSet[strings.ToLower(id)] = true
 	}
 
 	for _, id := range s.Models.Enabled {
@@ -2145,7 +2145,7 @@ func (s *Settings) ValidateModelConfig() []string {
 	for i := range s.Realtime.Audio.Sources {
 		src := &s.Realtime.Audio.Sources[i]
 		for _, modelID := range src.Models {
-			if !enabledSet[modelID] {
+			if !enabledSet[strings.ToLower(modelID)] {
 				issues = append(issues, "warning: source \""+src.Name+"\" references model \""+modelID+"\" not in models.enabled")
 			}
 		}
@@ -2153,7 +2153,7 @@ func (s *Settings) ValidateModelConfig() []string {
 	for i := range s.Realtime.RTSP.Streams {
 		stream := &s.Realtime.RTSP.Streams[i]
 		for _, modelID := range stream.Models {
-			if !enabledSet[modelID] {
+			if !enabledSet[strings.ToLower(modelID)] {
 				issues = append(issues, "warning: stream \""+stream.Name+"\" references model \""+modelID+"\" not in models.enabled")
 			}
 		}
