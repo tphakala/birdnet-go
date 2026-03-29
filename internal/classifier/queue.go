@@ -15,6 +15,7 @@ type Results struct {
 	ElapsedTime     time.Duration         // Time taken for analysis
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
+	ModelID         string                // identifies which model produced these results
 }
 
 // Default buffer size for the results queue
@@ -38,6 +39,7 @@ func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, 
 		ElapsedTime:     r.ElapsedTime,
 		ClipName:        r.ClipName,
 		Source:          r.Source,
+		ModelID:         r.ModelID,
 	}
 
 	// Deep copy PCMdata
