@@ -331,7 +331,7 @@ Foundation changes, no behavior change for single-model users.
 
 Scope:
 - `buffer.Manager`: composite keys, multi-model allocation/deallocation
-- `buffer.Manager`: per-size Float32Pool map with sync.Once lazy creation
+- `buffer.Manager`: per-size Float32Pool map with sync.Mutex lazy creation
 - `BufferConsumer`: model targets, fan-out Write(), resampler integration
 - `BufferManager` (analysis): per-(source, model) monitors with model-aware config
 - `effectiveOverlap()` scaling function with PCM byte alignment
