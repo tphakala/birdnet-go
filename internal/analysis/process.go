@@ -4,6 +4,7 @@
 package analysis
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -165,7 +166,7 @@ func ProcessData(bn *classifier.BirdNET, data []byte, startTime, audioCapturedAt
 
 	// run BirdNET inference
 	inferenceStart := time.Now()
-	results, err := bn.Predict(sampleData)
+	results, err := bn.Predict(context.Background(), sampleData)
 	inferenceDuration := time.Since(inferenceStart)
 
 	// Return float32 buffer to pool after prediction

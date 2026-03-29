@@ -1026,6 +1026,49 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	return 0.0
 }
 
+// Spec returns the audio requirements for this BirdNET model.
+// Implements ModelInstance.
+func (bn *BirdNET) Spec() ModelSpec {
+	return bn.ModelInfo.Spec
+}
+
+// ModelID returns the unique model identifier.
+// Implements ModelInstance.
+func (bn *BirdNET) ModelID() string {
+	return bn.ModelInfo.ID
+}
+
+// ModelName returns the human-readable model name.
+// Implements ModelInstance.
+func (bn *BirdNET) ModelName() string {
+	return bn.ModelInfo.Name
+}
+
+// ModelVersion returns the model version string.
+// Implements ModelInstance.
+func (bn *BirdNET) ModelVersion() string {
+	return modelVersion
+}
+
+// NumSpecies returns the number of species this model can classify.
+// Implements ModelInstance.
+func (bn *BirdNET) NumSpecies() int {
+	return len(bn.Settings.BirdNET.Labels)
+}
+
+// Labels returns the full list of species labels for this model.
+// Implements ModelInstance.
+func (bn *BirdNET) Labels() []string {
+	return bn.Settings.BirdNET.Labels
+}
+
+// Close releases resources held by the BirdNET model.
+// Implements ModelInstance (io.Closer compatible).
+func (bn *BirdNET) Close() error {
+	bn.Delete()
+	return nil
+}
+
 // EnrichResultWithTaxonomy adds taxonomy information to a detection result
 // Returns scientific name, common name, and eBird code if available
 func (bn *BirdNET) EnrichResultWithTaxonomy(speciesLabel string) (scientific, common, code string) {

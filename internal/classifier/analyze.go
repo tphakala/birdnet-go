@@ -21,13 +21,8 @@ type Filter struct {
 type DetectionsMap map[string][]datastore.Results
 
 // Predict performs inference on a given sample using the classifier backend.
-// It processes the sample to predict species and their confidence levels.
-func (bn *BirdNET) Predict(sample [][]float32) ([]datastore.Results, error) {
-	return bn.PredictWithContext(context.Background(), sample)
-}
-
-// PredictWithContext performs inference with tracing support
-func (bn *BirdNET) PredictWithContext(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
+// Implements ModelInstance.
+func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	span, _ := StartSpan(ctx, "birdnet.predict", "Species prediction")
 	defer span.Finish()
 

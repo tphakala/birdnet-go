@@ -8,9 +8,7 @@ import (
 )
 
 // Compile-time check that BirdNET implements ModelInstance.
-// This will fail to compile until BirdNET gets all the methods.
-// Uncomment after Task 3:
-// var _ ModelInstance = (*BirdNET)(nil)
+var _ ModelInstance = (*BirdNET)(nil)
 
 func TestModelSpecDefaults(t *testing.T) {
 	t.Parallel()
