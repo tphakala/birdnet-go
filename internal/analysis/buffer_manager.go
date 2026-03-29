@@ -463,10 +463,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 				startTime := time.Now().Add(-beginTimeOffset)
 
-				// For Phase 3e, ProcessData signature does NOT change — pass
-				// cfg.sourceID only. The cfg.modelID is available but not passed
-				// to ProcessData yet (that's PR 2 / Phase 3f).
-				if processErr := ProcessData(m.bn, data, startTime, audioCapturedAt, cfg.sourceID); processErr != nil {
+				if processErr := ProcessData(m.bn, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
 					m.logger.Error("error processing data",
 						logger.String("source_id", cfg.sourceID),
 						logger.String("model_id", cfg.modelID),

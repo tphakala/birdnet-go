@@ -51,47 +51,68 @@ type bufferOverrunTracker struct {
 	bufferLength time.Duration
 }
 
-// overrunTracker is the package-level tracker instance.
-var overrunTracker bufferOverrunTracker
+// overrunTrackers maps "source:modelID" to per-model overrun trackers.
+var (
+	overrunTrackers   map[string]*bufferOverrunTracker
+	overrunTrackersMu sync.Mutex
+)
+
+func init() {
+	overrunTrackers = make(map[string]*bufferOverrunTracker)
+}
+
+// getOverrunTracker returns the overrun tracker for the given source and model,
+// creating one if it doesn't exist yet.
+func getOverrunTracker(source, modelID string) *bufferOverrunTracker {
+	key := source + ":" + modelID
+	overrunTrackersMu.Lock()
+	defer overrunTrackersMu.Unlock()
+	if t, ok := overrunTrackers[key]; ok {
+		return t
+	}
+	t := &bufferOverrunTracker{}
+	overrunTrackers[key] = t
+	return t
+}
 
 // lastQueueOverflowReport tracks the last time a queue overflow was reported to Sentry.
 var lastQueueOverflowReport atomic.Int64
 
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
 // when the tumbling window expires with enough accumulated overruns.
-func recordBufferOverrun(elapsed, bufferLen time.Duration) {
-	overrunTracker.mu.Lock()
-	defer overrunTracker.mu.Unlock()
+func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.Duration) {
+	tracker.mu.Lock()
+	defer tracker.mu.Unlock()
 
 	now := time.Now()
 
 	// Initialize window on first overrun
-	if overrunTracker.windowStart.IsZero() {
-		overrunTracker.windowStart = now
+	if tracker.windowStart.IsZero() {
+		tracker.windowStart = now
 	}
 
 	// Check if window has expired
-	if now.Sub(overrunTracker.windowStart) >= bufferOverrunReportCooldown {
+	if now.Sub(tracker.windowStart) >= bufferOverrunReportCooldown {
 		// Window expired — report if threshold met
-		if overrunTracker.overrunCount >= bufferOverrunMinCount {
+		if tracker.overrunCount >= bufferOverrunMinCount {
 			reportBufferOverruns(
-				overrunTracker.overrunCount,
-				overrunTracker.maxElapsed,
-				overrunTracker.bufferLength,
-				now.Sub(overrunTracker.windowStart),
+				tracker.overrunCount,
+				tracker.maxElapsed,
+				tracker.bufferLength,
+				now.Sub(tracker.windowStart),
 			)
 		}
 		// Reset window regardless of whether we reported
-		overrunTracker.overrunCount = 0
-		overrunTracker.maxElapsed = 0
-		overrunTracker.windowStart = now
+		tracker.overrunCount = 0
+		tracker.maxElapsed = 0
+		tracker.windowStart = now
 	}
 
 	// Record this overrun
-	overrunTracker.overrunCount++
-	if elapsed > overrunTracker.maxElapsed {
-		overrunTracker.maxElapsed = elapsed
-		overrunTracker.bufferLength = bufferLen
+	tracker.overrunCount++
+	if elapsed > tracker.maxElapsed {
+		tracker.maxElapsed = elapsed
+		tracker.bufferLength = bufferLen
 	}
 }
 
@@ -148,7 +169,7 @@ func ReturnFloat32Buffer(buffer []float32) {
 
 // ProcessData processes the given audio data to detect bird species, logs the detected species
 // and optionally saves the audio clip if a bird species is detected above the configured threshold.
-func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source string) error {
+func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
@@ -237,7 +258,7 @@ func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCaptu
 			logger.Duration("elapsed_time", elapsedTime),
 			logger.Duration("buffer_length", effectiveBufferDuration),
 			logger.String("source", source))
-		recordBufferOverrun(elapsedTime, effectiveBufferDuration)
+		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
 
 		// Record Prometheus metrics for observability
 		processMetricsMutex.RLock()
@@ -266,6 +287,7 @@ func ProcessData(bn *classifier.Orchestrator, data []byte, startTime, audioCaptu
 		PCMdata:         data,
 		Results:         results,
 		Source:          audioSource,
+		ModelID:         modelID,
 	}
 
 	// Send the results to the queue
