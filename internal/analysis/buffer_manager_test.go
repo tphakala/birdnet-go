@@ -65,7 +65,7 @@ func TestMonitorKey_UsableAsMapKey(t *testing.T) {
 	assert.Equal(t, 1, m[k3], "same key should retrieve same value")
 }
 
-func TestBuildPrimaryMonitorConfig(t *testing.T) {
+func TestBuildMonitorConfig(t *testing.T) {
 	t.Parallel()
 
 	info := &classifier.ModelInfo{
@@ -74,7 +74,7 @@ func TestBuildPrimaryMonitorConfig(t *testing.T) {
 		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 	}
 
-	cfg := buildPrimaryMonitorConfig("mic1", info)
+	cfg := buildMonitorConfig("mic1", info)
 
 	assert.Equal(t, "mic1", cfg.sourceID)
 	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", cfg.modelID)
@@ -87,7 +87,7 @@ func TestBuildPrimaryMonitorConfig(t *testing.T) {
 	assert.Equal(t, expectedReadSize, cfg.readSize)
 }
 
-func TestBuildPrimaryMonitorConfig_PerchV2(t *testing.T) {
+func TestBuildMonitorConfig_PerchV2(t *testing.T) {
 	t.Parallel()
 
 	info := &classifier.ModelInfo{
@@ -96,7 +96,7 @@ func TestBuildPrimaryMonitorConfig_PerchV2(t *testing.T) {
 		Spec: classifier.ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
 	}
 
-	cfg := buildPrimaryMonitorConfig("stream1", info)
+	cfg := buildMonitorConfig("stream1", info)
 
 	assert.Equal(t, "stream1", cfg.sourceID)
 	assert.Equal(t, "Perch_V2", cfg.modelID)

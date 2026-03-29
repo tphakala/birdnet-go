@@ -117,8 +117,8 @@ func MustNewBufferManager(bn *classifier.Orchestrator, bufMgr *buffer.Manager, q
 	return bm
 }
 
-// AddMonitor safely adds a single analysis buffer monitor for a source using
-// the primary model's configuration. This is a convenience wrapper around
+// AddMonitor safely adds analysis buffer monitors for a source using all
+// loaded models' configurations. This is a convenience wrapper around
 // AddMonitors for callers that don't have model details (e.g., watchdog reset).
 func (m *BufferManager) AddMonitor(source string) error {
 	// Validate source parameter
@@ -142,9 +142,21 @@ func (m *BufferManager) AddMonitor(source string) error {
 			Build()
 	}
 
-	// Build a monitorConfig from the primary model info.
-	cfg := buildPrimaryMonitorConfig(source, &m.bn.ModelInfo)
-	return m.AddMonitors(source, []monitorConfig{cfg})
+	// Build monitorConfigs for all loaded models.
+	allInfos := m.bn.ModelInfos()
+	configs := make([]monitorConfig, 0, len(allInfos))
+	for i := range allInfos {
+		configs = append(configs, buildMonitorConfig(source, &allInfos[i]))
+	}
+
+	// Fallback to primary model for backward compatibility when no
+	// models are registered via the orchestrator's model map.
+	if len(configs) == 0 {
+		cfg := buildMonitorConfig(source, &m.bn.ModelInfo)
+		configs = []monitorConfig{cfg}
+	}
+
+	return m.AddMonitors(source, configs)
 }
 
 // AddMonitors creates one analysis buffer monitor goroutine per monitorConfig
@@ -298,8 +310,8 @@ func (m *BufferManager) RemoveAllMonitors() []error {
 }
 
 // UpdateMonitors ensures monitors are running for all given sources.
-// For Phase 3e it creates monitors for the primary model only (from m.bn.ModelInfo).
-// Future phases will accept model lists per source.
+// It creates monitors for all loaded models (from m.bn.ModelInfos()),
+// falling back to the primary model for backward compatibility.
 func (m *BufferManager) UpdateMonitors(sources []string) error {
 	// Performance metrics logging pattern
 	startTime := time.Now()
@@ -338,8 +350,12 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 	var removeErrors []error
 	addedCount := 0
 
-	// Build the primary model config for each source.
-	primaryModelInfo := &m.bn.ModelInfo
+	// Build configs for all loaded models. Fallback to primary model
+	// for backward compatibility when no models are registered.
+	modelInfos := m.bn.ModelInfos()
+	if len(modelInfos) == 0 {
+		modelInfos = []classifier.ModelInfo{m.bn.ModelInfo}
+	}
 
 	// Add new monitors and mark existing ones as still needed
 	for _, source := range sources {
@@ -348,8 +364,11 @@ func (m *BufferManager) UpdateMonitors(sources []string) error {
 			delete(toRemove, source)
 
 			if !wasExisting {
-				cfg := buildPrimaryMonitorConfig(source, primaryModelInfo)
-				if err := m.AddMonitors(source, []monitorConfig{cfg}); err != nil {
+				configs := make([]monitorConfig, 0, len(modelInfos))
+				for i := range modelInfos {
+					configs = append(configs, buildMonitorConfig(source, &modelInfos[i]))
+				}
+				if err := m.AddMonitors(source, configs); err != nil {
 					wrappedErr := errors.New(err).
 						Component("analysis.buffer").
 						Category(errors.CategoryBuffer).
@@ -475,11 +494,11 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 	}
 }
 
-// buildPrimaryMonitorConfig builds a monitorConfig for the primary model.
-// This is used by AddMonitor and UpdateMonitors to create a config from ModelInfo.
+// buildMonitorConfig builds a monitorConfig from a ModelInfo.
+// This is used by AddMonitor and UpdateMonitors to create a config for any model.
 // Note: overlapSize is left at zero because it is only needed at buffer
 // allocation time (in audio_pipeline_service.go), not by the monitor goroutine.
-func buildPrimaryMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
+func buildMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
 	clipLenSec := int(spec.ClipLength.Seconds())
 	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
