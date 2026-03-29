@@ -1,5 +1,15 @@
 // float32_pool.go provides a thread-safe pool of float32 slices to reduce
 // allocations during audio conversion in the BirdNET analysis pipeline.
+//
+// NOTE: This pool duplicates functionality that also exists in
+// buffer.Manager (internal/audiocore/buffer), which maintains a per-size
+// pool map for its consumers. The duplication exists because ProcessData
+// operates at a different layer than BufferConsumer and does not have
+// access to the buffer.Manager instance. Consolidating the two pools
+// would require threading the Manager (or a shared pool interface)
+// through the call chain from BufferManager → analysisBufferMonitor →
+// ProcessData → convertToFloat32WithPool, which is deferred to a future
+// refactor when the analysis pipeline is restructured.
 package analysis
 
 import (
