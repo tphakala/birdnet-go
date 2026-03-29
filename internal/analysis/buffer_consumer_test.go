@@ -393,6 +393,55 @@ func TestBufferConsumer_FanOut_SingleModel_BackwardsCompat(t *testing.T) {
 	assert.NoError(t, consumer.Write(frame))
 }
 
+func TestBufferConsumer_SingleModel_FullPipeline(t *testing.T) {
+	t.Parallel()
+	mgr := buffer.NewManager(logger.Global().Module("test"))
+
+	const (
+		sampleRate     = 48000
+		clipLength     = 3 // seconds
+		bytesPerSample = 2
+		capacity       = sampleRate * clipLength * bytesPerSample // 288000
+	)
+
+	userOverlap := 1 * time.Second
+	baseClip := 3 * time.Second
+	modelClip := 3 * time.Second
+	scaled := effectiveOverlap(userOverlap, baseClip, modelClip)
+	oBytes := overlapBytes(scaled, sampleRate, bytesPerSample)
+
+	readSize := capacity - oBytes
+
+	require.NoError(t, mgr.AllocateAnalysis("mic1", "birdnet-v2.4", capacity, oBytes, readSize))
+	require.NoError(t, mgr.AllocateCapture("mic1", 120, sampleRate, bytesPerSample))
+
+	targets := []ModelTarget{{ModelID: "birdnet-v2.4", SampleRate: sampleRate}}
+	consumer, err := NewBufferConsumer("mic1", mgr, sampleRate, 16, 1, targets)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, consumer.Close()) })
+
+	// Write enough data to fill the analysis buffer.
+	frameSize := 4096
+	framesNeeded := capacity / frameSize
+	for range framesNeeded + 1 {
+		frame := audiocore.AudioFrame{
+			SourceID:   "mic1",
+			Data:       make([]byte, frameSize),
+			SampleRate: sampleRate,
+			BitDepth:   16,
+			Channels:   1,
+		}
+		require.NoError(t, consumer.Write(frame))
+	}
+
+	// Read from the analysis buffer — should return data.
+	ab, err := mgr.AnalysisBuffer("mic1", "birdnet-v2.4")
+	require.NoError(t, err)
+	data, err := ab.Read()
+	require.NoError(t, err)
+	assert.NotNil(t, data, "should have enough data for a full read")
+}
+
 func TestBufferConsumer_Close_ClosesResamplers(t *testing.T) {
 	t.Parallel()
 
