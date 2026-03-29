@@ -237,6 +237,30 @@ func (o *Orchestrator) Debug(format string, v ...any) {
 	o.primary.Debug(format, v...)
 }
 
+// ModelInfos returns ModelInfo for all registered models. Thread-safe.
+// Used by the pipeline to build ModelTarget lists for buffer fan-out.
+func (o *Orchestrator) ModelInfos() []ModelInfo {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+
+	infos := make([]ModelInfo, 0, len(o.models))
+	for id, entry := range o.models {
+		if entry.instance == nil {
+			continue
+		}
+		info, exists := supportedModels[id]
+		if !exists {
+			info = ModelInfo{
+				ID:   entry.instance.ModelID(),
+				Name: entry.instance.ModelName(),
+				Spec: entry.instance.Spec(),
+			}
+		}
+		infos = append(infos, info)
+	}
+	return infos
+}
+
 // configToRegistryID maps user-facing config model IDs (lowercase) to internal
 // registry IDs used by supportedModels and the models map.
 var configToRegistryID = map[string]string{

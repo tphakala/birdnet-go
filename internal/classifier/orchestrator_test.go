@@ -222,3 +222,40 @@ func TestOrchestrator_PredictModel_NoCrossModelBlocking(t *testing.T) {
 		"fast model should finish before slow model; fast=%v slow=%v",
 		fastFinish, slowFinish)
 }
+
+func TestOrchestrator_ModelInfos(t *testing.T) {
+	t.Parallel()
+
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			"BirdNET_GLOBAL_6K_V2.4": {instance: &mockModelInstance{id: "BirdNET_GLOBAL_6K_V2.4"}},
+			"Perch_V2":               {instance: &mockModelInstance{id: "Perch_V2"}},
+		},
+	}
+
+	infos := o.ModelInfos()
+
+	assert.Len(t, infos, 2)
+	ids := make(map[string]bool)
+	for _, info := range infos {
+		ids[info.ID] = true
+	}
+	assert.True(t, ids["BirdNET_GLOBAL_6K_V2.4"])
+	assert.True(t, ids["Perch_V2"])
+}
+
+func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
+	t.Parallel()
+
+	o := &Orchestrator{
+		models: map[string]*modelEntry{
+			"BirdNET_GLOBAL_6K_V2.4": {instance: &mockModelInstance{id: "BirdNET_GLOBAL_6K_V2.4"}},
+			"Perch_V2":               {instance: nil}, // closed/deleted
+		},
+	}
+
+	infos := o.ModelInfos()
+
+	assert.Len(t, infos, 1)
+	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", infos[0].ID)
+}
