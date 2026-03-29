@@ -5,6 +5,7 @@ package classifier
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 
@@ -234,4 +235,19 @@ func (o *Orchestrator) Delete() {
 // Debug prints debug messages if debug mode is enabled.
 func (o *Orchestrator) Debug(format string, v ...any) {
 	o.primary.Debug(format, v...)
+}
+
+// configToRegistryID maps user-facing config model IDs (lowercase) to internal
+// registry IDs used by supportedModels and the models map.
+var configToRegistryID = map[string]string{
+	"birdnet":  "BirdNET_GLOBAL_6K_V2.4",
+	"perch_v2": "Perch_V2",
+}
+
+// ResolveConfigModelID maps a user-facing config model ID to the internal
+// registry ID. Returns the registry ID and true if found, or empty and false
+// if the config ID is unknown. Case-insensitive.
+func ResolveConfigModelID(configID string) (string, bool) {
+	id, ok := configToRegistryID[strings.ToLower(configID)]
+	return id, ok
 }
