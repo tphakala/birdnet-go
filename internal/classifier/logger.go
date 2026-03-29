@@ -1,4 +1,4 @@
-// Package birdnet provides logging for the BirdNET package.
+// Package classifier provides logging for the classifier package.
 package classifier
 
 import (

@@ -1,4 +1,4 @@
-// Package birdnet - tracing and telemetry helpers
+// Package classifier - tracing and telemetry helpers
 package classifier
 
 import (
