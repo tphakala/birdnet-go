@@ -79,6 +79,15 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.rangefilter.model", "latest")
 	viper.SetDefault("birdnet.rangefilter.threshold", 0.01)
 
+	// Perch model configuration (disabled by default)
+	viper.SetDefault("perch.enabled", false)
+	viper.SetDefault("perch.modelpath", "")
+	viper.SetDefault("perch.labelpath", "")
+	viper.SetDefault("perch.threshold", 0.5)
+
+	// Global model enablement (BirdNET only by default)
+	viper.SetDefault("models.enabled", []string{"birdnet"})
+
 	// Realtime configuration
 	viper.SetDefault("realtime.interval", 15)
 	viper.SetDefault("realtime.processingtime", false)

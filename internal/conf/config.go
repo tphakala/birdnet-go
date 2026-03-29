@@ -1111,6 +1111,19 @@ type RangeFilterSettings struct {
 	LastUpdated time.Time `yaml:"-" json:"lastUpdated"`       // last time the species list was updated, runtime value
 }
 
+// PerchConfig holds configuration for the Google Perch v2 model.
+type PerchConfig struct {
+	Enabled   bool    `yaml:"enabled" json:"enabled"`                         // true to load Perch at startup
+	ModelPath string  `yaml:"modelpath,omitempty" json:"modelPath,omitempty"` // path to Perch v2 ONNX model file
+	LabelPath string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"` // path to Perch v2 label CSV file
+	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
+}
+
+// ModelsConfig holds global model enablement settings.
+type ModelsConfig struct {
+	Enabled []string `yaml:"enabled" json:"enabled"` // list of model IDs to load (e.g., "birdnet", "perch_v2")
+}
+
 // BasicAuth holds settings for the password authentication
 type BasicAuth struct {
 	Enabled        bool          `yaml:"enabled" json:"enabled"`               // true to enable password authentication
@@ -1426,6 +1439,8 @@ type Settings struct {
 	} `yaml:"main" json:"main"`
 
 	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
+	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
+	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins
 
