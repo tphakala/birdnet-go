@@ -5,6 +5,8 @@ package classifier
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -77,6 +79,20 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 				logger.Error(closeErr))
 		}
 		return nil, err
+	}
+
+	// Divide threads among all loaded models
+	if len(o.models) > 1 {
+		modelIDs := slices.Collect(maps.Keys(o.models))
+		threadAlloc := divideThreads(settings.BirdNET.Threads, modelIDs, bn.ModelInfo.ID)
+		GetLogger().Info("Thread allocation for multi-model",
+			logger.Int("total_threads", settings.BirdNET.Threads),
+			logger.Int("model_count", len(o.models)))
+		for id, threads := range threadAlloc {
+			GetLogger().Debug("Model thread allocation",
+				logger.String("model_id", id),
+				logger.Int("threads", threads))
+		}
 	}
 
 	return o, nil

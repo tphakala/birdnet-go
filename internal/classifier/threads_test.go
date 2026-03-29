@@ -33,3 +33,20 @@ func TestDivideThreads_SingleModel(t *testing.T) {
 	result := divideThreads(4, []string{"only"}, "only")
 	assert.Equal(t, 4, result["only"])
 }
+
+func TestDivideThreads_TwoModels_RealIDs(t *testing.T) {
+	t.Parallel()
+
+	result := divideThreads(4, []string{"BirdNET_GLOBAL_6K_V2.4", "Perch_V2"}, "BirdNET_GLOBAL_6K_V2.4")
+
+	assert.Equal(t, 2, result["BirdNET_GLOBAL_6K_V2.4"], "4/2 = 2 base threads each, 0 remainder")
+	assert.Equal(t, 2, result["Perch_V2"], "4/2 = 2 base threads each")
+}
+
+func TestDivideThreads_SingleModel_RealID(t *testing.T) {
+	t.Parallel()
+
+	result := divideThreads(4, []string{"BirdNET_GLOBAL_6K_V2.4"}, "BirdNET_GLOBAL_6K_V2.4")
+
+	assert.Equal(t, 4, result["BirdNET_GLOBAL_6K_V2.4"], "single model gets all threads")
+}
