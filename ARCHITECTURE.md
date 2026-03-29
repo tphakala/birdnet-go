@@ -165,7 +165,7 @@ Both models work together to provide accurate, location-aware bird identificatio
 **Package Structure:**
 
 ```
-internal/birdnet/
+internal/classifier/
 ├── birdnet.go              # Main BirdNET struct and initialization
 ├── analyze.go              # Audio analysis and species detection
 ├── range_filter.go         # Geographic range filtering
@@ -183,7 +183,7 @@ internal/birdnet/
 BirdNET-Go uses the `github.com/tphakala/go-tflite` library for TensorFlow Lite integration:
 
 ```go
-// internal/birdnet/birdnet.go
+// internal/classifier/birdnet.go
 import (
     tflite "github.com/tphakala/go-tflite"
     "github.com/tphakala/go-tflite/delegates/xnnpack"
@@ -1047,7 +1047,7 @@ mockery --config .mockery.yaml
 task test
 
 # Specific package
-go test -v ./internal/birdnet/...
+go test -v ./internal/classifier/...
 
 # With coverage
 go test -race -coverprofile=coverage.out ./...

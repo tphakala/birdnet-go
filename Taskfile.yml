@@ -4,7 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  LABELS_DIR: internal/birdnet/data/labels
+  LABELS_DIR: internal/classifier/data/labels
   AVICOMMONS_DATA_DIR: internal/imageprovider/data
   AVICOMMONS_JSON_FILE: latest.json
   AVICOMMONS_JSON_URL: https://avicommons.org/latest.json

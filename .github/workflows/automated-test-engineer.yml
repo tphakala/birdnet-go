@@ -154,7 +154,7 @@ jobs:
                 case "$package" in
                   "internal/analysis"*) PACKAGE_LABELS+=",pkg:analysis" ;;
                   "internal/api"*) PACKAGE_LABELS+=",pkg:api" ;;
-                  "internal/birdnet"*) PACKAGE_LABELS+=",pkg:birdnet" ;;
+                  "internal/classifier"*) PACKAGE_LABELS+=",pkg:birdnet" ;;
                   "internal/myaudio"*) PACKAGE_LABELS+=",pkg:myaudio" ;;
                   "internal/datastore"*) PACKAGE_LABELS+=",pkg:datastore" ;;
                   "internal/diskmanager"*) PACKAGE_LABELS+=",pkg:diskmanager" ;;

@@ -68,7 +68,7 @@ FROM --platform=$TARGETPLATFORM debian:trixie-slim
 # Copy model files to /models directory as separate cacheable layer
 # This layer will be reused if model files haven't changed between builds
 RUN mkdir -p /models
-COPY --from=build /home/dev-user/src/BirdNET-Go/internal/birdnet/data/*.tflite /models/
+COPY --from=build /home/dev-user/src/BirdNET-Go/internal/classifier/data/*.tflite /models/
 # Set read permissions for model files
 RUN chmod -R a+r /models/*.tflite 2>/dev/null || true
 # Ensure directory is executable (browsable)

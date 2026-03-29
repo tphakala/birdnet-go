@@ -112,7 +112,7 @@ else
     $(error Build is supported only on Linux and macOS)
 endif
 
-LABELS_DIR := internal/birdnet/data/labels
+LABELS_DIR := internal/classifier/data/labels
 
 # Check required tools: go, unzip, git
 check-tools:
