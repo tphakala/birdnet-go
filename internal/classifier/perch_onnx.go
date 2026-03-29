@@ -17,7 +17,7 @@ import (
 )
 
 // Perch represents a loaded Google Perch v2 model.
-// Implements ModelInstance. NOT goroutine-safe.
+// Implements ModelInstance. Goroutine-safe via internal mutex.
 type Perch struct {
 	classifier inference.Classifier
 	labels     []string
