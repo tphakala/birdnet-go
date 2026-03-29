@@ -191,8 +191,9 @@ describe('API utilities', () => {
       mockFetch = vi.fn();
       global.fetch = mockFetch as unknown as typeof fetch;
 
-      // Reset the redirect guard before each test
+      // Reset the redirect guard and cooldown before each test
       resetRedirectGuard();
+      sessionStorage.removeItem('last_401_redirect');
 
       // Mock window.location.href as writable
       Object.defineProperty(window, 'location', {
