@@ -60,11 +60,6 @@ const (
 
 	// defaultSampleRate is used when a source config has no sample rate set.
 	defaultSampleRate = 48000
-
-	// defaultModelID is the model identifier used when allocating analysis
-	// buffers in single-model mode. It matches the primary BirdNET model
-	// registered in the classifier model registry.
-	defaultModelID = "BirdNET_GLOBAL_6K_V2.4"
 )
 
 // Config holds the configuration needed to create an AudioEngine.
@@ -139,6 +134,9 @@ type AudioEngine struct {
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
 
+	// primaryModelID is the model identifier used when allocating analysis
+	// buffers. Set via SetPrimaryModelID before adding sources.
+	primaryModelID string
 	// ffmpegPath is the absolute path to the FFmpeg binary.
 	ffmpegPath string
 	// soxPath is the absolute path to the SoX binary.
@@ -234,6 +232,19 @@ func (e *AudioEngine) SetScheduler(s *schedule.QuietHoursScheduler) {
 	e.scheduler.Store(s)
 }
 
+// SetPrimaryModelID sets the model identifier used when allocating analysis
+// buffers. This must be called before AddSource to ensure buffers are keyed
+// to the correct model. The value should come from the Orchestrator's
+// ModelInfo.ID.
+func (e *AudioEngine) SetPrimaryModelID(id string) {
+	e.primaryModelID = id
+}
+
+// PrimaryModelID returns the current primary model identifier.
+func (e *AudioEngine) PrimaryModelID() string {
+	return e.primaryModelID
+}
+
 // AddSource registers a new audio source and allocates its buffers.
 // For stream-type sources (RTSP, HTTP, HLS, RTMP, UDP), the FFmpeg manager
 // is started. For audio card sources, the device manager begins capture.
@@ -255,7 +266,7 @@ func (e *AudioEngine) AddSource(cfg *audiocore.SourceConfig) error {
 	// 2. Allocate analysis buffer.
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
-		defaultModelID,
+		e.primaryModelID,
 		defaultAnalysisCapacity,
 		defaultAnalysisOverlap,
 		defaultAnalysisReadSize,
@@ -416,7 +427,7 @@ func (e *AudioEngine) ReconfigureSource(sourceID string, newCfg *audiocore.Sourc
 	}
 	if err := e.bufferMgr.AllocateAnalysis(
 		sourceID,
-		defaultModelID,
+		e.primaryModelID,
 		defaultAnalysisCapacity,
 		defaultAnalysisOverlap,
 		defaultAnalysisReadSize,

@@ -116,6 +116,10 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	dataStore := p.dbService.DataStore()
 	metrics := p.apiService.Metrics()
 
+	// Set the primary model ID on the engine so that analysis buffers are
+	// allocated with the correct model key instead of a hardcoded constant.
+	p.engine.SetPrimaryModelID(bn.ModelInfo.ID)
+
 	// Clean up any leftover HLS streaming files from previous runs.
 	if err := cleanupHLSStreamingFiles(); err != nil {
 		logHLSCleanup(err)

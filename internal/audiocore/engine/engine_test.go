@@ -13,10 +13,14 @@ import (
 
 // newTestEngine creates an AudioEngine with a test context for testing.
 // The caller must call the returned stop function when done to avoid goroutine leaks.
+// testModelID is used by tests to verify analysis buffer allocation.
+const testModelID = "BirdNET_GLOBAL_6K_V2.4"
+
 func newTestEngine(t *testing.T) (eng *AudioEngine, stop func()) {
 	t.Helper()
 	cfg := &Config{Logger: audiocore.GetLogger()}
 	eng = New(t.Context(), cfg, nil)
+	eng.SetPrimaryModelID(testModelID)
 	return eng, eng.Stop
 }
 
@@ -80,7 +84,7 @@ func TestEngine_AddSource_Stream(t *testing.T) {
 	assert.Equal(t, audiocore.SourceTypeRTSP, src.Type)
 
 	// Verify analysis buffer was allocated.
-	ab, err := eng.BufferManager().AnalysisBuffer("test_rtsp_001", defaultModelID)
+	ab, err := eng.BufferManager().AnalysisBuffer("test_rtsp_001", testModelID)
 	require.NoError(t, err)
 	assert.NotNil(t, ab, "analysis buffer should be allocated")
 
@@ -121,7 +125,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 	// hardware, it succeeds.
 	if err != nil {
 		// Verify cleanup happened: buffers should be deallocated.
-		_, abErr := eng.BufferManager().AnalysisBuffer("test_audio_001", defaultModelID)
+		_, abErr := eng.BufferManager().AnalysisBuffer("test_audio_001", testModelID)
 		require.Error(t, abErr, "analysis buffer should be cleaned up on failure")
 		return
 	}
@@ -167,7 +171,7 @@ func TestEngine_RemoveSource(t *testing.T) {
 	assert.False(t, ok, "source should be unregistered after removal")
 
 	// Verify buffers are deallocated.
-	_, abErr := eng.BufferManager().AnalysisBuffer("test_remove_001", defaultModelID)
+	_, abErr := eng.BufferManager().AnalysisBuffer("test_remove_001", testModelID)
 	require.Error(t, abErr, "analysis buffer should be deallocated")
 
 	_, cbErr := eng.BufferManager().CaptureBuffer("test_remove_001")
@@ -213,7 +217,7 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	_, ok := eng.Registry().Get("test_reconfig_001")
 	require.True(t, ok)
 
-	ab1, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", defaultModelID)
+	ab1, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", testModelID)
 	require.NoError(t, err)
 	require.NotNil(t, ab1)
 
@@ -233,7 +237,7 @@ func TestEngine_ReconfigureSource(t *testing.T) {
 	assert.Equal(t, audiocore.SourceTypeRTSP, src.Type)
 
 	// Verify new buffers are allocated.
-	ab2, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", defaultModelID)
+	ab2, err := eng.BufferManager().AnalysisBuffer("test_reconfig_001", testModelID)
 	require.NoError(t, err)
 	assert.NotNil(t, ab2, "new analysis buffer should be allocated after reconfigure")
 
