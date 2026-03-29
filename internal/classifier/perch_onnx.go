@@ -151,8 +151,12 @@ func (p *Perch) ModelVersion() string { return "Perch V2" }
 // NumSpecies returns the number of species.
 func (p *Perch) NumSpecies() int { return len(p.labels) }
 
-// Labels returns the full list of species labels.
-func (p *Perch) Labels() []string { return p.labels }
+// Labels returns a copy of the species labels to prevent mutation of internal state.
+func (p *Perch) Labels() []string {
+	out := make([]string, len(p.labels))
+	copy(out, p.labels)
+	return out
+}
 
 // Close releases resources held by the Perch model.
 func (p *Perch) Close() error {
