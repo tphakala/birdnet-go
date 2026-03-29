@@ -39,7 +39,7 @@ type MockProcessor struct {
 	BirdNETInstance *MockBirdNET
 }
 
-func (m *MockProcessor) GetBirdNET() *classifier.BirdNET {
+func (m *MockProcessor) GetBirdNET() *classifier.Orchestrator {
 	// Since we can't easily mock the actual BirdNET struct, we'll return nil
 	// and handle this in the test setup
 	return nil

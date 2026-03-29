@@ -60,14 +60,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 }
 
 // Predict runs inference using the primary model.
-// Does not require a context — uses context.Background() internally.
-// Callers needing context propagation should use PredictWithContext.
-func (o *Orchestrator) Predict(sample [][]float32) ([]datastore.Results, error) {
-	return o.primary.Predict(context.Background(), sample)
-}
-
-// PredictWithContext runs inference with an explicit context for tracing/cancellation.
-func (o *Orchestrator) PredictWithContext(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
+// Matches BirdNET.Predict signature for drop-in caller migration.
+func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	return o.primary.Predict(ctx, sample)
 }
 

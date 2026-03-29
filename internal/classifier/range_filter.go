@@ -32,20 +32,20 @@ func (a ByScore) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 func (a ByScore) Less(i, j int) bool { return a[i].Score > a[j].Score } // For descending order
 
 // BuildRangeFilter updates the range filter with current probable species
-func BuildRangeFilter(bn *BirdNET) error {
+func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
 
 	// Get date for Range Filter week calculation
 	today := time.Now().Truncate(24 * time.Hour)
 
 	// Update location based species list
-	speciesScores, err := bn.GetProbableSpecies(today, 0.0)
+	speciesScores, err := o.GetProbableSpecies(today, 0.0)
 	if err != nil {
 		return errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("date", today.Format(time.DateOnly)).
-			Context("latitude", bn.Settings.BirdNET.Latitude).
-			Context("longitude", bn.Settings.BirdNET.Longitude).
+			Context("latitude", o.Settings.BirdNET.Latitude).
+			Context("longitude", o.Settings.BirdNET.Longitude).
 			Timing("range-filter-build", time.Since(start)).
 			Build()
 	}

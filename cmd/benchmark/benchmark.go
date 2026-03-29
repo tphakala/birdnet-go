@@ -86,7 +86,7 @@ type benchmarkResults struct {
 
 func runInferenceBenchmark(settings *conf.Settings, results *benchmarkResults) error {
 	// Initialize BirdNET
-	bn, err := classifier.NewBirdNET(settings)
+	bn, err := classifier.NewOrchestrator(settings)
 	if err != nil {
 		return fmt.Errorf("failed to initialize BirdNET: %w", err)
 	}

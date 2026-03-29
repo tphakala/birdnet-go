@@ -17,7 +17,7 @@ const birdNETAnalyzerName = "birdnet-analyzer"
 // and implements app.Analyzer for source-to-analyzer routing.
 type BirdNETAnalyzer struct {
 	settings *conf.Settings
-	bn       *classifier.BirdNET
+	bn       *classifier.Orchestrator
 }
 
 // NewBirdNETAnalyzer creates a new BirdNETAnalyzer with the given settings.
@@ -35,7 +35,7 @@ func (a *BirdNETAnalyzer) Name() string {
 // and initializes the audio conversion pool.
 // Model initialization failures are non-retryable (missing files, insufficient resources).
 func (a *BirdNETAnalyzer) Start(_ context.Context) error {
-	bn, err := classifier.NewBirdNET(a.settings)
+	bn, err := classifier.NewOrchestrator(a.settings)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
@@ -85,8 +85,8 @@ func (a *BirdNETAnalyzer) Compatible(source app.AudioSource) bool {
 	return source.Type != app.SourceTypeUltrasonic
 }
 
-// BirdNET returns the underlying BirdNET interpreter, or nil if the analyzer
+// BirdNET returns the underlying classifier orchestrator, or nil if the analyzer
 // has not been started. Callers must not use the returned pointer after Stop().
-func (a *BirdNETAnalyzer) BirdNET() *classifier.BirdNET {
+func (a *BirdNETAnalyzer) BirdNET() *classifier.Orchestrator {
 	return a.bn
 }

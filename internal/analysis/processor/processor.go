@@ -59,7 +59,7 @@ type Processor struct {
 	Settings            *conf.Settings
 	Ds                  datastore.Interface           // Legacy - to be removed after migration
 	Repo                datastore.DetectionRepository // New - preferred for detection operations
-	Bn                  *classifier.BirdNET
+	Bn                  *classifier.Orchestrator
 	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
 	BwClient            *birdweather.BwClient
 	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
@@ -385,7 +385,7 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.BirdNET, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, metrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -1879,12 +1879,12 @@ func (p *Processor) GetJobQueueStats() jobqueue.JobStatsSnapshot {
 // GetBn returns the BirdNET instance
 //
 // Deprecated: Use GetBirdNET instead
-func (p *Processor) GetBn() *classifier.BirdNET {
+func (p *Processor) GetBn() *classifier.Orchestrator {
 	return p.Bn
 }
 
 // GetBirdNET returns the BirdNET instance
-func (p *Processor) GetBirdNET() *classifier.BirdNET {
+func (p *Processor) GetBirdNET() *classifier.Orchestrator {
 	return p.Bn
 }
 

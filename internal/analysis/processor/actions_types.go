@@ -157,7 +157,7 @@ type MqttAction struct {
 }
 
 type UpdateRangeFilterAction struct {
-	Bn          *classifier.BirdNET
+	Bn          *classifier.Orchestrator
 	Settings    *conf.Settings
 	Description string
 	mu          sync.Mutex // Protect concurrent access to Settings

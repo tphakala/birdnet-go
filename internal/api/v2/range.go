@@ -63,7 +63,7 @@ func calculateWeek(date time.Time) float32 {
 }
 
 // getBirdNETInstance returns the BirdNET instance or an error if unavailable.
-func (c *Controller) getBirdNETInstance() (*classifier.BirdNET, error) {
+func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 	if c.Processor == nil {
 		return nil, fmt.Errorf("BirdNET processor not available")
 	}

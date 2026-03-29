@@ -15,7 +15,7 @@ func PrintCommand(settings *conf.Settings) *cobra.Command {
 		Use:   "print",
 		Short: "Print BirdNET range filter results",
 		Run: func(cmd *cobra.Command, args []string) {
-			bn, err := classifier.NewBirdNET(settings)
+			bn, err := classifier.NewOrchestrator(settings)
 			if err != nil {
 				fmt.Printf("Error initializing BirdNET: %v\n", err)
 				return

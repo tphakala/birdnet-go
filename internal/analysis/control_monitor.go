@@ -35,7 +35,7 @@ type ControlMonitor struct {
 	proc           *processor.Processor
 	audioLevelChan chan audiocore.AudioLevelData
 	soundLevelChan chan soundlevel.SoundLevelData
-	bn             *classifier.BirdNET
+	bn             *classifier.Orchestrator
 	apiController  *apiv2.Controller
 	engine         *engine.AudioEngine
 
