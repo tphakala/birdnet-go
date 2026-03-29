@@ -33,6 +33,9 @@ type Orchestrator struct {
 	TaxonomyPath    string
 	ScientificIndex ScientificNameIndex
 
+	// Name resolution chain. Resolvers are tried in order; first non-empty wins.
+	nameResolvers []NameResolver
+
 	// Model management.
 	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
 	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
@@ -50,12 +53,15 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		return nil, err
 	}
 
+	resolver := NewBirdNETLabelResolver(bn.Labels())
+
 	o := &Orchestrator{
 		Settings:        settings,
 		ModelInfo:       bn.ModelInfo,
 		TaxonomyMap:     bn.TaxonomyMap,
 		TaxonomyPath:    bn.TaxonomyPath,
 		ScientificIndex: bn.ScientificIndex,
+		nameResolvers:   []NameResolver{resolver},
 		models: map[string]*modelEntry{
 			bn.ModelInfo.ID: {instance: bn},
 		},
@@ -95,6 +101,17 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	return entry.instance.Predict(ctx, sample)
 }
 
+// ResolveName walks the resolver chain and returns the first non-empty
+// common name for the given scientific name and locale.
+func (o *Orchestrator) ResolveName(scientificName, locale string) string {
+	for _, r := range o.nameResolvers {
+		if name := r.Resolve(scientificName, locale); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
 // GetProbableSpecies returns species scores from the range filter.
 func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	return o.primary.GetProbableSpecies(date, week)
@@ -131,20 +148,37 @@ func (o *Orchestrator) RunFilterProcess(dateStr string, week float32) {
 }
 
 // ReloadModel reloads the primary model and re-syncs shared state.
-// It acquires a write lock on the models map to ensure safe concurrent access.
+// Acquires the per-model lock before reload to prevent concurrent inference,
+// then the write lock to re-key the models map.
 func (o *Orchestrator) ReloadModel() error {
+	// Step 1: acquire per-model lock to prevent concurrent inference during reload.
+	o.mu.RLock()
+	entry := o.models[o.primary.ModelInfo.ID]
+	o.mu.RUnlock()
+
+	entry.mu.Lock()
 	if err := o.primary.ReloadModel(); err != nil {
+		entry.mu.Unlock()
 		return err
 	}
+	entry.mu.Unlock()
 
+	// Step 2: write lock to re-sync shared state and re-key if model ID changed.
 	o.mu.Lock()
 	defer o.mu.Unlock()
 
-	// Re-sync shared state after reload
 	o.ModelInfo = o.primary.ModelInfo
 	o.TaxonomyMap = o.primary.TaxonomyMap
 	o.TaxonomyPath = o.primary.TaxonomyPath
 	o.ScientificIndex = o.primary.ScientificIndex
+
+	// Re-key the models map in case the model ID changed after reload (Forgejo #270).
+	newModels := make(map[string]*modelEntry, len(o.models))
+	for _, e := range o.models {
+		newModels[e.instance.ModelID()] = e
+	}
+	o.models = newModels
+
 	return nil
 }
 
