@@ -5,19 +5,21 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // ModelInfo represents metadata about a BirdNET model
 type ModelInfo struct {
-	ID               string   // Unique identifier for the model
-	Name             string   // User-friendly name
-	Description      string   // Description of the model
-	SupportedLocales []string // List of supported locale codes
-	DefaultLocale    string   // Default locale if none is specified
-	NumSpecies       int      // Number of species in the model
-	CustomPath       string   // Path to custom model file, if any
+	ID               string    // Unique identifier for the model
+	Name             string    // User-friendly name
+	Description      string    // Description of the model
+	Spec             ModelSpec // Audio requirements (sample rate, clip length)
+	SupportedLocales []string  // List of supported locale codes
+	DefaultLocale    string    // Default locale if none is specified
+	NumSpecies       int       // Number of species in the model
+	CustomPath       string    // Path to custom model file, if any
 }
 
 // Predefined supported models
@@ -26,12 +28,21 @@ var supportedModels = map[string]ModelInfo{
 		ID:          "BirdNET_GLOBAL_6K_V2.4",
 		Name:        "BirdNET GLOBAL 6K V2.4",
 		Description: "Global model with 6523 species",
+		Spec:        ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
 		DefaultLocale: conf.DefaultFallbackLocale,
 		NumSpecies:    6523,
 	},
+}
+
+// knownSpecs maps model family identifiers to their audio specifications.
+// Used by the Orchestrator to determine buffer sizes and resampling needs.
+var knownSpecs = map[string]ModelSpec{
+	"BirdNET_V2.4": {SampleRate: 48000, ClipLength: 3 * time.Second},
+	"BirdNET_V3.0": {SampleRate: 32000, ClipLength: 5 * time.Second},
+	"Perch_V2":     {SampleRate: 32000, ClipLength: 5 * time.Second},
 }
 
 // DetermineModelInfo identifies the model type from a file path or model identifier
@@ -47,10 +58,10 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 		baseName := filepath.Base(modelPathOrID)
 
 		// Check if it matches known patterns
-		for id, info := range supportedModels {
+		for id := range supportedModels {
 			if strings.Contains(baseName, id) {
 				// Clone the model info but mark it as custom
-				customInfo := info
+				customInfo := supportedModels[id]
 				customInfo.CustomPath = modelPathOrID
 				return customInfo, nil
 			}
