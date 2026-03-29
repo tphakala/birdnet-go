@@ -450,10 +450,14 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
 	log := GetLogger()
 	for _, sid := range sourceIDs {
+		// TODO(task6): Wire proper model targets from registry; single
+		// BirdNET target at source rate preserves backward compatibility.
+		defaultTargets := []ModelTarget{{ModelID: "BirdNET_GLOBAL_6K_V2.4", SampleRate: conf.SampleRate}}
 		bc, bcErr := NewBufferConsumer(
 			fmt.Sprintf("buffer_%s", sid),
 			p.engine.BufferManager(),
 			conf.SampleRate, conf.BitDepth, 1,
+			defaultTargets,
 		)
 		if bcErr != nil {
 			log.Warn("failed to create buffer consumer",

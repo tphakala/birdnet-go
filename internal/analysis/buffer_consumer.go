@@ -7,34 +7,55 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
+	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// ModelTarget describes a model that should receive audio from this consumer.
+// Each target specifies the model identifier and the sample rate at which the
+// model expects to receive audio data.
+type ModelTarget struct {
+	ModelID    string // unique model identifier (e.g. "BirdNET_GLOBAL_6K_V2.4")
+	SampleRate int    // target sample rate for this model in Hz
+}
+
 // BufferConsumer implements audiocore.AudioConsumer and writes each incoming
-// AudioFrame's PCM data to both the analysis buffer and the capture buffer
-// for the frame's source. It acts as the bridge between the audiocore routing
-// layer and the buffer.Manager that feeds the BirdNET analysis pipeline.
+// AudioFrame's PCM data to both the analysis buffers (one per model target) and
+// the capture buffer for the frame's source. It acts as the bridge between the
+// audiocore routing layer and the buffer.Manager that feeds analysis pipelines.
+//
+// Audio is resampled on the fly when a model target's sample rate differs from
+// the source rate. A single Resampler is created per unique target rate to
+// avoid redundant conversion when multiple models share the same rate.
 //
 // PCM constraint: The BirdNET model expects 16-bit signed little-endian PCM.
 // Callers must ensure the router delivers frames with BitDepth=16. Higher
 // bit depths will be written to the buffers without conversion, which will
 // produce incorrect analysis results.
 type BufferConsumer struct {
-	id        string
-	bufferMgr *buffer.Manager
-	rate      int
-	depth     int
-	channels  int
-	closed    atomic.Bool
+	id             string
+	bufferMgr      *buffer.Manager
+	rate           int // source sample rate
+	depth          int
+	channels       int
+	closed         atomic.Bool
+	targets        []ModelTarget
+	resamplers     map[int]*resample.Resampler // keyed by target rate
+	groupedTargets map[int][]ModelTarget       // targets grouped by rate, pre-computed
 }
 
 // NewBufferConsumer creates a BufferConsumer that writes audio frames to the
 // analysis and capture buffers managed by bufferMgr. The consumer expects
 // frames with the given sample rate, bit depth, and channel count.
 //
-// Returns an error if bufferMgr is nil or if the audio parameters are invalid.
-func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDepth, channels int) (*BufferConsumer, error) {
+// targets specifies the models that should receive audio. One Resampler is
+// created per unique target sample rate that differs from sampleRate. Targets
+// are pre-grouped by rate so the Write hot path only iterates rate groups.
+//
+// Returns an error if bufferMgr is nil, if the audio parameters are invalid,
+// or if a required resampler cannot be created.
+func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDepth, channels int, targets []ModelTarget) (*BufferConsumer, error) {
 	if bufferMgr == nil {
 		return nil, errors.Newf("buffer manager must not be nil").
 			Component("analysis.buffer_consumer").
@@ -64,12 +85,44 @@ func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDept
 			Build()
 	}
 
+	// Pre-compute grouped targets and create one resampler per unique
+	// non-native rate.
+	grouped := make(map[int][]ModelTarget, len(targets))
+	for _, t := range targets {
+		grouped[t.SampleRate] = append(grouped[t.SampleRate], t)
+	}
+
+	resamplers := make(map[int]*resample.Resampler, len(grouped))
+	for rate := range grouped {
+		if rate == sampleRate {
+			continue // native rate, no resampler needed
+		}
+		r, rErr := resample.NewResampler(sampleRate, rate)
+		if rErr != nil {
+			// Clean up any resamplers already created.
+			for _, prev := range resamplers {
+				_ = prev.Close()
+			}
+			return nil, errors.Newf("failed to create resampler for target rate %d: %w", rate, rErr).
+				Component("analysis.buffer_consumer").
+				Category(errors.CategoryAudio).
+				Context("operation", "new_buffer_consumer").
+				Context("source_rate", sampleRate).
+				Context("target_rate", rate).
+				Build()
+		}
+		resamplers[rate] = r
+	}
+
 	return &BufferConsumer{
-		id:        id,
-		bufferMgr: bufferMgr,
-		rate:      sampleRate,
-		depth:     bitDepth,
-		channels:  channels,
+		id:             id,
+		bufferMgr:      bufferMgr,
+		rate:           sampleRate,
+		depth:          bitDepth,
+		channels:       channels,
+		targets:        targets,
+		resamplers:     resamplers,
+		groupedTargets: grouped,
 	}, nil
 }
 
@@ -85,10 +138,10 @@ func (c *BufferConsumer) BitDepth() int { return c.depth }
 // Channels returns the expected channel count.
 func (c *BufferConsumer) Channels() int { return c.channels }
 
-// Write delivers an audio frame to both the analysis buffer and capture buffer
-// for the frame's source. If either buffer is not found the missing write is
-// logged and skipped; the other buffer is still written. Returns an error only
-// when the consumer has been closed.
+// Write delivers an audio frame to both the analysis buffers (one per model
+// target, with resampling as needed) and the capture buffer for the frame's
+// source. If a buffer is not found the missing write is logged and skipped.
+// Returns an error only when the consumer has been closed.
 func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if c.closed.Load() {
 		return audiocore.ErrConsumerClosed
@@ -96,25 +149,7 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 
 	sourceID := frame.SourceID
 
-	// Write to all analysis buffers for this source (one per model).
-	analysisBuffers := c.bufferMgr.AnalysisBuffers(sourceID)
-	if len(analysisBuffers) == 0 {
-		GetLogger().Warn("no analysis buffers found for source",
-			logger.String("source_id", sourceID),
-			logger.String("consumer_id", c.id),
-			logger.String("operation", "buffer_consumer_write"))
-	}
-	for modelID, ab := range analysisBuffers {
-		if writeErr := ab.Write(frame.Data); writeErr != nil {
-			GetLogger().Warn("failed to write to analysis buffer",
-				logger.String("source_id", sourceID),
-				logger.String("model_id", modelID),
-				logger.Error(writeErr),
-				logger.String("operation", "buffer_consumer_write"))
-		}
-	}
-
-	// Write to capture buffer.
+	// Write to capture buffer (always at source rate).
 	cb, err := c.bufferMgr.CaptureBuffer(sourceID)
 	if err != nil {
 		GetLogger().Warn("capture buffer not found for source",
@@ -128,6 +163,38 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 			logger.String("operation", "buffer_consumer_write"))
 	}
 
+	// Fan out to model analysis buffers, grouped by target rate.
+	// All targets sharing the same rate are written before the next
+	// ResampleInto call, so the resampler's internal buffer is safe to reuse.
+	for rate, targets := range c.groupedTargets {
+		var data []byte
+		if rate == c.rate {
+			data = frame.Data // native rate, no resampling
+		} else {
+			resampled, resampleErr := c.resamplers[rate].ResampleInto(frame.Data)
+			if resampleErr != nil {
+				GetLogger().Error("resampling failed for target rate",
+					logger.Int("target_rate", rate),
+					logger.String("source_id", sourceID),
+					logger.Error(resampleErr),
+					logger.String("operation", "buffer_consumer_write"))
+				continue
+			}
+			data = resampled
+		}
+		for _, t := range targets {
+			if ab, abErr := c.bufferMgr.AnalysisBuffer(sourceID, t.ModelID); abErr == nil {
+				if writeErr := ab.Write(data); writeErr != nil {
+					GetLogger().Warn("failed to write to analysis buffer",
+						logger.String("source_id", sourceID),
+						logger.String("model_id", t.ModelID),
+						logger.Error(writeErr),
+						logger.String("operation", "buffer_consumer_write"))
+				}
+			}
+		}
+	}
+
 	// Design: Write intentionally returns nil even when individual buffer
 	// writes fail. A missing or errored buffer should not crash the audio
 	// pipeline — the AudioConsumer contract expects Write to be resilient.
@@ -135,10 +202,13 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 	return nil
 }
 
-// Close marks the consumer as closed. Subsequent Write calls return
-// audiocore.ErrConsumerClosed.
+// Close marks the consumer as closed and releases all owned resamplers.
+// Subsequent Write calls return audiocore.ErrConsumerClosed.
 func (c *BufferConsumer) Close() error {
 	c.closed.Store(true)
+	for _, r := range c.resamplers {
+		_ = r.Close()
+	}
 	return nil
 }
 

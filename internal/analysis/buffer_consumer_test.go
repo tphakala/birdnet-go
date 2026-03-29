@@ -17,6 +17,15 @@ import (
 // tests where a concrete model name is not relevant.
 const testDefaultModelID = "BirdNET_GLOBAL_6K_V2.4"
 
+// testDefaultSampleRate is the source sample rate used in most tests.
+const testDefaultSampleRate = 48000
+
+// testDefaultTargets returns a single ModelTarget at 48 kHz for backwards-
+// compatible test helpers.
+func testDefaultTargets() []ModelTarget {
+	return []ModelTarget{{ModelID: testDefaultModelID, SampleRate: testDefaultSampleRate}}
+}
+
 // newTestBufferManager creates a buffer.Manager and allocates analysis and
 // capture buffers for the given sourceID. It uses reasonable defaults for
 // audio parameters (48 kHz, 16-bit, mono).
@@ -40,35 +49,35 @@ func TestBufferConsumer_NewValidation(t *testing.T) {
 
 	t.Run("nil buffer manager", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewBufferConsumer("test", nil, 48000, 16, 1)
+		_, err := NewBufferConsumer("test", nil, 48000, 16, 1, testDefaultTargets())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "buffer manager must not be nil")
 	})
 
 	t.Run("invalid sample rate", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewBufferConsumer("test", mgr, 0, 16, 1)
+		_, err := NewBufferConsumer("test", mgr, 0, 16, 1, testDefaultTargets())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid sample rate")
 	})
 
 	t.Run("invalid bit depth", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewBufferConsumer("test", mgr, 48000, 0, 1)
+		_, err := NewBufferConsumer("test", mgr, 48000, 0, 1, testDefaultTargets())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid bit depth")
 	})
 
 	t.Run("invalid channels", func(t *testing.T) {
 		t.Parallel()
-		_, err := NewBufferConsumer("test", mgr, 48000, 16, 0)
+		_, err := NewBufferConsumer("test", mgr, 48000, 16, 0, testDefaultTargets())
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid channel count")
 	})
 
 	t.Run("valid parameters", func(t *testing.T) {
 		t.Parallel()
-		consumer, err := NewBufferConsumer("test", mgr, 48000, 16, 1)
+		consumer, err := NewBufferConsumer("test", mgr, 48000, 16, 1, testDefaultTargets())
 		require.NoError(t, err)
 		assert.Equal(t, "test", consumer.ID())
 		assert.Equal(t, 48000, consumer.SampleRate())
@@ -83,7 +92,7 @@ func TestBufferConsumer_WritesToBothBuffers(t *testing.T) {
 	sourceID := "test-source"
 	mgr := newTestBufferManager(t, sourceID)
 
-	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1)
+	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1, testDefaultTargets())
 	require.NoError(t, err)
 
 	// Create a small PCM frame (100 samples of silence).
@@ -137,7 +146,7 @@ func TestBufferConsumer_MissingBufferDoesNotError(t *testing.T) {
 	// Manager with no buffers allocated.
 	mgr := buffer.NewManager(logger.Global().Module("test"))
 
-	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1)
+	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1, testDefaultTargets())
 	require.NoError(t, err)
 
 	frame := audiocore.AudioFrame{
@@ -161,7 +170,7 @@ func TestBufferConsumer_CloseRejectsSubsequentWrites(t *testing.T) {
 	sourceID := "test-source"
 	mgr := newTestBufferManager(t, sourceID)
 
-	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1)
+	consumer, err := NewBufferConsumer("buf-consumer", mgr, 48000, 16, 1, testDefaultTargets())
 	require.NoError(t, err)
 
 	require.NoError(t, consumer.Close())
@@ -287,4 +296,137 @@ func TestCalculateAudioLevel_MatchesLegacy(t *testing.T) {
 
 	result := calculateAudioLevel(data, "s", "n")
 	assert.Equal(t, int(expected), result.Level)
+}
+
+func TestBufferConsumer_FanOut_MultiModel(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID     = "multi-model-src"
+		birdnetModel = "birdnet-v2.4"
+		perchModel   = "perch-v2"
+		sourceRate   = 48000
+		perchRate    = 32000
+		// Use generous buffer capacities and small readSizes so a single
+		// frame write is sufficient to trigger a successful Read.
+		bufCapacity = 96000 // large enough for multiple frames
+		readSize48  = 4800  // small readSize for birdnet (100 ms at 48 kHz)
+		readSize32  = 3200  // small readSize for perch (100 ms at 32 kHz)
+	)
+
+	mgr := buffer.NewManager(logger.Global().Module("test"))
+
+	// Allocate analysis buffers for both models.
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, birdnetModel, bufCapacity, 0, readSize48))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, perchModel, bufCapacity, 0, readSize32))
+	require.NoError(t, mgr.AllocateCapture(sourceID, 10, sourceRate, 2))
+
+	targets := []ModelTarget{
+		{ModelID: birdnetModel, SampleRate: sourceRate},
+		{ModelID: perchModel, SampleRate: perchRate},
+	}
+
+	consumer, err := NewBufferConsumer("multi-model", mgr, sourceRate, 16, 1, targets)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = consumer.Close() })
+
+	// Write a frame large enough to satisfy both readSizes after resampling.
+	// 9600 bytes at 48 kHz = 4800 samples. Resampled to 32 kHz ≈ 3200 samples
+	// = 6400 bytes, well above readSize32.
+	frameSize := 9600 // bytes
+	frame := audiocore.AudioFrame{
+		SourceID:   sourceID,
+		SourceName: "Multi-Model Source",
+		Data:       make([]byte, frameSize),
+		SampleRate: sourceRate,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	require.NoError(t, consumer.Write(frame))
+
+	// Verify birdnet buffer received data (no resampling).
+	ab48, err := mgr.AnalysisBuffer(sourceID, birdnetModel)
+	require.NoError(t, err)
+	data48, readErr := ab48.Read()
+	require.NoError(t, readErr)
+	require.NotNil(t, data48, "48 kHz buffer should have data after write")
+
+	// Verify perch buffer received resampled data.
+	ab32, err := mgr.AnalysisBuffer(sourceID, perchModel)
+	require.NoError(t, err)
+	data32, readErr := ab32.Read()
+	require.NoError(t, readErr)
+	require.NotNil(t, data32, "32 kHz buffer should have resampled data after write")
+
+	// The 32 kHz read returns readSize32 bytes (3200), while the 48 kHz read
+	// returns readSize48 bytes (4800). The lower-rate read should be shorter.
+	assert.Less(t, len(data32), len(data48),
+		"32 kHz readSize should be less than 48 kHz readSize")
+}
+
+func TestBufferConsumer_FanOut_SingleModel_BackwardsCompat(t *testing.T) {
+	t.Parallel()
+
+	sourceID := "single-model-src"
+	mgr := newTestBufferManager(t, sourceID)
+
+	// Single target at source rate — no resampler should be created.
+	targets := []ModelTarget{{ModelID: testDefaultModelID, SampleRate: testDefaultSampleRate}}
+	consumer, err := NewBufferConsumer("single", mgr, testDefaultSampleRate, 16, 1, targets)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = consumer.Close() })
+
+	// No resamplers should have been created.
+	assert.Empty(t, consumer.resamplers, "no resamplers needed when target rate equals source rate")
+
+	// Write should succeed.
+	frame := audiocore.AudioFrame{
+		SourceID:   sourceID,
+		SourceName: "Single Model",
+		Data:       make([]byte, 200),
+		SampleRate: testDefaultSampleRate,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	assert.NoError(t, consumer.Write(frame))
+}
+
+func TestBufferConsumer_Close_ClosesResamplers(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sourceID   = "close-resampler-src"
+		sourceRate = 48000
+		targetRate = 32000
+		modelID    = "resampler-model"
+	)
+
+	mgr := buffer.NewManager(logger.Global().Module("test"))
+	require.NoError(t, mgr.AllocateAnalysis(sourceID, modelID, 32000, 0, 32000))
+	require.NoError(t, mgr.AllocateCapture(sourceID, 10, sourceRate, 2))
+
+	targets := []ModelTarget{{ModelID: modelID, SampleRate: targetRate}}
+	consumer, err := NewBufferConsumer("close-test", mgr, sourceRate, 16, 1, targets)
+	require.NoError(t, err)
+
+	// A resampler should have been created for the non-native rate.
+	require.Len(t, consumer.resamplers, 1)
+	assert.Contains(t, consumer.resamplers, targetRate)
+
+	// Close should succeed and not panic.
+	require.NoError(t, consumer.Close())
+
+	// Subsequent writes should be rejected.
+	frame := audiocore.AudioFrame{
+		SourceID:   sourceID,
+		SourceName: "Closed Source",
+		Data:       make([]byte, 200),
+		SampleRate: sourceRate,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	}
+	assert.ErrorIs(t, consumer.Write(frame), audiocore.ErrConsumerClosed)
 }
