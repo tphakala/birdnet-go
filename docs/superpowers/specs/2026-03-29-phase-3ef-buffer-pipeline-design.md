@@ -183,7 +183,7 @@ Note: overlap scaling is proportional, not absolute. A user setting "2s overlap"
 
 ### Float32Pool Consolidation
 
-Currently two separate float32 pools exist: `buffer.Manager` creates one at size 2048, and `process.go` creates its own at size 144,384. These must be consolidated into the Manager's `float32Pools` map. ProcessData will request a pool from the Manager by size rather than maintaining its own global pool. Pools are created lazily with `sync.Once` per size to prevent concurrent creation races.
+Currently two separate float32 pools exist: `buffer.Manager` creates one at size 2048, and `process.go` creates its own at size 144,384. These must be consolidated into the Manager's `float32Pools` map. ProcessData will request a pool from the Manager by size rather than maintaining its own global pool. Pools are created lazily under a dedicated `sync.Mutex` to prevent concurrent creation races.
 
 ## Phase 3f: Pipeline Integration
 

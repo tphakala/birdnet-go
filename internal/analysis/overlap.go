@@ -24,9 +24,9 @@ func effectiveOverlap(userOverlap, baseClipLength, modelClipLength time.Duration
 // sample boundaries. sampleRate is in Hz, bytesPerSample is typically 2 for
 // 16-bit mono PCM.
 func overlapBytes(overlap time.Duration, sampleRate, bytesPerSample int) int {
-	if bytesPerSample <= 0 {
+	if overlap <= 0 || sampleRate <= 0 || bytesPerSample <= 0 {
 		return 0
 	}
-	samples := int(overlap.Seconds() * float64(sampleRate))
+	samples := int((overlap * time.Duration(sampleRate)) / time.Second) //nolint:durationcheck // intentional: converts Hz rate to sample count via duration arithmetic
 	return samples * bytesPerSample
 }
