@@ -1588,7 +1588,9 @@ func Load() (*Settings, error) {
 	}
 
 	// Migrate per-source model field (model -> models)
-	settings.MigrateSourceModels()
+	if settings.MigrateSourceModels() {
+		persistMigration(settings, "source models")
+	}
 
 	// Validate multi-model configuration
 	if err := settings.applyModelValidation(); err != nil {
@@ -2161,7 +2163,9 @@ func (s *Settings) applyModelValidation() error {
 	modelIssues := s.ValidateModelConfig()
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {
-			return fmt.Errorf("model configuration: %s", strings.TrimPrefix(issue, "error: "))
+			return errors.Newf("model configuration: %s", strings.TrimPrefix(issue, "error: ")).
+				Category(errors.CategoryValidation).
+				Build()
 		}
 		GetLogger().Warn("model configuration issue", logger.String("issue", issue))
 		s.ValidationWarnings = append(s.ValidationWarnings, issue)
