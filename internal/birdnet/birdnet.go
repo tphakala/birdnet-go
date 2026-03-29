@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/inference/tflite"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
@@ -188,7 +189,7 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 	}
 
 	log := GetLogger()
-	classifier, threads, err := inference.NewTFLiteClassifier(modelData, inference.TFLiteClassifierOptions{
+	classifier, threads, err := tflite.NewTFLiteClassifier(modelData, tflite.TFLiteClassifierOptions{
 		Threads:    bn.Settings.BirdNET.Threads,
 		UseXNNPACK: bn.Settings.BirdNET.UseXNNPACK,
 		ErrorFunc: func(msg string) {
@@ -343,7 +344,7 @@ func (bn *BirdNET) initializeTFLiteMetaModel() error {
 		return err
 	}
 
-	rangeFilter, err := inference.NewTFLiteRangeFilter(metaModelData, func(msg string) {
+	rangeFilter, err := tflite.NewTFLiteRangeFilter(metaModelData, func(msg string) {
 		GetLogger().Error("TFLite meta model error", logger.String("message", msg))
 	})
 	if err != nil {
