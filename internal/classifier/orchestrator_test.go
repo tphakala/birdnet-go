@@ -244,6 +244,21 @@ func TestOrchestrator_ModelInfos(t *testing.T) {
 	assert.True(t, ids["Perch_V2"])
 }
 
+func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
+
+	o := &Orchestrator{
+		Settings: settings,
+		models:   map[string]*modelEntry{},
+	}
+
+	err := o.loadAdditionalModels()
+	assert.NoError(t, err)
+}
+
 func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
 	t.Parallel()
 

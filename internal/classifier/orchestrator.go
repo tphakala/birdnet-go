@@ -68,6 +68,17 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		},
 		primary: bn,
 	}
+
+	// Load additional models from configuration
+	if err := o.loadAdditionalModels(); err != nil {
+		// Clean up the primary model before returning
+		if closeErr := bn.Close(); closeErr != nil {
+			GetLogger().Warn("failed to close primary model during cleanup",
+				logger.Error(closeErr))
+		}
+		return nil, err
+	}
+
 	return o, nil
 }
 
@@ -259,6 +270,40 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		infos = append(infos, info)
 	}
 	return infos
+}
+
+// loadAdditionalModels iterates settings.Models.Enabled and loads any
+// non-primary models. Each loaded model is registered in the models map
+// and gets a label resolver added to the chain.
+func (o *Orchestrator) loadAdditionalModels() error {
+	log := GetLogger()
+
+	for _, configID := range o.Settings.Models.Enabled {
+		registryID, known := ResolveConfigModelID(configID)
+		if !known {
+			log.Warn("skipping unknown model ID in models.enabled",
+				logger.String("model_id", configID))
+			continue
+		}
+
+		// Skip the primary model (already loaded)
+		if _, exists := o.models[registryID]; exists {
+			continue
+		}
+
+		switch registryID {
+		case "Perch_V2":
+			//nolint:staticcheck // SA4023: loadPerch always errors in non-onnx build, but returns nil in onnx build
+			if err := o.loadPerch(); err != nil {
+				return err
+			}
+		default:
+			log.Warn("model registered but no loader implemented",
+				logger.String("registry_id", registryID))
+		}
+	}
+
+	return nil
 }
 
 // configToRegistryID maps user-facing config model IDs (lowercase) to internal
