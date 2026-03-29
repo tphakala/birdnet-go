@@ -32,7 +32,10 @@ type Orchestrator struct {
 	TaxonomyPath    string
 	ScientificIndex ScientificNameIndex
 
-	// Model management
+	// Model management.
+	// NOTE: models map is keyed by ModelInfo.ID at construction time. If ReloadModel
+	// changes the model ID, the key goes stale. Delete() iterates values so cleanup
+	// is unaffected. Phase 3c should re-key models on reload.
 	models  map[string]*modelEntry
 	primary *BirdNET // Phase 3b: direct access to the single model
 }
@@ -60,7 +63,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 }
 
 // Predict runs inference using the primary model.
-// Matches BirdNET.Predict signature for drop-in caller migration.
+// Phase 3b: relies on BirdNET's internal locking.
+// Phase 3c+ will use modelEntry.mu for per-model serialization.
 func (o *Orchestrator) Predict(ctx context.Context, sample [][]float32) ([]datastore.Results, error) {
 	return o.primary.Predict(ctx, sample)
 }
@@ -108,11 +112,13 @@ func (o *Orchestrator) ReloadModel() error {
 	// Re-sync shared state after reload
 	o.ModelInfo = o.primary.ModelInfo
 	o.TaxonomyMap = o.primary.TaxonomyMap
+	o.TaxonomyPath = o.primary.TaxonomyPath
 	o.ScientificIndex = o.primary.ScientificIndex
 	return nil
 }
 
 // Delete releases all resources held by the Orchestrator and its models.
+// After calling Delete, the Orchestrator must not be used.
 func (o *Orchestrator) Delete() {
 	for _, entry := range o.models {
 		entry.mu.Lock()
@@ -123,6 +129,9 @@ func (o *Orchestrator) Delete() {
 		}
 		entry.mu.Unlock()
 	}
+	// Nil out references to fail fast on use-after-delete.
+	o.primary = nil
+	o.models = nil
 }
 
 // Debug prints debug messages if debug mode is enabled.
