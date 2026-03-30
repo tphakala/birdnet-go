@@ -118,6 +118,34 @@ func TestDetermineModelInfo_OnnxSupport(t *testing.T) {
 	}
 }
 
+func TestResolveConfigModelID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		configID   string
+		wantID     string
+		wantExists bool
+	}{
+		{"birdnet maps to registry ID", "birdnet", "BirdNET_GLOBAL_6K_V2.4", true},
+		{"perch_v2 maps to registry ID", "perch_v2", "Perch_V2", true},
+		{"unknown returns false", "unknown_model", "", false},
+		{"case insensitive", "BIRDNET", "BirdNET_GLOBAL_6K_V2.4", true},
+		{"case insensitive perch", "PERCH_V2", "Perch_V2", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotID, gotExists := ResolveConfigModelID(tt.configID)
+			assert.Equal(t, tt.wantExists, gotExists)
+			if gotExists {
+				assert.Equal(t, tt.wantID, gotID)
+			}
+		})
+	}
+}
+
 func TestDetermineModelInfo_UnrecognizedNonModelFile(t *testing.T) {
 	t.Parallel()
 

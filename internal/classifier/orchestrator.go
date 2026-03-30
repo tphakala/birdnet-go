@@ -4,7 +4,6 @@ package classifier
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -350,20 +349,4 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 	}
 
 	return nil
-}
-
-// configToRegistryID maps user-facing config model IDs (lowercase) to internal
-// registry IDs used by ModelRegistry and the models map.
-// SYNC: keys must match conf.knownModelIDs in config.go.
-var configToRegistryID = map[string]string{
-	"birdnet":  "BirdNET_GLOBAL_6K_V2.4",
-	"perch_v2": "Perch_V2",
-}
-
-// ResolveConfigModelID maps a user-facing config model ID to the internal
-// registry ID. Returns the registry ID and true if found, or empty and false
-// if the config ID is unknown. Case-insensitive.
-func ResolveConfigModelID(configID string) (string, bool) {
-	id, ok := configToRegistryID[strings.ToLower(configID)]
-	return id, ok
 }

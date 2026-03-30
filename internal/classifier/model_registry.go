@@ -139,6 +139,21 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 	return ModelInfo{}, fmt.Errorf("unrecognized model: %s", modelPathOrID)
 }
 
+// ResolveConfigModelID maps a user-facing config model ID (e.g. "birdnet") to
+// the internal registry ID (e.g. "BirdNET_GLOBAL_6K_V2.4") by iterating
+// ModelRegistry.ConfigAliases. Returns the registry ID and true if found,
+// or empty string and false if unknown. Case-insensitive.
+func ResolveConfigModelID(configID string) (string, bool) {
+	for registryID := range ModelRegistry {
+		for _, alias := range ModelRegistry[registryID].ConfigAliases {
+			if strings.EqualFold(alias, configID) {
+				return registryID, true
+			}
+		}
+	}
+	return "", false
+}
+
 // IsLocaleSupported checks if a locale is supported by the given model.
 func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
 	// If it's a custom model with no specified locales, assume all are supported
