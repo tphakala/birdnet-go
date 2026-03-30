@@ -423,12 +423,13 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		Occurrence:     note.Occurrence,
 		Verified:       note.Verified,
 		Locked:         note.Locked,
-		Model: func() detection.ModelInfo {
-			if note.Model.Name != "" {
-				return note.Model
-			}
-			return detection.DefaultModelInfo()
-		}(),
+	}
+
+	// Use the note's model info if populated, otherwise fall back to default.
+	if note.Model.Name != "" {
+		result.Model = note.Model
+	} else {
+		result.Model = detection.DefaultModelInfo()
 	}
 
 	// Convert comments
