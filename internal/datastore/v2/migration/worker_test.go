@@ -486,6 +486,10 @@ func (f *failingModelRepo) Delete(_ context.Context, _ uint) error {
 	return errors.New("not implemented")
 }
 
+func (f *failingModelRepo) GetByIDs(_ context.Context, _ []uint) (map[uint]*entities.AIModel, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (f *failingModelRepo) Exists(_ context.Context, _ uint) (bool, error) {
 	return false, errors.New("not implemented")
 }

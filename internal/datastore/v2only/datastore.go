@@ -756,7 +756,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		}
 	}
 
-	return datastore.Note{
+	note := datastore.Note{
 		ID:             det.ID,
 		Date:           dateStr,
 		Time:           timeStr,
@@ -775,6 +775,18 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Verified:       verified,
 		Locked:         locked,
 	}
+
+	// Populate model info from preloaded Model entity
+	if det.Model != nil {
+		note.Model = detection.ModelInfo{
+			Name:           det.Model.Name,
+			Version:        det.Model.Version,
+			Variant:        det.Model.Variant,
+			ClassifierPath: det.Model.ClassifierPath,
+		}
+	}
+
+	return note
 }
 
 // detectionsToNotes converts multiple detections to notes.
@@ -1886,7 +1898,7 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 	return records, int(total), nil
 }
 
-// loadDetectionRelations loads Label, Source, Review, and Lock for detections.
+// loadDetectionRelations loads Label, Source, Model, Review, Lock, and Comments for detections.
 // Uses batch queries to minimize database round-trips.
 func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entities.Detection) error {
 	if len(dets) == 0 {
@@ -1897,10 +1909,12 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 	detectionIDs := make([]uint, len(dets))
 	labelIDSet := make(map[uint]struct{})
 	sourceIDSet := make(map[uint]struct{})
+	modelIDSet := make(map[uint]struct{})
 
 	for i, det := range dets {
 		detectionIDs[i] = det.ID
 		labelIDSet[det.LabelID] = struct{}{}
+		modelIDSet[det.ModelID] = struct{}{}
 		if det.SourceID != nil {
 			sourceIDSet[*det.SourceID] = struct{}{}
 		}
@@ -1926,6 +1940,16 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 		sourceMap, err = ds.source.GetByIDs(ctx, sourceIDs)
 		if err != nil {
 			return fmt.Errorf("load sources: %w", err)
+		}
+	}
+
+	modelIDs := slices.Collect(maps.Keys(modelIDSet))
+	var modelMap map[uint]*entities.AIModel
+	if ds.model != nil {
+		var err error
+		modelMap, err = ds.model.GetByIDs(ctx, modelIDs)
+		if err != nil {
+			return fmt.Errorf("load models: %w", err)
 		}
 	}
 
@@ -1962,6 +1986,9 @@ func (ds *Datastore) loadDetectionRelations(ctx context.Context, dets []*entitie
 		}
 		if comments, ok := commentMap[det.ID]; ok {
 			det.Comments = comments
+		}
+		if model, ok := modelMap[det.ModelID]; ok {
+			det.Model = model
 		}
 	}
 
@@ -2577,8 +2604,8 @@ func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold)
 	return ds.threshold.SaveDynamicThreshold(ctx, v2Threshold)
 }
 
-// GetDynamicThreshold retrieves a dynamic threshold by scientific name.
-func (ds *Datastore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
+// GetDynamicThreshold retrieves a dynamic threshold by scientific name and model.
+func (ds *Datastore) GetDynamicThreshold(speciesName, modelName string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
 	}

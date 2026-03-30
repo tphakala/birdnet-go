@@ -35,6 +35,7 @@ type SSEPendingDetection struct {
 	LastUpdated     int64                  `json:"lastUpdated"`               // Unix seconds — most recent inference hit
 	Source          string                 `json:"source"`                    // Source display name
 	SourceID        string                 `json:"sourceID"`                  // Raw source ID for client-side filtering
+	ModelID         string                 `json:"modelID,omitempty"`         // Classifier model that produced this detection
 	HitCount        int                    `json:"hitCount"`                  // Number of inference hits accumulated
 }
 
@@ -49,7 +50,7 @@ func unixOrZero(t time.Time) int64 {
 }
 
 // sortPendingSnapshot sorts a pending detection snapshot by FirstDetected
-// (oldest first), with species name and source ID as tie-breakers for determinism.
+// (oldest first), with species name, source ID, and model ID as tie-breakers for determinism.
 // This ordering is required by pendingSnapshotChanged which does index-based comparison.
 func sortPendingSnapshot(s []SSEPendingDetection) {
 	slices.SortFunc(s, func(a, b SSEPendingDetection) int {
@@ -69,6 +70,12 @@ func sortPendingSnapshot(s []SSEPendingDetection) {
 			return -1
 		}
 		if a.SourceID > b.SourceID {
+			return 1
+		}
+		if a.ModelID < b.ModelID {
+			return -1
+		}
+		if a.ModelID > b.ModelID {
 			return 1
 		}
 		return 0
@@ -111,6 +118,7 @@ func (p *Processor) SnapshotVisiblePending(minDetections int) []SSEPendingDetect
 			LastUpdated:     item.LastUpdated.Unix(),
 			Source:          p.getDisplayNameForSource(item.Source),
 			SourceID:        item.Source,
+			ModelID:         item.ModelID,
 			HitCount:        item.Count,
 		})
 	}
@@ -176,6 +184,7 @@ func (p *Processor) buildFlushNotification(item *PendingDetection, status Pendin
 		LastUpdated:     item.LastUpdated.Unix(),
 		Source:          p.getDisplayNameForSource(item.Source),
 		SourceID:        item.Source,
+		ModelID:         item.ModelID,
 		HitCount:        item.Count,
 	}
 }
@@ -189,6 +198,7 @@ func pendingSnapshotChanged(prev, curr []SSEPendingDetection) bool {
 	for i := range prev {
 		if prev[i].Species != curr[i].Species ||
 			prev[i].SourceID != curr[i].SourceID ||
+			prev[i].ModelID != curr[i].ModelID ||
 			prev[i].HitCount != curr[i].HitCount ||
 			prev[i].Status != curr[i].Status ||
 			prev[i].LastUpdated != curr[i].LastUpdated {

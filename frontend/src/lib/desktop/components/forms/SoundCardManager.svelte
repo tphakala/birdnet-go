@@ -15,10 +15,13 @@
 -->
 <script lang="ts">
   import { Plus, Volume2, RefreshCw, ChevronDown } from '@lucide/svelte';
+  import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
+  import { api } from '$lib/utils/api';
+  import { cn } from '$lib/utils/cn';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
@@ -47,16 +50,45 @@
       passes?: number;
     }>;
   }
-  import { cn } from '$lib/utils/cn';
 
   const logger = loggers.audio;
 
-  // Model options — use $derived to re-translate on locale change
+  // Fetch available models from backend API
+  interface BackendModel {
+    id: string;
+    name: string;
+  }
+
+  let availableModels = $state<BackendModel[]>([]);
+
+  $effect(() => {
+    const controller = new AbortController();
+
+    untrack(() => {
+      api
+        .get<BackendModel[]>('/api/v2/models', { signal: controller.signal })
+        .then(data => {
+          if (Array.isArray(data)) {
+            availableModels = data;
+          }
+        })
+        .catch((err: unknown) => {
+          if (err instanceof Error && err.name !== 'AbortError') {
+            logger.error('Failed to fetch models', err, {
+              component: 'SoundCardManager',
+              action: 'fetchModels',
+            });
+          }
+        });
+    });
+
+    return () => controller.abort();
+  });
+
+  // Model options — default entry + dynamically loaded models
   const modelOptions = $derived([
     { value: '', label: t('settings.audio.soundCards.models.birdnetDefault') },
-    { value: 'birdnet', label: t('settings.audio.soundCards.models.birdnet') },
-    { value: 'perch_v2', label: t('settings.audio.soundCards.models.perchV2') },
-    { value: 'bat', label: t('settings.audio.soundCards.models.bat') },
+    ...availableModels.map(m => ({ value: m.id, label: m.name })),
   ]);
 
   interface Props {
@@ -268,6 +300,7 @@
           {source}
           {index}
           {audioDevices}
+          {modelOptions}
           {disabled}
           onUpdate={updatedSource => updateSource(index, updatedSource)}
           onDelete={() => deleteSource(index)}

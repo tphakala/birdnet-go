@@ -126,7 +126,7 @@ func TestGetDynamicThreshold(t *testing.T) {
 		require.NoError(t, err)
 
 		// Retrieve it
-		retrieved, err := ds.GetDynamicThreshold("cardinal")
+		retrieved, err := ds.GetDynamicThreshold("cardinal", "")
 
 		require.NoError(t, err)
 		require.NotNil(t, retrieved)
@@ -139,7 +139,7 @@ func TestGetDynamicThreshold(t *testing.T) {
 	t.Run("GetNonExistentThreshold", func(t *testing.T) {
 		ds := setupDynamicThresholdTestDB(t)
 
-		threshold, err := ds.GetDynamicThreshold("nonexistent")
+		threshold, err := ds.GetDynamicThreshold("nonexistent", "")
 
 		require.Error(t, err)
 		assert.Nil(t, threshold)
@@ -150,7 +150,7 @@ func TestGetDynamicThreshold(t *testing.T) {
 	t.Run("RejectEmptySpeciesName", func(t *testing.T) {
 		ds := setupDynamicThresholdTestDB(t)
 
-		threshold, err := ds.GetDynamicThreshold("")
+		threshold, err := ds.GetDynamicThreshold("", "")
 
 		require.Error(t, err)
 		assert.Nil(t, threshold)
@@ -247,7 +247,7 @@ func TestDeleteDynamicThreshold(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify deletion
-		retrieved, err := ds.GetDynamicThreshold("sparrow")
+		retrieved, err := ds.GetDynamicThreshold("sparrow", "")
 		require.Error(t, err)
 		assert.Nil(t, retrieved)
 	})
@@ -382,7 +382,7 @@ func TestUpdateDynamicThresholdExpiry(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		retrieved, err := ds.GetDynamicThreshold("chickadee")
+		retrieved, err := ds.GetDynamicThreshold("chickadee", "")
 		require.NoError(t, err)
 		assert.True(t, retrieved.ExpiresAt.After(originalExpiry))
 		assert.WithinDuration(t, newExpiry, retrieved.ExpiresAt, time.Second)
@@ -488,7 +488,7 @@ func TestBatchSaveDynamicThresholds(t *testing.T) {
 		require.NoError(t, err)
 
 		// Verify update
-		retrieved, err := ds.GetDynamicThreshold("robin")
+		retrieved, err := ds.GetDynamicThreshold("robin", "")
 		require.NoError(t, err)
 		assert.Equal(t, 2, retrieved.Level)
 		assert.InDelta(t, 0.8, retrieved.CurrentValue, 0.001)

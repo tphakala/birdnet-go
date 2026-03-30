@@ -221,7 +221,7 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get threshold by scientific name
-	retrieved, err := ds.GetDynamicThreshold("Passer domesticus")
+	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
 	require.NoError(t, err)
 	assert.Equal(t, "Passer domesticus", retrieved.SpeciesName)
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
@@ -273,7 +273,7 @@ func TestV2OnlyDatastore_DynamicThreshold_CommonNameDisplay(t *testing.T) {
 	require.NoError(t, err)
 
 	// GetDynamicThreshold should return common name in SpeciesName
-	retrieved, err := ds.GetDynamicThreshold("Parus major")
+	retrieved, err := ds.GetDynamicThreshold("Parus major", "")
 	require.NoError(t, err)
 	assert.Equal(t, "Great Tit", retrieved.SpeciesName, "SpeciesName should be common name")
 	assert.Equal(t, "Parus major", retrieved.ScientificName, "ScientificName should stay scientific")
@@ -354,7 +354,7 @@ func TestV2OnlyDatastore_DynamicThreshold_GetByCommonName(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve using lowercase common name
-	retrieved, err := ds.GetDynamicThreshold("great tit")
+	retrieved, err := ds.GetDynamicThreshold("great tit", "")
 	require.NoError(t, err)
 	assert.Equal(t, "Great Tit", retrieved.SpeciesName)
 	assert.Equal(t, "Parus major", retrieved.ScientificName)
@@ -384,7 +384,7 @@ func TestV2OnlyDatastore_DynamicThreshold_FallbackWithoutMapping(t *testing.T) {
 	require.NoError(t, err)
 
 	// Without label mapping, should fall back to scientific name
-	retrieved, err := ds.GetDynamicThreshold("Passer domesticus")
+	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
 	require.NoError(t, err)
 	assert.Equal(t, "Passer domesticus", retrieved.SpeciesName, "should fallback to scientific name")
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
@@ -418,7 +418,7 @@ func TestV2OnlyDatastore_DynamicThreshold_UpdateExpiryByCommonName(t *testing.T)
 	require.NoError(t, err, "UpdateDynamicThresholdExpiry should work with common name")
 
 	// Verify the expiry was updated
-	retrieved, err := ds.GetDynamicThreshold("Parus major")
+	retrieved, err := ds.GetDynamicThreshold("Parus major", "")
 	require.NoError(t, err)
 	assert.WithinDuration(t, newExpiry, retrieved.ExpiresAt, time.Second, "expiry should be updated")
 }

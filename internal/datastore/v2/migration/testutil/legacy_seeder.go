@@ -450,20 +450,20 @@ func (s *LegacySeeder) SeedThresholdEvents(events []datastore.ThresholdEvent) er
 	}
 	defer func() { _ = stmt.Close() }()
 
-	for _, e := range events {
+	for i := range events {
 		_, err := stmt.Exec(
-			e.ID,
-			e.SpeciesName,
-			e.PreviousLevel,
-			e.NewLevel,
-			e.PreviousValue,
-			e.NewValue,
-			e.ChangeReason,
-			e.Confidence,
-			e.CreatedAt,
+			events[i].ID,
+			events[i].SpeciesName,
+			events[i].PreviousLevel,
+			events[i].NewLevel,
+			events[i].PreviousValue,
+			events[i].NewValue,
+			events[i].ChangeReason,
+			events[i].Confidence,
+			events[i].CreatedAt,
 		)
 		if err != nil {
-			return fmt.Errorf("insert threshold event %d: %w", e.ID, err)
+			return fmt.Errorf("insert threshold event %d: %w", events[i].ID, err)
 		}
 	}
 

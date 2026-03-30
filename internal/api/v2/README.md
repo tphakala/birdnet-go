@@ -453,6 +453,23 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 - All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
 
+### Models (`models.go`)
+
+| Method | Route     | Handler      | Auth | Description                         |
+| ------ | --------- | ------------ | ---- | ----------------------------------- |
+| GET    | `/models` | `ListModels` | ❌   | List available classifier models    |
+
+**GET /api/v2/models** — Returns all classifier models registered in the model registry. Each entry includes a config alias (used in audio source configuration) and a human-readable display name.
+
+**Response:**
+
+```json
+[
+  { "id": "birdnet", "name": "BirdNET GLOBAL 6K V2.4" },
+  { "id": "perch_v2", "name": "Google Perch V2" }
+]
+```
+
 ### TLS Certificate Management (`tls.go`)
 
 | Method | Route                       | Handler                         | Auth | Description                                |

@@ -240,7 +240,7 @@ func (m *mockStore) SearchDetections(filters *datastore.SearchFilters) ([]datast
 
 // Dynamic threshold methods
 func (m *mockStore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold) error { return nil }
-func (m *mockStore) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
+func (m *mockStore) GetDynamicThreshold(speciesName, modelName string) (*datastore.DynamicThreshold, error) {
 	return nil, fmt.Errorf("not found")
 }
 func (m *mockStore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicThreshold, error) {

@@ -1839,9 +1839,9 @@ func (_c *MockInterface_GetDetectionTrends_Call) RunAndReturn(run func(context.C
 	return _c
 }
 
-// GetDynamicThreshold provides a mock function with given fields: speciesName
-func (_m *MockInterface) GetDynamicThreshold(speciesName string) (*datastore.DynamicThreshold, error) {
-	ret := _m.Called(speciesName)
+// GetDynamicThreshold provides a mock function with given fields: speciesName, modelName
+func (_m *MockInterface) GetDynamicThreshold(speciesName string, modelName string) (*datastore.DynamicThreshold, error) {
+	ret := _m.Called(speciesName, modelName)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetDynamicThreshold")
@@ -1849,19 +1849,19 @@ func (_m *MockInterface) GetDynamicThreshold(speciesName string) (*datastore.Dyn
 
 	var r0 *datastore.DynamicThreshold
 	var r1 error
-	if rf, ok := ret.Get(0).(func(string) (*datastore.DynamicThreshold, error)); ok {
-		return rf(speciesName)
+	if rf, ok := ret.Get(0).(func(string, string) (*datastore.DynamicThreshold, error)); ok {
+		return rf(speciesName, modelName)
 	}
-	if rf, ok := ret.Get(0).(func(string) *datastore.DynamicThreshold); ok {
-		r0 = rf(speciesName)
+	if rf, ok := ret.Get(0).(func(string, string) *datastore.DynamicThreshold); ok {
+		r0 = rf(speciesName, modelName)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*datastore.DynamicThreshold)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(string) error); ok {
-		r1 = rf(speciesName)
+	if rf, ok := ret.Get(1).(func(string, string) error); ok {
+		r1 = rf(speciesName, modelName)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1876,13 +1876,14 @@ type MockInterface_GetDynamicThreshold_Call struct {
 
 // GetDynamicThreshold is a helper method to define mock.On call
 //   - speciesName string
-func (_e *MockInterface_Expecter) GetDynamicThreshold(speciesName interface{}) *MockInterface_GetDynamicThreshold_Call {
-	return &MockInterface_GetDynamicThreshold_Call{Call: _e.mock.On("GetDynamicThreshold", speciesName)}
+//   - modelName string
+func (_e *MockInterface_Expecter) GetDynamicThreshold(speciesName interface{}, modelName interface{}) *MockInterface_GetDynamicThreshold_Call {
+	return &MockInterface_GetDynamicThreshold_Call{Call: _e.mock.On("GetDynamicThreshold", speciesName, modelName)}
 }
 
-func (_c *MockInterface_GetDynamicThreshold_Call) Run(run func(speciesName string)) *MockInterface_GetDynamicThreshold_Call {
+func (_c *MockInterface_GetDynamicThreshold_Call) Run(run func(speciesName string, modelName string)) *MockInterface_GetDynamicThreshold_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
+		run(args[0].(string), args[1].(string))
 	})
 	return _c
 }
@@ -1892,7 +1893,7 @@ func (_c *MockInterface_GetDynamicThreshold_Call) Return(_a0 *datastore.DynamicT
 	return _c
 }
 
-func (_c *MockInterface_GetDynamicThreshold_Call) RunAndReturn(run func(string) (*datastore.DynamicThreshold, error)) *MockInterface_GetDynamicThreshold_Call {
+func (_c *MockInterface_GetDynamicThreshold_Call) RunAndReturn(run func(string, string) (*datastore.DynamicThreshold, error)) *MockInterface_GetDynamicThreshold_Call {
 	_c.Call.Return(run)
 	return _c
 }

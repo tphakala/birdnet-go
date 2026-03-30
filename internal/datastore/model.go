@@ -171,32 +171,34 @@ type DetectionRecord struct {
 // users experience a sudden drop in detections after restart when learned thresholds are lost.
 type DynamicThreshold struct {
 	ID             uint      `gorm:"primaryKey"`
-	SpeciesName    string    `gorm:"uniqueIndex;not null;size:200"` // Common name (lowercase)
-	ScientificName string    `gorm:"size:200"`                      // Scientific name for thumbnails
-	Level          int       `gorm:"not null;default:0"`            // Adjustment level (0-3)
-	CurrentValue   float64   `gorm:"not null"`                      // Current threshold value
-	BaseThreshold  float64   `gorm:"not null"`                      // Original base threshold for reference
-	HighConfCount  int       `gorm:"not null;default:0"`            // Count of high-confidence detections
-	ValidHours     int       `gorm:"not null"`                      // Hours until expiry
-	ExpiresAt      time.Time `gorm:"index;not null"`                // When this threshold expires
-	LastTriggered  time.Time `gorm:"index;not null"`                // Last time threshold was triggered
-	FirstCreated   time.Time `gorm:"not null"`                      // When first created
-	UpdatedAt      time.Time `gorm:"not null"`                      // Last update time
-	TriggerCount   int       `gorm:"not null;default:0"`            // Total number of times triggered (for statistics)
+	SpeciesName    string    `gorm:"uniqueIndex:idx_dt_species_model;not null;size:200"`                   // Common name (lowercase)
+	ModelName      string    `gorm:"uniqueIndex:idx_dt_species_model;not null;size:100;default:'BirdNET'"` // Model that produced this threshold
+	ScientificName string    `gorm:"size:200"`                                                             // Scientific name for thumbnails
+	Level          int       `gorm:"not null;default:0"`                                                   // Adjustment level (0-3)
+	CurrentValue   float64   `gorm:"not null"`                                                             // Current threshold value
+	BaseThreshold  float64   `gorm:"not null"`                                                             // Original base threshold for reference
+	HighConfCount  int       `gorm:"not null;default:0"`                                                   // Count of high-confidence detections
+	ValidHours     int       `gorm:"not null"`                                                             // Hours until expiry
+	ExpiresAt      time.Time `gorm:"index;not null"`                                                       // When this threshold expires
+	LastTriggered  time.Time `gorm:"index;not null"`                                                       // Last time threshold was triggered
+	FirstCreated   time.Time `gorm:"not null"`                                                             // When first created
+	UpdatedAt      time.Time `gorm:"not null"`                                                             // Last update time
+	TriggerCount   int       `gorm:"not null;default:0"`                                                   // Total number of times triggered (for statistics)
 }
 
 // ThresholdEvent records each change to a dynamic threshold for audit/history purposes.
 // This enables the frontend to display a timeline of threshold adjustments per species.
 type ThresholdEvent struct {
 	ID            uint      `gorm:"primaryKey"`
-	SpeciesName   string    `gorm:"index;not null;size:200"` // Common name (lowercase)
-	PreviousLevel int       `gorm:"not null"`                // Level before change
-	NewLevel      int       `gorm:"not null"`                // Level after change
-	PreviousValue float64   `gorm:"not null"`                // Threshold value before change
-	NewValue      float64   `gorm:"not null"`                // Threshold value after change
-	ChangeReason  string    `gorm:"not null;size:50"`        // "high_confidence", "expiry", "manual_reset"
-	Confidence    float64   `gorm:"default:0"`               // Detection confidence that triggered change (if applicable)
-	CreatedAt     time.Time `gorm:"index;not null"`          // When the event occurred
+	SpeciesName   string    `gorm:"index;not null;size:200"`             // Common name (lowercase)
+	ModelName     string    `gorm:"not null;size:100;default:'BirdNET'"` // Model that produced this event
+	PreviousLevel int       `gorm:"not null"`                            // Level before change
+	NewLevel      int       `gorm:"not null"`                            // Level after change
+	PreviousValue float64   `gorm:"not null"`                            // Threshold value before change
+	NewValue      float64   `gorm:"not null"`                            // Threshold value after change
+	ChangeReason  string    `gorm:"not null;size:50"`                    // "high_confidence", "expiry", "manual_reset"
+	Confidence    float64   `gorm:"default:0"`                           // Detection confidence that triggered change (if applicable)
+	CreatedAt     time.Time `gorm:"index;not null"`                      // When the event occurred
 
 	// ScientificName is a virtual field (not persisted in legacy DB) used by v2only
 	// datastore to correctly resolve the Label foreign key. The processor populates

@@ -35,6 +35,10 @@ type ModelRepository interface {
 	// Note: This may fail if there are detections or labels referencing this model.
 	Delete(ctx context.Context, id uint) error
 
+	// GetByIDs retrieves multiple models by their IDs in a single batch query.
+	// Returns a map of model ID to AIModel. Missing IDs are silently omitted.
+	GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.AIModel, error)
+
 	// Exists checks if a model with the given ID exists.
 	Exists(ctx context.Context, id uint) (bool, error)
 }

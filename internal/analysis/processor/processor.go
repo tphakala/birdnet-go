@@ -647,7 +647,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 		}
 
 		// Update the dynamic threshold for this species if enabled
-		p.updateDynamicThreshold(commonName, confidence)
+		p.updateDynamicThreshold(item.ModelID, commonName, confidence)
 
 		// Unlock the mutex to allow other goroutines to access shared resources
 		p.pendingMutex.Unlock()
@@ -783,7 +783,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
 		config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
-		confidenceThreshold = p.getAdjustedConfidenceThreshold(speciesLowercase, baseThreshold, isCustomThreshold)
+		confidenceThreshold = p.getAdjustedConfidenceThreshold(modelID, speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
 		confidenceThreshold = baseThreshold
 	}
@@ -1198,7 +1198,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	// This is the correct place for learning - only approved detections should affect thresholds,
 	// not pending detections that may later be discarded as false positives.
 	// Note: speciesName is already lowercase (lowered in flushPendingDetections)
-	p.LearnFromApprovedDetection(speciesName, item.Detection.Result.Species.ScientificName, confidence)
+	p.LearnFromApprovedDetection(item.ModelID, speciesName, item.Detection.Result.Species.ScientificName, confidence)
 
 	p.normalizeDetectionTimes(item)
 
@@ -1408,6 +1408,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 					LastUpdated:     item.LastUpdated.Unix(),
 					Source:          p.getDisplayNameForSource(item.Source),
 					SourceID:        item.Source,
+					ModelID:         item.ModelID,
 					HitCount:        item.Count,
 				})
 			}

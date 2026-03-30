@@ -66,14 +66,18 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 			if p.Settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Skipping expired threshold",
 					logger.String("species", dbThreshold.SpeciesName),
+					logger.String("model", dbThreshold.ModelName),
 					logger.Time("expires_at", dbThreshold.ExpiresAt),
 					logger.String("operation", "load_dynamic_thresholds"))
 			}
 			continue
 		}
 
+		// Reconstruct composite key from DB fields
+		key := dynamicThresholdKey(dbThreshold.ModelName, strings.ToLower(dbThreshold.SpeciesName))
+
 		// Convert database model to in-memory representation
-		p.DynamicThresholds[dbThreshold.SpeciesName] = &DynamicThreshold{
+		p.DynamicThresholds[key] = &DynamicThreshold{
 			Level:          dbThreshold.Level,
 			CurrentValue:   dbThreshold.CurrentValue,
 			Timer:          dbThreshold.ExpiresAt,
@@ -86,6 +90,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		if p.Settings.Realtime.DynamicThreshold.Debug {
 			GetLogger().Debug("Loaded dynamic threshold",
 				logger.String("species", dbThreshold.SpeciesName),
+				logger.String("model", dbThreshold.ModelName),
 				logger.Int("threshold_level", dbThreshold.Level),
 				logger.Float64("current_value", dbThreshold.CurrentValue),
 				logger.Time("expires_at", dbThreshold.ExpiresAt),
@@ -116,21 +121,25 @@ func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.
 	dbThresholds = make([]datastore.DynamicThreshold, 0, len(p.DynamicThresholds))
 	expiredSpecies = make([]string, 0)
 
-	for speciesName, threshold := range p.DynamicThresholds {
+	for compositeKey, threshold := range p.DynamicThresholds {
 		if now.After(threshold.Timer) {
-			expiredSpecies = append(expiredSpecies, speciesName)
+			expiredSpecies = append(expiredSpecies, compositeKey)
 			if p.Settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Found expired threshold during persistence",
-					logger.String("species", speciesName),
+					logger.String("key", compositeKey),
 					logger.Time("expires_at", threshold.Timer),
 					logger.String("operation", "persist_dynamic_thresholds"))
 			}
 			continue
 		}
 
+		// Extract model name and species name from composite key
+		modelName, speciesName := splitDynamicThresholdKey(compositeKey)
+
 		baseThreshold := p.getBaseConfidenceThreshold(speciesName, "")
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:    speciesName,
+			ModelName:      modelName,
 			ScientificName: threshold.ScientificName,
 			Level:          threshold.Level,
 			CurrentValue:   threshold.CurrentValue,
@@ -289,35 +298,38 @@ func (p *Processor) drainPendingResets() {
 		return
 	}
 
-	// Track species whose DB deletes failed so we can requeue them.
+	// Track composite keys whose DB deletes failed so we can requeue them.
 	var failedResets []string
 
-	for speciesName := range resets {
+	for compositeKey := range resets {
+		// Extract species name from composite key for DB operations
+		_, speciesName := splitDynamicThresholdKey(compositeKey)
+
 		thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
 		if thresholdErr != nil {
 			log.Warn("failed to re-delete dynamic threshold after persistence, requeuing",
-				logger.String("species", speciesName),
+				logger.String("key", compositeKey),
 				logger.Error(thresholdErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
 		if eventsErr != nil {
 			log.Warn("failed to re-delete threshold events after persistence, requeuing",
-				logger.String("species", speciesName),
+				logger.String("key", compositeKey),
 				logger.Error(eventsErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		if thresholdErr != nil || eventsErr != nil {
-			failedResets = append(failedResets, speciesName)
+			failedResets = append(failedResets, compositeKey)
 		}
 	}
 
-	// Requeue any species whose deletes failed so the next cycle retries them.
+	// Requeue any composite keys whose deletes failed so the next cycle retries them.
 	if len(failedResets) > 0 {
 		p.thresholdsMutex.Lock()
-		for _, speciesName := range failedResets {
+		for _, compositeKey := range failedResets {
 			if p.pendingResets != nil {
-				p.pendingResets[speciesName] = struct{}{}
+				p.pendingResets[compositeKey] = struct{}{}
 			}
 		}
 		p.thresholdsMutex.Unlock()

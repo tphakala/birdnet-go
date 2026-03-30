@@ -8,7 +8,7 @@
   - Card with view/edit modes
   - Device dropdown from available audio devices
   - Gain slider (-40 to +40 dB)
-  - Model selector (BirdNET, Perch v2, Bat)
+  - Model selector (dynamically loaded from backend)
   - Per-source equalizer (expandable, reuses AudioEqualizerSettings)
   - Per-source quiet hours (reuses QuietHoursEditor)
   - Delete confirmation overlay
@@ -60,20 +60,21 @@
     source: AudioSourceConfig;
     index: number;
     audioDevices: Array<{ index: number; name: string; id: string }>;
+    modelOptions: Array<{ value: string; label: string }>;
     disabled?: boolean;
     onUpdate: (_source: AudioSourceConfig) => boolean;
     onDelete: () => void;
   }
 
-  let { source, index, audioDevices, disabled = false, onUpdate, onDelete }: Props = $props();
-
-  // Model options — use $derived to re-translate on locale change
-  const modelOptions = $derived([
-    { value: '', label: t('settings.audio.soundCards.models.birdnetDefault') },
-    { value: 'birdnet', label: t('settings.audio.soundCards.models.birdnet') },
-    { value: 'perch_v2', label: t('settings.audio.soundCards.models.perchV2') },
-    { value: 'bat', label: t('settings.audio.soundCards.models.bat') },
-  ]);
+  let {
+    source,
+    index,
+    audioDevices,
+    modelOptions,
+    disabled = false,
+    onUpdate,
+    onDelete,
+  }: Props = $props();
 
   // Local editing state
   let isEditing = $state(false);

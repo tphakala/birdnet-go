@@ -294,7 +294,7 @@ func (m *ActionMockDatastore) SearchDetections(_ *datastore.SearchFilters) ([]da
 func (m *ActionMockDatastore) SaveDynamicThreshold(_ *datastore.DynamicThreshold) error {
 	return nil
 }
-func (m *ActionMockDatastore) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
+func (m *ActionMockDatastore) GetDynamicThreshold(_, _ string) (*datastore.DynamicThreshold, error) {
 	// Returns ErrNoteReviewNotFound as a generic "not found" sentinel.
 	// This stub method is not exercised by action execution tests.
 	return nil, datastore.ErrNoteReviewNotFound

@@ -762,7 +762,7 @@ func (s *testLegacyInterface) SearchDetections(_ *datastore.SearchFilters) ([]da
 	return nil, 0, nil
 }
 func (s *testLegacyInterface) SaveDynamicThreshold(_ *datastore.DynamicThreshold) error { return nil }
-func (s *testLegacyInterface) GetDynamicThreshold(_ string) (*datastore.DynamicThreshold, error) {
+func (s *testLegacyInterface) GetDynamicThreshold(_, _ string) (*datastore.DynamicThreshold, error) {
 	return nil, nil //nolint:nilnil // stub
 }
 func (s *testLegacyInterface) DeleteDynamicThreshold(_ string) error { return nil }

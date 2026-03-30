@@ -193,7 +193,7 @@ type Interface interface {
 	SearchDetections(filters *SearchFilters) ([]DetectionRecord, int, error)
 	// Dynamic Threshold methods
 	SaveDynamicThreshold(threshold *DynamicThreshold) error
-	GetDynamicThreshold(speciesName string) (*DynamicThreshold, error)
+	GetDynamicThreshold(speciesName, modelName string) (*DynamicThreshold, error)
 	GetAllDynamicThresholds(limit ...int) ([]DynamicThreshold, error) // Optional limit parameter
 	DeleteDynamicThreshold(speciesName string) error
 	DeleteExpiredDynamicThresholds(before time.Time) (int64, error) // Returns count deleted

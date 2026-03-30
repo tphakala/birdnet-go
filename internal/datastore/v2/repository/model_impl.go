@@ -97,6 +97,24 @@ func (r *modelRepository) GetByID(ctx context.Context, id uint) (*entities.AIMod
 	return &model, nil
 }
 
+// GetByIDs retrieves multiple models by their IDs in a single batch query.
+// Returns a map of model ID to AIModel. Missing IDs are silently omitted.
+func (r *modelRepository) GetByIDs(ctx context.Context, ids []uint) (map[uint]*entities.AIModel, error) {
+	if len(ids) == 0 {
+		return map[uint]*entities.AIModel{}, nil
+	}
+	var models []*entities.AIModel
+	err := r.db.WithContext(ctx).Table(r.tableName()).Where("id IN ?", ids).Find(&models).Error
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[uint]*entities.AIModel, len(models))
+	for _, m := range models {
+		result[m.ID] = m
+	}
+	return result, nil
+}
+
 // GetByNameVersionVariant retrieves a model by name, version, and variant.
 func (r *modelRepository) GetByNameVersionVariant(ctx context.Context, name, version, variant string) (*entities.AIModel, error) {
 	var model entities.AIModel

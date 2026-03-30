@@ -25,6 +25,7 @@ const (
 type DynamicThresholdResponse struct {
 	SpeciesName    string    `json:"speciesName"`
 	ScientificName string    `json:"scientificName"`
+	ModelName      string    `json:"modelName,omitempty"`
 	Level          int       `json:"level"`
 	CurrentValue   float64   `json:"currentValue"`
 	BaseThreshold  float64   `json:"baseThreshold"`
@@ -198,6 +199,7 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 		thresholdMap[strings.ToLower(dt.SpeciesName)] = &DynamicThresholdResponse{
 			SpeciesName:    dt.SpeciesName,
 			ScientificName: dt.ScientificName,
+			ModelName:      dt.ModelName,
 			Level:          dt.Level,
 			CurrentValue:   dt.CurrentValue,
 			BaseThreshold:  dt.BaseThreshold,
@@ -230,6 +232,7 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 			thresholdMap[key] = &DynamicThresholdResponse{
 				SpeciesName:    dt.SpeciesName,
 				ScientificName: dt.ScientificName,
+				ModelName:      dt.ModelName,
 				Level:          dt.Level,
 				CurrentValue:   dt.CurrentValue,
 				BaseThreshold:  float64(baseThreshold),
@@ -286,8 +289,9 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 		return err
 	}
 
-	// Try to get from database
-	dt, err := c.DS.GetDynamicThreshold(species)
+	// Try to get from database; optional model query param scopes the lookup
+	model := ctx.QueryParam("model")
+	dt, err := c.DS.GetDynamicThreshold(species, model)
 	if err != nil {
 		return c.handleErrorWithNotFound(ctx, err, "Threshold not found", "Failed to get threshold")
 	}
@@ -295,6 +299,7 @@ func (c *Controller) GetDynamicThreshold(ctx echo.Context) error {
 	response := DynamicThresholdResponse{
 		SpeciesName:    dt.SpeciesName,
 		ScientificName: dt.ScientificName,
+		ModelName:      dt.ModelName,
 		Level:          dt.Level,
 		CurrentValue:   dt.CurrentValue,
 		BaseThreshold:  dt.BaseThreshold,
@@ -337,17 +342,17 @@ func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
 
 	// Convert to response format
 	response := make([]ThresholdEventResponse, len(events))
-	for i, e := range events {
+	for i := range events {
 		response[i] = ThresholdEventResponse{
-			ID:            e.ID,
-			SpeciesName:   e.SpeciesName,
-			PreviousLevel: e.PreviousLevel,
-			NewLevel:      e.NewLevel,
-			PreviousValue: e.PreviousValue,
-			NewValue:      e.NewValue,
-			ChangeReason:  e.ChangeReason,
-			Confidence:    e.Confidence,
-			CreatedAt:     e.CreatedAt,
+			ID:            events[i].ID,
+			SpeciesName:   events[i].SpeciesName,
+			PreviousLevel: events[i].PreviousLevel,
+			NewLevel:      events[i].NewLevel,
+			PreviousValue: events[i].PreviousValue,
+			NewValue:      events[i].NewValue,
+			ChangeReason:  events[i].ChangeReason,
+			Confidence:    events[i].Confidence,
+			CreatedAt:     events[i].CreatedAt,
 		}
 	}
 

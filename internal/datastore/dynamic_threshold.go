@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -21,6 +22,9 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 	if threshold.SpeciesName == "" {
 		return validationError("species name cannot be empty", "species_name", "")
 	}
+	if threshold.ModelName == "" {
+		threshold.ModelName = detection.DefaultModelName
+	}
 
 	// Timestamps
 	now := time.Now()
@@ -29,7 +33,7 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 	// Upsert: set FirstCreated only on INSERT; always update other fields
 	return RetryOnLock(context.Background(), "save_dynamic_threshold", func() error {
 		threshold.ID = 0 // Reset ID for retry safety with FirstOrCreate
-		result := ds.DB.Where("species_name = ?", threshold.SpeciesName).
+		result := ds.DB.Where("species_name = ? AND model_name = ?", threshold.SpeciesName, threshold.ModelName).
 			Attrs(DynamicThreshold{
 				FirstCreated: now, // Only set on INSERT
 			}).
@@ -47,14 +51,17 @@ func (ds *DataStore) SaveDynamicThreshold(threshold *DynamicThreshold) error {
 	}, ds.getMetrics())
 }
 
-// GetDynamicThreshold retrieves a dynamic threshold for a specific species
-func (ds *DataStore) GetDynamicThreshold(speciesName string) (*DynamicThreshold, error) {
+// GetDynamicThreshold retrieves a dynamic threshold for a specific species and model
+func (ds *DataStore) GetDynamicThreshold(speciesName, modelName string) (*DynamicThreshold, error) {
 	if speciesName == "" {
 		return nil, validationError("species name cannot be empty", "species_name", "")
 	}
+	if modelName == "" {
+		modelName = detection.DefaultModelName
+	}
 
 	var threshold DynamicThreshold
-	err := ds.DB.Where("species_name = ?", speciesName).First(&threshold).Error
+	err := ds.DB.Where("species_name = ? AND model_name = ?", speciesName, modelName).First(&threshold).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.Newf("dynamic threshold not found").
@@ -390,10 +397,13 @@ func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) e
 		return nil // Nothing to save
 	}
 
-	// Validate all entries before starting transaction
+	// Validate and default all entries before starting transaction
 	for i := range thresholds {
 		if thresholds[i].SpeciesName == "" {
 			return validationError("species name cannot be empty", "index", i)
+		}
+		if thresholds[i].ModelName == "" {
+			thresholds[i].ModelName = detection.DefaultModelName
 		}
 	}
 
@@ -414,7 +424,7 @@ func (ds *DataStore) BatchSaveDynamicThresholds(thresholds []DynamicThreshold) e
 		// This is much more efficient than multiple FirstOrCreate calls
 		// GORM's OnConflict clause handles SQLite's INSERT...ON CONFLICT DO UPDATE
 		result := tx.Clauses(clause.OnConflict{
-			Columns: []clause.Column{{Name: "species_name"}},
+			Columns: []clause.Column{{Name: "species_name"}, {Name: "model_name"}},
 			DoUpdates: clause.AssignmentColumns([]string{
 				"level",
 				"current_value",

@@ -201,6 +201,12 @@ func (m *BufferManager) AddMonitors(source string, models []monitorConfig) error
 		// Use the channel we just stored (actual is our monitorQuit channel)
 		monitorQuit = actual.(chan struct{})
 
+		m.logger.Debug("Allocated analysis buffer monitor",
+			logger.String("source_id", source),
+			logger.String("model_id", cfg.modelID),
+			logger.String("component", "analysis.buffer"),
+			logger.String("operation", "allocate_monitor"))
+
 		// Capture cfg for the goroutine closure
 		monitorCfg := cfg
 

@@ -55,7 +55,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{},
 		pendingDetections: map[string]PendingDetection{
-			"src1:species_a": {
+			"src1:species_a:model1": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -65,11 +65,12 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
+				ModelID:       "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         5, // Above threshold of 3 (minDetections=12)
 			},
-			"src1:species_b": {
+			"src1:species_b:model1": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -79,11 +80,12 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
+				ModelID:       "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         1, // Below threshold of 3
 			},
-			"src1:species_c": {
+			"src1:species_c:model1": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -93,6 +95,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
+				ModelID:       "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         3, // Exactly at threshold
@@ -116,6 +119,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	if okA {
 		assert.Equal(t, PendingStatusActive, pdA.Status)
 		assert.Equal(t, "Genus speciesA", pdA.ScientificName)
+		assert.Equal(t, "model1", pdA.ModelID)
 		assert.NotZero(t, pdA.FirstDetected)
 	}
 
@@ -125,6 +129,7 @@ func TestSnapshotVisiblePending_FiltersByThreshold(t *testing.T) {
 	if okC {
 		assert.Equal(t, PendingStatusActive, pdC.Status)
 		assert.Equal(t, "Genus speciesC", pdC.ScientificName)
+		assert.Equal(t, "model1", pdC.ModelID)
 		assert.NotZero(t, pdC.FirstDetected)
 	}
 
@@ -151,7 +156,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 	p := &Processor{
 		Settings: &conf.Settings{},
 		pendingDetections: map[string]PendingDetection{
-			"src1:species_a": {
+			"src1:species_a:model1": {
 				Detection: Detections{
 					Result: detection.Result{
 						Species: detection.Species{
@@ -161,6 +166,7 @@ func TestSnapshotVisiblePending_AllBelowThreshold(t *testing.T) {
 					},
 				},
 				Source:        "src1",
+				ModelID:       "model1",
 				FirstDetected: time.Date(2026, 3, 7, 10, 0, 0, 0, time.UTC),
 				CreatedAt:     time.Date(2026, 3, 7, 10, 0, 13, 0, time.UTC),
 				Count:         2, // Below threshold of 3
@@ -189,6 +195,7 @@ func TestBuildFlushNotification(t *testing.T) {
 			},
 		},
 		Source:        "src1",
+		ModelID:       "birdnet-v2.4",
 		FirstDetected: time.Date(2026, 3, 7, 8, 50, 0, 0, time.UTC),
 		CreatedAt:     time.Date(2026, 3, 7, 8, 50, 13, 0, time.UTC),
 	}
@@ -197,10 +204,12 @@ func TestBuildFlushNotification(t *testing.T) {
 	assert.Equal(t, "käpytikka", approved.Species)
 	assert.Equal(t, "Dendrocopos major", approved.ScientificName)
 	assert.Equal(t, PendingStatusApproved, approved.Status)
+	assert.Equal(t, "birdnet-v2.4", approved.ModelID)
 	assert.Equal(t, item.CreatedAt.Unix(), approved.FirstDetected)
 
 	rejected := p.buildFlushNotification(item, PendingStatusRejected)
 	assert.Equal(t, PendingStatusRejected, rejected.Status)
+	assert.Equal(t, "birdnet-v2.4", rejected.ModelID)
 }
 
 func TestSnapshotVisiblePending_UsesCreatedAtNotFirstDetected(t *testing.T) {
@@ -397,6 +406,16 @@ func TestPendingSnapshotChanged(t *testing.T) {
 			prev: nil,
 			curr: []SSEPendingDetection{
 				{Species: "Blue Tit", SourceID: "src1", HitCount: 2, Status: PendingStatusActive},
+			},
+			changed: true,
+		},
+		{
+			name: "model_id_changed",
+			prev: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", ModelID: "model-a", HitCount: 3, Status: PendingStatusActive},
+			},
+			curr: []SSEPendingDetection{
+				{Species: "Blue Tit", SourceID: "src1", ModelID: "model-b", HitCount: 3, Status: PendingStatusActive},
 			},
 			changed: true,
 		},
