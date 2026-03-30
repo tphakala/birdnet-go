@@ -235,22 +235,10 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 
 	bn.classifier = classifier
 
-	// Update model version based on custom model path if provided.
-	// Only derive the ID from the filename when the resolution chain did not
-	// already determine a specific model (i.e., ID is empty or still "Custom").
-	// After NewBirdNET's 4-tier resolution, ModelInfo.ID may already be set
-	// correctly and must not be overwritten here.
+	// Update the human-readable model version string for display when a custom
+	// model path is provided. Model identity (ModelInfo.ID) is never modified
+	// here — it was fully resolved by NewBirdNET's 4-tier resolution chain.
 	if bn.Settings.BirdNET.ModelPath != "" {
-		if bn.ModelInfo.ID == "" || bn.ModelInfo.ID == modelIDCustom {
-			// Extract model version from the file name if possible
-			fileName := filepath.Base(bn.Settings.BirdNET.ModelPath)
-			if strings.HasPrefix(fileName, "BirdNET_") && strings.Contains(fileName, "_Model_") {
-				parts := strings.Split(fileName, "_Model_")
-				bn.ModelInfo.ID = parts[0]
-			} else {
-				bn.ModelInfo.ID = modelIDCustom
-			}
-		}
 		bn.modelVersion = bn.Settings.BirdNET.ModelPath
 	}
 
@@ -592,8 +580,15 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 		bn.speciesCacheMu.Unlock()
 		return out, nil
 	}
-	// Keep cache bounded by clearing before setting new key
-	clear(bn.speciesCache)
+	// Keep cache bounded: evict one arbitrary entry when limit is reached.
+	// Each key encodes date+lat+lon+model, so a small limit is sufficient.
+	const maxSpeciesCacheEntries = 8
+	if len(bn.speciesCache) >= maxSpeciesCacheEntries {
+		for k := range bn.speciesCache {
+			delete(bn.speciesCache, k)
+			break
+		}
+	}
 	bn.speciesCache[cacheKey] = &speciesCacheEntry{
 		key:    cacheKey,
 		scores: scores,

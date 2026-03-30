@@ -163,9 +163,10 @@ func ResolveConfigModelID(configID string) (string, bool) {
 
 // IsLocaleSupported checks if a locale is supported by the given model.
 func IsLocaleSupported(modelInfo *ModelInfo, locale string) bool {
-	// If it's a custom model with no specified locales, assume all are supported
+	// If it's a custom model with no specified locales, assume all are supported.
+	// Registered models with empty SupportedLocales genuinely have no locale support.
 	if len(modelInfo.SupportedLocales) == 0 {
-		return true
+		return modelInfo.ID == modelIDCustom
 	}
 
 	normalizedLocale := strings.ToLower(locale)

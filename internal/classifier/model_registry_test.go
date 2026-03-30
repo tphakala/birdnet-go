@@ -153,3 +153,17 @@ func TestDetermineModelInfo_UnrecognizedNonModelFile(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "unrecognized model")
 }
+
+func TestIsLocaleSupported_PerchHasNoLocales(t *testing.T) {
+	t.Parallel()
+
+	perchInfo := ModelRegistry["Perch_V2"]
+	assert.False(t, IsLocaleSupported(&perchInfo, "en-uk"), "Perch_V2 should not support any locale")
+}
+
+func TestIsLocaleSupported_CustomModelAcceptsAll(t *testing.T) {
+	t.Parallel()
+
+	customInfo := ModelInfo{ID: modelIDCustom, SupportedLocales: []string{}}
+	assert.True(t, IsLocaleSupported(&customInfo, "en-uk"), "Custom model should accept any locale")
+}
