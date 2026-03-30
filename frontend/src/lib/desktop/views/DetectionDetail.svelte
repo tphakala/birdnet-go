@@ -20,7 +20,6 @@
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
   import SpeciesBadges from '$lib/desktop/components/modals/SpeciesBadges.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
-  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
   import type { Detection, ImageAttribution } from '$lib/types/detection.types';
@@ -719,10 +718,56 @@
   </div>
 
   {#if isLoadingDetection}
-    <!-- Loading skeleton -->
-    <div class="surface-card p-8">
-      <div class="flex justify-center items-center h-64" aria-label="Loading detection details">
-        <LoadingSpinner size="lg" />
+    <!-- Loading skeleton matching real layout structure -->
+    <div class="detection-hero-grid" aria-label="Loading detection details">
+      <!-- Identity card skeleton -->
+      <div class="hero-card hero-identity-card">
+        <div class="skeleton-line w-20 h-3 mb-4"></div>
+        <div class="hero-identity-row">
+          <div class="hero-thumbnail skeleton-block"></div>
+          <div class="hero-species">
+            <div class="skeleton-line w-48 h-6 mb-2"></div>
+            <div class="skeleton-line w-32 h-4 mb-3"></div>
+            <div class="flex gap-2">
+              <div class="skeleton-line w-16 h-5 rounded-full"></div>
+              <div class="skeleton-line w-16 h-5 rounded-full"></div>
+            </div>
+          </div>
+          <div class="hero-confidence">
+            <div class="skeleton-block w-20 h-20 rounded-full"></div>
+          </div>
+        </div>
+      </div>
+      <!-- Metadata card skeleton -->
+      <div class="hero-card hero-metadata-card">
+        <div class="skeleton-line w-24 h-3 mb-4"></div>
+        <div class="space-y-3">
+          <div class="skeleton-line w-28 h-5"></div>
+          <div class="skeleton-line w-20 h-4"></div>
+          <div class="skeleton-line w-full h-12 mt-4"></div>
+        </div>
+      </div>
+    </div>
+    <!-- Media section skeleton -->
+    <div class="surface-card">
+      <div class="p-5 md:p-6">
+        <div class="skeleton-line w-32 h-4 mb-4"></div>
+        <div class="skeleton-block w-full" style:aspect-ratio="2 / 1"></div>
+      </div>
+    </div>
+    <!-- Tabs skeleton -->
+    <div class="surface-card">
+      <div class="p-5 md:p-6">
+        <div class="flex gap-4 mb-6">
+          <div class="skeleton-line w-20 h-8 rounded-md"></div>
+          <div class="skeleton-line w-20 h-8 rounded-md"></div>
+          <div class="skeleton-line w-20 h-8 rounded-md"></div>
+        </div>
+        <div class="space-y-3">
+          <div class="skeleton-line w-full h-4"></div>
+          <div class="skeleton-line w-3/4 h-4"></div>
+          <div class="skeleton-line w-1/2 h-4"></div>
+        </div>
       </div>
     </div>
   {:else if detectionError}
@@ -1437,5 +1482,28 @@
     color: var(--color-base-content);
     opacity: 0.4;
     font-style: italic;
+  }
+
+  /* ----- Skeleton loading primitives ----- */
+  .skeleton-line,
+  .skeleton-block {
+    background: var(--color-base-300);
+    opacity: 0.6;
+    border-radius: var(--radius-selector);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-block {
+    border-radius: var(--radius-box);
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 0.3;
+    }
   }
 </style>

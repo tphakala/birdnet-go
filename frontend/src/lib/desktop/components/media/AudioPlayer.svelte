@@ -1780,8 +1780,14 @@
   bind:this={playerContainer}
   class={cn('relative group overflow-hidden', className)}
   class:cursor-crosshair={enableClipExtraction}
+  class:spectrogram-skeleton={responsive &&
+    showSpectrogram &&
+    spectrogramUrl !== null &&
+    (spectrogramLoader.loading || spectrogramLoader.error)}
   style={responsive
-    ? ''
+    ? showSpectrogram
+      ? 'aspect-ratio: 2 / 1;'
+      : ''
     : `width: ${typeof width === 'number' ? width + 'px' : width}; height: ${typeof height === 'number' ? height + 'px' : height};`}
   onmousedown={enableClipExtraction ? handleSelectionMouseDown : undefined}
   ontouchstart={enableClipExtraction ? handleSelectionTouchStart : undefined}
@@ -2210,5 +2216,22 @@
 
   :global(.group:hover) .freq-line {
     background: rgb(255 255 255 / 0.12);
+  }
+
+  .spectrogram-skeleton {
+    background: var(--color-base-200);
+    border-radius: var(--radius-box);
+    border: 1px solid var(--color-base-300);
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
   }
 </style>
