@@ -46,7 +46,18 @@ type Orchestrator struct {
 // and loads any additional models from configuration.
 // This is the primary constructor — callers should use this instead of NewBirdNET.
 func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
-	bn, err := NewBirdNET(settings)
+	// Resolve primary model identity from config
+	var primaryInfo *ModelInfo
+	if settings.BirdNET.Version != "" {
+		info, ok := ResolveBirdNETVersion(settings.BirdNET.Version)
+		if ok {
+			if settings.BirdNET.ModelPath != "" {
+				info.CustomPath = settings.BirdNET.ModelPath
+			}
+			primaryInfo = &info
+		}
+	}
+	bn, err := NewBirdNET(settings, primaryInfo)
 	if err != nil {
 		return nil, err
 	}

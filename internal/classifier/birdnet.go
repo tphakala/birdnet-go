@@ -59,7 +59,9 @@ type BirdNET struct {
 }
 
 // NewBirdNET initializes a new BirdNET instance with given settings.
-func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
+// If modelInfo is non-nil it is used directly (orchestrator path); otherwise
+// the function walks a 4-tier resolution chain: config version > filename > default.
+func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error) {
 	bn := &BirdNET{
 		Settings:     settings,
 		TaxonomyPath: "", // Default to embedded taxonomy
@@ -67,27 +69,40 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 		speciesCache: make(map[string]*speciesCacheEntry),
 	}
 
-	// Determine model info based on settings
-	var modelIdentifier string
-	if settings.BirdNET.ModelPath != "" {
-		// Use custom model path
-		modelIdentifier = settings.BirdNET.ModelPath
-	} else {
-		// Use default embedded model
-		modelIdentifier = DefaultModelVersion
-	}
-
-	// Get model info
+	// Resolve model identity via the resolution chain
 	var err error
-	bn.ModelInfo, err = DetermineModelInfo(modelIdentifier)
-	if err != nil {
-		return nil, errors.New(err).
-			Component("birdnet").
-			Category(errors.CategoryModelInit).
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
-			Context("operation", "determine_model_info").
-			Context("model_identifier", modelIdentifier).
-			Build()
+	switch {
+	case modelInfo != nil:
+		// Tier 1: caller provided (orchestrator path)
+		bn.ModelInfo = *modelInfo
+	case settings.BirdNET.Version != "":
+		// Tier 2: explicit config version field
+		info, ok := ResolveBirdNETVersion(settings.BirdNET.Version)
+		if !ok {
+			return nil, errors.Newf("unknown BirdNET version: %s", settings.BirdNET.Version).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Context("version", settings.BirdNET.Version).
+				Build()
+		}
+		bn.ModelInfo = info
+		if settings.BirdNET.ModelPath != "" {
+			bn.ModelInfo.CustomPath = settings.BirdNET.ModelPath
+		}
+	case settings.BirdNET.ModelPath != "":
+		// Tier 3: filename-based fallback
+		bn.ModelInfo, err = DetermineModelInfo(settings.BirdNET.ModelPath)
+		if err != nil {
+			return nil, errors.New(err).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				ModelContext(settings.BirdNET.ModelPath, settings.BirdNET.ModelPath).
+				Context("operation", "determine_model_info").
+				Build()
+		}
+	default:
+		// Tier 4: default embedded model
+		bn.ModelInfo = ModelRegistry[DefaultModelVersion]
 	}
 
 	// Load taxonomy data
@@ -108,7 +123,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "load_labels").
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("locale", settings.BirdNET.Locale).
 			Build()
 	}
@@ -118,7 +133,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "initialize_model").
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 	}
 
@@ -127,7 +142,7 @@ func NewBirdNET(settings *conf.Settings) (*BirdNET, error) {
 			Component("birdnet").
 			Category(errors.CategoryModelInit).
 			Context("operation", "initialize_range_filter").
-			ModelContext(settings.BirdNET.ModelPath, modelIdentifier).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 	}
 
