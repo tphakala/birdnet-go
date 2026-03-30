@@ -870,10 +870,23 @@ func (bn *BirdNET) ReloadModel() error {
 		bn.Settings.BirdNET.Locale = oldLocale
 	}
 
-	// Re-determine model info if using a custom model path
-	if bn.Settings.BirdNET.ModelPath != "" {
-		var err error
-		bn.ModelInfo, err = DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
+	// Check if model version changed — if so, the orchestrator must handle
+	// the switch via pipeline cold restart, not ReloadModel.
+	if bn.Settings.BirdNET.Version != "" {
+		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
+		if ok && newInfo.ID != bn.ModelInfo.ID {
+			rollback()
+			return errors.Newf("model version changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Context("operation", "reload_model").
+				Context("current_model", bn.ModelInfo.ID).
+				Context("requested_model", newInfo.ID).
+				Build()
+		}
+	} else if bn.Settings.BirdNET.ModelPath != "" {
+		// Fallback: re-derive from filename for legacy configs
+		newInfo, err := DetermineModelInfo(bn.Settings.BirdNET.ModelPath)
 		if err != nil {
 			rollback()
 			return errors.New(err).
@@ -883,6 +896,15 @@ func (bn *BirdNET) ReloadModel() error {
 				Context("step", "determine_model_info").
 				Build()
 		}
+		if newInfo.ID != bn.ModelInfo.ID && newInfo.ID != "Custom" {
+			rollback()
+			return errors.Newf("model changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Context("operation", "reload_model").
+				Build()
+		}
+		bn.ModelInfo = newInfo
 	}
 
 	// Reload taxonomy data if needed
