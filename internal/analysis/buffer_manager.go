@@ -386,6 +386,10 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 	// hardcoded constant that assumed BirdNET v2.4 parameters.
 	analysisWindowBytes := cfg.readSize
 
+	// Track whether we ever successfully accessed the buffer to
+	// distinguish "never allocated" from "removed after use".
+	hasReadBuffer := false
+
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
@@ -396,12 +400,18 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 		case <-ticker.C:
 			ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
 			if err != nil {
-				// Buffer removed, exit gracefully
-				m.logger.Info("analysis buffer removed, stopping monitor",
-					logger.String("source_id", cfg.sourceID),
-					logger.String("model_id", cfg.modelID))
+				if hasReadBuffer {
+					m.logger.Info("analysis buffer removed, stopping monitor",
+						logger.String("source_id", cfg.sourceID),
+						logger.String("model_id", cfg.modelID))
+				} else {
+					m.logger.Warn("analysis buffer not found for monitor, may not be allocated",
+						logger.String("source_id", cfg.sourceID),
+						logger.String("model_id", cfg.modelID))
+				}
 				return
 			}
+			hasReadBuffer = true
 			data, readErr := ab.Read()
 			if readErr != nil {
 				m.logger.Error("buffer read error",

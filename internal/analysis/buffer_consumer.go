@@ -3,6 +3,7 @@ package analysis
 import (
 	"encoding/binary"
 	"math"
+	"sync"
 	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -43,6 +44,7 @@ type BufferConsumer struct {
 	targets        []ModelTarget
 	resamplers     map[int]*resample.Resampler // keyed by target rate
 	groupedTargets map[int][]ModelTarget       // targets grouped by rate, pre-computed
+	bufWarnOnce    sync.Map                    // modelID → struct{}, logs missing buffer once per model
 }
 
 // NewBufferConsumer creates a BufferConsumer that writes audio frames to the
@@ -183,14 +185,23 @@ func (c *BufferConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocr
 			data = resampled
 		}
 		for _, t := range targets {
-			if ab, abErr := c.bufferMgr.AnalysisBuffer(sourceID, t.ModelID); abErr == nil {
-				if writeErr := ab.Write(data); writeErr != nil {
-					GetLogger().Warn("failed to write to analysis buffer",
+			ab, abErr := c.bufferMgr.AnalysisBuffer(sourceID, t.ModelID)
+			if abErr != nil {
+				if _, loaded := c.bufWarnOnce.LoadOrStore(t.ModelID, struct{}{}); !loaded {
+					GetLogger().Warn("analysis buffer not found for model target",
 						logger.String("source_id", sourceID),
 						logger.String("model_id", t.ModelID),
-						logger.Error(writeErr),
+						logger.String("consumer_id", c.id),
 						logger.String("operation", "buffer_consumer_write"))
 				}
+				continue
+			}
+			if writeErr := ab.Write(data); writeErr != nil {
+				GetLogger().Warn("failed to write to analysis buffer",
+					logger.String("source_id", sourceID),
+					logger.String("model_id", t.ModelID),
+					logger.Error(writeErr),
+					logger.String("operation", "buffer_consumer_write"))
 			}
 		}
 	}

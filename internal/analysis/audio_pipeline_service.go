@@ -473,6 +473,8 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	primaryInfo := &p.bnAnalyzer.BirdNET().ModelInfo
 	primaryTargets := []classifier.ModelInfo{*primaryInfo}
 
+	bufMgr := p.engine.BufferManager()
+
 	for _, sid := range sourceIDs {
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -481,10 +483,38 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			modelInfos = primaryTargets
 		}
 
-		// Convert to ModelTarget for the buffer consumer
-		targets := make([]ModelTarget, len(modelInfos))
+		// Allocate analysis buffers for secondary models. The engine
+		// already allocates a buffer for the primary model in AddSource(),
+		// so only non-primary models need allocation here. Track which
+		// models have usable buffers so we only create targets for them.
+		allocatedModels := make(map[string]bool, len(modelInfos))
+		allocatedModels[primaryInfo.ID] = true // pre-allocated by engine
 		for i := range modelInfos {
-			targets[i] = ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.SampleRate}
+			if modelInfos[i].ID == primaryInfo.ID {
+				continue
+			}
+			spec := modelInfos[i].Spec
+			clipBytes := spec.SampleRate * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
+			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
+			readSize := clipBytes - overlapBytes
+			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {
+				log.Warn("failed to allocate analysis buffer for secondary model",
+					logger.String("source_id", sid),
+					logger.String("model_id", modelInfos[i].ID),
+					logger.Error(allocErr),
+					logger.String("operation", operation))
+				continue
+			}
+			allocatedModels[modelInfos[i].ID] = true
+		}
+
+		// Convert to ModelTarget for the buffer consumer, excluding
+		// models whose buffer allocation failed.
+		targets := make([]ModelTarget, 0, len(modelInfos))
+		for i := range modelInfos {
+			if allocatedModels[modelInfos[i].ID] {
+				targets = append(targets, ModelTarget{ModelID: modelInfos[i].ID, SampleRate: modelInfos[i].Spec.SampleRate})
+			}
 		}
 
 		bc, bcErr := NewBufferConsumer(
