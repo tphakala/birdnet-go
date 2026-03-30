@@ -54,7 +54,7 @@
       .then(data => {
         // Use index as unique key to avoid duplicate name issues with ALSA sub-devices
         devices = (data ?? []).map(d => ({
-          value: d.name,
+          value: d.id,
           label: d.index >= 0 ? `${d.name} (#${d.index})` : d.name,
         }));
         if (devices.length === 0 && !selectedDevice) {

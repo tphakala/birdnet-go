@@ -87,10 +87,26 @@ func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDept
 			Build()
 	}
 
+	// Filter out targets with invalid sample rates before grouping.
+	// A zero or negative rate would cause resampler creation to fail and
+	// indicates a misconfigured model (e.g., unrecognized custom model).
+	validTargets := make([]ModelTarget, 0, len(targets))
+	for _, t := range targets {
+		if t.SampleRate <= 0 {
+			GetLogger().Error("skipping model target with invalid sample rate",
+				logger.String("model_id", t.ModelID),
+				logger.Int("sample_rate", t.SampleRate),
+				logger.String("consumer_id", id),
+				logger.String("operation", "new_buffer_consumer"))
+			continue
+		}
+		validTargets = append(validTargets, t)
+	}
+
 	// Pre-compute grouped targets and create one resampler per unique
 	// non-native rate.
-	grouped := make(map[int][]ModelTarget, len(targets))
-	for _, t := range targets {
+	grouped := make(map[int][]ModelTarget, len(validTargets))
+	for _, t := range validTargets {
 		grouped[t.SampleRate] = append(grouped[t.SampleRate], t)
 	}
 
@@ -122,7 +138,7 @@ func NewBufferConsumer(id string, bufferMgr *buffer.Manager, sampleRate, bitDept
 		rate:           sampleRate,
 		depth:          bitDepth,
 		channels:       channels,
-		targets:        targets,
+		targets:        validTargets,
 		resamplers:     resamplers,
 		groupedTargets: grouped,
 	}, nil

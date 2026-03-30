@@ -95,6 +95,7 @@ var filenamePatterns = map[string]string{
 	"birdnet-v24":            "BirdNET_V2.4",
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
+	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
 	"perch_v2":               "Perch_V2",
 	"perch-v2":               "Perch_V2",
 }

@@ -104,6 +104,7 @@ func TestDetermineModelInfo_OnnxSupport(t *testing.T) {
 		{"onnx unrecognized returns Custom", "/path/to/unknown-model.onnx", "Custom"},
 		{"tflite with legacy name", "/path/to/BirdNET_GLOBAL_6K_V2.4_Model.tflite", "BirdNET_V2.4"},
 		{"tflite unrecognized returns Custom", "/path/to/some-model.tflite", "Custom"},
+		{"custom classifier build name", "/home/birdnet/BirdNET-Go_classifier_20260118.tflite", "BirdNET_V2.4"},
 		{"registry ID directly", "BirdNET_V2.4", "BirdNET_V2.4"},
 		{"registry ID Perch", "Perch_V2", "Perch_V2"},
 	}
