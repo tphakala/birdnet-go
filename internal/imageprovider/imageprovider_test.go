@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/observability"
@@ -153,6 +154,7 @@ func (m *mockStore) GetImageCacheBatch(providerName string, scientificNames []st
 // Implement other required interface methods with no-op implementations
 func (m *mockStore) Open() error                                                  { return nil }
 func (m *mockStore) Save(note *datastore.Note, results []datastore.Results) error { return nil }
+func (m *mockStore) EnsureModelRegistered(_ detection.ModelInfo) error            { return nil }
 func (m *mockStore) Delete(id string) error                                       { return nil }
 func (m *mockStore) Get(id string) (datastore.Note, error)                        { return datastore.Note{}, nil }
 func (m *mockStore) Close() error                                                 { return nil }

@@ -8,6 +8,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 	datastore "github.com/tphakala/birdnet-go/internal/datastore"
+	detection "github.com/tphakala/birdnet-go/internal/detection"
 	metrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	gorm "gorm.io/gorm"
 )
@@ -284,6 +285,52 @@ func (_c *MockInterface_CountSpeciesDetections_Call) Return(_a0 int64, _a1 error
 }
 
 func (_c *MockInterface_CountSpeciesDetections_Call) RunAndReturn(run func(string, string, string, int) (int64, error)) *MockInterface_CountSpeciesDetections_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// EnsureModelRegistered provides a mock function with given fields: info
+func (_m *MockInterface) EnsureModelRegistered(info detection.ModelInfo) error {
+	ret := _m.Called(info)
+
+	if len(ret) == 0 {
+		panic("no return value specified for EnsureModelRegistered")
+	}
+
+	var r0 error
+	if rf, ok := ret.Get(0).(func(detection.ModelInfo) error); ok {
+		r0 = rf(info)
+	} else {
+		r0 = ret.Error(0)
+	}
+
+	return r0
+}
+
+// MockInterface_EnsureModelRegistered_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'EnsureModelRegistered'
+type MockInterface_EnsureModelRegistered_Call struct {
+	*mock.Call
+}
+
+// EnsureModelRegistered is a helper method to define mock.On call
+//   - info detection.ModelInfo
+func (_e *MockInterface_Expecter) EnsureModelRegistered(info interface{}) *MockInterface_EnsureModelRegistered_Call {
+	return &MockInterface_EnsureModelRegistered_Call{Call: _e.mock.On("EnsureModelRegistered", info)}
+}
+
+func (_c *MockInterface_EnsureModelRegistered_Call) Run(run func(info detection.ModelInfo)) *MockInterface_EnsureModelRegistered_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(detection.ModelInfo))
+	})
+	return _c
+}
+
+func (_c *MockInterface_EnsureModelRegistered_Call) Return(_a0 error) *MockInterface_EnsureModelRegistered_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *MockInterface_EnsureModelRegistered_Call) RunAndReturn(run func(detection.ModelInfo) error) *MockInterface_EnsureModelRegistered_Call {
 	_c.Call.Return(run)
 	return _c
 }

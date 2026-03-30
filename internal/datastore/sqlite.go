@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -396,6 +397,12 @@ func (s *SQLiteStore) startWALCheckpointLoop() {
 			logger.String("interval", legacyWALCheckpointInterval.String()),
 			logger.String("mode", "PASSIVE"))
 	})
+}
+
+// EnsureModelRegistered is a no-op for the legacy SQLite datastore.
+// Model registration is only supported in the v2 schema.
+func (s *SQLiteStore) EnsureModelRegistered(_ detection.ModelInfo) error {
+	return nil
 }
 
 // Close closes the SQLite database connection

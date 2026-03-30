@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
@@ -40,14 +41,15 @@ type MockDatastore struct {
 
 // Implement all required methods from datastore.Interface
 
-func (m *MockDatastore) Open() error                                     { return nil }
-func (m *MockDatastore) Close() error                                    { return nil }
-func (m *MockDatastore) Save(*datastore.Note, []datastore.Results) error { return nil }
-func (m *MockDatastore) Delete(string) error                             { return nil }
-func (m *MockDatastore) Get(string) (datastore.Note, error)              { return datastore.Note{}, nil }
-func (m *MockDatastore) SetMetrics(*datastore.Metrics)                   {}
-func (m *MockDatastore) SetSunCalcMetrics(any)                           {}
-func (m *MockDatastore) Optimize(context.Context) error                  { return nil }
+func (m *MockDatastore) Open() error                                       { return nil }
+func (m *MockDatastore) Close() error                                      { return nil }
+func (m *MockDatastore) Save(*datastore.Note, []datastore.Results) error   { return nil }
+func (m *MockDatastore) EnsureModelRegistered(_ detection.ModelInfo) error { return nil }
+func (m *MockDatastore) Delete(string) error                               { return nil }
+func (m *MockDatastore) Get(string) (datastore.Note, error)                { return datastore.Note{}, nil }
+func (m *MockDatastore) SetMetrics(*datastore.Metrics)                     {}
+func (m *MockDatastore) SetSunCalcMetrics(any)                             {}
+func (m *MockDatastore) Optimize(context.Context) error                    { return nil }
 func (m *MockDatastore) GetAllNotes() ([]datastore.Note, error) {
 	return make([]datastore.Note, 0), nil
 }

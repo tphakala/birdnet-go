@@ -139,8 +139,9 @@ func (m *ActionMockDatastore) SetSaveError(err error) {
 // Implement remaining datastore.Interface methods as no-ops or stubs.
 // These are not needed for action execution tests.
 
-func (m *ActionMockDatastore) Open() error  { return nil }
-func (m *ActionMockDatastore) Close() error { return nil }
+func (m *ActionMockDatastore) Open() error                                       { return nil }
+func (m *ActionMockDatastore) Close() error                                      { return nil }
+func (m *ActionMockDatastore) EnsureModelRegistered(_ detection.ModelInfo) error { return nil }
 func (m *ActionMockDatastore) Delete(_ string) error {
 	return nil
 }

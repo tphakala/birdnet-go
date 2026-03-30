@@ -449,6 +449,13 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 	return stats, nil
 }
 
+// EnsureModelRegistered creates the model entry in ai_models if it doesn't exist.
+func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
+	ctx := context.Background()
+	_, err := ds.model.GetOrCreate(ctx, info.Name, info.Version, info.Variant, entities.ModelTypeBird, info.ClassifierPath)
+	return err
+}
+
 // Save saves a note with its results atomically.
 // The detection and its predictions are saved in a single transaction to prevent
 // partial writes (e.g., detection saved but predictions failed).

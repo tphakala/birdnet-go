@@ -123,6 +123,27 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	// allocated with the correct model key instead of a hardcoded constant.
 	p.engine.SetPrimaryModelID(bn.ModelInfo.ID)
 
+	// Register all loaded models in the ai_models database table so they
+	// appear even before any detections are saved.
+	log := GetLogger()
+	modelInfos := bn.ModelInfos()
+	for i := range modelInfos {
+		detInfo := modelInfos[i].ToDetectionModelInfo()
+		if err := dataStore.EnsureModelRegistered(detInfo); err != nil {
+			log.Warn("failed to register model in database",
+				logger.String("model_id", modelInfos[i].ID),
+				logger.String("detection_name", detInfo.Name),
+				logger.Error(err),
+				logger.String("operation", "startup_model_registration"))
+		} else {
+			log.Info("registered model in database",
+				logger.String("model_id", modelInfos[i].ID),
+				logger.String("detection_name", detInfo.Name),
+				logger.String("detection_version", detInfo.Version),
+				logger.String("operation", "startup_model_registration"))
+		}
+	}
+
 	// Clean up any leftover HLS streaming files from previous runs.
 	if err := cleanupHLSStreamingFiles(); err != nil {
 		logHLSCleanup(err)
@@ -506,6 +527,12 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			allocatedModels[modelInfos[i].ID] = true
+			log.Debug("allocated analysis buffer for secondary model",
+				logger.String("source_id", sid),
+				logger.String("model_id", modelInfos[i].ID),
+				logger.Int("clip_bytes", clipBytes),
+				logger.Int("overlap_bytes", overlapBytes),
+				logger.String("operation", operation))
 		}
 
 		// Convert to ModelTarget for the buffer consumer, excluding

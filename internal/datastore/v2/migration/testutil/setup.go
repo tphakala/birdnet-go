@@ -663,6 +663,7 @@ func (s *testLegacyInterface) GetAllHourlyWeather() ([]datastore.HourlyWeather, 
 func (s *testLegacyInterface) Open() error                                         { return nil }
 func (s *testLegacyInterface) Close() error                                        { return nil }
 func (s *testLegacyInterface) Save(_ *datastore.Note, _ []datastore.Results) error { return nil }
+func (s *testLegacyInterface) EnsureModelRegistered(_ detection.ModelInfo) error   { return nil }
 func (s *testLegacyInterface) Delete(_ string) error                               { return nil }
 func (s *testLegacyInterface) Get(_ string) (datastore.Note, error)                { return datastore.Note{}, nil }
 func (s *testLegacyInterface) SetMetrics(_ *datastore.Metrics)                     {}

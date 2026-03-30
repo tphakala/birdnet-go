@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 
@@ -247,6 +248,12 @@ func (store *MySQLStore) Optimize(ctx context.Context) error {
 		logger.Int("tables_processed", len(tables)),
 		logger.Int("tables_optimized", optimizedCount))
 
+	return nil
+}
+
+// EnsureModelRegistered is a no-op for the legacy MySQL datastore.
+// Model registration is only supported in the v2 schema.
+func (m *MySQLStore) EnsureModelRegistered(_ detection.ModelInfo) error {
 	return nil
 }
 

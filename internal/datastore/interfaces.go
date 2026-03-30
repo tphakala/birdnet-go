@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbstats"
 	"github.com/tphakala/birdnet-go/internal/datastore/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -89,6 +90,9 @@ const (
 type Interface interface {
 	Open() error
 	Save(note *Note, results []Results) error
+	// EnsureModelRegistered creates the model entry in the ai_models table if it doesn't exist.
+	// Used at startup to register all enabled models before detections are processed.
+	EnsureModelRegistered(info detection.ModelInfo) error
 	Delete(id string) error
 	Get(id string) (Note, error)
 	Close() error
