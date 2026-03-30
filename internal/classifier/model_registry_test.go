@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
@@ -166,4 +167,39 @@ func TestIsLocaleSupported_CustomModelAcceptsAll(t *testing.T) {
 
 	customInfo := ModelInfo{ID: modelIDCustom, SupportedLocales: []string{}}
 	assert.True(t, IsLocaleSupported(&customInfo, "en-uk"), "Custom model should accept any locale")
+}
+
+func TestModelInfo_ToDetectionModelInfo_BirdNET(t *testing.T) {
+	t.Parallel()
+	info := ModelRegistry["BirdNET_V2.4"]
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.ModelInfo{
+		Name:    "BirdNET",
+		Version: "2.4",
+		Variant: "default",
+	}, got)
+}
+
+func TestModelInfo_ToDetectionModelInfo_Perch(t *testing.T) {
+	t.Parallel()
+	info := ModelRegistry["Perch_V2"]
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.ModelInfo{
+		Name:    "Perch",
+		Version: "V2",
+		Variant: "default",
+	}, got)
+}
+
+func TestDetectionModelInfoForID_Known(t *testing.T) {
+	t.Parallel()
+	got := DetectionModelInfoForID("Perch_V2")
+	assert.Equal(t, "Perch", got.Name)
+	assert.Equal(t, "V2", got.Version)
+}
+
+func TestDetectionModelInfoForID_Unknown(t *testing.T) {
+	t.Parallel()
+	got := DetectionModelInfoForID("Unknown_Model")
+	assert.Equal(t, detection.DefaultModelInfo(), got)
 }

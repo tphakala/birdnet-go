@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // modelIDCustom is the sentinel ID used for user-supplied model files that
@@ -16,6 +18,8 @@ const modelIDCustom = "Custom"
 type ModelInfo struct {
 	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
 	Name             string    // User-friendly name
+	DetectionName    string    // Database model name (e.g., "BirdNET", "Perch")
+	DetectionVersion string    // Database model version (e.g., "2.4", "V2")
 	Description      string    // Description of the model
 	Spec             ModelSpec // Audio requirements (sample rate, clip length)
 	ConfigAliases    []string  // User-facing config IDs (e.g., ["birdnet"])
@@ -29,11 +33,13 @@ type ModelInfo struct {
 // All model identity lookups, config validation, and spec queries derive from this.
 var ModelRegistry = map[string]ModelInfo{
 	"BirdNET_V2.4": {
-		ID:            "BirdNET_V2.4",
-		Name:          "BirdNET GLOBAL 6K V2.4",
-		Description:   "Global model with 6523 species",
-		Spec:          ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
-		ConfigAliases: []string{"birdnet"},
+		ID:               "BirdNET_V2.4",
+		Name:             "BirdNET GLOBAL 6K V2.4",
+		DetectionName:    "BirdNET",
+		DetectionVersion: "2.4",
+		Description:      "Global model with 6523 species",
+		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		ConfigAliases:    []string{"birdnet"},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -41,12 +47,14 @@ var ModelRegistry = map[string]ModelInfo{
 		NumSpecies:    6523,
 	},
 	"Perch_V2": {
-		ID:            "Perch_V2",
-		Name:          "Google Perch V2",
-		Description:   "Perch v2 model with ~14,795 species (scientific names only)",
-		Spec:          ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
-		ConfigAliases: []string{"perch_v2"},
-		NumSpecies:    14795,
+		ID:               "Perch_V2",
+		Name:             "Google Perch V2",
+		DetectionName:    "Perch",
+		DetectionVersion: "V2",
+		Description:      "Perch v2 model with ~14,795 species (scientific names only)",
+		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
+		ConfigAliases:    []string{"perch_v2"},
+		NumSpecies:       14795,
 	},
 }
 
@@ -159,6 +167,36 @@ func ResolveConfigModelID(configID string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// ToDetectionModelInfo converts classifier model metadata to the detection domain
+// ModelInfo used for database storage in the ai_models table.
+// Returns DefaultModelInfo() if DetectionName is empty (e.g. custom models not in the registry).
+func (m *ModelInfo) ToDetectionModelInfo() detection.ModelInfo {
+	if m.DetectionName == "" {
+		return detection.DefaultModelInfo()
+	}
+	variant := "default"
+	var classifierPath *string
+	if m.CustomPath != "" {
+		classifierPath = &m.CustomPath
+		variant = "custom"
+	}
+	return detection.ModelInfo{
+		Name:           m.DetectionName,
+		Version:        m.DetectionVersion,
+		Variant:        variant,
+		ClassifierPath: classifierPath,
+	}
+}
+
+// DetectionModelInfoForID returns the detection.ModelInfo for a registry model ID.
+// Returns DefaultModelInfo() if the ID is not found in the registry.
+func DetectionModelInfoForID(modelID string) detection.ModelInfo {
+	if info, ok := ModelRegistry[modelID]; ok {
+		return info.ToDetectionModelInfo()
+	}
+	return detection.DefaultModelInfo()
 }
 
 // IsLocaleSupported checks if a locale is supported by the given model.
