@@ -19,10 +19,11 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 	now := time.Now()
 	expires := now.Add(24 * time.Hour)
 
-	// Database returns Title Case species name (as resolveCommonName does)
+	// Database returns Title Case species name with ModelName (as resolveCommonName does)
 	mockDS.EXPECT().GetAllDynamicThresholds().Return([]datastore.DynamicThreshold{
 		{
 			SpeciesName:    "Tawny Owl",
+			ModelName:      "BirdNET",
 			ScientificName: "Strix aluco",
 			Level:          1,
 			CurrentValue:   0.45,
@@ -32,13 +33,13 @@ func TestGetMergedThresholdData_NoDuplicates(t *testing.T) {
 		},
 	}, nil)
 
-	// Processor memory stores lowercase species name
+	// Processor memory stores with composite key "modelID:speciesLowercase"
 	proc := &processor.Processor{
 		Settings: &conf.Settings{
 			BirdNET: conf.BirdNETConfig{Threshold: 0.6},
 		},
 		DynamicThresholds: map[string]*processor.DynamicThreshold{
-			"tawny owl": {
+			"BirdNET:tawny owl": {
 				Level:          2,
 				CurrentValue:   0.3,
 				Timer:          expires,
@@ -90,7 +91,7 @@ func TestGetMergedThresholdData_MemoryOnlySpecies(t *testing.T) {
 			BirdNET: conf.BirdNETConfig{Threshold: 0.6},
 		},
 		DynamicThresholds: map[string]*processor.DynamicThreshold{
-			"eurasian blue tit": {
+			"BirdNET:eurasian blue tit": {
 				Level:          1,
 				CurrentValue:   0.45,
 				Timer:          expires,
@@ -130,6 +131,7 @@ func TestGetMergedThresholdData_DatabaseOnlySpecies(t *testing.T) {
 	mockDS.EXPECT().GetAllDynamicThresholds().Return([]datastore.DynamicThreshold{
 		{
 			SpeciesName:    "Common Blackbird",
+			ModelName:      "BirdNET",
 			ScientificName: "Turdus merula",
 			Level:          1,
 			CurrentValue:   0.45,
