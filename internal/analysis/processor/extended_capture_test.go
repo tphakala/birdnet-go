@@ -173,7 +173,7 @@ func TestExtendedCapture_FlushDeadlineExtension(t *testing.T) {
 
 	species := "tawny owl"
 	sourceID := "test_source"
-	mapKey := pendingDetectionKey(sourceID, species)
+	mapKey := pendingDetectionKey(sourceID, species, "")
 	now := time.Now()
 
 	// First detection: should get minimum 15s deadline
@@ -259,7 +259,7 @@ func TestExtendedCapture_EndToEnd_ContinuousSession(t *testing.T) {
 
 	species := "strix uralensis"
 	sourceID := "test_mic"
-	mapKey := pendingDetectionKey(sourceID, species)
+	mapKey := pendingDetectionKey(sourceID, species, "")
 	detectionWindow := 9 * time.Second // 15 - 6
 
 	// Simulate 20 detections over 2 minutes
@@ -325,7 +325,7 @@ func TestExtendedCapture_MultiSource_Independence(t *testing.T) {
 	now := time.Now()
 
 	// Source A detection
-	keyA := pendingDetectionKey("mic_a", species)
+	keyA := pendingDetectionKey("mic_a", species, "")
 	p.pendingDetections[keyA] = PendingDetection{
 		Source: "mic_a", FirstDetected: now, Count: 1,
 		FlushDeadline: now.Add(9 * time.Second),
@@ -333,7 +333,7 @@ func TestExtendedCapture_MultiSource_Independence(t *testing.T) {
 	p.applyExtendedCapture(keyA, now, 9*time.Second)
 
 	// Source B detection 5 seconds later
-	keyB := pendingDetectionKey("mic_b", species)
+	keyB := pendingDetectionKey("mic_b", species, "")
 	p.pendingDetections[keyB] = PendingDetection{
 		Source: "mic_b", FirstDetected: now.Add(5 * time.Second), Count: 1,
 		FlushDeadline: now.Add(14 * time.Second),

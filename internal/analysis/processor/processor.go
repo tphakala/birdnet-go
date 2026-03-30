@@ -165,10 +165,11 @@ type PendingDetection struct {
 }
 
 // pendingDetectionKey creates a composite key for the pendingDetections map
-// that includes the source ID to prevent cross-source data corruption when
-// multiple audio sources detect the same species concurrently.
-func pendingDetectionKey(sourceID, speciesName string) string {
-	return sourceID + ":" + speciesName
+// that includes the source ID and model ID to prevent cross-source and
+// cross-model data corruption when multiple audio sources or models detect
+// the same species concurrently.
+func pendingDetectionKey(sourceID, speciesName, modelID string) string {
+	return sourceID + ":" + speciesName + ":" + modelID
 }
 
 // suggestLevelForDisabledFilter provides smart recommendations for filter levels
@@ -593,7 +594,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 		p.pendingMutex.Lock()
 
 		now := time.Now()
-		mapKey := pendingDetectionKey(item.Source.ID, commonName)
+		mapKey := pendingDetectionKey(item.Source.ID, commonName, item.ModelID)
 
 		if existing, exists := p.pendingDetections[mapKey]; exists {
 			// Update the existing detection if it's already in pendingDetections map

@@ -9,59 +9,58 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-func TestCreateDetectionResult_UsesActualModelInfo(t *testing.T) {
+func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 	t.Parallel()
-	p := &Processor{Settings: &conf.Settings{}}
 
-	result := p.createDetectionResult(
-		time.Now(),
-		time.Now(), time.Now().Add(3*time.Second),
-		"Parus major", "Great Tit", "gretit1",
-		0.95,
-		datastore.AudioSource{ID: "test", DisplayName: "Test"},
-		"clip.wav",
-		100*time.Millisecond, 0.5,
-		"Perch_V2",
-	)
+	tests := []struct {
+		name            string
+		modelID         string
+		expectedName    string
+		expectedVersion string
+		expectedVariant string
+	}{
+		{
+			name:            "Perch_V2 resolves to Perch model",
+			modelID:         "Perch_V2",
+			expectedName:    "Perch",
+			expectedVersion: "V2",
+			expectedVariant: "default",
+		},
+		{
+			name:            "empty modelID defaults to BirdNET",
+			modelID:         "",
+			expectedName:    "BirdNET",
+			expectedVersion: "2.4",
+			expectedVariant: "default",
+		},
+		{
+			name:            "BirdNET_V2.4 resolves to BirdNET model",
+			modelID:         "BirdNET_V2.4",
+			expectedName:    "BirdNET",
+			expectedVersion: "2.4",
+			expectedVariant: "default",
+		},
+	}
 
-	assert.Equal(t, "Perch", result.Model.Name)
-	assert.Equal(t, "V2", result.Model.Version)
-	assert.Equal(t, "default", result.Model.Variant)
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			p := &Processor{Settings: &conf.Settings{}}
 
-func TestCreateDetectionResult_DefaultModelForEmpty(t *testing.T) {
-	t.Parallel()
-	p := &Processor{Settings: &conf.Settings{}}
+			result := p.createDetectionResult(
+				time.Now(),
+				time.Now(), time.Now().Add(3*time.Second),
+				"Parus major", "Great Tit", "gretit1",
+				0.95,
+				datastore.AudioSource{ID: "test", DisplayName: "Test"},
+				"clip.wav",
+				100*time.Millisecond, 0.5,
+				tc.modelID,
+			)
 
-	result := p.createDetectionResult(
-		time.Now(),
-		time.Now(), time.Now().Add(3*time.Second),
-		"Parus major", "Great Tit", "gretit1",
-		0.95,
-		datastore.AudioSource{ID: "test", DisplayName: "Test"},
-		"clip.wav",
-		100*time.Millisecond, 0.5,
-		"",
-	)
-
-	assert.Equal(t, "BirdNET", result.Model.Name, "empty modelID should default to BirdNET")
-}
-
-func TestCreateDetectionResult_DefaultModelForBirdNET(t *testing.T) {
-	t.Parallel()
-	p := &Processor{Settings: &conf.Settings{}}
-
-	result := p.createDetectionResult(
-		time.Now(),
-		time.Now(), time.Now().Add(3*time.Second),
-		"Parus major", "Great Tit", "gretit1",
-		0.95,
-		datastore.AudioSource{ID: "test", DisplayName: "Test"},
-		"clip.wav",
-		100*time.Millisecond, 0.5,
-		"BirdNET_V2.4",
-	)
-
-	assert.Equal(t, "BirdNET", result.Model.Name)
-	assert.Equal(t, "2.4", result.Model.Version)
+			assert.Equal(t, tc.expectedName, result.Model.Name)
+			assert.Equal(t, tc.expectedVersion, result.Model.Version)
+			assert.Equal(t, tc.expectedVariant, result.Model.Variant)
+		})
+	}
 }
