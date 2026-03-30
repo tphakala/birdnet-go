@@ -23,7 +23,7 @@ type LabelLoadResult struct {
 
 // Model version constants
 const (
-	BirdNET_GLOBAL_6K_V2_4 = "BirdNET_GLOBAL_6K_V2.4"
+	BirdNET_V2_4 = "BirdNET_V2.4"
 )
 
 // V2.4 model-specific constants
@@ -49,7 +49,7 @@ type Logger interface {
 // getModelFileSystem returns the appropriate embedded filesystem for the given model version
 func getModelFileSystem(modelVersion string) (fs.FS, error) {
 	switch modelVersion {
-	case BirdNET_GLOBAL_6K_V2_4:
+	case BirdNET_V2_4:
 		return v24LabelFiles, nil
 	default:
 		return nil, fmt.Errorf("no embedded filesystem available for model version: %s", modelVersion)

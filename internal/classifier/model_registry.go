@@ -10,7 +10,7 @@ import (
 
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
-	ID               string    // Unique registry identifier (e.g., "BirdNET_GLOBAL_6K_V2.4")
+	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
 	Name             string    // User-friendly name
 	Description      string    // Description of the model
 	Spec             ModelSpec // Audio requirements (sample rate, clip length)
@@ -24,8 +24,8 @@ type ModelInfo struct {
 // ModelRegistry is the single source of truth for all supported models.
 // All model identity lookups, config validation, and spec queries derive from this.
 var ModelRegistry = map[string]ModelInfo{
-	"BirdNET_GLOBAL_6K_V2.4": {
-		ID:            "BirdNET_GLOBAL_6K_V2.4",
+	"BirdNET_V2.4": {
+		ID:            "BirdNET_V2.4",
 		Name:          "BirdNET GLOBAL 6K V2.4",
 		Description:   "Global model with 6523 species",
 		Spec:          ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
@@ -48,7 +48,7 @@ var ModelRegistry = map[string]ModelInfo{
 
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
 var birdnetVersionToRegistryID = map[string]string{
-	"2.4": "BirdNET_GLOBAL_6K_V2.4",
+	"2.4": "BirdNET_V2.4",
 }
 
 // KnownConfigIDs collects all ConfigAliases from the registry.
@@ -83,13 +83,16 @@ func ResolveBirdNETVersion(version string) (ModelInfo, bool) {
 	return info, ok
 }
 
-// onnxFilenamePatterns maps common ONNX filename substrings to registry IDs.
-var onnxFilenamePatterns = map[string]string{
-	"birdnet-v24":  "BirdNET_GLOBAL_6K_V2.4",
-	"birdnet_v2.4": "BirdNET_GLOBAL_6K_V2.4",
-	"birdnet-v2.4": "BirdNET_GLOBAL_6K_V2.4",
-	"perch_v2":     "Perch_V2",
-	"perch-v2":     "Perch_V2",
+// filenamePatterns maps common filename substrings to registry IDs.
+// This covers ONNX naming conventions and legacy filenames whose prefix
+// no longer matches the (shortened) registry ID.
+var filenamePatterns = map[string]string{
+	"birdnet_global_6k_v2.4": "BirdNET_V2.4", // legacy TFLite/label filenames
+	"birdnet-v24":            "BirdNET_V2.4",
+	"birdnet_v2.4":           "BirdNET_V2.4",
+	"birdnet-v2.4":           "BirdNET_V2.4",
+	"perch_v2":               "Perch_V2",
+	"perch-v2":               "Perch_V2",
 }
 
 // DetermineModelInfo identifies the model type from a file path or model identifier.
@@ -116,8 +119,8 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 			}
 		}
 
-		// Check ONNX-specific filename patterns
-		for pattern, registryID := range onnxFilenamePatterns {
+		// Check known filename patterns (ONNX conventions, legacy names, etc.)
+		for pattern, registryID := range filenamePatterns {
 			if strings.Contains(lowerBase, pattern) {
 				info := ModelRegistry[registryID]
 				info.CustomPath = modelPathOrID
@@ -140,7 +143,7 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 }
 
 // ResolveConfigModelID maps a user-facing config model ID (e.g. "birdnet") to
-// the internal registry ID (e.g. "BirdNET_GLOBAL_6K_V2.4") by iterating
+// the internal registry ID (e.g. "BirdNET_V2.4") by iterating
 // ModelRegistry.ConfigAliases. Returns the registry ID and true if found,
 // or empty string and false if unknown. Case-insensitive.
 func ResolveConfigModelID(configID string) (string, bool) {

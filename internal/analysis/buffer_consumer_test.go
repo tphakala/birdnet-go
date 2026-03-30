@@ -15,7 +15,7 @@ import (
 
 // testDefaultModelID is the default model identifier used in buffer consumer
 // tests where a concrete model name is not relevant.
-const testDefaultModelID = "BirdNET_GLOBAL_6K_V2.4"
+const testDefaultModelID = "BirdNET_V2.4"
 
 // testDefaultSampleRate is the source sample rate used in most tests.
 const testDefaultSampleRate = 48000

@@ -27,7 +27,7 @@ import (
 )
 
 // Default model version for the embedded model
-const DefaultModelVersion = "BirdNET_GLOBAL_6K_V2.4"
+const DefaultModelVersion = "BirdNET_V2.4"
 
 // defaultModelVersionString is the default human-readable model version.
 const defaultModelVersionString = "BirdNET GLOBAL 6K V2.4 FP32"

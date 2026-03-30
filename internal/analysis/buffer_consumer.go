@@ -16,7 +16,7 @@ import (
 // Each target specifies the model identifier and the sample rate at which the
 // model expects to receive audio data.
 type ModelTarget struct {
-	ModelID    string // unique model identifier (e.g. "BirdNET_GLOBAL_6K_V2.4")
+	ModelID    string // unique model identifier (e.g. "BirdNET_V2.4")
 	SampleRate int    // target sample rate for this model in Hz
 }
 

@@ -11,7 +11,7 @@ import (
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 	t.Parallel()
 
-	expectedIDs := []string{"BirdNET_GLOBAL_6K_V2.4", "Perch_V2"}
+	expectedIDs := []string{"BirdNET_V2.4", "Perch_V2"}
 	for _, id := range expectedIDs {
 		info, exists := ModelRegistry[id]
 		require.True(t, exists, "ModelRegistry should contain %s", id)
@@ -25,7 +25,7 @@ func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 func TestModelRegistry_BirdNETSpec(t *testing.T) {
 	t.Parallel()
 
-	info := ModelRegistry["BirdNET_GLOBAL_6K_V2.4"]
+	info := ModelRegistry["BirdNET_V2.4"]
 	assert.Equal(t, 48000, info.Spec.SampleRate)
 	assert.Equal(t, 3*time.Second, info.Spec.ClipLength)
 	assert.Equal(t, 6523, info.NumSpecies)
@@ -53,7 +53,7 @@ func TestKnownConfigIDs(t *testing.T) {
 func TestGetModelSpec(t *testing.T) {
 	t.Parallel()
 
-	spec, ok := GetModelSpec("BirdNET_GLOBAL_6K_V2.4")
+	spec, ok := GetModelSpec("BirdNET_V2.4")
 	require.True(t, ok)
 	assert.Equal(t, 48000, spec.SampleRate)
 
@@ -74,7 +74,7 @@ func TestResolveBirdNETVersion(t *testing.T) {
 		wantID  string
 		wantOK  bool
 	}{
-		{"v2.4 resolves", "2.4", "BirdNET_GLOBAL_6K_V2.4", true},
+		{"v2.4 resolves", "2.4", "BirdNET_V2.4", true},
 		{"unknown version", "9.9", "", false},
 		{"empty string", "", "", false},
 	}
@@ -99,12 +99,12 @@ func TestDetermineModelInfo_OnnxSupport(t *testing.T) {
 		input  string
 		wantID string
 	}{
-		{"onnx with birdnet-v24 pattern", "/path/to/birdnet-v24.onnx", "BirdNET_GLOBAL_6K_V2.4"},
+		{"onnx with birdnet-v24 pattern", "/path/to/birdnet-v24.onnx", "BirdNET_V2.4"},
 		{"onnx with perch pattern", "/path/to/perch_v2.onnx", "Perch_V2"},
 		{"onnx unrecognized returns Custom", "/path/to/unknown-model.onnx", "Custom"},
-		{"tflite with legacy name", "/path/to/BirdNET_GLOBAL_6K_V2.4_Model.tflite", "BirdNET_GLOBAL_6K_V2.4"},
+		{"tflite with legacy name", "/path/to/BirdNET_GLOBAL_6K_V2.4_Model.tflite", "BirdNET_V2.4"},
 		{"tflite unrecognized returns Custom", "/path/to/some-model.tflite", "Custom"},
-		{"registry ID directly", "BirdNET_GLOBAL_6K_V2.4", "BirdNET_GLOBAL_6K_V2.4"},
+		{"registry ID directly", "BirdNET_V2.4", "BirdNET_V2.4"},
 		{"registry ID Perch", "Perch_V2", "Perch_V2"},
 	}
 
@@ -127,10 +127,10 @@ func TestResolveConfigModelID(t *testing.T) {
 		wantID     string
 		wantExists bool
 	}{
-		{"birdnet maps to registry ID", "birdnet", "BirdNET_GLOBAL_6K_V2.4", true},
+		{"birdnet maps to registry ID", "birdnet", "BirdNET_V2.4", true},
 		{"perch_v2 maps to registry ID", "perch_v2", "Perch_V2", true},
 		{"unknown returns false", "unknown_model", "", false},
-		{"case insensitive", "BIRDNET", "BirdNET_GLOBAL_6K_V2.4", true},
+		{"case insensitive", "BIRDNET", "BirdNET_V2.4", true},
 		{"case insensitive perch", "PERCH_V2", "Perch_V2", true},
 	}
 

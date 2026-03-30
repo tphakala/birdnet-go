@@ -69,7 +69,7 @@ func TestBuildMonitorConfig(t *testing.T) {
 	t.Parallel()
 
 	info := &classifier.ModelInfo{
-		ID:   "BirdNET_GLOBAL_6K_V2.4",
+		ID:   "BirdNET_V2.4",
 		Name: "BirdNET GLOBAL 6K V2.4",
 		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 	}
@@ -77,7 +77,7 @@ func TestBuildMonitorConfig(t *testing.T) {
 	cfg := buildMonitorConfig("mic1", info)
 
 	assert.Equal(t, "mic1", cfg.sourceID)
-	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", cfg.modelID)
+	assert.Equal(t, "BirdNET_V2.4", cfg.modelID)
 	assert.Equal(t, 48000, cfg.spec.SampleRate)
 	assert.Equal(t, 3*time.Second, cfg.spec.ClipLength)
 

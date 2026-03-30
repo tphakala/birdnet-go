@@ -26,7 +26,7 @@ type ModelInstance interface {
 	// Spec returns the model's fixed audio requirements.
 	Spec() ModelSpec
 
-	// ModelID returns the unique identifier for this model (e.g. "BirdNET_GLOBAL_6K_V2.4").
+	// ModelID returns the unique identifier for this model (e.g. "BirdNET_V2.4").
 	ModelID() string
 
 	// ModelName returns the human-readable model name.

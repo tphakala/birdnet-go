@@ -14,7 +14,7 @@ import (
 // newTestEngine creates an AudioEngine with a test context for testing.
 // The caller must call the returned stop function when done to avoid goroutine leaks.
 // testModelID is used by tests to verify analysis buffer allocation.
-const testModelID = "BirdNET_GLOBAL_6K_V2.4"
+const testModelID = "BirdNET_V2.4"
 
 func newTestEngine(t *testing.T) (eng *AudioEngine, stop func()) {
 	t.Helper()

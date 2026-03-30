@@ -26,7 +26,7 @@ type LabelConfig struct {
 
 // ModelLabelMapping maps model versions to their corresponding label configurations
 var ModelLabelMapping = map[string]LabelConfig{
-	"BirdNET_GLOBAL_6K_V2.4": {
+	"BirdNET_V2.4": {
 		FilePattern: "BirdNET_GLOBAL_6K_V2.4_Labels_%s.txt",
 		BasePath:    "V2.4/",
 	},

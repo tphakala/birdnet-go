@@ -200,8 +200,8 @@ func TestOrchestrator_ModelInfos(t *testing.T) {
 
 	o := &Orchestrator{
 		models: map[string]*modelEntry{
-			"BirdNET_GLOBAL_6K_V2.4": {instance: &mockModelInstance{id: "BirdNET_GLOBAL_6K_V2.4"}},
-			"Perch_V2":               {instance: &mockModelInstance{id: "Perch_V2"}},
+			"BirdNET_V2.4": {instance: &mockModelInstance{id: "BirdNET_V2.4"}},
+			"Perch_V2":     {instance: &mockModelInstance{id: "Perch_V2"}},
 		},
 	}
 
@@ -212,7 +212,7 @@ func TestOrchestrator_ModelInfos(t *testing.T) {
 	for _, info := range infos {
 		ids[info.ID] = true
 	}
-	assert.True(t, ids["BirdNET_GLOBAL_6K_V2.4"])
+	assert.True(t, ids["BirdNET_V2.4"])
 	assert.True(t, ids["Perch_V2"])
 }
 
@@ -236,13 +236,13 @@ func TestOrchestrator_ModelInfos_SkipsNilInstances(t *testing.T) {
 
 	o := &Orchestrator{
 		models: map[string]*modelEntry{
-			"BirdNET_GLOBAL_6K_V2.4": {instance: &mockModelInstance{id: "BirdNET_GLOBAL_6K_V2.4"}},
-			"Perch_V2":               {instance: nil}, // closed/deleted
+			"BirdNET_V2.4": {instance: &mockModelInstance{id: "BirdNET_V2.4"}},
+			"Perch_V2":     {instance: nil}, // closed/deleted
 		},
 	}
 
 	infos := o.ModelInfos()
 
 	assert.Len(t, infos, 1)
-	assert.Equal(t, "BirdNET_GLOBAL_6K_V2.4", infos[0].ID)
+	assert.Equal(t, "BirdNET_V2.4", infos[0].ID)
 }

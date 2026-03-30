@@ -40,7 +40,7 @@ func (tl *testLogger) Debug(format string, v ...any) {
 }
 
 func TestLoadAllV24LabelFiles(t *testing.T) {
-	modelVersion := BirdNET_GLOBAL_6K_V2_4
+	modelVersion := BirdNET_V2_4
 
 	// Test each locale code in the mapping
 	for localeCode, fileLocale := range conf.LocaleCodeMapping {
@@ -67,7 +67,7 @@ func TestLoadAllV24LabelFiles(t *testing.T) {
 }
 
 func TestValidateV24LabelFileLineCount(t *testing.T) {
-	modelVersion := BirdNET_GLOBAL_6K_V2_4
+	modelVersion := BirdNET_V2_4
 
 	for localeCode := range conf.LocaleCodeMapping {
 		t.Run(localeCode, func(t *testing.T) {
@@ -85,7 +85,7 @@ func TestValidateV24LabelFileLineCount(t *testing.T) {
 }
 
 func TestValidateV24LabelFileFormat(t *testing.T) {
-	modelVersion := BirdNET_GLOBAL_6K_V2_4
+	modelVersion := BirdNET_V2_4
 
 	for localeCode := range conf.LocaleCodeMapping {
 		t.Run(localeCode, func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestValidateV24LabelFileFormat(t *testing.T) {
 }
 
 func TestLabelFileConsistency(t *testing.T) {
-	modelVersion := BirdNET_GLOBAL_6K_V2_4
+	modelVersion := BirdNET_V2_4
 
 	// Load English labels as reference
 	enData, err := GetLabelFileData(modelVersion, "en-us")
@@ -200,7 +200,7 @@ func TestLabelFileDataErrors(t *testing.T) {
 	require.Error(t, err, "Expected error for unsupported model version")
 
 	// Test unsupported locale (should fall back to default)
-	data, err := GetLabelFileData(BirdNET_GLOBAL_6K_V2_4, "invalid-locale")
+	data, err := GetLabelFileData(BirdNET_V2_4, "invalid-locale")
 	require.NoError(t, err, "Expected fallback for invalid locale")
 	assert.NotEmpty(t, data, "Expected fallback data for invalid locale")
 }
@@ -213,13 +213,13 @@ func TestGetLabelFilename(t *testing.T) {
 		expectError  bool
 	}{
 		{
-			modelVersion: BirdNET_GLOBAL_6K_V2_4,
+			modelVersion: BirdNET_V2_4,
 			localeCode:   "en-us",
 			expected:     filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_en_us.txt"),
 			expectError:  false,
 		},
 		{
-			modelVersion: BirdNET_GLOBAL_6K_V2_4,
+			modelVersion: BirdNET_V2_4,
 			localeCode:   "de",
 			expected:     filepath.Join("V2.4", "BirdNET_GLOBAL_6K_V2.4_Labels_de.txt"),
 			expectError:  false,
@@ -231,7 +231,7 @@ func TestGetLabelFilename(t *testing.T) {
 			expectError:  true,
 		},
 		{
-			modelVersion: BirdNET_GLOBAL_6K_V2_4,
+			modelVersion: BirdNET_V2_4,
 			localeCode:   "invalid-locale",
 			expected:     "",
 			expectError:  true,
