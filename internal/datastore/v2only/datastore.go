@@ -2605,7 +2605,9 @@ func (ds *Datastore) SaveDynamicThreshold(threshold *datastore.DynamicThreshold)
 }
 
 // GetDynamicThreshold retrieves a dynamic threshold by scientific name and model.
-func (ds *Datastore) GetDynamicThreshold(speciesName, modelName string) (*datastore.DynamicThreshold, error) {
+// Note: modelName is accepted for interface compatibility but not used in the v2 schema
+// because v2 thresholds are scoped through LabelID (which is already per-model).
+func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.DynamicThreshold, error) {
 	if ds.threshold == nil {
 		return nil, fmt.Errorf("threshold repository not configured")
 	}
