@@ -718,8 +718,8 @@
   </div>
 
   {#if isLoadingDetection}
-    <!-- Loading skeleton matching real layout structure -->
-    <div class="detection-hero-grid" aria-label="Loading detection details">
+    <!-- Loading skeleton matching real layout structure (decorative, AT uses live region above) -->
+    <div class="detection-hero-grid" aria-hidden="true">
       <!-- Identity card skeleton -->
       <div class="hero-card hero-identity-card">
         <div class="skeleton-line w-20 h-3 mb-4"></div>
@@ -1488,7 +1488,6 @@
   .skeleton-line,
   .skeleton-block {
     background: var(--color-base-300);
-    opacity: 0.6;
     border-radius: var(--radius-selector);
     animation: skeleton-pulse 1.5s ease-in-out infinite;
   }
@@ -1500,11 +1499,18 @@
   @keyframes skeleton-pulse {
     0%,
     100% {
-      opacity: 0.6;
+      opacity: 1;
     }
 
     50% {
-      opacity: 0.3;
+      opacity: 0.5;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .skeleton-line,
+    .skeleton-block {
+      animation: none;
     }
   }
 </style>

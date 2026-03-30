@@ -2235,4 +2235,10 @@
       opacity: 0.5;
     }
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    .spectrogram-skeleton {
+      animation: none;
+    }
+  }
 </style>
