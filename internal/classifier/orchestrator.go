@@ -283,9 +283,10 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		info, exists := ModelRegistry[id]
 		if !exists {
 			info = ModelInfo{
-				ID:   entry.instance.ModelID(),
-				Name: entry.instance.ModelName(),
-				Spec: entry.instance.Spec(),
+				ID:         entry.instance.ModelID(),
+				Name:       entry.instance.ModelName(),
+				Spec:       entry.instance.Spec(),
+				NumSpecies: entry.instance.NumSpecies(),
 			}
 		}
 		infos = append(infos, info)

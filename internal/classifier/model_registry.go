@@ -8,6 +8,10 @@ import (
 	"time"
 )
 
+// modelIDCustom is the sentinel ID used for user-supplied model files that
+// cannot be matched to a known registry entry.
+const modelIDCustom = "Custom"
+
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
 	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
@@ -130,7 +134,7 @@ func DetermineModelInfo(modelPathOrID string) (ModelInfo, error) {
 
 		// Unrecognized model file — return Custom, let runtime figure it out
 		return ModelInfo{
-			ID:               "Custom",
+			ID:               modelIDCustom,
 			Name:             "Custom Model",
 			Description:      fmt.Sprintf("Custom model from %s", baseName),
 			CustomPath:       modelPathOrID,

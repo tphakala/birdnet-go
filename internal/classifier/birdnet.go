@@ -235,15 +235,21 @@ func (bn *BirdNET) initializeTFLiteModel() error {
 
 	bn.classifier = classifier
 
-	// Update model version based on custom model path if provided
+	// Update model version based on custom model path if provided.
+	// Only derive the ID from the filename when the resolution chain did not
+	// already determine a specific model (i.e., ID is empty or still "Custom").
+	// After NewBirdNET's 4-tier resolution, ModelInfo.ID may already be set
+	// correctly and must not be overwritten here.
 	if bn.Settings.BirdNET.ModelPath != "" {
-		// Extract model version from the file name if possible
-		fileName := filepath.Base(bn.Settings.BirdNET.ModelPath)
-		if strings.HasPrefix(fileName, "BirdNET_") && strings.Contains(fileName, "_Model_") {
-			parts := strings.Split(fileName, "_Model_")
-			bn.ModelInfo.ID = parts[0]
-		} else {
-			bn.ModelInfo.ID = "Custom"
+		if bn.ModelInfo.ID == "" || bn.ModelInfo.ID == modelIDCustom {
+			// Extract model version from the file name if possible
+			fileName := filepath.Base(bn.Settings.BirdNET.ModelPath)
+			if strings.HasPrefix(fileName, "BirdNET_") && strings.Contains(fileName, "_Model_") {
+				parts := strings.Split(fileName, "_Model_")
+				bn.ModelInfo.ID = parts[0]
+			} else {
+				bn.ModelInfo.ID = modelIDCustom
+			}
 		}
 		bn.modelVersion = bn.Settings.BirdNET.ModelPath
 	}
@@ -912,7 +918,11 @@ func (bn *BirdNET) ReloadModel() error {
 				Context("step", "determine_model_info").
 				Build()
 		}
-		if newInfo.ID != bn.ModelInfo.ID && newInfo.ID != "Custom" {
+		sameIdentity := newInfo.ID == bn.ModelInfo.ID
+		if newInfo.ID == modelIDCustom || bn.ModelInfo.ID == modelIDCustom {
+			sameIdentity = sameIdentity && newInfo.CustomPath == bn.ModelInfo.CustomPath
+		}
+		if !sameIdentity {
 			rollback()
 			return errors.Newf("model changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
 				Component("birdnet").
