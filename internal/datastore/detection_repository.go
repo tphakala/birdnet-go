@@ -360,6 +360,7 @@ func NoteFromResult(result *detection.Result) Note {
 		Occurrence: result.Occurrence,
 		Verified:   result.Verified,
 		Locked:     result.Locked,
+		Model:      result.Model,
 	}
 }
 
@@ -464,14 +465,14 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 	}
 
 	legacy := AdvancedSearchFilters{
-		TextQuery:     filters.Query,
-		Species:       filters.Species,
-		TimeOfDay:     filters.TimeOfDay,
-		Location:      filters.Location,
-		Limit:         filters.Limit,
-		Offset:        filters.Offset,
-		SortAscending: filters.SortAscending,
-		Verified:      filters.Verified,
+		TextQuery:        filters.Query,
+		Species:          filters.Species,
+		TimeOfDay:        filters.TimeOfDay,
+		Location:         filters.Location,
+		Limit:            filters.Limit,
+		Offset:           filters.Offset,
+		SortAscending:    filters.SortAscending,
+		Verified:         filters.Verified,
 		Locked:           filters.Locked,
 		MinID:            filters.MinID,
 		CursorPagination: filters.CursorPagination,

@@ -216,6 +216,33 @@ func TestDetectionRepository_Save_AdditionalResultsMatchInterface(t *testing.T) 
 		"Direct and Repository should save same number of results")
 }
 
+// TestNoteFromResult_PreservesModelInfo verifies that NoteFromResult copies the
+// Model field from detection.Result so that downstream consumers (e.g. v2only Save)
+// can attribute detections to the correct model.
+func TestNoteFromResult_PreservesModelInfo(t *testing.T) {
+	t.Parallel()
+
+	result := &detection.Result{
+		Timestamp:  time.Now(),
+		SourceNode: "test",
+		Species: detection.Species{
+			ScientificName: "Parus major",
+			CommonName:     "Great Tit",
+		},
+		Confidence: 0.95,
+		Model: detection.ModelInfo{
+			Name:    "Perch",
+			Version: "V2",
+			Variant: "default",
+		},
+	}
+
+	note := NoteFromResult(result)
+	assert.Equal(t, "Perch", note.Model.Name)
+	assert.Equal(t, "V2", note.Model.Version)
+	assert.Equal(t, "default", note.Model.Variant)
+}
+
 // TestDetectionRepository_ConversionFunctions verifies that the exported
 // conversion functions produce correct results for use by action structs.
 func TestDetectionRepository_ConversionFunctions(t *testing.T) {

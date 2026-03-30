@@ -455,8 +455,12 @@ func (ds *Datastore) GetDatabaseStats() (*datastore.DatabaseStats, error) {
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
-	// Get or create default model first (needed for model-specific labels)
-	modelInfo := detection.DefaultModelInfo()
+	// Use the model info from the note if available, otherwise fall back to the default.
+	// This allows multi-model detections to be attributed to the correct model.
+	modelInfo := note.Model
+	if modelInfo.Name == "" {
+		modelInfo = detection.DefaultModelInfo()
+	}
 	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, entities.ModelTypeBird, modelInfo.ClassifierPath)
 	if err != nil {
 		return fmt.Errorf("failed to get/create model: %w", err)

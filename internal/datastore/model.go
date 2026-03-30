@@ -1,7 +1,11 @@
 // model.go this code defines the data model for the application
 package datastore
 
-import "time"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/detection"
+)
 
 // AudioSource represents a structured audio source with ID, safe string, and display name
 // This allows safe separation of concerns: ID for buffer operations, SafeString for logging, DisplayName for UI
@@ -18,7 +22,8 @@ type Note struct {
 	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
 	Time       string `gorm:"index:idx_notes_time"`
 	//InputFile      string
-	Source      AudioSource `gorm:"-"` // Runtime only, not stored in database
+	Source      AudioSource         `gorm:"-"` // Runtime only, not stored in database
+	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	BeginTime   time.Time
 	EndTime     time.Time
 	SpeciesCode string
