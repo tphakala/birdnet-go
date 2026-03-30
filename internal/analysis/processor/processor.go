@@ -153,6 +153,7 @@ type PendingDetection struct {
 	Detection       Detections // The detection data
 	Confidence      float64    // Confidence level of the detection
 	Source          string     // Audio source of the detection, RTSP URL or audio card name
+	ModelID         string     // Identifies which classifier model produced this detection
 	FirstDetected   time.Time  // Back-dated time for audio clip extraction (startTime from analysis buffer)
 	CreatedAt       time.Time  // Real wall-clock time when detection was first created (for display)
 	AudioCapturedAt time.Time  // Wall-clock time when the most recent audio chunk was captured (updated on each hit; for spectrogram overlay)
@@ -561,6 +562,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 	// Add structured logging for detection pipeline entry
 	GetLogger().Debug("Processing detections from queue",
 		logger.String("source", item.Source.DisplayName),
+		logger.String("model_id", item.ModelID),
 		logger.Time("start_time", item.StartTime),
 		logger.Int("results_count", len(item.Results)),
 		logger.Int64("elapsed_time_ms", item.ElapsedTime.Milliseconds()),
@@ -619,12 +621,14 @@ func (p *Processor) processDetections(item classifier.Results) {
 				logger.String("species", commonName),
 				logger.Float64("confidence", confidence),
 				logger.String("source", item.Source.DisplayName),
+				logger.String("model_id", item.ModelID),
 				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
 			p.pendingDetections[mapKey] = PendingDetection{
 				Detection:       det,
 				Confidence:      confidence,
 				Source:          item.Source.ID,
+				ModelID:         item.ModelID,
 				FirstDetected:   item.StartTime,
 				CreatedAt:       now,
 				AudioCapturedAt: item.AudioCapturedAt,
@@ -698,7 +702,7 @@ func (p *Processor) processResults(item classifier.Results) []Detections {
 		baseThreshold := p.getBaseConfidenceThreshold(commonName, scientificName)
 
 		// Check if detection should be filtered
-		shouldSkip, _ := p.shouldFilterDetection(result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID)
+		shouldSkip, _ := p.shouldFilterDetection(result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
 		if shouldSkip {
 			continue
 		}
@@ -750,7 +754,7 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item class
 }
 
 // shouldFilterDetection checks if a detection should be filtered out
-func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source string) (shouldFilter bool, confidenceThreshold float32) {
+func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter
 	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
@@ -791,6 +795,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 				logger.Float32("confidence", result.Confidence),
 				logger.Float32("threshold", confidenceThreshold),
 				logger.String("source", p.getDisplayNameForSource(source)),
+				logger.String("model_id", modelID),
 				logger.String("operation", "confidence_filter"))
 		}
 		return true, confidenceThreshold
@@ -851,7 +856,8 @@ func (p *Processor) createDetection(item classifier.Results, result datastore.Re
 		scientificName, commonName, speciesCode,
 		float64(result.Confidence),
 		item.Source, clipName,
-		item.ElapsedTime, occurrence)
+		item.ElapsedTime, occurrence,
+		item.ModelID)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -884,7 +890,8 @@ func (p *Processor) createDetectionResult(
 	scientificName, commonName, speciesCode string,
 	confidence float64,
 	source datastore.AudioSource, clipName string,
-	elapsedTime time.Duration, occurrence float64) detection.Result {
+	elapsedTime time.Duration, occurrence float64,
+	modelID string) detection.Result {
 
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
@@ -908,7 +915,7 @@ func (p *Processor) createDetectionResult(
 		ClipName:       clipName,
 		ProcessingTime: elapsedTime,
 		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)),
-		Model:          detection.DefaultModelInfo(),
+		Model:          classifier.DetectionModelInfoForID(modelID),
 	}
 }
 
@@ -1181,6 +1188,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
+		logger.String("model_id", item.ModelID),
 		logger.Int("match_count", item.Count),
 		logger.Float64("confidence", item.Confidence),
 		logger.String("operation", "approve_detection"))
@@ -1366,6 +1374,7 @@ func (p *Processor) flushPendingDetections(minDetections int) (pendingCount, flu
 		GetLogger().Info("Flushing detection",
 			logger.String("species", speciesName),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
+			logger.String("model_id", item.ModelID),
 			logger.Bool("deadline_reached", true),
 			logger.Int("count", item.Count),
 			logger.Int("required", minDetections),
