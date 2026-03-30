@@ -270,7 +270,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		if entry.instance == nil {
 			continue
 		}
-		info, exists := supportedModels[id]
+		info, exists := ModelRegistry[id]
 		if !exists {
 			info = ModelInfo{
 				ID:   entry.instance.ModelID(),
@@ -353,7 +353,7 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 }
 
 // configToRegistryID maps user-facing config model IDs (lowercase) to internal
-// registry IDs used by supportedModels and the models map.
+// registry IDs used by ModelRegistry and the models map.
 // SYNC: keys must match conf.knownModelIDs in config.go.
 var configToRegistryID = map[string]string{
 	"birdnet":  "BirdNET_GLOBAL_6K_V2.4",
