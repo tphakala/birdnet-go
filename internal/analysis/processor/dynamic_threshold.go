@@ -146,6 +146,9 @@ func (p *Processor) recordThresholdEvent(speciesName, scientificName, modelName 
 	if p.Ds == nil {
 		return
 	}
+	if modelName == "" {
+		modelName = defaultModelID
+	}
 
 	event := &datastore.ThresholdEvent{
 		SpeciesName:    speciesName,
@@ -353,17 +356,17 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	// memory clear and DB delete. See drainPendingResets for the pattern.
 	p.thresholdsMutex.Lock()
 
-	// Remove all model-scoped entries for this species from the in-memory map
-	// and mark them as pending resets so the periodic persistence goroutine
-	// won't re-insert stale snapshots into the database.
+	// Remove all model-scoped entries for this species from the in-memory map.
+	// Record only the species name (not composite key) in pendingResets since
+	// DeleteDynamicThreshold operates on species name and deletes across all models.
 	for key := range p.DynamicThresholds {
 		_, keySpecies := splitDynamicThresholdKey(key)
 		if keySpecies == speciesName {
 			delete(p.DynamicThresholds, key)
-			if p.pendingResets != nil {
-				p.pendingResets[key] = struct{}{}
-			}
 		}
+	}
+	if p.pendingResets != nil {
+		p.pendingResets[speciesName] = struct{}{}
 	}
 
 	// Delete from database while still holding the lock to prevent a concurrent

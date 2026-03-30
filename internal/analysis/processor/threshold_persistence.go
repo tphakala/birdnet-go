@@ -298,38 +298,35 @@ func (p *Processor) drainPendingResets() {
 		return
 	}
 
-	// Track composite keys whose DB deletes failed so we can requeue them.
+	// Track species names whose DB deletes failed so we can requeue them.
 	var failedResets []string
 
-	for compositeKey := range resets {
-		// Extract species name from composite key for DB operations
-		_, speciesName := splitDynamicThresholdKey(compositeKey)
-
+	for speciesName := range resets {
 		thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
 		if thresholdErr != nil {
 			log.Warn("failed to re-delete dynamic threshold after persistence, requeuing",
-				logger.String("key", compositeKey),
+				logger.String("species", speciesName),
 				logger.Error(thresholdErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
 		if eventsErr != nil {
 			log.Warn("failed to re-delete threshold events after persistence, requeuing",
-				logger.String("key", compositeKey),
+				logger.String("species", speciesName),
 				logger.Error(eventsErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		if thresholdErr != nil || eventsErr != nil {
-			failedResets = append(failedResets, compositeKey)
+			failedResets = append(failedResets, speciesName)
 		}
 	}
 
-	// Requeue any composite keys whose deletes failed so the next cycle retries them.
+	// Requeue any species whose deletes failed so the next cycle retries them.
 	if len(failedResets) > 0 {
 		p.thresholdsMutex.Lock()
-		for _, compositeKey := range failedResets {
+		for _, speciesName := range failedResets {
 			if p.pendingResets != nil {
-				p.pendingResets[compositeKey] = struct{}{}
+				p.pendingResets[speciesName] = struct{}{}
 			}
 		}
 		p.thresholdsMutex.Unlock()

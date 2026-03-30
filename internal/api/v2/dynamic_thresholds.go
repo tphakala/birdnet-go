@@ -41,6 +41,7 @@ type DynamicThresholdResponse struct {
 type ThresholdEventResponse struct {
 	ID            uint      `json:"id"`
 	SpeciesName   string    `json:"speciesName"`
+	ModelName     string    `json:"modelName,omitempty"`
 	PreviousLevel int       `json:"previousLevel"`
 	NewLevel      int       `json:"newLevel"`
 	PreviousValue float64   `json:"previousValue"`
@@ -196,7 +197,9 @@ func (c *Controller) addDatabaseThresholds(thresholdMap map[string]*DynamicThres
 	now := time.Now()
 	for i := range dbThresholds {
 		dt := &dbThresholds[i]
-		thresholdMap[strings.ToLower(dt.SpeciesName)] = &DynamicThresholdResponse{
+		// Use composite key to prevent overwrite when multiple models have thresholds for the same species.
+		mapKey := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
+		thresholdMap[mapKey] = &DynamicThresholdResponse{
 			SpeciesName:    dt.SpeciesName,
 			ScientificName: dt.ScientificName,
 			ModelName:      dt.ModelName,
@@ -223,7 +226,7 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 	baseThreshold := c.Settings.BirdNET.Threshold
 
 	for _, dt := range memoryData {
-		key := strings.ToLower(dt.SpeciesName)
+		key := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
 		if existing, exists := thresholdMap[key]; exists {
 			// Update existing entry with in-memory values
 			applyMemoryOverlay(existing, dt.Level, dt.HighConfCount, dt.CurrentValue, dt.ExpiresAt, dt.IsActive, dt.ScientificName)
@@ -346,6 +349,7 @@ func (c *Controller) GetThresholdEvents(ctx echo.Context) error {
 		response[i] = ThresholdEventResponse{
 			ID:            events[i].ID,
 			SpeciesName:   events[i].SpeciesName,
+			ModelName:     events[i].ModelName,
 			PreviousLevel: events[i].PreviousLevel,
 			NewLevel:      events[i].NewLevel,
 			PreviousValue: events[i].PreviousValue,

@@ -70,6 +70,10 @@
         .then(data => {
           if (Array.isArray(data)) {
             availableModels = data;
+          } else {
+            logger.warn('Fetched models response is not an array', {
+              component: 'SoundCardManager',
+            });
           }
         })
         .catch((err: unknown) => {
