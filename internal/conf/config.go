@@ -1086,6 +1086,7 @@ type InputConfig struct {
 }
 
 type BirdNETConfig struct {
+	Version            string              `yaml:"version,omitempty" json:"version,omitempty"`                 // model version: "2.4", "3.0"
 	Debug              bool                `yaml:"debug" json:"debug"`                                         // true to enable debug mode
 	Sensitivity        float64             `yaml:"sensitivity" json:"sensitivity"`                             // birdnet analysis sigmoid sensitivity
 	Threshold          float64             `yaml:"threshold" json:"threshold"`                                 // threshold for prediction confidence to report
@@ -2101,17 +2102,13 @@ func (s *Settings) MigrateSourceModels() bool {
 	return migrated
 }
 
-// knownModelIDs lists the config-level model identifiers recognized by the system.
-// SYNC: must match classifier.configToRegistryID keys in orchestrator.go.
-var knownModelIDs = map[string]bool{
-	"birdnet":  true,
-	"perch_v2": true,
-}
-
 // ValidateModelConfig checks model-related configuration for errors and
 // warnings. Returns a slice of warning/error strings. Fatal errors are
 // prefixed with "error:"; non-fatal issues with "warning:".
-func (s *Settings) ValidateModelConfig() []string {
+// knownIDs is the set of recognized config-level model identifiers; callers
+// should pass classifier.KnownConfigIDs() when available, or a hardcoded
+// fallback during early config loading.
+func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
 	var issues []string
 
 	enabledSet := make(map[string]bool, len(s.Models.Enabled))
@@ -2120,7 +2117,7 @@ func (s *Settings) ValidateModelConfig() []string {
 	}
 
 	for _, id := range s.Models.Enabled {
-		if !knownModelIDs[strings.ToLower(id)] {
+		if !knownIDs[strings.ToLower(id)] {
 			issues = append(issues, "warning: unknown model ID in models.enabled: "+id)
 		}
 	}
@@ -2167,7 +2164,11 @@ func (s *Settings) ValidateModelConfig() []string {
 // errors are collected and returned together so the user can fix them in
 // one pass.
 func (s *Settings) applyModelValidation() error {
-	modelIssues := s.ValidateModelConfig()
+	// Default known IDs — matches classifier.KnownConfigIDs() at compile time.
+	// This fallback is used during config loading before the classifier package
+	// is available. The orchestrator re-validates with the authoritative list.
+	knownIDs := map[string]bool{"birdnet": true, "perch_v2": true}
+	modelIssues := s.ValidateModelConfig(knownIDs)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
 		if strings.HasPrefix(issue, "error:") {

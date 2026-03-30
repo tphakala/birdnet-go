@@ -7,6 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testKnownIDs mirrors classifier.KnownConfigIDs() for testing without circular imports.
+var testKnownIDs = map[string]bool{"birdnet": true, "perch_v2": true}
+
 func TestPerchConfig_Defaults(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
@@ -92,7 +95,7 @@ func TestValidateModelConfig_PerchEnabledRequiresPaths(t *testing.T) {
 	settings := &Settings{}
 	settings.Perch.Enabled = true
 	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
-	errs := settings.ValidateModelConfig()
+	errs := settings.ValidateModelConfig(testKnownIDs)
 	assert.NotEmpty(t, errs, "should return errors when Perch enabled without paths")
 }
 
@@ -100,7 +103,7 @@ func TestValidateModelConfig_PerchDisabledNoErrors(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet"}
-	errs := settings.ValidateModelConfig()
+	errs := settings.ValidateModelConfig(testKnownIDs)
 	assert.Empty(t, errs, "should have no errors with just BirdNET")
 }
 
@@ -109,7 +112,7 @@ func TestValidateModelConfig_PerchInModelsRequiresEnabled(t *testing.T) {
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet", "perch_v2"}
 	settings.Perch.Enabled = false
-	errs := settings.ValidateModelConfig()
+	errs := settings.ValidateModelConfig(testKnownIDs)
 	assert.NotEmpty(t, errs, "perch_v2 in models.enabled requires perch.enabled=true")
 }
 
@@ -117,7 +120,7 @@ func TestValidateModelConfig_UnknownModelWarning(t *testing.T) {
 	t.Parallel()
 	settings := &Settings{}
 	settings.Models.Enabled = []string{"birdnet", "unknown_model"}
-	warnings := settings.ValidateModelConfig()
+	warnings := settings.ValidateModelConfig(testKnownIDs)
 	assert.NotEmpty(t, warnings, "unknown model ID should produce a warning")
 }
 
@@ -128,6 +131,13 @@ func TestValidateModelConfig_SourceReferencesUnavailableModel(t *testing.T) {
 	settings.Realtime.Audio.Sources = []AudioSourceConfig{
 		{Name: "Mic1", Device: "hw:0,0", Models: []string{"birdnet", "perch_v2"}},
 	}
-	warnings := settings.ValidateModelConfig()
+	warnings := settings.ValidateModelConfig(testKnownIDs)
 	assert.NotEmpty(t, warnings, "source referencing model not in models.enabled should warn")
+}
+
+func TestBirdNETConfig_VersionField(t *testing.T) {
+	t.Parallel()
+	settings := &Settings{}
+	settings.BirdNET.Version = "2.4"
+	assert.Equal(t, "2.4", settings.BirdNET.Version)
 }
