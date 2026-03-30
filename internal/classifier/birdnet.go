@@ -102,7 +102,14 @@ func NewBirdNET(settings *conf.Settings, modelInfo *ModelInfo) (*BirdNET, error)
 		}
 	default:
 		// Tier 4: default embedded model
-		bn.ModelInfo = ModelRegistry[DefaultModelVersion]
+		info, ok := ModelRegistry[DefaultModelVersion]
+		if !ok {
+			return nil, errors.Newf("default model version %s not found in registry", DefaultModelVersion).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Build()
+		}
+		bn.ModelInfo = info
 	}
 
 	// Load taxonomy data
@@ -874,7 +881,16 @@ func (bn *BirdNET) ReloadModel() error {
 	// the switch via pipeline cold restart, not ReloadModel.
 	if bn.Settings.BirdNET.Version != "" {
 		newInfo, ok := ResolveBirdNETVersion(bn.Settings.BirdNET.Version)
-		if ok && newInfo.ID != bn.ModelInfo.ID {
+		if !ok {
+			rollback()
+			return errors.Newf("unknown BirdNET version: %s", bn.Settings.BirdNET.Version).
+				Component("birdnet").
+				Category(errors.CategoryModelInit).
+				Context("operation", "reload_model").
+				Context("version", bn.Settings.BirdNET.Version).
+				Build()
+		}
+		if newInfo.ID != bn.ModelInfo.ID {
 			rollback()
 			return errors.Newf("model version changed from %s to %s: requires orchestrator restart", bn.ModelInfo.ID, newInfo.ID).
 				Component("birdnet").
