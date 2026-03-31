@@ -567,17 +567,6 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	originalFilename := filepath.Base(clipPath)
 	ext := strings.ToLower(filepath.Ext(originalFilename))
 
-	// Verify file exists BEFORE setting audio-specific headers.
-	// Without this check, 404 responses carry Content-Type: audio/wav and
-	// Content-Disposition headers, confusing HTTP clients.
-	if _, statErr := c.SFS.StatRel(normalizedClipPath); statErr != nil {
-		return c.handleAudio404WithWait(ctx, normalizedClipPath, statErr,
-			logger.String("note_id", noteID),
-			logger.String("path", ctx.Request().URL.Path),
-			logger.String("ip", ctx.RealIP()),
-		)
-	}
-
 	// Set proper Content-Type for audio files BEFORE ServeRelativeFile.
 	// This ensures Safari recognizes the file as audio.
 	switch ext {
@@ -607,6 +596,22 @@ func (c *Controller) ServeAudioByID(ctx echo.Context) error {
 	// Serve the file using SecureFS.
 	err = c.SFS.ServeRelativeFile(ctx, normalizedClipPath)
 	if err != nil {
+		// Clear audio-specific headers before error handling so 404 responses
+		// don't carry Content-Type: audio/wav on JSON error bodies.
+		if !ctx.Response().Committed {
+			ctx.Response().Header().Del("Content-Type")
+			ctx.Response().Header().Del("Content-Disposition")
+			ctx.Response().Header().Del("Accept-Ranges")
+		}
+
+		var httpErr *echo.HTTPError
+		if errors.As(err, &httpErr) && httpErr.Code == http.StatusNotFound {
+			return c.handleAudio404WithWait(ctx, normalizedClipPath, err,
+				logger.String("note_id", noteID),
+				logger.String("path", ctx.Request().URL.Path),
+				logger.String("ip", ctx.RealIP()),
+			)
+		}
 		return c.translateSecureFSError(ctx, err, "Failed to serve audio clip due to an unexpected error")
 	}
 

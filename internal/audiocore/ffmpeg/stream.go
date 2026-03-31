@@ -689,8 +689,10 @@ func (s *Stream) Run(parentCtx context.Context) {
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
 
 				// Publish stream event for alerting rules.
+				// EOF returns nil from handleReadError and never reaches here,
+				// so only silence timeouts are classified as disconnections.
 				eventName := alerting.EventStreamError
-				if isSilenceTimeout || errors.Is(err, io.EOF) {
+				if isSilenceTimeout {
 					eventName = alerting.EventStreamDisconnected
 				}
 				alerting.TryPublish(&alerting.AlertEvent{
