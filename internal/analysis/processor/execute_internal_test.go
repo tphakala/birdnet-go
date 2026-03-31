@@ -807,10 +807,19 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 	}
 	t.Parallel()
 
-	scriptPath := createTestScript(t, "fail_script.sh", "#!/bin/sh\nexit 1\n")
+	// Use /bin/false (or /usr/bin/false) which always exits with status 1.
+	// This avoids creating a script file entirely, sidestepping ETXTBSY
+	// ("text file busy") flakiness on Linux CI runners with overlayfs.
+	falseBin := "/bin/false"
+	if _, err := os.Stat(falseBin); os.IsNotExist(err) {
+		falseBin = "/usr/bin/false"
+		if _, err := os.Stat(falseBin); os.IsNotExist(err) {
+			t.Skip("neither /bin/false nor /usr/bin/false found")
+		}
+	}
 
 	action := &ExecuteCommandAction{
-		Command: scriptPath,
+		Command: falseBin,
 		Params:  nil,
 	}
 
