@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -807,15 +808,13 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Use /bin/false (or /usr/bin/false) which always exits with status 1.
-	// This avoids creating a script file entirely, sidestepping ETXTBSY
-	// ("text file busy") flakiness on Linux CI runners with overlayfs.
-	falseBin := "/bin/false"
-	if _, err := os.Stat(falseBin); os.IsNotExist(err) {
-		falseBin = "/usr/bin/false"
-		if _, err := os.Stat(falseBin); os.IsNotExist(err) {
-			t.Skip("neither /bin/false nor /usr/bin/false found")
-		}
+	// Use the system `false` binary (always exits with status 1), found via
+	// exec.LookPath for portability. This avoids creating a script file
+	// entirely, sidestepping ETXTBSY ("text file busy") flakiness on Linux
+	// CI runners with overlayfs.
+	falseBin, err := exec.LookPath("false")
+	if err != nil {
+		t.Skip("false binary not found in PATH")
 	}
 
 	action := &ExecuteCommandAction{
@@ -829,7 +828,7 @@ func TestExecuteCommandAction_ScriptFailure(t *testing.T) {
 		},
 	}
 
-	err := action.Execute(t.Context(), det)
+	err = action.Execute(t.Context(), det)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "exit")
 }
