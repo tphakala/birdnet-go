@@ -190,7 +190,10 @@ func TestStream_GetHealth(t *testing.T) {
 	assert.True(t, health.LastDataReceived.IsZero(), "Initial LastDataReceived should be zero time")
 	assert.Equal(t, 0, health.RestartCount)
 
-	// Update data time to make stream healthy.
+	// Set state to running and update data time to make stream healthy.
+	stream.processStateMu.Lock()
+	stream.processState = StateRunning
+	stream.processStateMu.Unlock()
 	stream.updateLastDataTime()
 	health = stream.GetHealth()
 	assert.True(t, health.IsHealthy, "Stream should be healthy after receiving data")
@@ -444,6 +447,10 @@ func TestStream_HealthTracking(t *testing.T) {
 	health := stream.GetHealth()
 	assert.False(t, health.IsHealthy)
 
+	// Set state to running so health check considers timestamp.
+	stream.processStateMu.Lock()
+	stream.processState = StateRunning
+	stream.processStateMu.Unlock()
 	stream.updateLastDataTime()
 	health = stream.GetHealth()
 	assert.True(t, health.IsHealthy)
@@ -924,7 +931,10 @@ func TestStream_ZeroTimeHandling(t *testing.T) {
 	assert.True(t, health.LastDataReceived.IsZero())
 	assert.False(t, health.IsHealthy)
 
-	// After receiving data: healthy.
+	// After receiving data with state=running: healthy.
+	stream.processStateMu.Lock()
+	stream.processState = StateRunning
+	stream.processStateMu.Unlock()
 	stream.updateLastDataTime()
 	health = stream.GetHealth()
 	assert.False(t, health.LastDataReceived.IsZero())

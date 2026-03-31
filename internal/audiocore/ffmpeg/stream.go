@@ -1531,8 +1531,10 @@ func (s *Stream) GetHealth() StreamHealth {
 
 	var isHealthy, isReceivingData bool
 	switch {
-	case state == StateBackoff || state == StateCircuitOpen || state == StateStopped:
-		// Stream is not running — always unhealthy regardless of last data time.
+	case state != StateRunning:
+		// Stream is not actively processing audio — always unhealthy.
+		// Covers StateIdle, StateStarting, StateRestarting, StateBackoff,
+		// StateCircuitOpen, and StateStopped.
 		isHealthy = false
 		isReceivingData = false
 	case lastData.IsZero():

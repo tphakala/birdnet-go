@@ -51,7 +51,7 @@ var ModelRegistry = map[string]ModelInfo{
 		Name:             "BirdNET GLOBAL V3.0",
 		DetectionName:    "BirdNET",
 		DetectionVersion: "3.0",
-		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)",
+		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
 		ConfigAliases:    []string{"birdnet_v3.0"},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
