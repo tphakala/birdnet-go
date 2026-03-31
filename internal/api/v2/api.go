@@ -17,6 +17,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/patrickmn/go-cache"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
@@ -655,22 +657,37 @@ func (c *Controller) HealthCheck(ctx echo.Context) error {
 	// Add system metrics
 	systemMetrics := make(map[string]any)
 
-	// Add placeholder CPU usage (would be implemented with actual metrics in production)
-	systemMetrics["cpu_usage"] = 0.0
+	// CPU usage from cached background sampler
+	cpuPercent := GetCachedCPUUsage()
+	if len(cpuPercent) > 0 {
+		systemMetrics["cpu_usage"] = cpuPercent[0]
+	} else {
+		systemMetrics["cpu_usage"] = 0.0
+	}
 
-	// Add placeholder memory usage
+	// Memory usage via gopsutil
 	memoryMetrics := map[string]any{
 		"used_percent": 0.0,
 		"total_mb":     0.0,
 		"used_mb":      0.0,
 	}
+	if memInfo, err := mem.VirtualMemory(); err == nil {
+		memoryMetrics["used_percent"] = memInfo.UsedPercent
+		memoryMetrics["total_mb"] = float64(memInfo.Total) / 1024 / 1024
+		memoryMetrics["used_mb"] = float64(memInfo.Used) / 1024 / 1024
+	}
 	systemMetrics["memory"] = memoryMetrics
 
-	// Add placeholder disk space
+	// Disk usage via gopsutil (root partition)
 	diskMetrics := map[string]any{
 		"total_gb":     0.0,
 		"free_gb":      0.0,
 		"used_percent": 0.0,
+	}
+	if diskInfo, err := disk.Usage("/"); err == nil {
+		diskMetrics["total_gb"] = float64(diskInfo.Total) / 1024 / 1024 / 1024
+		diskMetrics["free_gb"] = float64(diskInfo.Free) / 1024 / 1024 / 1024
+		diskMetrics["used_percent"] = diskInfo.UsedPercent
 	}
 	systemMetrics["disk_space"] = diskMetrics
 

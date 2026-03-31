@@ -1527,13 +1527,20 @@ func (s *Stream) GetHealth() StreamHealth {
 		healthyDataThreshold = defaultHealthyDataThreshold
 	}
 
+	state := s.GetProcessState()
+
 	var isHealthy, isReceivingData bool
-	if lastData.IsZero() {
+	switch {
+	case state == StateBackoff || state == StateCircuitOpen || state == StateStopped:
+		// Stream is not running — always unhealthy regardless of last data time.
+		isHealthy = false
+		isReceivingData = false
+	case lastData.IsZero():
 		// No data ever received: unhealthy regardless of grace period.
 		// (Grace period only suppresses external alarms, not the health flag.)
 		isHealthy = false
 		isReceivingData = false
-	} else {
+	default:
 		isHealthy = time.Since(lastData) < healthyDataThreshold
 		isReceivingData = time.Since(lastData) < defaultReceivingDataThreshold
 	}
@@ -1542,8 +1549,6 @@ func (s *Stream) GetHealth() StreamHealth {
 	if s.metrics != nil {
 		s.metrics.SetStreamHealth(s.config.SourceID, isHealthy)
 	}
-
-	state := s.GetProcessState()
 
 	allHistory := s.GetStateHistory()
 	var recentHistory []StateTransition

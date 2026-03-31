@@ -46,6 +46,19 @@ var ModelRegistry = map[string]ModelInfo{
 		DefaultLocale: "en-uk",
 		NumSpecies:    6523,
 	},
+	"BirdNET_V3.0": {
+		ID:               "BirdNET_V3.0",
+		Name:             "BirdNET GLOBAL V3.0",
+		DetectionName:    "BirdNET",
+		DetectionVersion: "3.0",
+		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)",
+		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
+		ConfigAliases:    []string{"birdnet_v3.0"},
+		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
+			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
+			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
+		DefaultLocale: "en-uk",
+	},
 	"Perch_V2": {
 		ID:               "Perch_V2",
 		Name:             "Google Perch V2",
@@ -61,6 +74,7 @@ var ModelRegistry = map[string]ModelInfo{
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.
 var birdnetVersionToRegistryID = map[string]string{
 	"2.4": "BirdNET_V2.4",
+	"3.0": "BirdNET_V3.0",
 }
 
 // KnownConfigIDs collects all ConfigAliases from the registry.
@@ -104,6 +118,10 @@ var filenamePatterns = map[string]string{
 	"birdnet_v2.4":           "BirdNET_V2.4",
 	"birdnet-v2.4":           "BirdNET_V2.4",
 	"birdnet-go_classifier":  "BirdNET_V2.4", // custom-named classifier builds
+	"birdnet_global_v3.0":    "BirdNET_V3.0",
+	"birdnet-v30":            "BirdNET_V3.0",
+	"birdnet_v3.0":           "BirdNET_V3.0",
+	"birdnet-v3.0":           "BirdNET_V3.0",
 	"perch_v2":               "Perch_V2",
 	"perch-v2":               "Perch_V2",
 }

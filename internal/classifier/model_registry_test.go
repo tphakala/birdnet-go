@@ -12,7 +12,7 @@ import (
 func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 	t.Parallel()
 
-	expectedIDs := []string{"BirdNET_V2.4", "Perch_V2"}
+	expectedIDs := []string{"BirdNET_V2.4", "BirdNET_V3.0", "Perch_V2"}
 	for _, id := range expectedIDs {
 		info, exists := ModelRegistry[id]
 		require.True(t, exists, "ModelRegistry should contain %s", id)
@@ -33,6 +33,17 @@ func TestModelRegistry_BirdNETSpec(t *testing.T) {
 	assert.Contains(t, info.ConfigAliases, "birdnet")
 }
 
+func TestModelRegistry_BirdNETv30Spec(t *testing.T) {
+	t.Parallel()
+
+	info := ModelRegistry["BirdNET_V3.0"]
+	assert.Equal(t, 32000, info.Spec.SampleRate)
+	assert.Equal(t, 5*time.Second, info.Spec.ClipLength)
+	assert.Contains(t, info.ConfigAliases, "birdnet_v3.0")
+	assert.Equal(t, "BirdNET", info.DetectionName)
+	assert.Equal(t, "3.0", info.DetectionVersion)
+}
+
 func TestModelRegistry_PerchSpec(t *testing.T) {
 	t.Parallel()
 
@@ -47,6 +58,7 @@ func TestKnownConfigIDs(t *testing.T) {
 
 	ids := KnownConfigIDs()
 	assert.True(t, ids["birdnet"])
+	assert.True(t, ids["birdnet_v3.0"])
 	assert.True(t, ids["perch_v2"])
 	assert.False(t, ids["unknown"])
 }
@@ -57,6 +69,10 @@ func TestGetModelSpec(t *testing.T) {
 	spec, ok := GetModelSpec("BirdNET_V2.4")
 	require.True(t, ok)
 	assert.Equal(t, 48000, spec.SampleRate)
+
+	spec, ok = GetModelSpec("BirdNET_V3.0")
+	require.True(t, ok)
+	assert.Equal(t, 32000, spec.SampleRate)
 
 	spec, ok = GetModelSpec("Perch_V2")
 	require.True(t, ok)
@@ -76,6 +92,7 @@ func TestResolveBirdNETVersion(t *testing.T) {
 		wantOK  bool
 	}{
 		{"v2.4 resolves", "2.4", "BirdNET_V2.4", true},
+		{"v3.0 resolves", "3.0", "BirdNET_V3.0", true},
 		{"unknown version", "9.9", "", false},
 		{"empty string", "", "", false},
 	}
@@ -101,12 +118,15 @@ func TestDetermineModelInfo_OnnxSupport(t *testing.T) {
 		wantID string
 	}{
 		{"onnx with birdnet-v24 pattern", "/path/to/birdnet-v24.onnx", "BirdNET_V2.4"},
+		{"onnx with birdnet-v30 pattern", "/path/to/birdnet-v30.onnx", "BirdNET_V3.0"},
+		{"onnx with birdnet_v3.0 pattern", "/path/to/birdnet_v3.0.onnx", "BirdNET_V3.0"},
 		{"onnx with perch pattern", "/path/to/perch_v2.onnx", "Perch_V2"},
 		{"onnx unrecognized returns Custom", "/path/to/unknown-model.onnx", "Custom"},
 		{"tflite with legacy name", "/path/to/BirdNET_GLOBAL_6K_V2.4_Model.tflite", "BirdNET_V2.4"},
 		{"tflite unrecognized returns Custom", "/path/to/some-model.tflite", "Custom"},
 		{"custom classifier build name", "/home/birdnet/BirdNET-Go_classifier_20260118.tflite", "BirdNET_V2.4"},
 		{"registry ID directly", "BirdNET_V2.4", "BirdNET_V2.4"},
+		{"registry ID v3.0", "BirdNET_V3.0", "BirdNET_V3.0"},
 		{"registry ID Perch", "Perch_V2", "Perch_V2"},
 	}
 
@@ -130,9 +150,11 @@ func TestResolveConfigModelID(t *testing.T) {
 		wantExists bool
 	}{
 		{"birdnet maps to registry ID", "birdnet", "BirdNET_V2.4", true},
+		{"birdnet_v3.0 maps to registry ID", "birdnet_v3.0", "BirdNET_V3.0", true},
 		{"perch_v2 maps to registry ID", "perch_v2", "Perch_V2", true},
 		{"unknown returns false", "unknown_model", "", false},
 		{"case insensitive", "BIRDNET", "BirdNET_V2.4", true},
+		{"case insensitive birdnet v3", "BIRDNET_V3.0", "BirdNET_V3.0", true},
 		{"case insensitive perch", "PERCH_V2", "Perch_V2", true},
 	}
 
@@ -177,6 +199,17 @@ func TestModelInfo_ToDetectionModelInfo_BirdNET(t *testing.T) {
 	assert.Equal(t, detection.ModelInfo{
 		Name:    "BirdNET",
 		Version: "2.4",
+		Variant: "default",
+	}, got)
+}
+
+func TestModelInfo_ToDetectionModelInfo_BirdNETv30(t *testing.T) {
+	t.Parallel()
+	info := ModelRegistry["BirdNET_V3.0"]
+	got := info.ToDetectionModelInfo()
+	assert.Equal(t, detection.ModelInfo{
+		Name:    "BirdNET",
+		Version: "3.0",
 		Variant: "default",
 	}, got)
 }
