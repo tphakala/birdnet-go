@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -37,6 +38,7 @@ const (
 	// Process management timeouts.
 	processCleanupTimeout = 5 * time.Second
 	processQuickExitTime  = 5 * time.Second
+	stderrDrainTimeout    = 500 * time.Millisecond // extra wait for stderr flush after quick-exit timeout
 
 	// Backoff settings.
 	defaultBackoffDuration = 5 * time.Second
@@ -640,6 +642,15 @@ func (s *Stream) Run(parentCtx context.Context) {
 					logger.Error(err),
 					logger.String("component", "ffmpeg-stream"),
 					logger.String("operation", "start_process"))
+				alerting.TryPublish(&alerting.AlertEvent{
+					ObjectType: alerting.ObjectTypeStream,
+					EventName:  alerting.EventStreamError,
+					Properties: map[string]any{
+						alerting.PropertyStreamName: s.config.SourceName,
+						alerting.PropertyStreamURL:  s.config.safeURL(),
+						alerting.PropertyError:      err.Error(),
+					},
+				})
 				s.recordFailure(0)
 				currentState := s.GetProcessState()
 				if currentState != StateCircuitOpen {
@@ -676,6 +687,21 @@ func (s *Stream) Run(parentCtx context.Context) {
 				errorMsg := err.Error()
 				sanitizedError := privacy.SanitizeFFmpegError(errorMsg)
 				isSilenceTimeout := strings.Contains(errorMsg, "silence timeout")
+
+				// Publish stream event for alerting rules.
+				eventName := alerting.EventStreamError
+				if isSilenceTimeout || errors.Is(err, io.EOF) {
+					eventName = alerting.EventStreamDisconnected
+				}
+				alerting.TryPublish(&alerting.AlertEvent{
+					ObjectType: alerting.ObjectTypeStream,
+					EventName:  eventName,
+					Properties: map[string]any{
+						alerting.PropertyStreamName: s.config.SourceName,
+						alerting.PropertyStreamURL:  s.config.safeURL(),
+						alerting.PropertyError:      sanitizedError,
+					},
+				})
 
 				getStreamLogger().Warn("FFmpeg process ended",
 					logger.String("url", s.config.safeURL()),
@@ -1223,7 +1249,17 @@ func (s *Stream) handleQuickExitError(startTime time.Time) error {
 			processState = s.exitProcessState
 			s.exitInfoMu.Unlock()
 		case <-time.After(processQuickExitTime):
-			// Timeout; background goroutine will eventually reap.
+			// Primary timeout expired. Give stderr a brief drain window
+			// so cmd.Wait() can finish flushing the pipe buffers.
+			select {
+			case <-waitDone:
+				s.exitInfoMu.Lock()
+				exitCode = s.exitExitCode
+				processState = s.exitProcessState
+				s.exitInfoMu.Unlock()
+			case <-time.After(stderrDrainTimeout):
+				// cmd.Wait() still pending — proceed with partial stderr.
+			}
 		}
 	}
 
