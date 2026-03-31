@@ -86,7 +86,7 @@ func (m *BirdNETMetrics) initMetrics() error {
 	m.ModelInvokeDuration = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Name:    "birdnet_model_invoke_duration_seconds",
-			Help:    "Time taken for TensorFlow Lite model invocation",
+			Help:    "Time taken for model invocation",
 			Buckets: prometheus.ExponentialBuckets(BucketStart1ms, BucketFactor2, BucketCount8), // 1ms to ~256ms
 		},
 		[]string{"model"},

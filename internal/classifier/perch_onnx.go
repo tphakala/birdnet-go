@@ -6,6 +6,7 @@ package classifier
 import (
 	"context"
 	"fmt"
+	"math"
 	"os"
 	"sync"
 	"time"
@@ -118,13 +119,18 @@ func (p *Perch) Predict(ctx context.Context, samples [][]float32) ([]datastore.R
 			Build()
 	}
 
-	predictions, err := p.classifier.Predict(samples[0])
+	rawLogits, err := p.classifier.Predict(samples[0])
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryAudio).
 			Context("model", "Perch_V2").
 			Build()
 	}
+
+	// Apply softmax to normalize raw logits into probabilities (0.0-1.0).
+	// The inference.Classifier interface returns pre-activation logits;
+	// BirdNET applies sigmoid in its own Predict path, Perch needs softmax.
+	predictions := perchSoftmax(rawLogits)
 
 	// Pair labels with predictions
 	results, err := pairLabelsAndConfidence(p.labels, predictions)
@@ -167,4 +173,27 @@ func (p *Perch) Close() error {
 		p.classifier = nil
 	}
 	return nil
+}
+
+// perchSoftmax normalizes raw logits into probabilities via the softmax function.
+func perchSoftmax(logits []float32) []float32 {
+	if len(logits) == 0 {
+		return logits
+	}
+	result := make([]float32, len(logits))
+	maxVal := logits[0]
+	for _, v := range logits[1:] {
+		if v > maxVal {
+			maxVal = v
+		}
+	}
+	var sum float32
+	for i, v := range logits {
+		result[i] = float32(math.Exp(float64(v - maxVal)))
+		sum += result[i]
+	}
+	for i := range result {
+		result[i] /= sum
+	}
+	return result
 }

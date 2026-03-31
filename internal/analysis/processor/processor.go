@@ -723,8 +723,9 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item class
 	// Use BirdNET's EnrichResultWithTaxonomy to get species information
 	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
 
-	// Skip processing if we couldn't parse the species properly (either name missing)
-	if commonName == "" || scientificName == "" {
+	// Skip processing if scientific name is missing. Common name may be empty
+	// for models like Perch v2 that return scientific-name-only labels.
+	if scientificName == "" {
 		if p.Settings.Debug {
 			GetLogger().Debug("Skipping species with invalid format",
 				logger.String("species", result.Species),
@@ -732,6 +733,11 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item class
 				logger.String("operation", "species_format_validation"))
 		}
 		return "", "", "", ""
+	}
+
+	// Use scientific name as fallback when common name is not available.
+	if commonName == "" {
+		commonName = scientificName
 	}
 
 	// Log placeholder taxonomy codes if using custom model
