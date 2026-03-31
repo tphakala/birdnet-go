@@ -791,14 +791,19 @@ func TestExecuteCommandAction_SuccessfulExecution(t *testing.T) {
 	}
 	t.Parallel()
 
-	scriptPath := createTestScript(t, "test_script.sh", "#!/bin/sh\nexit 0\n")
+	// Use the system `true` binary (always exits with status 0), found via
+	// exec.LookPath for portability. Avoids ETXTBSY flakiness on overlayfs.
+	trueBin, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true binary not found in PATH")
+	}
 
 	action := &ExecuteCommandAction{
-		Command: scriptPath,
+		Command: trueBin,
 		Params:  nil,
 	}
 
-	err := action.Execute(t.Context(), createTestDetections("Test Bird"))
+	err = action.Execute(t.Context(), createTestDetections("Test Bird"))
 	assert.NoError(t, err)
 }
 
