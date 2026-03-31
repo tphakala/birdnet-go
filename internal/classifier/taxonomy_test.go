@@ -45,6 +45,39 @@ func TestRemapLegacyCode(t *testing.T) {
 	}
 }
 
+// TestSplitSpeciesName verifies parsing of species name formats used by
+// different models (BirdNET underscore format, Perch binomial names, etc.).
+func TestSplitSpeciesName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		input          string
+		wantScientific string
+		wantCommon     string
+	}{
+		{"BirdNET underscore format", "Glaucidium passerinum_Eurasian Pygmy-Owl", "Glaucidium passerinum", "Eurasian Pygmy-Owl"},
+		{"BirdNET with species code", "Turdus merula_Common Blackbird_eurbla", "Turdus merula", "Common Blackbird"},
+		{"Perch binomial scientific name", "Glaucidium passerinum", "Glaucidium passerinum", ""},
+		{"Perch binomial Turdus merula", "Turdus merula", "Turdus merula", ""},
+		{"Perch binomial Parus major", "Parus major", "Parus major", ""},
+		{"Perch sound event underscore", "dog_bark", "dog", "bark"},
+		{"common name only", "Eurasian Pygmy-Owl", "", "Eurasian Pygmy-Owl"},
+		{"single word", "unknown", "unknown", ""},
+		{"empty string", "", "", ""},
+		{"both words capitalized (not binomial)", "Great Tit", "", "Great Tit"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			gotSci, gotCommon := SplitSpeciesName(tt.input)
+			assert.Equal(t, tt.wantScientific, gotSci, "scientific name")
+			assert.Equal(t, tt.wantCommon, gotCommon, "common name")
+		})
+	}
+}
+
 // TestGetSpeciesCodeFromName_LegacyRemapping verifies that looking up
 // Herring Gull by name returns the remapped code "amhgul1" instead
 // of the retired "hergul".

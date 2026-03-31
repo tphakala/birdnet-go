@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 //go:embed data/eBird_taxonomy_codes_2021E.json
@@ -162,9 +164,12 @@ func GetSpeciesNameFromCode(taxonomyMap TaxonomyMap, code string) (string, bool)
 	return name, exists
 }
 
-// SplitSpeciesName splits a species name string into scientific and common names
+// SplitSpeciesName splits a species name string into scientific and common names.
+// Handles three formats:
+//   - BirdNET: "Scientific name_Common name" (underscore-separated)
+//   - Perch v2 birds: "Genus species" (binomial scientific name, no common name)
+//   - Perch v2 sounds: "sound_event_name" (underscore-separated, no common name)
 func SplitSpeciesName(speciesName string) (scientific, common string) {
-	// Check if the string is empty
 	if speciesName == "" {
 		return "", ""
 	}
@@ -175,13 +180,32 @@ func SplitSpeciesName(speciesName string) (scientific, common string) {
 	if len(parts) >= 2 {
 		// Format: "ScientificName_CommonName[_SpeciesCode]"
 		return parts[0], parts[1]
-	} else if len(parts) == 1 && strings.Contains(speciesName, " ") {
-		// This might be just a common name without scientific name format
+	}
+
+	// No underscore — check if this is a binomial scientific name.
+	// Pattern: exactly two space-separated words where the first starts
+	// with an uppercase letter and the second starts with a lowercase
+	// letter (e.g., "Glaucidium passerinum").
+	if strings.Contains(speciesName, " ") {
+		words := strings.Fields(speciesName)
+		if len(words) == 2 && isBinomialName(words[0], words[1]) {
+			return speciesName, ""
+		}
+		// Multi-word but not binomial — treat as common name.
 		return "", speciesName
 	}
 
-	// If we couldn't parse it properly, return the original string as scientific name
+	// Single word, no underscore, no space — return as scientific name.
 	return speciesName, ""
+}
+
+// isBinomialName returns true if genus starts with an uppercase letter
+// and epithet starts with a lowercase letter (Latin binomial convention).
+func isBinomialName(genus, epithet string) bool {
+	g, _ := utf8.DecodeRuneInString(genus)
+	e, _ := utf8.DecodeRuneInString(epithet)
+	return g != utf8.RuneError && e != utf8.RuneError &&
+		unicode.IsUpper(g) && unicode.IsLower(e)
 }
 
 // IsTaxonomyComplete checks if the taxonomy map has all the species in the labels
