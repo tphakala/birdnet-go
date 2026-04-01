@@ -399,18 +399,38 @@ func categorizeFilePath(path string) string {
 
 // clearDeletedClipPaths removes stale clip_name references from the database
 // for files that were deleted from disk by the retention policy.
-func clearDeletedClipPaths(db Interface, deletedNames []string, policy string) {
-	if len(deletedNames) == 0 {
+// deletedPaths contains absolute file paths; baseDir is the audio export root
+// used to compute relative paths matching the clip_name format in the database.
+func clearDeletedClipPaths(db Interface, deletedPaths []string, baseDir, policy string) {
+	if len(deletedPaths) == 0 {
 		return
 	}
 
 	log := GetLogger()
 
-	cleared, err := db.ClearNoteClipPathsByNames(deletedNames)
+	// Convert absolute file paths to relative clip names matching database format
+	clipNames := make([]string, 0, len(deletedPaths))
+	for _, absPath := range deletedPaths {
+		relPath, err := filepath.Rel(baseDir, absPath)
+		if err != nil {
+			log.Debug("Failed to compute relative path for clip",
+				logger.String("policy", policy),
+				logger.String("path", absPath),
+				logger.Error(err))
+			continue
+		}
+		clipNames = append(clipNames, filepath.ToSlash(relPath))
+	}
+
+	if len(clipNames) == 0 {
+		return
+	}
+
+	cleared, err := db.ClearNoteClipPathsByNames(clipNames)
 	if err != nil {
 		log.Warn("Failed to clear clip paths for deleted files",
 			logger.String("policy", policy),
-			logger.Int("deleted_files", len(deletedNames)),
+			logger.Int("deleted_files", len(clipNames)),
 			logger.Error(err))
 		return
 	}
@@ -419,7 +439,7 @@ func clearDeletedClipPaths(db Interface, deletedNames []string, policy string) {
 		log.Info("Cleared stale clip path references",
 			logger.String("policy", policy),
 			logger.Int64("records_cleared", cleared),
-			logger.Int("files_deleted", len(deletedNames)))
+			logger.Int("files_deleted", len(clipNames)))
 	}
 }
 

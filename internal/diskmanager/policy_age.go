@@ -3,7 +3,6 @@ package diskmanager
 
 import (
 	"fmt"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -165,7 +164,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		quit, retentionCutoffUnix)
 
 	// Clear clip_name references in the database for deleted files
-	clearDeletedClipPaths(db, deletedNames, "age")
+	clearDeletedClipPaths(db, deletedNames, baseDir, "age")
 
 	// Get final disk utilization
 	diskUsage, diskErr := GetDiskUsage(baseDir)
@@ -270,7 +269,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 				if speciesTotalCount[file.Species] < 0 {
 					speciesTotalCount[file.Species] = 0
 				}
-				deletedNames = append(deletedNames, filepath.Base(file.Path))
+				deletedNames = append(deletedNames, file.Path)
 				deletedCount++
 			}
 

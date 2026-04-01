@@ -2063,19 +2063,31 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 }
 
 // ClearNoteClipPathsByNames clears the clip_name field for detections matching the given filenames.
+// Updates are batched to stay within SQLite's parameter limit (999).
 func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
 	if len(clipNames) == 0 {
 		return 0, nil
 	}
+
+	const batchSize = 500
+	var totalAffected int64
 	ctx := context.Background()
-	result := ds.manager.DB().WithContext(ctx).
-		Table("detections").
-		Where("clip_name IN ?", clipNames).
-		Update("clip_name", nil)
-	if result.Error != nil {
-		return 0, fmt.Errorf("failed to clear clip paths for %d names: %w", len(clipNames), result.Error)
+
+	for i := 0; i < len(clipNames); i += batchSize {
+		end := min(i+batchSize, len(clipNames))
+		batch := clipNames[i:end]
+
+		result := ds.manager.DB().WithContext(ctx).
+			Table("detections").
+			Where("clip_name IN ?", batch).
+			Update("clip_name", nil)
+		if result.Error != nil {
+			return totalAffected, fmt.Errorf("failed to clear clip paths for %d names: %w", len(batch), result.Error)
+		}
+		totalAffected += result.RowsAffected
 	}
-	return result.RowsAffected, nil
+
+	return totalAffected, nil
 }
 
 // ============================================================

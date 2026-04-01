@@ -125,7 +125,7 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		quit)
 
 	// Clear clip_name references in the database for deleted files
-	clearDeletedClipPaths(db, deletedNames, "usage")
+	clearDeletedClipPaths(db, deletedNames, baseDir, "usage")
 
 	// --- Calculate Final Usage & Return ---
 	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent)
@@ -244,7 +244,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 
 			if deleted {
 				estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
-				deletedNames = append(deletedNames, filepath.Base(file.Path))
+				deletedNames = append(deletedNames, file.Path)
 				deletedCount++
 			}
 
