@@ -43,6 +43,7 @@ type FileInfo struct {
 // Interface represents the minimal database interface needed for diskmanager
 type Interface interface {
 	GetLockedNotesClipPaths() ([]string, error)
+	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
 }
 
 // LoadPolicy loads the cleanup policies from a CSV file

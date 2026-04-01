@@ -178,6 +178,7 @@ type Interface interface {
 	SaveImageCache(cache *ImageCache) error
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
+	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
 	GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]SpeciesSummaryData, error)
@@ -1949,6 +1950,31 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 	}
 
 	return clipPaths, nil
+}
+
+// ClearNoteClipPathsByNames clears the clip_name field for notes matching the given filenames.
+// This is used by the disk manager to remove stale references after audio files are deleted.
+func (ds *DataStore) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
+	if len(clipNames) == 0 {
+		return 0, nil
+	}
+
+	var rowsAffected int64
+	err := RetryOnLock(context.Background(), "clear_clip_paths_by_names", func() error {
+		result := ds.DB.Model(&Note{}).Where("clip_name IN ?", clipNames).Update("clip_name", "")
+		if result.Error != nil {
+			return errors.New(result.Error).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "clear_clip_paths_by_names").
+				Context("clip_count", len(clipNames)).
+				Build()
+		}
+		rowsAffected = result.RowsAffected
+		return nil
+	}, ds.getMetrics())
+
+	return rowsAffected, err
 }
 
 // CountHourlyDetections counts the number of detections for a specific date and hour.

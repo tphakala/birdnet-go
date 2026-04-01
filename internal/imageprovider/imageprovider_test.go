@@ -217,8 +217,9 @@ func (m *mockStore) UnlockNote(noteID string) error               { return nil }
 func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 	return nil, datastore.ErrNoteLockNotFound
 }
-func (m *mockStore) IsNoteLocked(noteID string) (bool, error)   { return false, nil }
-func (m *mockStore) GetLockedNotesClipPaths() ([]string, error) { return nil, nil }
+func (m *mockStore) IsNoteLocked(noteID string) (bool, error)            { return false, nil }
+func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
+func (m *mockStore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
 func (m *mockStore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	return 0, nil
 }

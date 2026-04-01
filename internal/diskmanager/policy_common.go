@@ -397,6 +397,32 @@ func categorizeFilePath(path string) string {
 	return "simple-filename"
 }
 
+// clearDeletedClipPaths removes stale clip_name references from the database
+// for files that were deleted from disk by the retention policy.
+func clearDeletedClipPaths(db Interface, deletedNames []string, policy string) {
+	if len(deletedNames) == 0 {
+		return
+	}
+
+	log := GetLogger()
+
+	cleared, err := db.ClearNoteClipPathsByNames(deletedNames)
+	if err != nil {
+		log.Warn("Failed to clear clip paths for deleted files",
+			logger.String("policy", policy),
+			logger.Int("deleted_files", len(deletedNames)),
+			logger.Error(err))
+		return
+	}
+
+	if cleared > 0 {
+		log.Info("Cleared stale clip path references",
+			logger.String("policy", policy),
+			logger.Int64("records_cleared", cleared),
+			logger.Int("files_deleted", len(deletedNames)))
+	}
+}
+
 // ShouldSkipUsageBasedCleanup checks if cleanup can be skipped based on current disk usage.
 // Returns:
 //   - skip: true if cleanup should be skipped (usage below threshold)

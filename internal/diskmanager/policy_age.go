@@ -3,6 +3,7 @@ package diskmanager
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -159,9 +160,12 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 	maxDeletions := maxDeletionsPerRun
 
 	// Call the helper function to process files
-	deletedCount, loopErr := processAgeBasedDeletionLoop(files, speciesTotalCount,
+	deletedCount, deletedNames, loopErr := processAgeBasedDeletionLoop(files, speciesTotalCount,
 		minClipsPerSpecies, maxDeletions, keepSpectrograms,
 		quit, retentionCutoffUnix)
+
+	// Clear clip_name references in the database for deleted files
+	clearDeletedClipPaths(db, deletedNames, "age")
 
 	// Get final disk utilization
 	diskUsage, diskErr := GetDiskUsage(baseDir)
@@ -228,7 +232,7 @@ func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTota
 // 3. A quit signal is received
 func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]int,
 	minClipsPerSpecies int, maxDeletions int, keepSpectrograms bool,
-	quit <-chan struct{}, retentionCutoffUnix int64) (deletedCount int, loopErr error) {
+	quit <-chan struct{}, retentionCutoffUnix int64) (deletedCount int, deletedNames []string, loopErr error) {
 
 	deletedCount = 0
 	errorCount := 0
@@ -241,13 +245,13 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			log.Info("Age-based cleanup loop interrupted by quit signal",
 				logger.String("policy", "age"),
 				logger.Int("files_deleted", deletedCount))
-			return deletedCount, nil // Indicate interruption, but not necessarily an error from the loop itself
+			return deletedCount, deletedNames, nil // Indicate interruption, but not necessarily an error from the loop itself
 		default:
 			if deletedCount >= maxDeletions {
 				log.Debug("Reached maximum number of deletions for age-based cleanup",
 					logger.String("policy", "age"),
 					logger.Int("max_deletions", maxDeletions))
-				return deletedCount, nil
+				return deletedCount, deletedNames, nil
 			}
 
 			file := &files[i]
@@ -256,7 +260,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 			if delErr != nil {
 				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, delErr, &errorCount, 10, "age")
 				if shouldStop {
-					return deletedCount, loopErrTmp
+					return deletedCount, deletedNames, loopErrTmp
 				}
 				continue
 			}
@@ -266,6 +270,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 				if speciesTotalCount[file.Species] < 0 {
 					speciesTotalCount[file.Species] = 0
 				}
+				deletedNames = append(deletedNames, filepath.Base(file.Path))
 				deletedCount++
 			}
 
@@ -274,7 +279,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 	}
 
 	// Loop finished normally or due to max deletions
-	return deletedCount, loopErr
+	return deletedCount, deletedNames, loopErr
 }
 
 // isEligibleForAgeDeletion checks if a file meets the criteria for deletion based on age policy.

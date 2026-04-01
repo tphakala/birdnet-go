@@ -120,9 +120,12 @@ func UsageBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 		refreshInterval:     50,                 // Refresh actual disk usage every N deletions
 		keepSpectrograms:    keepSpectrograms,
 	}
-	deletedCount, lastKnownGoodUsagePercent, loopErr := processUsageDeletionLoop(files, speciesMonthCount,
+	deletedCount, deletedNames, lastKnownGoodUsagePercent, loopErr := processUsageDeletionLoop(files, speciesMonthCount,
 		loopParams, baseDir, // Pass the struct pointer and baseDir
 		quit)
+
+	// Clear clip_name references in the database for deleted files
+	clearDeletedClipPaths(db, deletedNames, "usage")
 
 	// --- Calculate Final Usage & Return ---
 	finalUsagePercent := getFinalUsagePercent(baseDir, lastKnownGoodUsagePercent)
@@ -200,7 +203,7 @@ func updateUsageStateAfterDeletion(file *FileInfo, speciesMonthCount map[string]
 // 4. A quit signal is received
 func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map[string]int,
 	params *usageLoopParams, baseDir string,
-	quit <-chan struct{}) (deletedCount, lastKnownGoodUsagePercent int, loopErr error) {
+	quit <-chan struct{}) (deletedCount int, deletedNames []string, lastKnownGoodUsagePercent int, loopErr error) {
 
 	deletedCount = 0
 	errorCount := 0
@@ -215,7 +218,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			log.Info("Usage-based cleanup loop interrupted by quit signal",
 				logger.String("policy", "usage"),
 				logger.Int("files_deleted", deletedCount))
-			return deletedCount, lastKnownGoodUsagePercent, loopErr
+			return deletedCount, deletedNames, lastKnownGoodUsagePercent, loopErr
 		default:
 			params.diskInfo, estimatedUsedBytes = refreshUsageDataIfNeeded(deletedCount, params.refreshInterval, baseDir, params.diskInfo, estimatedUsedBytes)
 
@@ -225,7 +228,7 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			}
 
 			if shouldStopUsageCleanup(currentUsagePercent, params.usageThreshold, deletedCount, params.maxDeletions) {
-				return deletedCount, lastKnownGoodUsagePercent, loopErr
+				return deletedCount, deletedNames, lastKnownGoodUsagePercent, loopErr
 			}
 
 			file := &files[i]
@@ -234,20 +237,21 @@ func processUsageDeletionLoop(files []FileInfo, speciesMonthCount map[string]map
 			if deletionErr != nil {
 				shouldStop, loopErrTmp := handleDeletionErrorInLoop(file.Path, deletionErr, &errorCount, 10, "usage")
 				if shouldStop {
-					return deletedCount, lastKnownGoodUsagePercent, loopErrTmp
+					return deletedCount, deletedNames, lastKnownGoodUsagePercent, loopErrTmp
 				}
 				continue
 			}
 
 			if deleted {
 				estimatedUsedBytes = updateUsageStateAfterDeletion(file, speciesMonthCount, estimatedUsedBytes, params.diskInfo.TotalBytes)
+				deletedNames = append(deletedNames, filepath.Base(file.Path))
 				deletedCount++
 			}
 
 			runtime.Gosched()
 		}
 	}
-	return deletedCount, lastKnownGoodUsagePercent, loopErr
+	return deletedCount, deletedNames, lastKnownGoodUsagePercent, loopErr
 }
 
 // getFinalUsagePercent calculates the final disk usage percentage, falling back if necessary.

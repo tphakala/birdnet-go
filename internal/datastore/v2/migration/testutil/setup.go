@@ -729,8 +729,9 @@ func (s *testLegacyInterface) GetImageCache(_ datastore.ImageCacheQuery) (*datas
 func (s *testLegacyInterface) GetImageCacheBatch(_ string, _ []string) (map[string]*datastore.ImageCache, error) {
 	return nil, nil //nolint:nilnil // stub
 }
-func (s *testLegacyInterface) SaveImageCache(_ *datastore.ImageCache) error { return nil }
-func (s *testLegacyInterface) GetLockedNotesClipPaths() ([]string, error)   { return nil, nil }
+func (s *testLegacyInterface) SaveImageCache(_ *datastore.ImageCache) error        { return nil }
+func (s *testLegacyInterface) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
+func (s *testLegacyInterface) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
 func (s *testLegacyInterface) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }

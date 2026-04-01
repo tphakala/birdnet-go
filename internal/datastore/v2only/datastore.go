@@ -2062,6 +2062,22 @@ func (ds *Datastore) GetLockedNotesClipPaths() ([]string, error) {
 	return ds.detection.GetLockedClipPaths(ctx)
 }
 
+// ClearNoteClipPathsByNames clears the clip_name field for detections matching the given filenames.
+func (ds *Datastore) ClearNoteClipPathsByNames(clipNames []string) (int64, error) {
+	if len(clipNames) == 0 {
+		return 0, nil
+	}
+	ctx := context.Background()
+	result := ds.manager.DB().WithContext(ctx).
+		Table("detections").
+		Where("clip_name IN ?", clipNames).
+		Update("clip_name", nil)
+	if result.Error != nil {
+		return 0, fmt.Errorf("failed to clear clip paths for %d names: %w", len(clipNames), result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // ============================================================
 // Image Cache Methods
 // ============================================================

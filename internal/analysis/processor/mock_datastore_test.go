@@ -261,6 +261,9 @@ func (m *ActionMockDatastore) GetAllImageCaches(_ string) ([]datastore.ImageCach
 func (m *ActionMockDatastore) GetLockedNotesClipPaths() ([]string, error) {
 	return nil, nil
 }
+func (m *ActionMockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) {
+	return 0, nil
+}
 func (m *ActionMockDatastore) CountHourlyDetections(_, _ string, _ int) (int64, error) {
 	return 0, nil
 }
