@@ -1004,10 +1004,14 @@ func (bn *BirdNET) ReloadModel() error {
 		oldRangeFilter.Close()
 	}
 
-	// Force the runtime to collect unreachable native resource wrappers and
-	// return freed pages to the OS. Without this, TFLite interpreters linger
-	// because GC doesn't see the ~80MB of native memory per interpreter, and
-	// ONNX freed pages stay in RSS because libc doesn't return them eagerly.
+	// Encourage the runtime to collect unreachable native resource wrappers
+	// and return freed pages to the OS. For ONNX, session.Destroy() already
+	// freed native memory; FreeOSMemory returns those pages. For TFLite,
+	// Close() nils the interpreter pointer but native cleanup depends on GC
+	// collecting the Go wrapper and running its AddCleanup handler — a chain
+	// spanning interpreter → model → options → delegates across multiple GC
+	// cycles. Full TFLite cleanup requires explicit Delete() methods in the
+	// go-tflite library; this GC hint provides partial relief.
 	runtime.GC()
 	debug.FreeOSMemory()
 
