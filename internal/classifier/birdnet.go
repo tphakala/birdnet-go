@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
@@ -992,13 +993,23 @@ func (bn *BirdNET) ReloadModel() error {
 			Build()
 	}
 
-	// Explicitly close old backends to release resources promptly
+	// Explicitly close old backends to release native resources promptly.
+	// ONNX Close() calls session.Destroy() which frees via ort_api->ReleaseSession().
+	// TFLite Close() nils the interpreter, making it eligible for GC collection
+	// which triggers the AddCleanup handler calling C.TfLiteInterpreterDelete.
 	if oldClassifier != nil {
 		oldClassifier.Close()
 	}
 	if oldRangeFilter != nil {
 		oldRangeFilter.Close()
 	}
+
+	// Force the runtime to collect unreachable native resource wrappers and
+	// return freed pages to the OS. Without this, TFLite interpreters linger
+	// because GC doesn't see the ~80MB of native memory per interpreter, and
+	// ONNX freed pages stay in RSS because libc doesn't return them eagerly.
+	runtime.GC()
+	debug.FreeOSMemory()
 
 	// Clear species cache as model/labels have changed
 	bn.clearSpeciesCache()
