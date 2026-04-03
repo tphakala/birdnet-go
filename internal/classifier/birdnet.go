@@ -995,8 +995,8 @@ func (bn *BirdNET) ReloadModel() error {
 
 	// Explicitly close old backends to release native resources promptly.
 	// ONNX Close() calls session.Destroy() which frees via ort_api->ReleaseSession().
-	// TFLite Close() nils the interpreter, making it eligible for GC collection
-	// which triggers the AddCleanup handler calling C.TfLiteInterpreterDelete.
+	// TFLite Close() calls interpreter.Delete() which immediately frees native
+	// resources via C.TfLiteInterpreterDelete and cascades to model/options/delegates.
 	if oldClassifier != nil {
 		oldClassifier.Close()
 	}
@@ -1004,15 +1004,9 @@ func (bn *BirdNET) ReloadModel() error {
 		oldRangeFilter.Close()
 	}
 
-	// Encourage the runtime to collect unreachable native resource wrappers
-	// and return freed pages to the OS. For ONNX, session.Destroy() already
-	// freed native memory; FreeOSMemory returns those pages. For TFLite,
-	// Close() nils the interpreter pointer but native cleanup depends on GC
-	// collecting the Go wrapper and running its AddCleanup handler — a chain
-	// spanning interpreter → model → options → delegates across multiple GC
-	// cycles. Full TFLite cleanup requires explicit Delete() methods in the
-	// go-tflite library; this GC hint provides partial relief.
-	runtime.GC()
+	// Return freed native pages to the OS. Both backends free native memory in
+	// Close() above, but libc may retain freed pages. FreeOSMemory hints the
+	// runtime and libc to release them, reducing RSS after reload.
 	debug.FreeOSMemory()
 
 	// Clear species cache as model/labels have changed
