@@ -96,7 +96,12 @@ func (r *tfliteRangeFilter) NumSpecies() int {
 	return r.numSpecies
 }
 
-// Close releases the TFLite range filter interpreter resources.
+// Close releases the TFLite range filter interpreter and all associated
+// native resources. This frees memory immediately rather than waiting for
+// garbage collection.
 func (r *tfliteRangeFilter) Close() {
-	r.interpreter = nil
+	if r.interpreter != nil {
+		r.interpreter.Delete()
+		r.interpreter = nil
+	}
 }

@@ -121,7 +121,12 @@ func (c *tfliteClassifier) NumSpecies() int {
 	return c.numSpecies
 }
 
-// Close releases the TFLite interpreter resources.
+// Close releases the TFLite interpreter and all associated native resources
+// (model weights, tensors, delegates). This frees memory immediately rather
+// than waiting for garbage collection.
 func (c *tfliteClassifier) Close() {
-	c.interpreter = nil
+	if c.interpreter != nil {
+		c.interpreter.Delete()
+		c.interpreter = nil
+	}
 }

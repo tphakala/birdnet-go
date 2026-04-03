@@ -34,8 +34,10 @@ require (
 	github.com/testcontainers/testcontainers-go v0.41.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.41.0
 	github.com/tphakala/flac v0.0.0-20241217200312-20d6d98f5ee3
-	github.com/tphakala/go-tflite v0.2.1
+	github.com/tphakala/go-audio-resampler v1.2.0
+	github.com/tphakala/go-tflite v0.2.2-0.20260403122459-aedbd0bca261
 	github.com/tphakala/simd v1.0.22
+	github.com/yalue/onnxruntime_go v1.27.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.49.0
 	golang.org/x/net v0.52.0
@@ -99,8 +101,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.2 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
-	github.com/tphakala/go-audio-resampler v1.2.0 // indirect
-	github.com/yalue/onnxruntime_go v1.27.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 // indirect
 	go.opentelemetry.io/otel v1.42.0 // indirect
@@ -133,7 +133,6 @@ require (
 	github.com/markbates/goth v1.82.0
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/mattn/go-sqlite3 v1.14.37
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
