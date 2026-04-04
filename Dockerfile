@@ -57,8 +57,9 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Download ONNX Runtime for the target platform
 RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
+        "linux/amd64") echo "x64" ;; \
         "linux/arm64") echo "aarch64" ;; \
-        *) echo "x64" ;; \
+        *) echo "Error: unsupported platform ${TARGETPLATFORM}" >&2; exit 1 ;; \
     esac) && \
     echo "Downloading ONNX Runtime ${ONNXRUNTIME_VERSION} for ${ONNX_ARCH}" && \
     curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
