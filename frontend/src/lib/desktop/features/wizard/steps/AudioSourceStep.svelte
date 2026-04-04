@@ -7,6 +7,7 @@
   import { settingsActions, settingsStore, type RealtimeSettings } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
 
@@ -23,8 +24,10 @@
   let devicesLoading = $state(true);
   let dirty = $state(false);
 
+  let skipped = $state(false);
+
   let isValid = $derived(
-    sourceType === 'soundcard' ? selectedDevice !== '' : rtspUrl.trim() !== ''
+    skipped || (sourceType === 'soundcard' ? selectedDevice !== '' : rtspUrl.trim() !== '')
   );
 
   $effect(() => {
@@ -85,14 +88,16 @@
     }
   }
 
-  // Save on unmount — only if user made changes
+  // Save on unmount — only if user made changes and has valid data
   $effect(() => {
     return () => {
-      if (!dirty) return;
+      if (!dirty || skipped) return;
+      let hasUpdate = false;
       if (sourceType === 'soundcard' && selectedDevice) {
         settingsActions.updateSection('realtime', {
           audio: { source: selectedDevice } as RealtimeSettings['audio'],
         });
+        hasUpdate = true;
       } else if (sourceType === 'rtsp' && rtspUrl.trim()) {
         settingsActions.updateSection('realtime', {
           rtsp: {
@@ -106,10 +111,13 @@
             ],
           } as RealtimeSettings['rtsp'],
         });
+        hasUpdate = true;
       }
-      settingsActions.saveSettings().catch(err => {
-        logger.error('Failed to save audio source settings', err);
-      });
+      if (hasUpdate) {
+        settingsActions.saveSettings().catch(err => {
+          logger.error('Failed to save audio source settings', err);
+        });
+      }
     };
   });
 </script>
@@ -150,7 +158,11 @@
           : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
         onclick={() => setSourceType('rtsp')}
       >
-        <Video class="size-5 shrink-0 text-[var(--color-base-content)]" />
+        <Video
+          class="size-5 shrink-0 {sourceType === 'rtsp'
+            ? 'text-[var(--color-primary)]'
+            : 'text-[var(--color-base-content)] opacity-70'}"
+        />
         <span class="text-sm font-medium text-[var(--color-base-content)]">
           {t('wizard.steps.audioSource.rtspStream')}
         </span>
@@ -167,13 +179,13 @@
         {t('wizard.steps.audioSource.deviceLabel')}
       </label>
       {#if devicesLoading}
-        <p class="text-sm text-[var(--color-base-content)] opacity-60">
+        <p class="text-sm text-[var(--color-base-content)] opacity-80">
           {t('wizard.steps.audioSource.deviceLoading')}
         </p>
       {:else if devices.length === 0}
-        <p class="rounded-lg bg-[var(--color-info)]/10 p-3 text-sm text-[var(--color-info)]">
-          {t('wizard.steps.audioSource.noDevicesFound')}
-        </p>
+        <SettingsNote className="mt-0">
+          <p>{t('wizard.steps.audioSource.noDevicesFound')}</p>
+        </SettingsNote>
       {:else}
         <SelectDropdown
           id="wizard-audio-device"
@@ -194,7 +206,7 @@
       >
         {t('wizard.steps.audioSource.rtspUrlLabel')}
       </label>
-      <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
+      <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
         {t('wizard.steps.audioSource.rtspUrlHelp')}
       </p>
       <TextInput
@@ -208,7 +220,20 @@
     </div>
   {/if}
 
-  <p class="text-xs text-[var(--color-base-content)] opacity-50">
-    {t('wizard.steps.audioSource.additionalSourcesHint')}
-  </p>
+  <div class="flex items-center justify-between">
+    <p class="text-sm text-[var(--color-base-content)] opacity-80">
+      {t('wizard.steps.audioSource.additionalSourcesHint')}
+    </p>
+    {#if !isValid || skipped}
+      <button
+        type="button"
+        class="shrink-0 text-sm text-[var(--color-base-content)] opacity-60 transition-opacity hover:opacity-100"
+        onclick={() => {
+          skipped = true;
+        }}
+      >
+        {t('wizard.steps.audioSource.configureLater')}
+      </button>
+    {/if}
+  </div>
 </div>

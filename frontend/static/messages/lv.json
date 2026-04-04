@@ -4335,8 +4335,9 @@
       "welcome": {
         "title": "Sveicināti",
         "heading": "Laipni lūdzam BirdNET-Go!",
-        "description": "BirdNET-Go ir reāllaika putnu skaņu identificēšanas sistēma. Tā klausās audio no jūsu mikrofona vai audio straumes un izmanto BirdNET mākslīgā intelekta modeli, lai identificētu putnu sugas.",
-        "credit": "Darbina BirdNET Analyzer, ko izstrādājis K. Lisa Yang Center for Conservation Bioacoustics Kornela Ornitoloģijas laboratorijā un Kemnicas Tehnoloģiju universitātē.",
+        "description": "BirdNET-Go ir atvērtā pirmkoda putnu skaņu identificēšanas sistēma, kas klausās audio no jūsu mikrofona vai straumes un reāllaikā identificē putnu sugas.",
+        "credit": "BirdNET-Go izmanto BirdNET AI modeli, ko izstrādājis K. Lisa Yang Center for Conservation Bioacoustics Cornell Lab of Ornithology un Kemnicas Tehniskajā universitātē. BirdNET-Go ir neatkarīgs kopienas projekts un nav saistīts ar BirdNET komandu.",
+        "learnMore": "Uzziniet vairāk par BirdNET",
         "cta": "Iestatīsim jūsu putnu novērošanas staciju."
       },
       "locationLanguage": {
@@ -4352,7 +4353,12 @@
         "useMyLocation": "Izmantot manu atrašanās vietu",
         "locationDetected": "Atrašanās vieta noteikta",
         "locationError": "Neizdevās noteikt atrašanās vietu. Lūdzu, ievadiet koordinātas manuāli.",
-        "locationDenied": "Piekļuve atrašanās vietai liegta. Lūdzu, ievadiet koordinātas manuāli."
+        "locationDenied": "Piekļuve atrašanās vietai liegta. Lūdzu, ievadiet koordinātas manuāli.",
+        "geolocationRequiresHttps": "Pārlūkprogrammas atrašanās vietas noteikšanai nepieciešams HTTPS. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+        "geolocationDenied": "Atrašanās vietas atļauja tika liegta. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+        "geolocationFailed": "Nevarēja noteikt jūsu atrašanās vietu. Ievadiet koordinātas manuāli vai izmantojiet karti.",
+        "localesLoading": "Ielādē valodas...",
+        "localesLoadFailed": "Neizdevās ielādēt valodu opcijas. Angļu valoda ir izvēlēta kā noklusējuma."
       },
       "audioSource": {
         "title": "Audio avots",
@@ -4365,7 +4371,8 @@
         "rtspUrlLabel": "Straumes URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ievadiet RTSP audio straumes URL",
-        "additionalSourcesHint": "Papildu audio avotus varēsiet pievienot vēlāk iestatījumos."
+        "additionalSourcesHint": "Papildu audio avotus varēsiet pievienot vēlāk iestatījumos.",
+        "configureLater": "Izlaist — konfigurēt vēlāk"
       },
       "detection": {
         "title": "Noteikšanas slieksnis",

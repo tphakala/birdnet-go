@@ -4335,8 +4335,9 @@
       "welcome": {
         "title": "Välkommen",
         "heading": "Välkommen till BirdNET-Go!",
-        "description": "BirdNET-Go är ett realtidssystem för identifiering av fågelljud. Det lyssnar på ljud från din mikrofon eller ljudström och använder BirdNET AI-modellen för att identifiera fågelarter.",
-        "credit": "Drivs av BirdNET Analyzer, utvecklad av K. Lisa Yang Center for Conservation Bioacoustics vid Cornell Lab of Ornithology och Chemnitz University of Technology.",
+        "description": "BirdNET-Go är ett open source-system för identifiering av fågelljud som lyssnar på ljud från din mikrofon eller stream och identifierar fågelarter i realtid.",
+        "credit": "BirdNET-Go använder BirdNET AI-modellen som utvecklats av K. Lisa Yang Center for Conservation Bioacoustics vid Cornell Lab of Ornithology och Chemnitz tekniska universitet. BirdNET-Go är ett oberoende communityprojekt och är inte anslutet till eller godkänt av BirdNET-teamet.",
+        "learnMore": "Läs mer om BirdNET",
         "cta": "Låt oss konfigurera din fågelövervakningsstation."
       },
       "locationLanguage": {
@@ -4352,7 +4353,12 @@
         "useMyLocation": "Använd min plats",
         "locationDetected": "Plats identifierad",
         "locationError": "Kunde inte identifiera plats. Ange koordinater manuellt.",
-        "locationDenied": "Platsåtkomst nekad. Ange koordinater manuellt."
+        "locationDenied": "Platsåtkomst nekad. Ange koordinater manuellt.",
+        "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS. Ange koordinaterna manuellt eller använd kartan.",
+        "geolocationDenied": "Platstillstånd nekades. Ange koordinaterna manuellt eller använd kartan.",
+        "geolocationFailed": "Din plats kunde inte fastställas. Ange koordinaterna manuellt eller använd kartan.",
+        "localesLoading": "Laddar språk...",
+        "localesLoadFailed": "Kunde inte ladda språkalternativ. Engelska har valts som standard."
       },
       "audioSource": {
         "title": "Ljudkälla",
@@ -4365,7 +4371,8 @@
         "rtspUrlLabel": "Ström-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ange URL:en till din RTSP-ljudström",
-        "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar."
+        "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar.",
+        "configureLater": "Hoppa över — konfigurera senare"
       },
       "detection": {
         "title": "Detekteringströskel",

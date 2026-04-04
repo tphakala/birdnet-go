@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Welkom",
         "heading": "Welkom bij BirdNET-Go!",
-        "description": "BirdNET-Go is een realtime systeem voor het identificeren van vogelgeluiden. Het luistert naar audio van je microfoon of audiostream en gebruikt het BirdNET AI-model om vogelsoorten te identificeren.",
-        "credit": "Aangedreven door de BirdNET Analyzer, ontwikkeld door het K. Lisa Yang Center for Conservation Bioacoustics aan het Cornell Lab of Ornithology en de Chemnitz University of Technology.",
+        "description": "BirdNET-Go is een open-source vogelgeluiden-identificatiesysteem dat luistert naar audio van je microfoon of stream en vogelsoorten in realtime identificeert.",
+        "credit": "BirdNET-Go maakt gebruik van het BirdNET AI-model, ontwikkeld door het K. Lisa Yang Center for Conservation Bioacoustics aan het Cornell Lab of Ornithology en de Technische Universiteit Chemnitz. BirdNET-Go is een onafhankelijk communityproject en is niet gelieerd aan het BirdNET-team.",
+        "learnMore": "Meer informatie over BirdNET",
         "cta": "Laten we je vogelmonitoringstation instellen."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Gebruik mijn locatie",
         "locationDetected": "Locatie gedetecteerd",
         "locationError": "Locatie kon niet worden gedetecteerd. Voer de coördinaten handmatig in.",
-        "locationDenied": "Locatietoegang geweigerd. Voer de coördinaten handmatig in."
+        "locationDenied": "Locatietoegang geweigerd. Voer de coördinaten handmatig in.",
+        "geolocationRequiresHttps": "Browserlocatie vereist HTTPS. Voer de coördinaten handmatig in of gebruik de kaart.",
+        "geolocationDenied": "Locatietoestemming is geweigerd. Voer de coördinaten handmatig in of gebruik de kaart.",
+        "geolocationFailed": "Uw locatie kon niet worden bepaald. Voer de coördinaten handmatig in of gebruik de kaart.",
+        "localesLoading": "Talen laden...",
+        "localesLoadFailed": "Kon taalopties niet laden. Engels is als standaard geselecteerd."
       },
       "audioSource": {
         "title": "Audiobron",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Voer de URL van je RTSP-audiostream in",
-        "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen."
+        "additionalSourcesHint": "Je kunt later meer audiobronnen toevoegen in Instellingen.",
+        "configureLater": "Overslaan — later configureren"
       },
       "detection": {
         "title": "Detectiedrempel",

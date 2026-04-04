@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Witaj",
         "heading": "Witaj w BirdNET-Go!",
-        "description": "BirdNET-Go to system identyfikacji dźwięków ptaków w czasie rzeczywistym. Nasłuchuje audio z mikrofonu lub strumienia audio i wykorzystuje model AI BirdNET do identyfikacji gatunków ptaków.",
-        "credit": "Oparte na analizatorze BirdNET opracowanym przez K. Lisa Yang Center for Conservation Bioacoustics w Cornell Lab of Ornithology i Chemnitz University of Technology.",
+        "description": "BirdNET-Go to system open source do identyfikacji dźwięków ptaków, który słucha dźwięku z mikrofonu lub strumienia i identyfikuje gatunki ptaków w czasie rzeczywistym.",
+        "credit": "BirdNET-Go wykorzystuje model AI BirdNET opracowany przez K. Lisa Yang Center for Conservation Bioacoustics w Cornell Lab of Ornithology i Politechnice w Chemnitz. BirdNET-Go jest niezależnym projektem społecznościowym i nie jest powiązany z zespołem BirdNET.",
+        "learnMore": "Dowiedz się więcej o BirdNET",
         "cta": "Skonfigurujmy twoją stację monitorowania ptaków."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Użyj mojej lokalizacji",
         "locationDetected": "Lokalizacja wykryta",
         "locationError": "Nie udało się wykryć lokalizacji. Wprowadź współrzędne ręcznie.",
-        "locationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie."
+        "locationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie.",
+        "geolocationRequiresHttps": "Lokalizacja przeglądarki wymaga HTTPS. Wprowadź współrzędne ręcznie lub użyj mapy.",
+        "geolocationDenied": "Odmówiono dostępu do lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+        "geolocationFailed": "Nie udało się określić Twojej lokalizacji. Wprowadź współrzędne ręcznie lub użyj mapy.",
+        "localesLoading": "Ładowanie języków...",
+        "localesLoadFailed": "Nie udało się załadować opcji językowych. Angielski został wybrany jako domyślny."
       },
       "audioSource": {
         "title": "Źródło audio",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "URL strumienia",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Wprowadź URL twojego strumienia audio RTSP",
-        "additionalSourcesHint": "Możesz dodać więcej źródeł audio później w Ustawieniach."
+        "additionalSourcesHint": "Możesz dodać więcej źródeł audio później w Ustawieniach.",
+        "configureLater": "Pomiń — skonfiguruj później"
       },
       "detection": {
         "title": "Próg detekcji",

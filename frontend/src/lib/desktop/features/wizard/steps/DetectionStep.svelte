@@ -5,6 +5,7 @@
   import { get } from 'svelte/store';
   import { getLogger } from '$lib/utils/logger';
   import { Scale, Target, Radio } from '@lucide/svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
 
   const logger = getLogger('DetectionStep');
@@ -22,6 +23,13 @@
 
   const presets: Preset[] = [
     {
+      id: 'high-sensitivity',
+      titleKey: 'wizard.steps.detection.highSensitivity',
+      descKey: 'wizard.steps.detection.highSensitivityDesc',
+      threshold: 0.6,
+      icon: Radio,
+    },
+    {
       id: 'balanced',
       titleKey: 'wizard.steps.detection.balanced',
       descKey: 'wizard.steps.detection.balancedDesc',
@@ -35,13 +43,6 @@
       descKey: 'wizard.steps.detection.highAccuracyDesc',
       threshold: 0.9,
       icon: Target,
-    },
-    {
-      id: 'high-sensitivity',
-      titleKey: 'wizard.steps.detection.highSensitivity',
-      descKey: 'wizard.steps.detection.highSensitivityDesc',
-      threshold: 0.6,
-      icon: Radio,
     },
   ];
 
@@ -86,8 +87,8 @@
   });
 </script>
 
-<div class="space-y-4">
-  <p class="text-sm text-[var(--color-base-content)] opacity-70">
+<div class="space-y-5">
+  <p class="text-sm text-[var(--color-base-content)]">
     {t('wizard.steps.detection.description')}
   </p>
 
@@ -104,7 +105,11 @@
           : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
         onclick={() => selectPreset(preset.id)}
       >
-        <PresetIcon class="mt-0.5 size-5 shrink-0 text-[var(--color-base-content)]" />
+        <PresetIcon
+          class="mt-0.5 size-5 shrink-0 {selectedPreset === preset.id
+            ? 'text-[var(--color-primary)]'
+            : 'text-[var(--color-base-content)] opacity-70'}"
+        />
         <div class="flex-1">
           <div class="flex items-center gap-2">
             <span class="text-sm font-medium text-[var(--color-base-content)]">
@@ -118,10 +123,10 @@
               </span>
             {/if}
           </div>
-          <p class="mt-0.5 text-xs text-[var(--color-base-content)] opacity-60">
+          <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
             {t(preset.descKey)}
           </p>
-          <p class="mt-1 text-xs font-mono text-[var(--color-base-content)] opacity-40">
+          <p class="mt-1 text-sm font-mono text-[var(--color-base-content)] opacity-70">
             {t('wizard.steps.detection.threshold')}: {preset.threshold}
           </p>
         </div>
@@ -129,7 +134,7 @@
     {/each}
   </div>
 
-  <p class="rounded-lg bg-[var(--color-info)]/10 p-3 text-xs text-[var(--color-info)]">
-    {t('wizard.steps.detection.fpFilterNote')}
-  </p>
+  <SettingsNote className="mt-0">
+    <p>{t('wizard.steps.detection.fpFilterNote')}</p>
+  </SettingsNote>
 </div>

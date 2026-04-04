@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Tervetuloa",
         "heading": "Tervetuloa BirdNET-Go:hon!",
-        "description": "BirdNET-Go on reaaliaikainen lintulajien tunnistusjärjestelmä. Se kuuntelee ääntä mikrofonistasi tai äänilähetyksestä ja käyttää BirdNET-tekoälymallia lintulajien tunnistamiseen.",
-        "credit": "Perustuu BirdNET Analyzeriin, jonka on kehittänyt K. Lisa Yang Center for Conservation Bioacoustics Cornellin yliopiston ornitologian laboratoriossa ja Chemnitzin teknillisessä yliopistossa.",
+        "description": "BirdNET-Go on avoimen lähdekoodin linnunäänitunnistusjärjestelmä, joka kuuntelee ääntä mikrofonistasi tai streamistä ja tunnistaa lintulajeja reaaliajassa.",
+        "credit": "BirdNET-Go käyttää BirdNET-tekoälymallia, jonka on kehittänyt K. Lisa Yang Center for Conservation Bioacoustics Cornell Lab of Ornithologyssa ja Chemnitzin teknillisessä yliopistossa. BirdNET-Go on itsenäinen yhteisöprojekti eikä ole sidoksissa BirdNET-tiimiin.",
+        "learnMore": "Lue lisää BirdNETistä",
         "cta": "Määritetään lintuseuranta-asemasi."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Käytä sijaintiani",
         "locationDetected": "Sijainti havaittu",
         "locationError": "Sijaintia ei voitu havaita. Syötä koordinaatit manuaalisesti.",
-        "locationDenied": "Sijainnin käyttö estetty. Syötä koordinaatit manuaalisesti."
+        "locationDenied": "Sijainnin käyttö estetty. Syötä koordinaatit manuaalisesti.",
+        "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
+        "geolocationDenied": "Sijaintilupa evättiin. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
+        "geolocationFailed": "Sijaintiasi ei voitu määrittää. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
+        "localesLoading": "Ladataan kieliä...",
+        "localesLoadFailed": "Kielivaihtoehtoja ei voitu ladata. Oletuskieleksi on valittu englanti."
       },
       "audioSource": {
         "title": "Äänilähde",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "Lähetyksen URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Syötä RTSP-äänilähetyksesi URL",
-        "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa."
+        "additionalSourcesHint": "Voit lisätä äänilähteitä myöhemmin Asetuksissa.",
+        "configureLater": "Ohita — määritä myöhemmin"
       },
       "detection": {
         "title": "Tunnistuskynnys",

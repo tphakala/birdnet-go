@@ -34,7 +34,7 @@ func TestNewService(t *testing.T) {
 		{"openweather_provider", "openweather", false},
 		{"wunderground_provider", "wunderground", false},
 		{"invalid_provider_disabled", "invalid", true},
-		{"empty_provider_disabled", "", true},
+		{"empty_provider_defaults_to_yrno", "", false},
 		{"none_provider_disabled", "none", true},
 	}
 

@@ -13,12 +13,12 @@
   });
 </script>
 
-<div class="space-y-4">
+<div class="space-y-5">
   <p class="text-sm leading-relaxed text-[var(--color-base-content)]">
     {t('wizard.steps.responsibleUse.intro')}
   </p>
 
-  <ul class="list-disc space-y-2 pl-5 text-sm text-[var(--color-base-content)] opacity-80">
+  <ul class="list-disc space-y-2 pl-5 text-sm text-[var(--color-base-content)] opacity-90">
     <li>{t('wizard.steps.responsibleUse.point1')}</li>
     <li>{t('wizard.steps.responsibleUse.point2')}</li>
     <li>{t('wizard.steps.responsibleUse.point3')}</li>
@@ -29,18 +29,20 @@
     {t('wizard.steps.responsibleUse.citizenScienceHeading')}
   </h4>
 
-  <ul class="list-disc space-y-2 pl-5 text-sm text-[var(--color-base-content)] opacity-80">
+  <ul class="list-disc space-y-2 pl-5 text-sm text-[var(--color-base-content)] opacity-90">
     <li>{t('wizard.steps.responsibleUse.citizenPoint1')}</li>
     <li>{t('wizard.steps.responsibleUse.citizenPoint2')}</li>
     <li>{t('wizard.steps.responsibleUse.citizenPoint3')}</li>
   </ul>
 
-  <p class="text-sm leading-relaxed text-[var(--color-base-content)] opacity-70">
+  <p class="text-sm leading-relaxed text-[var(--color-base-content)]">
     {t('wizard.steps.responsibleUse.outro')}
   </p>
 
   <label
-    class="mt-4 flex cursor-pointer items-center gap-3 rounded-lg border border-[var(--border-200)] p-3"
+    class="mt-6 flex cursor-pointer items-center gap-3 rounded-lg border-2 p-4 transition-colors {acknowledged
+      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
+      : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
   >
     <input
       type="checkbox"

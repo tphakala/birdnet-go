@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Bienvenue",
         "heading": "Bienvenue dans BirdNET-Go !",
-        "description": "BirdNET-Go est un système d'identification des sons d'oiseaux en temps réel. Il écoute l'audio de votre microphone ou flux audio et utilise le modèle IA BirdNET pour identifier les espèces d'oiseaux.",
-        "credit": "Propulsé par le BirdNET Analyzer développé par le K. Lisa Yang Center for Conservation Bioacoustics au Cornell Lab of Ornithology et la Chemnitz University of Technology.",
+        "description": "BirdNET-Go est un système open source d'identification des chants d'oiseaux qui écoute l'audio de votre microphone ou flux et identifie les espèces d'oiseaux en temps réel.",
+        "credit": "BirdNET-Go utilise le modèle d'IA BirdNET développé par le K. Lisa Yang Center for Conservation Bioacoustics au Cornell Lab of Ornithology et l'Université technique de Chemnitz. BirdNET-Go est un projet communautaire indépendant et n'est pas affilié ni approuvé par l'équipe BirdNET.",
+        "learnMore": "En savoir plus sur BirdNET",
         "cta": "Configurons votre station de surveillance d'oiseaux."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Utiliser ma position",
         "locationDetected": "Position détectée",
         "locationError": "Impossible de détecter la position. Veuillez saisir les coordonnées manuellement.",
-        "locationDenied": "Accès à la position refusé. Veuillez saisir les coordonnées manuellement."
+        "locationDenied": "Accès à la position refusé. Veuillez saisir les coordonnées manuellement.",
+        "geolocationRequiresHttps": "La localisation du navigateur nécessite HTTPS. Veuillez entrer les coordonnées manuellement ou utiliser la carte.",
+        "geolocationDenied": "L'autorisation de localisation a été refusée. Veuillez entrer les coordonnées manuellement ou utiliser la carte.",
+        "geolocationFailed": "Impossible de déterminer votre position. Veuillez entrer les coordonnées manuellement ou utiliser la carte.",
+        "localesLoading": "Chargement des langues...",
+        "localesLoadFailed": "Impossible de charger les options de langue. L'anglais a été sélectionné par défaut."
       },
       "audioSource": {
         "title": "Source audio",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "URL du flux",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Entrez l'URL de votre flux audio RTSP",
-        "additionalSourcesHint": "Vous pourrez ajouter d'autres sources audio plus tard dans les Paramètres."
+        "additionalSourcesHint": "Vous pourrez ajouter d'autres sources audio plus tard dans les Paramètres.",
+        "configureLater": "Passer — configurer plus tard"
       },
       "detection": {
         "title": "Seuil de détection",

@@ -4,6 +4,7 @@
   import type { SelectOption, SelectDropdownVariant } from './SelectDropdown.types';
   import { X, ChevronDown } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
+  import { portal } from '$lib/utils/portal';
   import {
     safeGet,
     safeArrayAccess,
@@ -91,6 +92,11 @@
 
   // Position state for fixed dropdown
   let dropdownPosition = $state({ top: 0, left: 0, width: 0, openAbove: false });
+
+  // Portal target: nearest dialog ancestor (for focus containment) or body
+  let portalTarget = $derived.by(
+    () => (buttonElement?.closest('[role="dialog"]') as HTMLElement | null) ?? document.body
+  );
 
   // Size classes for trigger (padding + font size)
   const sizeClasses = {
@@ -210,13 +216,14 @@
 
     const rect = buttonElement.getBoundingClientRect();
     const viewportHeight = globalThis.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
+    const gap = 4; // px gap between button and dropdown
+    const spaceBelow = viewportHeight - rect.bottom - gap;
+    const spaceAbove = rect.top - gap;
     // Open above if not enough space below and more space above
     const openAbove = spaceBelow < maxHeight && spaceAbove > spaceBelow;
 
     dropdownPosition = {
-      top: openAbove ? rect.top : rect.bottom,
+      top: openAbove ? rect.top - gap : rect.bottom + gap,
       left: rect.left,
       width: rect.width,
       openAbove,
@@ -453,10 +460,11 @@
     {#if isOpen}
       <div
         bind:this={dropdownElement}
+        use:portal={portalTarget}
         in:dropdown={{ y: -4, duration: 120 }}
         out:dropdown={{ y: -4, duration: 80 }}
         class={cn(
-          'fixed z-[60] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
+          'fixed z-[2100] font-sans bg-[var(--color-base-100)] rounded-md shadow-xl border border-[var(--color-base-content)]/20 overflow-hidden',
           dropdownClassName
         )}
         style:top={dropdownPosition.openAbove ? 'auto' : `${dropdownPosition.top}px`}

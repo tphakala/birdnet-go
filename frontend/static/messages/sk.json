@@ -4335,8 +4335,9 @@
       "welcome": {
         "title": "Vitajte",
         "heading": "Vitajte v BirdNET-Go!",
-        "description": "BirdNET-Go je systém na identifikáciu zvukov vtákov v reálnom čase. Počúva zvuk z mikrofónu alebo audio streamu a používa AI model BirdNET na identifikáciu druhov vtákov.",
-        "credit": "Založené na BirdNET Analyzer vyvinutom v K. Lisa Yang Center for Conservation Bioacoustics na Cornell Lab of Ornithology a Chemnitz University of Technology.",
+        "description": "BirdNET-Go je open source systém na identifikáciu vtáčích hlasov, ktorý počúva zvuk z mikrofónu alebo streamu a v reálnom čase identifikuje druhy vtákov.",
+        "credit": "BirdNET-Go používa AI model BirdNET vyvinutý K. Lisa Yang Center for Conservation Bioacoustics na Cornell Lab of Ornithology a Technickej univerzite v Chemnitz. BirdNET-Go je nezávislý komunitný projekt a nie je prepojený s tímom BirdNET.",
+        "learnMore": "Viac informácií o BirdNET",
         "cta": "Poďme nastaviť vašu stanicu na monitorovanie vtákov."
       },
       "locationLanguage": {
@@ -4352,7 +4353,12 @@
         "useMyLocation": "Použiť moju polohu",
         "locationDetected": "Poloha zistená",
         "locationError": "Nepodarilo sa zistiť polohu. Zadajte súradnice ručne.",
-        "locationDenied": "Prístup k polohe zamietnutý. Zadajte súradnice ručne."
+        "locationDenied": "Prístup k polohe zamietnutý. Zadajte súradnice ručne.",
+        "geolocationRequiresHttps": "Poloha prehliadača vyžaduje HTTPS. Zadajte súradnice manuálne alebo použite mapu.",
+        "geolocationDenied": "Povolenie polohy bolo zamietnuté. Zadajte súradnice manuálne alebo použite mapu.",
+        "geolocationFailed": "Vašu polohu sa nepodarilo určiť. Zadajte súradnice manuálne alebo použite mapu.",
+        "localesLoading": "Načítavanie jazykov...",
+        "localesLoadFailed": "Nepodarilo sa načítať jazykové možnosti. Angličtina bola zvolená ako predvolená."
       },
       "audioSource": {
         "title": "Zdroj zvuku",
@@ -4365,7 +4371,8 @@
         "rtspUrlLabel": "URL streamu",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Zadajte URL vášho RTSP audio streamu",
-        "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach."
+        "additionalSourcesHint": "Ďalšie zdroje zvuku môžete pridať neskôr v Nastaveniach.",
+        "configureLater": "Preskočiť — nastaviť neskôr"
       },
       "detection": {
         "title": "Prah detekcie",

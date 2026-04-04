@@ -70,12 +70,14 @@
 <Modal
   bind:this={modalRef}
   isOpen={wizardState.isActive}
-  size="lg"
+  size="2xl"
+  className="w-full"
+  showCloseButton={false}
   closeOnBackdrop={false}
   onClose={() => wizardState.skip()}
 >
   {#snippet header()}
-    <div class="mb-4 flex items-center justify-between">
+    <div class="flex items-center justify-between">
       <h3 id="modal-title" class="text-lg font-bold">{stepTitle}</h3>
       <WizardProgressBar
         currentStep={wizardState.currentStepIndex}
@@ -86,9 +88,11 @@
   {/snippet}
 
   {#snippet children()}
-    <div class="min-h-[200px]">
+    <div
+      class="h-[33rem] rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)]/30 px-4 py-3"
+    >
       {#if isLoadingStep}
-        <div class="flex items-center justify-center py-12" role="status">
+        <div class="flex h-full items-center justify-center" role="status">
           <span
             class="inline-block size-6 animate-spin rounded-full border-2 border-[var(--color-base-300)] border-t-[var(--color-primary)]"
           ></span>
@@ -104,10 +108,10 @@
   {/snippet}
 
   {#snippet footer()}
-    <div class="flex items-center justify-between">
+    <div class="flex w-full items-center justify-between">
       <button
         type="button"
-        class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-opacity hover:opacity-100"
+        class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] px-3 py-1.5 text-sm font-medium text-[var(--color-base-content)] opacity-70 transition-colors hover:bg-[var(--hover-overlay)] hover:opacity-100"
         onclick={() => wizardState.skip()}
       >
         {t('wizard.skip')}

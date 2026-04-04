@@ -4335,8 +4335,9 @@
       "welcome": {
         "title": "Velkommen",
         "heading": "Velkommen til BirdNET-Go!",
-        "description": "BirdNET-Go er et realtids fuglelydsidentifikationssystem. Det lytter til lyd fra din mikrofon eller lydstream og bruger BirdNET AI-modellen til at identificere fuglearter.",
-        "credit": "Drevet af BirdNET Analyzer, udviklet af K. Lisa Yang Center for Conservation Bioacoustics ved Cornell Lab of Ornithology og Chemnitz University of Technology.",
+        "description": "BirdNET-Go er et open source-system til identifikation af fuglelyde, der lytter til lyd fra din mikrofon eller stream og identificerer fuglearter i realtid.",
+        "credit": "BirdNET-Go bruger BirdNET AI-modellen udviklet af K. Lisa Yang Center for Conservation Bioacoustics ved Cornell Lab of Ornithology og Chemnitz University of Technology. BirdNET-Go er et uafhængigt fællesskabsprojekt og er ikke tilknyttet eller godkendt af BirdNET-teamet.",
+        "learnMore": "Læs mere om BirdNET",
         "cta": "Lad os opsætte din fugleovervågningsstation."
       },
       "locationLanguage": {
@@ -4352,7 +4353,12 @@
         "useMyLocation": "Brug min placering",
         "locationDetected": "Placering registreret",
         "locationError": "Kunne ikke registrere placering. Indtast venligst koordinater manuelt.",
-        "locationDenied": "Adgang til placering nægtet. Indtast venligst koordinater manuelt."
+        "locationDenied": "Adgang til placering nægtet. Indtast venligst koordinater manuelt.",
+        "geolocationRequiresHttps": "Browserplacering kræver HTTPS. Indtast koordinaterne manuelt eller brug kortet.",
+        "geolocationDenied": "Placeringstilladelse blev nægtet. Indtast koordinaterne manuelt eller brug kortet.",
+        "geolocationFailed": "Din placering kunne ikke bestemmes. Indtast koordinaterne manuelt eller brug kortet.",
+        "localesLoading": "Indlæser sprog...",
+        "localesLoadFailed": "Kunne ikke indlæse sprogmuligheder. Engelsk er valgt som standard."
       },
       "audioSource": {
         "title": "Lydkilde",
@@ -4365,7 +4371,8 @@
         "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Indtast URL'en til din RTSP-lydstream",
-        "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger."
+        "additionalSourcesHint": "Du kan tilføje flere lydkilder senere under Indstillinger.",
+        "configureLater": "Spring over — konfigurér senere"
       },
       "detection": {
         "title": "Detekteringsgrænse",

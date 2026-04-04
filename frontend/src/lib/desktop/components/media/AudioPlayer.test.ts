@@ -29,7 +29,7 @@ vi.mock('$lib/i18n', () => ({
   }),
 }));
 
-// Mock the logger
+// Mock the logger - must include getLogger since settings.ts imports it
 vi.mock('$lib/utils/logger', () => ({
   loggers: {
     audio: {
@@ -39,6 +39,12 @@ vi.mock('$lib/utils/logger', () => ({
       debug: vi.fn(),
     },
   },
+  getLogger: vi.fn(() => ({
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
 }));
 
 /* global Audio */

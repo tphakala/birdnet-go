@@ -103,13 +103,13 @@
 {#if mapLoadFailed}
   <div
     role="alert"
-    class="flex h-48 items-center justify-center rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] p-3 text-sm text-[var(--color-base-content)] opacity-60"
+    class="flex h-36 items-center justify-center rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] p-3 text-sm text-[var(--color-base-content)] opacity-60"
   >
     {t('wizard.steps.locationLanguage.locationError')}
   </div>
 {:else}
   <div
     bind:this={mapContainer}
-    class="h-48 w-full overflow-hidden rounded-lg border border-[var(--border-200)]"
+    class="h-36 w-full overflow-hidden rounded-lg border border-[var(--border-200)]"
   ></div>
 {/if}

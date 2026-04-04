@@ -4335,8 +4335,9 @@
       "welcome": {
         "title": "Üdvözöljük",
         "heading": "Üdvözöljük a BirdNET-Go-ban!",
-        "description": "A BirdNET-Go egy valós idejű madárhang azonosító rendszer. Meghallgatja a hangot a mikrofonjából vagy audio stream-jéből, és a BirdNET AI modellt használja a madárfajok azonosításához.",
-        "credit": "A BirdNET Analyzer által működtetve, amelyet a Cornell Lab of Ornithology K. Lisa Yang Center for Conservation Bioacoustics és a Chemnitz University of Technology fejlesztett ki.",
+        "description": "A BirdNET-Go egy nyílt forráskódú madárhang-azonosító rendszer, amely a mikrofonjából vagy streamjéből hallgatja a hangot, és valós időben azonosítja a madárfajokat.",
+        "credit": "A BirdNET-Go a BirdNET AI modellt használja, amelyet a K. Lisa Yang Center for Conservation Bioacoustics fejlesztett a Cornell Lab of Ornithology-n és a Chemnitz-i Műszaki Egyetemen. A BirdNET-Go egy független közösségi projekt, és nem áll kapcsolatban a BirdNET csapattal.",
+        "learnMore": "Tudjon meg többet a BirdNET-ről",
         "cta": "Állítsuk be az Ön madármegfigyelő állomását."
       },
       "locationLanguage": {
@@ -4352,7 +4353,12 @@
         "useMyLocation": "Helyszínem használata",
         "locationDetected": "Helyszín észlelve",
         "locationError": "A helyszín nem észlelhető. Kérjük, adja meg manuálisan a koordinátákat.",
-        "locationDenied": "A helyszín hozzáférés megtagadva. Kérjük, adja meg manuálisan a koordinátákat."
+        "locationDenied": "A helyszín hozzáférés megtagadva. Kérjük, adja meg manuálisan a koordinátákat.",
+        "geolocationRequiresHttps": "A böngésző helymeghatározáshoz HTTPS szükséges. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
+        "geolocationDenied": "A helymeghatározási engedély megtagadva. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
+        "geolocationFailed": "Nem sikerült meghatározni a tartózkodási helyét. Adja meg a koordinátákat kézzel, vagy használja a térképet.",
+        "localesLoading": "Nyelvek betöltése...",
+        "localesLoadFailed": "A nyelvi lehetőségek betöltése sikertelen. Az angol lett kiválasztva alapértelmezettként."
       },
       "audioSource": {
         "title": "Hang forrás",
@@ -4365,7 +4371,8 @@
         "rtspUrlLabel": "Adatfolyam URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Adja meg az RTSP audio stream URL-jét",
-        "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban."
+        "additionalSourcesHint": "Később további hang forrásokat adhat hozzá a Beállításokban.",
+        "configureLater": "Kihagyás — beállítás később"
       },
       "detection": {
         "title": "Detektálási küszöbérték",

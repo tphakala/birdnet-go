@@ -9,8 +9,11 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { MapPin } from '@lucide/svelte';
+  import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
+  import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
   import { getLogger } from '$lib/utils/logger';
+  import { toastActions } from '$lib/stores/toast';
 
   const logger = getLogger('LocationLanguageStep');
 
@@ -20,6 +23,7 @@
   let longitude = $state(0);
   let speciesLocale = $state('en');
   let localesLoading = $state(true);
+  let localesFailed = $state(false);
   let localeOptions = $state<Array<{ value: string; label: string }>>([]);
   let geolocating = $state(false);
   let hasGeolocation = $state(false);
@@ -49,6 +53,7 @@
       })
       .catch(() => {
         localeOptions = [{ value: 'en', label: 'English' }];
+        localesFailed = true;
       })
       .finally(() => {
         localesLoading = false;
@@ -63,17 +68,28 @@
 
   function handleGeolocation() {
     if (!hasGeolocation) return;
+
+    if (!window.isSecureContext) {
+      toastActions.warning(t('wizard.steps.locationLanguage.geolocationRequiresHttps'));
+      return;
+    }
+
     geolocating = true;
     navigator.geolocation.getCurrentPosition(
       position => {
-        latitude = Math.round(position.coords.latitude * 10000) / 10000;
-        longitude = Math.round(position.coords.longitude * 10000) / 10000;
+        latitude = Math.round(position.coords.latitude * 1000) / 1000;
+        longitude = Math.round(position.coords.longitude * 1000) / 1000;
         geolocating = false;
         dirty = true;
       },
       error => {
         logger.error('Geolocation failed', error);
         geolocating = false;
+        if (error.code === error.PERMISSION_DENIED) {
+          toastActions.warning(t('wizard.steps.locationLanguage.geolocationDenied'));
+        } else {
+          toastActions.error(t('wizard.steps.locationLanguage.geolocationFailed'));
+        }
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -103,7 +119,7 @@
     >
       {t('wizard.steps.locationLanguage.uiLanguageLabel')}
     </label>
-    <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
+    <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
       {t('wizard.steps.locationLanguage.uiLanguageHelp')}
     </p>
     <LanguageSelector id="wizard-ui-language" />
@@ -116,45 +132,77 @@
     >
       {t('wizard.steps.locationLanguage.speciesLanguageLabel')}
     </label>
-    <p class="mb-2 text-xs text-[var(--color-base-content)] opacity-60">
+    <p class="mb-2 text-sm text-[var(--color-base-content)] opacity-80">
       {t('wizard.steps.locationLanguage.speciesLanguageHelp')}
     </p>
-    <SelectDropdown
-      id="wizard-species-locale"
-      options={localeOptions}
-      value={speciesLocale}
-      searchable={true}
-      disabled={localesLoading}
-      onChange={value => {
-        if (typeof value === 'string') {
-          speciesLocale = value;
-          dirty = true;
-        }
-      }}
-    />
+    {#if localesLoading}
+      <div
+        class="flex items-center gap-3 rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] px-4 py-3"
+      >
+        <span
+          class="inline-block size-4 animate-spin rounded-full border-2 border-[var(--border-300)] border-t-[var(--color-primary)]"
+        ></span>
+        <span class="text-sm font-medium text-[var(--color-base-content)] opacity-80"
+          >{t('wizard.steps.locationLanguage.localesLoading')}</span
+        >
+      </div>
+    {:else}
+      {#if localesFailed}
+        <SettingsNote className="mt-0 mb-2">
+          <p>{t('wizard.steps.locationLanguage.localesLoadFailed')}</p>
+        </SettingsNote>
+      {/if}
+      <SelectDropdown
+        id="wizard-species-locale"
+        options={localeOptions}
+        value={speciesLocale}
+        searchable={true}
+        onChange={value => {
+          if (typeof value === 'string') {
+            speciesLocale = value;
+            dirty = true;
+          }
+        }}
+      >
+        {#snippet renderOption(option)}
+          <div class="flex items-center gap-2">
+            <FlagIcon locale={option.value as FlagLocale} className="size-4" />
+            <span>{option.label}</span>
+          </div>
+        {/snippet}
+        {#snippet renderSelected(options)}
+          {#if options.length > 0}
+            <span class="flex items-center gap-2">
+              <FlagIcon locale={options[0].value as FlagLocale} className="size-4" />
+              <span>{options[0].label}</span>
+            </span>
+          {/if}
+        {/snippet}
+      </SelectDropdown>
+    {/if}
   </div>
 
   <div>
-    <div class="mb-2 flex items-center justify-between">
-      <div>
+    <div class="mb-2">
+      <div class="flex items-start justify-between gap-4">
         <span class="block text-sm font-medium text-[var(--color-base-content)]">
           {t('wizard.steps.locationLanguage.locationLabel')}
         </span>
-        <p class="text-xs text-[var(--color-base-content)] opacity-60">
-          {t('wizard.steps.locationLanguage.locationHelp')}
-        </p>
+        {#if hasGeolocation}
+          <button
+            type="button"
+            class="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] disabled:opacity-50"
+            onclick={handleGeolocation}
+            disabled={geolocating}
+          >
+            <MapPin class="size-3.5" />
+            {t('wizard.steps.locationLanguage.useMyLocation')}
+          </button>
+        {/if}
       </div>
-      {#if hasGeolocation}
-        <button
-          type="button"
-          class="inline-flex items-center gap-1.5 rounded-[var(--radius-field)] border border-[var(--border-200)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--color-base-content)] transition-colors hover:bg-[var(--hover-overlay)] disabled:opacity-50"
-          onclick={handleGeolocation}
-          disabled={geolocating}
-        >
-          <MapPin class="size-3.5" />
-          {t('wizard.steps.locationLanguage.useMyLocation')}
-        </button>
-      {/if}
+      <p class="mt-1 text-sm text-[var(--color-base-content)] opacity-80">
+        {t('wizard.steps.locationLanguage.locationHelp')}
+      </p>
     </div>
 
     <div class="mb-3 grid grid-cols-2 gap-3">
@@ -163,7 +211,7 @@
         value={latitude}
         min={-90}
         max={90}
-        step={0.0001}
+        step={0.001}
         onUpdate={value => {
           latitude = value;
           dirty = true;
@@ -174,7 +222,7 @@
         value={longitude}
         min={-180}
         max={180}
-        step={0.0001}
+        step={0.001}
         onUpdate={value => {
           longitude = value;
           dirty = true;

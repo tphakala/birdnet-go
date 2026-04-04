@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Bem-vindo",
         "heading": "Bem-vindo ao BirdNET-Go!",
-        "description": "O BirdNET-Go é um sistema de identificação de sons de aves em tempo real. Escuta o áudio do seu microfone ou transmissão de áudio e utiliza o modelo de IA BirdNET para identificar espécies de aves.",
-        "credit": "Alimentado pelo BirdNET Analyzer, desenvolvido pelo K. Lisa Yang Center for Conservation Bioacoustics no Cornell Lab of Ornithology e pela Chemnitz University of Technology.",
+        "description": "BirdNET-Go é um sistema de código aberto para identificação de sons de aves que ouve o áudio do seu microfone ou stream e identifica espécies de aves em tempo real.",
+        "credit": "BirdNET-Go utiliza o modelo de IA BirdNET desenvolvido pelo K. Lisa Yang Center for Conservation Bioacoustics no Cornell Lab of Ornithology e na Universidade Técnica de Chemnitz. BirdNET-Go é um projeto comunitário independente e não é afiliado ou endossado pela equipe BirdNET.",
+        "learnMore": "Saiba mais sobre o BirdNET",
         "cta": "Vamos configurar a sua estação de monitorização de aves."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Usar a minha localização",
         "locationDetected": "Localização detetada",
         "locationError": "Não foi possível detetar a localização. Por favor, introduza as coordenadas manualmente.",
-        "locationDenied": "Acesso à localização negado. Por favor, introduza as coordenadas manualmente."
+        "locationDenied": "Acesso à localização negado. Por favor, introduza as coordenadas manualmente.",
+        "geolocationRequiresHttps": "A localização do navegador requer HTTPS. Insira as coordenadas manualmente ou use o mapa.",
+        "geolocationDenied": "A permissão de localização foi negada. Insira as coordenadas manualmente ou use o mapa.",
+        "geolocationFailed": "Não foi possível determinar a sua localização. Insira as coordenadas manualmente ou use o mapa.",
+        "localesLoading": "Carregando idiomas...",
+        "localesLoadFailed": "Não foi possível carregar as opções de idioma. Inglês foi selecionado como padrão."
       },
       "audioSource": {
         "title": "Fonte de Áudio",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "URL da Transmissão",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Introduza o URL da sua transmissão de áudio RTSP",
-        "additionalSourcesHint": "Pode adicionar mais fontes de áudio posteriormente nas Definições."
+        "additionalSourcesHint": "Pode adicionar mais fontes de áudio posteriormente nas Definições.",
+        "configureLater": "Ignorar — configurar mais tarde"
       },
       "detection": {
         "title": "Limiar de Deteção",

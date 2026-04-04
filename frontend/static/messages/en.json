@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Welcome",
         "heading": "Welcome to BirdNET-Go!",
-        "description": "BirdNET-Go is a real-time bird sound identification system. It listens to audio from your microphone or audio stream and uses the BirdNET AI model to identify bird species.",
-        "credit": "Powered by the BirdNET Analyzer developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology.",
+        "description": "BirdNET-Go is an open-source bird sound identification system that listens to audio from your microphone or stream and identifies bird species in real time.",
+        "credit": "Powered by the BirdNET model developed by the K. Lisa Yang Center for Conservation Bioacoustics at the Cornell Lab of Ornithology and Chemnitz University of Technology. BirdNET-Go is an independent community project, not affiliated with or endorsed by the BirdNET team.",
+        "learnMore": "Learn more about BirdNET",
         "cta": "Let's set up your bird monitoring station."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Use my location",
         "locationDetected": "Location detected",
         "locationError": "Could not detect location. Please enter coordinates manually.",
-        "locationDenied": "Location access denied. Please enter coordinates manually."
+        "locationDenied": "Location access denied. Please enter coordinates manually.",
+        "geolocationRequiresHttps": "Browser location requires HTTPS. Please enter coordinates manually or use the map.",
+        "geolocationDenied": "Location permission was denied. Please enter coordinates manually or use the map.",
+        "geolocationFailed": "Could not determine your location. Please enter coordinates manually or use the map.",
+        "localesLoading": "Loading languages...",
+        "localesLoadFailed": "Could not load language options. English has been selected as default."
       },
       "audioSource": {
         "title": "Audio Source",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "Stream URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Enter the URL of your RTSP audio stream",
-        "additionalSourcesHint": "You can add more audio sources later in Settings."
+        "additionalSourcesHint": "You can add more audio sources later in Settings.",
+        "configureLater": "Skip — configure later"
       },
       "detection": {
         "title": "Detection Threshold",

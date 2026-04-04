@@ -40,12 +40,15 @@
  * - Error handling and user feedback
  */
 import { t } from '$lib/i18n';
+import { getLogger } from '$lib/utils/logger';
 import { safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
 import { toastActions } from './toast.js';
+
+const logger = getLogger('settings');
 
 // Type definitions for settings - Updated interfaces
 export interface MainSettings {
@@ -1258,7 +1261,7 @@ export const settingsActions = {
       } catch (e) {
         // Non-critical: restart status refresh failed, but settings were saved.
         // The banner may show stale state until next page load.
-        console.error('Failed to refresh restart status after settings save:', e);
+        logger.error('Failed to refresh restart status after settings save:', e);
       }
 
       // Check if UI locale changed and apply it

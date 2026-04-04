@@ -4372,8 +4372,9 @@
       "welcome": {
         "title": "Willkommen",
         "heading": "Willkommen bei BirdNET-Go!",
-        "description": "BirdNET-Go ist ein Echtzeit-Vogelstimmen-Erkennungssystem. Es lauscht dem Audio Ihres Mikrofons oder Audiostreams und verwendet das BirdNET-KI-Modell, um Vogelarten zu identifizieren.",
-        "credit": "Unterstützt vom BirdNET Analyzer, entwickelt vom K. Lisa Yang Center for Conservation Bioacoustics am Cornell Lab of Ornithology und der Technischen Universität Chemnitz.",
+        "description": "BirdNET-Go ist ein Open-Source-System zur Vogelstimmenerkennung, das Audio von Ihrem Mikrofon oder Stream aufnimmt und Vogelarten in Echtzeit identifiziert.",
+        "credit": "BirdNET-Go verwendet das BirdNET-KI-Modell, entwickelt vom K. Lisa Yang Center for Conservation Bioacoustics am Cornell Lab of Ornithology und der Technischen Universität Chemnitz. BirdNET-Go ist ein unabhängiges Community-Projekt und steht in keiner Verbindung zum BirdNET-Team.",
+        "learnMore": "Mehr über BirdNET erfahren",
         "cta": "Richten wir Ihre Vogelbeobachtungsstation ein."
       },
       "locationLanguage": {
@@ -4389,7 +4390,12 @@
         "useMyLocation": "Meinen Standort verwenden",
         "locationDetected": "Standort erkannt",
         "locationError": "Standort konnte nicht ermittelt werden. Bitte geben Sie die Koordinaten manuell ein.",
-        "locationDenied": "Standortzugriff verweigert. Bitte geben Sie die Koordinaten manuell ein."
+        "locationDenied": "Standortzugriff verweigert. Bitte geben Sie die Koordinaten manuell ein.",
+        "geolocationRequiresHttps": "Browser-Standort erfordert HTTPS. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+        "geolocationDenied": "Standortberechtigung wurde verweigert. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+        "geolocationFailed": "Ihr Standort konnte nicht ermittelt werden. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+        "localesLoading": "Sprachen werden geladen...",
+        "localesLoadFailed": "Sprachoptionen konnten nicht geladen werden. Englisch wurde als Standard ausgewählt."
       },
       "audioSource": {
         "title": "Audioquelle",
@@ -4402,7 +4408,8 @@
         "rtspUrlLabel": "Stream-URL",
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Geben Sie die URL Ihres RTSP-Audiostreams ein",
-        "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen."
+        "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen.",
+        "configureLater": "Überspringen — später konfigurieren"
       },
       "detection": {
         "title": "Erkennungsschwelle",
