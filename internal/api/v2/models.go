@@ -37,6 +37,7 @@ func (c *Controller) ListModels(ctx echo.Context) error {
 					ID:   alias,
 					Name: info.DisplayName(),
 				})
+				break // one entry per model
 			}
 		}
 	}
