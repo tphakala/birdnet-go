@@ -1,5 +1,6 @@
 ARG TFLITE_LIB_DIR=/usr/lib
 ARG TENSORFLOW_VERSION=2.17.1
+ARG ONNXRUNTIME_VERSION=1.24.4
 
 FROM --platform=$BUILDPLATFORM golang:1.26-trixie AS buildenv
 
@@ -49,11 +50,25 @@ ARG BUILD_VERSION
 ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
 ARG TARGETPLATFORM
+ARG ONNXRUNTIME_VERSION
 
 # Skip puppeteer download during build (not needed for production)
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 
-# Build assets and compile BirdNET-Go (non-embedded build)
+# Download ONNX Runtime for the target platform
+RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
+        "linux/arm64") echo "aarch64" ;; \
+        *) echo "x64" ;; \
+    esac) && \
+    echo "Downloading ONNX Runtime ${ONNXRUNTIME_VERSION} for ${ONNX_ARCH}" && \
+    curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
+        -o /tmp/onnxruntime.tgz && \
+    mkdir -p /tmp/onnxruntime && \
+    tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1 && \
+    cp /tmp/onnxruntime/lib/libonnxruntime*.so* /home/dev-user/lib/ && \
+    rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
+
+# Build assets and compile BirdNET-Go with TFLite support (non-embedded build)
 # Note: frontend-build (including Tailwind) is handled as a dependency of noembed_* tasks
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
@@ -61,6 +76,19 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
     BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
+
+# Rebuild with ONNX support enabled (TFLite + frontend assets already cached)
+RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
+    --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
+    GOARCH=$(echo ${TARGETPLATFORM} | cut -d/ -f2) && \
+    if [ "${TARGETPLATFORM}" = "linux/arm64" ] && [ "$(uname -m)" != "aarch64" ]; then \
+        export CC=aarch64-linux-gnu-gcc; \
+    fi && \
+    GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" \
+    CGO_LDFLAGS="-L/home/dev-user/lib -ltensorflowlite_c" \
+    go build -trimpath -tags noembed,onnx \
+        -ldflags "-s -w -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.version=${BUILD_VERSION}'" \
+        -o bin/birdnet-go
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
@@ -110,6 +138,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then \
 
 # Copy TensorFlow Lite library from build stage
 COPY --from=build /home/dev-user/lib/libtensorflowlite_c.so* ${TFLITE_LIB_DIR}/
+
+# Copy ONNX Runtime libraries from build stage
+COPY --from=build /home/dev-user/lib/libonnxruntime*.so* /usr/lib/
 RUN ldconfig
 
 # Include reset_auth tool from build stage
@@ -142,7 +173,7 @@ COPY --from=build /home/dev-user/src/BirdNET-Go/bin /usr/bin/
 
 # Add container labels for metadata and compatibility information
 LABEL org.opencontainers.image.title="BirdNET-Go"
-LABEL org.opencontainers.image.description="Real-time bird sound identification using BirdNET"
+LABEL org.opencontainers.image.description="Real-time bird sound identification using BirdNET with ONNX Runtime support"
 LABEL org.opencontainers.image.source="https://github.com/tphakala/birdnet-go"
 LABEL org.opencontainers.image.documentation="https://github.com/tphakala/birdnet-go/blob/main/README.md"
 LABEL org.opencontainers.image.url="https://github.com/tphakala/birdnet-go"
