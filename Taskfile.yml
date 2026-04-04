@@ -1032,9 +1032,13 @@ tasks:
         {{else if .CC}}
         export CC={{.CC}}
         {{end}}
+        BUILD_TAGS="noembed"
+        if [ -n "${EXTRA_BUILD_TAGS:-}" ]; then
+          BUILD_TAGS="${BUILD_TAGS},${EXTRA_BUILD_TAGS}"
+        fi
         GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{.CGO_FLAGS}} \
           CGO_LDFLAGS="-L{{.TFLITE_LIB_DIR}} -ltensorflowlite_c" \
-          go build -trimpath -tags noembed {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
+          go build -trimpath -tags ${BUILD_TAGS} {{.BUILD_FLAGS}} -o {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}
         echo "Built non-embedded binary: {{.BINARY_DIR}}/{{.BINARY_NAME}}{{.BINARY_SUFFIX}}"
         echo "Note: This binary requires external model files to run"
 

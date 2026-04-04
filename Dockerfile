@@ -68,27 +68,15 @@ RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
     cp /tmp/onnxruntime/lib/libonnxruntime*.so* /home/dev-user/lib/ && \
     rm -rf /tmp/onnxruntime /tmp/onnxruntime.tgz
 
-# Build assets and compile BirdNET-Go with TFLite support (non-embedded build)
+# Build assets and compile BirdNET-Go with TFLite + ONNX support (non-embedded build)
+# EXTRA_BUILD_TAGS adds the onnx tag to the noembed build in a single compilation pass
 # Note: frontend-build (including Tailwind) is handled as a dependency of noembed_* tasks
 RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
     --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
     task check-tensorflow && \
     TARGET=$(echo ${TARGETPLATFORM} | tr '/' '_') && \
     echo "Building non-embedded version with BUILD_VERSION=${BUILD_VERSION}" && \
-    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib task noembed_${TARGET}
-
-# Rebuild with ONNX support enabled (TFLite + frontend assets already cached)
-RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
-    --mount=type=cache,target=/home/dev-user/.cache/go-build,uid=10001,gid=10001 \
-    GOARCH=$(echo ${TARGETPLATFORM} | cut -d/ -f2) && \
-    if [ "${TARGETPLATFORM}" = "linux/arm64" ] && [ "$(uname -m)" != "aarch64" ]; then \
-        export CC=aarch64-linux-gnu-gcc; \
-    fi && \
-    GOOS=linux GOARCH=${GOARCH} CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow" \
-    CGO_LDFLAGS="-L/home/dev-user/lib -ltensorflowlite_c" \
-    go build -trimpath -tags noembed,onnx \
-        -ldflags "-s -w -X 'main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)' -X 'main.version=${BUILD_VERSION}'" \
-        -o bin/birdnet-go
+    BUILD_VERSION="${BUILD_VERSION}" DOCKER_LIB_DIR=/home/dev-user/lib EXTRA_BUILD_TAGS=onnx task noembed_${TARGET}
 
 # Create final image using a multi-platform base image
 FROM --platform=$TARGETPLATFORM debian:trixie-slim
