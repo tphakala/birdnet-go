@@ -31,7 +31,7 @@ import (
 const DefaultModelVersion = "BirdNET_V2.4"
 
 // defaultModelVersionString is the default human-readable model version.
-const defaultModelVersionString = "BirdNET GLOBAL 6K V2.4 FP32"
+const defaultModelVersionString = ModelNameBirdNETv24 + " FP32"
 
 // speciesCacheEntry holds cached species scores for a composite cache key.
 // Scores are immutable once stored - callers must not mutate the returned map.

@@ -23,6 +23,38 @@ func TestModelRegistry_ContainsExpectedModels(t *testing.T) {
 	}
 }
 
+func TestModelRegistry_BackendAndDisplayName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		registryID  string
+		wantName    string
+		wantBackend string
+		wantDisplay string
+	}{
+		{"BirdNET_V2.4", ModelNameBirdNETv24, BackendTFLite, "BirdNET v2.4 (TFLite)"},
+		{"BirdNET_V3.0", ModelNameBirdNETv30, BackendONNX, "BirdNET v3.0 (ONNX)"},
+		{"Perch_V2", ModelNamePerchV2, BackendONNX, "Google Perch v2 (ONNX)"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.registryID, func(t *testing.T) {
+			t.Parallel()
+			info := ModelRegistry[tt.registryID]
+			assert.Equal(t, tt.wantName, info.Name)
+			assert.Equal(t, tt.wantBackend, info.Backend)
+			assert.Equal(t, tt.wantDisplay, info.DisplayName())
+		})
+	}
+}
+
+func TestDisplayName_NoBackend(t *testing.T) {
+	t.Parallel()
+
+	info := ModelInfo{Name: "Custom Model"}
+	assert.Equal(t, "Custom Model", info.DisplayName())
+}
+
 func TestModelRegistry_BirdNETSpec(t *testing.T) {
 	t.Parallel()
 

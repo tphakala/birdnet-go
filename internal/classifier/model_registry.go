@@ -14,10 +14,24 @@ import (
 // cannot be matched to a known registry entry.
 const modelIDCustom = "Custom"
 
+// Model display names — single source of truth for user-facing model names.
+const (
+	ModelNameBirdNETv24 = "BirdNET v2.4"
+	ModelNameBirdNETv30 = "BirdNET v3.0"
+	ModelNamePerchV2    = "Google Perch v2"
+)
+
+// Inference backend identifiers.
+const (
+	BackendTFLite = "TFLite"
+	BackendONNX   = "ONNX"
+)
+
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
 	ID               string    // Unique registry identifier (e.g., "BirdNET_V2.4")
-	Name             string    // User-friendly name
+	Name             string    // User-friendly name (e.g., "BirdNET v2.4")
+	Backend          string    // Inference backend: "TFLite" or "ONNX"
 	DetectionName    string    // Database model name (e.g., "BirdNET", "Perch")
 	DetectionVersion string    // Database model version (e.g., "2.4", "V2")
 	Description      string    // Description of the model
@@ -29,12 +43,21 @@ type ModelInfo struct {
 	CustomPath       string    // Path to custom model file, if any
 }
 
+// DisplayName returns the user-facing name including the backend type, e.g. "BirdNET v2.4 (TFLite)".
+func (m *ModelInfo) DisplayName() string {
+	if m.Backend == "" {
+		return m.Name
+	}
+	return m.Name + " (" + m.Backend + ")"
+}
+
 // ModelRegistry is the single source of truth for all supported models.
 // All model identity lookups, config validation, and spec queries derive from this.
 var ModelRegistry = map[string]ModelInfo{
 	"BirdNET_V2.4": {
 		ID:               "BirdNET_V2.4",
-		Name:             "BirdNET GLOBAL 6K V2.4",
+		Name:             ModelNameBirdNETv24,
+		Backend:          BackendTFLite,
 		DetectionName:    "BirdNET",
 		DetectionVersion: "2.4",
 		Description:      "Global model with 6523 species",
@@ -48,7 +71,8 @@ var ModelRegistry = map[string]ModelInfo{
 	},
 	"BirdNET_V3.0": {
 		ID:               "BirdNET_V3.0",
-		Name:             "BirdNET GLOBAL V3.0",
+		Name:             ModelNameBirdNETv30,
+		Backend:          BackendONNX,
 		DetectionName:    "BirdNET",
 		DetectionVersion: "3.0",
 		Description:      "BirdNET v3.0 model (32kHz, 5s clips, embeddings)", // NumSpecies omitted: determined at runtime from label file
@@ -61,7 +85,8 @@ var ModelRegistry = map[string]ModelInfo{
 	},
 	"Perch_V2": {
 		ID:               "Perch_V2",
-		Name:             "Google Perch V2",
+		Name:             ModelNamePerchV2,
+		Backend:          BackendONNX,
 		DetectionName:    "Perch",
 		DetectionVersion: "V2",
 		Description:      "Perch v2 model with ~14,795 species (scientific names only)",

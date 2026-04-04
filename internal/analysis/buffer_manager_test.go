@@ -70,7 +70,7 @@ func TestBuildMonitorConfig(t *testing.T) {
 
 	info := &classifier.ModelInfo{
 		ID:   "BirdNET_V2.4",
-		Name: "BirdNET GLOBAL 6K V2.4",
+		Name: classifier.ModelNameBirdNETv24,
 		Spec: classifier.ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 	}
 
@@ -92,7 +92,7 @@ func TestBuildMonitorConfig_PerchV2(t *testing.T) {
 
 	info := &classifier.ModelInfo{
 		ID:   "Perch_V2",
-		Name: "Google Perch V2",
+		Name: classifier.ModelNamePerchV2,
 		Spec: classifier.ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
 	}
 

@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -11,7 +12,7 @@ import (
 // ModelListItem represents a model in the API response.
 type ModelListItem struct {
 	ID   string `json:"id"`   // Config alias (e.g., "birdnet", "perch_v2")
-	Name string `json:"name"` // Display name (e.g., "BirdNET GLOBAL 6K V2.4")
+	Name string `json:"name"` // Display name (e.g., "BirdNET v2.4 (TFLite)")
 }
 
 // initModelRoutes registers model-related API routes.
@@ -19,22 +20,24 @@ func (c *Controller) initModelRoutes() {
 	c.Group.GET("/models", c.ListModels)
 }
 
-// ListModels returns available classifier models from the registry.
+// ListModels returns classifier models that are enabled in the configuration.
 func (c *Controller) ListModels(ctx echo.Context) error {
-	// Pre-count total aliases across all registry entries for preallocation.
-	totalAliases := 0
-	for id := range classifier.ModelRegistry {
-		totalAliases += len(classifier.ModelRegistry[id].ConfigAliases)
+	// Build a set of enabled model config IDs for fast lookup.
+	enabled := make(map[string]bool, len(c.Settings.Models.Enabled))
+	for _, id := range c.Settings.Models.Enabled {
+		enabled[strings.ToLower(id)] = true
 	}
 
-	models := make([]ModelListItem, 0, totalAliases)
+	models := make([]ModelListItem, 0, len(enabled))
 	for id := range classifier.ModelRegistry {
 		info := classifier.ModelRegistry[id]
 		for _, alias := range info.ConfigAliases {
-			models = append(models, ModelListItem{
-				ID:   alias,
-				Name: info.Name,
-			})
+			if enabled[strings.ToLower(alias)] {
+				models = append(models, ModelListItem{
+					ID:   alias,
+					Name: info.DisplayName(),
+				})
+			}
 		}
 	}
 
