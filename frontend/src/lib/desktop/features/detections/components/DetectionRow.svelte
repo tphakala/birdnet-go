@@ -264,6 +264,19 @@
   {/if}
 </td>
 
+<!-- Source -->
+<td class="text-sm hidden lg:table-cell">
+  {#if detection.source?.displayName}
+    <span class="truncate max-w-32 inline-block" title={detection.source.displayName}>
+      {detection.source.displayName}
+    </span>
+  {:else if detection.source?.id}
+    <span class="truncate max-w-32 inline-block opacity-50" title={detection.source.id}>
+      {detection.source.id}
+    </span>
+  {/if}
+</td>
+
 <!-- Bird species (with thumbnail) -->
 <td class="text-sm">
   <div class="sp-species-container sp-layout-detections">

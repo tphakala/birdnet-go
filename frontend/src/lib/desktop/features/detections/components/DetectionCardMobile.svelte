@@ -64,6 +64,9 @@
         <div class="mt-1 text-xs opacity-70">
           {detection.date}
           {detection.time}
+          {#if detection.source?.displayName}
+            <span class="ml-1">· {detection.source.displayName}</span>
+          {/if}
         </div>
       </div>
       <div class="shrink-0">

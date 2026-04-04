@@ -18,6 +18,7 @@ export type FilterType =
   | 'verified'
   | 'species'
   | 'location'
+  | 'source'
   | 'locked';
 
 export interface SearchFilter {
@@ -137,6 +138,9 @@ function parseFilter(type: FilterType, value: string, raw: string): FilterParseR
 
     case 'location':
       return parseLocationFilter(operator, actualValue, raw);
+
+    case 'source':
+      return parseSourceFilter(operator, actualValue, raw);
 
     case 'locked':
       return parseLockedFilter(operator, actualValue, raw);
@@ -422,6 +426,29 @@ function parseLocationFilter(
   };
 }
 
+function parseSourceFilter(
+  operator: FilterOperator,
+  value: string,
+  raw: string
+): FilterParseResult {
+  if (operator !== ':' && operator !== '=') {
+    return { error: `Invalid operator "${operator}" for source filter` };
+  }
+
+  if (!value.trim()) {
+    return { error: 'Source value cannot be empty' };
+  }
+
+  return {
+    filter: {
+      type: 'source',
+      operator: ':',
+      value: value.trim(),
+      raw,
+    },
+  };
+}
+
 function parseLockedFilter(
   operator: FilterOperator,
   value: string,
@@ -499,6 +526,10 @@ export function formatFiltersForAPI(filters: SearchFilter[]): Record<string, str
         params.location = filter.value.toString();
         break;
 
+      case 'source':
+        params.location = filter.value.toString();
+        break;
+
       case 'locked':
         params.locked = filter.value.toString();
         break;
@@ -553,6 +584,7 @@ export function getFilterSuggestions(partialInput: string): string[] {
       'hour:',
       'verified:',
       'species:',
+      'source:',
       'location:',
       'locked:',
     ];
@@ -597,6 +629,9 @@ export function formatFilterForDisplay(filter: SearchFilter): string {
 
     case 'location':
       return `Location: ${filter.value}`;
+
+    case 'source':
+      return `Source: ${filter.value}`;
 
     case 'locked':
       return `Locked: ${filter.value}`;

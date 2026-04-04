@@ -317,6 +317,7 @@
                   onSort={handleSort}
                 />
                 <th scope="col" class="hidden md:table-cell">{t('detections.headers.weather')}</th>
+                <th scope="col" class="hidden lg:table-cell">{t('detections.headers.source')}</th>
                 <SortableHeader
                   label={t('detections.headers.species')}
                   field="species"

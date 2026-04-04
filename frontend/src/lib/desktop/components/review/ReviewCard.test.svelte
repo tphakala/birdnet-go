@@ -18,7 +18,7 @@
     id: 1,
     date: '2024-12-30',
     time: '12:00:00',
-    source: 'test',
+    source: { id: 'test', type: 'unknown' },
     beginTime: '12:00:00',
     endTime: '12:00:03',
     speciesCode: 'test',

@@ -724,7 +724,7 @@ Performance Optimizations:
         speciesCode: detectionData.speciesCode,
         verified: detectionData.verified ?? 'unverified',
         locked: detectionData.locked ?? false,
-        source: detectionData.source?.displayName ?? '',
+        source: detectionData.source ?? null,
         beginTime: detectionData.beginTime ?? '',
         endTime: detectionData.endTime ?? '',
         clipName: detectionData.clipName,

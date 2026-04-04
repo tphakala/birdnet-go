@@ -5,12 +5,18 @@ export interface Comment {
   updatedAt: string;
 }
 
+export interface SourceInfo {
+  id: string;
+  type?: string;
+  displayName?: string;
+}
+
 export interface Detection {
   id: number;
   date: string;
   time: string;
   timestamp?: string; // ISO8601/RFC3339 with timezone from server
-  source: string;
+  source?: SourceInfo | null;
   beginTime: string;
   endTime: string;
   speciesCode: string;

@@ -17,6 +17,7 @@ import (
 	"github.com/patrickmn/go-cache"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -161,7 +162,7 @@ type DetectionResponse struct {
 	Date               string            `json:"date"`
 	Time               string            `json:"time"`
 	Timestamp          string            `json:"timestamp,omitempty"` // ISO8601/RFC3339 with timezone
-	Source             string            `json:"source"`
+	Source             *SourceInfo       `json:"source,omitempty"`
 	BeginTime          string            `json:"beginTime"`
 	EndTime            string            `json:"endTime"`
 	SpeciesCode        string            `json:"speciesCode"`
@@ -182,6 +183,13 @@ type DetectionResponse struct {
 	DaysThisYear    int    `json:"daysThisYear,omitempty"`    // Days since first this year
 	DaysThisSeason  int    `json:"daysThisSeason,omitempty"`  // Days since first this season
 	CurrentSeason   string `json:"currentSeason,omitempty"`   // Current season name
+}
+
+// SourceInfo describes the audio source of a detection.
+type SourceInfo struct {
+	ID          string `json:"id"`
+	Type        string `json:"type,omitempty"`
+	DisplayName string `json:"displayName,omitempty"`
 }
 
 // WeatherInfo represents weather data for a detection
@@ -629,7 +637,6 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		ID:             note.ID,
 		Date:           note.Date,
 		Time:           note.Time,
-		Source:         note.Source.SafeString,
 		BeginTime:      note.BeginTime.Format(time.RFC3339),
 		EndTime:        note.EndTime.Format(time.RFC3339),
 		SpeciesCode:    note.SpeciesCode,
@@ -637,6 +644,15 @@ func (c *Controller) noteToDetectionResponse(note *datastore.Note, includeWeathe
 		CommonName:     note.CommonName,
 		Confidence:     note.Confidence,
 		Locked:         note.Locked,
+	}
+
+	// populate source info if available
+	if note.Source.ID != "" {
+		detection.Source = &SourceInfo{
+			ID:          note.Source.ID,
+			Type:        detectionPkg.DetermineSourceType(note.Source.SafeString),
+			DisplayName: note.Source.DisplayName,
+		}
 	}
 
 	// Build RFC3339 timestamp from Date+Time in the server's local timezone

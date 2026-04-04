@@ -762,6 +762,7 @@
     "headers": {
       "dateTime": "Datum/Tijd",
       "weather": "Weer",
+      "source": "Bron",
       "species": "Soort",
       "confidence": "Betrouwbaarheid",
       "thumbnail": "afbeelding",

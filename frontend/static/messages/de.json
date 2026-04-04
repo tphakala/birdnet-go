@@ -762,6 +762,7 @@
     "headers": {
       "dateTime": "Datum & Zeit",
       "weather": "Wetter",
+      "source": "Quelle",
       "species": "Art",
       "confidence": "Konfidenz",
       "thumbnail": "Vorschau",

@@ -762,6 +762,7 @@
     "headers": {
       "dateTime": "Fecha y hora",
       "weather": "Clima",
+      "source": "Fuente",
       "species": "Especie",
       "confidence": "Confianza",
       "thumbnail": "Miniatura",
