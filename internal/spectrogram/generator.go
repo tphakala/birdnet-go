@@ -70,6 +70,24 @@ const (
 	soxResampleRate = "24k"
 )
 
+// GenerateOption configures optional parameters for spectrogram generation.
+type GenerateOption func(*generateOptions)
+
+type generateOptions struct {
+	// preValidatedDuration is the audio duration already obtained by the caller
+	// (e.g., from FFprobe validation). When set, skips the sox --info duration query.
+	preValidatedDuration float64
+}
+
+// WithDuration provides a pre-validated audio duration (in seconds) to skip
+// the sox --info duration query during spectrogram generation. This is useful
+// when the caller has already obtained the duration from FFprobe validation.
+func WithDuration(seconds float64) GenerateOption {
+	return func(o *generateOptions) {
+		o.preValidatedDuration = seconds
+	}
+}
+
 // getFileSizeBytes returns the file size in bytes, or -1 if the file can't be stat'd.
 // Used for telemetry context — the size value is privacy-safe (numeric only).
 func getFileSizeBytes(path string) int64 {
@@ -232,13 +250,21 @@ func (g *Generator) getDynamicRange() string {
 //   - Long-running generations are bounded to prevent resource exhaustion
 //   - Callers can still impose stricter timeouts if needed
 //   - HTTP request cancellations are still respected via parent context
-func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
+func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath string, width int, raw bool, opts ...GenerateOption) error {
 	start := time.Now()
+
+	// Apply options
+	var options generateOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+
 	g.log().Debug("Starting spectrogram generation from file",
 		logger.String("audio_path", audioPath),
 		logger.String("output_path", outputPath),
 		logger.Int("width", width),
-		logger.Bool("raw", raw))
+		logger.Bool("raw", raw),
+		logger.Float64("pre_validated_duration", options.preValidatedDuration))
 
 	// Validate inputs before filesystem operations
 	if outputPath == "" {
@@ -275,7 +301,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	defer soxCancel()
 
 	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw); err != nil {
+	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw, options.preValidatedDuration); err != nil {
 		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg",
 			logger.String("audio_path", audioPath),
 			logger.Error(err),
@@ -381,7 +407,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 // generateWithSoxFile generates a spectrogram using Sox from an audio file.
 // If the file format is supported by Sox, it uses Sox directly.
 // Otherwise, it uses FFmpeg to convert to Sox format and pipes to Sox.
-func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
+func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	soxBinary := g.settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
@@ -405,16 +431,16 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPa
 
 	// If file is supported by Sox, use Sox directly
 	if !useFFmpeg {
-		return g.generateWithSoxDirect(ctx, audioPath, outputPath, width, raw)
+		return g.generateWithSoxDirect(ctx, audioPath, outputPath, width, raw, preValidatedDuration)
 	}
 
 	// Otherwise, use FFmpeg to convert to Sox format
-	return g.generateWithFFmpegSoxPipeline(ctx, audioPath, outputPath, width, raw)
+	return g.generateWithFFmpegSoxPipeline(ctx, audioPath, outputPath, width, raw, preValidatedDuration)
 }
 
 // generateWithSoxDirect generates a spectrogram using only Sox (no FFmpeg).
 // Used when the audio file format is natively supported by Sox.
-func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
+func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	soxBinary := g.settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
@@ -425,7 +451,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	}
 
 	// Build Sox arguments for file input
-	soxArgs := g.getSoxArgs(ctx, audioPath, outputPath, width, raw, SoxInputFile)
+	soxArgs := g.getSoxArgs(ctx, audioPath, outputPath, width, raw, SoxInputFile, preValidatedDuration)
 
 	g.log().Debug("Executing SoX command directly",
 		logger.String("sox_binary", soxBinary),
@@ -494,7 +520,7 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
 // Used when the audio file format is not natively supported by Sox.
-func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
+func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
 	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
 	soxBinary := g.settings.Realtime.Audio.SoxPath
 
@@ -517,7 +543,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 
 	// FFmpeg converts audio to Sox format and pipes to Sox
 	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-f", "sox", "-"}
-	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)...)
+	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, preValidatedDuration)...)
 
 	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
 	soxCmd := createCommandWithNice(ctx, soxBinary, soxArgs)
@@ -800,13 +826,13 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 
 // getSoxArgs builds Sox arguments for file input.
 // Used when Sox can directly read the audio file.
-func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, inputType SoxInputType) []string {
+func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, inputType SoxInputType, preValidatedDuration float64) []string {
 	args := make([]string, 0, 16) // Preallocate capacity for input path + spectrogram args
 	if inputType == SoxInputFile {
 		args = append(args, audioPath)
 	}
 
-	args = append(args, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)...)
+	args = append(args, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, preValidatedDuration)...)
 	return args
 }
 
@@ -815,7 +841,10 @@ func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string
 // The -d (duration) parameter must always be explicitly provided to Sox. Without it,
 // Sox interprets the -x (width in pixels) as seconds of audio time, causing spectrograms
 // to show truncated audio durations (see issue #1484).
-func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
+//
+// preValidatedDuration, when > 0, is used directly (e.g., from FFprobe validation),
+// skipping the sox --info duration query entirely.
+func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) []string {
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
@@ -823,13 +852,17 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	args := []string{"-n", "rate", soxResampleRate, "spectrogram", "-x", widthStr, "-y", heightStr}
 
 	// Always provide explicit duration via -d parameter to ensure spectrogram
-	// shows the full audio duration regardless of image width (fixes #1484)
-	duration := getCachedAudioDuration(ctx, audioPath)
+	// shows the full audio duration regardless of image width (fixes #1484).
+	// Priority: pre-validated (from FFprobe) > cached sox/ffprobe > configured fallback.
+	duration := preValidatedDuration
 	if duration <= 0 {
-		// Fallback: Use configured capture length if sox --info fails
+		duration = getCachedAudioDuration(ctx, audioPath)
+	}
+	if duration <= 0 {
+		// Fallback: Use configured capture length if both sox and ffprobe fail
 		captureLength := g.settings.Realtime.Audio.Export.Length
 		duration = float64(captureLength)
-		g.log().Warn("Sox duration query failed, using configured fallback duration",
+		g.log().Warn("Duration query failed, using configured fallback duration",
 			logger.Float64("fallback_duration_seconds", duration),
 			logger.String("audio_path", audioPath))
 	}
@@ -982,7 +1015,8 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 	}
 }
 
-// getCachedAudioDuration retrieves audio duration from cache or fetches it using sox --info.
+// getCachedAudioDuration retrieves audio duration from cache or fetches it using sox --info,
+// falling back to ffprobe if sox fails (e.g., for MP3/AAC files without libsox-fmt-mp3).
 // The cache is invalidated if the file has been modified (size or modTime changed).
 // Returns 0 if duration cannot be determined (caller should use configured fallback).
 func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
@@ -1011,10 +1045,17 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 		}
 	}
 
-	// Cache miss or invalid - fetch duration via sox --info
-	duration, err := getAudioDurationViaSox(ctx, audioPath)
-	if err != nil {
-		return 0 // Caller will use configured fallback
+	// Cache miss or invalid - try sox --info first (~30x faster than ffprobe)
+	duration, soxErr := getAudioDurationViaSox(ctx, audioPath)
+	if soxErr != nil {
+		// Sox failed (common for MP3/AAC without libsox-fmt-mp3) — fall back to ffprobe
+		GetLogger().Debug("Sox duration query failed, falling back to ffprobe",
+			logger.Error(soxErr),
+			logger.String("audio_path", audioPath))
+		duration, err = ffmpeg.GetDurationViaFFprobe(ctx, audioPath)
+		if err != nil {
+			return 0 // Caller will use configured fallback
+		}
 	}
 
 	// Store in cache with write lock, evicting old entries if needed
@@ -1088,7 +1129,7 @@ func getAudioDurationViaSox(ctx context.Context, audioPath string) (float64, err
 // This method is exported to allow tests in other packages to verify the
 // FFmpeg version optimization logic.
 func (g *Generator) GetSoxSpectrogramArgsForTest(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
-	return g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw)
+	return g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, 0)
 }
 
 // CreateFreshFFmpegContext creates a new context for FFmpeg fallback with full timeout.

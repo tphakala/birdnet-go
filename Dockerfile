@@ -98,6 +98,7 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     libasound2 \
     ffmpeg \
     sox \
+    libsox-fmt-mp3 \
     procps \
     iproute2 \
     net-tools \

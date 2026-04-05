@@ -107,7 +107,7 @@ func TestGenerator_GetSoxSpectrogramArgs(t *testing.T) {
 			audioPath := filepath.Join(tempDir, "test.wav")
 			outputPath := filepath.Join(tempDir, "test.png")
 
-			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, tt.raw)
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, tt.raw, 0)
 			result := parseSoxSpectrogramArgs(args)
 
 			assert.Equal(t, tt.wantDuration, result.hasDuration, "duration parameter mismatch")
@@ -142,7 +142,7 @@ func TestGenerator_GetSoxArgs(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile)
+	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile, 0)
 
 	// First argument should be the audio file path
 	require.NotEmpty(t, args, "getSoxArgs() should return args")
@@ -587,7 +587,7 @@ func TestGenerateWithSoxDirect_MissingBinary(t *testing.T) {
 	err := os.WriteFile(audioPath, []byte("fake audio"), 0o600)
 	require.NoError(t, err, "Failed to create test file")
 
-	err = gen.generateWithSoxDirect(t.Context(), audioPath, outputPath, 400, false)
+	err = gen.generateWithSoxDirect(t.Context(), audioPath, outputPath, 400, false, 0)
 	require.Error(t, err, "should error when Sox binary not configured")
 	assert.Contains(t, err.Error(), "sox binary not configured", "error should mention sox binary")
 }
@@ -626,7 +626,7 @@ func TestGenerateWithFFmpegSoxPipeline_MissingBinaries(t *testing.T) {
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
 
-			err := gen.generateWithFFmpegSoxPipeline(t.Context(), audioPath, outputPath, 400, false)
+			err := gen.generateWithFFmpegSoxPipeline(t.Context(), audioPath, outputPath, 400, false, 0)
 			require.Error(t, err, "should error when binary not configured")
 			assert.Contains(t, err.Error(), tt.errContain, "error should mention missing binary")
 		})
@@ -673,7 +673,7 @@ func TestGetSoxArgs_FileInput(t *testing.T) {
 	audioPath := filepath.Join(env.TempDir, "test.wav")
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
-	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile)
+	args := gen.getSoxArgs(t.Context(), audioPath, outputPath, 800, false, SoxInputFile, 0)
 
 	// First argument should be the audio file for SoxInputFile
 	require.NotEmpty(t, args, "args should not be empty")
@@ -702,14 +702,30 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// Test with raw=false
-	argsNoRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
+	argsNoRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false, 0)
 	hasRaw := slices.Contains(argsNoRaw, "-r")
 	assert.False(t, hasRaw, "should not contain -r flag when raw=false")
 
 	// Test with raw=true
-	argsWithRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, true)
+	argsWithRaw := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, true, 0)
 	hasRaw = slices.Contains(argsWithRaw, "-r")
 	assert.True(t, hasRaw, "should contain -r flag when raw=true")
+}
+
+// TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration
+// is used directly for the -d parameter, skipping the sox --info duration query.
+func TestGetSoxSpectrogramArgs_UsesProvidedDuration(t *testing.T) {
+	gen, tempDir := createTestGenerator(t, 0, false)
+
+	audioPath := filepath.Join(tempDir, "input.mp3")
+	outputPath := filepath.Join(tempDir, "out.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false, 12.6)
+
+	idx := slices.Index(args, "-d")
+	require.NotEqual(t, -1, idx, "should contain -d parameter")
+	require.Less(t, idx+1, len(args), "-d should have a value after it")
+	assert.Equal(t, "13", args[idx+1], "duration should be int(12.6 + 0.5) = 13")
 }
 
 // TestGetSoxSpectrogramArgs_DimensionCalculation tests width/height calculation.
@@ -735,7 +751,7 @@ func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("width_"+strconv.Itoa(tt.width), func(t *testing.T) {
-			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, false)
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, tt.width, false, 0)
 
 			widthStr := strconv.Itoa(tt.width)
 			heightStr := strconv.Itoa(tt.expectedHeight)
@@ -882,7 +898,7 @@ func TestNewGenerator_WithNilLogger(t *testing.T) {
 	outputPath := filepath.Join(env.TempDir, "test.png")
 
 	// getSoxSpectrogramArgs uses g.log().Warn internally
-	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
+	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false, 0)
 	assert.NotEmpty(t, args, "should return valid args without panic")
 }
 
@@ -1088,7 +1104,7 @@ func TestGetSoxSpectrogramArgs_StyleArgs(t *testing.T) {
 			audioPath := filepath.Join(env.TempDir, "test.wav")
 			outputPath := filepath.Join(env.TempDir, "test.png")
 
-			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false)
+			args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false, 0)
 
 			for _, want := range tt.wantContains {
 				assert.True(t, slices.Contains(args, want),

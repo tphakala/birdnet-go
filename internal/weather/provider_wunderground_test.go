@@ -64,6 +64,31 @@ func TestWundergroundProvider_TimeParsing(t *testing.T) {
 			"Expected: %v, Got: %v", expectedTime, data.Time)
 }
 
+// TestWundergroundProvider_FetchWeather_ImperialConfigIgnored verifies that even
+// when the user configures Units="e" (imperial), the provider still requests metric
+// from the API and parses temperature correctly. This is a regression test for #2662.
+func TestWundergroundProvider_FetchWeather_ImperialConfigIgnored(t *testing.T) {
+	setupHTTPMock(t)
+
+	registerWundergroundResponder(t, http.StatusOK, wundergroundSuccessResponse())
+
+	provider := NewWundergroundProvider(nil)
+	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.Units = "e" // User configured imperial
+	})
+
+	data, err := provider.FetchWeather(settings)
+
+	require.NoError(t, err)
+	assertWeatherDataBasics(t, data)
+
+	// Temperature must still be correct — the provider always requests metric
+	// regardless of the configured Units value
+	assert.InDelta(t, 15.0, data.Temperature.Current, 0.1)
+	assert.InDelta(t, 9.0*KmhToMs, data.Wind.Speed, 0.1)
+	assert.Equal(t, 1013, data.Pressure)
+}
+
 func TestWundergroundProvider_FetchWeather_NoAPIKey(t *testing.T) {
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
@@ -387,23 +412,10 @@ func TestValidateWundergroundConfig(t *testing.T) {
 			errMsg:  "invalid",
 		},
 		{
-			name: "valid_custom_units_m",
+			name: "units_field_ignored",
 			setupFunc: func(s *conf.Settings) {
-				s.Realtime.Weather.Wunderground.Units = "m"
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid_custom_units_e",
-			setupFunc: func(s *conf.Settings) {
+				// Units in settings are ignored; we always request metric from the API.
 				s.Realtime.Weather.Wunderground.Units = "e"
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid_custom_units_h",
-			setupFunc: func(s *conf.Settings) {
-				s.Realtime.Weather.Wunderground.Units = "h"
 			},
 			wantErr: false,
 		},
@@ -426,28 +438,6 @@ func TestValidateWundergroundConfig(t *testing.T) {
 				require.NoError(t, err)
 				require.NotNil(t, cfg)
 			}
-		})
-	}
-}
-
-func TestNormalizeWindGust(t *testing.T) {
-	tests := []struct {
-		name        string
-		windGustRaw float64
-		units       string
-		expectedMS  float64
-	}{
-		{"metric_kmh_to_ms", 36.0, "m", 36.0 * KmhToMs},     // 36 km/h = 10 m/s
-		{"imperial_mph_to_ms", 22.37, "e", 22.37 * MphToMs}, // 22.37 mph = 10 m/s
-		{"hybrid_mph_to_ms", 22.37, "h", 22.37 * MphToMs},
-		{"zero_value", 0.0, "m", 0.0},
-		{"unknown_units_defaults_to_mph", 10.0, "x", 10.0 * MphToMs},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeWindGust(tt.windGustRaw, tt.units)
-			assert.InDelta(t, tt.expectedMS, got, 0.001)
 		})
 	}
 }
@@ -489,7 +479,5 @@ func TestWundergroundConstants(t *testing.T) {
 	t.Run("conversion_factors", func(t *testing.T) {
 		// Verify conversion accuracy
 		assert.InDelta(t, 0.2778, KmhToMs, 0.001, "1 km/h = ~0.2778 m/s")
-		assert.InDelta(t, 0.4470, MphToMs, 0.001, "1 mph = ~0.4470 m/s")
-		assert.InDelta(t, 33.864, InHgToHPa, 0.01, "1 inHg = ~33.864 hPa")
 	})
 }

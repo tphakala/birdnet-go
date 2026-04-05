@@ -429,6 +429,26 @@ func parseFFprobeLine(line string, result *ValidationResult) {
 	}
 }
 
+// GetDurationViaFFprobe returns the audio duration in seconds using ffprobe.
+// This is slower than sox --info but supports all formats FFmpeg can decode
+// (MP3, AAC, FLAC, etc.) without requiring additional codec libraries.
+// Returns 0 and an error if the duration cannot be determined.
+func GetDurationViaFFprobe(ctx context.Context, audioPath string) (float64, error) {
+	// Enforce a bounded timeout so the fallback doesn't inherit a long parent deadline
+	// (e.g., the 90-second spectrogram generation timeout).
+	probeCtx, cancel := context.WithTimeout(ctx, FFprobeTimeout)
+	defer cancel()
+
+	var result ValidationResult
+	if err := validateWithFFprobe(probeCtx, audioPath, &result); err != nil {
+		return 0, fmt.Errorf("ffprobe duration query failed: %w", err)
+	}
+	if result.Duration <= 0 {
+		return 0, fmt.Errorf("ffprobe returned no duration for %s", filepath.Base(audioPath))
+	}
+	return result.Duration, nil
+}
+
 // validateWithFFprobe uses ffprobe to validate audio file format and extract metadata.
 func validateWithFFprobe(ctx context.Context, path string, result *ValidationResult) error {
 	// Apply a per-call timeout if the context has no deadline.
