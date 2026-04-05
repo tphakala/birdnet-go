@@ -29,6 +29,7 @@
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
   import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
+  import { resolveSpeciesDisplayNames, type SpeciesNameMaps } from '$lib/utils/speciesNames';
 
   interface Props {
     title: string;
@@ -36,6 +37,7 @@
     icon: Component<IconProps>;
     iconColorClass?: string;
     scientificNameMap?: Map<string, string>;
+    scientificToCommonMap?: Map<string, string>;
     predictions: string[];
     inputValue: string;
     inputLabel: string;
@@ -53,6 +55,7 @@
     icon: Icon,
     iconColorClass = 'emerald',
     scientificNameMap = new Map(),
+    scientificToCommonMap = new Map(),
     predictions,
     inputValue = $bindable(),
     inputLabel,
@@ -94,24 +97,32 @@
   let sortDirection = $state<'asc' | 'desc'>('asc');
   let showSearch = $derived(species.length > 8);
 
+  let nameMaps = $derived<SpeciesNameMaps>({
+    commonToScientific: scientificNameMap,
+    scientificToCommon: scientificToCommonMap,
+    allNames: [],
+  });
+
   let filteredSpecies = $derived.by(() => {
     const query = searchQuery.trim().toLowerCase();
     let result = query
       ? species.filter(s => {
-          if (s.toLowerCase().includes(query)) return true;
-          const sci = scientificNameMap.get(s.toLowerCase());
-          return sci ? sci.toLowerCase().includes(query) : false;
+          const resolved = resolveSpeciesDisplayNames(s, nameMaps);
+          return (
+            resolved.displayCommonName.toLowerCase().includes(query) ||
+            resolved.displayScientificName.toLowerCase().includes(query)
+          );
         })
       : [...species];
     if (sortColumn) {
       result.sort((a, b) => {
+        const resolvedA = resolveSpeciesDisplayNames(a, nameMaps);
+        const resolvedB = resolveSpeciesDisplayNames(b, nameMaps);
         let cmp = 0;
         if (sortColumn === 'commonName') {
-          cmp = a.localeCompare(b);
+          cmp = resolvedA.displayCommonName.localeCompare(resolvedB.displayCommonName);
         } else {
-          const sciA = scientificNameMap.get(a.toLowerCase()) ?? '';
-          const sciB = scientificNameMap.get(b.toLowerCase()) ?? '';
-          cmp = sciA.localeCompare(sciB);
+          cmp = resolvedA.displayScientificName.localeCompare(resolvedB.displayScientificName);
         }
         return sortDirection === 'asc' ? cmp : -cmp;
       });
@@ -304,16 +315,15 @@
         </thead>
         <tbody>
           {#each filteredSpecies as item, index (`${item}_${index}`)}
+            {@const resolved = resolveSpeciesDisplayNames(item, nameMaps)}
             <tr
               class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
             >
               <td class="py-2 px-3">
-                <span class="font-medium text-sm">{item}</span>
+                <span class="font-medium text-sm">{resolved.displayCommonName}</span>
               </td>
               <td class="py-2 px-3">
-                <span class="text-xs text-muted italic"
-                  >{scientificNameMap.get(item.toLowerCase()) ?? ''}</span
-                >
+                <span class="text-xs text-muted italic">{resolved.displayScientificName}</span>
               </td>
               <td class="py-2 px-3 w-12 text-right">
                 <button
