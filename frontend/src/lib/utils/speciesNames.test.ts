@@ -44,13 +44,14 @@ describe('buildSpeciesNameMaps', () => {
     expect(maps.allNames.length).toBe(uniqueCount);
   });
 
-  it('skips entries missing scientificName', () => {
+  it('skips map entries for missing scientificName but keeps common name in allNames', () => {
     const species: SpeciesApiEntry[] = [
       { commonName: 'Unknown Bird', scientificName: '', label: 'Unknown Bird' },
     ];
     const maps = buildSpeciesNameMaps(species);
     expect(maps.commonToScientific.size).toBe(0);
     expect(maps.scientificToCommon.size).toBe(0);
+    expect(maps.allNames).toContain('Unknown Bird');
   });
 
   it('handles empty input', () => {

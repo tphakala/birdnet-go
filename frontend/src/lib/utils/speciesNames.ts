@@ -42,11 +42,16 @@ export function buildSpeciesNameMaps(species: SpeciesApiEntry[]): SpeciesNameMap
     const commonName = s.commonName ?? s.label;
     const scientificName = s.scientificName ?? '';
 
+    // Always add common name to allNames for autocomplete, even without scientific name
+    if (commonName) {
+      namesSet.add(commonName);
+    }
+
+    // Only build bidirectional maps when both names are present
     if (!scientificName || !commonName) continue;
 
     commonToScientific.set(commonName.toLowerCase(), scientificName);
     scientificToCommon.set(scientificName.toLowerCase(), commonName);
-    namesSet.add(commonName);
     namesSet.add(scientificName);
   }
 
