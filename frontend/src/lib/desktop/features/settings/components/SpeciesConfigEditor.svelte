@@ -49,45 +49,17 @@
     onPredictionSelect,
   }: Props = $props();
 
-  // Form state
-  let speciesName = $state('');
-  let threshold = $state(0.5);
-  let interval = $state(0);
-  let showActions = $state(false);
-  let actionCommand = $state('');
-  let actionParameters = $state('');
-  let actionExecuteDefaults = $state(true);
-
-  // Initialize form from props
-  $effect(() => {
-    if (species && config) {
-      speciesName = species;
-      threshold = config.threshold;
-      interval = config.interval || 0;
-      const existingAction = config.actions?.[0];
-      if (existingAction) {
-        actionCommand = existingAction.command || '';
-        actionParameters = Array.isArray(existingAction.parameters)
-          ? existingAction.parameters.join(',')
-          : '';
-        actionExecuteDefaults = existingAction.executeDefaults !== false;
-        showActions = true;
-      } else {
-        actionCommand = '';
-        actionParameters = '';
-        actionExecuteDefaults = true;
-        showActions = false;
-      }
-    } else {
-      speciesName = '';
-      threshold = 0.5;
-      interval = 0;
-      actionCommand = '';
-      actionParameters = '';
-      actionExecuteDefaults = true;
-      showActions = false;
-    }
-  });
+  // Form state initialized from props — parent uses {#key} to reset on species change
+  const existingAction = config?.actions?.[0];
+  let speciesName = $state(species ?? '');
+  let threshold = $state(config?.threshold ?? 0.5);
+  let interval = $state(config?.interval ?? 0);
+  let showActions = $state(!!existingAction);
+  let actionCommand = $state(existingAction?.command ?? '');
+  let actionParameters = $state(
+    Array.isArray(existingAction?.parameters) ? existingAction.parameters.join(',') : ''
+  );
+  let actionExecuteDefaults = $state(existingAction?.executeDefaults !== false);
 
   // Validation
   let isValid = $derived(speciesName.trim() !== '' && threshold >= 0 && threshold <= 1);

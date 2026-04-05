@@ -39,6 +39,7 @@
   }: Props = $props();
 
   let showPredictions = $state(false);
+  let manuallyDismissed = $state(false);
   let inputElement: HTMLInputElement;
   let portalDropdown: HTMLDivElement | null = null;
 
@@ -70,19 +71,26 @@
 
   // Manage portal lifecycle based on prediction visibility
   $effect(() => {
-    const shouldShow = filteredPredictions.length > 0;
+    const hasPredictions = filteredPredictions.length > 0;
 
-    if (shouldShow && !portalDropdown && inputElement) {
-      createPortalDropdown();
-    } else if (!shouldShow && portalDropdown) {
-      destroyPortalDropdown();
+    if (!hasPredictions) {
+      // No predictions — always close and reset dismissed flag
+      if (portalDropdown) destroyPortalDropdown();
+      showPredictions = false;
+      manuallyDismissed = false;
+      return;
     }
 
-    if (shouldShow && portalDropdown) {
+    // Has predictions but user manually dismissed — stay closed
+    if (manuallyDismissed) return;
+
+    if (!portalDropdown && inputElement) {
+      createPortalDropdown();
+    }
+    if (portalDropdown) {
       updatePortalDropdown();
     }
-
-    showPredictions = shouldShow;
+    showPredictions = true;
   });
 
   // ── Portal event delegation ──────────────────────────────────────────────
@@ -232,6 +240,7 @@
   function handleInput(event: Event) {
     const target = event.target as HTMLInputElement;
     value = target.value;
+    manuallyDismissed = false; // Re-show suggestions on new input
     onInput?.(target.value);
   }
 
@@ -289,6 +298,8 @@
     const target = event.target as globalThis.Element;
     if (!target.closest(`#${fieldId}-wrapper`) && !target.closest(`#${instanceId}`)) {
       showPredictions = false;
+      manuallyDismissed = true;
+      destroyPortalDropdown();
     }
   }
 

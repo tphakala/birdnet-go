@@ -1221,23 +1221,28 @@
       {/if}
     </div>
 
-    <!-- Editor panel (conditional) -->
+    <!-- Editor panel (conditional, keyed to reset state on species change) -->
     {#if editorOpen}
       <div bind:this={editorElement}>
-        <SpeciesConfigEditor
-          species={editingSpecies}
-          config={editingSpecies ? (safeGet(settings.config, editingSpecies) ?? null) : null}
-          predictions={configPredictions}
-          disabled={store.isLoading}
-          saving={store.isSaving}
-          onSave={handleEditorSave}
-          onClose={closeEditor}
-          onDelete={removeConfig}
-          onInput={updateConfigPredictions}
-          onPredictionSelect={() => {
-            configPredictions = [];
-          }}
-        />
+        {#key editingSpecies}
+          <SpeciesConfigEditor
+            species={editingSpecies}
+            config={editingSpecies ? (safeGet(settings.config, editingSpecies) ?? null) : null}
+            predictions={configPredictions}
+            disabled={store.isLoading}
+            saving={store.isSaving}
+            onSave={handleEditorSave}
+            onClose={closeEditor}
+            onDelete={species => {
+              removeConfig(species);
+              closeEditor();
+            }}
+            onInput={updateConfigPredictions}
+            onPredictionSelect={() => {
+              configPredictions = [];
+            }}
+          />
+        {/key}
       </div>
     {/if}
 
