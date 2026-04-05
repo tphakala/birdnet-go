@@ -383,10 +383,17 @@ func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log
 	}
 
 	// Delete the database file and its WAL/SHM companions.
+	// The main database file MUST be removed — if it fails, return an error
+	// because the manager is already closed and the caller would proceed
+	// with a closed manager.
 	for _, suffix := range []string{"", "-wal", "-shm"} {
 		path := v2Path + suffix
 		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
-			log.Warn("failed to remove v2 database file during self-healing",
+			if suffix == "" {
+				// Main database file removal failed — this is fatal for self-healing
+				return fmt.Errorf("failed to remove corrupt v2 database file %s: %w", path, removeErr)
+			}
+			log.Warn("failed to remove v2 companion file during self-healing",
 				logger.Error(removeErr),
 				logger.String("path", path))
 		}
@@ -444,10 +451,12 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 	}
 
 	// Check migration state: if a migration is active, do not delete.
-	var migrationTableExists int64
-	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_states'").Scan(&migrationTableExists).Error; err == nil && migrationTableExists > 0 {
+	// Check both current (migration_states) and pre-PR#2165 (migration_state) table names
+	// in case corruption happened before the rename could run.
+	var migrationTableName string
+	if err := db.Raw("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('migration_states', 'migration_state') LIMIT 1").Scan(&migrationTableName).Error; err == nil && migrationTableName != "" {
 		var state string
-		if err := db.Raw("SELECT state FROM migration_states WHERE id = 1").Scan(&state).Error; err == nil {
+		if err := db.Raw("SELECT state FROM `" + migrationTableName + "` WHERE id = 1").Scan(&state).Error; err == nil {
 			unsafeStates := map[string]bool{
 				"migrating":  true,
 				"completed":  true,
