@@ -35,12 +35,15 @@
     id,
   }: Props = $props();
 
+  // Unique suffix per instance to prevent ID collisions when labels repeat
+  const idSuffix = crypto?.randomUUID?.().slice(0, 8) ?? Math.random().toString(36).slice(2, 10);
+
   const fieldId = $derived(
     id ||
       `editor-slider-${label
         .toLowerCase()
         .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '')}`
+        .replace(/[^a-z0-9-]/g, '')}-${idSuffix}`
   );
 
   let displayValue = $derived(formatValue ? formatValue(value) : value.toFixed(2));
