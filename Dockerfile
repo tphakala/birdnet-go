@@ -168,7 +168,7 @@ LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 # Add healthcheck to monitor container status
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -fs http://localhost:8080/ || curl -fsk https://localhost:8443 || exit 1
+    CMD curl -fs --connect-timeout 2 http://localhost:8080/ || curl -fsk --connect-timeout 2 https://localhost:8443/ || curl -fsk --connect-timeout 2 https://localhost:443/ || exit 1
 
 # Container startup execution chain:
 # 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs
