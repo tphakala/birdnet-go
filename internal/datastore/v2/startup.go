@@ -51,6 +51,9 @@ var (
 	ErrV2DatabaseNotFound = errors.NewStd("v2 database not found")
 	// ErrV2DatabaseCorrupted indicates the v2 database is corrupted or unreadable.
 	ErrV2DatabaseCorrupted = errors.NewStd("v2 database corrupted or unreadable")
+	// ErrV2SchemaCorrupted indicates the v2 database has contaminated or invalid schema.
+	// Callers can use errors.Is(err, ErrV2SchemaCorrupted) to trigger self-healing.
+	ErrV2SchemaCorrupted = errors.NewStd("v2 database schema corrupted")
 )
 
 // StartupState represents the result of checking migration state at startup.
