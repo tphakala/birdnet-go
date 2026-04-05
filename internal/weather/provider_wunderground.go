@@ -121,7 +121,7 @@ type wundergroundErrorResponse struct {
 	} `json:"errors"`
 }
 
-// wundergroundMeasurementData holds unit-specific weather measurements from Wunderground API
+// wundergroundMeasurementData holds metric weather measurements from Wunderground API
 type wundergroundMeasurementData struct {
 	Temp        float64 `json:"temp"`
 	HeatIndex   float64 `json:"heatIndex"`

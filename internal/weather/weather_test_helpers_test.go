@@ -198,41 +198,6 @@ func wundergroundSuccessResponse() string {
 }`
 }
 
-// wundergroundMetricOnlyResponse returns a WU API response with ONLY the metric
-// measurement object and no imperial block. This matches what the real Weather
-// Underground API returns when called with units=m.
-func wundergroundMetricOnlyResponse() string {
-	return `{
-  "observations": [{
-    "stationID": "KTEST123",
-    "obsTimeUtc": "2026-01-13T12:00:00Z",
-    "obsTimeLocal": "2026-01-13 14:00:00",
-    "neighborhood": "Test Location",
-    "softwareType": "TestSoftware",
-    "country": "FI",
-    "solarRadiation": 450.5,
-    "lon": 24.9384,
-    "lat": 60.1699,
-    "uv": 2.0,
-    "winddir": 270,
-    "humidity": 55.0,
-    "qcStatus": 1,
-    "metric": {
-      "temp": 15.0,
-      "heatIndex": 15.0,
-      "dewpt": 6.0,
-      "windChill": 13.3,
-      "windSpeed": 9.0,
-      "windGust": 14.8,
-      "pressure": 1013.2,
-      "precipRate": 0.0,
-      "precipTotal": 0.0,
-      "elev": 10.0
-    }
-  }]
-}`
-}
-
 // wundergroundTestErrorResponse returns a Wunderground API error response for tests.
 func wundergroundTestErrorResponse(code, message string) string {
 	return `{

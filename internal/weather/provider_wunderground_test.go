@@ -70,7 +70,7 @@ func TestWundergroundProvider_TimeParsing(t *testing.T) {
 func TestWundergroundProvider_FetchWeather_MetricOnlyResponse(t *testing.T) {
 	setupHTTPMock(t)
 
-	registerWundergroundResponder(t, http.StatusOK, wundergroundMetricOnlyResponse())
+	registerWundergroundResponder(t, http.StatusOK, wundergroundSuccessResponse())
 
 	provider := NewWundergroundProvider(nil)
 	settings := createTestSettings(t, "wunderground")
