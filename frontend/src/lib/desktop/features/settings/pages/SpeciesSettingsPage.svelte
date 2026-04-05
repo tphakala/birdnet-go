@@ -26,7 +26,7 @@
   @component
 -->
 <script lang="ts">
-  import { onMount, onDestroy, untrack } from 'svelte';
+  import { onMount, onDestroy, untrack, tick } from 'svelte';
   import SpeciesInput from '$lib/desktop/components/forms/SpeciesInput.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
@@ -47,8 +47,9 @@
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import DynamicThresholdTab from '$lib/desktop/features/settings/components/DynamicThresholdTab.svelte';
   import SpeciesTable from '$lib/desktop/features/settings/components/SpeciesTable.svelte';
-  import ResizableContainer from '$lib/desktop/components/ui/ResizableContainer.svelte';
   import SpeciesListCard from '$lib/desktop/features/settings/components/SpeciesListCard.svelte';
+  import SpeciesConfigEditor from '$lib/desktop/features/settings/components/SpeciesConfigEditor.svelte';
+  import SpeciesConfigList from '$lib/desktop/features/settings/components/SpeciesConfigList.svelte';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
@@ -58,7 +59,6 @@
     ArrowLeftRight,
     ChevronRight,
     Plus,
-    SquarePen,
     Trash2,
     CirclePlus,
     CircleMinus,
@@ -230,40 +230,11 @@
   // Input values for species inputs
   let includeInputValue = $state('');
   let excludeInputValue = $state('');
-  let configInputValue = $state('');
 
   // Configuration form state
-  let newThreshold = $state(0.5);
-  let newInterval = $state(0);
-  let showAddForm = $state(false);
   let editingSpecies = $state<string | null>(null);
-  let showActions = $state(false);
-
-  // Actions configuration state
-  let actionCommand = $state('');
-  let actionParameters = $state('');
-  let actionExecuteDefaults = $state(true);
-
-  // Helper function to add parameter to the list
-  function addParameter(param: string) {
-    if (actionParameters) {
-      actionParameters += ',' + param;
-    } else {
-      actionParameters = param;
-    }
-  }
-
-  // Helper function to clear parameters
-  function clearParameters() {
-    actionParameters = '';
-  }
-
-  // Helper function to handle species selection with proper timing
-  function handleSpeciesPicked(species: string) {
-    queueMicrotask(() => {
-      configInputValue = species;
-    });
-  }
+  let editorOpen = $state(false);
+  let editorElement = $state<HTMLDivElement>();
 
   // Taxonomy synonyms management
   function updateSynonymPredictions(input: string) {
@@ -896,115 +867,63 @@
     });
   }
 
-  function startEdit(species: string) {
-    const config = safeGet(settings.config, species, { threshold: 0.5, interval: 0, actions: [] });
-    configInputValue = species;
-    newThreshold = config.threshold;
-    newInterval = config.interval || 0;
-    editingSpecies = species;
-    showAddForm = true;
-
-    // Load existing action if present
-    const existingAction = config.actions?.[0];
-    if (existingAction) {
-      actionCommand = existingAction.command || '';
-      actionParameters = Array.isArray(existingAction.parameters)
-        ? existingAction.parameters.join(',')
-        : '';
-      actionExecuteDefaults = existingAction.executeDefaults !== false;
-    } else {
-      // Reset action fields
-      actionCommand = '';
-      actionParameters = '';
-      actionExecuteDefaults = true;
-    }
-    showActions = false; // Start with actions collapsed
+  function openEditor(species: string | null = null) {
+    editingSpecies = species ?? null;
+    editorOpen = true;
+    tick().then(() => {
+      editorElement?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
   }
 
-  async function saveConfig() {
-    const species = configInputValue.trim();
+  function closeEditor() {
+    editingSpecies = null;
+    editorOpen = false;
+  }
+
+  async function handleEditorSave(payload: {
+    species: string;
+    threshold: number;
+    interval: number;
+    actions: {
+      type: 'ExecuteCommand';
+      command: string;
+      parameters: string[];
+      executeDefaults: boolean;
+    }[];
+  }) {
+    const { species, threshold, interval, actions } = payload;
     if (!species) return;
-
-    const threshold = Number(newThreshold);
-    if (threshold < 0 || threshold > 1) return;
-
-    const interval = Number(newInterval) || 0;
-
-    // Build actions array if command is provided
-    const actions = [];
-    if (actionCommand.trim()) {
-      actions.push({
-        type: 'ExecuteCommand' as const,
-        command: actionCommand.trim(),
-        parameters: actionParameters
-          .split(',')
-          .map(p => p.trim())
-          .filter(p => p),
-        executeDefaults: actionExecuteDefaults,
-      });
-    }
 
     let updatedConfig = { ...settings.config };
 
     if (editingSpecies && editingSpecies !== species) {
-      // Check if new species name already exists
       if (species in updatedConfig) {
-        // Prevent overwriting existing configuration
         toastActions.error(t('settings.species.duplicateConfigError', { species }));
         return;
       }
-      // Rename: delete old entry and create new
       // eslint-disable-next-line security/detect-object-injection -- editingSpecies is controlled component state
       delete updatedConfig[editingSpecies];
     }
 
-    // Add/update species configuration
     // eslint-disable-next-line security/detect-object-injection -- species is controlled component state
-    updatedConfig[species] = {
-      threshold,
-      interval,
-      actions,
-    };
+    updatedConfig[species] = { threshold, interval, actions };
 
     try {
-      // Update the section in form data
       settingsActions.updateSection('realtime', {
         ...$realtimeSettings,
-        species: {
-          ...settings,
-          config: updatedConfig,
-        },
+        species: { ...settings, config: updatedConfig },
       });
-
-      // Actually save the settings to the server
       await settingsActions.saveSettings();
-
-      // Show success feedback
       toastActions.success(
         editingSpecies
           ? t('settings.species.configUpdated', { species })
           : t('settings.species.configAdded', { species })
       );
-
-      // Reset form only after successful save
-      cancelEdit();
+      closeEditor();
     } catch (error) {
       logger.error('Failed to save species configuration:', error);
       toastActions.error(t('settings.species.saveError', { species }));
-      // Don't reset the form on error so user can retry
     }
-  }
-
-  function cancelEdit() {
-    configInputValue = '';
-    newThreshold = 0.5;
-    newInterval = 0;
-    editingSpecies = null;
-    showAddForm = false;
-    showActions = false;
-    actionCommand = '';
-    actionParameters = '';
-    actionExecuteDefaults = true;
   }
 
   // Tab state
@@ -1267,397 +1186,67 @@
 
 <!-- Custom Configuration Tab Content -->
 {#snippet configTabContent()}
-  <div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl shadow-sm">
-    <!-- Header -->
-    <div class="flex items-center justify-between px-4 py-3 border-b border-[var(--border-100)]">
+  <div class="space-y-4">
+    <!-- Header with Add button -->
+    <div class="flex items-center justify-between">
       <div class="flex items-center gap-2">
         <div class="p-1.5 rounded-lg bg-teal-500/10">
           <Settings2 class="w-4 h-4 text-teal-500" />
         </div>
-        <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
+        <h3
+          class="text-xs font-semibold uppercase tracking-wider text-[var(--color-base-content)]/60"
+        >
           {t('settings.species.customConfiguration.title')}
         </h3>
         {#if Object.keys(settings.config).length > 0}
           <span
-            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-muted"
+            class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-500/10 text-[var(--color-base-content)]/60"
           >
             {Object.keys(settings.config).length}
           </span>
         {/if}
       </div>
-      {#if !showAddForm}
+      {#if !editorOpen}
         <button
           type="button"
           class="inline-flex items-center justify-center gap-2 h-8 px-3 text-xs font-medium rounded-lg bg-teal-500 text-white hover:bg-teal-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           data-testid="add-configuration-button"
-          onclick={() => (showAddForm = true)}
+          onclick={() => openEditor()}
           disabled={store.isLoading || store.isSaving}
         >
           <Plus class="size-3.5" />
           {t('settings.species.customConfiguration.addConfiguration')}
         </button>
-      {:else}
-        <span class="text-xs font-medium text-muted">
-          {editingSpecies
-            ? t('settings.species.customConfiguration.editing', { species: editingSpecies })
-            : t('settings.species.customConfiguration.newConfiguration')}
-        </span>
       {/if}
     </div>
 
-    <div class="p-4 space-y-4">
-      <!-- Compact Add/Edit Form -->
-      {#if showAddForm}
-        <div
-          class="border border-[var(--border-100)] rounded-xl p-3 bg-[var(--surface-100)] space-y-3"
-        >
-          <!-- Main configuration row -->
-          <div class="grid grid-cols-12 gap-3 items-end">
-            <!-- Species Input -->
-            <div class="col-span-4">
-              <label class="flex flex-col gap-1 py-1" for="config-species">
-                <span class="text-xs font-medium text-muted"
-                  >{t('settings.species.customConfiguration.columnHeaders.species')}</span
-                >
-              </label>
-              <SpeciesInput
-                id="config-species"
-                bind:value={configInputValue}
-                placeholder={t('settings.species.customConfiguration.searchPlaceholder')}
-                predictions={configPredictions}
-                onInput={updateConfigPredictions}
-                onPredictionSelect={handleSpeciesPicked}
-                onAdd={handleSpeciesPicked}
-                buttonText=""
-                buttonIcon={false}
-                size="xs"
-                disabled={store.isLoading || store.isSaving}
-              />
-            </div>
+    <!-- Editor panel (conditional) -->
+    {#if editorOpen}
+      <div bind:this={editorElement}>
+        <SpeciesConfigEditor
+          species={editingSpecies}
+          config={editingSpecies ? (safeGet(settings.config, editingSpecies) ?? null) : null}
+          predictions={configPredictions}
+          disabled={store.isLoading}
+          saving={store.isSaving}
+          onSave={handleEditorSave}
+          onClose={closeEditor}
+          onDelete={removeConfig}
+          onInput={updateConfigPredictions}
+          onPredictionSelect={() => {}}
+        />
+      </div>
+    {/if}
 
-            <!-- Threshold -->
-            <div class="col-span-3">
-              <label class="flex items-center justify-between py-1" for="config-threshold">
-                <span class="text-xs font-medium text-muted"
-                  >{t('settings.species.customConfiguration.labels.threshold')}</span
-                >
-                <span class="text-xs text-muted">{newThreshold.toFixed(2)}</span>
-              </label>
-              <input
-                id="config-threshold"
-                type="range"
-                min="0"
-                max="1"
-                step="0.01"
-                value={newThreshold}
-                oninput={e => (newThreshold = Number(e.currentTarget.value))}
-                class="w-full h-2 bg-[var(--surface-300)] rounded-lg appearance-none cursor-pointer accent-[var(--color-primary)]"
-              />
-            </div>
-
-            <!-- Interval -->
-            <div class="col-span-3">
-              <label class="flex flex-col gap-1 py-1" for="config-interval">
-                <span class="text-xs font-medium text-muted"
-                  >{t('settings.species.customConfiguration.labels.intervalSeconds')}</span
-                >
-              </label>
-              <input
-                id="config-interval"
-                type="number"
-                value={newInterval}
-                onchange={e => (newInterval = Number(e.currentTarget.value))}
-                min="0"
-                max="3600"
-                class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                placeholder="0"
-              />
-            </div>
-
-            <!-- Buttons -->
-            <div class="col-span-2 flex gap-1">
-              <button
-                type="button"
-                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                data-testid="save-config-button"
-                onclick={saveConfig}
-                disabled={!configInputValue.trim() ||
-                  newThreshold < 0 ||
-                  newThreshold > 1 ||
-                  store.isLoading ||
-                  store.isSaving}
-              >
-                {#if store.isSaving}
-                  <span
-                    class="inline-block w-3 h-3 border-2 border-[var(--color-primary-content)] border-t-transparent rounded-full animate-spin mr-1"
-                  ></span>
-                  {t('settings.species.customConfiguration.saving')}
-                {:else}
-                  {editingSpecies
-                    ? t('settings.species.customConfiguration.save')
-                    : t('settings.species.customConfiguration.labels.addButton')}
-                {/if}
-              </button>
-              <button
-                type="button"
-                class="inline-flex items-center justify-center flex-1 h-7 px-2 text-xs font-medium rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                onclick={cancelEdit}
-                disabled={store.isSaving}
-              >
-                {t('settings.species.customConfiguration.cancel')}
-              </button>
-            </div>
-          </div>
-
-          <!-- Actions Toggle -->
-          <div class="border-t border-[var(--border-100)] pt-2">
-            <button
-              type="button"
-              class="flex items-center gap-2 text-xs font-medium hover:text-[var(--color-primary)] transition-colors"
-              onclick={() => (showActions = !showActions)}
-              aria-expanded={showActions}
-              aria-controls="actionsSection"
-            >
-              <span class="transition-transform duration-200" class:rotate-90={showActions}>
-                <ChevronRight class="size-4" />
-              </span>
-              <span>{t('settings.species.customConfiguration.configureActions')}</span>
-              {#if actionCommand}
-                <span
-                  class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400"
-                  >{t('settings.species.customConfiguration.actionsConfigured')}</span
-                >
-              {/if}
-            </button>
-          </div>
-
-          <!-- Actions Section -->
-          {#if showActions}
-            <div class="space-y-3 pl-6" id="actionsSection">
-              <!-- Command Input -->
-              <div>
-                <label class="flex flex-col gap-1 py-1" for="action-command">
-                  <span class="text-xs font-medium text-muted"
-                    >{t('settings.species.actionsModal.command.label')}</span
-                  >
-                </label>
-                <input
-                  id="action-command"
-                  type="text"
-                  bind:value={actionCommand}
-                  placeholder={t('settings.species.commandPathPlaceholder')}
-                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-100)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                />
-                <span class="text-xs text-muted mt-1 block"
-                  >{t('settings.species.actionsModal.command.helpText')}</span
-                >
-              </div>
-
-              <!-- Parameters -->
-              <div>
-                <label class="flex flex-col gap-1 py-1" for="action-parameters">
-                  <span class="text-xs font-medium text-muted flex items-center gap-1">
-                    {t('settings.species.actionsModal.parameters.label')}
-                    <span
-                      class="text-muted"
-                      role="img"
-                      aria-label={t('settings.species.actionsModal.parameters.tooltip')}
-                      title={t('settings.species.actionsModal.parameters.tooltip')}
-                    >
-                      ⓘ
-                    </span>
-                  </span>
-                </label>
-                <input
-                  id="action-parameters"
-                  type="text"
-                  bind:value={actionParameters}
-                  placeholder={t('settings.species.actionsModal.parameters.placeholder')}
-                  class="w-full h-7 px-2 text-sm rounded-md border border-[var(--border-100)] bg-[var(--surface-200)]/50 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
-                  title={t('settings.species.actionsModal.parameters.tooltip')}
-                />
-                <span class="text-xs text-muted mt-1 block"
-                  >{t('settings.species.actionsModal.parameters.helpText')}</span
-                >
-              </div>
-
-              <!-- Parameter Buttons -->
-              <div>
-                <div class="text-xs font-medium mb-1">
-                  {t('settings.species.actionsModal.parameters.availableTitle')}
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
-                    onclick={() => addParameter('CommonName')}
-                    >{t('settings.species.actionsModal.parameters.buttons.commonName')}</button
-                  >
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
-                    onclick={() => addParameter('ScientificName')}
-                    >{t('settings.species.actionsModal.parameters.buttons.scientificName')}</button
-                  >
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
-                    onclick={() => addParameter('Confidence')}
-                    >{t('settings.species.actionsModal.parameters.buttons.confidence')}</button
-                  >
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
-                    onclick={() => addParameter('Time')}
-                    >{t('settings.species.actionsModal.parameters.buttons.time')}</button
-                  >
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md border border-[var(--border-100)] bg-transparent hover:bg-[var(--surface-200)] transition-colors"
-                    onclick={() => addParameter('Source')}
-                    >{t('settings.species.actionsModal.parameters.buttons.source')}</button
-                  >
-                  <button
-                    type="button"
-                    class="inline-flex items-center justify-center h-6 px-2 text-xs font-medium rounded-md bg-[var(--color-warning)] text-[var(--color-warning-content)] hover:opacity-90 transition-colors"
-                    onclick={clearParameters}
-                    >{t('settings.species.actionsModal.parameters.buttons.clearParameters')}</button
-                  >
-                </div>
-              </div>
-
-              <!-- Execute Defaults Checkbox -->
-              <div>
-                <label
-                  class="flex items-center cursor-pointer justify-start gap-2"
-                  for="action-execute-defaults"
-                >
-                  <input
-                    id="action-execute-defaults"
-                    type="checkbox"
-                    bind:checked={actionExecuteDefaults}
-                    class="appearance-none w-3.5 h-3.5 border-2 border-[var(--border-100)] rounded bg-[var(--surface-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
-                  />
-                  <span class="text-xs text-muted"
-                    >{t('settings.species.actionsModal.executeDefaults.label')}</span
-                  >
-                </label>
-                <span class="text-xs text-muted mt-1 block"
-                  >{t('settings.species.actionsModal.executeDefaults.helpText')}</span
-                >
-              </div>
-            </div>
-          {/if}
-        </div>
-      {/if}
-
-      <!-- Configuration List -->
-      {#if Object.keys(settings.config).length > 0}
-        <ResizableContainer defaultHeight={448} minHeight={200} maxHeight={800}>
-          <table class="w-full text-sm">
-            <thead>
-              <tr class="border-b border-[var(--border-100)]">
-                <th class="text-left py-2 px-3 text-xs font-medium text-muted"
-                  >{t('settings.species.customConfiguration.columnHeaders.species')}</th
-                >
-                <th class="text-left py-2 px-3 text-xs font-medium text-muted">
-                  {t('settings.species.activeSpecies.columns.scientificName')}
-                </th>
-                <th class="text-left py-2 px-3 text-xs font-medium text-muted w-48"
-                  >{t('settings.species.customConfiguration.list.threshold')}</th
-                >
-                <th class="text-left py-2 px-3 text-xs font-medium text-muted"
-                  >{t('settings.species.customConfiguration.list.interval')}</th
-                >
-                <th class="w-24"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each Object.entries(settings.config) as [species, config] (species)}
-                <tr
-                  class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
-                >
-                  <td class="py-2.5 px-3">
-                    <span class="font-medium text-sm">{species}</span>
-                    {#if config.actions?.length > 0}
-                      <span
-                        class="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400"
-                      >
-                        {t('settings.species.customConfiguration.list.actionBadge')}
-                      </span>
-                    {/if}
-                  </td>
-                  <td class="py-2.5 px-3">
-                    <span class="text-xs text-muted italic"
-                      >{speciesScientificNameMap.get(species.toLowerCase()) ?? ''}</span
-                    >
-                  </td>
-                  <td class="py-2.5 px-3">
-                    <div class="flex items-center gap-2">
-                      <div
-                        class="flex-1 h-1.5 rounded-full bg-[var(--surface-300)] overflow-hidden"
-                      >
-                        <div
-                          class="h-full rounded-full bg-teal-500 transition-all"
-                          style:width="{((config.threshold ?? 0) * 100).toFixed(0)}%"
-                        ></div>
-                      </div>
-                      <span class="font-mono tabular-nums text-xs font-medium w-8 text-right"
-                        >{(config.threshold ?? 0).toFixed(2)}</span
-                      >
-                    </div>
-                  </td>
-                  <td class="py-2.5 px-3">
-                    <span class="font-mono tabular-nums text-xs font-medium">
-                      {config.interval > 0
-                        ? `${config.interval}s`
-                        : t('settings.species.customConfiguration.list.intervalNone')}
-                    </span>
-                  </td>
-                  <td class="py-2.5 px-3 text-right">
-                    <div class="flex items-center justify-end gap-1">
-                      <button
-                        type="button"
-                        class="inline-flex items-center justify-center p-1.5 rounded-md bg-transparent hover:bg-[var(--surface-200)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        onclick={() => startEdit(species)}
-                        title={t('settings.species.customConfiguration.list.editTitle')}
-                        aria-label={t('settings.species.customConfiguration.list.editTitle')}
-                        disabled={store.isLoading || store.isSaving}
-                      >
-                        <SquarePen class="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        class="inline-flex items-center justify-center p-1.5 rounded-md transition-colors cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] text-muted hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
-                        onclick={() => removeConfig(species)}
-                        title={t('settings.species.customConfiguration.list.removeTitle')}
-                        aria-label={t('settings.species.customConfiguration.list.removeTitle')}
-                        disabled={store.isLoading || store.isSaving}
-                      >
-                        <Trash2 class="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        </ResizableContainer>
-      {/if}
-
-      <!-- Empty State -->
-      {#if Object.keys(settings.config).length === 0 && !showAddForm}
-        <div class="text-center py-8 text-muted">
-          <Settings2 class="size-12 mx-auto mb-3 opacity-30" />
-          <p class="text-sm font-medium">
-            {t('settings.species.customConfiguration.emptyState.title')}
-          </p>
-          <p class="text-xs mt-1">
-            {t('settings.species.customConfiguration.emptyState.description')}
-          </p>
-        </div>
-      {/if}
-    </div>
+    <!-- Config list -->
+    <SpeciesConfigList
+      configs={settings.config}
+      scientificNameMap={speciesScientificNameMap}
+      {editingSpecies}
+      disabled={store.isLoading || store.isSaving}
+      onEdit={openEditor}
+      onDelete={removeConfig}
+    />
   </div>
 {/snippet}
 
