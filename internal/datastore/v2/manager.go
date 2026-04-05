@@ -204,7 +204,13 @@ func (m *SQLiteManager) Initialize() error {
 
 	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
 	// fell back to legacy mode due to the PR #2165 table name mismatch.
-	m.cleanupLegacySchemaContamination()
+	if err := m.cleanupLegacySchemaContamination(); err != nil {
+		if m.log != nil {
+			m.log.Warn("legacy schema cleanup encountered errors",
+				logger.Error(err),
+				logger.String("operation", "cleanup_legacy_contamination"))
+		}
+	}
 
 	// Run GORM auto-migrations for all entities
 	err := m.db.AutoMigrate(
@@ -309,8 +315,13 @@ func (m *SQLiteManager) renamePrePR2165Tables() error {
 // migration order, and dynamic_thresholds is where the crash occurred (stopping further
 // contamination).
 //
-// Requires SQLite 3.35.0+ (ALTER TABLE DROP COLUMN). Safe no-op on older versions.
-func (m *SQLiteManager) cleanupLegacySchemaContamination() {
+// Strategy:
+//  1. Try ALTER TABLE DROP COLUMN (SQLite 3.35.0+).
+//  2. If DROP COLUMN fails and the table is empty, DROP TABLE entirely — AutoMigrate
+//     will recreate it with the correct schema.
+//  3. If DROP COLUMN fails and the table has data, return ErrV2SchemaCorrupted so the
+//     caller can decide how to handle it (e.g. self-healing or user notification).
+func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 	contaminations := []struct {
 		table  string
 		column string
@@ -323,10 +334,37 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() {
 		if err := m.db.Raw("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", c.table, c.column).Scan(&colCount).Error; err != nil || colCount == 0 {
 			continue
 		}
+
+		// Try DROP COLUMN first (SQLite 3.35.0+).
 		if err := m.db.Exec("ALTER TABLE `" + c.table + "` DROP COLUMN `" + c.column + "`").Error; err != nil {
-			reportInitFailure("sqlite", "dropOrphanedColumn_"+c.table+"_"+c.column, err, m.dbPath)
+			// DROP COLUMN not available — check if table is empty.
+			var rowCount int64
+			if countErr := m.db.Raw("SELECT COUNT(*) FROM `" + c.table + "`").Scan(&rowCount).Error; countErr != nil {
+				reportInitFailure("sqlite", "countRows_"+c.table, countErr, m.dbPath)
+				return fmt.Errorf("%w: cannot count rows in %s: %w", ErrV2SchemaCorrupted, c.table, countErr)
+			}
+
+			if rowCount == 0 {
+				// Table is empty — safe to drop and let AutoMigrate recreate it.
+				if m.log != nil {
+					m.log.Info("dropping empty table with orphaned column, AutoMigrate will recreate",
+						logger.String("table", c.table),
+						logger.String("column", c.column))
+				}
+				if dropErr := m.db.Exec("DROP TABLE IF EXISTS `" + c.table + "`").Error; dropErr != nil {
+					reportInitFailure("sqlite", "dropTable_"+c.table, dropErr, m.dbPath)
+					return fmt.Errorf("%w: failed to drop empty table %s: %w", ErrV2SchemaCorrupted, c.table, dropErr)
+				}
+			} else {
+				// Table has data and DROP COLUMN is unavailable — cannot clean up safely.
+				reportInitFailure("sqlite", "dropOrphanedColumn_"+c.table+"_"+c.column, err, m.dbPath)
+				return fmt.Errorf("%w: cannot remove orphaned column %s.%s: table has %d rows and DROP COLUMN unavailable",
+					ErrV2SchemaCorrupted, c.table, c.column, rowCount)
+			}
 		}
 	}
+
+	return nil
 }
 
 // fixSQLiteForeignKeys ensures ON DELETE SET NULL behavior for SQLite.

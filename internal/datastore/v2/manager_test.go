@@ -466,6 +466,82 @@ func TestSQLiteManager_NoReverseForeignKey(t *testing.T) {
 		"audio_sources should not have source_id column (renamed to source_uri)")
 }
 
+func TestCleanupLegacySchemaContamination_DropsEmptyTable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	// Create the image_caches table with an orphaned scientific_name column
+	// that would have been added by the legacy AutoMigrate bug.
+	err = mgr.DB().Exec(`CREATE TABLE IF NOT EXISTS image_caches (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		species_code TEXT,
+		url TEXT,
+		cached_at DATETIME,
+		scientific_name TEXT NOT NULL DEFAULT ''
+	)`).Error
+	require.NoError(t, err)
+
+	// Verify the orphaned column exists before cleanup
+	var colCount int64
+	err = mgr.DB().Raw("SELECT COUNT(*) FROM pragma_table_info('image_caches') WHERE name = 'scientific_name'").Scan(&colCount).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), colCount, "scientific_name column should exist before cleanup")
+
+	// Run cleanup — should succeed with no error
+	err = mgr.cleanupLegacySchemaContamination()
+	require.NoError(t, err)
+
+	// Verify the scientific_name column is gone
+	err = mgr.DB().Raw("SELECT COUNT(*) FROM pragma_table_info('image_caches') WHERE name = 'scientific_name'").Scan(&colCount).Error
+	// Table may have been dropped entirely (empty table fallback), so handle both cases
+	if err != nil {
+		// Table was dropped — that's fine for an empty table
+		colCount = 0
+	}
+	assert.Equal(t, int64(0), colCount, "scientific_name column should not exist after cleanup")
+}
+
+func TestCleanupLegacySchemaContamination_PreservesPopulatedTable(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	// Create the image_caches table with an orphaned scientific_name column
+	err = mgr.DB().Exec(`CREATE TABLE IF NOT EXISTS image_caches (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		species_code TEXT,
+		url TEXT,
+		cached_at DATETIME,
+		scientific_name TEXT NOT NULL DEFAULT ''
+	)`).Error
+	require.NoError(t, err)
+
+	// Insert a row so the table is populated
+	err = mgr.DB().Exec(`INSERT INTO image_caches (species_code, url, cached_at, scientific_name) VALUES ('turdmer', 'http://example.com/img.jpg', datetime('now'), 'Turdus merula')`).Error
+	require.NoError(t, err)
+
+	// Run cleanup — on modern SQLite (3.35.0+), DROP COLUMN should succeed
+	err = mgr.cleanupLegacySchemaContamination()
+	require.NoError(t, err)
+
+	// Verify the scientific_name column is gone (modern SQLite can DROP COLUMN)
+	var colCount int64
+	err = mgr.DB().Raw("SELECT COUNT(*) FROM pragma_table_info('image_caches') WHERE name = 'scientific_name'").Scan(&colCount).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), colCount, "scientific_name column should be removed by DROP COLUMN on modern SQLite")
+
+	// Verify the row is still there
+	var rowCount int64
+	err = mgr.DB().Raw("SELECT COUNT(*) FROM image_caches").Scan(&rowCount).Error
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), rowCount, "existing data should be preserved after DROP COLUMN")
+}
+
 func TestScrubErrorWithPaths(t *testing.T) {
 	t.Parallel()
 
