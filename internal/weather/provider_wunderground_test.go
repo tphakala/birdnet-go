@@ -64,25 +64,28 @@ func TestWundergroundProvider_TimeParsing(t *testing.T) {
 			"Expected: %v, Got: %v", expectedTime, data.Time)
 }
 
-// TestWundergroundProvider_FetchWeather_MetricOnlyResponse verifies that a WU API
-// response containing ONLY the metric measurement object (no imperial block) is
-// handled correctly. This matches the real API behavior when called with units=m.
-func TestWundergroundProvider_FetchWeather_MetricOnlyResponse(t *testing.T) {
+// TestWundergroundProvider_FetchWeather_ImperialConfigIgnored verifies that even
+// when the user configures Units="e" (imperial), the provider still requests metric
+// from the API and parses temperature correctly. This is a regression test for #2662.
+func TestWundergroundProvider_FetchWeather_ImperialConfigIgnored(t *testing.T) {
 	setupHTTPMock(t)
 
 	registerWundergroundResponder(t, http.StatusOK, wundergroundSuccessResponse())
 
 	provider := NewWundergroundProvider(nil)
-	settings := createTestSettings(t, "wunderground")
+	settings := createTestSettings(t, "wunderground", func(s *conf.Settings) {
+		s.Realtime.Weather.Wunderground.Units = "e" // User configured imperial
+	})
 
 	data, err := provider.FetchWeather(settings)
 
 	require.NoError(t, err)
 	assertWeatherDataBasics(t, data)
 
-	// Verify parsed values match expected metric measurements
+	// Temperature must still be correct — the provider always requests metric
+	// regardless of the configured Units value
 	assert.InDelta(t, 15.0, data.Temperature.Current, 0.1)
-	assert.InDelta(t, 9.0*KmhToMs, data.Wind.Speed, 0.1) // 9 km/h to m/s
+	assert.InDelta(t, 9.0*KmhToMs, data.Wind.Speed, 0.1)
 	assert.Equal(t, 1013, data.Pressure)
 }
 

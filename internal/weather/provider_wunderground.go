@@ -49,6 +49,11 @@ const (
 	// Unit conversion factors
 	KmhToMs = 0.277778 // Convert km/h to m/s (divide by 3.6)
 
+	// wundergroundMetricUnits is the unit system always sent to the WU API.
+	// The API returns only the measurement object matching the requested units,
+	// so we force metric to ensure obs.Metric is always populated.
+	wundergroundMetricUnits = "m"
+
 	// Feels-like temperature thresholds - Metric
 	MetricHotTempC        = 27.0         // Temperature above which to use heat index
 	MetricColdTempC       = 10.0         // Temperature below which to use wind chill
@@ -268,12 +273,7 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 	q := u.Query()
 	q.Set("stationId", cfg.stationID)
 	q.Set("format", "json")
-	// Always request metric units. The WU API returns only the measurement
-	// object matching the requested unit system (e.g. units=e returns only
-	// "imperial", units=m returns only "metric"). Hardcoding metric avoids
-	// zero-valued temperature when the user's configured unit doesn't match
-	// the struct field we read from.
-	q.Set("units", "m")
+	q.Set("units", wundergroundMetricUnits)
 	q.Set("apiKey", cfg.apiKey)
 	q.Set("numericPrecision", "decimal")
 	u.RawQuery = q.Encode()
