@@ -10,6 +10,8 @@
   - species: string[] - Current species list
   - icon: Component - Lucide icon for the header pill
   - iconColorClass: string - Tailwind color class for icon pill (e.g. 'emerald', 'red')
+  - scientificNameMap?: Map<string, string> - Optional map of common to scientific names
+  - scientificToCommonMap?: Map<string, string> - Optional map of scientific to common names
   - predictions: string[] - Autocomplete predictions
   - inputValue: string - Current input value (bindable)
   - inputLabel: string - Label for the input
@@ -115,17 +117,18 @@
         })
       : [...species];
     if (sortColumn) {
-      result.sort((a, b) => {
-        const resolvedA = resolveSpeciesDisplayNames(a, nameMaps);
-        const resolvedB = resolveSpeciesDisplayNames(b, nameMaps);
-        let cmp = 0;
-        if (sortColumn === 'commonName') {
-          cmp = resolvedA.displayCommonName.localeCompare(resolvedB.displayCommonName);
-        } else {
-          cmp = resolvedA.displayScientificName.localeCompare(resolvedB.displayScientificName);
-        }
+      const withResolved = result.map(s => ({
+        raw: s,
+        resolved: resolveSpeciesDisplayNames(s, nameMaps),
+      }));
+      withResolved.sort((a, b) => {
+        const cmp =
+          sortColumn === 'commonName'
+            ? a.resolved.displayCommonName.localeCompare(b.resolved.displayCommonName)
+            : a.resolved.displayScientificName.localeCompare(b.resolved.displayScientificName);
         return sortDirection === 'asc' ? cmp : -cmp;
       });
+      return withResolved.map(x => x.raw);
     }
     return result;
   });
