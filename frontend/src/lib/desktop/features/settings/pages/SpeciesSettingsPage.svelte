@@ -575,11 +575,8 @@
       logger.error('Failed to load species data:', error);
       speciesListState.error = t('settings.species.errors.speciesLoadFailed');
       speciesListState.data = [];
-      speciesNameMaps = {
-        commonToScientific: new Map(),
-        scientificToCommon: new Map(),
-        allNames: [],
-      };
+      // Preserve last-successful speciesNameMaps so alias-aware display/dedup
+      // continues working with stale data rather than silently breaking.
     } finally {
       speciesListState.loading = false;
     }
@@ -838,11 +835,14 @@
       }
 
       const inputLower = input.toLowerCase();
+      // Exclude the currently-editing species from the collision check so its
+      // own alias remains selectable during rename operations.
+      const existingConfigKeys = Object.keys(settings.config).filter(key => key !== editingSpecies);
       configPredictions = allSpecies
         .filter(
           species =>
             species.toLowerCase().includes(inputLower) &&
-            !isSpeciesInList(species, Object.keys(settings.config), speciesNameMaps)
+            !isSpeciesInList(species, existingConfigKeys, speciesNameMaps)
         )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
@@ -959,14 +959,16 @@
     }
 
     let updatedConfig = { ...settings.config };
+    // Exclude the currently-editing entry so renaming to its own alias is allowed
+    const existingConfigKeys = Object.keys(updatedConfig).filter(key => key !== editingSpecies);
+
+    // Check alias collision for both create and rename operations
+    if (isSpeciesInList(species, existingConfigKeys, speciesNameMaps)) {
+      toastActions.error(t('settings.species.duplicateConfigError', { species }));
+      return;
+    }
 
     if (editingSpecies && editingSpecies !== species) {
-      // Check if new species name (or its alias) already exists in config
-      if (isSpeciesInList(species, Object.keys(updatedConfig), speciesNameMaps)) {
-        // Prevent overwriting existing configuration (including alias matches)
-        toastActions.error(t('settings.species.duplicateConfigError', { species }));
-        return;
-      }
       // Rename: delete old entry and create new
       // eslint-disable-next-line security/detect-object-injection -- editingSpecies is controlled component state
       delete updatedConfig[editingSpecies];
