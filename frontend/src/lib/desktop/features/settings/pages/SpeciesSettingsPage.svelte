@@ -229,7 +229,7 @@
   // Format: "ScientificName (CommonName)"
   let scientificNamePredictions = $state<string[]>([]);
 
-  // PERFORMANCE OPTIMIZATION: Derived species list
+  // Derived species list: contains both common and scientific names for bidirectional search
   let allSpecies = $derived(speciesListState.data);
 
   // Species predictions state
@@ -843,7 +843,7 @@
 
   // Species management functions
   function addIncludeSpecies(species: string) {
-    if (!species.trim() || settings.include.includes(species)) return;
+    if (!species.trim() || isSpeciesInList(species, settings.include, speciesNameMaps)) return;
 
     const updatedSpecies = [...settings.include, species];
     settingsActions.updateSection('realtime', {
@@ -867,7 +867,7 @@
   }
 
   function addExcludeSpecies(species: string) {
-    if (!species.trim() || settings.exclude.includes(species)) return;
+    if (!species.trim() || isSpeciesInList(species, settings.exclude, speciesNameMaps)) return;
 
     const updatedSpecies = [...settings.exclude, species];
     settingsActions.updateSection('realtime', {
