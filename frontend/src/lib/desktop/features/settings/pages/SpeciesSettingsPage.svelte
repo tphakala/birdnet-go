@@ -55,6 +55,12 @@
   import { api, ApiError } from '$lib/utils/api';
   import { getLocalDateString } from '$lib/utils/date';
   import {
+    buildSpeciesNameMaps,
+    resolveSpeciesDisplayNames,
+    isSpeciesInList,
+    type SpeciesNameMaps,
+  } from '$lib/utils/speciesNames';
+  import {
     ArrowLeftRight,
     ChevronRight,
     Plus,
@@ -212,8 +218,12 @@
 
   // Search/filter/expand state is now handled inside SpeciesTable component
 
-  // Lookup map: commonName (lowercase) → scientificName, built from species API
-  let speciesScientificNameMap = $state(new Map<string, string>());
+  // Bidirectional species name lookup maps, built from species API
+  let speciesNameMaps = $state<SpeciesNameMaps>({
+    commonToScientific: new Map(),
+    scientificToCommon: new Map(),
+    allNames: [],
+  });
 
   // Scientific name predictions for taxonomy synonym autocomplete
   // Format: "ScientificName (CommonName)"
@@ -370,7 +380,7 @@
   let synonyms = $derived(store.formData.taxonomySynonyms ?? {});
   let synonymCount = $derived(Object.keys(synonyms).length);
   let knownScientificNames = $derived(
-    new Set(Array.from(speciesScientificNameMap.values()).map(n => n.toLowerCase()))
+    new Set(Array.from(speciesNameMaps.commonToScientific.values()).map(n => n.toLowerCase()))
   );
   let synonymBirdnetName = $state('');
   let synonymUpdatedName = $state('');
@@ -552,17 +562,10 @@
       }
       const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
       const speciesList = data.species ?? [];
-      speciesListState.data = speciesList.map(s => s.commonName || s.label);
 
-      // Build lookup map: commonName (lowercase) → scientificName
-      const map = new Map<string, string>();
-      for (const s of speciesList) {
-        const name = s.commonName || s.label;
-        if (s.scientificName) {
-          map.set(name.toLowerCase(), s.scientificName);
-        }
-      }
-      speciesScientificNameMap = map;
+      // Build bidirectional maps and combined name list
+      speciesNameMaps = buildSpeciesNameMaps(speciesList);
+      speciesListState.data = speciesNameMaps.allNames;
 
       // Build scientific name predictions for taxonomy synonym autocomplete
       scientificNamePredictions = speciesList
@@ -577,7 +580,11 @@
         speciesListState.error = t('settings.species.errors.speciesLoadFailed');
       }
       speciesListState.data = [];
-      speciesScientificNameMap = new Map();
+      speciesNameMaps = {
+        commonToScientific: new Map(),
+        scientificToCommon: new Map(),
+        allNames: [],
+      };
     } finally {
       speciesListState.loading = false;
     }
@@ -786,11 +793,11 @@
       }
 
       const inputLower = input.toLowerCase();
-      const includeSet = new Set(settings.include.map(s => s.toLowerCase())); // Use Set with lowercase for case-insensitive comparison
       includePredictions = allSpecies
         .filter(
           species =>
-            species.toLowerCase().includes(inputLower) && !includeSet.has(species.toLowerCase())
+            species.toLowerCase().includes(inputLower) &&
+            !isSpeciesInList(species, settings.include, speciesNameMaps)
         )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
@@ -805,11 +812,11 @@
       }
 
       const inputLower = input.toLowerCase();
-      const excludeSet = new Set(settings.exclude.map(s => s.toLowerCase())); // Use Set with lowercase for case-insensitive comparison
       excludePredictions = allSpecies
         .filter(
           species =>
-            species.toLowerCase().includes(inputLower) && !excludeSet.has(species.toLowerCase())
+            species.toLowerCase().includes(inputLower) &&
+            !isSpeciesInList(species, settings.exclude, speciesNameMaps)
         )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
@@ -824,12 +831,12 @@
       }
 
       const inputLower = input.toLowerCase();
-      const existingConfigs = new Set(Object.keys(settings.config).map(s => s.toLowerCase())); // Use Set
       configPredictions = allSpecies
-        .filter(species => {
-          const speciesLower = species.toLowerCase();
-          return speciesLower.includes(inputLower) && !existingConfigs.has(speciesLower);
-        })
+        .filter(
+          species =>
+            species.toLowerCase().includes(inputLower) &&
+            !isSpeciesInList(species, Object.keys(settings.config), speciesNameMaps)
+        )
         .slice(0, 10);
     }, 150); // Debounce by 150ms
   }
@@ -1232,7 +1239,8 @@
     species={settings.include}
     icon={CirclePlus}
     iconColorClass="emerald"
-    scientificNameMap={speciesScientificNameMap}
+    scientificNameMap={speciesNameMaps.commonToScientific}
+    scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={includePredictions}
     bind:inputValue={includeInputValue}
     inputLabel={t('settings.species.addSpeciesToIncludeLabel')}
@@ -1252,7 +1260,8 @@
     species={settings.exclude}
     icon={CircleMinus}
     iconColorClass="red"
-    scientificNameMap={speciesScientificNameMap}
+    scientificNameMap={speciesNameMaps.commonToScientific}
+    scientificToCommonMap={speciesNameMaps.scientificToCommon}
     predictions={excludePredictions}
     bind:inputValue={excludeInputValue}
     inputLabel={t('settings.species.addSpeciesToExcludeLabel')}
@@ -1574,11 +1583,12 @@
             </thead>
             <tbody>
               {#each Object.entries(settings.config) as [species, config] (species)}
+                {@const resolved = resolveSpeciesDisplayNames(species, speciesNameMaps)}
                 <tr
                   class="border-b last:border-b-0 border-[var(--border-100)]/50 hover:bg-black/[0.02] dark:hover:bg-white/[0.02] transition-colors"
                 >
                   <td class="py-2.5 px-3">
-                    <span class="font-medium text-sm">{species}</span>
+                    <span class="font-medium text-sm">{resolved.displayCommonName}</span>
                     {#if config.actions?.length > 0}
                       <span
                         class="ml-2 inline-flex items-center px-1.5 py-0.5 text-[10px] font-medium rounded-full bg-teal-500/15 text-teal-600 dark:text-teal-400"
@@ -1588,9 +1598,7 @@
                     {/if}
                   </td>
                   <td class="py-2.5 px-3">
-                    <span class="text-xs text-muted italic"
-                      >{speciesScientificNameMap.get(species.toLowerCase()) ?? ''}</span
-                    >
+                    <span class="text-xs text-muted italic">{resolved.displayScientificName}</span>
                   </td>
                   <td class="py-2.5 px-3">
                     <div class="flex items-center gap-2">
