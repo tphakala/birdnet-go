@@ -99,6 +99,9 @@
   let sortDirection = $state<'asc' | 'desc'>('asc');
   let showSearch = $derived(species.length > 8);
 
+  // Build SpeciesNameMaps from the two map props for resolveSpeciesDisplayNames.
+  // allNames is empty here — it's only populated by buildSpeciesNameMaps in the parent page
+  // and used for autocomplete predictions, not for display resolution.
   let nameMaps = $derived<SpeciesNameMaps>({
     commonToScientific: scientificNameMap,
     scientificToCommon: scientificToCommonMap,

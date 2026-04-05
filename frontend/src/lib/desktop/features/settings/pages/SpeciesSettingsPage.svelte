@@ -52,7 +52,7 @@
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { safeGet } from '$lib/utils/security';
-  import { api, ApiError } from '$lib/utils/api';
+  import { api } from '$lib/utils/api';
   import { getLocalDateString } from '$lib/utils/date';
   import {
     buildSpeciesNameMaps,
@@ -573,12 +573,7 @@
         .map(s => `${s.scientificName} (${s.commonName || s.label})`);
     } catch (error) {
       logger.error('Failed to load species data:', error);
-      // Provide specific error messages based on status code
-      if (error instanceof ApiError) {
-        speciesListState.error = t('settings.species.errors.speciesLoadFailed');
-      } else {
-        speciesListState.error = t('settings.species.errors.speciesLoadFailed');
-      }
+      speciesListState.error = t('settings.species.errors.speciesLoadFailed');
       speciesListState.data = [];
       speciesNameMaps = {
         commonToScientific: new Map(),
@@ -647,19 +642,31 @@
       });
 
       // Cross-reference with include/exclude and config lists (using captured values)
+      const threshold = response.threshold;
+
+      // Check if a species (by common or scientific name) is in a name set.
+      // Handles users who add species by scientific name to include/config lists.
+      const isInNameSet = (
+        nameSet: Set<string>,
+        commonName: string,
+        scientificName: string
+      ): boolean =>
+        nameSet.has(commonName.toLowerCase()) || nameSet.has(scientificName.toLowerCase());
+
       const includeSet = new Set(currentInclude.map(s => s.toLowerCase()));
       const configKeys = new Set(Object.keys(currentConfig).map(s => s.toLowerCase()));
-      const threshold = response.threshold;
 
       // Filter species that pass the threshold OR are manually included
       const mappedSpecies: ActiveSpecies[] = response.species
-        .filter(s => s.score >= threshold || includeSet.has(s.commonName.toLowerCase()))
+        .filter(
+          s => s.score >= threshold || isInNameSet(includeSet, s.commonName, s.scientificName)
+        )
         .map(s => ({
           commonName: s.commonName,
           scientificName: s.scientificName,
           score: s.score,
-          isManuallyIncluded: includeSet.has(s.commonName.toLowerCase()),
-          hasCustomConfig: configKeys.has(s.commonName.toLowerCase()),
+          isManuallyIncluded: isInNameSet(includeSet, s.commonName, s.scientificName),
+          hasCustomConfig: isInNameSet(configKeys, s.commonName, s.scientificName),
         }));
 
       // Sort by score descending
@@ -954,9 +961,9 @@
     let updatedConfig = { ...settings.config };
 
     if (editingSpecies && editingSpecies !== species) {
-      // Check if new species name already exists
-      if (species in updatedConfig) {
-        // Prevent overwriting existing configuration
+      // Check if new species name (or its alias) already exists in config
+      if (isSpeciesInList(species, Object.keys(updatedConfig), speciesNameMaps)) {
+        // Prevent overwriting existing configuration (including alias matches)
         toastActions.error(t('settings.species.duplicateConfigError', { species }));
         return;
       }
