@@ -194,26 +194,11 @@ func NewSQLiteManager(cfg Config) (*SQLiteManager, error) {
 	}, nil
 }
 
-// Initialize creates the schema and seeds initial data.
-func (m *SQLiteManager) Initialize() error {
-	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
-	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
-	if err := m.renamePrePR2165Tables(); err != nil {
-		return err
-	}
-
-	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
-	// fell back to legacy mode due to the PR #2165 table name mismatch.
-	if err := m.cleanupLegacySchemaContamination(); err != nil {
-		if m.log != nil {
-			m.log.Warn("legacy schema cleanup encountered errors",
-				logger.Error(err),
-				logger.String("operation", "cleanup_legacy_contamination"))
-		}
-	}
-
-	// Run GORM auto-migrations for all entities
-	err := m.db.AutoMigrate(
+// v2Entities returns the canonical list of all v2 entity pointers.
+// This is the single source of truth used by both Initialize (AutoMigrate)
+// and validateV2SchemaIntegrity.
+func v2Entities() []any {
+	return []any{
 		// Lookup tables (must be created first due to FK constraints)
 		&entities.LabelType{},
 		&entities.TaxonomicClass{},
@@ -242,7 +227,36 @@ func (m *SQLiteManager) Initialize() error {
 		&entities.AlertHistory{},
 		// Application metadata
 		&entities.AppMetadata{},
-	)
+	}
+}
+
+// Initialize creates the schema and seeds initial data.
+func (m *SQLiteManager) Initialize() error {
+	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
+	// This must run BEFORE AutoMigrate to avoid creating duplicate tables.
+	if err := m.renamePrePR2165Tables(); err != nil {
+		return err
+	}
+
+	// Remove orphaned columns added by legacy AutoMigrate when the app incorrectly
+	// fell back to legacy mode due to the PR #2165 table name mismatch.
+	if err := m.cleanupLegacySchemaContamination(); err != nil {
+		if m.log != nil {
+			m.log.Warn("legacy schema cleanup encountered errors",
+				logger.Error(err),
+				logger.String("operation", "cleanup_legacy_contamination"))
+		}
+	}
+
+	// Validate schema integrity: detect unexpected columns from legacy contamination.
+	// Empty contaminated tables are dropped so AutoMigrate can recreate them cleanly.
+	// Populated contaminated tables return ErrV2SchemaCorrupted for manual intervention.
+	if err := m.validateV2SchemaIntegrity(); err != nil {
+		return fmt.Errorf("v2 schema integrity check failed: %w", err)
+	}
+
+	// Run GORM auto-migrations for all entities
+	err := m.db.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("sqlite", "AutoMigrate", err, m.dbPath)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
@@ -364,6 +378,80 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 		}
 	}
 
+	return nil
+}
+
+// validateV2SchemaIntegrity checks all v2 tables for unexpected columns that
+// indicate legacy schema contamination. For each table:
+//   - If the table doesn't exist yet, skip (AutoMigrate will create it).
+//   - If unexpected columns are found and the table is empty, drop it so
+//     AutoMigrate can recreate it with the correct schema.
+//   - If unexpected columns are found and the table has data, return
+//     ErrV2SchemaCorrupted so the caller can trigger self-healing or notify the user.
+func (m *SQLiteManager) validateV2SchemaIntegrity() error {
+	migrator := m.db.Migrator()
+
+	for _, entity := range v2Entities() {
+		if !migrator.HasTable(entity) {
+			continue
+		}
+
+		// Parse the Go struct to get expected column names from GORM tags.
+		// This uses GORM's schema parser (not the database), so it reflects
+		// the Go entity definition — the source of truth.
+		stmt := &gorm.Statement{DB: m.db}
+		if parseErr := stmt.Parse(entity); parseErr != nil {
+			continue
+		}
+		tableName := stmt.Schema.Table
+
+		expectedNames := make(map[string]bool, len(stmt.Schema.DBNames))
+		for _, dbName := range stmt.Schema.DBNames {
+			expectedNames[dbName] = true
+		}
+
+		// Get actual columns from SQLite pragma
+		type pragmaCol struct {
+			Name string
+		}
+		var actualCols []pragmaCol
+		if err := m.db.Raw("SELECT name FROM pragma_table_info(?)", tableName).Scan(&actualCols).Error; err != nil {
+			continue
+		}
+
+		// Find unexpected columns
+		var unexpected []string
+		for _, col := range actualCols {
+			if !expectedNames[col.Name] {
+				unexpected = append(unexpected, col.Name)
+			}
+		}
+
+		if len(unexpected) == 0 {
+			continue
+		}
+
+		// Check if table is empty
+		var rowCount int64
+		m.db.Raw("SELECT COUNT(*) FROM `" + tableName + "`").Scan(&rowCount)
+
+		if rowCount == 0 {
+			if dropErr := m.db.Exec("DROP TABLE IF EXISTS `" + tableName + "`").Error; dropErr != nil {
+				return fmt.Errorf("%w: failed to drop contaminated table %s: %w",
+					ErrV2SchemaCorrupted, tableName, dropErr)
+			}
+			if m.log != nil {
+				m.log.Info("dropped empty contaminated table for recreation",
+					logger.String("table", tableName),
+					logger.Any("unexpected_columns", unexpected),
+					logger.String("operation", "validate_schema_integrity"))
+			}
+			continue
+		}
+
+		return fmt.Errorf("%w: table %s has unexpected columns %v (%d rows): manual cleanup required",
+			ErrV2SchemaCorrupted, tableName, unexpected, rowCount)
+	}
 	return nil
 }
 
