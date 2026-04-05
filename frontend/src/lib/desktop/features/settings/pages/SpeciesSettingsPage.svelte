@@ -1233,7 +1233,9 @@
           onClose={closeEditor}
           onDelete={removeConfig}
           onInput={updateConfigPredictions}
-          onPredictionSelect={() => {}}
+          onPredictionSelect={() => {
+            configPredictions = [];
+          }}
         />
       </div>
     {/if}
