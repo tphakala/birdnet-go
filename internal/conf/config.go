@@ -2585,10 +2585,5 @@ func (w *WundergroundSettings) ValidateWunderground() error {
 	if w.StationID == "" {
 		return fmt.Errorf("wunderground.stationId is required when provider is wunderground")
 	}
-	// Validate units
-	validUnits := map[string]bool{"m": true, "e": true, "h": true}
-	if !validUnits[w.Units] {
-		return fmt.Errorf("wunderground.units must be one of [m, e, h], got: %s", w.Units)
-	}
 	return nil
 }

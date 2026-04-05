@@ -182,18 +182,6 @@ func wundergroundSuccessResponse() string {
     "winddir": 270,
     "humidity": 55.0,
     "qcStatus": 1,
-    "imperial": {
-      "temp": 59.0,
-      "heatIndex": 59.0,
-      "dewpt": 42.8,
-      "windChill": 56.0,
-      "windSpeed": 5.6,
-      "windGust": 9.2,
-      "pressure": 29.92,
-      "precipRate": 0.0,
-      "precipTotal": 0.0,
-      "elev": 33.0
-    },
     "metric": {
       "temp": 15.0,
       "heatIndex": 15.0,

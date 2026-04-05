@@ -439,25 +439,6 @@ func TestValidateWundergroundConfig(t *testing.T) {
 	}
 }
 
-func TestNormalizeWindGust(t *testing.T) {
-	tests := []struct {
-		name        string
-		windGustKmh float64
-		expectedMS  float64
-	}{
-		{"kmh_to_ms", 36.0, 36.0 * KmhToMs},  // 36 km/h = 10 m/s
-		{"small_gust", 14.8, 14.8 * KmhToMs}, // 14.8 km/h
-		{"zero_value", 0.0, 0.0},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeWindGust(tt.windGustKmh)
-			assert.InDelta(t, tt.expectedMS, got, 0.001)
-		})
-	}
-}
-
 func TestNewWundergroundProvider(t *testing.T) {
 	t.Run("nil_client_creates_default", func(t *testing.T) {
 		provider := NewWundergroundProvider(nil)
@@ -495,7 +476,5 @@ func TestWundergroundConstants(t *testing.T) {
 	t.Run("conversion_factors", func(t *testing.T) {
 		// Verify conversion accuracy
 		assert.InDelta(t, 0.2778, KmhToMs, 0.001, "1 km/h = ~0.2778 m/s")
-		assert.InDelta(t, 0.4470, MphToMs, 0.001, "1 mph = ~0.4470 m/s")
-		assert.InDelta(t, 33.864, InHgToHPa, 0.01, "1 inHg = ~33.864 hPa")
 	})
 }

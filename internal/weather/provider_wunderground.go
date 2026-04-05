@@ -47,23 +47,12 @@ const (
 	NightPartlyCloudyHumidityPercent = 60.0 // Humidity threshold for partly cloudy at night
 
 	// Unit conversion factors
-	KmhToMs    = 0.277778      // Convert km/h to m/s (divide by 3.6)
-	MphToMs    = 0.44704       // Convert mph to m/s
-	InHgToHPa  = 33.8638866667 // Convert inches of mercury to hectopascals
-	InchesToMm = 25.4          // Convert inches to millimeters
+	KmhToMs = 0.277778 // Convert km/h to m/s (divide by 3.6)
 
 	// Feels-like temperature thresholds - Metric
 	MetricHotTempC        = 27.0         // Temperature above which to use heat index
 	MetricColdTempC       = 10.0         // Temperature below which to use wind chill
 	MetricWindThresholdMs = 1.3333333333 // Wind speed threshold for wind chill (4.8 km/h)
-
-	// Feels-like temperature thresholds - Hybrid (UK)
-	HybridWindThresholdMs = 1.34112 // Wind speed threshold for wind chill (3 mph)
-
-	// Feels-like temperature thresholds - Imperial
-	ImperialHotTempF         = 80.0 // Temperature above which to use heat index
-	ImperialColdTempF        = 50.0 // Temperature below which to use wind chill
-	ImperialWindThresholdMph = 3.0  // Wind speed threshold for wind chill
 )
 
 var stationIDRegex = regexp.MustCompile(`^[A-Za-z0-9_-]{3,32}$`)
@@ -411,11 +400,10 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *W
 
 	measurements := extractMeasurements(&obs)
 	feelsLike := calculateFeelsLike(measurements)
-	gustMS := normalizeWindGust(obs.Metric.WindGust)
 	precipMMH := getPrecipitationRate(&obs)
 
 	iconCode := InferWundergroundIcon(
-		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, gustMS,
+		measurements.temp, precipMMH, float64(obs.Humidity), obs.SolarRadiation, measurements.windGust,
 	)
 
 	return &WeatherData{
@@ -493,12 +481,4 @@ func calculateFeelsLike(m weatherMeasurements) float64 {
 	default:
 		return m.temp
 	}
-}
-
-// normalizeWindGust converts wind gust from km/h to m/s for icon inference.
-func normalizeWindGust(windGustKmh float64) float64 {
-	if math.IsNaN(windGustKmh) || windGustKmh == 0 {
-		return 0.0
-	}
-	return windGustKmh * KmhToMs
 }
