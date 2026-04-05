@@ -281,7 +281,14 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 	}
 
 	// If the database was deleted by self-healing (manager was closed), recreate it.
-	if _, statErr := os.Stat(v2Path); os.IsNotExist(statErr) {
+	_, statErr := os.Stat(v2Path)
+	if statErr != nil && !os.IsNotExist(statErr) {
+		log.Warn("unexpected error checking v2 database path after self-healing",
+			logger.Error(statErr),
+			logger.String("path", v2Path),
+			logger.String("operation", "initialize_migration_infrastructure"))
+	}
+	if os.IsNotExist(statErr) {
 		log.Info("recreating v2 database after self-healing reset",
 			logger.String("path", v2Path),
 			logger.String("operation", "initialize_migration_infrastructure"))

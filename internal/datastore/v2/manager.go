@@ -431,9 +431,18 @@ func (m *SQLiteManager) validateV2SchemaIntegrity() error {
 			continue
 		}
 
-		// Check if table is empty
+		// Check if table is empty — must verify count before dropping to avoid data loss
 		var rowCount int64
-		m.db.Raw("SELECT COUNT(*) FROM `" + tableName + "`").Scan(&rowCount)
+		if countErr := m.db.Raw("SELECT COUNT(*) FROM `" + tableName + "`").Scan(&rowCount).Error; countErr != nil {
+			// Cannot determine row count — skip this table rather than risk data loss
+			if m.log != nil {
+				m.log.Warn("skipping schema validation for table due to query error",
+					logger.String("table", tableName),
+					logger.Error(countErr),
+					logger.String("operation", "validate_schema_integrity"))
+			}
+			continue
+		}
 
 		if rowCount == 0 {
 			if dropErr := m.db.Exec("DROP TABLE IF EXISTS `" + tableName + "`").Error; dropErr != nil {
