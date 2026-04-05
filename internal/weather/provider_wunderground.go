@@ -474,7 +474,7 @@ func extractMeasurements(obs *wundergroundObservation) weatherMeasurements {
 // All values are in metric units (Celsius temperatures, m/s wind speed).
 func calculateFeelsLike(m weatherMeasurements) float64 {
 	switch {
-	case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
+	case m.temp >= MetricHotTempC && m.heatIndex > 0 && !isInvalid(m.heatIndex):
 		return m.heatIndex
 	case m.temp <= MetricColdTempC && m.windSpeed > MetricWindThresholdMs && !isInvalid(m.windChill):
 		return m.windChill
