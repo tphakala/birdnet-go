@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"context"
+	"os"
 	"time"
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
@@ -250,8 +251,23 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 			Build()
 	}
 
-	// Initialize the v2 database schema
-	if err := v2Manager.Initialize(); err != nil {
+	// Initialize the v2 database schema with self-healing for empty corrupt databases.
+	v2Path := datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path)
+	if err := initializeV2WithSelfHealing(v2Manager, v2Path, log); err != nil {
+		if errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
+			// Self-healing failed or was not safe — close and return.
+			if closeErr := v2Manager.Close(); closeErr != nil {
+				log.Warn("failed to close v2 manager after self-healing failure",
+					logger.Error(closeErr),
+					logger.String("operation", "initialize_migration_infrastructure"))
+			}
+			return nil, errors.New(err).
+				Component("analysis").
+				Category(errors.CategoryDatabase).
+				Context("operation", "initialize_v2_database").
+				Build()
+		}
+		// Non-corruption error — close and return.
 		if closeErr := v2Manager.Close(); closeErr != nil {
 			log.Warn("failed to close v2 manager after initialization failure",
 				logger.Error(closeErr),
@@ -262,6 +278,38 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 			Category(errors.CategoryDatabase).
 			Context("operation", "initialize_v2_database").
 			Build()
+	}
+
+	// If the database was deleted by self-healing (manager was closed), recreate it.
+	if _, statErr := os.Stat(v2Path); os.IsNotExist(statErr) {
+		log.Info("recreating v2 database after self-healing reset",
+			logger.String("path", v2Path),
+			logger.String("operation", "initialize_migration_infrastructure"))
+		var recreateErr error
+		v2Manager, recreateErr = datastoreV2.NewSQLiteManager(datastoreV2.Config{
+			ConfiguredPath: settings.Output.SQLite.Path,
+			Debug:          settings.Debug,
+			Logger:         log,
+		})
+		if recreateErr != nil {
+			return nil, errors.New(recreateErr).
+				Component("analysis").
+				Category(errors.CategoryDatabase).
+				Context("operation", "recreate_v2_manager_after_reset").
+				Build()
+		}
+		if initErr := v2Manager.Initialize(); initErr != nil {
+			if closeErr := v2Manager.Close(); closeErr != nil {
+				log.Warn("failed to close v2 manager after retry failure",
+					logger.Error(closeErr),
+					logger.String("operation", "initialize_migration_infrastructure"))
+			}
+			return nil, errors.New(initErr).
+				Component("analysis").
+				Category(errors.CategoryDatabase).
+				Context("operation", "initialize_v2_database_after_reset").
+				Build()
+		}
 	}
 
 	// Start periodic WAL checkpoint for the v2 migration database

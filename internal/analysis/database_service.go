@@ -2,7 +2,11 @@ package analysis
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/app"
@@ -16,6 +20,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gorm_logger "gorm.io/gorm/logger"
 )
 
 // databaseServiceName is the service name used for logging and diagnostics.
@@ -305,6 +312,157 @@ func (d *DatabaseService) closeDataStore(log logger.Logger) {
 		log.Info("successfully closed database",
 			logger.String("operation", "close_database"))
 	}
+}
+
+// v2SchemaResetMarker is the filename written next to the v2 database after a
+// self-healing deletion. If Initialize() fails again with ErrV2SchemaCorrupted
+// and this file already exists, the self-healing loop is broken to prevent
+// infinite crash-delete cycles.
+const v2SchemaResetMarker = ".v2_schema_reset"
+
+// initializeV2WithSelfHealing wraps v2 Manager.Initialize() with automatic
+// recovery for empty, schema-corrupted databases. When Initialize() returns
+// ErrV2SchemaCorrupted and the database contains no user data, the database
+// file (plus WAL/SHM) is deleted so the caller can recreate the manager and
+// retry. A marker file prevents infinite crash loops.
+//
+// Returns nil when the database was successfully deleted (caller must recreate
+// the manager and call Initialize again), or the original/wrapped error when
+// self-healing is not possible.
+func initializeV2WithSelfHealing(manager datastoreV2.Manager, v2Path string, log logger.Logger) error {
+	// Attempt normal initialization.
+	if err := manager.Initialize(); err == nil {
+		// Success — clean up any stale marker from a previous recovery.
+		markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)
+		if removeErr := os.Remove(markerPath); removeErr != nil && !os.IsNotExist(removeErr) {
+			log.Warn("failed to remove stale schema reset marker",
+				logger.Error(removeErr),
+				logger.String("marker", markerPath))
+		}
+		return nil
+	} else if !errors.Is(err, datastoreV2.ErrV2SchemaCorrupted) {
+		// Not a schema corruption error — return as-is.
+		return err
+	} else {
+		// Schema corrupted — attempt self-healing below.
+		log.Warn("v2 schema corruption detected, evaluating self-healing",
+			logger.Error(err),
+			logger.String("path", v2Path))
+	}
+
+	// Guard: if the marker already exists, a previous reset did not help.
+	markerPath := filepath.Join(filepath.Dir(v2Path), v2SchemaResetMarker)
+	if _, statErr := os.Stat(markerPath); statErr == nil {
+		log.Error("v2 schema reset marker already exists, aborting self-healing to prevent crash loop",
+			logger.String("marker", markerPath))
+		return fmt.Errorf("v2 schema still corrupted after previous reset (marker %s exists): %w",
+			v2SchemaResetMarker, datastoreV2.ErrV2SchemaCorrupted)
+	}
+
+	// Guard: only delete if the database has no user data.
+	if !isV2DatabaseSafeToDelete(v2Path, log) {
+		log.Error("v2 database contains user data, cannot auto-delete",
+			logger.String("path", v2Path))
+		return fmt.Errorf("v2 schema corrupted but database contains user data, manual cleanup required: %w",
+			datastoreV2.ErrV2SchemaCorrupted)
+	}
+
+	// Write the marker BEFORE deleting so a crash mid-delete still prevents loops.
+	markerContent := fmt.Sprintf("reset at %s\n", time.Now().UTC().Format(time.RFC3339))
+	if writeErr := os.WriteFile(markerPath, []byte(markerContent), 0o600); writeErr != nil {
+		log.Error("failed to write schema reset marker",
+			logger.Error(writeErr),
+			logger.String("marker", markerPath))
+		return fmt.Errorf("cannot write reset marker: %w", writeErr)
+	}
+
+	// Close the manager before deleting the file.
+	if closeErr := manager.Close(); closeErr != nil {
+		log.Warn("failed to close v2 manager before self-healing delete",
+			logger.Error(closeErr))
+	}
+
+	// Delete the database file and its WAL/SHM companions.
+	for _, suffix := range []string{"", "-wal", "-shm"} {
+		path := v2Path + suffix
+		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+			log.Warn("failed to remove v2 database file during self-healing",
+				logger.Error(removeErr),
+				logger.String("path", path))
+		}
+	}
+
+	log.Info("deleted corrupted empty v2 database for recreation",
+		logger.String("path", v2Path),
+		logger.String("operation", "self_healing_schema_reset"))
+
+	return nil
+}
+
+// isV2DatabaseSafeToDelete opens the v2 database read-only and checks whether
+// it contains any user data. Returns true only when all user-facing tables are
+// empty and no migration is in progress.
+func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
+	// Open database in read-only mode.
+	dsn := dbPath + "?mode=ro&_journal_mode=WAL&_busy_timeout=5000"
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
+		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
+	})
+	if err != nil {
+		log.Warn("cannot open v2 database for safety check",
+			logger.Error(err),
+			logger.String("path", dbPath))
+		return false
+	}
+	defer func() {
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	}()
+
+	// Check user-data tables: if ANY has rows, the database is not safe to delete.
+	userTables := []string{"detections", "alert_rules", "detection_reviews"}
+	for _, table := range userTables {
+		var exists int64
+		// Check if the table exists before querying it.
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&exists).Error; err != nil || exists == 0 {
+			continue // Table doesn't exist — OK.
+		}
+		var rowCount int64
+		if err := db.Raw("SELECT COUNT(*) FROM `" + table + "` LIMIT 1").Scan(&rowCount).Error; err != nil {
+			log.Warn("failed to count rows in table during safety check",
+				logger.Error(err),
+				logger.String("table", table))
+			return false // Cannot confirm empty — be safe.
+		}
+		if rowCount > 0 {
+			log.Warn("v2 database has user data, not safe to delete",
+				logger.String("table", table),
+				logger.Int64("rows", rowCount))
+			return false
+		}
+	}
+
+	// Check migration state: if a migration is active, do not delete.
+	var migrationTableExists int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='migration_states'").Scan(&migrationTableExists).Error; err == nil && migrationTableExists > 0 {
+		var state string
+		if err := db.Raw("SELECT state FROM migration_states WHERE id = 1").Scan(&state).Error; err == nil {
+			unsafeStates := map[string]bool{
+				"migrating":  true,
+				"completed":  true,
+				"dual_write": true,
+				"validating": true,
+			}
+			if unsafeStates[state] {
+				log.Warn("v2 database has active migration state, not safe to delete",
+					logger.String("migration_state", state))
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 // closeV2Database performs a WAL checkpoint and closes the v2 database.
