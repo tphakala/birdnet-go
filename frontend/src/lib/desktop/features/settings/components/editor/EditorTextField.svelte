@@ -66,14 +66,6 @@
       onUpdate(target.value);
     }
   }
-
-  function handleInput(event: Event) {
-    const target = event.currentTarget as HTMLInputElement;
-    if (type === 'text') {
-      value = target.value;
-      onUpdate(target.value);
-    }
-  }
 </script>
 
 <div>
@@ -90,7 +82,6 @@
     {step}
     bind:value
     onchange={handleChange}
-    oninput={handleInput}
     aria-describedby={helpId}
     class="w-full px-3 py-2 rounded-lg text-sm bg-[var(--color-base-200)] border border-[var(--color-base-300)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 outline-none focus:ring-2 focus:ring-[var(--color-primary)]/20 focus:border-[var(--color-primary)] transition-colors tabular-nums disabled:opacity-50 disabled:cursor-not-allowed"
   />

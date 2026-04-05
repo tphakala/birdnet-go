@@ -897,11 +897,24 @@
 
     let updatedConfig = { ...settings.config };
 
-    if (editingSpecies && editingSpecies !== species) {
-      if (species in updatedConfig) {
-        toastActions.error(t('settings.species.duplicateConfigError', { species }));
-        return;
-      }
+    // Check for duplicate species (case-insensitive) on both create and rename
+    const existingKeys = Object.keys(updatedConfig).map(k => k.toLowerCase());
+    const isRename = editingSpecies !== null && editingSpecies !== species;
+    const isCreate = editingSpecies === null;
+    if (
+      (isRename || isCreate) &&
+      existingKeys.includes(species.toLowerCase()) &&
+      !(
+        isRename &&
+        editingSpecies !== null &&
+        species.toLowerCase() === editingSpecies.toLowerCase()
+      )
+    ) {
+      toastActions.error(t('settings.species.duplicateConfigError', { species }));
+      return;
+    }
+
+    if (isRename && editingSpecies !== null) {
       // eslint-disable-next-line security/detect-object-injection -- editingSpecies is controlled component state
       delete updatedConfig[editingSpecies];
     }
@@ -1253,7 +1266,10 @@
       {editingSpecies}
       disabled={store.isLoading || store.isSaving}
       onEdit={openEditor}
-      onDelete={removeConfig}
+      onDelete={species => {
+        removeConfig(species);
+        if (editingSpecies === species) closeEditor();
+      }}
     />
   </div>
 {/snippet}

@@ -128,7 +128,7 @@
     portalDropdown.style.position = 'absolute';
     portalDropdown.style.zIndex = Z_INDEX.PORTAL_DROPDOWN.toString();
     portalDropdown.setAttribute('role', 'listbox');
-    portalDropdown.setAttribute('aria-label', 'Species suggestions');
+    portalDropdown.setAttribute('aria-label', label || placeholder || 'Species suggestions');
 
     portalDropdown.addEventListener('click', handlePortalClick);
     portalDropdown.addEventListener('keydown', handlePortalKeydown);
@@ -356,7 +356,7 @@
   </div>
 
   <!-- Screen reader announcement for suggestion count changes -->
-  <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+  <div class="sr-only" role="status" aria-atomic="true">
     {#if showPredictions && filteredPredictions.length > 0}
       {t('components.forms.species.suggestionsAvailable', { count: filteredPredictions.length })}
     {/if}
