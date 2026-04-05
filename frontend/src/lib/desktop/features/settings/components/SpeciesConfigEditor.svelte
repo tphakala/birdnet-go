@@ -255,12 +255,25 @@
 
       <!-- Execute defaults checkbox -->
       <label class="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          bind:checked={actionExecuteDefaults}
-          disabled={disabled || saving}
-          class="appearance-none w-4 h-4 border-2 border-[var(--color-base-300)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
-        />
+        <span class="relative inline-flex items-center justify-center w-4 h-4">
+          <input
+            type="checkbox"
+            bind:checked={actionExecuteDefaults}
+            disabled={disabled || saving}
+            class="peer appearance-none w-4 h-4 border-2 border-[var(--color-base-300)] rounded bg-[var(--color-base-100)] cursor-pointer transition-all checked:bg-[var(--color-primary)] checked:border-[var(--color-primary)]"
+          />
+          <svg
+            class="absolute w-2.5 h-2.5 text-[var(--color-primary-content)] pointer-events-none opacity-0 peer-checked:opacity-100 transition-opacity"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <polyline points="3 8 7 12 13 4" />
+          </svg>
+        </span>
         <span class="text-xs text-[var(--color-base-content)]/60">
           {t('settings.species.actionsModal.executeDefaults.label')}
         </span>

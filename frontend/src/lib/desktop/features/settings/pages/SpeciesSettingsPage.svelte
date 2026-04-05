@@ -878,6 +878,7 @@
   function closeEditor() {
     editingSpecies = null;
     editorOpen = false;
+    configPredictions = [];
   }
 
   async function handleEditorSave(payload: {
