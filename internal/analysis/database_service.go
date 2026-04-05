@@ -428,7 +428,7 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 	}()
 
 	// Check user-data tables: if ANY has rows, the database is not safe to delete.
-	userTables := []string{"detections", "alert_rules", "detection_reviews"}
+	userTables := []string{"detections", "alert_rules", "detection_reviews", "dynamic_thresholds"}
 	for _, table := range userTables {
 		var exists int64
 		// Check if the table exists before querying it.
@@ -436,7 +436,7 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 			continue // Table doesn't exist — OK.
 		}
 		var rowCount int64
-		if err := db.Raw("SELECT COUNT(*) FROM `" + table + "` LIMIT 1").Scan(&rowCount).Error; err != nil {
+		if err := db.Raw("SELECT COUNT(*) FROM `" + table + "`").Scan(&rowCount).Error; err != nil {
 			log.Warn("failed to count rows in table during safety check",
 				logger.Error(err),
 				logger.String("table", table))
@@ -458,10 +458,12 @@ func isV2DatabaseSafeToDelete(dbPath string, log logger.Logger) bool {
 		var state string
 		if err := db.Raw("SELECT state FROM `" + migrationTableName + "` WHERE id = 1").Scan(&state).Error; err == nil {
 			unsafeStates := map[string]bool{
-				"migrating":  true,
-				"completed":  true,
-				"dual_write": true,
-				"validating": true,
+				string(entities.MigrationStatusMigrating):  true,
+				string(entities.MigrationStatusCompleted):  true,
+				string(entities.MigrationStatusDualWrite):  true,
+				string(entities.MigrationStatusValidating): true,
+				string(entities.MigrationStatusCutover):    true,
+				string(entities.MigrationStatusPaused):     true,
 			}
 			if unsafeStates[state] {
 				log.Warn("v2 database has active migration state, not safe to delete",
