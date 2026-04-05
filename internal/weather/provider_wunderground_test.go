@@ -409,23 +409,10 @@ func TestValidateWundergroundConfig(t *testing.T) {
 			errMsg:  "invalid",
 		},
 		{
-			name: "valid_custom_units_m",
+			name: "units_field_ignored",
 			setupFunc: func(s *conf.Settings) {
-				s.Realtime.Weather.Wunderground.Units = "m"
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid_custom_units_e",
-			setupFunc: func(s *conf.Settings) {
+				// Units in settings are ignored; we always request metric from the API.
 				s.Realtime.Weather.Wunderground.Units = "e"
-			},
-			wantErr: false,
-		},
-		{
-			name: "valid_custom_units_h",
-			setupFunc: func(s *conf.Settings) {
-				s.Realtime.Weather.Wunderground.Units = "h"
 			},
 			wantErr: false,
 		},
@@ -455,20 +442,17 @@ func TestValidateWundergroundConfig(t *testing.T) {
 func TestNormalizeWindGust(t *testing.T) {
 	tests := []struct {
 		name        string
-		windGustRaw float64
-		units       string
+		windGustKmh float64
 		expectedMS  float64
 	}{
-		{"metric_kmh_to_ms", 36.0, "m", 36.0 * KmhToMs},     // 36 km/h = 10 m/s
-		{"imperial_mph_to_ms", 22.37, "e", 22.37 * MphToMs}, // 22.37 mph = 10 m/s
-		{"hybrid_mph_to_ms", 22.37, "h", 22.37 * MphToMs},
-		{"zero_value", 0.0, "m", 0.0},
-		{"unknown_units_defaults_to_mph", 10.0, "x", 10.0 * MphToMs},
+		{"kmh_to_ms", 36.0, 36.0 * KmhToMs},  // 36 km/h = 10 m/s
+		{"small_gust", 14.8, 14.8 * KmhToMs}, // 14.8 km/h
+		{"zero_value", 0.0, 0.0},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeWindGust(tt.windGustRaw, tt.units)
+			got := normalizeWindGust(tt.windGustKmh)
 			assert.InDelta(t, tt.expectedMS, got, 0.001)
 		})
 	}

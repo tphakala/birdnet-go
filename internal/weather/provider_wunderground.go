@@ -161,7 +161,6 @@ type wundergroundObservation struct {
 	Winddir        int                         `json:"winddir"`
 	Humidity       float64                     `json:"humidity"`
 	QcStatus       int                         `json:"qcStatus"`
-	Imperial       wundergroundMeasurementData `json:"imperial"`
 	Metric         wundergroundMeasurementData `json:"metric"`
 }
 
@@ -171,7 +170,7 @@ type wundergroundResponse struct {
 }
 
 // parseWundergroundError extracts and formats error messages from Weather Underground API responses
-func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units string, log logger.Logger) string {
+func parseWundergroundError(bodyBytes []byte, statusCode int, stationId string, log logger.Logger) string {
 	// Try to parse Weather Underground error response
 	var errorResp wundergroundErrorResponse
 
@@ -185,8 +184,7 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 			logger.Int("status_code", statusCode),
 			logger.String("error_code", errorCode),
 			logger.String("error_message", errorMessage),
-			logger.String("station", stationId),
-			logger.String("units", units))
+			logger.String("station", stationId))
 
 		// Provide user-friendly error messages based on error code
 		switch errorCode {
@@ -240,7 +238,6 @@ func parseWundergroundError(bodyBytes []byte, statusCode int, stationId, units s
 type wundergroundConfig struct {
 	apiKey    string
 	stationID string
-	units     string
 	endpoint  string
 }
 
@@ -249,19 +246,11 @@ func validateWundergroundConfig(settings *conf.Settings) (*wundergroundConfig, e
 	cfg := &wundergroundConfig{
 		apiKey:    settings.Realtime.Weather.Wunderground.APIKey,
 		stationID: settings.Realtime.Weather.Wunderground.StationID,
-		units:     settings.Realtime.Weather.Wunderground.Units,
 		endpoint:  settings.Realtime.Weather.Wunderground.Endpoint,
 	}
 
 	if cfg.endpoint == "" {
 		cfg.endpoint = wundergroundBaseURL
-	}
-	if cfg.units == "" {
-		cfg.units = "e"
-	}
-	if cfg.units != "e" && cfg.units != "m" && cfg.units != "h" {
-		getLogger().Warn("Invalid units value, falling back to imperial", logger.String("units", cfg.units))
-		cfg.units = "e"
 	}
 	if cfg.apiKey == "" || cfg.stationID == "" {
 		return nil, newWeatherError(
@@ -290,7 +279,12 @@ func buildWundergroundURL(cfg *wundergroundConfig) (string, error) {
 	q := u.Query()
 	q.Set("stationId", cfg.stationID)
 	q.Set("format", "json")
-	q.Set("units", cfg.units)
+	// Always request metric units. The WU API returns only the measurement
+	// object matching the requested unit system (e.g. units=e returns only
+	// "imperial", units=m returns only "metric"). Hardcoding metric avoids
+	// zero-valued temperature when the user's configured unit doesn't match
+	// the struct field we read from.
+	q.Set("units", "m")
 	q.Set("apiKey", cfg.apiKey)
 	q.Set("numericPrecision", "decimal")
 	u.RawQuery = q.Encode()
@@ -324,7 +318,7 @@ func (p *WundergroundProvider) FetchWeather(settings *conf.Settings) (*WeatherDa
 	}
 
 	providerLogger.Info("Successfully received and parsed weather data")
-	return mapWundergroundResponse(wuResp, cfg.units, providerLogger), nil
+	return mapWundergroundResponse(wuResp, providerLogger), nil
 }
 
 // executeRequest performs the HTTP request with context timeout
@@ -355,7 +349,7 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 	// HTTP 401: authentication failed — likely invalid API key
 	if resp.StatusCode == http.StatusUnauthorized {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, log)
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, log)
 		log.Error("Weather API authentication failed — check your API key",
 			logger.String("station", cfg.stationID),
 			logger.String("detail", errorMessage))
@@ -364,7 +358,7 @@ func (p *WundergroundProvider) executeRequest(apiURL string, cfg *wundergroundCo
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, cfg.units, log)
+		errorMessage := parseWundergroundError(bodyBytes, resp.StatusCode, cfg.stationID, log)
 		return nil, newWeatherError(
 			fmt.Errorf("%s", errorMessage),
 			errors.CategoryNetwork, "weather_api_response", wundergroundProviderName,
@@ -403,8 +397,10 @@ func parseWundergroundResponse(body []byte) (*wundergroundResponse, error) {
 	return &wuResp, nil
 }
 
-// mapWundergroundResponse converts wundergroundResponse to WeatherData
-func mapWundergroundResponse(wuResp *wundergroundResponse, units string, log logger.Logger) *WeatherData {
+// mapWundergroundResponse converts wundergroundResponse to WeatherData.
+// All data is read from the metric measurement object, since we always
+// request units=m from the WU API.
+func mapWundergroundResponse(wuResp *wundergroundResponse, log logger.Logger) *WeatherData {
 	obs := wuResp.Observations[0]
 
 	obsTime, err := time.Parse(time.RFC3339, obs.ObsTimeUtc)
@@ -413,9 +409,9 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, units string, log log
 		obsTime = time.Now().UTC()
 	}
 
-	measurements := extractMeasurements(&obs, units)
-	feelsLike := calculateFeelsLike(measurements, units)
-	gustMS := normalizeWindGust(measurements.windGustRaw, units)
+	measurements := extractMeasurements(&obs)
+	feelsLike := calculateFeelsLike(measurements)
+	gustMS := normalizeWindGust(obs.Metric.WindGust)
 	precipMMH := getPrecipitationRate(&obs)
 
 	iconCode := InferWundergroundIcon(
@@ -448,16 +444,12 @@ func mapWundergroundResponse(wuResp *wundergroundResponse, units string, log log
 	}
 }
 
-// getPrecipitationRate extracts precipitation rate in mm/h
+// getPrecipitationRate extracts precipitation rate in mm/h from metric data.
 func getPrecipitationRate(obs *wundergroundObservation) float64 {
-	switch {
-	case obs.Metric.PrecipRate > 0:
+	if obs.Metric.PrecipRate > 0 {
 		return obs.Metric.PrecipRate
-	case obs.Imperial.PrecipRate > 0:
-		return obs.Imperial.PrecipRate * InchesToMm
-	default:
-		return 0.0
 	}
+	return 0.0
 }
 
 // isInvalid checks if a float64 value is NaN (invalid for HeatIndex/WindChill logic)
@@ -466,102 +458,47 @@ func isInvalid(val float64) bool {
 	return math.IsNaN(val)
 }
 
-// weatherMeasurements holds extracted weather data from API response
+// weatherMeasurements holds extracted weather data from API response.
+// All values are in metric units (Celsius, m/s, hPa).
 type weatherMeasurements struct {
-	temp         float64
-	heatIndex    float64
-	windChill    float64
-	windSpeed    float64
-	windGust     float64
-	windGustRaw  float64
-	windSpeedRaw float64 // Raw wind speed in original units for feels-like calculation
-	pressure     float64
+	temp      float64
+	heatIndex float64
+	windChill float64
+	windSpeed float64
+	windGust  float64
+	pressure  float64
 }
 
-// extractMeasurements extracts weather measurements based on units configuration.
-// IMPORTANT: All temperatures (temp, heatIndex, windChill) are ALWAYS returned in Celsius
-// regardless of the API units setting. This ensures consistent storage and display.
-func extractMeasurements(obs *wundergroundObservation, units string) weatherMeasurements {
-	m := weatherMeasurements{}
-
-	// Always use Metric struct for temperature values (already in Celsius)
-	// This ensures consistent storage regardless of API units setting.
-	// Wind speed and pressure handling varies by units for optimal API data usage.
-	m.temp = obs.Metric.Temp
-	m.heatIndex = obs.Metric.HeatIndex
-	m.windChill = obs.Metric.WindChill
-
-	switch units {
-	case "m":
-		// Metric units: km/h wind, hPa pressure
-		m.windSpeed = obs.Metric.WindSpeed * KmhToMs
-		m.windGust = obs.Metric.WindGust * KmhToMs
-		m.windGustRaw = obs.Metric.WindGust
-		m.pressure = obs.Metric.Pressure
-	case "h":
-		// Hybrid (UK): Celsius temp (already set above), mph wind
-		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
-		m.windGust = obs.Imperial.WindGust * MphToMs
-		m.windGustRaw = obs.Imperial.WindGust
-		m.pressure = obs.Metric.Pressure
-	default:
-		// Imperial units (default): Use imperial wind/pressure but metric temp
-		m.windSpeed = obs.Imperial.WindSpeed * MphToMs
-		m.windGust = obs.Imperial.WindGust * MphToMs
-		m.windSpeedRaw = obs.Imperial.WindSpeed
-		m.windGustRaw = obs.Imperial.WindGust
-		m.pressure = obs.Imperial.Pressure * InHgToHPa
+// extractMeasurements extracts weather measurements from the metric observation data.
+// We always request units=m from the WU API, so only obs.Metric is populated.
+func extractMeasurements(obs *wundergroundObservation) weatherMeasurements {
+	return weatherMeasurements{
+		temp:      obs.Metric.Temp,
+		heatIndex: obs.Metric.HeatIndex,
+		windChill: obs.Metric.WindChill,
+		windSpeed: obs.Metric.WindSpeed * KmhToMs,
+		windGust:  obs.Metric.WindGust * KmhToMs,
+		pressure:  obs.Metric.Pressure,
 	}
-
-	return m
 }
 
 // calculateFeelsLike calculates the feels-like temperature based on conditions.
-// NOTE: All temperatures (temp, heatIndex, windChill) are in Celsius.
-// The units parameter only affects wind speed threshold comparison.
-func calculateFeelsLike(m weatherMeasurements, units string) float64 {
-	// All temperature thresholds are in Celsius since extractMeasurements
-	// now always returns temperatures in Celsius.
-	// Hot threshold: >=27°C, Cold threshold: <=10°C
-
-	// Determine wind threshold based on API units (for threshold comparison only)
-	var windExceedsThreshold bool
-	switch units {
-	case "m":
-		// Metric: wind threshold 4.8 km/h = 1.333 m/s
-		windExceedsThreshold = m.windSpeed > MetricWindThresholdMs
-	case "h":
-		// Hybrid UK: wind threshold 3 mph = 1.34112 m/s
-		windExceedsThreshold = m.windSpeed > HybridWindThresholdMs
-	default:
-		// Imperial: use raw wind speed (mph) for threshold comparison
-		windExceedsThreshold = m.windSpeedRaw > ImperialWindThresholdMph
-	}
-
+// All values are in metric units (Celsius temperatures, m/s wind speed).
+func calculateFeelsLike(m weatherMeasurements) float64 {
 	switch {
 	case m.temp >= MetricHotTempC && !isInvalid(m.heatIndex):
 		return m.heatIndex
-	case m.temp <= MetricColdTempC && windExceedsThreshold && !isInvalid(m.windChill):
+	case m.temp <= MetricColdTempC && m.windSpeed > MetricWindThresholdMs && !isInvalid(m.windChill):
 		return m.windChill
 	default:
 		return m.temp
 	}
 }
 
-// normalizeWindGust converts wind gust to m/s for icon inference
-func normalizeWindGust(windGustRaw float64, units string) float64 {
-	if math.IsNaN(windGustRaw) || windGustRaw == 0 {
+// normalizeWindGust converts wind gust from km/h to m/s for icon inference.
+func normalizeWindGust(windGustKmh float64) float64 {
+	if math.IsNaN(windGustKmh) || windGustKmh == 0 {
 		return 0.0
 	}
-
-	switch units {
-	case "m":
-		// WU metric wind is in km/h
-		return windGustRaw * KmhToMs
-	case "h", "e":
-		// WU imperial wind (and hybrid uses imperial for wind) is in mph
-		return windGustRaw * MphToMs
-	default:
-		return windGustRaw * MphToMs
-	}
+	return windGustKmh * KmhToMs
 }
