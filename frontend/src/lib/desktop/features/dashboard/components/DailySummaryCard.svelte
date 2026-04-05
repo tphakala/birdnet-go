@@ -67,8 +67,9 @@ Responsive Breakpoints:
     getTemperatureSymbol,
     type TemperatureUnit,
   } from '$lib/utils/formatters';
+  import { dashboardSettings } from '$lib/stores/settings';
   import { ChevronLeft, ChevronRight, Star, Sunrise, Sunset, XCircle } from '@lucide/svelte';
-  import { onMount, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
 
@@ -209,8 +210,10 @@ Responsive Breakpoints:
   // Map for O(1) hour lookup (populated when hourlyWeather changes)
   let hourlyWeatherMap = $state(new Map<number, HourlyWeatherResponse>());
 
-  // Temperature unit preference (fetched from dashboard config)
-  let temperatureUnit = $state<TemperatureUnit>('metric');
+  // Temperature unit preference (from dashboard settings store, consistent with BannerCard/System/Search)
+  let temperatureUnit: TemperatureUnit = $derived(
+    $dashboardSettings?.temperatureUnit === 'fahrenheit' ? 'imperial' : 'metric'
+  );
 
   // Cache for sun times to avoid repeated API calls - use LRUCache to limit memory usage
   const sunTimesCache = $state.raw(
@@ -221,29 +224,6 @@ Responsive Breakpoints:
   const hourlyWeatherCache = $state.raw(
     new LRUCache<string, HourlyWeatherResponse[]>(CONFIG.CACHE.SUN_TIMES_MAX_ENTRIES)
   );
-
-  // Fetch dashboard config for temperature unit preference
-  async function fetchDashboardConfig(): Promise<void> {
-    try {
-      const response = await fetch(buildAppUrl('/api/v2/settings/dashboard'));
-      if (!response.ok) return;
-      const config = await response.json();
-      // Map config temperatureUnit to TemperatureUnit type
-      if (config.temperatureUnit === 'fahrenheit') {
-        temperatureUnit = 'imperial';
-      } else {
-        temperatureUnit = 'metric';
-      }
-    } catch {
-      // Keep default 'metric' on error
-    }
-  }
-
-  // Fetch dashboard config on mount (onMount, not $effect, to avoid
-  // reactive dependency tracking that can cascade during initialization)
-  onMount(() => {
-    fetchDashboardConfig();
-  });
 
   // Optimize loading state management with proper dependency tracking
   $effect(() => {
