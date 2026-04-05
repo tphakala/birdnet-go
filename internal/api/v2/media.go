@@ -839,7 +839,12 @@ func (c *Controller) ProcessAudioByID(ctx echo.Context) error {
 	// Write to a temp file so FFmpeg produces valid WAV headers (correct data size).
 	// Piping to stdout produces broken headers because FFmpeg can't seek back to
 	// update the RIFF chunk sizes, causing playback artifacts in some browsers.
-	tmpFile, err := os.CreateTemp("", "birdnet-process-*.wav")
+	// Use app-managed dir (not os.TempDir) for container compatibility with read-only rootfs.
+	tmpDir := filepath.Join(c.SFS.BaseDir(), ".tmp-processing")
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
+		return c.HandleError(ctx, err, "Failed to create temp directory", http.StatusInternalServerError)
+	}
+	tmpFile, err := os.CreateTemp(tmpDir, "birdnet-process-*.wav")
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to create temp file", http.StatusInternalServerError)
 	}

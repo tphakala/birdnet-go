@@ -434,8 +434,13 @@ func parseFFprobeLine(line string, result *ValidationResult) {
 // (MP3, AAC, FLAC, etc.) without requiring additional codec libraries.
 // Returns 0 and an error if the duration cannot be determined.
 func GetDurationViaFFprobe(ctx context.Context, audioPath string) (float64, error) {
+	// Enforce a bounded timeout so the fallback doesn't inherit a long parent deadline
+	// (e.g., the 90-second spectrogram generation timeout).
+	probeCtx, cancel := context.WithTimeout(ctx, FFprobeTimeout)
+	defer cancel()
+
 	var result ValidationResult
-	if err := validateWithFFprobe(ctx, audioPath, &result); err != nil {
+	if err := validateWithFFprobe(probeCtx, audioPath, &result); err != nil {
 		return 0, fmt.Errorf("ffprobe duration query failed: %w", err)
 	}
 	if result.Duration <= 0 {

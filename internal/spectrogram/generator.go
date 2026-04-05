@@ -1049,6 +1049,9 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	duration, soxErr := getAudioDurationViaSox(ctx, audioPath)
 	if soxErr != nil {
 		// Sox failed (common for MP3/AAC without libsox-fmt-mp3) — fall back to ffprobe
+		GetLogger().Debug("Sox duration query failed, falling back to ffprobe",
+			logger.Error(soxErr),
+			logger.String("audio_path", audioPath))
 		duration, err = ffmpeg.GetDurationViaFFprobe(ctx, audioPath)
 		if err != nil {
 			return 0 // Caller will use configured fallback

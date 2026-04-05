@@ -712,6 +712,22 @@ func TestGetSoxSpectrogramArgs_RawFlag(t *testing.T) {
 	assert.True(t, hasRaw, "should contain -r flag when raw=true")
 }
 
+// TestGetSoxSpectrogramArgs_UsesProvidedDuration verifies that a non-zero preValidatedDuration
+// is used directly for the -d parameter, skipping the sox --info duration query.
+func TestGetSoxSpectrogramArgs_UsesProvidedDuration(t *testing.T) {
+	gen, tempDir := createTestGenerator(t, 0, false)
+
+	audioPath := filepath.Join(tempDir, "input.mp3")
+	outputPath := filepath.Join(tempDir, "out.png")
+
+	args := gen.getSoxSpectrogramArgs(t.Context(), audioPath, outputPath, 400, false, 12.6)
+
+	idx := slices.Index(args, "-d")
+	require.NotEqual(t, -1, idx, "should contain -d parameter")
+	require.Less(t, idx+1, len(args), "-d should have a value after it")
+	assert.Equal(t, "13", args[idx+1], "duration should be int(12.6 + 0.5) = 13")
+}
+
 // TestGetSoxSpectrogramArgs_DimensionCalculation tests width/height calculation.
 // Heights should be FFT-friendly (2^n + 1) so sox uses fast FFT instead of brute-force DFT.
 func TestGetSoxSpectrogramArgs_DimensionCalculation(t *testing.T) {
