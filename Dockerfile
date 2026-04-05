@@ -186,11 +186,11 @@ LABEL usage.compose.docker="Use Docker/docker-compose.yml"
 LABEL usage.compose.podman="Use Podman/podman-compose.yml"
 
 # Add healthcheck to monitor container status
-# Uses /health endpoint and validates response body contains "healthy" to avoid
-# false positives from HTTP->HTTPS 308 redirects (curl treats 3xx as success).
+# Uses /health endpoint and validates JSON status via jq to avoid false positives
+# from HTTP->HTTPS 308 redirects (curl -f treats 3xx as success).
 # Extended start-period for low-power devices (e.g., Raspberry Pi)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -sS --connect-timeout 2 --max-time 3 http://localhost:8080/health | grep -q '"status":"healthy"' || curl -sSk --connect-timeout 2 --max-time 3 https://localhost:8443/health | grep -q '"status":"healthy"' || curl -sSk --connect-timeout 2 --max-time 3 https://localhost:443/health | grep -q '"status":"healthy"' || exit 1
+    CMD curl -fs --connect-timeout 2 --max-time 3 http://localhost:8080/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:8443/health | jq -e '.status == "healthy"' >/dev/null || curl -fsk --connect-timeout 2 --max-time 3 https://localhost:443/health | jq -e '.status == "healthy"' >/dev/null || exit 1
 
 # Container startup execution chain:
 # 1. entrypoint.sh - Sets up user permissions, timezone, device access, and performs
