@@ -24,6 +24,11 @@ const (
 
 	// errorLogInterval controls how often consumer write errors are logged.
 	errorLogInterval = 100
+
+	// dropSentryThreshold is the total number of drops per route before
+	// a single Sentry report is fired. This fires once — the log.Warn at
+	// dropLogInterval provides ongoing visibility.
+	dropSentryThreshold int64 = 1000
 )
 
 // drainerStopTimeout is the maximum time to wait for a drainer goroutine
@@ -244,6 +249,15 @@ func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugePara
 					logger.String("consumer_id", rt.Consumer.ID()),
 					logger.Int64("total_drops", drops))
 			}
+			if drops == dropSentryThreshold {
+				_ = errors.Newf("consumer dropped %d frames, likely cannot keep up", drops).
+					Component("audiocore.router").
+					Category(errors.CategoryAudio).
+					Context("operation", "sustained_frame_drops").
+					Context("source_id", frame.SourceID).
+					Context("consumer_id", rt.Consumer.ID()).
+					Build()
+			}
 		}
 	}
 }
@@ -323,6 +337,13 @@ func (r *AudioRouter) stopRoute(route *Route) {
 		r.log.Warn("drainer goroutine did not exit in time, leaking resources",
 			logger.String("source_id", route.SourceID),
 			logger.String("consumer_id", route.Consumer.ID()))
+		_ = errors.Newf("drainer goroutine leaked after %s timeout", drainerStopTimeout).
+			Component("audiocore.router").
+			Category(errors.CategoryResource).
+			Context("operation", "drainer_goroutine_leaked").
+			Context("source_id", route.SourceID).
+			Context("consumer_id", route.Consumer.ID()).
+			Build()
 	}
 }
 
