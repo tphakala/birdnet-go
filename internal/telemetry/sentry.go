@@ -380,6 +380,48 @@ func removePrivacyExtraFields(extra map[string]any) int {
 		"max_elapsed_ms":           true,
 		"buffer_length_ms":         true,
 		"reporting_window_minutes": true,
+		// Audiocore diagnostic fields (identifiers, enumerations, numeric values)
+		"source_id": true, // opaque source identifier (uuid-based)
+		"source":    true, // alias used by capture buffer
+		"device_id": true, // ALSA/WASAPI device identifier
+		// NOTE: device_name excluded — can contain user PII (e.g. "Jane's AirPods").
+		// device_id (opaque ALSA/WASAPI identifier) provides sufficient diagnostic value.
+		"consumer_id":          true, // route consumer identifier
+		"active_streams":       true, // count of active streams
+		"restart_count":        true, // stream restart counter
+		"consecutive_failures": true, // circuit breaker failure count
+		"timeout_seconds":      true, // silence timeout threshold
+		"runtime_seconds":      true, // process runtime duration
+		"exit_time_seconds":    true, // time to process exit
+		"error_detail":         true, // sanitized ffmpeg stderr
+		// Audio format fields (numeric/enumeration only)
+		"bit_depth":          true, // PCM bit depth (16/24/32)
+		"num_channels":       true, // audio channel count
+		"sample_rate":        true, // Hz value
+		"bytes_per_sample":   true, // PCM bytes per sample
+		"duration_seconds":   true, // buffer duration
+		"data_size":          true, // byte count
+		"pcm_data_size":      true, // PCM byte count
+		"sample_count":       true, // sample count
+		"requested_bytes":    true, // ring buffer read request
+		"bytes_read":         true, // actual bytes read
+		"requested_capacity": true, // buffer allocation request
+		"requested_end_byte": true, // read segment end offset
+		"written_bytes":      true, // bytes written to buffer
+		"read_size":          true, // analysis buffer read size
+		"overlap_size":       true, // analysis buffer overlap
+		"capacity":           true, // buffer capacity
+		// Resampling fields (numeric only)
+		"from_rate":     true, // resample source rate
+		"to_rate":       true, // resample target rate
+		"input_len":     true, // resample input length
+		"input_samples": true, // resample input sample count
+		// File format fields (string enumerations, no paths)
+		"file_extension":       true, // e.g. ".wav", ".flac"
+		"file_operation":       true, // e.g. "open", "read_header"
+		"supported_formats":    true, // e.g. "wav,flac"
+		"supported_bit_depths": true, // e.g. "16,24,32"
+		"center_frequency":     true, // octave band center freq
 	}
 
 	for k := range extra {

@@ -381,6 +381,46 @@ func TestRemovePrivacyExtraFields_AllowsDiagnosticFields(t *testing.T) {
 	assert.NotContains(t, extra, "secret_data")
 }
 
+func TestRemovePrivacyExtraFields_AllowsAudiocoreFields(t *testing.T) {
+	t.Parallel()
+
+	extra := map[string]any{
+		"error_type":           "test",
+		"component":            "audiocore",
+		"operation":            "capture_goroutine_panic",
+		"source_id":            "rtsp_a1b2c3d4",
+		"device_id":            ":0,0",
+		"consumer_id":          "analysis_buffer",
+		"active_streams":       3,
+		"restart_count":        5,
+		"consecutive_failures": 2,
+		"bit_depth":            16,
+		"sample_rate":          48000,
+		"from_rate":            44100,
+		"to_rate":              48000,
+		"file_extension":       ".wav",
+		"center_frequency":     1000.0,
+		"unknown_field":        "should_be_removed",
+	}
+
+	removed := removePrivacyExtraFields(extra)
+
+	assert.Equal(t, 1, removed, "only unknown_field should be removed")
+	assert.Contains(t, extra, "source_id")
+	assert.Contains(t, extra, "device_id")
+	assert.Contains(t, extra, "consumer_id")
+	assert.Contains(t, extra, "active_streams")
+	assert.Contains(t, extra, "restart_count")
+	assert.Contains(t, extra, "consecutive_failures")
+	assert.Contains(t, extra, "bit_depth")
+	assert.Contains(t, extra, "sample_rate")
+	assert.Contains(t, extra, "from_rate")
+	assert.Contains(t, extra, "to_rate")
+	assert.Contains(t, extra, "file_extension")
+	assert.Contains(t, extra, "center_frequency")
+	assert.NotContains(t, extra, "unknown_field")
+}
+
 func TestApplyStacktracePrivacyFilters_ErrorLevel(t *testing.T) {
 	t.Parallel()
 
