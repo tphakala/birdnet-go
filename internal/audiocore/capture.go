@@ -337,6 +337,13 @@ func startCapture(
 				log.Error("failed to stop capture device",
 					logger.String("source_id", sourceID),
 					logger.Error(err))
+				_ = errors.New(err).
+					Component("audiocore.capture").
+					Category(errors.CategoryAudioSource).
+					Context("operation", "device_stop_failed").
+					Context("source_id", sourceID).
+					Context("device_name", selectedDevInfo.Name).
+					Build()
 			}
 			captureDevice.Uninit()
 			// Context requires explicit two-step teardown.

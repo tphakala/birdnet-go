@@ -509,6 +509,13 @@ func (m *Manager) checkForStuckStreams() {
 				logger.Error(err),
 				logger.String("component", "ffmpeg-manager"),
 				logger.String("operation", "watchdog_stop"))
+			_ = errors.New(err).
+				Component("ffmpeg-manager").
+				Category(errors.CategoryRTSP).
+				Context("operation", "watchdog_stop_failed").
+				Context("source_id", id).
+				Context("restart_count", h.RestartCount).
+				Build()
 			continue
 		}
 
@@ -530,6 +537,13 @@ func (m *Manager) checkForStuckStreams() {
 				logger.Error(err),
 				logger.String("component", "ffmpeg-manager"),
 				logger.String("operation", "watchdog_restart"))
+			_ = errors.New(err).
+				Component("ffmpeg-manager").
+				Category(errors.CategoryRTSP).
+				Context("operation", "watchdog_restart_failed").
+				Context("source_id", id).
+				Context("restart_count", h.RestartCount).
+				Build()
 			continue
 		}
 
