@@ -424,8 +424,17 @@ func init() {
 	RegisterComponent("threshold", "analysis.threshold")
 	RegisterComponent("tracker", "analysis.tracker")
 
-	// audiocore package
+	// audiocore package and subpackages (slash-separated match Go import paths)
 	RegisterComponent("audiocore", "audiocore")
+	RegisterComponent("audiocore/readfile", "audiocore.readfile")
+	RegisterComponent("audiocore/convert", "audiocore.convert")
+	RegisterComponent("audiocore/ffmpeg", "audiocore.ffmpeg")
+	RegisterComponent("audiocore/buffer", "audiocore.buffer")
+	RegisterComponent("audiocore/soundlevel", "audiocore.soundlevel")
+	RegisterComponent("audiocore/resample", "audiocore.resample")
+	RegisterComponent("audiocore/engine", "audiocore.engine")
+	RegisterComponent("audiocore/schedule", "audiocore.schedule")
+	RegisterComponent("audiocore/equalizer", "audiocore.equalizer")
 }
 
 // Helper functions for auto-detection and categorization
