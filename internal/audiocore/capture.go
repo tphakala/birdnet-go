@@ -342,7 +342,6 @@ func startCapture(
 					Category(errors.CategoryAudioSource).
 					Context("operation", "device_stop_failed").
 					Context("source_id", sourceID).
-					Context("device_name", selectedDevInfo.Name).
 					Build()
 			}
 			captureDevice.Uninit()
