@@ -314,3 +314,50 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 done:
 	assert.Positive(t, drained, "at least some frames should have been delivered")
 }
+
+func TestDrainRoutePanicRecovery(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger())
+	t.Cleanup(func() { router.Close() })
+
+	panicConsumer := &panicOnWriteConsumer{
+		id:         "panic-consumer",
+		sampleRate: 48000,
+	}
+
+	err := router.AddRoute("src1", panicConsumer, 48000)
+	require.NoError(t, err)
+
+	// Dispatch a frame — the consumer will panic on Write.
+	router.Dispatch(AudioFrame{
+		SourceID:   "src1",
+		Data:       make([]byte, 100),
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Timestamp:  time.Now(),
+	})
+
+	// Wait for drainer to process the frame, recover, and exit.
+	time.Sleep(200 * time.Millisecond)
+
+	// The drainer exited on panic — the route's stopped channel is closed,
+	// and subsequent dispatches to its inbox are silently dropped.
+	// Verify the process didn't crash (panic was recovered).
+}
+
+// panicOnWriteConsumer always panics on Write.
+type panicOnWriteConsumer struct {
+	id         string
+	sampleRate int
+}
+
+func (c *panicOnWriteConsumer) ID() string      { return c.id }
+func (c *panicOnWriteConsumer) SampleRate() int { return c.sampleRate }
+func (c *panicOnWriteConsumer) BitDepth() int   { return 16 }
+func (c *panicOnWriteConsumer) Channels() int   { return 1 }
+func (c *panicOnWriteConsumer) Close() error    { return nil }
+func (c *panicOnWriteConsumer) Write(_ AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	panic("consumer exploded")
+}

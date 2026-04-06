@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -331,6 +332,26 @@ func (r *AudioRouter) stopRoute(route *Route) {
 // channel is closed or the router's context is cancelled.
 func (r *AudioRouter) drainRoute(route *Route) {
 	defer close(route.stopped)
+	defer func() {
+		if p := recover(); p != nil {
+			panicErr := fmt.Errorf("panic in drainer goroutine: %v", p)
+			r.log.Error("panic in drainer goroutine, route terminated",
+				logger.String("source_id", route.SourceID),
+				logger.String("consumer_id", route.Consumer.ID()),
+				logger.Any("panic", p))
+			_ = errors.New(panicErr).
+				Component("audiocore.router").
+				Category(errors.CategoryAudio).
+				Context("operation", "drainer_goroutine_panic").
+				Context("source_id", route.SourceID).
+				Context("consumer_id", route.Consumer.ID()).
+				Priority(errors.PriorityCritical).
+				Build()
+			// Goroutine returns here — the route is effectively dead.
+			// The stopped channel is closed by the outer defer, allowing
+			// stopRoute to clean up the resampler and consumer.
+		}
+	}()
 	for {
 		select {
 		case frame := <-route.inbox:
