@@ -99,7 +99,7 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 	// Create the output directory if needed.
 	outputDir := filepath.Dir(opts.OutputPath)
 	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return errors.New(err).
+		return errors.Newf("failed to create output directory for export: %w", err).
 			Component("audiocore/ffmpeg").
 			Category(errors.CategoryFileIO).
 			Context("operation", "export_create_directory").
@@ -121,7 +121,7 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 
 	// Atomic rename to final path.
 	if err := os.Rename(tempPath, opts.OutputPath); err != nil {
-		return errors.New(err).
+		return errors.Newf("failed to finalize export output: %w", err).
 			Component("audiocore/ffmpeg").
 			Category(errors.CategoryFileIO).
 			Context("operation", "export_finalize_rename").

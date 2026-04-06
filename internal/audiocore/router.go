@@ -355,7 +355,12 @@ func (r *AudioRouter) drainRoute(route *Route) {
 	defer close(route.stopped)
 	defer func() {
 		if p := recover(); p != nil {
-			panicErr := fmt.Errorf("panic in drainer goroutine: %v", p)
+			var panicErr error
+			if asErr, ok := p.(error); ok {
+				panicErr = fmt.Errorf("panic in drainer goroutine: %w", asErr)
+			} else {
+				panicErr = fmt.Errorf("panic in drainer goroutine: %v", p)
+			}
 			r.log.Error("panic in drainer goroutine, route terminated",
 				logger.String("source_id", route.SourceID),
 				logger.String("consumer_id", route.Consumer.ID()),
@@ -368,7 +373,24 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				Context("consumer_id", route.Consumer.ID()).
 				Priority(errors.PriorityCritical).
 				Build()
-			// Goroutine returns here — the route is effectively dead.
+			// Remove the dead route from the map so HasConsumers/Dispatch
+			// stop sending frames to an inbox nobody drains.
+			r.mu.Lock()
+			routes := r.routes[route.SourceID]
+			for i, rt := range routes {
+				if rt != route {
+					continue
+				}
+				routes[i] = routes[len(routes)-1]
+				routes[len(routes)-1] = nil
+				r.routes[route.SourceID] = routes[:len(routes)-1]
+				if len(r.routes[route.SourceID]) == 0 {
+					delete(r.routes, route.SourceID)
+				}
+				break
+			}
+			r.mu.Unlock()
+			// Goroutine returns here — the route is removed.
 			// The stopped channel is closed by the outer defer, allowing
 			// stopRoute to clean up the resampler and consumer.
 		}

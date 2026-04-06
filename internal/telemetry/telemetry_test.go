@@ -400,12 +400,13 @@ func TestRemovePrivacyExtraFields_AllowsAudiocoreFields(t *testing.T) {
 		"to_rate":              48000,
 		"file_extension":       ".wav",
 		"center_frequency":     1000.0,
+		"device_name":          "Alice's AirPods", // PII risk — must be filtered
 		"unknown_field":        "should_be_removed",
 	}
 
 	removed := removePrivacyExtraFields(extra)
 
-	assert.Equal(t, 1, removed, "only unknown_field should be removed")
+	assert.Equal(t, 2, removed, "device_name and unknown_field should be removed")
 	assert.Contains(t, extra, "source_id")
 	assert.Contains(t, extra, "device_id")
 	assert.Contains(t, extra, "consumer_id")
@@ -418,6 +419,7 @@ func TestRemovePrivacyExtraFields_AllowsAudiocoreFields(t *testing.T) {
 	assert.Contains(t, extra, "to_rate")
 	assert.Contains(t, extra, "file_extension")
 	assert.Contains(t, extra, "center_frequency")
+	assert.NotContains(t, extra, "device_name", "device_name must be filtered — PII risk")
 	assert.NotContains(t, extra, "unknown_field")
 }
 
