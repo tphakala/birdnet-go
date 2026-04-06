@@ -147,6 +147,7 @@
     "svelte"
   ],
   "overrides": {
-    "flatted": "3.4.2"
+    "flatted": "3.4.2",
+    "lru-cache": "11.2.7"
   }
 }
