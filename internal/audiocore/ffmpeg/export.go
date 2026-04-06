@@ -99,7 +99,11 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 	// Create the output directory if needed.
 	outputDir := filepath.Dir(opts.OutputPath)
 	if err := os.MkdirAll(outputDir, 0o750); err != nil {
-		return fmt.Errorf("failed to create output directory %s: %w", outputDir, err)
+		return errors.New(err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryFileIO).
+			Context("operation", "export_create_directory").
+			Build()
 	}
 
 	// Write to a temp file first for atomic finalisation.
@@ -117,7 +121,11 @@ func ExportAudio(ctx context.Context, opts *ExportOptions) error {
 
 	// Atomic rename to final path.
 	if err := os.Rename(tempPath, opts.OutputPath); err != nil {
-		return fmt.Errorf("failed to finalize export output: %w", err)
+		return errors.New(err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryFileIO).
+			Context("operation", "export_finalize_rename").
+			Build()
 	}
 
 	return nil
@@ -166,7 +174,12 @@ func runExportFFmpeg(ctx context.Context, opts *ExportOptions, tempPath string) 
 		if writeErr != nil {
 			_ = cmd.Process.Kill()
 			_ = cmd.Wait()
-			return fmt.Errorf("failed to write PCM data to FFmpeg: %w, stderr: %s", writeErr, stderr.String())
+			return errors.Newf("failed to write PCM data to FFmpeg: %w", writeErr).
+				Component("audiocore/ffmpeg").
+				Category(errors.CategoryAudio).
+				Context("operation", "export_ffmpeg_write").
+				Context("error_detail", stderr.String()).
+				Build()
 		}
 	case <-ctx.Done():
 		_ = cmd.Process.Kill()
@@ -185,7 +198,13 @@ func runExportFFmpeg(ctx context.Context, opts *ExportOptions, tempPath string) 
 			exitCode = exitErr.ExitCode()
 		}
 
-		return fmt.Errorf("FFmpeg export failed (exit_code=%d): %w, stderr: %s", exitCode, err, stderr.String())
+		return errors.Newf("FFmpeg export failed (exit_code=%d): %w", exitCode, err).
+			Component("audiocore/ffmpeg").
+			Category(errors.CategoryAudio).
+			Context("operation", "export_ffmpeg_wait").
+			Context("exit_code", exitCode).
+			Context("error_detail", stderr.String()).
+			Build()
 	}
 
 	return nil
