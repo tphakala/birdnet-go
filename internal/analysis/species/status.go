@@ -86,9 +86,14 @@ func (t *SpeciesTracker) getFirstSeasonalDetection(scientificName, currentSeason
 	return nil
 }
 
-// calculateDaysSince calculates days between two times, returning at minimum 0.
+// calculateDaysSince calculates calendar days between two times, returning at minimum 0.
+// Uses date-only arithmetic in UTC to avoid DST off-by-one errors.
 func calculateDaysSince(currentTime, referenceTime time.Time) int {
-	days := int(currentTime.Sub(referenceTime).Hours() / hoursPerDay)
+	y1, m1, d1 := referenceTime.Date()
+	y2, m2, d2 := currentTime.Date()
+	start := time.Date(y1, m1, d1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(y2, m2, d2, 0, 0, 0, 0, time.UTC)
+	days := int(end.Sub(start) / (hoursPerDay * time.Hour))
 	return max(0, days)
 }
 

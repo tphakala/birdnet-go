@@ -169,7 +169,7 @@ func TestRaceConditionFixDemo(t *testing.T) {
 				t.speciesFirstSeen[scientificName] = detectionTime
 			} else {
 				// Calculate days BEFORE any updates
-				daysSince := int(detectionTime.Sub(firstSeen).Hours() / hoursPerDay)
+				daysSince := calculateDaysSince(detectionTime, firstSeen)
 
 				if detectionTime.Before(firstSeen) {
 					// Update to earlier time
