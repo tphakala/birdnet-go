@@ -704,11 +704,10 @@ func CaptureError(err error, component string) {
 		scope.SetTag("component", component)
 		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("error_origin", "unknown")
-		// Add parsed error type to extras for easier filtering in Sentry
-		scope.SetExtra("error_type", errorType)
 		scope.SetContext("error", map[string]any{
 			"type":             fmt.Sprintf("%T", err),
 			"scrubbed_message": scrubbedErrorMsg,
+			"error_type":       errorType,
 		})
 
 		// Create event with custom title to replace generic error type prefix
@@ -796,9 +795,7 @@ func CaptureMessageWithExtras(message string, level sentry.Level, component stri
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", component)
 		scope.SetLevel(level)
-		for k, v := range extras {
-			scope.SetExtra(k, v)
-		}
+		scope.SetContext("extras", extras)
 		sentry.CaptureMessage(scrubbedMessage)
 	})
 

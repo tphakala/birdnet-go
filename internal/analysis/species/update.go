@@ -123,18 +123,8 @@ func (t *SpeciesTracker) checkAndUpdateLifetimeLocked(scientificName string, det
 		return true, 0
 	}
 
-	// Calculate calendar days since first seen (DST-safe)
+	// Calculate calendar days since first seen (DST-safe, clamped to 0)
 	daysSince := calculateDaysSince(detectionTime, firstSeen)
-	if daysSince < 0 {
-		// Handle anomaly: treat as earliest detection
-		getLog().Debug("Negative days calculation detected - treating as earliest detection",
-			logger.String("species", scientificName),
-			logger.String("detection_time", detectionTime.Format("2006-01-02 15:04:05.000")),
-			logger.String("first_seen", firstSeen.Format("2006-01-02 15:04:05.000")))
-		t.speciesFirstSeen[scientificName] = detectionTime
-		return true, 0
-	}
-
 	return daysSince <= t.windowDays, daysSince
 }
 

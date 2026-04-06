@@ -75,13 +75,13 @@ func (at *AlertingTelemetry) ReportPanic(panicValue any, stack []byte) {
 		scope.SetTag("outcome", "panic")
 		scope.SetFingerprint([]string{telemetryComponent, "panic", panicType})
 
-		scope.SetContext(telemetryComponent, map[string]any{
+		contextData := map[string]any{
 			"panic_type": panicType,
-		})
-
-		if len(stack) > 0 {
-			scope.SetExtra("stacktrace", privacy.ScrubMessage(string(stack)))
 		}
+		if len(stack) > 0 {
+			contextData["stacktrace"] = privacy.ScrubMessage(string(stack))
+		}
+		scope.SetContext(telemetryComponent, contextData)
 
 		telemetry.CaptureMessage(
 			fmt.Sprintf("Alerting handler panic (type: %s)", panicType),
