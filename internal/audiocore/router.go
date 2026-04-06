@@ -390,9 +390,11 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				break
 			}
 			r.mu.Unlock()
-			// Goroutine returns here — the route is removed.
-			// The stopped channel is closed by the outer defer, allowing
-			// stopRoute to clean up the resampler and consumer.
+			// Goroutine returns here — the route is removed from the map.
+			// Note: consumer and resampler are intentionally NOT closed here
+			// to avoid potential secondary panics during cleanup. They will
+			// be reclaimed by GC. The stopped channel is closed by the outer
+			// defer for consistency.
 		}
 	}()
 	for {
