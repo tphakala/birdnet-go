@@ -6,7 +6,7 @@
    * audio source. Manages its own HLS.js connection, heartbeat, and access control.
    *
    * Key design:
-   * - Uses useSpectrogramAnalyser composable (no inline Web Audio graph)
+   * - Uses HLS for playback and the server-side FFT stream for rendering
    * - Source discovery via SSE audio-level stream
    * - Silent by default with speaker toggle
    * - Manual start/stop with localStorage persistence
@@ -24,10 +24,13 @@
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { primeAudioContext } from '$lib/utils/audioContextManager';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { loggers } from '$lib/utils/logger';
+  import { connectLiveSpectrogramStream } from '$lib/utils/liveSpectrogramStream';
   import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
+  import type { LiveSpectrogramColumn } from '$lib/types/liveSpectrogram';
   import type { PendingDetection } from '$lib/types/pending.types';
   import type { OverlayLabel, QueuedLabel } from '$lib/utils/detectionOverlay';
   import {
@@ -76,6 +79,11 @@
   });
   let colorMap = $state<ColorMapName>('inferno');
   let frequencyRange = $state<[number, number]>([0, 15000]);
+  let streamColumns = $state<LiveSpectrogramColumn[]>([]);
+  let currentWallClockAtPlayhead = $state(0);
+  let streamSampleRate = $state(48000);
+  let streamFFTSize = $state(FFT_SIZE);
+  let streamHopSize = $state(128);
 
   // Stream token state
   let activeStreamToken: string | null = null;
@@ -86,6 +94,7 @@
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let abortController: AbortController | null = null;
   let activeSourceId = $state<string | null>(null);
+  let closeLiveSpectrogramStream: (() => void) | null = null;
 
   // Detection overlay state
   let overlayLabels = $state<OverlayLabel[]>([]);
@@ -97,6 +106,30 @@
 
   // Initialize composable during component init (must be at top level for $effect cleanup)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: false });
+
+  function startLiveSpectrogram(sourceId: string) {
+    closeLiveSpectrogramStream?.();
+    streamColumns = [];
+    closeLiveSpectrogramStream = connectLiveSpectrogramStream(sourceId, {
+      onMeta: meta => {
+        streamSampleRate = meta.sampleRate;
+        streamFFTSize = meta.fftSize;
+        streamHopSize = meta.hopSize;
+      },
+      onColumns: event => {
+        streamColumns = [...streamColumns, ...event.columns].slice(-1024);
+      },
+    });
+  }
+
+  function stopLiveSpectrogram() {
+    closeLiveSpectrogramStream?.();
+    closeLiveSpectrogramStream = null;
+    streamColumns = [];
+    streamSampleRate = 48000;
+    streamFFTSize = FFT_SIZE;
+    streamHopSize = 128;
+  }
 
   function shouldAutoStart(): boolean {
     if (appState.liveSpectrogram) return true;
@@ -181,6 +214,8 @@
     if (isActive || isConnecting) return;
     isConnecting = true;
 
+    await primeAudioContext();
+
     // Abort any previous in-flight operation
     abortController?.abort();
     const controller = new AbortController();
@@ -218,6 +253,11 @@
 
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
+      audioElement.muted = gainPresetIndex === 0;
+      // eslint-disable-next-line security/detect-object-injection -- gainPresetIndex is a numeric index bounded by modulo
+      const preset = GAIN_PRESETS[gainPresetIndex];
+      audioElement.volume =
+        'db' in preset ? Math.max(0, Math.min(1, Math.pow(10, preset.db / 20))) : 1;
 
       if (Hls.isSupported()) {
         hls = new Hls(HLS_AUDIO_CONFIG);
@@ -241,6 +281,9 @@
           isActive = true;
           isConnecting = false;
           persistToggleState(true);
+          if (activeSourceId) {
+            startLiveSpectrogram(activeSourceId);
+          }
 
           if (audioElement) {
             await spectro.connect(audioElement);
@@ -261,7 +304,7 @@
           }
         });
       } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari / iOS)
+        // Native HLS fallback path
         audioElement.src = hlsUrl;
         try {
           await audioElement.play();
@@ -276,9 +319,11 @@
         isConnecting = false;
         persistToggleState(true);
 
-        await spectro.connect(audioElement);
+        if (activeSourceId) {
+          startLiveSpectrogram(activeSourceId);
+        }
         if (signal.aborted) {
-          spectro.disconnect();
+          stopLiveSpectrogram();
         }
       } else {
         // Browser supports neither HLS.js nor native HLS — tear down
@@ -344,6 +389,8 @@
     }
 
     stopHeartbeat();
+    stopLiveSpectrogram();
+    currentWallClockAtPlayhead = 0;
     spectro.disconnect();
 
     if (hls) {
@@ -378,6 +425,12 @@
     gainPresetIndex = (gainPresetIndex + 1) % GAIN_PRESETS.length;
     // eslint-disable-next-line security/detect-object-injection -- gainPresetIndex is a numeric index bounded by modulo
     const preset = GAIN_PRESETS[gainPresetIndex];
+    if (audioElement) {
+      audioElement.muted = !preset.audio;
+      audioElement.volume = preset.audio
+        ? Math.max(0, Math.min(1, Math.pow(10, preset.db / 20)))
+        : 1;
+    }
     spectro.setAudioOutput(preset.audio);
     // Always update gain -- when muted (db: -Infinity), this resets the
     // spectrogram visualization to 0 dB instead of leaving it at max gain.
@@ -425,6 +478,10 @@
         hls?.playingDate ?? null,
         nowUnix
       );
+
+      if (wallClockAtPlayhead > 0) {
+        currentWallClockAtPlayhead = wallClockAtPlayhead;
+      }
 
       // Promote queued labels when playhead is available
       if (wallClockAtPlayhead > 0 && labelQueue.length > 0) {
@@ -526,25 +583,26 @@
       </div>
     </div>
 
-    {#if (isActive || isConnecting) && spectro.isActive}
+    {#if isActive || isConnecting}
       <SpectrogramCanvas
         analyser={spectro.analyser}
         frequencyData={spectro.frequencyData}
-        sampleRate={spectro.sampleRate}
-        fftSize={FFT_SIZE}
+        sampleRate={streamSampleRate}
+        fftSize={streamFFTSize}
+        showFrequencyAxis={true}
+        frequencyAxisMode="compact"
+        showTimeAxis={true}
         {frequencyRange}
         {colorMap}
-        isActive={spectro.isActive}
+        {isActive}
+        renderMode="stream"
+        {streamColumns}
+        {streamHopSize}
         overlayLabels={showDetectionLabels ? overlayLabels : []}
         overlayFontSize={9}
+        wallClockAtPlayhead={currentWallClockAtPlayhead}
         className="h-28 w-full"
       />
-    {:else if isActive || isConnecting}
-      <div class="flex h-28 items-center justify-center bg-black">
-        <div
-          class="h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-primary)] border-t-transparent"
-        ></div>
-      </div>
     {/if}
   </div>
 {/if}

@@ -958,6 +958,7 @@
       "title": "Reaaliaikainen ääni",
       "sourceLabel": "Äänilähde",
       "connected": "Yhdistetty",
+      "syncingAudio": "Synkronoidaan reaaliaikaista ääntä...",
       "enterFullscreen": "Koko näyttö",
       "exitFullscreen": "Poistu koko näytöstä"
     },
@@ -967,7 +968,8 @@
       "grayscale": "Harmaasävy"
     },
     "labels": {
-      "toggle": "Näytä/piilota tunnistusmerkinnät"
+      "toggle": "Näytä/piilota tunnistusmerkinnät",
+      "toggleTimeAxis": "Näytä/piilota aikajana"
     }
   },
   "system": {

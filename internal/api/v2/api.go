@@ -93,7 +93,10 @@ type Controller struct {
 
 	// Audio level channel for SSE streaming
 	// TODO: Consider moving to a dedicated audio manager
-	audioLevelChan chan audiocore.AudioLevelData
+	audioLevelChan         chan audiocore.AudioLevelData
+	liveSpectrogramChan    chan LiveSpectrogramBatch
+	acquireLiveSpectrogram func(string) error
+	releaseLiveSpectrogram func(string)
 
 	// engine provides access to the unified audio subsystem (sources, buffers, routing).
 	engine *engine.AudioEngine
@@ -168,6 +171,15 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
 		c.engine = e
+	}
+}
+
+// WithLiveSpectrogramLifecycle injects callbacks that activate and release the
+// server-side live spectrogram producer for a source.
+func WithLiveSpectrogramLifecycle(acquire func(string) error, release func(string)) Option {
+	return func(c *Controller) {
+		c.acquireLiveSpectrogram = acquire
+		c.releaseLiveSpectrogram = release
 	}
 }
 
@@ -571,6 +583,7 @@ func (c *Controller) initRoutes() {
 		{"stream health routes", c.initStreamHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
+		{"audio spectrogram routes", c.initAudioSpectrogramRoutes},
 		{"hls streaming routes", c.initHLSRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
 		{"control routes", c.initControlRoutes},

@@ -957,6 +957,7 @@
       "title": "Live-lyd",
       "sourceLabel": "Lydkilde",
       "connected": "Forbundet",
+      "syncingAudio": "Synkroniserer live-lyd...",
       "enterFullscreen": "Fuld skærm",
       "exitFullscreen": "Afslut fuld skærm"
     },
@@ -966,7 +967,8 @@
       "grayscale": "Gråtone"
     },
     "labels": {
-      "toggle": "Skift detekteringsetiketter"
+      "toggle": "Skift detekteringsetiketter",
+      "toggleTimeAxis": "Skift tidsakse"
     }
   },
   "system": {

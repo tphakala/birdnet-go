@@ -1264,11 +1264,20 @@ type WebServerSettings struct {
 }
 
 type LiveStreamSettings struct {
-	Debug          bool   `yaml:"debug" json:"debug"`                   // true to enable debug mode
-	BitRate        int    `yaml:"bitrate" json:"bitRate"`               // bitrate for live stream in kbps
-	SampleRate     int    `yaml:"samplerate" json:"sampleRate"`         // sample rate for live stream in Hz
-	SegmentLength  int    `yaml:"segmentlength" json:"segmentLength"`   // length of each segment in seconds
-	FfmpegLogLevel string `yaml:"ffmpegloglevel" json:"ffmpegLogLevel"` // log level for ffmpeg
+	Debug          bool                    `yaml:"debug" json:"debug"`                   // true to enable debug mode
+	BitRate        int                     `yaml:"bitrate" json:"bitRate"`               // bitrate for live stream in kbps
+	SampleRate     int                     `yaml:"samplerate" json:"sampleRate"`         // sample rate for live stream in Hz
+	SegmentLength  int                     `yaml:"segmentlength" json:"segmentLength"`   // length of each segment in seconds
+	FfmpegLogLevel string                  `yaml:"ffmpegloglevel" json:"ffmpegLogLevel"` // log level for ffmpeg
+	Spectrogram    LiveSpectrogramSettings `yaml:"spectrogram" json:"spectrogram"`       // live spectrogram stream configuration
+}
+
+type LiveSpectrogramSettings struct {
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	FFTSize         int    `yaml:"fftsize" json:"fftSize"`
+	HopSize         int    `yaml:"hopsize" json:"hopSize"`
+	Window          string `yaml:"window" json:"window"`
+	BatchIntervalMs int    `yaml:"batchintervalms" json:"batchIntervalMs"`
 }
 
 // BackupRetention defines backup retention policy

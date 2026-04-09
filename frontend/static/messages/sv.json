@@ -957,6 +957,7 @@
       "title": "Live-ljud",
       "sourceLabel": "Ljudkälla",
       "connected": "Ansluten",
+      "syncingAudio": "Synkroniserar live-ljud...",
       "enterFullscreen": "Helskärm",
       "exitFullscreen": "Avsluta helskärm"
     },
@@ -966,7 +967,8 @@
       "grayscale": "Gråskala"
     },
     "labels": {
-      "toggle": "Växla detekteringsetiketter"
+      "toggle": "Växla detekteringsetiketter",
+      "toggleTimeAxis": "Växla tidsaxel"
     }
   },
   "system": {

@@ -957,6 +957,7 @@
       "title": "Audio dal vivo",
       "sourceLabel": "Sorgente audio",
       "connected": "Connesso",
+      "syncingAudio": "Sincronizzazione audio dal vivo...",
       "enterFullscreen": "Schermo intero",
       "exitFullscreen": "Esci da schermo intero"
     },
@@ -966,7 +967,8 @@
       "grayscale": "Scala di grigi"
     },
     "labels": {
-      "toggle": "Mostra/nascondi etichette di rilevamento"
+      "toggle": "Mostra/nascondi etichette di rilevamento",
+      "toggleTimeAxis": "Mostra/nascondi asse temporale"
     }
   },
   "system": {

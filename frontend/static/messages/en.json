@@ -958,6 +958,7 @@
       "title": "Live Audio",
       "sourceLabel": "Audio Source",
       "connected": "Connected",
+      "syncingAudio": "Syncing live audio...",
       "enterFullscreen": "Enter fullscreen",
       "exitFullscreen": "Exit fullscreen"
     },
@@ -967,7 +968,8 @@
       "grayscale": "Grayscale"
     },
     "labels": {
-      "toggle": "Toggle detection labels"
+      "toggle": "Toggle detection labels",
+      "toggleTimeAxis": "Toggle time axis"
     }
   },
   "system": {

@@ -80,6 +80,22 @@ export async function getAudioContext(): Promise<AudioContext> {
 }
 
 /**
+ * Prime the shared AudioContext as early as possible in a user gesture.
+ *
+ * Safari is stricter than Chrome about when AudioContext.resume() is allowed.
+ * Calling this before async boundaries (fetch/HLS setup) helps preserve the
+ * gesture-initiated activation needed for analyser output on native HLS.
+ */
+export async function primeAudioContext(): Promise<void> {
+  try {
+    await getAudioContext();
+  } catch {
+    // Ignore support/activation failures here; callers can continue and the
+    // analyser will retry later during full graph setup.
+  }
+}
+
+/**
  * Check if AudioContext is supported in this browser.
  * Use this for feature detection before attempting audio playback.
  *

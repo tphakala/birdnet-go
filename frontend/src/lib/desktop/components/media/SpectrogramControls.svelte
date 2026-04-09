@@ -25,7 +25,7 @@
    * Uses callback props for state changes.
    */
 
-  import { Tag, Volume2, VolumeX } from '@lucide/svelte';
+  import { Clock3, Tag, Volume2, VolumeX } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
@@ -57,8 +57,12 @@
     compact?: boolean;
     /** Whether detection labels are shown */
     showDetectionLabels?: boolean;
+    /** Whether time axis is shown */
+    showTimeAxis?: boolean;
     /** Toggle detection label visibility */
     onDetectionLabelsToggle?: () => void;
+    /** Toggle time axis visibility */
+    onTimeAxisToggle?: () => void;
     /** Callbacks */
     onFrequencyRangeChange?: (_range: [number, number]) => void;
     onColorMapChange?: (_map: ColorMapName) => void;
@@ -73,7 +77,9 @@
     audioOutput = false,
     compact = false,
     showDetectionLabels = true,
+    showTimeAxis = true,
     onDetectionLabelsToggle,
+    onTimeAxisToggle,
     onFrequencyRangeChange,
     onColorMapChange,
     onGainChange,
@@ -157,7 +163,7 @@
       size="xs"
       groupBy={false}
       onChange={handleColorMapChange}
-      className="w-36"
+      className="w-44"
     >
       {#snippet renderOption(option)}
         <div class="flex items-center gap-2">
@@ -240,6 +246,20 @@
       title={t('spectrogram.labels.toggle')}
     >
       <Tag class="size-4" />
+    </button>
+  {/if}
+
+  {#if onTimeAxisToggle}
+    <button
+      type="button"
+      onclick={onTimeAxisToggle}
+      class="rounded p-1.5 transition-colors {showTimeAxis
+        ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+        : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
+      aria-label={t('spectrogram.labels.toggleTimeAxis')}
+      title={t('spectrogram.labels.toggleTimeAxis')}
+    >
+      <Clock3 class="size-4" />
     </button>
   {/if}
 </div>

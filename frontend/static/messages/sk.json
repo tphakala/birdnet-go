@@ -957,6 +957,7 @@
       "title": "Živý zvuk",
       "sourceLabel": "Zdroj zvuku",
       "connected": "Pripojené",
+      "syncingAudio": "Synchronizuje sa živý zvuk...",
       "enterFullscreen": "Celá obrazovka",
       "exitFullscreen": "Ukončiť celú obrazovku"
     },
@@ -966,7 +967,8 @@
       "grayscale": "Odtiene šedej"
     },
     "labels": {
-      "toggle": "Prepnúť štítky detekcie"
+      "toggle": "Prepnúť štítky detekcie",
+      "toggleTimeAxis": "Prepnúť časovú os"
     }
   },
   "system": {

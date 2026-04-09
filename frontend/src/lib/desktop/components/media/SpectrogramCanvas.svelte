@@ -15,9 +15,9 @@
     DEFAULT_COLOR_MAP,
     type ColorMapName,
   } from '$lib/utils/spectrogramColorMaps';
-  import { loggers } from '$lib/utils/logger';
+  import { t } from '$lib/i18n';
+  import type { LiveSpectrogramColumn } from '$lib/types/liveSpectrogram';
 
-  const logger = loggers.audio;
   /** Interval between debug time markers on the waterfall (seconds) */
   const DEBUG_MARKER_INTERVAL_SEC = 5;
 
@@ -54,6 +54,18 @@
     debug?: boolean;
     /** Current wall-clock time at playhead (Unix seconds) — used for debug time markers */
     wallClockAtPlayhead?: number;
+    /** Rendering mode: analyser bins or server-streamed bins */
+    renderMode?: 'analyser' | 'stream';
+    /** Timestamped FFT columns streamed from the backend */
+    streamColumns?: LiveSpectrogramColumn[];
+    /** Hop size for streamed FFT columns */
+    streamHopSize?: number;
+    /** Whether to show a frequency axis on the left side */
+    showFrequencyAxis?: boolean;
+    /** Frequency axis density mode */
+    frequencyAxisMode?: 'compact' | 'adaptive';
+    /** Whether to show a time axis along the bottom edge */
+    showTimeAxis?: boolean;
   }
 
   let {
@@ -70,6 +82,12 @@
     overlayFontSize = 11,
     debug = false,
     wallClockAtPlayhead = 0,
+    renderMode = 'analyser',
+    streamColumns = [],
+    streamHopSize = 128,
+    showFrequencyAxis = false,
+    frequencyAxisMode = 'adaptive',
+    showTimeAxis = false,
   }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -78,6 +96,8 @@
   // CSS pixel dimensions (from ResizeObserver)
   let cssWidth = $state(800);
   let cssHeight = $state(300);
+  let queuedStreamColumns = $state<LiveSpectrogramColumn[]>([]);
+  let lastQueuedStreamUnixMs = $state(0);
 
   // DPR tracking
   let dpr = $state(globalThis.devicePixelRatio ?? 1);
@@ -85,6 +105,16 @@
   // Device pixel dimensions
   let deviceWidth = $derived(Math.round(cssWidth * dpr));
   let deviceHeight = $derived(Math.round(cssHeight * dpr));
+  let frequencyAxisWidthCss = $derived.by(() => {
+    if (!showFrequencyAxis) return 0;
+    return frequencyAxisMode === 'compact' ? 42 : 50;
+  });
+  let frequencyAxisWidth = $derived(Math.round(frequencyAxisWidthCss * dpr));
+  let plotOffsetX = $derived(showFrequencyAxis ? frequencyAxisWidth : 0);
+  let timeAxisHeightCss = $derived(showTimeAxis ? 22 : 0);
+  let timeAxisHeight = $derived(Math.round(timeAxisHeightCss * dpr));
+  let plotHeight = $derived(Math.max(1, deviceHeight - timeAxisHeight));
+  let plotWidth = $derived(Math.max(1, deviceWidth - plotOffsetX));
 
   // Precomputed bin-to-pixel mapping: maps each DEVICE pixel row to FFT bin index
   // y=0 is top of canvas = highest frequency
@@ -92,7 +122,7 @@
     const binCount = fftSize / 2;
     const nyquist = sampleRate / 2;
     const [minFreq, maxFreq] = frequencyRange;
-    const height = deviceHeight;
+    const height = plotHeight;
     const map = new Uint16Array(height);
 
     for (let y = 0; y < height; y++) {
@@ -110,6 +140,83 @@
   // Selected color LUT
   // eslint-disable-next-line security/detect-object-injection -- colorMap is typed as ColorMapName
   let colorLUT = $derived(COLOR_MAPS[colorMap] ?? COLOR_MAPS[DEFAULT_COLOR_MAP]);
+  const MAX_RENDER_READY_COLUMNS = 8192;
+
+  function getFrequencyTickCount(): number {
+    if (!showFrequencyAxis) return 0;
+    if (frequencyAxisMode === 'compact') return 3;
+    if (cssHeight < 260) return 3;
+    if (cssHeight < 520) return 5;
+    return 7;
+  }
+
+  function formatFrequencyLabel(hz: number): string {
+    const khz = hz / 1000;
+    const rounded = Math.round(khz * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  }
+
+  function buildFrequencyTicks(count: number): Array<{ y: number; label: string }> {
+    if (!showFrequencyAxis || count < 2 || plotHeight <= 0) return [];
+    const [minFreq, maxFreq] = frequencyRange;
+    const ticks: Array<{ y: number; label: string }> = [];
+    for (let i = 0; i < count; i++) {
+      const ratio = count === 1 ? 0 : i / (count - 1);
+      const freq = minFreq + ratio * (maxFreq - minFreq);
+      const y = plotHeight - ratio * plotHeight;
+      ticks.push({
+        y,
+        label: formatFrequencyLabel(freq),
+      });
+    }
+    return ticks;
+  }
+
+  function aggregateStreamColumns(
+    columns: Array<number[] | Uint8Array<ArrayBuffer>>,
+    binCount: number
+  ): Uint8Array<ArrayBuffer> {
+    const aggregated = new Uint8Array(binCount);
+    if (columns.length === 0) return aggregated;
+
+    for (let bin = 0; bin < binCount; bin++) {
+      let totalValue = 0;
+      for (const column of columns) {
+        /* eslint-disable security/detect-object-injection -- bin is a bounded loop index for dense FFT column arrays */
+        const value = column[bin] ?? 0;
+        /* eslint-enable security/detect-object-injection */
+        totalValue += value;
+      }
+      /* eslint-disable security/detect-object-injection -- bin is a bounded loop index for dense FFT column arrays */
+      aggregated[bin] = Math.round(totalValue / columns.length);
+      /* eslint-enable security/detect-object-injection */
+    }
+
+    return aggregated;
+  }
+
+  $effect(() => {
+    if (renderMode !== 'stream') {
+      queuedStreamColumns = [];
+      lastQueuedStreamUnixMs = 0;
+      return;
+    }
+
+    const nextColumns: LiveSpectrogramColumn[] = [];
+    for (const column of streamColumns) {
+      if (column.tUnixMs > lastQueuedStreamUnixMs) {
+        nextColumns.push(column);
+      }
+    }
+    if (nextColumns.length === 0) return;
+
+    queuedStreamColumns = [...queuedStreamColumns, ...nextColumns];
+    lastQueuedStreamUnixMs = nextColumns[nextColumns.length - 1].tUnixMs;
+
+    if (queuedStreamColumns.length > 4096) {
+      queuedStreamColumns = queuedStreamColumns.slice(-4096);
+    }
+  });
 
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
@@ -184,7 +291,6 @@
             overlayCanvasEl.width = newW;
             overlayCanvasEl.height = newH;
           }
-          logger.debug('Canvas resized with content preserved', { oldW, oldH, newW, newH });
           return;
         }
       } catch {
@@ -203,7 +309,8 @@
 
   // Main animation loop
   $effect(() => {
-    if (!analyser || !isActive || !canvasEl) return;
+    if (!isActive || !canvasEl) return;
+    if (renderMode === 'analyser' && !analyser) return;
 
     const ctx = canvasEl.getContext('2d');
     if (!ctx) return;
@@ -232,6 +339,14 @@
     let frameId: number;
     // Track whether overlay was drawn last frame to avoid clearing an already-empty canvas
     let overlayHadContent = false;
+    let lastStreamBins: number[] | Uint8Array<ArrayBuffer> | null = null;
+    let renderReadyColumns: Array<number[] | Uint8Array<ArrayBuffer>> = [];
+    let streamColumnAccumulator = 0;
+    let hasRenderedStreamColumns = false;
+    let clearedStreamPrimingCanvas = false;
+    let wasStreamPriming = false;
+    const streamColumnsPerSecond =
+      renderMode === 'stream' ? sampleRate / Math.max(1, streamHopSize) : 0;
 
     // Convert CSS px/s to device px/s
     const deviceScrollSpeed = scrollSpeed * dpr;
@@ -265,52 +380,219 @@
       const now = performance.now();
       const deltaTime = (now - lastFrameTime) / 1000;
       lastFrameTime = now;
+      let dueStreamColumns: LiveSpectrogramColumn[] = [];
+      let streamPriming = false;
 
-      // Read frequency data from analyser
-      analyser.getByteFrequencyData(frequencyData);
+      if (renderMode === 'analyser') {
+        analyser?.getByteFrequencyData(frequencyData);
+      } else if (queuedStreamColumns.length > 0) {
+        const playheadUnixMs = wallClockAtPlayhead > 0 ? Math.floor(wallClockAtPlayhead * 1000) : 0;
+
+        while (
+          queuedStreamColumns.length > 0 &&
+          playheadUnixMs > 0 &&
+          queuedStreamColumns[0].tUnixMs <= playheadUnixMs
+        ) {
+          dueStreamColumns.push(queuedStreamColumns[0]);
+          queuedStreamColumns = queuedStreamColumns.slice(1);
+        }
+        if (dueStreamColumns.length > 0) {
+          const dueBins = dueStreamColumns.map(column => column.bins);
+          renderReadyColumns.push(...dueBins);
+          if (renderReadyColumns.length > MAX_RENDER_READY_COLUMNS) {
+            renderReadyColumns = renderReadyColumns.slice(-MAX_RENDER_READY_COLUMNS);
+          }
+          lastStreamBins = dueBins[dueBins.length - 1];
+        }
+      } else if (renderMode === 'stream' && wallClockAtPlayhead > 0) {
+        streamPriming = true;
+      }
+
+      if (
+        renderMode === 'stream' &&
+        !hasRenderedStreamColumns &&
+        dueStreamColumns.length === 0 &&
+        renderReadyColumns.length === 0
+      ) {
+        streamPriming = true;
+      }
+
+      if (streamPriming && !clearedStreamPrimingCanvas) {
+        ctx.clearRect(0, 0, deviceWidth, deviceHeight);
+        clearedStreamPrimingCanvas = true;
+      }
+
+      if (showFrequencyAxis && plotOffsetX > 0) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, plotOffsetX, plotHeight);
+      }
+      if (showTimeAxis && timeAxisHeight > 0) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(plotOffsetX, plotHeight, plotWidth, timeAxisHeight);
+      }
 
       // Compute device pixels to scroll
       scrollAccumulator += deviceScrollSpeed * deltaTime;
-      const pixelsToScroll = Math.floor(scrollAccumulator);
-      scrollAccumulator -= pixelsToScroll;
+      let pixelsToScroll = Math.floor(scrollAccumulator);
+      if (streamPriming) {
+        scrollAccumulator = 0;
+        pixelsToScroll = 0;
+      } else {
+        if (wasStreamPriming) {
+          scrollAccumulator = 0;
+          streamColumnAccumulator = 0;
+          pixelsToScroll = 0;
+          if (!hasRenderedStreamColumns) {
+            ctx.clearRect(0, 0, deviceWidth, deviceHeight);
+          }
+        }
+        scrollAccumulator -= pixelsToScroll;
+      }
+      wasStreamPriming = streamPriming;
 
       if (pixelsToScroll > 0) {
-        const w = deviceWidth;
-        const h = deviceHeight;
+        const w = plotWidth;
+        const h = plotHeight;
 
         // Self-blit: shift existing content left (GPU-composited)
-        ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
+        if (hasRenderedStreamColumns || renderMode === 'analyser') {
+          ctx.drawImage(
+            canvasEl!,
+            plotOffsetX + pixelsToScroll,
+            0,
+            Math.max(0, w - pixelsToScroll),
+            h,
+            plotOffsetX,
+            0,
+            Math.max(0, w - pixelsToScroll),
+            h
+          );
+        }
 
         // Draw new column(s) at right edge using device pixel dimensions
         const imgData = ctx.createImageData(pixelsToScroll, h);
-        const data = new Uint32Array(imgData.data.buffer);
+        const data = imgData.data;
         const currentBinMap = pixelToBinMap;
         const currentLUT = colorLUT;
+        let streamPixels: Array<number[] | Uint8Array<ArrayBuffer>> = [];
+
+        if (renderMode === 'stream') {
+          streamColumnAccumulator += streamColumnsPerSecond * deltaTime;
+          let columnsToConsume = Math.floor(streamColumnAccumulator);
+          if (columnsToConsume > 0) {
+            streamColumnAccumulator -= columnsToConsume;
+          }
+
+          if (renderReadyColumns.length > 0 && columnsToConsume === 0) {
+            columnsToConsume = 1;
+          }
+
+          if (columnsToConsume > renderReadyColumns.length) {
+            columnsToConsume = renderReadyColumns.length;
+          }
+
+          if (columnsToConsume > 0) {
+            if (!hasRenderedStreamColumns) {
+              pixelsToScroll = Math.min(pixelsToScroll, Math.max(1, columnsToConsume));
+            }
+            const consumedColumns = renderReadyColumns.slice(0, columnsToConsume);
+            renderReadyColumns = renderReadyColumns.slice(columnsToConsume);
+            hasRenderedStreamColumns = true;
+            clearedStreamPrimingCanvas = false;
+            const columnsPerPixel = consumedColumns.length / pixelsToScroll;
+
+            for (let col = 0; col < pixelsToScroll; col++) {
+              const start = Math.floor(col * columnsPerPixel);
+              const end = Math.max(start + 1, Math.floor((col + 1) * columnsPerPixel));
+              const slice = consumedColumns.slice(start, end);
+              streamPixels.push(
+                slice.length > 0
+                  ? aggregateStreamColumns(slice, frequencyData.length)
+                  : (lastStreamBins ?? [])
+              );
+            }
+          } else if (lastStreamBins) {
+            for (let col = 0; col < pixelsToScroll; col++) {
+              streamPixels.push(lastStreamBins);
+            }
+          }
+        }
 
         for (let col = 0; col < pixelsToScroll; col++) {
+          let columnBins: number[] | Uint8Array<ArrayBuffer> = frequencyData;
+          if (renderMode === 'stream') {
+            /* eslint-disable security/detect-object-injection -- col is a bounded loop index for the scroll buffer */
+            columnBins = streamPixels[col] ?? lastStreamBins ?? [];
+            /* eslint-enable security/detect-object-injection */
+          }
           for (let y = 0; y < h; y++) {
             /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
             const binIndex = currentBinMap[y];
-            const magnitude = frequencyData[binIndex];
-            data[y * pixelsToScroll + col] = currentLUT[magnitude];
+            const magnitude = columnBins[binIndex] ?? 0;
+            const rgba = currentLUT[magnitude];
+            const offset = (y * pixelsToScroll + col) * 4;
+            data[offset] = rgba & 0xff;
+            data[offset + 1] = (rgba >>> 8) & 0xff;
+            data[offset + 2] = (rgba >>> 16) & 0xff;
+            data[offset + 3] = (rgba >>> 24) & 0xff;
             /* eslint-enable security/detect-object-injection */
           }
         }
 
         // putImageData works in raw device pixel coordinates (no transform needed)
-        ctx.putImageData(imgData, w - pixelsToScroll, 0);
+        ctx.putImageData(imgData, plotOffsetX + w - pixelsToScroll, 0);
       }
 
       // --- Overlay: detection labels + debug time markers ---
-      const hasOverlayContent = overlayLabels.length > 0 || debug;
+      const hasOverlayContent =
+        showFrequencyAxis || showTimeAxis || overlayLabels.length > 0 || debug || streamPriming;
 
       if (olCtx && hasOverlayContent) {
         olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
 
+        if (showFrequencyAxis && plotOffsetX > 0) {
+          const axisFontSize = Math.max(
+            9,
+            Math.round((frequencyAxisMode === 'compact' ? 9 : 10) * dpr)
+          );
+          const ticks = buildFrequencyTicks(getFrequencyTickCount());
+
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          olCtx.lineWidth = 1 * dpr;
+          olCtx.font = `${axisFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'right';
+
+          olCtx.beginPath();
+          olCtx.moveTo(plotOffsetX - 0.5 * dpr, 0);
+          olCtx.lineTo(plotOffsetX - 0.5 * dpr, plotHeight);
+          olCtx.stroke();
+
+          const topAxisPadding =
+            frequencyAxisMode === 'compact' ? axisFontSize * 1.1 : axisFontSize;
+          for (const tick of ticks) {
+            const y = Math.max(topAxisPadding, Math.min(plotHeight - axisFontSize, tick.y));
+            olCtx.beginPath();
+            olCtx.moveTo(plotOffsetX - 6 * dpr, y);
+            olCtx.lineTo(plotOffsetX - 1.5 * dpr, y);
+            olCtx.stroke();
+            olCtx.fillText(tick.label, plotOffsetX - 8 * dpr, y);
+          }
+
+          olCtx.textBaseline = 'top';
+          olCtx.textAlign = 'left';
+          olCtx.fillText('kHz', 4 * dpr, 4 * dpr);
+          olCtx.restore();
+        }
+
         // --- Debug time markers: vertical lines every 5s with HH:MM:SS ---
         if (debug && wallClockAtPlayhead > 0) {
           const debugFontSize = Math.round(9 * dpr);
-          const visibleSeconds = deviceWidth / deviceScrollSpeed;
+          const visibleSeconds = plotWidth / deviceScrollSpeed;
 
           // Draw markers from right edge backwards
           // Right edge = wallClockAtPlayhead, left edge = wallClockAtPlayhead - visibleSeconds
@@ -331,8 +613,8 @@
             t -= DEBUG_MARKER_INTERVAL_SEC
           ) {
             const ageSeconds = rightEdgeTime - t;
-            const x = deviceWidth - ageSeconds * deviceScrollSpeed;
-            if (x < 0 || x > deviceWidth) continue;
+            const x = plotOffsetX + plotWidth - ageSeconds * deviceScrollSpeed;
+            if (x < plotOffsetX || x > deviceWidth) continue;
 
             // Vertical dashed line
             olCtx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
@@ -340,7 +622,7 @@
             olCtx.setLineDash([4 * dpr, 4 * dpr]);
             olCtx.beginPath();
             olCtx.moveTo(x, 0);
-            olCtx.lineTo(x, deviceHeight);
+            olCtx.lineTo(x, plotHeight);
             olCtx.stroke();
             olCtx.setLineDash([]);
 
@@ -349,7 +631,7 @@
             olCtx.font = `${debugFontSize}px monospace`;
             olCtx.fillStyle = 'rgba(255, 255, 0, 0.8)';
             olCtx.textBaseline = 'bottom';
-            olCtx.fillText(timeStr, x + 2 * dpr, deviceHeight - 2 * dpr);
+            olCtx.fillText(timeStr, x + 2 * dpr, plotHeight - 2 * dpr);
           }
 
           // Debug info panel (top-left corner)
@@ -359,17 +641,80 @@
           const playheadStr = formatTimeCached(wallClockAtPlayhead);
           const nowStr = formatTimeCached(Date.now() / 1000);
           const hlsDelay = (Date.now() / 1000 - wallClockAtPlayhead).toFixed(1);
-          olCtx.fillText(`playhead: ${playheadStr}`, 4 * dpr, 4 * dpr);
+          olCtx.fillText(`playhead: ${playheadStr}`, plotOffsetX + 4 * dpr, 4 * dpr);
           olCtx.fillText(
             `wall: ${nowStr}  HLS lag: ${hlsDelay}s`,
-            4 * dpr,
+            plotOffsetX + 4 * dpr,
             4 * dpr + debugFontSize + 2 * dpr
           );
           olCtx.fillText(
             `queue: ${overlayLabels.length} labels`,
-            4 * dpr,
+            plotOffsetX + 4 * dpr,
             4 * dpr + (debugFontSize + 2 * dpr) * 2
           );
+
+          olCtx.restore();
+        }
+
+        if (streamPriming) {
+          const primingFontSize = Math.max(10, Math.round(10 * dpr));
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+          olCtx.font = `${primingFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'center';
+          olCtx.fillText(
+            t('spectrogram.page.syncingAudio'),
+            plotOffsetX + plotWidth / 2,
+            plotHeight / 2
+          );
+          olCtx.restore();
+        }
+
+        if (showTimeAxis && wallClockAtPlayhead > 0) {
+          const axisFontSize = Math.max(9, Math.round(10 * dpr));
+          const visibleSeconds = plotWidth / deviceScrollSpeed;
+          const leftEdgeTime = wallClockAtPlayhead - visibleSeconds;
+          const midpointTime = leftEdgeTime + visibleSeconds / 2;
+          const timeLabels = [
+            { x: plotOffsetX + 8 * dpr, time: leftEdgeTime, align: 'left' as const },
+            { x: plotOffsetX + plotWidth / 2, time: midpointTime, align: 'center' as const },
+            {
+              x: plotOffsetX + plotWidth - 8 * dpr,
+              time: wallClockAtPlayhead,
+              align: 'right' as const,
+            },
+          ];
+
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          olCtx.lineWidth = 1 * dpr;
+          olCtx.font = `${axisFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'center';
+
+          olCtx.beginPath();
+          olCtx.moveTo(plotOffsetX, plotHeight + 0.5 * dpr);
+          olCtx.lineTo(plotOffsetX + plotWidth, plotHeight + 0.5 * dpr);
+          olCtx.stroke();
+
+          for (const label of timeLabels) {
+            olCtx.textAlign = label.align;
+            olCtx.beginPath();
+            olCtx.moveTo(label.x, plotHeight + 1.5 * dpr);
+            olCtx.lineTo(label.x, plotHeight + 6 * dpr);
+            olCtx.stroke();
+            olCtx.fillText(
+              formatTimeCached(label.time),
+              label.x,
+              plotHeight + timeAxisHeight / 2 + 1 * dpr
+            );
+          }
 
           olCtx.restore();
         }
@@ -385,15 +730,15 @@
           olCtx.shadowOffsetY = 1 * dpr;
           olCtx.textBaseline = 'middle';
 
-          const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+          const maxSlots = Math.max(2, Math.floor(plotHeight / (fontSize * 2.5)));
 
           for (const label of overlayLabels) {
             const labelAge = (now - label.birthTime) / 1000;
-            const x = deviceWidth - labelAge * deviceScrollSpeed;
+            const x = plotOffsetX + plotWidth - labelAge * deviceScrollSpeed;
 
-            if (x < -200 * dpr || x > deviceWidth) continue;
+            if (x < plotOffsetX - 200 * dpr || x > deviceWidth) continue;
 
-            const slotHeight = deviceHeight / (maxSlots + 1);
+            const slotHeight = plotHeight / (maxSlots + 1);
             const y = slotHeight * (1 + (label.ySlot % maxSlots));
 
             if (debug && label.firstDetected) {

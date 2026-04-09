@@ -958,6 +958,7 @@
       "title": "Audio na żywo",
       "sourceLabel": "Źródło audio",
       "connected": "Połączono",
+      "syncingAudio": "Synchronizowanie dźwięku na żywo...",
       "enterFullscreen": "Pełny ekran",
       "exitFullscreen": "Zamknij pełny ekran"
     },
@@ -967,7 +968,8 @@
       "grayscale": "Skala szarości"
     },
     "labels": {
-      "toggle": "Przełącz etykiety wykrywania"
+      "toggle": "Przełącz etykiety wykrywania",
+      "toggleTimeAxis": "Przełącz oś czasu"
     }
   },
   "system": {

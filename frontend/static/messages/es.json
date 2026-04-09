@@ -958,6 +958,7 @@
       "title": "Audio en vivo",
       "sourceLabel": "Fuente de audio",
       "connected": "Conectado",
+      "syncingAudio": "Sincronizando audio en vivo...",
       "enterFullscreen": "Pantalla completa",
       "exitFullscreen": "Salir de pantalla completa"
     },
@@ -967,7 +968,8 @@
       "grayscale": "Escala de grises"
     },
     "labels": {
-      "toggle": "Alternar etiquetas de detección"
+      "toggle": "Alternar etiquetas de detección",
+      "toggleTimeAxis": "Alternar eje temporal"
     }
   },
   "system": {

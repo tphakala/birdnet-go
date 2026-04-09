@@ -958,6 +958,7 @@
       "title": "Live-Audio",
       "sourceLabel": "Audioquelle",
       "connected": "Verbunden",
+      "syncingAudio": "Live-Audio wird synchronisiert...",
       "enterFullscreen": "Vollbild",
       "exitFullscreen": "Vollbild beenden"
     },
@@ -967,7 +968,8 @@
       "grayscale": "Graustufen"
     },
     "labels": {
-      "toggle": "Erkennungslabels umschalten"
+      "toggle": "Erkennungslabels umschalten",
+      "toggleTimeAxis": "Zeitachse umschalten"
     }
   },
   "system": {
