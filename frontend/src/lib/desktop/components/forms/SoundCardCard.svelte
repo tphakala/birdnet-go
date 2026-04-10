@@ -47,9 +47,19 @@
     }>;
   }
 
+  // Default model ID — BirdNET v2.4 is the built-in default
+  const DEFAULT_MODEL_ID = 'birdnet';
+
+  function getDefaultModels(): string[] {
+    const defaultModel = modelOptions.find(m => m.value === DEFAULT_MODEL_ID);
+    if (defaultModel) return [DEFAULT_MODEL_ID];
+    return modelOptions.length > 0 ? [modelOptions[0].value] : [DEFAULT_MODEL_ID];
+  }
+
   interface Props {
     source: AudioSourceConfig;
     index: number;
+    sources: AudioSourceConfig[];
     audioDevices: Array<{ index: number; name: string; id: string }>;
     modelOptions: Array<{ value: string; label: string }>;
     disabled?: boolean;
@@ -60,6 +70,7 @@
   let {
     source,
     index,
+    sources,
     audioDevices,
     modelOptions,
     disabled = false,
@@ -90,15 +101,19 @@
       : (modelOptions[0]?.label ?? '')
   );
 
-  // Device dropdown options
-  let deviceOptions = $derived(audioDevices.map(d => ({ value: d.id, label: d.name })));
+  // Device dropdown options — show current source's device + devices not used by other sources
+  let deviceOptions = $derived(
+    audioDevices
+      .filter(d => d.id === source.device || !sources.some(s => s.device === d.id))
+      .map(d => ({ value: d.id, label: d.name }))
+  );
 
   // Edit mode functions
   function startEdit() {
     editName = source.name;
     editDevice = source.device;
     editGain = source.gain;
-    editModels = [...source.models];
+    editModels = source.models.length > 0 ? [...source.models] : getDefaultModels();
     editEqualizer = source.equalizer
       ? { ...source.equalizer, filters: [...source.equalizer.filters] }
       : { enabled: false, filters: [] };
@@ -114,6 +129,11 @@
   function saveEdit() {
     const trimmedName = editName.trim();
     if (!trimmedName || !editDevice) return;
+
+    // Ensure at least one model is selected
+    if (editModels.length === 0) {
+      editModels = getDefaultModels();
+    }
 
     // Transform equalizer filters to ensure all have an id (required by store type)
     const transformedEqualizer =

@@ -53,6 +53,16 @@
 
   const logger = loggers.audio;
 
+  // Default model ID — BirdNET v2.4 is the built-in default
+  const DEFAULT_MODEL_ID = 'birdnet';
+
+  function getDefaultModels(): string[] {
+    if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
+      return [DEFAULT_MODEL_ID];
+    }
+    return availableModels.length > 0 ? [availableModels[0].id] : [DEFAULT_MODEL_ID];
+  }
+
   // Fetch available models from backend API
   interface BackendModel {
     id: string;
@@ -122,8 +132,12 @@
   let nameError = $state<string | null>(null);
   let deviceError = $state<string | null>(null);
 
-  // Device dropdown options
-  let deviceOptions = $derived(audioDevices.map(d => ({ value: d.id, label: d.name })));
+  // Device dropdown options — filter out devices already configured as sources
+  let deviceOptions = $derived(
+    audioDevices
+      .filter(d => !sources.some(s => s.device === d.id))
+      .map(d => ({ value: d.id, label: d.name }))
+  );
 
   // Clear form errors
   function clearErrors() {
@@ -136,12 +150,19 @@
     newName = '';
     newDevice = '';
     newGain = 0;
-    newModels = [];
+    newModels = getDefaultModels();
     newEqualizer = { enabled: false, filters: [] };
     newQuietHours = { ...defaultQuietHoursConfig };
     showNewEqualizer = false;
     clearErrors();
     showAddForm = false;
+  }
+
+  // Open add form with default model pre-selected
+  function openAddForm() {
+    if (disabled) return;
+    newModels = getDefaultModels();
+    showAddForm = true;
   }
 
   // Add new source
@@ -172,6 +193,11 @@
     if (sources.some(s => s.device === newDevice)) {
       deviceError = t('settings.audio.soundCards.errors.duplicateDevice');
       return;
+    }
+
+    // Ensure at least one model is selected
+    if (newModels.length === 0) {
+      newModels = getDefaultModels();
     }
 
     // Transform equalizer filters to ensure all have an id (required by store type)
@@ -290,7 +316,7 @@
         label: t('settings.audio.soundCards.addSource'),
         icon: Plus,
         onclick: () => {
-          if (!disabled) showAddForm = true;
+          openAddForm();
         },
       }}
     />
@@ -300,6 +326,7 @@
         <SoundCardCard
           {source}
           {index}
+          {sources}
           {audioDevices}
           {modelOptions}
           {disabled}
@@ -451,8 +478,8 @@
       <button
         type="button"
         class="w-full inline-flex items-center justify-center gap-2 h-8 px-3 text-sm rounded-lg border border-dashed border-[var(--border-200)] bg-transparent hover:bg-[var(--color-base-content)]/5 text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        onclick={() => (showAddForm = true)}
-        {disabled}
+        onclick={openAddForm}
+        disabled={disabled || deviceOptions.length === 0}
       >
         <Plus class="size-4" />
         {t('settings.audio.soundCards.addSource')}
