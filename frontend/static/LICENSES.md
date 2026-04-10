@@ -9,7 +9,7 @@ https://creativecommons.org/licenses/by-nc-sa/4.0/
 
 ### cloud.google.com/go/auth
 
-License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.19.0/auth/LICENSE
+License: https://github.com/googleapis/google-cloud-go/blob/auth/v0.20.0/auth/LICENSE
 Source: Apache-2.0
 
 ### cloud.google.com/go/auth/oauth2adapt
@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.44.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.45.0/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -239,12 +239,12 @@ Source: MIT
 
 ### github.com/mattn/go-isatty
 
-License: https://github.com/mattn/go-isatty/blob/v0.0.20/LICENSE
+License: https://github.com/mattn/go-isatty/blob/v0.0.21/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.40/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.42/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -434,7 +434,7 @@ Source: Apache-2.0
 
 ### go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 
-License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.67.0/instrumentation/net/http/otelhttp/LICENSE
+License: https://github.com/open-telemetry/opentelemetry-go-contrib/blob/instrumentation/net/http/otelhttp/v0.68.0/instrumentation/net/http/otelhttp/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/otel
@@ -469,12 +469,12 @@ Source: MIT
 
 ### golang.org/x/crypto
 
-License: https://cs.opensource.google/go/x/crypto/+/v0.49.0:LICENSE
+License: https://cs.opensource.google/go/x/crypto/+/v0.50.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/net
 
-License: https://cs.opensource.google/go/x/net/+/v0.52.0:LICENSE
+License: https://cs.opensource.google/go/x/net/+/v0.53.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/oauth2
@@ -489,17 +489,17 @@ Source: BSD-3-Clause
 
 ### golang.org/x/sys
 
-License: https://cs.opensource.google/go/x/sys/+/v0.42.0:LICENSE
+License: https://cs.opensource.google/go/x/sys/+/v0.43.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/term
 
-License: https://cs.opensource.google/go/x/term/+/v0.41.0:LICENSE
+License: https://cs.opensource.google/go/x/term/+/v0.42.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/text
 
-License: https://cs.opensource.google/go/x/text/+/v0.35.0:LICENSE
+License: https://cs.opensource.google/go/x/text/+/v0.36.0:LICENSE
 Source: BSD-3-Clause
 
 ### golang.org/x/time/rate
@@ -509,17 +509,17 @@ Source: BSD-3-Clause
 
 ### gonum.org/v1/gonum/dsp/fourier
 
-License: Unknown
+License: https://github.com/gonum/gonum/blob/v0.17.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.274.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.275.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/9d38bb4040a9/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/6f92a3bedf2d/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
