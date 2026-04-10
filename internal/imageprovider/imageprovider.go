@@ -1335,18 +1335,23 @@ func (c *BirdImageCache) handleProviderFetchError(scientificName string, fetchEr
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
+	// Check for expected "not found" condition first — this is not an error.
+	// Many species legitimately have no images in AviCommons or Wikipedia.
+	if errors.Is(fetchErr, ErrImageNotFound) {
+		if c.metrics != nil {
+			c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "not_found")
+		}
+		return c.storeNegativeCacheEntry(scientificName, fetchErr)
+	}
+
+	// Actual provider errors — log at error level
 	enhancedErr := c.enhanceFetchError(fetchErr, scientificName)
 	log.Error("Failed to fetch image from provider", logger.Error(enhancedErr))
 
 	if c.metrics != nil {
-		c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "provider_fetch")
+		c.metrics.IncrementDownloadErrorsWithCategory("image-fetch", c.providerName, "provider_error")
 	}
 
-	if errors.Is(fetchErr, ErrImageNotFound) {
-		return c.storeNegativeCacheEntry(scientificName, fetchErr)
-	}
-
-	log.Warn("Provider error (not caching)", logger.Error(enhancedErr))
 	return BirdImage{}, enhancedErr
 }
 
