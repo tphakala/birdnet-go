@@ -159,7 +159,7 @@ func checkMinClips(file *FileInfo, subDir string, speciesCount map[string]map[st
 func deleteAudioFile(file *FileInfo, policy string) error {
 	log := GetLogger()
 
-	log.Info("Deleting audio file",
+	log.Debug("Deleting audio file",
 		logger.String("policy", policy),
 		logger.String("path", file.Path),
 		logger.Int64("size", file.Size),
@@ -198,7 +198,7 @@ func deleteAudioFile(file *FileInfo, policy string) error {
 		return enhancedErr
 	}
 
-	log.Info("Audio file deleted successfully",
+	log.Debug("Audio file deleted successfully",
 		logger.String("policy", policy),
 		logger.String("path", file.Path))
 
@@ -240,7 +240,7 @@ func tryDeleteSpectrogram(pngPath, variant, policy string, log logger.Logger) in
 		}
 		return 0
 	}
-	log.Info("Deleted associated spectrogram",
+	log.Debug("Deleted associated spectrogram",
 		logger.String("policy", policy),
 		logger.String("variant", variant),
 		logger.String("path", pngPath))
@@ -259,7 +259,7 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 	time.Sleep(deletionThrottleDelay)
 
 	// Log intent before deleting
-	log.Info("Deleting file based on policy",
+	log.Debug("Deleting file based on policy",
 		logger.String("policy", policy),
 		logger.String("reason", reason),
 		logger.String("path", file.Path),
@@ -315,7 +315,7 @@ func deleteFileAndOptionalSpectrogram(file *FileInfo, reason string, keepSpectro
 		m.RecordCleanupDuration(policy, duration)
 	}
 
-	log.Info("File deletion completed",
+	log.Debug("File deletion completed",
 		logger.String("policy", policy),
 		logger.String("path", file.Path),
 		logger.String("reason", reason),
