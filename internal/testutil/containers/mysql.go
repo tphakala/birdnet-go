@@ -154,7 +154,7 @@ func (c *MySQLContainer) GetPort(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	return mappedPort.Int(), nil
+	return int(mappedPort.Num()), nil
 }
 
 // HealthCheck performs a health check on the MySQL database.

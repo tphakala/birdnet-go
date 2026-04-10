@@ -23,9 +23,9 @@ const ntfyContainerPort = "80/tcp"
 
 // NtfyContainer wraps a testcontainers ntfy push notification server instance.
 type NtfyContainer struct {
-	container  testcontainers.Container
-	host       string
-	port       int
+	container   testcontainers.Container
+	host        string
+	port        int
 	authEnabled bool
 }
 
@@ -106,7 +106,7 @@ func NewNtfyContainer(ctx context.Context, config *NtfyConfig) (*NtfyContainer, 
 	nc := &NtfyContainer{
 		container:   container,
 		host:        host,
-		port:        mappedPort.Int(),
+		port:        int(mappedPort.Num()),
 		authEnabled: config.EnableAuth,
 	}
 

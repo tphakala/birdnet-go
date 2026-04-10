@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/docker/go-connections/nat"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
@@ -122,11 +121,11 @@ func NewMediaMTXContainer(ctx context.Context, config *MediaMTXConfig) (*MediaMT
 
 // mappedPortInt extracts the integer port from a container's mapped port.
 func mappedPortInt(ctx context.Context, container testcontainers.Container, port string) (int, error) {
-	mapped, err := container.MappedPort(ctx, nat.Port(port))
+	mapped, err := container.MappedPort(ctx, port)
 	if err != nil {
 		return 0, err
 	}
-	return mapped.Int(), nil
+	return int(mapped.Num()), nil
 }
 
 // GetRTSPURL returns an RTSP URL for the given stream path.

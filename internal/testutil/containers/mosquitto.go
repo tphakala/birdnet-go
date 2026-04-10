@@ -129,7 +129,7 @@ func NewMosquittoContainer(ctx context.Context, config *MosquittoConfig) (*Mosqu
 		return nil, fmt.Errorf("failed to get mapped port: %w", err)
 	}
 
-	port := mappedPort.Int()
+	port := int(mappedPort.Num())
 	brokerURL := fmt.Sprintf("tcp://%s", net.JoinHostPort(host, strconv.Itoa(port)))
 
 	mc := &MosquittoContainer{
