@@ -105,9 +105,14 @@ func (b *BirdImage) IsNegativeEntry() bool {
 	return b.URL == negativeEntryMarker
 }
 
-// GetTTL returns the appropriate TTL for this cache entry
+// GetTTL returns the appropriate TTL for this cache entry.
+// Non-avian species (Siren, Dog, etc.) get an effectively permanent TTL
+// since they will never have images from bird image providers.
 func (b *BirdImage) GetTTL() time.Duration {
 	if b.IsNegativeEntry() {
+		if isNonAvianClass(b.ScientificName) {
+			return 10 * 365 * 24 * time.Hour // ~10 years: effectively permanent
+		}
 		return negativeCacheTTL
 	}
 	return defaultCacheTTL

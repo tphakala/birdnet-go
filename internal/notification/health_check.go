@@ -255,7 +255,7 @@ func (hc *HealthChecker) recordHealthFailure(entry *healthCheckEntry, providerNa
 	}
 
 	if hc.log != nil {
-		hc.log.Warn("provider health check failed",
+		hc.log.Debug("provider health check failed",
 			logger.String("provider", providerName),
 			logger.Error(err),
 			logger.Int("consecutive_failures", entry.health.ConsecutiveFailures))
