@@ -483,6 +483,41 @@ func TestIsRealError(t *testing.T) {
 	}
 }
 
+// TestIsNonAvianClass tests the isNonAvianClass helper function.
+func TestIsNonAvianClass(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name           string
+		scientificName string
+		want           bool
+	}{
+		{"siren is non-avian", "Siren", true},
+		{"dog is non-avian", "Dog", true},
+		{"power tools is non-avian", "Power tools", true},
+		{"human vocal is non-avian", "Human vocal", true},
+		{"human non-vocal is non-avian", "Human non-vocal", true},
+		{"human whistle is non-avian", "Human whistle", true},
+		{"jet is non-avian", "Jet", true},
+		{"gun is non-avian", "Gun", true},
+		{"fireworks is non-avian", "Fireworks", true},
+		{"noise is non-avian", "Noise", true},
+		{"environmental is non-avian", "Environmental", true},
+		{"engine is non-avian", "Engine", true},
+		{"real bird species is avian", "Cyanistes caeruleus", false},
+		{"another bird species is avian", "Turdus merula", false},
+		{"empty string is avian", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := isNonAvianClass(tt.scientificName)
+			assert.Equal(t, tt.want, got, "isNonAvianClass(%q)", tt.scientificName)
+		})
+	}
+}
+
 // TestParseAuthorFromHTML tests the author parsing helper function.
 func TestParseAuthorFromHTML(t *testing.T) {
 	t.Parallel()

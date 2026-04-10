@@ -210,6 +210,30 @@ const (
 // The order matters: avicommons is tried first as it's faster (local data), then wikimedia (remote API).
 var fallbackProviders = []string{"avicommons", "wikimedia"}
 
+// nonAvianClasses lists BirdNET model output classes that are not bird species.
+// These will never have images available from bird image providers, so their
+// negative cache entries should never expire to avoid futile re-fetch attempts.
+var nonAvianClasses = map[string]bool{
+	"Siren":           true,
+	"Dog":             true,
+	"Power tools":     true,
+	"Human vocal":     true,
+	"Human non-vocal": true,
+	"Human whistle":   true,
+	"Jet":             true,
+	"Gun":             true,
+	"Fireworks":       true,
+	"Noise":           true,
+	"Environmental":   true,
+	"Engine":          true,
+}
+
+// isNonAvianClass returns true if the scientific name is a non-bird class
+// that will never have images available from bird image providers.
+func isNonAvianClass(scientificName string) bool {
+	return nonAvianClasses[scientificName]
+}
+
 // --- Shared Helper Functions ---
 
 // shouldQuit checks if the cache's quit channel has been signaled.
@@ -295,6 +319,11 @@ func (c *BirdImageCache) findStaleEntries(entries []datastore.ImageCache) []stri
 			continue
 		}
 		isNegative := entries[i].URL == negativeEntryMarker
+		// Non-avian species (Siren, Dog, etc.) will never have images;
+		// skip their negative entries so they never expire and re-fetch.
+		if isNegative && isNonAvianClass(entries[i].ScientificName) {
+			continue
+		}
 		if isCacheEntryStale(entries[i].CachedAt, isNegative) {
 			if isNegative {
 				log.Debug("Found stale negative entry",
@@ -1236,7 +1265,7 @@ func (c *BirdImageCache) handleNegativeDBEntry(scientificName string, dbImage *B
 		logger.String("provider", c.providerName),
 		logger.String("scientific_name", scientificName))
 
-	if isCacheEntryStale(dbImage.CachedAt, true) {
+	if !isNonAvianClass(scientificName) && isCacheEntryStale(dbImage.CachedAt, true) {
 		log.Debug("Negative cache entry from DB is expired, will re-fetch")
 		return BirdImage{}, false // Continue to provider fetch
 	}
