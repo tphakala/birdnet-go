@@ -11,6 +11,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -95,6 +96,11 @@ type SaveAudioAction struct {
 	Settings      *conf.Settings
 	ClipName      string
 	pcmData       []byte            // Pre-read PCM data (set by buildSaveAudioAction)
+	bufferMgr     *buffer.Manager   // Used for deferred buffer reads when extended capture tail is still in the future
+	sourceID      string            // Source used for deferred buffer reads
+	beginTime     time.Time         // Capture start used for deferred buffer reads
+	duration      int               // Capture length in seconds used for deferred buffer reads
+	readyAt       time.Time         // Earliest time deferred capture is expected to be fully available
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
 	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers

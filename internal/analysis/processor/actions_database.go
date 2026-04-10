@@ -5,10 +5,12 @@ package processor
 
 import (
 	"context"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"time"
 
+	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -293,6 +295,27 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			logger.String("clip_name", a.ClipName),
 			logger.String("operation", "audio_export_disabled"))
 		return nil
+	}
+
+	if len(a.pcmData) == 0 && a.bufferMgr != nil && a.duration > 0 {
+		if wait := time.Until(a.readyAt); wait > 0 {
+			return stderrors.New("audio export deferred until capture tail is available")
+		}
+
+		cb, err := a.bufferMgr.CaptureBuffer(a.sourceID)
+		if err != nil {
+			return err
+		}
+
+		endTime := a.beginTime.Add(time.Duration(a.duration) * time.Second)
+		pcmData, err := cb.ReadSegment(a.beginTime, endTime)
+		if err != nil {
+			if stderrors.Is(err, audioBuffer.ErrInsufficientData) {
+				return err
+			}
+			return err
+		}
+		a.pcmData = pcmData
 	}
 
 	// If PCM data was not captured (e.g., buffer read failed), skip export.
