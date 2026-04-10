@@ -40,10 +40,11 @@ type HealthChecker struct {
 }
 
 type healthCheckEntry struct {
-	provider       Provider
-	circuitBreaker *PushCircuitBreaker
-	health         ProviderHealth
-	mu             sync.RWMutex
+	provider          Provider
+	circuitBreaker    *PushCircuitBreaker
+	health            ProviderHealth
+	lastLoggedHealthy *bool // nil = never logged; tracks state transitions for log dedup
+	mu                sync.RWMutex
 }
 
 // HealthCheckConfig holds configuration for the health checker.
@@ -268,13 +269,29 @@ func (hc *HealthChecker) updateCircuitBreakerState(entry *healthCheckEntry, circ
 	}
 }
 
-// logHealthCheckResult logs successful health checks at debug level.
+// logHealthCheckResult logs health check results only on state transitions
+// to avoid per-check log spam (was ~8500 entries/week for a single provider).
 func (hc *HealthChecker) logHealthCheckResult(entry *healthCheckEntry, providerName string) {
-	if entry.health.Healthy && hc.log != nil {
-		hc.log.Debug("provider health check passed",
+	if hc.log == nil {
+		return
+	}
+	healthy := entry.health.Healthy
+	// Only log when state changes (or on first check when lastLoggedHealthy is nil)
+	if entry.lastLoggedHealthy != nil && *entry.lastLoggedHealthy == healthy {
+		return
+	}
+	entry.lastLoggedHealthy = &healthy
+	if healthy {
+		hc.log.Info("provider health status: healthy",
 			logger.String("provider", providerName),
 			logger.Int("total_successes", entry.health.TotalSuccesses),
 			logger.Int("total_failures", entry.health.TotalFailures))
+	} else {
+		hc.log.Warn("provider health status: unhealthy",
+			logger.String("provider", providerName),
+			logger.Int("total_successes", entry.health.TotalSuccesses),
+			logger.Int("total_failures", entry.health.TotalFailures),
+			logger.String("error", entry.health.ErrorMessage))
 	}
 }
 
