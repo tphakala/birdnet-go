@@ -133,8 +133,7 @@ func (b *BwClient) logGainLimit(log logger.Logger, msg, key1 string, val1 float6
 	const gainWarnInterval int64 = 300 // 5 minutes in seconds
 	now := time.Now().Unix()
 	last := b.lastGainWarn.Load()
-	if now-last >= gainWarnInterval {
-		b.lastGainWarn.Store(now)
+	if now-last >= gainWarnInterval && b.lastGainWarn.CompareAndSwap(last, now) {
 		log.Warn(msg, logger.Float64(key1, val1), logger.Float64(key2, val2))
 	} else {
 		log.Debug(msg, logger.Float64(key1, val1), logger.Float64(key2, val2))
