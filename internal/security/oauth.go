@@ -570,7 +570,7 @@ func (s *OAuth2Server) UpdateProviders() {
 
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-	clientIP := net.ParseIP(c.RealIP())
+	clientIP := parseIPWithZone(c.RealIP())
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
@@ -884,7 +884,7 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 		return false
 	}
 
-	ip := net.ParseIP(ipStr)
+	ip := parseIPWithZone(ipStr)
 	if ip == nil {
 		authLog.Warn("Failed to parse IP address for allowed subnet check", logger.String("ip_string", ipStr))
 		return false
