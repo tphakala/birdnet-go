@@ -213,7 +213,8 @@ func TestEncodeFlacUsingFFmpeg(t *testing.T) {
 	// Encode PCM to FLAC with normalization
 	// Pass a background context since this test doesn't need timeout control itself
 	ctx := t.Context()
-	flacBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
+	client := &BwClient{Settings: settings}
+	flacBuffer, err := client.encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPathForTest, settings)
 	require.NoError(t, err, "encodeFlacUsingFFmpeg failed with valid input")
 	require.NotNil(t, flacBuffer, "encodeFlacUsingFFmpeg returned nil buffer")
 

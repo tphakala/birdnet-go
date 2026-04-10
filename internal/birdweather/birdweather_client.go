@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
@@ -114,6 +115,7 @@ type BwClient struct {
 	Latitude      float64
 	Longitude     float64
 	HTTPClient    *http.Client
+	lastGainWarn  atomic.Int64 // unix timestamp of last WARN-level gain log
 }
 
 // maskURL masks sensitive BirdWeatherID tokens in URLs for safe logging.
@@ -123,6 +125,20 @@ func (b *BwClient) maskURL(urlStr string) string {
 		return urlStr
 	}
 	return strings.ReplaceAll(urlStr, b.BirdweatherID, "[BIRDWEATHER_ID]")
+}
+
+// logGainLimit logs gain limiting at WARN level at most once per 5 minutes,
+// falling back to DEBUG for subsequent occurrences to avoid log spam.
+func (b *BwClient) logGainLimit(log logger.Logger, msg, key1 string, val1 float64, key2 string, val2 float64) {
+	const gainWarnInterval int64 = 300 // 5 minutes in seconds
+	now := time.Now().Unix()
+	last := b.lastGainWarn.Load()
+	if now-last >= gainWarnInterval {
+		b.lastGainWarn.Store(now)
+		log.Warn(msg, logger.Float64(key1, val1), logger.Float64(key2, val2))
+	} else {
+		log.Debug(msg, logger.Float64(key1, val1), logger.Float64(key2, val2))
+	}
 }
 
 // closeResponseBody safely closes an HTTP response body and logs any errors
@@ -406,7 +422,7 @@ func handleHTTPResponse(resp *http.Response, expectedStatus int, operation, mask
 // It applies a simple gain adjustment instead of dynamic loudness normalization to avoid pumping effects.
 // This avoids writing temporary files to disk.
 // It accepts a context for timeout/cancellation control and the explicit path to the FFmpeg executable.
-func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
+func (b *BwClient) encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath string, settings *conf.Settings) (*bytes.Buffer, error) {
 	log := GetLogger()
 
 	log.Debug("Starting FLAC encoding process")
@@ -468,15 +484,13 @@ func encodeFlacUsingFFmpeg(ctx context.Context, pcmData []byte, ffmpegPath strin
 	maxGain := 30.0 // Maximum gain in dB (absolute value)
 	gainLimited := false
 	if gainNeeded > maxGain {
-		log.Warn("Limiting gain to prevent excessive amplification",
-			logger.Float64("calculated_gain", gainNeeded),
-			logger.Float64("max_gain", maxGain))
+		b.logGainLimit(log, "Limiting gain to prevent excessive amplification",
+			"calculated_gain", gainNeeded, "max_gain", maxGain)
 		gainNeeded = maxGain
 		gainLimited = true
 	} else if gainNeeded < -maxGain {
-		log.Warn("Limiting gain to prevent excessive attenuation",
-			logger.Float64("calculated_gain", gainNeeded),
-			logger.Float64("min_gain", -maxGain))
+		b.logGainLimit(log, "Limiting gain to prevent excessive attenuation",
+			"calculated_gain", gainNeeded, "min_gain", -maxGain)
 		gainNeeded = -maxGain
 		gainLimited = true
 	}
@@ -546,7 +560,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	}
 
 	// Encode PCM data to audio format (FLAC with FFmpeg, or WAV fallback)
-	encodingResult, err := encodeAudioForUpload(b.Settings, pcmData, timestamp)
+	encodingResult, err := b.encodeAudioForUpload(b.Settings, pcmData, timestamp)
 	if err != nil {
 		return "", errors.New(err).
 			Component("birdweather").
@@ -941,7 +955,7 @@ type audioEncodingResult struct {
 
 // encodeAudioForUpload handles the PCM to FLAC encoding using FFmpeg
 // FFmpeg is required as BirdWeather only accepts FLAC format
-func encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
+func (b *BwClient) encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 
 	// Use the validated FFmpeg path from settings (validated at startup)
@@ -958,17 +972,17 @@ func encodeAudioForUpload(settings *conf.Settings, pcmData []byte, timestamp str
 		return nil, fmt.Errorf("FFmpeg is required for BirdWeather uploads (FLAC encoding)")
 	}
 
-	return encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
+	return b.encodeWithFFmpeg(settings, pcmData, ffmpegPathForExec, timestamp)
 }
 
 // encodeWithFFmpeg encodes PCM to FLAC format using FFmpeg
-func encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
+func (b *BwClient) encodeWithFFmpeg(settings *conf.Settings, pcmData []byte, ffmpegPath, timestamp string) (*audioEncodingResult, error) {
 	log := GetLogger()
 
 	ctx, cancel := context.WithTimeout(context.Background(), encodingTimeout)
 	defer cancel()
 
-	audioBuffer, err := encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPath, settings)
+	audioBuffer, err := b.encodeFlacUsingFFmpeg(ctx, pcmData, ffmpegPath, settings)
 	if err != nil {
 		log.Error("FLAC encoding failed",
 			logger.String("timestamp", timestamp),
