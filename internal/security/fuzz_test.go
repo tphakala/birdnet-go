@@ -460,7 +460,7 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 
 		// If disabled, result must be false (unless loopback)
 		if !enabled {
-			parsedIP := net.ParseIP(ipStr)
+			parsedIP := parseIPWithZone(ipStr)
 			if parsedIP == nil || !parsedIP.IsLoopback() {
 				assert.False(t, result, "Disabled subnet bypass should return false")
 			}
@@ -470,7 +470,7 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 		if ipStr == "" {
 			assert.False(t, result, "Empty IP should return false")
 		}
-		if net.ParseIP(ipStr) == nil {
+		if parseIPWithZone(ipStr) == nil {
 			assert.False(t, result, "Invalid IP should return false")
 		}
 
