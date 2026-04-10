@@ -236,8 +236,9 @@ log.Error("authentication failed", logger.String("ip", clientIP), logger.String(
 | `access` | internal/api/middleware | HTTP access logging |
 | `analysis` | internal/analysis | Bird sound analysis |
 | `analysis.soundlevel` | internal/analysis | Sound level monitoring |
-| `audio` | internal/myaudio | Audio capture and processing |
-| `audio.ffmpeg` | internal/myaudio | FFmpeg stream management |
+| `audio` | internal/audiocore | Audio capture and processing (legacy module name) |
+| `audio.ffmpeg` | internal/audiocore | FFmpeg stream management (legacy module name) |
+| `audiocore` | internal/audiocore | Audio capture and processing |
 | `auth` | internal/security | Authentication |
 | `backup` | internal/backup | Backup operations |
 | `birdweather` | internal/birdweather | BirdWeather integration |

@@ -141,6 +141,7 @@ func applyConfigDefaults(cfg *LoggingConfig) {
 	// Audio processing logs (high volume during operation)
 	ensureModuleOutput(cfg, "audio", DefaultAudioLogPath)
 	ensureModuleOutput(cfg, "audio.ffmpeg", DefaultAudioLogPath)
+	ensureModuleOutput(cfg, "audiocore", DefaultAudioLogPath)
 
 	// External service integration logs
 	ensureModuleOutput(cfg, "birdweather", DefaultBirdweatherLogPath)
