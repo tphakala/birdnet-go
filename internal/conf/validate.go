@@ -43,6 +43,16 @@ var validRetentionPolicies = []string{
 var (
 	// birdweatherIDPattern validates Birdweather ID format (24 alphanumeric characters)
 	birdweatherIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{24}$`)
+
+	// gpsCoordPattern matches the exact shape of the GPS-coordinate-
+	// as-device-string misconfiguration seen in the wild:
+	// a leading colon, a signed decimal latitude, a comma, and a signed
+	// decimal longitude (e.g. `:45.5,-120.5`). This ALSA device-prefix
+	// shape only looks legal to the parser until playback starts, so
+	// the audio engine fails forever on every startup. Detecting it at
+	// validation time lets us point the user at the right field with a
+	// single clear error instead of emitting recurring telemetry.
+	gpsCoordPattern = regexp.MustCompile(`^:[+-]?\d+(\.\d+)?,[+-]?\d+(\.\d+)?$`)
 )
 
 // Audio gain limits in dB
@@ -332,6 +342,16 @@ func (a *AudioSourceConfig) Validate() error {
 	// Device is required
 	if a.Device == "" {
 		return fmt.Errorf("audio source device is required for '%s'", a.Name)
+	}
+
+	// Reject device strings that look like GPS coordinates. Users have
+	// pasted values like ":45.5,-120.5" into the device field (probably
+	// intended for the location/coordinates setting) which bypasses
+	// argument parsing in ALSA/pipewire/pulse and causes the audio
+	// engine to fail forever on every startup. Catch it up front with
+	// a clear error pointing at the right setting.
+	if gpsCoordPattern.MatchString(a.Device) {
+		return fmt.Errorf("audio source '%s': device %q looks like GPS coordinates; set latitude/longitude under birdnet.latitude and birdnet.longitude instead and pick a real audio device", a.Name, a.Device)
 	}
 
 	// Validate gain range
