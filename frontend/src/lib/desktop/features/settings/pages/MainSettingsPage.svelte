@@ -23,6 +23,7 @@
   @component
 -->
 <script lang="ts">
+  import { tick } from 'svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
@@ -403,7 +404,13 @@
     loadInitialData();
   });
 
-  // LAZY LOADING: Initialize map only when Location tab becomes active
+  // LAZY LOADING: Initialize map only when Location tab becomes active.
+  // The Location tab panel is conditionally rendered via `{#if isActive}` in
+  // SettingsTabs.svelte, so the `bind:this={mapElement}` target may not be
+  // attached to the DOM in the same reactive round that flips `activeTab`.
+  // Await a tick so the DOM settles, then double-check the container is
+  // actually connected before handing it to MapLibre — otherwise MapLibre's
+  // internal `_resolveContainer` throws on a null/undefined element.
   $effect(() => {
     const isLocationTab = activeTab === 'location';
     const hasActualCoordinates =
@@ -411,17 +418,16 @@
       $birdnetSettings.latitude !== undefined &&
       $birdnetSettings.longitude !== undefined;
 
-    if (
-      isLocationTab &&
-      !store.isLoading &&
-      mapElement &&
-      !mapInitialized &&
-      hasActualCoordinates
-    ) {
+    if (!isLocationTab || store.isLoading || mapInitialized || !hasActualCoordinates) {
+      return;
+    }
+
+    tick().then(() => {
+      if (!mapElement || !mapElement.isConnected) return;
       logger.debug('Location tab active - initializing map lazily');
       initializeMap();
       mapInitialized = true;
-    }
+    });
   });
 
   let initialLoadComplete = $state(false);
@@ -577,7 +583,15 @@
   const createMapStyle = createMapStyleFromConfig;
 
   async function initializeMap() {
-    if (!mapElement || mapInitialized) return;
+    // Belt-and-suspenders guard: the effect above already waits for a tick
+    // and checks `mapElement.isConnected`, but keep a local check so any
+    // future caller fails cleanly instead of crashing inside MapLibre's
+    // `_resolveContainer` when the container is null/undefined/detached.
+    if (!mapElement || !mapElement.isConnected) {
+      logger.warn('initializeMap called without a bound container');
+      return;
+    }
+    if (mapInitialized) return;
 
     try {
       if (!maplibregl) {
