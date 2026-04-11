@@ -95,6 +95,7 @@ func TestBasePathStripMiddleware(t *testing.T) {
 
 			bp := tt.basePath
 			var capturedPath string
+			var capturedQuery string
 
 			e := echo.New()
 
@@ -102,7 +103,8 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			e.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 				return func(c echo.Context) error {
 					req := c.Request()
-					if req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != "" {
+					hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
+					if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
 						return next(c)
 					}
 					path := req.URL.Path
@@ -122,6 +124,7 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			// Catch-all handler to capture the routed path
 			e.Any("/*", func(c echo.Context) error {
 				capturedPath = c.Request().URL.Path
+				capturedQuery = c.Request().URL.RawQuery
 				return c.NoContent(http.StatusOK)
 			})
 
@@ -134,6 +137,9 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			e.ServeHTTP(rec, req)
 
 			assert.Equal(t, tt.expectedPath, capturedPath, "path after stripping")
+			if strings.Contains(tt.requestPath, "?") {
+				assert.NotEmpty(t, capturedQuery, "query string should be preserved")
+			}
 		})
 	}
 }
