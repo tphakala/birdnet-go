@@ -1714,7 +1714,9 @@ func (img *BirdImage) EstimateSize() int {
 	return size
 }
 
-// MemoryUsage estimates the total memory usage of the cache map.
+// MemoryUsage estimates the total memory usage of the cache maps.
+// Includes both the per-species image data map and the exhausted-species
+// short-circuit map so cache metrics reflect the full footprint.
 func (c *BirdImageCache) MemoryUsage() int {
 	totalSize := 0
 	c.dataMap.Range(func(key, value any) bool {
@@ -1724,6 +1726,16 @@ func (c *BirdImageCache) MemoryUsage() int {
 		if img, ok := value.(*BirdImage); ok && img != nil {
 			totalSize += img.EstimateSize() // Add value size
 		}
+		return true
+	})
+	c.exhaustedSpecies.Range(func(key, value any) bool {
+		if scientificName, ok := key.(string); ok {
+			totalSize += len(scientificName)
+		}
+		// Each entry stores a time.Time (24 bytes on 64-bit). Use a constant
+		// here to avoid an unsafe.Sizeof import for one constant value.
+		const timeStructBytes = 24
+		totalSize += timeStructBytes
 		return true
 	})
 	return totalSize
