@@ -442,8 +442,13 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
 				if stamp, ok := v.(time.Time); ok && time.Since(stamp) < invalidCommandPathRecheckTTL {
 					continue
 				}
-				// Stale entry — fall through and re-validate so a fixed
-				// path is cleared instead of being re-flagged below.
+				// Stale entry (or malformed value) — delete it before
+				// re-validating so a still-broken path hits the
+				// LoadOrStore loaded=false branch below and emits a
+				// fresh notification in the new TTL window. This
+				// matches the delete-before-recheck contract in
+				// markCommandPathInvalidIfBroken.
+				p.invalidCommandPaths.Delete(cmd)
 			}
 
 			// validateCommandPath returns a fully built enhanced error
