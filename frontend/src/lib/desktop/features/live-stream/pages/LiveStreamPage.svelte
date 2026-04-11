@@ -773,11 +773,11 @@
         <SelectDropdown
           options={sourceOptions}
           value={selectedSourceId}
-          placeholder={sources.length === 0
-            ? sourceDiscoveryDone
+          placeholder={sources.length > 0
+            ? t('spectrogram.page.sourceLabel')
+            : sourceDiscoveryDone
               ? t('common.ui.noAudioSources')
-              : t('common.loading') + '...'
-            : t('spectrogram.page.sourceLabel')}
+              : t('common.loading') + '...'}
           variant="select"
           size="sm"
           groupBy={false}
