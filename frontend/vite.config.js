@@ -2,9 +2,14 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { svelteTesting } from '@testing-library/svelte/vite'
-import { copyFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'fs'
-import { join } from 'path'
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { createHash } from 'node:crypto'
+
+// Single source of truth for the translation files directory. Both the i18n
+// cache version helper and the copy-messages plugin reference this path so
+// they cannot drift apart.
+const MESSAGES_SOURCE_DIR = './static/messages'
 
 /**
  * Compute a stable i18n cache version from the content of
@@ -17,7 +22,7 @@ import { createHash } from 'node:crypto'
  * runs still get a well-defined value.
  */
 function computeI18nCacheVersion() {
-  const sourceDir = './static/messages'
+  const sourceDir = MESSAGES_SOURCE_DIR
   if (!existsSync(sourceDir)) return 'dev'
   const files = readdirSync(sourceDir)
     .filter(f => f.endsWith('.json'))
@@ -69,9 +74,9 @@ export default defineConfig({
           // Create messages directory in dist
           const messagesDir = './dist/messages';
           mkdirSync(messagesDir, { recursive: true });
-          
+
           // Copy all message files
-          const sourceDir = './static/messages';
+          const sourceDir = MESSAGES_SOURCE_DIR;
           
           // Check if source directory exists
           if (!existsSync(sourceDir)) {
