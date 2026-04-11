@@ -76,13 +76,96 @@ func (sfs *StaticFileServer) RegisterRoutes(e *echo.Echo) {
 }
 
 // handleAssetRequest serves static assets based on dev/prod mode.
+// For text-based assets (CSS, JS) behind a base path, it rewrites absolute
+// /ui/assets/ references so the browser requests them through the proxy prefix.
 func (sfs *StaticFileServer) handleAssetRequest(c echo.Context) error {
 	path := c.Param("*")
+	basePath, _ := c.Get("basePath").(string)
+
+	// For text-based assets that may contain absolute /ui/assets/ references,
+	// read the content, rewrite paths, and serve the modified content.
+	if basePath != "" && isRewritableAsset(path) {
+		return sfs.serveRewrittenAsset(c, path, basePath)
+	}
 
 	if sfs.devMode {
 		return sfs.serveFromDisk(c, path)
 	}
 	return sfs.serveFromEmbed(c, path)
+}
+
+// isRewritableAsset returns true for text-based asset types that may contain
+// absolute /ui/assets/ references needing base path rewriting (CSS, JS).
+func isRewritableAsset(path string) bool {
+	return strings.HasSuffix(path, ".css") || strings.HasSuffix(path, ".js") || strings.HasSuffix(path, ".mjs")
+}
+
+// serveRewrittenAsset reads a text asset, rewrites /ui/assets/ references to
+// include the base path prefix, and serves the modified content.
+func (sfs *StaticFileServer) serveRewrittenAsset(c echo.Context, path, basePath string) error {
+	var content []byte
+	var err error
+
+	if sfs.devMode {
+		content, err = sfs.readAssetFromDisk(path)
+	} else {
+		content, err = sfs.readAssetFromEmbed(path)
+	}
+	if err != nil {
+		return err
+	}
+
+	// Replace absolute /ui/assets/ references with the prefixed version.
+	// This covers CSS url(/ui/assets/...) and JS dynamic imports.
+	// Idempotent: skip references already prefixed (e.g., by nginx sub_filter).
+	s := string(content)
+	s = strings.ReplaceAll(s, basePath+"/ui/assets/", "\x00ASSET_PLACEHOLDER\x00")
+	s = strings.ReplaceAll(s, "/ui/assets/", basePath+"/ui/assets/")
+	rewritten := strings.ReplaceAll(s, "\x00ASSET_PLACEHOLDER\x00", basePath+"/ui/assets/")
+
+	contentType := getMIMEType(path)
+	c.Response().Header().Set("Content-Type", contentType)
+	if isUnhashedAsset(path) {
+		c.Response().Header().Set("Cache-Control", "no-cache, must-revalidate")
+	} else {
+		c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	}
+	return c.Blob(http.StatusOK, contentType, []byte(rewritten))
+}
+
+// readAssetFromDisk reads a static asset file from the dev mode dist directory.
+func (sfs *StaticFileServer) readAssetFromDisk(path string) ([]byte, error) {
+	root, err := sfs.openDevRoot()
+	if err != nil {
+		return nil, err
+	}
+	defer sfs.closeWithLog(root, "root handle")
+
+	file, err := sfs.openFileFromRoot(root, path)
+	if err != nil {
+		return nil, err
+	}
+	defer sfs.closeFileWithLog(file, path)
+
+	return io.ReadAll(file)
+}
+
+// readAssetFromEmbed reads a static asset file from the embedded filesystem.
+func (sfs *StaticFileServer) readAssetFromEmbed(path string) ([]byte, error) {
+	log := GetLogger()
+	file, err := frontend.DistFS.Open(path)
+	if err != nil {
+		return nil, echo.NewHTTPError(http.StatusNotFound, "File not found")
+	}
+	defer func() {
+		if closeErr := file.Close(); closeErr != nil {
+			log.Warn("Error closing embedded file",
+				logger.String("path", path),
+				logger.Error(closeErr))
+		}
+	}()
+
+	return io.ReadAll(file)
 }
 
 // serveFromDisk serves frontend assets from the local filesystem (dev mode).

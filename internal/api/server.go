@@ -260,8 +260,56 @@ func (s *Server) setupMiddleware() {
 	// Go's net/http automatically suppresses the response body for HEAD.
 	s.echo.Pre(mw.NewHeadToGet())
 
+	// Base path prefix stripping — enables direct access when basepath is configured.
+	// When settings.WebServer.BasePath is "/birdnet", a request to /birdnet/ui/dashboard
+	// gets stripped to /ui/dashboard so existing route handlers match.
+	// Skipped when reverse proxy headers are present (the proxy already stripped it).
+	if bp := strings.TrimRight(s.settings.WebServer.BasePath, "/"); bp != "" {
+		s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				// Skip stripping when a reverse proxy header is present —
+				// the proxy already removed the prefix before forwarding.
+				req := c.Request()
+				if req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != "" {
+					return next(c)
+				}
+
+				path := req.URL.Path
+				if strings.HasPrefix(path, bp) {
+					rest := path[len(bp):]
+					if rest == "" || rest[0] == '/' {
+						if rest == "" {
+							rest = "/"
+						}
+						req.URL.Path = rest
+						// Also update RawPath if set (percent-encoded paths).
+						if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
+							raw := req.URL.RawPath[len(bp):]
+							if raw == "" {
+								raw = "/"
+							}
+							req.URL.RawPath = raw
+						}
+					}
+				}
+				return next(c)
+			}
+		})
+		s.slogger.Info("Base path prefix stripping enabled", logger.String("basePath", bp))
+	}
+
 	// Recovery middleware - should be first
 	s.echo.Use(echomw.Recover())
+
+	// Base path context — makes the effective base path available to all handlers
+	// via c.Get("basePath"). Computed per-request from ingressPath() which checks
+	// proxy headers and config in priority order.
+	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Set("basePath", ingressPath(c, s.settings))
+			return next(c)
+		}
+	})
 
 	// Request logging using custom middleware package (uses centralized logger)
 	s.echo.Use(mw.NewRequestLogger())

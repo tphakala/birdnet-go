@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/frontend"
@@ -46,11 +47,46 @@ func NewSPAHandler(devMode bool, devModePath string) *SPAHandler {
 // ServeApp serves the SPA HTML shell for all frontend routes.
 // The HTML is served directly from Vite's build output.
 // Configuration is fetched by the frontend from /api/v2/app/config.
+// When a base path is set (reverse proxy or config), absolute asset URLs
+// in the HTML are rewritten to include the prefix.
 func (h *SPAHandler) ServeApp(c echo.Context) error {
 	if h.devMode {
 		return h.serveFromDisk(c)
 	}
 	return h.serveFromEmbed(c)
+}
+
+// rewriteHTMLBasePath prefixes absolute asset URLs in HTML content with the
+// given base path. This ensures the browser requests assets through the
+// reverse proxy (e.g., /birdnet/ui/assets/main.js instead of /ui/assets/main.js).
+//
+// The rewriting is idempotent: paths already containing the base path prefix
+// are not double-prefixed. This is important because some reverse proxies
+// (e.g., nginx sub_filter) may also rewrite paths in the response body.
+func rewriteHTMLBasePath(content []byte, basePath string) []byte {
+	if basePath == "" {
+		return content
+	}
+	s := string(content)
+
+	// Rewrite href="/..." and src="/..." attributes, but skip paths that
+	// already start with the base path to avoid double-prefixing.
+	s = strings.ReplaceAll(s, `href="`+basePath+`/`, "\x00HREF_PLACEHOLDER\x00")
+	s = strings.ReplaceAll(s, `src="`+basePath+`/`, "\x00SRC_PLACEHOLDER\x00")
+	s = strings.ReplaceAll(s, `href="/`, `href="`+basePath+`/`)
+	s = strings.ReplaceAll(s, `src="/`, `src="`+basePath+`/`)
+	s = strings.ReplaceAll(s, "\x00HREF_PLACEHOLDER\x00", `href="`+basePath+`/`)
+	s = strings.ReplaceAll(s, "\x00SRC_PLACEHOLDER\x00", `src="`+basePath+`/`)
+
+	// Rewrite service worker registration path and scope.
+	if !strings.Contains(s, `'`+basePath+`/sw.js'`) {
+		s = strings.ReplaceAll(s, `'/sw.js'`, `'`+basePath+`/sw.js'`)
+	}
+	if !strings.Contains(s, `scope: '`+basePath+`/'`) {
+		s = strings.ReplaceAll(s, `scope: '/'`, `scope: '`+basePath+`/'`)
+	}
+
+	return []byte(s)
 }
 
 // serveFromDisk serves index.html from the local filesystem (dev mode).
@@ -84,6 +120,10 @@ func (h *SPAHandler) serveFromDisk(c echo.Context) error {
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
 
+	// Rewrite absolute asset URLs when served behind a base path.
+	basePath, _ := c.Get("basePath").(string)
+	content = rewriteHTMLBasePath(content, basePath)
+
 	return c.HTMLBlob(http.StatusOK, content)
 }
 
@@ -110,6 +150,10 @@ func (h *SPAHandler) serveFromEmbed(c echo.Context) error {
 	c.Response().Header().Set(echo.HeaderCacheControl, cacheControlNoCache)
 	c.Response().Header().Set("Pragma", "no-cache")
 	c.Response().Header().Set("Expires", "0")
+
+	// Rewrite absolute asset URLs when served behind a base path.
+	basePath, _ := c.Get("basePath").(string)
+	content = rewriteHTMLBasePath(content, basePath)
 
 	return c.HTMLBlob(http.StatusOK, content)
 }

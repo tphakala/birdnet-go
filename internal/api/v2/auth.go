@@ -240,9 +240,12 @@ func (c *Controller) Login(ctx echo.Context) error {
 		}
 	}
 
-	// Construct the V2 OAuth callback URL with the validated redirect
-	// URL-encode both code and redirect to prevent parameter injection and handle special characters
-	redirectURL := fmt.Sprintf("/api/v2/auth/callback?code=%s&redirect=%s", url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
+	// Construct the V2 OAuth callback URL with the validated redirect.
+	// Include the base path prefix so the browser follows the redirect through
+	// the reverse proxy (e.g., /birdnet/api/v2/auth/callback instead of /api/v2/auth/callback).
+	// URL-encode both code and redirect to prevent parameter injection and handle special characters.
+	requestBase, _ := ctx.Get("basePath").(string)
+	redirectURL := fmt.Sprintf("%s/api/v2/auth/callback?code=%s&redirect=%s", requestBase, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.logInfoIfEnabled("Returning successful login response with redirect",
 		logger.Username(req.Username),

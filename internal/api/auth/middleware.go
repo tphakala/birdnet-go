@@ -230,7 +230,8 @@ func (m *Middleware) redirectToLogin(c echo.Context, path, ip string) error {
 }
 
 // buildLoginRedirectURL constructs the login URL with a safe redirect parameter.
-// Supports reverse proxy prefixes via X-Ingress-Path / X-Forwarded-Prefix headers.
+// Supports reverse proxy prefixes via X-Ingress-Path / X-Forwarded-Prefix headers
+// and direct access with configured BasePath (via context set by basepath middleware).
 func (m *Middleware) buildLoginRedirectURL(c echo.Context, ip string) string {
 	const loginPath = "/login"
 
@@ -244,11 +245,16 @@ func (m *Middleware) buildLoginRedirectURL(c echo.Context, ip string) string {
 	return basePath + loginPath + "?redirect=" + url.QueryEscape(safeRedirectPath)
 }
 
-// requestBasePath returns the reverse proxy base path from request headers.
-// Priority: X-Ingress-Path > X-Forwarded-Prefix > empty.
-// Note: Unlike the version in api/v2/app.go, this does not fall back to config
-// BasePath because the auth context requires matching the actual request prefix.
+// requestBasePath returns the effective base path for the current request.
+// Uses the basePath value set in Echo context by the server's basepath middleware,
+// which already handles the priority chain: X-Ingress-Path > X-Forwarded-Prefix > config BasePath.
+// Falls back to checking proxy headers directly if the context value is not set.
 func requestBasePath(c echo.Context) string {
+	// Prefer the authoritative value from the basepath context middleware.
+	if bp, ok := c.Get("basePath").(string); ok && bp != "" {
+		return bp
+	}
+	// Fallback: check proxy headers directly (for cases where context middleware hasn't run).
 	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
 		return strings.TrimRight(p, "/")
 	}
