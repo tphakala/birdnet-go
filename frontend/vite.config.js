@@ -148,7 +148,14 @@ export default defineConfig({
           )
             return 'd3';
           if (id.includes('node_modules/@sentry/')) return 'sentry';
-          if (id.includes('node_modules/maplibre-gl/')) return 'maps';
+          // Do NOT manually chunk maplibre-gl. It ships as UMD/CJS and
+          // Rolldown's manualChunks path emits a broken
+          //   export { maplibre_gl_exports as n, t }
+          // that references an undeclared `maplibre_gl_exports` identifier,
+          // throwing SyntaxError at module load. Letting Rolldown auto-chunk
+          // it (returning undefined) produces a working isolated chunk.
+          // See https://github.com/rolldown/rolldown/ — known UMD wrapping
+          // bug under manualChunks.
           return undefined;
         },
       },
