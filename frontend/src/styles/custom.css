@@ -195,22 +195,37 @@
    Form Field Helpers
    ======================================================================== */
 
-/* Settings form grid alignment - ensures consistent field heights */
+/* Settings form grid alignment - ensures consistent field heights.
+   Plain CSS rather than Tailwind @apply: this file is imported via
+   @import url('./custom.css') layer(base) which puts it in its own CSS
+   processing context, so @apply directives are not resolved by Tailwind
+   and previously leaked through to the browser as literal at-rules. */
 .settings-form-grid {
-  @apply grid grid-cols-1 md:grid-cols-3 gap-6;
+  display: grid;
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .settings-form-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .settings-form-grid .form-control {
-  @apply flex flex-col;
+  display: flex;
+  flex-direction: column;
 }
 
-/* Ensure labels have consistent height to align input fields
-   min-h-[2rem] (32px) provides enough space for label text while preventing
-   vertical misalignment when labels wrap or have different heights.
-   This ensures all input fields in the same row start at the same vertical position. */
+/* Ensure labels have consistent height to align input fields.
+   min-height: 2rem (32px) provides enough space for label text while
+   preventing vertical misalignment when labels wrap or have different
+   heights, so all input fields in the same row start at the same
+   vertical position. */
 .settings-form-grid .form-control > label:first-child,
 .settings-form-grid .form-control > .label:first-child {
-  @apply min-h-8 items-start;
+  min-height: 2rem;
+  align-items: flex-start;
 }
 
 /* ========================================================================
