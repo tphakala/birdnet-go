@@ -116,6 +116,54 @@ func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	assert.True(t, shouldReportToSentry(ee))
 }
 
+// TestShouldReportToSentry_FiltersCategoryLimit verifies that throttling and
+// rate-limit conditions are not forwarded to Sentry, regardless of the
+// specific message. These represent operational state (circuit breaker open,
+// queue full, etc.) and the interesting signal is covered by dedicated
+// telemetry paths.
+func TestShouldReportToSentry_FiltersCategoryLimit(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		component string
+		err       error
+	}{
+		{
+			name:      "notification circuit breaker open",
+			component: "notification",
+			err:       fmt.Errorf("circuit breaker is open"),
+		},
+		{
+			name:      "notification circuit breaker half-open too many requests",
+			component: "notification",
+			err:       fmt.Errorf("circuit breaker is half-open, too many requests"),
+		},
+		{
+			name:      "analysis job queue full",
+			component: "analysis.jobqueue",
+			err:       fmt.Errorf("job queue is full"),
+		},
+		{
+			name:      "spectrogram prerender queue full",
+			component: "spectrogram",
+			err:       fmt.Errorf("pre-render queue full"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ee := New(tt.err).
+				Component(tt.component).
+				Category(CategoryLimit).
+				Build()
+			assert.False(t, shouldReportToSentry(ee),
+				"CategoryLimit errors must not be forwarded to Sentry")
+		})
+	}
+}
+
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 	// Not parallel — mutates package-level state
 	lastDiskFullReport.Store(0)

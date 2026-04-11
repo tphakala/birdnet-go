@@ -152,6 +152,16 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	}
 	errorMsg := strings.ToLower(ee.Err.Error())
 
+	// Throttling / rate-limit conditions are operational state, not bugs.
+	// Current producers of CategoryLimit: notification circuit breaker
+	// open/half-open, job queue full, spectrogram pre-render queue full.
+	// The interesting signal (state transitions, degraded mode) is already
+	// surfaced through dedicated telemetry paths, so the per-call errors
+	// are pure noise when forwarded to Sentry.
+	if ee.Category == CategoryLimit {
+		return false
+	}
+
 	// Check for MQTT authentication/authorization errors (user config issues)
 	if ee.Category == CategoryMQTTConnection || ee.Category == CategoryMQTTAuth {
 		// Common MQTT authentication/authorization error patterns
