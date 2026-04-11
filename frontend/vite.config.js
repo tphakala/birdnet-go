@@ -2,15 +2,41 @@ import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
 import { svelteTesting } from '@testing-library/svelte/vite'
-import { copyFileSync, mkdirSync, readdirSync, existsSync } from 'fs'
+import { copyFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from 'fs'
 import { join } from 'path'
+import { createHash } from 'node:crypto'
+
+/**
+ * Compute a stable i18n cache version from the content of
+ * `static/messages/*.json`. This replaces `Date.now()` so two builds from
+ * identical sources produce identical bundle content hashes (reproducible
+ * builds) and the i18n localStorage cache only evicts when translations
+ * actually change.
+ *
+ * Returns 'dev' if the messages directory is missing or empty so dev/test
+ * runs still get a well-defined value.
+ */
+function computeI18nCacheVersion() {
+  const sourceDir = './static/messages'
+  if (!existsSync(sourceDir)) return 'dev'
+  const files = readdirSync(sourceDir)
+    .filter(f => f.endsWith('.json'))
+    .sort()
+  if (files.length === 0) return 'dev'
+  const hash = createHash('sha256')
+  for (const file of files) {
+    hash.update(file)
+    hash.update(readFileSync(join(sourceDir, file)))
+  }
+  return hash.digest('hex').slice(0, 8)
+}
 
 // https://vite.dev/config/
 export default defineConfig({
   base: '/ui/assets/',
   publicDir: 'static',
   define: {
-    __I18N_CACHE_VERSION__: JSON.stringify(Date.now().toString(36)),
+    __I18N_CACHE_VERSION__: JSON.stringify(computeI18nCacheVersion()),
   },
   plugins: [
     tailwindcss(),
@@ -80,10 +106,6 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     emptyOutDir: true,
     manifest: true, // Generates .vite/manifest.json for cache busting
-    // Watch mode uses Rolldown's default watcher options under Vite 8.
-    // The previous chokidar polling config was removed because Rolldown's
-    // WatcherOptions type no longer accepts a nested `chokidar` key.
-    watch: process.argv.includes('--watch') ? {} : null,
     rollupOptions: {
       output: {
         // Content hashes enable proper cache busting with CDNs like Cloudflare
@@ -92,7 +114,16 @@ export default defineConfig({
         assetFileNames: '[name]-[hash].[ext]',
         manualChunks(id) {
           if (id.includes('node_modules/svelte/')) return 'vendor';
-          if (id.includes('node_modules/chart.js/')) return 'charts';
+          if (
+            id.includes('node_modules/chart.js/') ||
+            id.includes('node_modules/chartjs-adapter-date-fns/')
+          )
+            return 'charts';
+          // `node_modules/d3` (no trailing slash) intentionally catches the
+          // whole d3 family: d3, d3-scale-chromatic, d3-time-format, etc.
+          if (id.includes('node_modules/d3')) return 'd3';
+          if (id.includes('node_modules/@sentry/')) return 'sentry';
+          if (id.includes('node_modules/maplibre-gl/')) return 'maps';
           return undefined;
         },
       },
