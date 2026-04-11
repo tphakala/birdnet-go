@@ -44,15 +44,19 @@ var (
 	// birdweatherIDPattern validates Birdweather ID format (24 alphanumeric characters)
 	birdweatherIDPattern = regexp.MustCompile(`^[a-zA-Z0-9]{24}$`)
 
-	// gpsCoordPattern matches the exact shape of the GPS-coordinate-
-	// as-device-string misconfiguration seen in the wild:
-	// a leading colon, a signed decimal latitude, a comma, and a signed
-	// decimal longitude (e.g. `:45.5,-120.5`). This ALSA device-prefix
-	// shape only looks legal to the parser until playback starts, so
-	// the audio engine fails forever on every startup. Detecting it at
-	// validation time lets us point the user at the right field with a
-	// single clear error instead of emitting recurring telemetry.
-	gpsCoordPattern = regexp.MustCompile(`^:[+-]?\d+(\.\d+)?,[+-]?\d+(\.\d+)?$`)
+	// gpsCoordPattern matches the GPS-coordinate-as-device-string
+	// misconfiguration seen in the wild. The leading colon is optional:
+	// the originally reported case was `:45.5,-120.5` (an ALSA-style
+	// device prefix with the PCM name replaced by coordinates), but the
+	// naked variant `45.5,-120.5` — and integer-only forms like
+	// `45,120` — are equally nonsensical as audio devices and would
+	// otherwise slip through. Real ALSA/Pulse device strings always
+	// start with a letter (`default`, `hw:0,0`, `pulse:0`, etc.), so
+	// a leading digit / sign / optional colon never collides with a
+	// valid configuration. Detecting this shape at validation time lets
+	// us point the user at the right field with a single clear error
+	// instead of emitting recurring telemetry.
+	gpsCoordPattern = regexp.MustCompile(`^:?[+-]?\d+(\.\d+)?,[+-]?\d+(\.\d+)?$`)
 )
 
 // Audio gain limits in dB

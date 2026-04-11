@@ -96,6 +96,12 @@ func TestAudioSourceConfig_Validate_RejectsGPSCoordinates(t *testing.T) {
 		{"negative lat", ":-45.5,120.5"},
 		{"explicit signs", ":+45.5,-120.5"},
 		{"integer coords", ":45,-120"},
+		// Naked variant — same nonsense, no leading colon. Must also be
+		// rejected even though it does not mimic the ALSA device-prefix
+		// shape, since real ALSA/Pulse device strings always start with
+		// a letter.
+		{"naked decimal coords", "45.5,-120.5"},
+		{"naked integer coords", "45,120"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
