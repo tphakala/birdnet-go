@@ -775,7 +775,7 @@
           value={selectedSourceId}
           placeholder={sources.length === 0
             ? sourceDiscoveryDone
-              ? t('common.noAudioSources')
+              ? t('common.ui.noAudioSources')
               : t('common.loading') + '...'
             : t('spectrogram.page.sourceLabel')}
           variant="select"
