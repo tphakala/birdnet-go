@@ -265,9 +265,14 @@ func requestBasePath(c echo.Context) string {
 }
 
 // isSafePathPrefix validates that a path prefix is safe for use in redirects.
-// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+// Rejects empty strings, protocol-relative URLs (//...), absolute URLs (://...),
+// and backslashes (browsers normalize "/\" to "//" producing protocol-relative URLs).
 func isSafePathPrefix(p string) bool {
-	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
+	return p != "" &&
+		strings.HasPrefix(p, "/") &&
+		!strings.HasPrefix(p, "//") &&
+		!strings.Contains(p, "://") &&
+		!strings.Contains(p, "\\")
 }
 
 // getSafeRedirectPath validates and returns a safe redirect path.

@@ -100,9 +100,14 @@ func ingressPath(c echo.Context, settings *conf.Settings) string {
 }
 
 // isSafePathPrefix validates that a path prefix is safe for use in redirects.
-// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+// Rejects empty strings, protocol-relative URLs (//...), absolute URLs (://...),
+// and backslashes (browsers normalize "/\" to "//" producing protocol-relative URLs).
 func isSafePathPrefix(p string) bool {
-	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
+	return p != "" &&
+		strings.HasPrefix(p, "/") &&
+		!strings.HasPrefix(p, "//") &&
+		!strings.Contains(p, "://") &&
+		!strings.Contains(p, "\\")
 }
 
 // ServerOption is a functional option for configuring the Server.

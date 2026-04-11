@@ -667,6 +667,13 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 		}
 	}
 
+	// Validate BasePath (reverse proxy subpath prefix).
+	// Empty is allowed (disables basepath). Non-empty must be a safe URL-path prefix.
+	if err := validateBasePath(settings.BasePath); err != nil {
+		result.Valid = false
+		result.Errors = append(result.Errors, err.Error())
+	}
+
 	// Validate LiveStream settings
 	if settings.LiveStream.BitRate < 16 || settings.LiveStream.BitRate > 320 {
 		result.Valid = false
@@ -682,6 +689,50 @@ func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
 
 	result.Normalized = settings
 	return result
+}
+
+// validateBasePath verifies that a configured WebServer.BasePath is a safe URL-path prefix.
+// Empty is allowed and disables subpath routing. Non-empty values must start with "/",
+// contain only a restricted character set, and must not introduce path traversal,
+// protocol-relative URLs, backslashes, or scheme-like sequences.
+func validateBasePath(basePath string) error {
+	if basePath == "" {
+		return nil
+	}
+
+	if !strings.HasPrefix(basePath, "/") {
+		return fmt.Errorf("WebServer basepath must start with %q, got %q", "/", basePath)
+	}
+
+	// A single "/" is meaningless as a subpath prefix — require the caller to use empty instead.
+	if basePath == "/" {
+		return fmt.Errorf("WebServer basepath %q is meaningless; leave empty to disable subpath routing", basePath)
+	}
+
+	// Reject dangerous sequences outright. The sequence list aligns with the
+	// dangerous-pattern check in isValidBasePath (internal/api/v2/auth.go) so that
+	// YAML-configured and UI-supplied basepaths share the same rejection rules.
+	for _, bad := range []string{"..", "//", "\\", "://", "\n", "\r", "\x00"} {
+		if strings.Contains(basePath, bad) {
+			return fmt.Errorf("WebServer basepath contains disallowed sequence %q: %q", bad, basePath)
+		}
+	}
+
+	// Restrict to the same alphanumeric + /_- character set accepted elsewhere.
+	// This catches HTML/JS injection attempts, whitespace, and unicode surprises early.
+	for _, r := range basePath {
+		switch {
+		case r >= 'a' && r <= 'z',
+			r >= 'A' && r <= 'Z',
+			r >= '0' && r <= '9',
+			r == '/', r == '-', r == '_':
+			// allowed
+		default:
+			return fmt.Errorf("WebServer basepath contains disallowed character %q: %q", r, basePath)
+		}
+	}
+
+	return nil
 }
 
 // ValidateTelemetrySettings validates the telemetry endpoint configuration.

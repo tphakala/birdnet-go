@@ -283,6 +283,7 @@ func TestBasePathContextMiddleware(t *testing.T) {
 
 	tests := []struct {
 		name             string
+		xIngressPath     string
 		xForwardedPrefix string
 		expectedBasePath string
 	}{
@@ -290,6 +291,39 @@ func TestBasePathContextMiddleware(t *testing.T) {
 			name:             "sets basePath from X-Forwarded-Prefix",
 			xForwardedPrefix: "/birdnet",
 			expectedBasePath: "/birdnet",
+		},
+		{
+			name:             "sets basePath from X-Ingress-Path",
+			xIngressPath:     "/api/hassio_ingress/TOKEN",
+			expectedBasePath: "/api/hassio_ingress/TOKEN",
+		},
+		{
+			name:             "X-Ingress-Path wins over X-Forwarded-Prefix",
+			xIngressPath:     "/api/hassio_ingress/TOKEN",
+			xForwardedPrefix: "/birdnet",
+			expectedBasePath: "/api/hassio_ingress/TOKEN",
+		},
+		{
+			name:             "rejects protocol-relative X-Forwarded-Prefix",
+			xForwardedPrefix: "//evil.example",
+			expectedBasePath: "",
+		},
+		{
+			name:             "rejects backslash-prefixed X-Forwarded-Prefix",
+			xForwardedPrefix: `/\evil.example`,
+			expectedBasePath: "",
+		},
+		{
+			// X-Ingress-Path is the higher-priority header (Home Assistant uses it), so
+			// guard it against the same backslash → protocol-relative URL trick.
+			name:             "rejects backslash-prefixed X-Ingress-Path",
+			xIngressPath:     `/\evil.example`,
+			expectedBasePath: "",
+		},
+		{
+			name:             "rejects scheme-embedded X-Forwarded-Prefix",
+			xForwardedPrefix: "/http://evil",
+			expectedBasePath: "",
 		},
 		{
 			name:             "empty basePath when no headers",
@@ -318,6 +352,9 @@ func TestBasePathContextMiddleware(t *testing.T) {
 			})
 
 			req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
+			if tt.xIngressPath != "" {
+				req.Header.Set("X-Ingress-Path", tt.xIngressPath)
+			}
 			if tt.xForwardedPrefix != "" {
 				req.Header.Set("X-Forwarded-Prefix", tt.xForwardedPrefix)
 			}
@@ -327,6 +364,38 @@ func TestBasePathContextMiddleware(t *testing.T) {
 
 			require.Equal(t, http.StatusOK, rec.Code)
 			assert.Equal(t, tt.expectedBasePath, capturedBasePath)
+		})
+	}
+}
+
+// TestIsSafePathPrefix verifies the guard used by ingressPath/requestBasePath
+// for proxy-supplied path prefixes. This prevents header-driven open redirect
+// / DOM XSS when the rewritten value ends up as a URL prefix in HTML/JS.
+func TestIsSafePathPrefix(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  bool
+	}{
+		{"empty is unsafe", "", false},
+		{"simple prefix is safe", "/birdnet", true},
+		{"multi-segment is safe", "/apps/birdnet", true},
+		{"hassio ingress prefix is safe", "/api/hassio_ingress/TOKEN", true},
+		{"trailing slash is safe", "/birdnet/", true},
+		{"no leading slash is unsafe", "birdnet", false},
+		{"protocol-relative // is unsafe", "//evil.example", false},
+		{"backslash is unsafe", `/\evil.example`, false},
+		{"backslash midpath is unsafe", `/birdnet\foo`, false},
+		{"scheme :// is unsafe", "/http://evil", false},
+		{"naked scheme prefix is unsafe", "https://evil", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isSafePathPrefix(tt.input))
 		})
 	}
 }

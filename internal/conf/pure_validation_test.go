@@ -758,6 +758,66 @@ func TestValidateWebServerSettings_Valid(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "basepath empty (disabled)",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+		},
+		{
+			name: "basepath simple prefix",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/birdnet",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+		},
+		{
+			name: "basepath multi-segment",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/apps/birdnet",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+		},
+		{
+			name: "basepath with trailing slash",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/birdnet/",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+		},
+		{
+			name: "basepath with underscore and hyphen",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/my_bird-net",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -857,6 +917,114 @@ func TestValidateWebServerSettings_Invalid(t *testing.T) {
 				},
 			},
 			expectError: "segment length must be between 1 and 30 seconds",
+		},
+		{
+			name: "basepath missing leading slash",
+			settings: WebServerSettings{
+				Enabled: true,
+				Port:    "8080",
+				// Missing leading "/" is a common typo. Reject loudly so users notice before the
+				// server silently routes nothing through the subpath middleware.
+				BasePath: "birdnet",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "basepath must start with",
+		},
+		{
+			name: "basepath is just slash",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "is meaningless",
+		},
+		{
+			name: "basepath protocol-relative",
+			settings: WebServerSettings{
+				Enabled: true,
+				Port:    "8080",
+				// Browsers treat "//host" as a protocol-relative URL — must not be allowed as a path prefix.
+				BasePath: "//evil.example",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed sequence",
+		},
+		{
+			name: "basepath with backslash",
+			settings: WebServerSettings{
+				Enabled: true,
+				Port:    "8080",
+				// Browsers normalize "/\foo" to "//foo" (protocol-relative). Defensive reject.
+				BasePath: `/\evil.example`,
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed sequence",
+		},
+		{
+			name: "basepath path traversal",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/../etc/passwd",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed sequence",
+		},
+		{
+			name: "basepath scheme injection",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/javascript://evil",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed sequence",
+		},
+		{
+			name: "basepath with space",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/bird net",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed character",
+		},
+		{
+			name: "basepath with HTML injection",
+			settings: WebServerSettings{
+				Enabled:  true,
+				Port:     "8080",
+				BasePath: "/<script>",
+				LiveStream: LiveStreamSettings{
+					BitRate:       128,
+					SegmentLength: 5,
+				},
+			},
+			expectError: "disallowed character",
 		},
 	}
 
