@@ -121,7 +121,9 @@
 
             // Mark discovery as done after the first message from the backend.
             // If levels is empty, there are no configured audio sources.
-            sourceDiscoveryDone = true;
+            if (!sourceDiscoveryDone) {
+              sourceDiscoveryDone = true;
+            }
 
             if (newSources.length > 0) {
               // Update sources if count changed or this is the first time
