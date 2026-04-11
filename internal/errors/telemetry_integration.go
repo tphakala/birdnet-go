@@ -211,6 +211,16 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		}
 	}
 
+	// RTSP silence timeouts are most often transient network glitches
+	// (flaky Wi-Fi, switch reboot, camera NTP hiccup). The stream layer
+	// already logs a warning and restarts, so forwarding a Sentry event
+	// per occurrence just floods the project with duplicates. A future
+	// enhancement can track consecutive timeouts inside stream.go and
+	// only escalate when the stream stays silent for multiple windows.
+	if ee.Category == CategoryRTSP && strings.Contains(errorMsg, "stream stopped producing data") {
+		return false
+	}
+
 	// Rate-limit disk-full errors — a single root cause creates cascading
 	// errors across many subsystems (database, FFmpeg, alerting, etc.)
 	if strings.Contains(errorMsg, "disk is full") ||

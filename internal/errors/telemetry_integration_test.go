@@ -164,6 +164,33 @@ func TestShouldReportToSentry_FiltersCategoryLimit(t *testing.T) {
 	}
 }
 
+// TestShouldReportToSentry_FiltersRTSPSilenceTimeout verifies that the RTSP
+// silence-timeout warning emitted by the ffmpeg stream layer is not
+// forwarded to Sentry. These are transient network glitches, not bugs.
+func TestShouldReportToSentry_FiltersRTSPSilenceTimeout(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("stream stopped producing data for 90 seconds")).
+		Component("ffmpeg-stream").
+		Category(CategoryRTSP).
+		Context("operation", "silence_timeout").
+		Build()
+	assert.False(t, shouldReportToSentry(ee))
+}
+
+// TestShouldReportToSentry_AllowsRTSPCodeBugs is a positive control that
+// pins the behavior for RTSP category errors that do NOT match the
+// known-noisy patterns. These must still reach Sentry so real bugs in the
+// RTSP stack remain visible.
+func TestShouldReportToSentry_AllowsRTSPCodeBugs(t *testing.T) {
+	t.Parallel()
+	ee := New(fmt.Errorf("ffmpeg produced invalid frame header at offset 42")).
+		Component("ffmpeg-stream").
+		Category(CategoryRTSP).
+		Build()
+	assert.True(t, shouldReportToSentry(ee),
+		"non-noise RTSP errors must still be forwarded to Sentry")
+}
+
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 	// Not parallel — mutates package-level state
 	lastDiskFullReport.Store(0)
