@@ -53,10 +53,13 @@ var (
 	// otherwise slip through. Real ALSA/Pulse device strings always
 	// start with a letter (`default`, `hw:0,0`, `pulse:0`, etc.), so
 	// a leading digit / sign / optional colon never collides with a
-	// valid configuration. Detecting this shape at validation time lets
-	// us point the user at the right field with a single clear error
-	// instead of emitting recurring telemetry.
-	gpsCoordPattern = regexp.MustCompile(`^:?[+-]?\d+(\.\d+)?,[+-]?\d+(\.\d+)?$`)
+	// valid configuration. Optional whitespace around the comma is
+	// allowed because users frequently paste coordinates copied from
+	// map services with a space after the separator (`45.5, -120.5`).
+	// Detecting this shape at validation time lets us point the user
+	// at the right field with a single clear error instead of emitting
+	// recurring telemetry.
+	gpsCoordPattern = regexp.MustCompile(`^:?[+-]?\d+(\.\d+)?\s*,\s*[+-]?\d+(\.\d+)?$`)
 )
 
 // Audio gain limits in dB

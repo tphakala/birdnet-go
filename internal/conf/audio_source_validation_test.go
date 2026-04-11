@@ -102,6 +102,14 @@ func TestAudioSourceConfig_Validate_RejectsGPSCoordinates(t *testing.T) {
 		// a letter.
 		{"naked decimal coords", "45.5,-120.5"},
 		{"naked integer coords", "45,120"},
+		// Whitespace variants — copy-pasted from map services or
+		// spreadsheet exports often include a space after (or around)
+		// the comma. The shape is still nonsense as an audio device
+		// and must be rejected with the same clear error.
+		{"colon space after comma", ":45.5, -120.5"},
+		{"naked space after comma", "45.5, -120.5"},
+		{"naked space before comma", "45.5 ,-120.5"},
+		{"naked spaces both sides", ":45.5  ,  -120.5"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
