@@ -80,26 +80,21 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     emptyOutDir: true,
     manifest: true, // Generates .vite/manifest.json for cache busting
-    // Watch mode disabled by default for CI/CD compatibility
-    // When using --watch flag, chokidar options are applied for reliable file change detection
-    watch: process.argv.includes('--watch')
-      ? {
-          chokidar: {
-            usePolling: true,
-            interval: 300,
-          },
-        }
-      : null,
+    // Watch mode uses Rolldown's default watcher options under Vite 8.
+    // The previous chokidar polling config was removed because Rolldown's
+    // WatcherOptions type no longer accepts a nested `chokidar` key.
+    watch: process.argv.includes('--watch') ? {} : null,
     rollupOptions: {
       output: {
         // Content hashes enable proper cache busting with CDNs like Cloudflare
         entryFileNames: '[name]-[hash].js',
         chunkFileNames: '[name]-[hash].js',
         assetFileNames: '[name]-[hash].[ext]',
-        manualChunks: {
-          vendor: ['svelte'],
-          charts: ['chart.js'],
-        }
+        manualChunks(id) {
+          if (id.includes('node_modules/svelte/')) return 'vendor';
+          if (id.includes('node_modules/chart.js/')) return 'charts';
+          return undefined;
+        },
       },
     },
   },

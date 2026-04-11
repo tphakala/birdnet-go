@@ -203,17 +203,19 @@
     & .tab-panel {
       animation: fadeIn 0.15s ease-out;
     }
+  }
 
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
-        transform: translateY(4px);
-      }
+  /* Keyframes must be at top level — lightningcss (Vite 8 default CSS minifier)
+     does not support @keyframes nested inside selector rule blocks */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
 
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+    to {
+      opacity: 1;
+      transform: translateY(0);
     }
   }
 

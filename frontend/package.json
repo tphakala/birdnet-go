@@ -86,7 +86,7 @@
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.1",
     "@playwright/test": "^1.58.2",
-    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/vite": "^4.2.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/svelte": "^5.2.8",
@@ -119,7 +119,7 @@
     "svelte-eslint-parser": "^1.2.0",
     "tailwindcss": "^4.2",
     "typescript": "^5.8.3",
-    "vite": "^7.1.11",
+    "vite": "^8.0.8",
     "vite-bundle-analyzer": "^1.3.6",
     "vitest": "^4.0.16",
     "vitest-browser-svelte": "^2.0.2"
