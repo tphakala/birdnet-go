@@ -835,16 +835,23 @@ func validateSecuritySettings(settings *Security) error {
 		return err
 	}
 
-	// Validate the subnet bypass setting against the allowed pattern
+	// Validate the subnet bypass setting against the allowed pattern.
+	// Empty entries (from trailing commas, double commas, or all-whitespace tokens)
+	// are skipped so that a config like "10.0.0.0/8, ,192.168.0.0/24" is accepted
+	// with the same semantics as oauth.go's allowlist check.
 	if settings.AllowSubnetBypass.Enabled {
 		subnets := strings.SplitSeq(settings.AllowSubnetBypass.Subnet, ",")
 		for subnet := range subnets {
-			_, _, err := net.ParseCIDR(strings.TrimSpace(subnet))
+			trimmedSubnet := strings.TrimSpace(subnet)
+			if trimmedSubnet == "" {
+				continue // Skip empty entries (e.g. trailing or embedded commas)
+			}
+			_, _, err := net.ParseCIDR(trimmedSubnet)
 			if err != nil {
 				return errors.New(err).
 					Category(errors.CategoryValidation).
 					Context("validation_type", "security-subnet-format").
-					Context("subnet", subnet).
+					Context("subnet", trimmedSubnet).
 					Build()
 			}
 		}

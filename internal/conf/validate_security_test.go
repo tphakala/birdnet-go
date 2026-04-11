@@ -381,6 +381,44 @@ func TestValidateSecuritySettings_SubnetBypass(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			// Regression: an empty Subnet string previously produced
+			// "invalid CIDR address: (empty)" because every split token was
+			// passed to net.ParseCIDR. Empty means "no CIDRs configured".
+			name: "Enabled with empty subnet string - should pass",
+			security: Security{
+				AllowSubnetBypass: AllowSubnetBypass{
+					Enabled: true,
+					Subnet:  "",
+				},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			name: "Enabled with whitespace-only subnet - should pass",
+			security: Security{
+				AllowSubnetBypass: AllowSubnetBypass{
+					Enabled: true,
+					Subnet:  "   ",
+				},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
+		{
+			// Regression: trailing/embedded empty tokens (double comma,
+			// trailing comma, whitespace-only token) must not error.
+			name: "Mixed valid and empty subnet entries - should pass",
+			security: Security{
+				AllowSubnetBypass: AllowSubnetBypass{
+					Enabled: true,
+					Subnet:  "10.0.0.0/8, ,192.168.0.0/24,",
+				},
+				SessionDuration: 24 * time.Hour,
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
