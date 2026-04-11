@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -44,6 +45,10 @@ type AviCommonsProvider struct {
 var (
 	// loggedUnknownLicenses tracks unknown license codes to avoid repeated warnings.
 	loggedUnknownLicenses sync.Map
+
+	// aviCommonsVersionSuffix matches a trailing version number like " 3.0" or " 4"
+	// on license display names (e.g. "CC BY 3.0"). Compiled once at package load.
+	aviCommonsVersionSuffix = regexp.MustCompile(`\s+\d+(\.\d+)?$`)
 )
 
 // NewAviCommonsProvider creates a new provider instance using data from the provided filesystem.
@@ -215,11 +220,41 @@ func (p *AviCommonsProvider) Fetch(scientificName string) (BirdImage, error) {
 	}, nil
 }
 
-// mapAviCommonsLicense converts Avicommons license codes to names and URLs.
-// This is a basic implementation and might need refinement.
+// normalizeAviCommonsLicense converts raw license strings from the Avicommons
+// dataset into canonical slug form so the lookup switch works for both legacy
+// slug codes ("cc-by-nc") and display-name variants like "CC BY 3.0" or
+// "CC BY-NC-SA 4.0" observed in production data.
+//
+// The normalization pipeline is:
+//  1. Trim surrounding whitespace.
+//  2. Lowercase the whole string for case-insensitive matching.
+//  3. Strip any trailing version suffix (e.g. " 3.0", " 4").
+//  4. Replace remaining inner whitespace with hyphens.
+//
+// Examples:
+//
+//	"CC BY 3.0"       -> "cc-by"
+//	"CC BY-NC-SA 4.0" -> "cc-by-nc-sa"
+//	"CC0 3.0"         -> "cc0"
+//	"cc-by-nc"        -> "cc-by-nc" (unchanged)
+func normalizeAviCommonsLicense(code string) string {
+	normalized := strings.ToLower(strings.TrimSpace(code))
+	normalized = aviCommonsVersionSuffix.ReplaceAllString(normalized, "")
+	normalized = strings.TrimSpace(normalized)
+	// Collapse any internal whitespace runs to a single hyphen so
+	// "cc by  nc" becomes "cc-by-nc" rather than "cc-by--nc".
+	normalized = strings.Join(strings.Fields(normalized), "-")
+	return normalized
+}
+
+// mapAviCommonsLicense converts Avicommons license codes to display names and
+// canonical URLs. Both slug-style codes (e.g. "cc-by-nc") and display-name
+// variants (e.g. "CC BY-NC 4.0") are accepted — see normalizeAviCommonsLicense.
+// Unknown codes return the raw input as the name with an empty URL and log a
+// one-shot warning so the Sentry noise in bug reports stays bounded.
 func mapAviCommonsLicense(code string) (name, url string) {
 	// No logging needed here as it's a pure function
-	switch strings.ToLower(code) {
+	switch normalizeAviCommonsLicense(code) {
 	case "cc-by":
 		return "CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/"
 	case "cc-by-sa":
