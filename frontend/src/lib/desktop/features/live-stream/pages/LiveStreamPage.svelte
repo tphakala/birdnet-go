@@ -61,6 +61,7 @@
   // Source discovery
   let sources = $state<Array<{ id: string; name: string }>>([]);
   let selectedSourceId = $state<string>('');
+  let sourceDiscoveryDone = $state(false);
 
   // Connection state
   let connectionError = $state<string | null>(null);
@@ -117,6 +118,10 @@
                 name: level.name ?? id,
               })
             );
+
+            // Mark discovery as done after the first message from the backend.
+            // If levels is empty, there are no configured audio sources.
+            sourceDiscoveryDone = true;
 
             if (newSources.length > 0) {
               // Update sources if count changed or this is the first time
@@ -769,7 +774,9 @@
           options={sourceOptions}
           value={selectedSourceId}
           placeholder={sources.length === 0
-            ? t('common.loading') + '...'
+            ? sourceDiscoveryDone
+              ? t('common.noAudioSources')
+              : t('common.loading') + '...'
             : t('spectrogram.page.sourceLabel')}
           variant="select"
           size="sm"
