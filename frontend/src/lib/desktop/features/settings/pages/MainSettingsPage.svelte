@@ -397,11 +397,14 @@
   let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
-  // mapLoadError sticks after a hard failure (dynamic import network error,
-  // MapLibre constructor throw) so the effect below does NOT keep retrying
-  // on every reactive cycle. Recoverable failures (container detached during
-  // import) intentionally do NOT set this — the next visit to the Location
-  // tab will retry naturally.
+  // mapLoadError sticks during the current Location tab visit after a hard
+  // failure (dynamic import network error, MapLibre constructor throw) so the
+  // effect below does NOT infinite-retry on every reactive cycle. The flag is
+  // automatically reset when the user leaves the Location tab so the next
+  // visit gets a fresh attempt — making transient failures user-recoverable
+  // by toggling away and back, instead of permanently stuck until reload.
+  // Recoverable failures (container detached during import) intentionally do
+  // NOT set this and naturally retry on the next reactive cycle.
   let mapLoadError = $state(false);
   let mapLibraryLoading = $state(false);
 
@@ -419,16 +422,32 @@
   // internal `_resolveContainer` throws on a null/undefined element.
   $effect(() => {
     const isLocationTab = activeTab === 'location';
+
+    // Reset the sticky error flag when leaving the Location tab so the next
+    // visit gets a fresh init attempt. This makes a hard failure (e.g., a
+    // transient network error during the maplibre-gl import) recoverable
+    // by toggling away from the tab and back, rather than permanently
+    // blocking the map until full page reload.
+    if (!isLocationTab) {
+      if (mapLoadError) {
+        mapLoadError = false;
+      }
+      return;
+    }
+
     const hasActualCoordinates =
       $birdnetSettings &&
       $birdnetSettings.latitude !== undefined &&
       $birdnetSettings.longitude !== undefined;
 
+    // Include `mapLibraryLoading` in the guard so a reactive cycle that
+    // fires while the dynamic `import('maplibre-gl')` is in flight does NOT
+    // kick off a second concurrent `initializeMap()` call.
     if (
-      !isLocationTab ||
       store.isLoading ||
       mapInitialized ||
       mapLoadError ||
+      mapLibraryLoading ||
       !hasActualCoordinates
     ) {
       return;
