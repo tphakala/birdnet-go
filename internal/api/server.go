@@ -86,12 +86,16 @@ type Server struct {
 
 // ingressPath returns the effective base path prefix for the current request.
 // Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
+//
+// Header values are trimmed of trailing slashes before the safety check so that
+// real-world values like "/ingress/token///" are accepted (and normalized) while
+// embedded dangerous sequences like "//evil" or "/../admin" still get rejected.
 func ingressPath(c echo.Context, settings *conf.Settings) string {
-	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
-		return strings.TrimRight(p, "/")
+	if p := strings.TrimRight(c.Request().Header.Get("X-Ingress-Path"), "/"); isSafePathPrefix(p) {
+		return p
 	}
-	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
-		return strings.TrimRight(p, "/")
+	if p := strings.TrimRight(c.Request().Header.Get("X-Forwarded-Prefix"), "/"); isSafePathPrefix(p) {
+		return p
 	}
 	if settings != nil && settings.WebServer.BasePath != "" {
 		return strings.TrimRight(settings.WebServer.BasePath, "/")
@@ -99,15 +103,29 @@ func ingressPath(c echo.Context, settings *conf.Settings) string {
 	return ""
 }
 
-// isSafePathPrefix validates that a path prefix is safe for use in redirects.
-// Rejects empty strings, protocol-relative URLs (//...), absolute URLs (://...),
-// and backslashes (browsers normalize "/\" to "//" producing protocol-relative URLs).
+// isSafePathPrefix validates that a path prefix (typically from a proxy header)
+// is safe for use in redirects and HTML asset rewriting. Rules align with
+// validateBasePath() in internal/conf/validate.go so that header-supplied and
+// YAML-configured basepaths share the same rejection rules.
+//
+// Rejects:
+//   - empty strings
+//   - values not starting with "/"
+//   - protocol-relative URLs ("//...") and embedded "//" sequences
+//   - absolute URLs ("://")
+//   - backslashes ("/\..." normalizes to "//" in browsers)
+//   - path traversal ("..")
+//   - CR/LF/NUL injection
 func isSafePathPrefix(p string) bool {
-	return p != "" &&
-		strings.HasPrefix(p, "/") &&
-		!strings.HasPrefix(p, "//") &&
-		!strings.Contains(p, "://") &&
-		!strings.Contains(p, "\\")
+	if p == "" || !strings.HasPrefix(p, "/") {
+		return false
+	}
+	for _, bad := range []string{"//", "\\", "://", "..", "\n", "\r", "\x00"} {
+		if strings.Contains(p, bad) {
+			return false
+		}
+	}
+	return true
 }
 
 // ServerOption is a functional option for configuring the Server.
@@ -269,41 +287,53 @@ func (s *Server) setupMiddleware() {
 	// When settings.WebServer.BasePath is "/birdnet", a request to /birdnet/ui/dashboard
 	// gets stripped to /ui/dashboard so existing route handlers match.
 	// Skipped when reverse proxy headers are present (the proxy already stripped it).
-	if bp := strings.TrimRight(s.settings.WebServer.BasePath, "/"); bp != "" {
-		s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
-				// When a reverse proxy header is present, the proxy usually already
-				// stripped the prefix before forwarding. But only skip our stripping
-				// if the path does NOT start with the basepath — a client could send
-				// the header without an actual proxy, leaving the prefix intact.
-				req := c.Request()
-				hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
-				if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
-					return next(c)
-				}
-
-				path := req.URL.Path
-				if strings.HasPrefix(path, bp) {
-					rest := path[len(bp):]
-					if rest == "" || rest[0] == '/' {
-						if rest == "" {
-							rest = "/"
-						}
-						req.URL.Path = rest
-						// Also update RawPath if set (percent-encoded paths).
-						if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
-							raw := req.URL.RawPath[len(bp):]
-							if raw == "" {
-								raw = "/"
-							}
-							req.URL.RawPath = raw
-						}
-					}
-				}
+	//
+	// The effective basepath is read per-request from s.settings so changes to
+	// settings.WebServer.BasePath take effect without a server restart, matching
+	// the dynamic behavior of ingressPath() used by the context middleware below.
+	s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			bp := strings.TrimRight(s.settings.WebServer.BasePath, "/")
+			if bp == "" {
 				return next(c)
 			}
-		})
-		s.slogger.Info("Base path prefix stripping enabled", logger.String("basePath", bp))
+
+			// When a reverse proxy header is present, the proxy usually already
+			// stripped the prefix before forwarding. But only skip our stripping
+			// if the path does NOT start with the basepath — a client could send
+			// the header without an actual proxy, leaving the prefix intact.
+			req := c.Request()
+			hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
+			if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
+				return next(c)
+			}
+
+			path := req.URL.Path
+			if strings.HasPrefix(path, bp) {
+				rest := path[len(bp):]
+				if rest == "" || rest[0] == '/' {
+					if rest == "" {
+						rest = "/"
+					}
+					req.URL.Path = rest
+					// Also update RawPath if set (percent-encoded paths).
+					if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
+						raw := req.URL.RawPath[len(bp):]
+						if raw == "" {
+							raw = "/"
+						}
+						req.URL.RawPath = raw
+					}
+				}
+			}
+			return next(c)
+		}
+	})
+	if initialBP := strings.TrimRight(s.settings.WebServer.BasePath, "/"); initialBP != "" {
+		s.slogger.Info("Base path prefix stripping enabled (hot-reloadable)",
+			logger.String("initialBasePath", initialBP))
+	} else {
+		s.slogger.Debug("Base path prefix stripping middleware installed (no basepath configured yet)")
 	}
 
 	// Recovery middleware - should be first

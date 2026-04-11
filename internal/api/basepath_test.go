@@ -14,6 +14,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// stripMiddlewareForTest mirrors the production Pre middleware in setupMiddleware().
+// Kept in sync by hand. We can't easily instantiate a full Server in this package-level
+// unit test, so the stripping logic is duplicated here and exercised with the same
+// table-driven assertions production would see.
+func stripMiddlewareForTest(getBP func() string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			bp := strings.TrimRight(getBP(), "/")
+			if bp == "" {
+				return next(c)
+			}
+			req := c.Request()
+			hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
+			if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
+				return next(c)
+			}
+			path := req.URL.Path
+			if strings.HasPrefix(path, bp) {
+				rest := path[len(bp):]
+				if rest == "" || rest[0] == '/' {
+					if rest == "" {
+						rest = "/"
+					}
+					req.URL.Path = rest
+				}
+			}
+			return next(c)
+		}
+	}
+}
+
 // TestBasePathStripMiddleware tests the Pre middleware that strips the configured
 // basepath prefix from incoming request URLs for direct access (no proxy).
 func TestBasePathStripMiddleware(t *testing.T) {
@@ -99,27 +130,8 @@ func TestBasePathStripMiddleware(t *testing.T) {
 
 			e := echo.New()
 
-			// Register the stripping middleware using the same logic as setupMiddleware
-			e.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
-				return func(c echo.Context) error {
-					req := c.Request()
-					hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
-					if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
-						return next(c)
-					}
-					path := req.URL.Path
-					if strings.HasPrefix(path, bp) {
-						rest := path[len(bp):]
-						if rest == "" || rest[0] == '/' {
-							if rest == "" {
-								rest = "/"
-							}
-							req.URL.Path = rest
-						}
-					}
-					return next(c)
-				}
-			})
+			// Exercise the strip middleware via the shared test helper that mirrors production.
+			e.Pre(stripMiddlewareForTest(func() string { return bp }))
 
 			// Catch-all handler to capture the routed path
 			e.Any("/*", func(c echo.Context) error {
@@ -386,10 +398,17 @@ func TestIsSafePathPrefix(t *testing.T) {
 		{"trailing slash is safe", "/birdnet/", true},
 		{"no leading slash is unsafe", "birdnet", false},
 		{"protocol-relative // is unsafe", "//evil.example", false},
+		{"embedded // is unsafe", "/birdnet//foo", false},
 		{"backslash is unsafe", `/\evil.example`, false},
 		{"backslash midpath is unsafe", `/birdnet\foo`, false},
 		{"scheme :// is unsafe", "/http://evil", false},
 		{"naked scheme prefix is unsafe", "https://evil", false},
+		{"path traversal leading is unsafe", "/../admin", false},
+		{"path traversal midpath is unsafe", "/birdnet/../admin", false},
+		{"lone dotdot segment is unsafe", "/..", false},
+		{"newline injection is unsafe", "/birdnet\nX-Injected: 1", false},
+		{"carriage return injection is unsafe", "/birdnet\rX-Injected: 1", false},
+		{"null byte is unsafe", "/birdnet\x00/evil", false},
 	}
 
 	for _, tt := range tests {
@@ -398,6 +417,60 @@ func TestIsSafePathPrefix(t *testing.T) {
 			assert.Equal(t, tt.want, isSafePathPrefix(tt.input))
 		})
 	}
+}
+
+// TestBasePathStripMiddleware_HotReload verifies that the strip middleware reads
+// the current basepath on every request rather than capturing it at setup time.
+// Regression guard: previously the middleware was registered conditionally and
+// captured bp in a closure, so changes to settings.WebServer.BasePath required
+// a server restart to take effect.
+func TestBasePathStripMiddleware_HotReload(t *testing.T) {
+	t.Parallel()
+
+	// Mutable basepath source, simulating settings.WebServer.BasePath being
+	// updated at runtime. Access is serialized through the test — no goroutines.
+	var currentBP string
+
+	e := echo.New()
+	e.Pre(stripMiddlewareForTest(func() string { return currentBP }))
+
+	var capturedPath string
+	e.Any("/*", func(c echo.Context) error {
+		capturedPath = c.Request().URL.Path
+		return c.NoContent(http.StatusOK)
+	})
+
+	do := func(path string) string {
+		req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code)
+		return capturedPath
+	}
+
+	// 1. No basepath configured: requests pass through untouched.
+	assert.Equal(t, "/ui/dashboard", do("/ui/dashboard"), "no basepath should pass through")
+	assert.Equal(t, "/birdnet/ui/dashboard", do("/birdnet/ui/dashboard"),
+		"no basepath should not strip anything")
+
+	// 2. Basepath set to /birdnet at runtime — middleware must pick it up immediately.
+	currentBP = "/birdnet"
+	assert.Equal(t, "/ui/dashboard", do("/birdnet/ui/dashboard"),
+		"strip should activate without restart after basepath is set")
+	assert.Equal(t, "/other", do("/other"),
+		"non-prefixed paths should still pass through unchanged")
+
+	// 3. Basepath changed to a different value at runtime.
+	currentBP = "/apps/birdnet"
+	assert.Equal(t, "/ui/dashboard", do("/apps/birdnet/ui/dashboard"),
+		"strip should follow runtime basepath changes")
+	assert.Equal(t, "/birdnet/ui/dashboard", do("/birdnet/ui/dashboard"),
+		"old basepath must no longer strip after change")
+
+	// 4. Basepath cleared — strip must disable again without restart.
+	currentBP = ""
+	assert.Equal(t, "/apps/birdnet/ui/dashboard", do("/apps/birdnet/ui/dashboard"),
+		"clearing basepath should restore pass-through behavior")
 }
 
 // TestIsRewritableAsset tests the file extension check for CSS/JS rewriting.

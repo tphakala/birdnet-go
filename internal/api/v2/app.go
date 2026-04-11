@@ -299,12 +299,16 @@ func (c *Controller) determineAccessAllowed(ctx echo.Context, securityEnabled bo
 
 // requestBasePath returns the effective base path prefix for the current request.
 // Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
+//
+// Header values are trimmed of trailing slashes before the safety check so that
+// real-world values like "/ingress/token///" are accepted (and normalized) while
+// embedded dangerous sequences like "//evil" or "/../admin" still get rejected.
 func requestBasePath(c echo.Context, settings *conf.Settings) string {
-	if p := c.Request().Header.Get("X-Ingress-Path"); isSafePathPrefix(p) {
-		return strings.TrimRight(p, "/")
+	if p := strings.TrimRight(c.Request().Header.Get("X-Ingress-Path"), "/"); isSafePathPrefix(p) {
+		return p
 	}
-	if p := c.Request().Header.Get("X-Forwarded-Prefix"); isSafePathPrefix(p) {
-		return strings.TrimRight(p, "/")
+	if p := strings.TrimRight(c.Request().Header.Get("X-Forwarded-Prefix"), "/"); isSafePathPrefix(p) {
+		return p
 	}
 	if settings != nil && settings.WebServer.BasePath != "" {
 		return strings.TrimRight(settings.WebServer.BasePath, "/")
@@ -312,8 +316,28 @@ func requestBasePath(c echo.Context, settings *conf.Settings) string {
 	return ""
 }
 
-// isSafePathPrefix validates that a path prefix is safe for use in redirects.
-// Rejects empty strings, protocol-relative URLs (//...), and absolute URLs (://...).
+// isSafePathPrefix validates that a path prefix (typically from a proxy header)
+// is safe for use in redirects. Must stay in sync with the copies in
+// internal/api/server.go and internal/api/auth/middleware.go. Rules align with
+// validateBasePath() in internal/conf/validate.go so header-supplied and
+// YAML-configured basepaths share the same rejection rules.
+//
+// Rejects:
+//   - empty strings
+//   - values not starting with "/"
+//   - protocol-relative URLs ("//...") and embedded "//" sequences
+//   - absolute URLs ("://")
+//   - backslashes ("/\..." normalizes to "//" in browsers)
+//   - path traversal ("..")
+//   - CR/LF/NUL injection
 func isSafePathPrefix(p string) bool {
-	return p != "" && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") && !strings.Contains(p, "://")
+	if p == "" || !strings.HasPrefix(p, "/") {
+		return false
+	}
+	for _, bad := range []string{"//", "\\", "://", "..", "\n", "\r", "\x00"} {
+		if strings.Contains(p, bad) {
+			return false
+		}
+	}
+	return true
 }
