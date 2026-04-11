@@ -397,6 +397,12 @@
   let modalMarker: import('maplibre-gl').Marker | null = null;
   let mapModalOpen = $state(false);
   let mapInitialized = $state(false);
+  // mapLoadError sticks after a hard failure (dynamic import network error,
+  // MapLibre constructor throw) so the effect below does NOT keep retrying
+  // on every reactive cycle. Recoverable failures (container detached during
+  // import) intentionally do NOT set this — the next visit to the Location
+  // tab will retry naturally.
+  let mapLoadError = $state(false);
   let mapLibraryLoading = $state(false);
 
   // Load initial data
@@ -418,7 +424,13 @@
       $birdnetSettings.latitude !== undefined &&
       $birdnetSettings.longitude !== undefined;
 
-    if (!isLocationTab || store.isLoading || mapInitialized || !hasActualCoordinates) {
+    if (
+      !isLocationTab ||
+      store.isLoading ||
+      mapInitialized ||
+      mapLoadError ||
+      !hasActualCoordinates
+    ) {
       return;
     }
 
@@ -431,11 +443,15 @@
     const el = mapElement;
     if (!el) return;
 
-    tick().then(() => {
+    void tick().then(() => {
       if (!el.isConnected) return;
       logger.debug('Location tab active - initializing map lazily');
-      initializeMap();
-      mapInitialized = true;
+      // initializeMap() owns the `mapInitialized = true` flip after the
+      // MapLibre constructor returns successfully. Setting it here would
+      // mark the map as initialized even when initializeMap() aborts later
+      // (e.g., the tab unmounted during the dynamic import), permanently
+      // blocking future re-init attempts.
+      void initializeMap();
     });
   });
 
@@ -600,7 +616,7 @@
       logger.warn('initializeMap called without a bound container');
       return;
     }
-    if (mapInitialized) return;
+    if (mapInitialized || mapLoadError) return;
 
     try {
       if (!maplibregl) {
@@ -616,7 +632,9 @@
           mapLibraryLoading = false;
           logger.error('Failed to load MapLibre GL JS:', importError);
           toastActions.error(t('settings.main.errors.mapLibraryLoadFailed'));
-          mapInitialized = false;
+          // Hard failure: stick the error flag so the effect does NOT retry
+          // on every reactive cycle (each retry would re-import and re-toast).
+          mapLoadError = true;
           return;
         }
 
@@ -647,6 +665,13 @@
         pitchWithRotate: MAP_CONFIG.PITCH_WITH_ROTATE,
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
+
+      // Map construction succeeded — flip the flag here, AFTER the
+      // constructor returns. The previous design set this from the effect
+      // before initializeMap() ran, so an abort partway through (e.g., the
+      // post-import isConnected check above) would leave map=null but
+      // mapInitialized=true, permanently blocking re-init.
+      mapInitialized = true;
 
       map.on('load', () => {
         if (map) {
@@ -692,7 +717,10 @@
     } catch (error) {
       logger.error('Failed to initialize map:', error);
       toastActions.error(t('settings.main.errors.mapLoadFailed'));
-      mapInitialized = false;
+      // Hard failure: stick the error flag so the effect does NOT retry on
+      // every reactive cycle. mapInitialized was not yet set so we don't
+      // need to reset it.
+      mapLoadError = true;
     }
   }
 
