@@ -422,8 +422,17 @@
       return;
     }
 
+    // Synchronous read so Svelte tracks `mapElement` as a reactive dependency
+    // of this effect. Without this, the `mapElement` access inside the
+    // `tick().then(...)` microtask callback below is NOT tracked — effects
+    // only pick up dependencies read synchronously during the effect body —
+    // and the effect would never re-run when `bind:this` populates
+    // `mapElement` after the conditional `{#if isActive}` mounts the tab.
+    const el = mapElement;
+    if (!el) return;
+
     tick().then(() => {
-      if (!mapElement || !mapElement.isConnected) return;
+      if (!el.isConnected) return;
       logger.debug('Location tab active - initializing map lazily');
       initializeMap();
       mapInitialized = true;
@@ -608,6 +617,17 @@
           logger.error('Failed to load MapLibre GL JS:', importError);
           toastActions.error(t('settings.main.errors.mapLibraryLoadFailed'));
           mapInitialized = false;
+          return;
+        }
+
+        // Re-verify the container is still connected after the dynamic
+        // import. The user may have switched away from the Location tab
+        // while MapLibre was being imported, which unmounts `mapElement`
+        // (the tab panel is conditionally rendered via `{#if isActive}`).
+        // Without this check we'd hand a detached node to MapLibre and
+        // `_resolveContainer` would throw or create a zombie map.
+        if (!mapElement || !mapElement.isConnected) {
+          logger.warn('initializeMap aborted: container detached during import');
           return;
         }
       }
