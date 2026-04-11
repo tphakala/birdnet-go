@@ -239,26 +239,35 @@ func (m *Manager) Start() error {
 		return nil
 	}
 
+	// Snapshot source/target counts under a brief read lock so we don't race
+	// with concurrent RegisterSource/RegisterTarget callers (which take the
+	// write lock on m.mu). The lock is released immediately so the rest of
+	// Start() runs without blocking writers.
+	m.mu.RLock()
+	sourcesLen := len(m.sources)
+	targetsLen := len(m.targets)
+	m.mu.RUnlock()
+
 	// When backup is enabled but no sources or targets have been registered,
 	// treat this as "user has not finished setting up backup" rather than a
 	// hard error. Emitting telemetry here floods Sentry with noise from
 	// users who toggled the feature on but never configured it. A stray
 	// half-configured manager (sources but no targets, or vice versa) is
 	// still treated as a misconfiguration below.
-	if len(m.sources) == 0 && len(m.targets) == 0 {
+	if sourcesLen == 0 && targetsLen == 0 {
 		m.logger.Info("Backup manager enabled but no sources or targets configured; nothing to do")
 		return nil
 	}
 
 	// Validate that we have at least one source and target
-	if len(m.sources) == 0 {
+	if sourcesLen == 0 {
 		return errors.Newf("no backup sources registered").
 			Component("backup").
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_config").
 			Build()
 	}
-	if len(m.targets) == 0 {
+	if targetsLen == 0 {
 		return errors.Newf("no backup targets registered").
 			Component("backup").
 			Category(errors.CategoryValidation).
@@ -277,15 +286,30 @@ func (m *Manager) Start() error {
 
 // RunBackup performs an immediate backup of all sources
 func (m *Manager) RunBackup(ctx context.Context) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-
 	// Early-return when backup is disabled. Scheduler-driven runs that land
 	// on a disabled manager must be a silent no-op, not a telemetry event.
+	// The Enabled flag is set once at construction so it does not need lock
+	// protection; the maps below do.
 	if !m.config.Enabled {
 		m.logger.Info("Backup manager is disabled")
 		return nil
 	}
+
+	// Snapshot the registered sources under a brief read lock and release
+	// immediately. Holding m.mu.RLock for the full RunBackup duration would
+	// (a) block any concurrent RegisterSource / RegisterTarget writer for
+	// the entire backup window (potentially many minutes of I/O), and
+	// (b) risk a deadlock if any nested call attempted to acquire m.mu
+	// because sync.RWMutex is not reentrant. Iterating over the snapshot
+	// is also safe against mid-run mutations of the live maps.
+	m.mu.RLock()
+	sourcesLen := len(m.sources)
+	targetsLen := len(m.targets)
+	sources := make(map[string]Source, sourcesLen)
+	for k, v := range m.sources {
+		sources[k] = v
+	}
+	m.mu.RUnlock()
 
 	// Early-return when neither sources nor targets have been registered.
 	// Treat this as "user has not finished setting up backup" rather than a
@@ -293,7 +317,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	// cadence-aligned noise from users who toggled the feature on but never
 	// configured it. Mirror the Start() semantics: the half-configured cases
 	// below still fail fast.
-	if len(m.sources) == 0 && len(m.targets) == 0 {
+	if sourcesLen == 0 && targetsLen == 0 {
 		m.logger.Info("Backup run requested but no sources or targets configured; nothing to do")
 		return nil
 	}
@@ -301,7 +325,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	// Validate that we have at least one source. This mirrors Start()'s
 	// independent sources/targets validation so the targets-only
 	// half-configured state fails fast instead of silently no-oping.
-	if len(m.sources) == 0 {
+	if sourcesLen == 0 {
 		return errors.Newf("no backup sources registered, backup cannot proceed").
 			Component("backup").
 			Category(errors.CategoryValidation).
@@ -316,7 +340,7 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	m.logger.Info("Starting backup process...")
 
 	// Validate that we have at least one target
-	if len(m.targets) == 0 {
+	if targetsLen == 0 {
 		return errors.Newf("no backup targets registered, backup cannot proceed").
 			Component("backup").
 			Category(errors.CategoryValidation).
@@ -333,8 +357,10 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	var allTempDirs []string
 	var errs []error
 
-	// Process each source
-	for sourceName, source := range m.sources {
+	// Process each source from the snapshot taken under the brief read lock
+	// above. Iterating the snapshot avoids holding the lock during long I/O
+	// and is safe against concurrent registration mutations.
+	for sourceName, source := range sources {
 		select {
 		case <-ctx.Done():
 			// Clean up temp dirs before returning
