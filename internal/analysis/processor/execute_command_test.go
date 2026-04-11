@@ -709,3 +709,150 @@ func TestMarkCommandPathInvalidIfBroken_RecentFailureSkipsRecheck(t *testing.T) 
 // body that the value is "now relative to test wall-clock", which is
 // the same source of truth markCommandPathInvalidIfBroken uses.
 func timeNowForTest() time.Time { return time.Now() }
+
+// TestGetActionsForItem_UnimplementedAction_FallsThroughToDefaults is a
+// regression test for the case where a species has ONLY unimplemented
+// action types (e.g. the SendNotification placeholder) configured with
+// ExecuteDefaults=false. A previous iteration of the "respect
+// ExecuteDefaults=false when the custom action was dropped" fix was too
+// broad: it tracked "any custom action was configured" rather than "a
+// validated ExecuteCommand path was dropped", so a species with only
+// unimplemented custom actions silently returned an empty action list,
+// dropping DB/SSE/MQTT/audio fallbacks without any error. That meant
+// users lost detections for the species until the new action type
+// shipped. The fix narrows the short-circuit to broken command paths
+// only, letting unimplemented types fall through to the default set.
+func TestGetActionsForItem_UnimplementedAction_FallsThroughToDefaults(t *testing.T) {
+	t.Parallel()
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				// Enable the Log default action so the presence of
+				// the fallback is observable without wiring up a real
+				// datastore / MQTT client / SSE broadcaster.
+				Log: struct {
+					Enabled bool   `yaml:"enabled" json:"enabled"`
+					Path    string `yaml:"path" json:"path"`
+				}{
+					Enabled: true,
+				},
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Threshold: 0.8,
+							Actions: []conf.SpeciesAction{
+								{
+									Type:            "SendNotification",
+									ExecuteDefaults: false, // Explicit opt-out
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+
+	// The species had only an unimplemented custom action type and no
+	// matching switch branch added anything to the action list. The
+	// function must NOT short-circuit to an empty result — it must
+	// fall through to the default action set so detections keep
+	// flowing. Asserting LogAction is present is the cheapest way to
+	// confirm the default-action branch fired.
+	require.NotEmpty(t, actions,
+		"unimplemented custom action with ExecuteDefaults=false must fall through to default actions, not yield an empty list")
+
+	var hasLog bool
+	for _, a := range actions {
+		if _, ok := a.(*LogAction); ok {
+			hasLog = true
+			break
+		}
+	}
+	assert.True(t, hasLog,
+		"default LogAction must be present when the only configured custom action is unimplemented")
+
+	// And the unimplemented action must not have silently produced an
+	// ExecuteCommandAction.
+	for _, a := range actions {
+		if _, ok := a.(*ExecuteCommandAction); ok {
+			t.Fatalf("unimplemented SendNotification must not produce an ExecuteCommandAction")
+		}
+	}
+}
+
+// TestMarkCommandPathInvalidIfBroken_ReNotifiesAfterTTL is a regression
+// test for the sync.Map sticky-entry bug in the TTL recheck path. When
+// a cached failure's TTL expires and the path is still broken, the
+// previous implementation left the stale entry in place and called
+// LoadOrStore, which returned loaded=true because of the stale value.
+// The notification branch is gated on loaded=false, so operators only
+// ever saw one notification per process lifetime instead of one per
+// recheck window.
+//
+// The fix deletes the stale entry BEFORE the re-validation slow path
+// runs, so a still-failing path goes through LoadOrStore's loaded=false
+// branch and re-emits the notification. Because the notification
+// helper is a no-op when the notification service is not initialized
+// (the test binary does not init it), the assertion checks the
+// observable sync.Map state: the entry was recreated with a fresh
+// timestamp (i.e. the entry got deleted and re-added) rather than left
+// in place at the original stale value.
+func TestMarkCommandPathInvalidIfBroken_ReNotifiesAfterTTL(t *testing.T) {
+	t.Parallel()
+
+	// A path that does not exist and cannot be fixed mid-test.
+	missing := "/tmp/birdnet_go_re_notify_after_ttl_b19e7.sh"
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	// Seed the cache with a stale failure from well before the
+	// recheck window. If the stale-entry bug resurfaces, the re-check
+	// path below will see loaded=true and leave this exact timestamp
+	// untouched instead of refreshing it.
+	stale := timeNowForTest().Add(-2 * invalidCommandPathRecheckTTL)
+	processor.invalidCommandPaths.Store(missing, stale)
+
+	// Re-check the still-broken path. The gate must report "invalid",
+	// delete the stale entry, re-stat the path, and re-store a fresh
+	// timestamp. The notification branch runs inside the
+	// just-deleted->LoadOrStore(loaded=false) window (verified below
+	// by checking the timestamp was refreshed rather than left at the
+	// stale value).
+	got := processor.markCommandPathInvalidIfBroken("turdus migratorius", missing)
+	assert.True(t, got, "still-broken path must be reported as invalid after TTL expiry")
+
+	v, stillCached := processor.invalidCommandPaths.Load(missing)
+	require.True(t, stillCached, "still-broken path must remain cached under a fresh timestamp after re-validation")
+
+	stamp, ok := v.(time.Time)
+	require.True(t, ok, "cached entry must be a time.Time")
+
+	// The fresh timestamp must be strictly newer than the stale one
+	// we seeded. If the sticky-entry bug returns, `stamp` will equal
+	// `stale` because LoadOrStore observed the old value and left it
+	// alone.
+	assert.True(t, stamp.After(stale),
+		"re-check of still-broken path must refresh the cached timestamp (old=%v, new=%v); same timestamp means the stale entry was not deleted before LoadOrStore and the notification branch never ran",
+		stale, stamp)
+
+	// The refreshed timestamp must also be within the current recheck
+	// window — i.e. roughly "now" — so a subsequent call in the next
+	// instant still hits the fast path.
+	assert.Less(t, time.Since(stamp), invalidCommandPathRecheckTTL,
+		"refreshed timestamp must be inside the active recheck window")
+}

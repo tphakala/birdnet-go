@@ -510,26 +510,30 @@ func (p *Processor) markCommandPathInvalidIfBroken(speciesKey, cmd string) (inva
 			return true
 		}
 		// TTL expired (or someone stored a non-time value, which
-		// should not happen but is handled defensively); fall through
-		// to re-validate.
+		// should not happen but is handled defensively). Drop the
+		// stale entry BEFORE the slow path runs. Without this,
+		// LoadOrStore below would observe the old entry and return
+		// loaded=true on a still-failing re-check, so the fresh
+		// failure would never reach the notification branch and the
+		// operator would only ever get one notification per startup.
+		// Deleting here means a still-broken path goes through the
+		// loaded=false branch and re-emits the notification exactly
+		// once per recheck window, while a now-usable path naturally
+		// falls through to the clear-and-return-false tail below.
+		p.invalidCommandPaths.Delete(cmd)
 	}
 
 	if _, err := validateCommandPath(cmd); err != nil {
-		// Mark the path as freshly invalid. We use Store rather than
-		// LoadOrStore because we *want* to overwrite a stale entry
-		// from a previous failure to keep the recheck window aligned
-		// with the most recent failure. The notification is gated on
-		// whether there was no entry at all, or the previous entry was
-		// already past the recheck window — concurrent detections that
-		// race on the first miss will only see one of them re-emit a
-		// notification because LoadOrStore on first insertion picks a
-		// single winner.
+		// LoadOrStore is authoritative here because the stale entry
+		// (if any) was already deleted above. A concurrent detection
+		// racing on the same path will see exactly one winner, so the
+		// notification is emitted at most once per recheck window
+		// even under contention.
 		_, loaded := p.invalidCommandPaths.LoadOrStore(cmd, time.Now())
 		if loaded {
-			// Another detection beat us to the cache update; refresh
-			// the timestamp without re-emitting the notification so
-			// the recheck window slides forward.
-			p.invalidCommandPaths.Store(cmd, time.Now())
+			// Another concurrent detection won the LoadOrStore race
+			// for the freshly-deleted entry; it is responsible for
+			// the notification, we just suppress the action.
 			return true
 		}
 
@@ -544,9 +548,12 @@ func (p *Processor) markCommandPathInvalidIfBroken(speciesKey, cmd string) (inva
 		return true
 	}
 
-	// Path is valid — clear any stale invalid marker so a previously
-	// broken path that has been fixed (chmod +x, restored file, etc.)
-	// becomes active immediately for subsequent dispatches.
+	// Path is valid — ensure any lingering invalid marker is gone
+	// (the Delete above already handled the TTL-expired path; this
+	// covers the rare "entry appeared between the Load branch and
+	// here" case defensively) so a previously broken path that has
+	// been fixed (chmod +x, restored file, etc.) becomes active
+	// immediately for subsequent dispatches.
 	p.invalidCommandPaths.Delete(cmd)
 	return false
 }

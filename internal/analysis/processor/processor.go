@@ -1532,20 +1532,27 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 
 		var actions []Action
 		var executeDefaults bool
-		// hadCustomActionsConfigured tracks whether the species had at
-		// least one custom action defined in its config, even if every
-		// one of them was skipped at dispatch time (e.g. an
-		// ExecuteCommand action whose path failed validation). This is
-		// load-bearing for honoring ExecuteDefaults=false: a user who
-		// explicitly opts out of default actions for a species must not
-		// silently get DB/SSE/MQTT/audio fallbacks back when their
-		// custom command path breaks. See coderabbit review on PR #2729
-		// for the regression this guards against.
-		var hadCustomActionsConfigured bool
+		// brokenCommandPathSkipped tracks only the narrow case of a
+		// custom ExecuteCommand action that was validated against the
+		// filesystem and explicitly dropped because its command path
+		// is invalid. It is load-bearing for honoring
+		// ExecuteDefaults=false on an otherwise-broken custom command:
+		// a user who opts out of default actions for a species must
+		// not silently get DB/SSE/MQTT/audio fallbacks back when their
+		// custom script breaks.
+		//
+		// It is intentionally NOT flipped for unimplemented action
+		// types (e.g. the SendNotification placeholder below). A
+		// species configured with only unimplemented action types
+		// must fall through to the default action set so detections
+		// keep flowing until the new type is wired up; treating those
+		// configs as "custom only" would silently drop detections.
+		// See Sentry issue BIRDNET-GO-... / PR #2729 review for the
+		// regression this flag guards against.
+		var brokenCommandPathSkipped bool
 
 		// Add custom actions from the new structure
 		for _, actionConfig := range speciesConfig.Actions {
-			hadCustomActionsConfigured = true
 			// Capture ExecuteDefaults BEFORE the switch so a `continue`
 			// inside a case (e.g. when an ExecuteCommand path fails
 			// validation) does not silently drop the user's
@@ -1571,6 +1578,14 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 				// fixed paths are picked up automatically without a
 				// process restart.
 				if p.markCommandPathInvalidIfBroken(det.Result.Species.ScientificName, actionConfig.Command) {
+					// Only the ExecuteCommand branch flips the
+					// "custom-only intent" guard below, because it is
+					// the only branch where we know for sure that the
+					// user configured a working action and the path is
+					// temporarily broken. Unimplemented action types
+					// must not trip this flag — they are a separate
+					// issue and should fall through to defaults.
+					brokenCommandPathSkipped = true
 					continue
 				}
 				actions = append(actions, &ExecuteCommandAction{
@@ -1580,6 +1595,12 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 			case "SendNotification":
 				// Add notification action handling
 				// ... implementation ...
+				// NOTE: Until this branch is implemented, a species
+				// configured with only SendNotification actions adds
+				// nothing to `actions` and deliberately does NOT flip
+				// brokenCommandPathSkipped, so the function falls
+				// through to the default action set instead of
+				// returning an empty list.
 			}
 		}
 
@@ -1594,19 +1615,24 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 			return append(actions, defaultActions...)
 		}
 
-		// Custom actions were configured for this species but every one
-		// of them was skipped (the only realistic source today is an
-		// ExecuteCommand action whose path failed validation). Respect
-		// the user's ExecuteDefaults choice exactly as it would have
-		// been respected if the command had been usable: when
-		// ExecuteDefaults is false, return an empty action list rather
-		// than silently re-enabling the default DB/SSE/MQTT/audio
-		// fallbacks. The notification emitted by
-		// markCommandPathInvalidIfBroken already informs the user that
-		// the action is broken, so the operator gets a clear signal
-		// without losing their stated "custom only" intent.
-		if hadCustomActionsConfigured && !executeDefaults {
-			GetLogger().Debug("All custom actions for species were skipped and ExecuteDefaults is false; returning empty action list",
+		// A custom ExecuteCommand action was configured for this
+		// species, its command path was validated and dropped because
+		// it is broken, and the user explicitly opted out of default
+		// actions. Respect the "custom only" intent exactly as it
+		// would have been respected if the command had been usable:
+		// return an empty action list rather than silently
+		// re-enabling the default DB/SSE/MQTT/audio fallbacks. The
+		// notification emitted by markCommandPathInvalidIfBroken
+		// already informs the user that the action is broken, so the
+		// operator gets a clear signal without losing their stated
+		// intent.
+		//
+		// Note: this is gated on brokenCommandPathSkipped, not "had
+		// any custom action configured". Unimplemented action types
+		// such as SendNotification deliberately fall through to the
+		// default action set below so detections keep flowing.
+		if brokenCommandPathSkipped && !executeDefaults {
+			GetLogger().Debug("Broken custom ExecuteCommand was skipped and ExecuteDefaults is false; returning empty action list",
 				logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
 				logger.String("operation", "custom_action_skipped_no_defaults"))
 			return nil
