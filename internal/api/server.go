@@ -267,10 +267,13 @@ func (s *Server) setupMiddleware() {
 	if bp := strings.TrimRight(s.settings.WebServer.BasePath, "/"); bp != "" {
 		s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 			return func(c echo.Context) error {
-				// Skip stripping when a reverse proxy header is present —
-				// the proxy already removed the prefix before forwarding.
+				// When a reverse proxy header is present, the proxy usually already
+				// stripped the prefix before forwarding. But only skip our stripping
+				// if the path does NOT start with the basepath — a client could send
+				// the header without an actual proxy, leaving the prefix intact.
 				req := c.Request()
-				if req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != "" {
+				hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
+				if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {
 					return next(c)
 				}
 
