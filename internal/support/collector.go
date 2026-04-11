@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1362,13 +1363,23 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 		}
 	}
 
-	// Add journald logs
-	getLogger().Debug("support: attempting to add journald logs to archive")
-	if err := lfc.addJournaldLogs(w, duration); err == nil {
-		lfc.logsAdded++
-		getLogger().Debug("support: journald logs added successfully")
+	// Add journald logs when running on a host where systemd-journald is
+	// actually available. In container runtimes (Docker, Podman, LXC,
+	// systemd-nspawn, generic) the journalctl binary either does not exist
+	// or returns an error, which previously surfaced as a recurring Sentry
+	// event every time a support dump was generated. Use the shared
+	// sysinfo.IsContainer() detector so we cover all container flavours,
+	// not just Docker.
+	if sysinfo.IsContainer() {
+		getLogger().Debug("support: skipping journald collection (container runtime)")
 	} else {
-		getLogger().Debug("support: could not add journald logs", logger.Error(err))
+		getLogger().Debug("support: attempting to add journald logs to archive")
+		if err := lfc.addJournaldLogs(w, duration); err == nil {
+			lfc.logsAdded++
+			getLogger().Debug("support: journald logs added successfully")
+		} else {
+			getLogger().Debug("support: could not add journald logs", logger.Error(err))
+		}
 	}
 
 	// Add README if no logs found
