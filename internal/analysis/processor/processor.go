@@ -138,6 +138,14 @@ type Processor struct {
 	// Cached taxonomy database (lazy-loaded, shared across init functions)
 	taxonomyDB     *classifier.TaxonomyDatabase
 	taxonomyDBOnce sync.Once
+
+	// invalidCommandPaths records ExecuteCommand action command paths that
+	// failed validation (missing, unreadable, non-executable, or relative)
+	// during startup. Entries here are skipped by getActionsForItem so a
+	// bad path fails once with a user-visible notification instead of
+	// generating a Sentry event per detection. The map is populated during
+	// New() and only read afterwards, so no mutex is required.
+	invalidCommandPaths map[string]struct{}
 }
 
 type Detections struct {
@@ -462,6 +470,12 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 
 	// Validate and log false positive filter configuration
 	validateAndLogFilterConfig(settings)
+
+	// Validate user-configured custom ExecuteCommand action paths up front
+	// so that a misconfigured command path produces a single user-facing
+	// notification at startup instead of emitting telemetry on every
+	// detection that would have triggered the action.
+	p.invalidCommandPaths = p.validateCustomCommandActions(settings)
 
 	// Initialize species tracker if enabled
 	p.NewSpeciesTracker = initSpeciesTracker(settings, ds)
@@ -1501,7 +1515,15 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 		// Add custom actions from the new structure
 		for _, actionConfig := range speciesConfig.Actions {
 			switch actionConfig.Type {
-			case "ExecuteCommand":
+			case executeCommandActionType:
+				// Startup gate: if the command path failed validation in
+				// New(), silently skip registration so the action becomes
+				// a no-op for this species instead of emitting telemetry
+				// on every detection. The user already saw a notification
+				// and a log message at startup.
+				if _, invalid := p.invalidCommandPaths[actionConfig.Command]; invalid {
+					continue
+				}
 				actions = append(actions, &ExecuteCommandAction{
 					Command: actionConfig.Command,
 					Params:  parseCommandParams(actionConfig.Parameters, det),

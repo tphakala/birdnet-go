@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -219,4 +220,141 @@ func TestExecuteCommandAction_ExecuteDefaultsWithNoParams(t *testing.T) {
 
 	assert.True(t, hasExecuteCommand, "Expected ExecuteCommandAction to be present")
 	assert.True(t, hasLogAction, "Expected LogAction (default action) to be present when ExecuteDefaults is true")
+}
+
+// TestValidateCustomCommandActions_SkipsInvalidPath asserts that the
+// startup validation gate correctly flags command paths that point at a
+// non-existent file. Subsequent per-detection dispatch must not produce
+// an ExecuteCommandAction for those species, so the dual-fingerprint
+// Sentry event (validation re-wrap + file-io original) can no longer
+// fire on every detection.
+func TestValidateCustomCommandActions_SkipsInvalidPath(t *testing.T) {
+	t.Parallel()
+
+	missingPath := "/tmp/birdnet_go_does_not_exist_47f3e8a1.sh"
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Threshold: 0.8,
+							Actions: []conf.SpeciesAction{
+								{
+									Type:    "ExecuteCommand",
+									Command: missingPath,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	// Run the same startup validation New() runs.
+	processor.invalidCommandPaths = processor.validateCustomCommandActions(processor.Settings)
+
+	require.Contains(t, processor.invalidCommandPaths, missingPath,
+		"missing command path must be recorded as invalid at startup")
+
+	// At dispatch time, the ExecuteCommand action must NOT be registered.
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+	for _, action := range actions {
+		if _, ok := action.(*ExecuteCommandAction); ok {
+			t.Fatalf("invalid command path %q must not produce an ExecuteCommandAction", missingPath)
+		}
+	}
+}
+
+// TestValidateCustomCommandActions_AllowsValidPath asserts that a valid
+// command path is NOT flagged by the startup gate and the action is
+// still dispatched as before.
+func TestValidateCustomCommandActions_AllowsValidPath(t *testing.T) {
+	t.Parallel()
+
+	// Pick an existing executable on the host (/bin/sh is present on
+	// effectively every POSIX CI runner). Skip gracefully otherwise.
+	validCmd := ""
+	for _, candidate := range []string{"/bin/sh", "/bin/true", "/usr/bin/true"} {
+		if _, err := os.Stat(candidate); err == nil {
+			validCmd = candidate
+			break
+		}
+	}
+	if validCmd == "" {
+		t.Skip("no suitable absolute executable found for positive test")
+	}
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Threshold: 0.8,
+							Actions: []conf.SpeciesAction{
+								{Type: "ExecuteCommand", Command: validCmd},
+							},
+						},
+					},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	processor.invalidCommandPaths = processor.validateCustomCommandActions(processor.Settings)
+	assert.Empty(t, processor.invalidCommandPaths,
+		"valid command path must not be flagged at startup")
+
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+
+	var found *ExecuteCommandAction
+	for _, a := range actions {
+		if ea, ok := a.(*ExecuteCommandAction); ok {
+			found = ea
+			break
+		}
+	}
+	require.NotNil(t, found, "valid command path must still produce an ExecuteCommandAction")
+	assert.Equal(t, validCmd, found.Command)
+}
+
+// TestValidateCustomCommandActions_DeduplicatesPaths ensures that the
+// same broken command path used across multiple species is only flagged
+// once in the returned invalid set.
+func TestValidateCustomCommandActions_DeduplicatesPaths(t *testing.T) {
+	t.Parallel()
+
+	missing := "/tmp/birdnet_go_does_not_exist_dedup_2a4c.sh"
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Actions: []conf.SpeciesAction{
+								{Type: "ExecuteCommand", Command: missing},
+							},
+						},
+						"house sparrow": {
+							Actions: []conf.SpeciesAction{
+								{Type: "ExecuteCommand", Command: missing},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	invalid := processor.validateCustomCommandActions(processor.Settings)
+	require.Len(t, invalid, 1, "same broken path across multiple species must be recorded once")
+	assert.Contains(t, invalid, missing)
 }

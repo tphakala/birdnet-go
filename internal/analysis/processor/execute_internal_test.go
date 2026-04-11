@@ -186,6 +186,15 @@ func TestValidateCommandPath_NonExistentFile(t *testing.T) {
 
 	_, err := validateCommandPath("/tmp/this_file_definitely_does_not_exist_12345.sh")
 	require.Error(t, err)
+
+	// Regression: a missing file must produce a single enhanced error with
+	// CategoryFileIO. Previously the caller re-wrapped this into
+	// CategoryValidation, producing a second Sentry fingerprint per failed
+	// execution. See execute.go ExecuteContext for the consolidation.
+	var enhancedErr *errors.EnhancedError
+	require.True(t, errors.As(err, &enhancedErr), "expected enhanced error")
+	assert.Equal(t, errors.CategoryFileIO, enhancedErr.Category,
+		"missing-file path validation must use CategoryFileIO as its single fingerprint")
 }
 
 func TestValidateCommandPath_NonExecutableFile(t *testing.T) {

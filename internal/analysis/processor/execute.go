@@ -14,11 +14,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// executeCommandActionType is the action type discriminator used in
+// species configuration entries to identify ExecuteCommand actions.
+const executeCommandActionType = "ExecuteCommand"
 
 type ExecuteCommandAction struct {
 	Command string
@@ -52,16 +58,14 @@ func (a ExecuteCommandAction) ExecuteContext(ctx context.Context, data any) erro
 			Build()
 	}
 
-	// Validate and resolve the command path
+	// Validate and resolve the command path. validateCommandPath already
+	// returns a fully-annotated enhanced error (CategoryFileIO for stat
+	// failures, CategoryValidation for bad-shape failures). Re-wrapping it
+	// here used to produce a second, dual-fingerprint Sentry event per
+	// failed execution, so propagate the original error unchanged.
 	cmdPath, err := validateCommandPath(a.Command)
 	if err != nil {
-		return errors.New(err).
-			Component("analysis.processor").
-			Category(errors.CategoryValidation).
-			Priority(errors.PriorityHigh). // User-configured script issues should notify users
-			Context("operation", "validate_command_path").
-			Context("command_type", "external_script").
-			Build()
+		return err
 	}
 
 	// Building the command line arguments with validation
@@ -374,4 +378,74 @@ func getResultValueByName(result *detection.Result, paramName string) any {
 	default:
 		return nil
 	}
+}
+
+// validateCustomCommandActions scans the species configuration once at
+// startup and validates every ExecuteCommand action command path. Paths
+// that fail validation are recorded in the returned set so that
+// getActionsForItem can skip them at dispatch time. A single user-facing
+// notification and one telemetry event are emitted per unique broken
+// path, replacing the previous behavior of emitting a dual-fingerprint
+// Sentry event on every detection that would have triggered the action.
+//
+// The returned map is keyed by the *original* (non-cleaned) command
+// string from the config so that getActionsForItem can look up entries
+// without re-cleaning the path on every detection. An empty command
+// string is always treated as invalid because ExecuteCommand with no
+// command is a user misconfiguration.
+//
+// The method is a no-op when there are no species configurations.
+func (p *Processor) validateCustomCommandActions(settings *conf.Settings) map[string]struct{} {
+	invalid := make(map[string]struct{})
+
+	// validated deduplicates work so the same command path appearing in
+	// multiple species configs is only stat'd and reported once, even if
+	// users share the same script across many species.
+	validated := make(map[string]bool)
+
+	log := GetLogger()
+
+	for speciesKey, speciesCfg := range settings.Realtime.Species.Config {
+		for i := range speciesCfg.Actions {
+			actionCfg := &speciesCfg.Actions[i]
+			if actionCfg.Type != executeCommandActionType {
+				continue
+			}
+
+			cmd := actionCfg.Command
+			if _, seen := validated[cmd]; seen {
+				// Already validated on a previous iteration; skip so the
+				// same broken path shared across many species only
+				// produces one notification and one telemetry event.
+				continue
+			}
+
+			// validateCommandPath returns a fully built enhanced error
+			// that is already routed to the telemetry pipeline via
+			// ErrorBuilder.Build(). Calling it once per unique cmd gives
+			// us exactly one Sentry fingerprint per broken path.
+			if _, err := validateCommandPath(cmd); err != nil {
+				validated[cmd] = false
+				invalid[cmd] = struct{}{}
+
+				// Structured log for operators reading journal/stdout.
+				log.Error("Custom ExecuteCommand action has invalid command path — action will be skipped",
+					logger.String("species", speciesKey),
+					logger.String("command", cmd),
+					logger.Error(err),
+					logger.String("operation", "validate_custom_command_path"))
+
+				// Surface the failure in the notification center exactly
+				// once per unique bad path. NotifyError does not create a
+				// second telemetry event: it only extracts title/priority
+				// from the existing enhanced error for the UI panel.
+				notification.NotifyError("analysis.processor", err)
+				continue
+			}
+
+			validated[cmd] = true
+		}
+	}
+
+	return invalid
 }
