@@ -856,9 +856,12 @@
           disabled={!selectedSourceId || sources.length === 0}
           class="flex h-full w-full flex-col items-center justify-center gap-3 bg-black text-[var(--color-base-content)]/60 transition-colors hover:text-[var(--color-base-content)]/80 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {#if sources.length === 0}
+          {#if sources.length === 0 && !sourceDiscoveryDone}
             <Loader2 class="size-8 animate-spin" />
             <span class="text-sm">{t('common.loading')}...</span>
+          {:else if sources.length === 0 && sourceDiscoveryDone}
+            <Mic class="size-8" />
+            <span class="text-sm">{t('common.ui.noAudioSources')}</span>
           {:else}
             <Play class="size-12" />
             <span class="text-sm">{t('spectrogram.page.sourceLabel')}</span>
