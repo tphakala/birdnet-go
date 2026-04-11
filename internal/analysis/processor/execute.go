@@ -26,6 +26,18 @@ import (
 // species configuration entries to identify ExecuteCommand actions.
 const executeCommandActionType = "ExecuteCommand"
 
+// invalidCommandPathRecheckTTL is how long an entry in
+// Processor.invalidCommandPaths is trusted before
+// markCommandPathInvalidIfBroken re-stats the underlying file. Operators
+// who fix a broken script (chmod +x, restore a missing file, etc.) get
+// the corresponding ExecuteCommand action back within this window
+// without restarting the process. The value is short enough that
+// recovery feels immediate to a human, and long enough that the
+// per-detection hot path remains a cheap sync.Map lookup for actions
+// that legitimately stay broken (the original Sentry-spam scenario the
+// gate was introduced to fix).
+const invalidCommandPathRecheckTTL = 30 * time.Second
+
 type ExecuteCommandAction struct {
 	Command string
 	Params  map[string]any
@@ -380,13 +392,15 @@ func getResultValueByName(result *detection.Result, paramName string) any {
 	}
 }
 
-// validateCustomCommandActions scans the species configuration once at
-// startup and validates every ExecuteCommand action command path. Paths
-// that fail validation are recorded in p.invalidCommandPaths so that
-// getActionsForItem can skip them at dispatch time. A single user-facing
-// notification and one telemetry event are emitted per unique broken
-// path, replacing the previous behavior of emitting a dual-fingerprint
-// Sentry event on every detection that would have triggered the action.
+// validateCustomCommandActions scans the species configuration at
+// startup (and on any subsequent re-scan) and validates every
+// ExecuteCommand action command path. Paths that fail validation are
+// recorded in p.invalidCommandPaths so that getActionsForItem can skip
+// them at dispatch time. A single user-facing notification and one
+// telemetry event are emitted per unique broken path per recheck
+// window, replacing the previous behavior of emitting a
+// dual-fingerprint Sentry event on every detection that would have
+// triggered the action.
 //
 // Entries are keyed by the *original* (non-cleaned) command string from
 // the config so that getActionsForItem can look up entries without
@@ -402,9 +416,7 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
 	// validated deduplicates work within a single scan so the same
 	// command path appearing in multiple species configs is only stat'd
 	// and reported once, even if users share the same script across
-	// many species. Entries that were already recorded as invalid on a
-	// previous call (e.g. a second pre-warm after runtime reload) are
-	// also skipped.
+	// many species.
 	validated := make(map[string]struct{})
 
 	log := GetLogger()
@@ -422,10 +434,16 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
 			}
 			validated[cmd] = struct{}{}
 
-			// Skip paths we already know are invalid from an earlier
-			// scan so the notification is not re-emitted on re-scan.
-			if _, known := p.invalidCommandPaths.Load(cmd); known {
-				continue
+			// Skip paths we already flagged inside the recheck window
+			// so a re-scan does not re-emit the same notification. The
+			// per-dispatch gate (markCommandPathInvalidIfBroken) is the
+			// only place that re-stats once the TTL has elapsed.
+			if v, known := p.invalidCommandPaths.Load(cmd); known {
+				if stamp, ok := v.(time.Time); ok && time.Since(stamp) < invalidCommandPathRecheckTTL {
+					continue
+				}
+				// Stale entry — fall through and re-validate so a fixed
+				// path is cleared instead of being re-flagged below.
 			}
 
 			// validateCommandPath returns a fully built enhanced error
@@ -435,9 +453,9 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
 			if _, err := validateCommandPath(cmd); err != nil {
 				// LoadOrStore guarantees a single winner even if a
 				// concurrent detection path is racing with this scan,
-				// so notification is emitted at most once per process
-				// lifetime for the same unique broken path.
-				if _, loaded := p.invalidCommandPaths.LoadOrStore(cmd, struct{}{}); loaded {
+				// so notification is emitted at most once per recheck
+				// window for the same unique broken path.
+				if _, loaded := p.invalidCommandPaths.LoadOrStore(cmd, time.Now()); loaded {
 					continue
 				}
 
@@ -449,38 +467,69 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
 					logger.String("operation", "validate_custom_command_path"))
 
 				// Surface the failure in the notification center exactly
-				// once per unique bad path. NotifyError does not create a
-				// second telemetry event: it only extracts title/priority
-				// from the existing enhanced error for the UI panel.
+				// once per unique bad path per recheck window.
+				// NotifyError does not create a second telemetry event:
+				// it only extracts title/priority from the existing
+				// enhanced error for the UI panel.
 				notification.NotifyError("analysis.processor", err)
+				continue
 			}
+
+			// Path is valid — clear any stale invalid marker so a
+			// previously broken path that has been fixed becomes
+			// active immediately on the next dispatch.
+			p.invalidCommandPaths.Delete(cmd)
 		}
 	}
 }
 
 // markCommandPathInvalidIfBroken is the per-dispatch gate used by
-// getActionsForItem. It returns true if the path has been seen before
-// and is known-invalid (skip silently), or if it is freshly stat'd and
-// found broken (skip and emit exactly one log line + one notification).
-// It returns false when the path is usable, letting the caller register
-// an ExecuteCommandAction.
+// getActionsForItem. It returns true if the path is currently flagged
+// invalid (skip silently), or if it is freshly stat'd and found broken
+// (skip and emit exactly one log line + one notification per recheck
+// window). It returns false when the path is usable, letting the
+// caller register an ExecuteCommandAction.
 //
-// Combined with the startup pre-warm in New(), this gives hot-reload
-// coverage for species configurations that were added or edited after
-// process start: the new ExecuteCommand path is stat'd on its first
-// dispatch, and if broken, the failure is announced once and then
-// cached so subsequent detections are cheap silent no-ops.
+// Cached failures are honored only for invalidCommandPathRecheckTTL —
+// after that, the path is re-stat'd on the next dispatch. This gives
+// hot-reload coverage for two scenarios:
+//
+//  1. The species was added or edited after startup. The new
+//     ExecuteCommand path is stat'd on its first dispatch and, if
+//     broken, the failure is announced once and cached so subsequent
+//     detections are cheap silent no-ops.
+//  2. The path was previously broken (e.g. missing file, missing
+//     execute bit) but the operator has since fixed it. After
+//     invalidCommandPathRecheckTTL elapses, the next dispatch re-stats
+//     the path; on success the cache entry is deleted and the action
+//     becomes active immediately without a process restart.
 func (p *Processor) markCommandPathInvalidIfBroken(speciesKey, cmd string) (invalid bool) {
-	if _, known := p.invalidCommandPaths.Load(cmd); known {
-		return true
+	if v, known := p.invalidCommandPaths.Load(cmd); known {
+		if stamp, ok := v.(time.Time); ok && time.Since(stamp) < invalidCommandPathRecheckTTL {
+			// Recent failure — still skip without re-stating.
+			return true
+		}
+		// TTL expired (or someone stored a non-time value, which
+		// should not happen but is handled defensively); fall through
+		// to re-validate.
 	}
 
 	if _, err := validateCommandPath(cmd); err != nil {
-		// LoadOrStore ensures that concurrent detections for the same
-		// broken path only emit a single notification even if they
-		// race on the first stat — whichever goroutine wins the store
-		// is the one that logs and notifies.
-		if _, loaded := p.invalidCommandPaths.LoadOrStore(cmd, struct{}{}); loaded {
+		// Mark the path as freshly invalid. We use Store rather than
+		// LoadOrStore because we *want* to overwrite a stale entry
+		// from a previous failure to keep the recheck window aligned
+		// with the most recent failure. The notification is gated on
+		// whether there was no entry at all, or the previous entry was
+		// already past the recheck window — concurrent detections that
+		// race on the first miss will only see one of them re-emit a
+		// notification because LoadOrStore on first insertion picks a
+		// single winner.
+		_, loaded := p.invalidCommandPaths.LoadOrStore(cmd, time.Now())
+		if loaded {
+			// Another detection beat us to the cache update; refresh
+			// the timestamp without re-emitting the notification so
+			// the recheck window slides forward.
+			p.invalidCommandPaths.Store(cmd, time.Now())
 			return true
 		}
 
@@ -495,5 +544,9 @@ func (p *Processor) markCommandPathInvalidIfBroken(speciesKey, cmd string) (inva
 		return true
 	}
 
+	// Path is valid — clear any stale invalid marker so a previously
+	// broken path that has been fixed (chmod +x, restored file, etc.)
+	// becomes active immediately for subsequent dispatches.
+	p.invalidCommandPaths.Delete(cmd)
 	return false
 }

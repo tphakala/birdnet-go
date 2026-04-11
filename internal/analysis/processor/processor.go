@@ -140,7 +140,7 @@ type Processor struct {
 	taxonomyDBOnce sync.Once
 
 	// invalidCommandPaths records ExecuteCommand action command paths that
-	// have already failed validation (missing, unreadable, non-executable,
+	// have recently failed validation (missing, unreadable, non-executable,
 	// or relative). Entries here are skipped by getActionsForItem so a
 	// bad path fails once with a user-visible notification instead of
 	// generating a Sentry event per detection.
@@ -155,11 +155,15 @@ type Processor struct {
 	// in place by ControlMonitor), and concurrent reads from detection
 	// goroutines would otherwise race with the first runtime write.
 	//
-	// Values are empty struct{} sentinels (set membership only). A path
-	// that enters the map is cached as "skip" for the lifetime of the
-	// process; fixing a broken script requires a restart. This matches
-	// how the original startup gate behaved and keeps the implementation
-	// free of TTL/metrics bookkeeping.
+	// Values are time.Time timestamps recording when the path most
+	// recently failed validation. After invalidCommandPathRecheckTTL
+	// has elapsed since the last failure, markCommandPathInvalidIfBroken
+	// re-stats the path on the next dispatch; if the path now validates
+	// (e.g. the operator fixed permissions or restored a missing file),
+	// the entry is deleted and the action becomes active immediately
+	// without waiting for a process restart. This satisfies the
+	// hot-reload requirement in CLAUDE.md while still suppressing the
+	// per-detection Sentry spam between rechecks.
 	invalidCommandPaths sync.Map
 }
 
@@ -1528,22 +1532,44 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 
 		var actions []Action
 		var executeDefaults bool
+		// hadCustomActionsConfigured tracks whether the species had at
+		// least one custom action defined in its config, even if every
+		// one of them was skipped at dispatch time (e.g. an
+		// ExecuteCommand action whose path failed validation). This is
+		// load-bearing for honoring ExecuteDefaults=false: a user who
+		// explicitly opts out of default actions for a species must not
+		// silently get DB/SSE/MQTT/audio fallbacks back when their
+		// custom command path breaks. See coderabbit review on PR #2729
+		// for the regression this guards against.
+		var hadCustomActionsConfigured bool
 
 		// Add custom actions from the new structure
 		for _, actionConfig := range speciesConfig.Actions {
+			hadCustomActionsConfigured = true
+			// Capture ExecuteDefaults BEFORE the switch so a `continue`
+			// inside a case (e.g. when an ExecuteCommand path fails
+			// validation) does not silently drop the user's
+			// ExecuteDefaults preference. Without this, a broken
+			// custom command with ExecuteDefaults=true would yield no
+			// actions at all because the post-switch flag-set was
+			// being skipped.
+			if actionConfig.ExecuteDefaults {
+				executeDefaults = true
+			}
 			switch actionConfig.Type {
 			case executeCommandActionType:
 				// First-use and cached-invalid gate: skip the action if
 				// the command path is (a) known invalid from an earlier
 				// dispatch or startup pre-warm, or (b) newly stat'd here
 				// and found broken. The helper emits at most one log
-				// line and one notification per unique bad path for the
-				// entire process lifetime, replacing the previous
-				// behavior of emitting a Sentry event per detection.
-				// Because the helper is driven by sync.Map it is
-				// hot-reload safe: species added or edited after
-				// startup get validated on their first detection
-				// without touching the Processor initialization path.
+				// line and one notification per unique bad path per
+				// recheck window, replacing the previous behavior of
+				// emitting a Sentry event per detection. Because the
+				// helper is driven by sync.Map with TTL-based recheck
+				// it is hot-reload safe: species added or edited after
+				// startup get validated on their first detection, and
+				// fixed paths are picked up automatically without a
+				// process restart.
 				if p.markCommandPathInvalidIfBroken(det.Result.Species.ScientificName, actionConfig.Command) {
 					continue
 				}
@@ -1554,10 +1580,6 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 			case "SendNotification":
 				// Add notification action handling
 				// ... implementation ...
-			}
-			// If any action has ExecuteDefaults set to true, we'll include default actions
-			if actionConfig.ExecuteDefaults {
-				executeDefaults = true
 			}
 		}
 
@@ -1570,6 +1592,24 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 		if len(actions) > 0 && executeDefaults {
 			defaultActions := p.getDefaultActions(det)
 			return append(actions, defaultActions...)
+		}
+
+		// Custom actions were configured for this species but every one
+		// of them was skipped (the only realistic source today is an
+		// ExecuteCommand action whose path failed validation). Respect
+		// the user's ExecuteDefaults choice exactly as it would have
+		// been respected if the command had been usable: when
+		// ExecuteDefaults is false, return an empty action list rather
+		// than silently re-enabling the default DB/SSE/MQTT/audio
+		// fallbacks. The notification emitted by
+		// markCommandPathInvalidIfBroken already informs the user that
+		// the action is broken, so the operator gets a clear signal
+		// without losing their stated "custom only" intent.
+		if hadCustomActionsConfigured && !executeDefaults {
+			GetLogger().Debug("All custom actions for species were skipped and ExecuteDefaults is false; returning empty action list",
+				logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
+				logger.String("operation", "custom_action_skipped_no_defaults"))
+			return nil
 		}
 	}
 

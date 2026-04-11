@@ -3,6 +3,7 @@ package processor
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -395,6 +396,7 @@ func TestValidateCustomCommandActions_DeduplicatesPaths(t *testing.T) {
 				},
 			},
 		},
+		EventTracker: NewEventTracker(0),
 	}
 
 	processor.validateCustomCommandActions(processor.Settings)
@@ -496,3 +498,214 @@ func TestValidateCustomCommandActions_HotReload_NewSpeciesValidatedOnFirstUse(t 
 		"hot-reloaded valid command path must produce an ExecuteCommandAction on first dispatch")
 	assert.Equal(t, validCmd, found.Command)
 }
+
+// TestGetActionsForItem_BrokenCommand_RespectsExecuteDefaultsFalse is a
+// regression test for the case where a species explicitly opts out of
+// default actions (ExecuteDefaults=false) and the only configured
+// custom action is an ExecuteCommand whose path fails validation.
+//
+// Before the fix, the per-dispatch gate skipped the broken command but
+// the function then fell through to the default-action fallback, so a
+// user who had disabled default actions for a species suddenly got
+// DB/SSE/MQTT/audio fallbacks back as soon as their script broke. The
+// fix tracks "had at least one custom action configured" separately
+// from "ended up with at least one runnable custom action" and
+// short-circuits the default fallback when ExecuteDefaults is false.
+func TestGetActionsForItem_BrokenCommand_RespectsExecuteDefaultsFalse(t *testing.T) {
+	t.Parallel()
+
+	missing := "/tmp/birdnet_go_broken_no_defaults_3f7a1.sh"
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				// Default-action sources enabled so that any
+				// accidental fall-through would produce a non-empty
+				// action list — this is what makes the assertion
+				// meaningful.
+				Log: struct {
+					Enabled bool   `yaml:"enabled" json:"enabled"`
+					Path    string `yaml:"path" json:"path"`
+				}{
+					Enabled: true,
+				},
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Threshold: 0.8,
+							Actions: []conf.SpeciesAction{
+								{
+									Type:            "ExecuteCommand",
+									Command:         missing,
+									ExecuteDefaults: false, // Explicit opt-out
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	// Pre-populate the invalid path cache so the gate fires without
+	// having to rely on the file system. Use the current timestamp so
+	// the entry is well within the recheck window.
+	processor.invalidCommandPaths.Store(missing, timeNowForTest())
+
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+
+	assert.Empty(t, actions,
+		"broken ExecuteCommand with ExecuteDefaults=false must yield zero actions, not silent default fallbacks")
+	for _, a := range actions {
+		switch a.(type) {
+		case *LogAction, *DatabaseAction, *SSEAction, *MqttAction:
+			t.Fatalf("unexpected default action %T leaked through when ExecuteDefaults=false", a)
+		}
+	}
+}
+
+// TestGetActionsForItem_BrokenCommand_AllowsExecuteDefaultsTrue is the
+// inverse case: when the user opts INTO default actions for a species
+// and the custom command happens to be broken, the default fallbacks
+// should still run. This guards against an over-eager fix to the
+// previous regression where we accidentally disable defaults for
+// everyone.
+func TestGetActionsForItem_BrokenCommand_AllowsExecuteDefaultsTrue(t *testing.T) {
+	t.Parallel()
+
+	missing := "/tmp/birdnet_go_broken_with_defaults_84c2e.sh"
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Log: struct {
+					Enabled bool   `yaml:"enabled" json:"enabled"`
+					Path    string `yaml:"path" json:"path"`
+				}{
+					Enabled: true,
+				},
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{
+						"american robin": {
+							Threshold: 0.8,
+							Actions: []conf.SpeciesAction{
+								{
+									Type:            "ExecuteCommand",
+									Command:         missing,
+									ExecuteDefaults: true, // Opt INTO default fallback
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	processor.invalidCommandPaths.Store(missing, timeNowForTest())
+
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+
+	// LogAction is part of the default set when Log.Enabled is true,
+	// and is the cheapest one to assert presence of without needing a
+	// real datastore wired up. Its presence implies the default-action
+	// fallback fired even though the custom command was skipped.
+	var hasLog bool
+	for _, a := range actions {
+		if _, ok := a.(*LogAction); ok {
+			hasLog = true
+			break
+		}
+	}
+	assert.True(t, hasLog,
+		"broken ExecuteCommand with ExecuteDefaults=true must still produce default actions (LogAction)")
+	// And the broken ExecuteCommand itself must NOT be in the list.
+	for _, a := range actions {
+		if _, ok := a.(*ExecuteCommandAction); ok {
+			t.Fatalf("broken ExecuteCommand must not be registered as an action")
+		}
+	}
+}
+
+// TestMarkCommandPathInvalidIfBroken_RecheckClearsFixedPath is a
+// regression test for the sticky-cache issue called out by CodeRabbit.
+// A path that was once cached as invalid must be re-validated after the
+// recheck TTL elapses; if it now passes, the cache entry is removed and
+// the corresponding ExecuteCommand action becomes active again without
+// any process restart.
+func TestMarkCommandPathInvalidIfBroken_RecheckClearsFixedPath(t *testing.T) {
+	t.Parallel()
+
+	validCmd := resolveValidExecutable(t)
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	// Seed the cache with a stale failure timestamp older than the
+	// recheck TTL, simulating a path that was broken at some point in
+	// the past. The actual validCmd path is now (and was, throughout
+	// this test) a real executable.
+	stale := timeNowForTest().Add(-2 * invalidCommandPathRecheckTTL)
+	processor.invalidCommandPaths.Store(validCmd, stale)
+
+	// First call: TTL expired, path is good — gate should clear the
+	// cache entry and report the path as usable.
+	got := processor.markCommandPathInvalidIfBroken("turdus migratorius", validCmd)
+	assert.False(t, got, "valid path with expired-TTL cache entry must re-validate cleanly")
+
+	_, stillCached := processor.invalidCommandPaths.Load(validCmd)
+	assert.False(t, stillCached, "fixed path must be removed from invalidCommandPaths after successful re-validation")
+}
+
+// TestMarkCommandPathInvalidIfBroken_RecentFailureSkipsRecheck verifies
+// that a recent failure timestamp suppresses re-stating the path. This
+// is the cheap-fast-path the original sync.Map design was built for —
+// it must remain in place so the per-detection hot path stays a single
+// map lookup for paths that legitimately stay broken.
+func TestMarkCommandPathInvalidIfBroken_RecentFailureSkipsRecheck(t *testing.T) {
+	t.Parallel()
+
+	validCmd := resolveValidExecutable(t)
+
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+
+	// Seed the cache with a *recent* failure timestamp even though the
+	// path is actually fine. The gate must trust the cache and report
+	// the path as invalid without re-stating, otherwise the hot-path
+	// suppression that the original change was built for is lost.
+	processor.invalidCommandPaths.Store(validCmd, timeNowForTest())
+
+	got := processor.markCommandPathInvalidIfBroken("turdus migratorius", validCmd)
+	assert.True(t, got, "recent failure must suppress action without re-stating the path")
+
+	_, stillCached := processor.invalidCommandPaths.Load(validCmd)
+	assert.True(t, stillCached, "recent-failure cache entry must not be cleared by a non-recheck call")
+}
+
+// timeNowForTest is a tiny indirection so the timestamp helper used by
+// the recheck-TTL tests is named in one place. Keeping it as a local
+// helper rather than time.Now() inline makes it obvious in the test
+// body that the value is "now relative to test wall-clock", which is
+// the same source of truth markCommandPathInvalidIfBroken uses.
+func timeNowForTest() time.Time { return time.Now() }
