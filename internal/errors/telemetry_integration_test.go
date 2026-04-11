@@ -188,14 +188,47 @@ func TestShouldReportToSentry_CategoryLimitNotificationOnly(t *testing.T) {
 // TestShouldReportToSentry_FiltersRTSPSilenceTimeout verifies that the RTSP
 // silence-timeout warning emitted by the ffmpeg stream layer is not
 // forwarded to Sentry. These are transient network glitches, not bugs.
+// The full, stable signature from stream.go must match; a loose substring
+// without "for 90 seconds" is intentionally NOT suppressed so that future
+// RTSP failures worded similarly still reach Sentry.
 func TestShouldReportToSentry_FiltersRTSPSilenceTimeout(t *testing.T) {
 	t.Parallel()
-	ee := New(fmt.Errorf("stream stopped producing data for 90 seconds")).
-		Component("ffmpeg-stream").
-		Category(CategoryRTSP).
-		Context("operation", "silence_timeout").
-		Build()
-	assert.False(t, shouldReportToSentry(ee))
+
+	tests := []struct {
+		name       string
+		errMsg     string
+		wantReport bool
+	}{
+		{
+			name:       "exact silence-timeout signature is suppressed",
+			errMsg:     "stream stopped producing data for 90 seconds",
+			wantReport: false,
+		},
+		{
+			name:       "silence-timeout signature with wrapping context is suppressed",
+			errMsg:     "[rtsp-connection] stream stopped producing data for 90 seconds, restarting",
+			wantReport: false,
+		},
+		{
+			name:       "loose substring without full signature is reported",
+			errMsg:     "[rtsp-connection] stream stopped producing data",
+			wantReport: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ee := New(fmt.Errorf("%s", tt.errMsg)).
+				Component("ffmpeg-stream").
+				Category(CategoryRTSP).
+				Context("operation", "silence_timeout").
+				Build()
+			got := shouldReportToSentry(ee)
+			assert.Equal(t, tt.wantReport, got,
+				"shouldReportToSentry(%q) = %v, want %v", tt.errMsg, got, tt.wantReport)
+		})
+	}
 }
 
 // TestShouldReportToSentry_AllowsRTSPCodeBugs is a positive control that

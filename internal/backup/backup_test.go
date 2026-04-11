@@ -133,6 +133,72 @@ func TestRunBackup_OnlySources_StillErrors(t *testing.T) {
 	assert.Contains(t, err.Error(), "no backup targets registered")
 }
 
+// TestRunBackup_OnlyTargets_StillErrors ensures that the mirror half-configured
+// case (targets registered but no sources) also fails fast with the structured
+// validation error, matching Start()'s independent sources/targets validation.
+// Without the explicit no-sources check, RunBackup would silently no-op when
+// the user registered targets but no sources.
+func TestRunBackup_OnlyTargets_StillErrors(t *testing.T) {
+	cfg := &conf.Settings{}
+	cfg.Backup.Enabled = true
+
+	m := &Manager{
+		config:     &cfg.Backup,
+		fullConfig: cfg,
+		sources:    make(map[string]Source),
+		targets: map[string]Target{
+			"dummy": dummyTarget{},
+		},
+		logger: GetLogger().Module("manager-test"),
+	}
+
+	err := m.RunBackup(t.Context())
+	require.Error(t, err,
+		"RunBackup should fail when targets are registered but sources are missing")
+	assert.Contains(t, err.Error(), "no backup sources registered")
+}
+
+// TestRunBackup_Disabled_NoError verifies that the explicit "manager disabled"
+// early-return path returns nil without touching telemetry. This pins the
+// split of the previously combined !Enabled || empty check into two separate
+// early-returns, each with its own log line.
+func TestRunBackup_Disabled_NoError(t *testing.T) {
+	// Not parallel: the errors package keeps the hook list as package state.
+	var (
+		mu          sync.Mutex
+		capturedErr []*errors.EnhancedError
+	)
+	errors.AddErrorHook(func(ee *errors.EnhancedError) {
+		mu.Lock()
+		defer mu.Unlock()
+		capturedErr = append(capturedErr, ee)
+	})
+	t.Cleanup(errors.ClearErrorHooks)
+
+	cfg := &conf.Settings{}
+	cfg.Backup.Enabled = false
+
+	m := &Manager{
+		config:     &cfg.Backup,
+		fullConfig: cfg,
+		sources: map[string]Source{
+			"dummy": dummySource{},
+		},
+		targets: map[string]Target{
+			"dummy": dummyTarget{},
+		},
+		logger: GetLogger().Module("manager-test"),
+	}
+
+	require.NoError(t, m.RunBackup(t.Context()),
+		"RunBackup should succeed as a silent no-op when the manager is disabled")
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Empty(t, capturedErr,
+		"no telemetry event should be emitted when the backup manager is disabled")
+}
+
 // dummySource is a minimal Source implementation used only for the
 // half-configured test cases. It is never actually invoked because Start
 // and RunBackup return before any source methods are called.
@@ -143,3 +209,14 @@ func (dummySource) Backup(_ context.Context) (io.ReadCloser, error) {
 	return nil, nil //nolint:nilnil // never invoked in this test
 }
 func (dummySource) Validate() error { return nil }
+
+// dummyTarget is a minimal Target implementation used only for the
+// half-configured test cases. It is never actually invoked because Start
+// and RunBackup return before any target methods are called.
+type dummyTarget struct{}
+
+func (dummyTarget) Name() string                                         { return "dummy" }
+func (dummyTarget) Store(_ context.Context, _ string, _ *Metadata) error { return nil }
+func (dummyTarget) List(_ context.Context) ([]BackupInfo, error)         { return nil, nil }
+func (dummyTarget) Delete(_ context.Context, _ string) error             { return nil }
+func (dummyTarget) Validate() error                                      { return nil }

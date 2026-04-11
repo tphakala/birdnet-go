@@ -41,6 +41,13 @@ var (
 // Set by the telemetry package to avoid circular imports.
 var ResourceSnapshotFunc func() map[string]any
 
+// rtspSilenceTimeoutSignature is the full, stable log message emitted by the
+// ffmpeg stream layer when an RTSP source has been silent for the silence
+// watchdog window. Using the complete signature (rather than a loose
+// substring) keeps unrelated "stream stopped producing data" wording from
+// future RTSP code paths reaching Sentry when they shouldn't be suppressed.
+const rtspSilenceTimeoutSignature = "stream stopped producing data for 90 seconds"
+
 var (
 	lastDiskFullReport atomic.Int64                           // Unix timestamp of last disk-full report
 	diskFullCooldown   = int64(5 * time.Minute / time.Second) // 5 minutes between disk-full reports
@@ -219,7 +226,9 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	// per occurrence just floods the project with duplicates. A future
 	// enhancement can track consecutive timeouts inside stream.go and
 	// only escalate when the stream stays silent for multiple windows.
-	if ee.Category == CategoryRTSP && strings.Contains(errorMsg, "stream stopped producing data") {
+	// Match the full signature (not just a prefix substring) so unrelated
+	// RTSP failures worded similarly are not accidentally suppressed.
+	if ee.Category == CategoryRTSP && strings.Contains(errorMsg, rtspSilenceTimeoutSignature) {
 		return false
 	}
 

@@ -280,15 +280,33 @@ func (m *Manager) RunBackup(ctx context.Context) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	// When backup is enabled but neither sources nor targets have been
-	// registered, treat this as "user has not finished setting up backup"
-	// rather than a hard error. Scheduler-driven runs would otherwise
-	// flood Sentry with cadence-aligned noise from users who toggled the
-	// feature on but never configured it. Mirror the Start() semantics:
-	// the half-configured case (targets missing below) still fails fast.
-	if !m.config.Enabled || (len(m.sources) == 0 && len(m.targets) == 0) {
+	// Early-return when backup is disabled. Scheduler-driven runs that land
+	// on a disabled manager must be a silent no-op, not a telemetry event.
+	if !m.config.Enabled {
+		m.logger.Info("Backup manager is disabled")
+		return nil
+	}
+
+	// Early-return when neither sources nor targets have been registered.
+	// Treat this as "user has not finished setting up backup" rather than a
+	// hard error. Scheduler-driven runs would otherwise flood Sentry with
+	// cadence-aligned noise from users who toggled the feature on but never
+	// configured it. Mirror the Start() semantics: the half-configured cases
+	// below still fail fast.
+	if len(m.sources) == 0 && len(m.targets) == 0 {
 		m.logger.Info("Backup run requested but no sources or targets configured; nothing to do")
 		return nil
+	}
+
+	// Validate that we have at least one source. This mirrors Start()'s
+	// independent sources/targets validation so the targets-only
+	// half-configured state fails fast instead of silently no-oping.
+	if len(m.sources) == 0 {
+		return errors.Newf("no backup sources registered, backup cannot proceed").
+			Component("backup").
+			Category(errors.CategoryValidation).
+			Context("operation", "perform_backup").
+			Build()
 	}
 
 	// Add a timeout for the entire backup operation
