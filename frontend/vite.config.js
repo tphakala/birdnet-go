@@ -24,9 +24,23 @@ function computeI18nCacheVersion() {
     .sort()
   if (files.length === 0) return 'dev'
   const hash = createHash('sha256')
+  // NUL-byte delimiter prevents collisions between (filename, content) pairs:
+  // without it, `a.json` containing `bc` and `ab.json` containing `c` both
+  // hash the byte stream `abc` and produce the same digest.
+  const delimiter = Buffer.from([0])
   for (const file of files) {
     hash.update(file)
-    hash.update(readFileSync(join(sourceDir, file)))
+    hash.update(delimiter)
+    try {
+      hash.update(readFileSync(join(sourceDir, file)))
+    } catch (/** @type {any} */ err) {
+      // Surface the failing file name then re-throw so the build fails loudly
+      // rather than silently producing a 'dev' cache version that masks the
+      // problem.
+      console.error(`[i18n-cache-version] Failed to read ${file}:`, err.message)
+      throw err
+    }
+    hash.update(delimiter)
   }
   return hash.digest('hex').slice(0, 8)
 }
@@ -119,9 +133,15 @@ export default defineConfig({
             id.includes('node_modules/chartjs-adapter-date-fns/')
           )
             return 'charts';
-          // `node_modules/d3` (no trailing slash) intentionally catches the
-          // whole d3 family: d3, d3-scale-chromatic, d3-time-format, etc.
-          if (id.includes('node_modules/d3')) return 'd3';
+          // Catch the whole d3 family: bare `d3/` and the `d3-*` packages
+          // (d3-scale-chromatic, d3-time-format, d3-array, etc.). Requiring
+          // a `/` or `-` after `d3` avoids matching unrelated packages like
+          // `d3x` or stray `d3.js` filenames inside other packages.
+          if (
+            id.includes('node_modules/d3/') ||
+            id.includes('node_modules/d3-')
+          )
+            return 'd3';
           if (id.includes('node_modules/@sentry/')) return 'sentry';
           if (id.includes('node_modules/maplibre-gl/')) return 'maps';
           return undefined;
