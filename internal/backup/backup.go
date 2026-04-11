@@ -239,6 +239,17 @@ func (m *Manager) Start() error {
 		return nil
 	}
 
+	// When backup is enabled but no sources or targets have been registered,
+	// treat this as "user has not finished setting up backup" rather than a
+	// hard error. Emitting telemetry here floods Sentry with noise from
+	// users who toggled the feature on but never configured it. A stray
+	// half-configured manager (sources but no targets, or vice versa) is
+	// still treated as a misconfiguration below.
+	if len(m.sources) == 0 && len(m.targets) == 0 {
+		m.logger.Info("Backup manager enabled but no sources or targets configured; nothing to do")
+		return nil
+	}
+
 	// Validate that we have at least one source and target
 	if len(m.sources) == 0 {
 		return errors.Newf("no backup sources registered").
