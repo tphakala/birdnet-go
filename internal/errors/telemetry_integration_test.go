@@ -116,38 +116,51 @@ func TestShouldReportToSentry_AllowsNetworkCategoryCodeBugs(t *testing.T) {
 	assert.True(t, shouldReportToSentry(ee))
 }
 
-// TestShouldReportToSentry_FiltersCategoryLimit verifies that throttling and
-// rate-limit conditions are not forwarded to Sentry, regardless of the
-// specific message. These represent operational state (circuit breaker open,
-// queue full, etc.) and the interesting signal is covered by dedicated
-// telemetry paths.
-func TestShouldReportToSentry_FiltersCategoryLimit(t *testing.T) {
+// TestShouldReportToSentry_CategoryLimitNotificationOnly verifies that the
+// CategoryLimit suppression is scoped to the notification component only.
+// The notification circuit breaker produces high-volume [limit] state noise
+// that is already covered by the dedicated CircuitBreakerStateTransition
+// telemetry path. Other CategoryLimit producers (eBird API quota, analysis
+// job queue full, spectrogram pre-render memory limits) are legitimate
+// operational signals that ops needs to see and must still reach Sentry.
+func TestShouldReportToSentry_CategoryLimitNotificationOnly(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name      string
-		component string
-		err       error
+		name       string
+		component  string
+		err        error
+		wantReport bool
 	}{
 		{
-			name:      "notification circuit breaker open",
-			component: "notification",
-			err:       fmt.Errorf("circuit breaker is open"),
+			name:       "notification circuit breaker open is suppressed",
+			component:  "notification",
+			err:        fmt.Errorf("circuit breaker is open"),
+			wantReport: false,
 		},
 		{
-			name:      "notification circuit breaker half-open too many requests",
-			component: "notification",
-			err:       fmt.Errorf("circuit breaker is half-open, too many requests"),
+			name:       "notification circuit breaker half-open too many requests is suppressed",
+			component:  "notification",
+			err:        fmt.Errorf("circuit breaker is half-open, too many requests"),
+			wantReport: false,
 		},
 		{
-			name:      "analysis job queue full",
-			component: "analysis.jobqueue",
-			err:       fmt.Errorf("job queue is full"),
+			name:       "ebird API quota exhaustion is reported",
+			component:  "ebird",
+			err:        fmt.Errorf("ebird API quota exceeded"),
+			wantReport: true,
 		},
 		{
-			name:      "spectrogram prerender queue full",
-			component: "spectrogram",
-			err:       fmt.Errorf("pre-render queue full"),
+			name:       "analysis job queue full is reported",
+			component:  "jobqueue",
+			err:        fmt.Errorf("job queue is full"),
+			wantReport: true,
+		},
+		{
+			name:       "spectrogram prerender queue full is reported",
+			component:  "spectrogram",
+			err:        fmt.Errorf("pre-render queue full"),
+			wantReport: true,
 		},
 	}
 
@@ -158,8 +171,16 @@ func TestShouldReportToSentry_FiltersCategoryLimit(t *testing.T) {
 				Component(tt.component).
 				Category(CategoryLimit).
 				Build()
-			assert.False(t, shouldReportToSentry(ee),
-				"CategoryLimit errors must not be forwarded to Sentry")
+			got := shouldReportToSentry(ee)
+			if tt.wantReport {
+				assert.Truef(t, got,
+					"%s: CategoryLimit from %q must still be forwarded to Sentry",
+					tt.name, tt.component)
+			} else {
+				assert.Falsef(t, got,
+					"%s: CategoryLimit from %q must not be forwarded to Sentry",
+					tt.name, tt.component)
+			}
 		})
 	}
 }

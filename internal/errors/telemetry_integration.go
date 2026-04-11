@@ -152,13 +152,15 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	}
 	errorMsg := strings.ToLower(ee.Err.Error())
 
-	// Throttling / rate-limit conditions are operational state, not bugs.
-	// Current producers of CategoryLimit: notification circuit breaker
-	// open/half-open, job queue full, spectrogram pre-render queue full.
-	// The interesting signal (state transitions, degraded mode) is already
-	// surfaced through dedicated telemetry paths, so the per-call errors
-	// are pure noise when forwarded to Sentry.
-	if ee.Category == CategoryLimit {
+	// Notification circuit-breaker open/half-open conditions are operational
+	// throttling state, not bugs. Suppress only that component — NOT all
+	// CategoryLimit producers. eBird API quota exhaustion, analysis job
+	// queue overflow, and spectrogram pre-render memory limits should still
+	// reach Sentry as legitimate signals. The notification state transitions
+	// themselves are already surfaced via the dedicated CircuitBreakerStateTransition
+	// telemetry path, so the per-call errors from that component are pure
+	// noise when forwarded to Sentry.
+	if ee.Category == CategoryLimit && ee.GetComponent() == "notification" {
 		return false
 	}
 
