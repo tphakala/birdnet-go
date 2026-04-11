@@ -11,9 +11,13 @@ import (
 // codes and the display-name variants observed in production data. The
 // normalization helper should fold things like "CC BY 3.0" onto the same
 // canonical "cc-by" case so the switch returns proper names and URLs.
+//
+// Note: this test intentionally does NOT call t.Parallel() because
+// mapAviCommonsLicense mutates the package-global loggedUnknownLicenses
+// sync.Map via LoadOrStore when it encounters an unknown code. Per the
+// project coding guideline, tests that mutate global state must run
+// sequentially.
 func TestMapAviCommonsLicense(t *testing.T) {
-	t.Parallel()
-
 	const (
 		ccBYName        = "CC BY 4.0"
 		ccBYURL         = "https://creativecommons.org/licenses/by/4.0/"
@@ -70,8 +74,7 @@ func TestMapAviCommonsLicense(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
+			// No t.Parallel(): see note on the outer test.
 			gotName, gotURL := mapAviCommonsLicense(tt.input)
 			assert.Equal(t, tt.wantName, gotName, "license name mismatch for input %q", tt.input)
 			assert.Equal(t, tt.wantURL, gotURL, "license URL mismatch for input %q", tt.input)
