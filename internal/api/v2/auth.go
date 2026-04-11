@@ -245,6 +245,11 @@ func (c *Controller) Login(ctx echo.Context) error {
 	// the reverse proxy (e.g., /birdnet/api/v2/auth/callback instead of /api/v2/auth/callback).
 	// URL-encode both code and redirect to prevent parameter injection and handle special characters.
 	requestBase, _ := ctx.Get("basePath").(string)
+	// Normalize finalRedirect against the request base path so the post-auth
+	// redirect goes through the proxy (e.g., /birdnet/ui/ instead of /ui/).
+	if requestBase != "" {
+		finalRedirect = ensurePathWithinBase(finalRedirect, requestBase+"/")
+	}
 	redirectURL := fmt.Sprintf("%s/api/v2/auth/callback?code=%s&redirect=%s", requestBase, url.QueryEscape(authCode), url.QueryEscape(finalRedirect))
 
 	c.logInfoIfEnabled("Returning successful login response with redirect",
