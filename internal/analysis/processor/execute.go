@@ -382,26 +382,30 @@ func getResultValueByName(result *detection.Result, paramName string) any {
 
 // validateCustomCommandActions scans the species configuration once at
 // startup and validates every ExecuteCommand action command path. Paths
-// that fail validation are recorded in the returned set so that
+// that fail validation are recorded in p.invalidCommandPaths so that
 // getActionsForItem can skip them at dispatch time. A single user-facing
 // notification and one telemetry event are emitted per unique broken
 // path, replacing the previous behavior of emitting a dual-fingerprint
 // Sentry event on every detection that would have triggered the action.
 //
-// The returned map is keyed by the *original* (non-cleaned) command
-// string from the config so that getActionsForItem can look up entries
-// without re-cleaning the path on every detection. An empty command
-// string is always treated as invalid because ExecuteCommand with no
-// command is a user misconfiguration.
+// Entries are keyed by the *original* (non-cleaned) command string from
+// the config so that getActionsForItem can look up entries without
+// re-cleaning the path on every detection. An empty command string is
+// always treated as invalid because ExecuteCommand with no command is
+// a user misconfiguration.
 //
-// The method is a no-op when there are no species configurations.
-func (p *Processor) validateCustomCommandActions(settings *conf.Settings) map[string]struct{} {
-	invalid := make(map[string]struct{})
-
-	// validated deduplicates work so the same command path appearing in
-	// multiple species configs is only stat'd and reported once, even if
-	// users share the same script across many species.
-	validated := make(map[string]bool)
+// The method is a no-op when there are no species configurations. It
+// only records failures; valid paths are left unrecorded so a species
+// added post-startup still goes through first-use validation via
+// markCommandPathInvalidIfBroken in getActionsForItem.
+func (p *Processor) validateCustomCommandActions(settings *conf.Settings) {
+	// validated deduplicates work within a single scan so the same
+	// command path appearing in multiple species configs is only stat'd
+	// and reported once, even if users share the same script across
+	// many species. Entries that were already recorded as invalid on a
+	// previous call (e.g. a second pre-warm after runtime reload) are
+	// also skipped.
+	validated := make(map[string]struct{})
 
 	log := GetLogger()
 
@@ -414,9 +418,13 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) map[st
 
 			cmd := actionCfg.Command
 			if _, seen := validated[cmd]; seen {
-				// Already validated on a previous iteration; skip so the
-				// same broken path shared across many species only
-				// produces one notification and one telemetry event.
+				continue
+			}
+			validated[cmd] = struct{}{}
+
+			// Skip paths we already know are invalid from an earlier
+			// scan so the notification is not re-emitted on re-scan.
+			if _, known := p.invalidCommandPaths.Load(cmd); known {
 				continue
 			}
 
@@ -425,8 +433,13 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) map[st
 			// ErrorBuilder.Build(). Calling it once per unique cmd gives
 			// us exactly one Sentry fingerprint per broken path.
 			if _, err := validateCommandPath(cmd); err != nil {
-				validated[cmd] = false
-				invalid[cmd] = struct{}{}
+				// LoadOrStore guarantees a single winner even if a
+				// concurrent detection path is racing with this scan,
+				// so notification is emitted at most once per process
+				// lifetime for the same unique broken path.
+				if _, loaded := p.invalidCommandPaths.LoadOrStore(cmd, struct{}{}); loaded {
+					continue
+				}
 
 				// Structured log for operators reading journal/stdout.
 				log.Error("Custom ExecuteCommand action has invalid command path — action will be skipped",
@@ -440,12 +453,47 @@ func (p *Processor) validateCustomCommandActions(settings *conf.Settings) map[st
 				// second telemetry event: it only extracts title/priority
 				// from the existing enhanced error for the UI panel.
 				notification.NotifyError("analysis.processor", err)
-				continue
 			}
-
-			validated[cmd] = true
 		}
 	}
+}
 
-	return invalid
+// markCommandPathInvalidIfBroken is the per-dispatch gate used by
+// getActionsForItem. It returns true if the path has been seen before
+// and is known-invalid (skip silently), or if it is freshly stat'd and
+// found broken (skip and emit exactly one log line + one notification).
+// It returns false when the path is usable, letting the caller register
+// an ExecuteCommandAction.
+//
+// Combined with the startup pre-warm in New(), this gives hot-reload
+// coverage for species configurations that were added or edited after
+// process start: the new ExecuteCommand path is stat'd on its first
+// dispatch, and if broken, the failure is announced once and then
+// cached so subsequent detections are cheap silent no-ops.
+func (p *Processor) markCommandPathInvalidIfBroken(speciesKey, cmd string) (invalid bool) {
+	if _, known := p.invalidCommandPaths.Load(cmd); known {
+		return true
+	}
+
+	if _, err := validateCommandPath(cmd); err != nil {
+		// LoadOrStore ensures that concurrent detections for the same
+		// broken path only emit a single notification even if they
+		// race on the first stat — whichever goroutine wins the store
+		// is the one that logs and notifies.
+		if _, loaded := p.invalidCommandPaths.LoadOrStore(cmd, struct{}{}); loaded {
+			return true
+		}
+
+		log := GetLogger()
+		log.Error("Custom ExecuteCommand action has invalid command path — action will be skipped",
+			logger.String("species", speciesKey),
+			logger.String("command", cmd),
+			logger.Error(err),
+			logger.String("operation", "validate_custom_command_path_runtime"))
+
+		notification.NotifyError("analysis.processor", err)
+		return true
+	}
+
+	return false
 }

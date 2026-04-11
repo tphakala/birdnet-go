@@ -9,6 +9,44 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// resolveValidExecutable returns an absolute path to an executable that
+// is known to exist on the test host. Used by tests that exercise the
+// action-dispatch pipeline and need a path that survives the per-call
+// command-path validation gate without relying on fixture scripts.
+// Tests that cannot find any usable executable are skipped rather than
+// failing — this keeps CI portable across containerized runners.
+func resolveValidExecutable(t *testing.T) string {
+	t.Helper()
+	for _, candidate := range []string{"/bin/sh", "/bin/true", "/usr/bin/true"} {
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	t.Skip("no suitable absolute executable found for action-dispatch test")
+	return ""
+}
+
+// resolveTwoValidExecutables returns two distinct absolute paths to
+// executables that exist on the test host. Tests that exercise
+// multi-action dispatch and need to assert both commands appear in the
+// produced action list use this to avoid tripping the per-call
+// command-path validation gate. Skips gracefully on runners that only
+// have one of the candidates (rare for any POSIX CI image).
+func resolveTwoValidExecutables(t *testing.T) (first, second string) {
+	t.Helper()
+	found := make([]string, 0, 2)
+	for _, candidate := range []string{"/bin/sh", "/bin/true", "/usr/bin/true", "/bin/ls", "/usr/bin/env"} {
+		if _, err := os.Stat(candidate); err == nil {
+			found = append(found, candidate)
+			if len(found) == 2 {
+				return found[0], found[1]
+			}
+		}
+	}
+	t.Skip("fewer than two suitable absolute executables found for multi-action dispatch test")
+	return "", ""
+}
+
 // TestExecuteCommandAction_WithoutParameters tests that ExecuteCommand actions
 // are executed even when no parameters are specified.
 // Bug: https://github.com/tphakala/birdnet-go/discussions/1757
@@ -16,6 +54,11 @@ import (
 // which prevented commands without parameters from being added to the action list.
 func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 	t.Parallel()
+
+	// Use a real executable so the per-dispatch command path validation
+	// gate in getActionsForItem lets the action through. The original
+	// bug this test guards against is unrelated to path validity.
+	validCmd := resolveValidExecutable(t)
 
 	tests := []struct {
 		name            string
@@ -30,13 +73,13 @@ func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 				Actions: []conf.SpeciesAction{
 					{
 						Type:       "ExecuteCommand",
-						Command:    "/usr/local/bin/notify.sh",
+						Command:    validCmd,
 						Parameters: []string{}, // Empty parameters - this was the bug!
 					},
 				},
 			},
 			expectAction:    true,
-			expectedCommand: "/usr/local/bin/notify.sh",
+			expectedCommand: validCmd,
 		},
 		{
 			name: "command with nil parameters should still create action",
@@ -45,13 +88,13 @@ func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 				Actions: []conf.SpeciesAction{
 					{
 						Type:       "ExecuteCommand",
-						Command:    "/usr/local/bin/alert.sh",
+						Command:    validCmd,
 						Parameters: nil, // Nil parameters - should also work
 					},
 				},
 			},
 			expectAction:    true,
-			expectedCommand: "/usr/local/bin/alert.sh",
+			expectedCommand: validCmd,
 		},
 		{
 			name: "command with parameters should create action with params",
@@ -60,13 +103,13 @@ func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 				Actions: []conf.SpeciesAction{
 					{
 						Type:       "ExecuteCommand",
-						Command:    "/usr/local/bin/script.sh",
+						Command:    validCmd,
 						Parameters: []string{"CommonName", "Confidence"},
 					},
 				},
 			},
 			expectAction:    true,
-			expectedCommand: "/usr/local/bin/script.sh",
+			expectedCommand: validCmd,
 		},
 	}
 
@@ -117,6 +160,8 @@ func TestExecuteCommandAction_WithoutParameters(t *testing.T) {
 func TestExecuteCommandAction_MultipleActionsWithMixedParams(t *testing.T) {
 	t.Parallel()
 
+	simpleCmd, detailedCmd := resolveTwoValidExecutables(t)
+
 	processor := &Processor{
 		Settings: &conf.Settings{
 			Debug: true,
@@ -128,12 +173,12 @@ func TestExecuteCommandAction_MultipleActionsWithMixedParams(t *testing.T) {
 							Actions: []conf.SpeciesAction{
 								{
 									Type:       "ExecuteCommand",
-									Command:    "/usr/local/bin/simple.sh",
+									Command:    simpleCmd,
 									Parameters: []string{}, // No parameters
 								},
 								{
 									Type:       "ExecuteCommand",
-									Command:    "/usr/local/bin/detailed.sh",
+									Command:    detailedCmd,
 									Parameters: []string{"CommonName", "Confidence"},
 								},
 							},
@@ -165,14 +210,16 @@ func TestExecuteCommandAction_MultipleActionsWithMixedParams(t *testing.T) {
 		commands[action.Command] = true
 	}
 
-	assert.True(t, commands["/usr/local/bin/simple.sh"], "simple.sh should be in actions")
-	assert.True(t, commands["/usr/local/bin/detailed.sh"], "detailed.sh should be in actions")
+	assert.True(t, commands[simpleCmd], "%s should be in actions", simpleCmd)
+	assert.True(t, commands[detailedCmd], "%s should be in actions", detailedCmd)
 }
 
 // TestExecuteCommandAction_ExecuteDefaultsWithNoParams tests that executeDefaults
 // works correctly even when the custom command has no parameters.
 func TestExecuteCommandAction_ExecuteDefaultsWithNoParams(t *testing.T) {
 	t.Parallel()
+
+	validCmd := resolveValidExecutable(t)
 
 	processor := &Processor{
 		Settings: &conf.Settings{
@@ -191,7 +238,7 @@ func TestExecuteCommandAction_ExecuteDefaultsWithNoParams(t *testing.T) {
 							Actions: []conf.SpeciesAction{
 								{
 									Type:            "ExecuteCommand",
-									Command:         "/usr/local/bin/notify.sh",
+									Command:         validCmd,
 									Parameters:      []string{},
 									ExecuteDefaults: true, // Should also run default actions
 								},
@@ -255,9 +302,10 @@ func TestValidateCustomCommandActions_SkipsInvalidPath(t *testing.T) {
 	}
 
 	// Run the same startup validation New() runs.
-	processor.invalidCommandPaths = processor.validateCustomCommandActions(processor.Settings)
+	processor.validateCustomCommandActions(processor.Settings)
 
-	require.Contains(t, processor.invalidCommandPaths, missingPath,
+	_, flagged := processor.invalidCommandPaths.Load(missingPath)
+	require.True(t, flagged,
 		"missing command path must be recorded as invalid at startup")
 
 	// At dispatch time, the ExecuteCommand action must NOT be registered.
@@ -276,18 +324,7 @@ func TestValidateCustomCommandActions_SkipsInvalidPath(t *testing.T) {
 func TestValidateCustomCommandActions_AllowsValidPath(t *testing.T) {
 	t.Parallel()
 
-	// Pick an existing executable on the host (/bin/sh is present on
-	// effectively every POSIX CI runner). Skip gracefully otherwise.
-	validCmd := ""
-	for _, candidate := range []string{"/bin/sh", "/bin/true", "/usr/bin/true"} {
-		if _, err := os.Stat(candidate); err == nil {
-			validCmd = candidate
-			break
-		}
-	}
-	if validCmd == "" {
-		t.Skip("no suitable absolute executable found for positive test")
-	}
+	validCmd := resolveValidExecutable(t)
 
 	processor := &Processor{
 		Settings: &conf.Settings{
@@ -307,8 +344,14 @@ func TestValidateCustomCommandActions_AllowsValidPath(t *testing.T) {
 		EventTracker: NewEventTracker(0),
 	}
 
-	processor.invalidCommandPaths = processor.validateCustomCommandActions(processor.Settings)
-	assert.Empty(t, processor.invalidCommandPaths,
+	processor.validateCustomCommandActions(processor.Settings)
+
+	var flaggedCount int
+	processor.invalidCommandPaths.Range(func(_, _ any) bool {
+		flaggedCount++
+		return true
+	})
+	assert.Equal(t, 0, flaggedCount,
 		"valid command path must not be flagged at startup")
 
 	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
@@ -354,7 +397,102 @@ func TestValidateCustomCommandActions_DeduplicatesPaths(t *testing.T) {
 		},
 	}
 
-	invalid := processor.validateCustomCommandActions(processor.Settings)
-	require.Len(t, invalid, 1, "same broken path across multiple species must be recorded once")
-	assert.Contains(t, invalid, missing)
+	processor.validateCustomCommandActions(processor.Settings)
+
+	var recorded int
+	processor.invalidCommandPaths.Range(func(key, _ any) bool {
+		if key == missing {
+			recorded++
+		}
+		return true
+	})
+	assert.Equal(t, 1, recorded, "same broken path across multiple species must be recorded once")
+}
+
+// TestValidateCustomCommandActions_HotReload_NewSpeciesValidatedOnFirstUse
+// is a regression test for the hot-reload gap where a species custom
+// ExecuteCommand action added *after* Processor.New() (i.e. via a UI
+// settings save) was never revalidated, letting the original per-call
+// Sentry spam return under a different code path. The sync.Map-backed
+// per-dispatch gate (markCommandPathInvalidIfBroken) must stat the new
+// path on its first dispatch and cache the skip from then on.
+func TestValidateCustomCommandActions_HotReload_NewSpeciesValidatedOnFirstUse(t *testing.T) {
+	t.Parallel()
+
+	// Start with an empty species config — nothing to validate at startup.
+	processor := &Processor{
+		Settings: &conf.Settings{
+			Realtime: conf.RealtimeSettings{
+				Species: conf.SpeciesSettings{
+					Config: map[string]conf.SpeciesConfig{},
+				},
+			},
+		},
+		EventTracker: NewEventTracker(0),
+	}
+	processor.validateCustomCommandActions(processor.Settings)
+
+	var startupFlagged int
+	processor.invalidCommandPaths.Range(func(_, _ any) bool {
+		startupFlagged++
+		return true
+	})
+	require.Equal(t, 0, startupFlagged,
+		"empty species config must not flag anything at startup")
+
+	// Simulate a post-startup hot reload: the settings store is mutated
+	// in place (mirroring how ControlMonitor updates settings without
+	// recreating the Processor), adding a species with a broken path.
+	missing := "/tmp/birdnet_go_hot_reload_missing_9e21b.sh"
+	processor.Settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"american robin": {
+			Threshold: 0.8,
+			Actions: []conf.SpeciesAction{
+				{Type: "ExecuteCommand", Command: missing},
+			},
+		},
+	}
+
+	// First dispatch after the reload must trigger per-call validation,
+	// flag the path as invalid, and omit the ExecuteCommandAction.
+	det := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions := processor.getActionsForItem(&det)
+	for _, action := range actions {
+		if _, ok := action.(*ExecuteCommandAction); ok {
+			t.Fatalf("hot-reloaded invalid command %q must not produce an ExecuteCommandAction", missing)
+		}
+	}
+
+	_, flagged := processor.invalidCommandPaths.Load(missing)
+	assert.True(t, flagged, "first dispatch must cache the broken path")
+
+	// Now swap the broken path for an executable that definitely exists
+	// (same hot-reload shape as before). A *new* detection should now
+	// produce an ExecuteCommandAction — the previous sync.Map entry
+	// belongs to the old broken path, not this one, so the new path is
+	// stat'd fresh on its first use.
+	validCmd := resolveValidExecutable(t)
+
+	processor.Settings.Realtime.Species.Config = map[string]conf.SpeciesConfig{
+		"american robin": {
+			Threshold: 0.8,
+			Actions: []conf.SpeciesAction{
+				{Type: "ExecuteCommand", Command: validCmd},
+			},
+		},
+	}
+
+	det2 := testDetectionWithSpecies("American Robin", "Turdus migratorius", 0.95)
+	actions2 := processor.getActionsForItem(&det2)
+
+	var found *ExecuteCommandAction
+	for _, a := range actions2 {
+		if ea, ok := a.(*ExecuteCommandAction); ok {
+			found = ea
+			break
+		}
+	}
+	require.NotNil(t, found,
+		"hot-reloaded valid command path must produce an ExecuteCommandAction on first dispatch")
+	assert.Equal(t, validCmd, found.Command)
 }

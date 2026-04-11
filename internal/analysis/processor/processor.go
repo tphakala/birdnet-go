@@ -140,12 +140,27 @@ type Processor struct {
 	taxonomyDBOnce sync.Once
 
 	// invalidCommandPaths records ExecuteCommand action command paths that
-	// failed validation (missing, unreadable, non-executable, or relative)
-	// during startup. Entries here are skipped by getActionsForItem so a
+	// have already failed validation (missing, unreadable, non-executable,
+	// or relative). Entries here are skipped by getActionsForItem so a
 	// bad path fails once with a user-visible notification instead of
-	// generating a Sentry event per detection. The map is populated during
-	// New() and only read afterwards, so no mutex is required.
-	invalidCommandPaths map[string]struct{}
+	// generating a Sentry event per detection.
+	//
+	// Pre-populated during New() by validateCustomCommandActions so that
+	// operators get a startup-time error for any broken path already
+	// configured. The map is then consulted from detection goroutines
+	// (read) and extended on-demand (write) when a species that was
+	// added or edited *after* startup first fires — that hot-reload
+	// path is why we use sync.Map instead of a plain map + mutex: the
+	// Processor itself is never recreated on settings reload (mutation
+	// in place by ControlMonitor), and concurrent reads from detection
+	// goroutines would otherwise race with the first runtime write.
+	//
+	// Values are empty struct{} sentinels (set membership only). A path
+	// that enters the map is cached as "skip" for the lifetime of the
+	// process; fixing a broken script requires a restart. This matches
+	// how the original startup gate behaved and keeps the implementation
+	// free of TTL/metrics bookkeeping.
+	invalidCommandPaths sync.Map
 }
 
 type Detections struct {
@@ -474,8 +489,10 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	// Validate user-configured custom ExecuteCommand action paths up front
 	// so that a misconfigured command path produces a single user-facing
 	// notification at startup instead of emitting telemetry on every
-	// detection that would have triggered the action.
-	p.invalidCommandPaths = p.validateCustomCommandActions(settings)
+	// detection that would have triggered the action. Entries that still
+	// pass validation later (because the species was added after startup)
+	// are memoized on first dispatch in getActionsForItem.
+	p.validateCustomCommandActions(settings)
 
 	// Initialize species tracker if enabled
 	p.NewSpeciesTracker = initSpeciesTracker(settings, ds)
@@ -1516,12 +1533,18 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 		for _, actionConfig := range speciesConfig.Actions {
 			switch actionConfig.Type {
 			case executeCommandActionType:
-				// Startup gate: if the command path failed validation in
-				// New(), silently skip registration so the action becomes
-				// a no-op for this species instead of emitting telemetry
-				// on every detection. The user already saw a notification
-				// and a log message at startup.
-				if _, invalid := p.invalidCommandPaths[actionConfig.Command]; invalid {
+				// First-use and cached-invalid gate: skip the action if
+				// the command path is (a) known invalid from an earlier
+				// dispatch or startup pre-warm, or (b) newly stat'd here
+				// and found broken. The helper emits at most one log
+				// line and one notification per unique bad path for the
+				// entire process lifetime, replacing the previous
+				// behavior of emitting a Sentry event per detection.
+				// Because the helper is driven by sync.Map it is
+				// hot-reload safe: species added or edited after
+				// startup get validated on their first detection
+				// without touching the Processor initialization path.
+				if p.markCommandPathInvalidIfBroken(det.Result.Species.ScientificName, actionConfig.Command) {
 					continue
 				}
 				actions = append(actions, &ExecuteCommandAction{
