@@ -18,6 +18,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
+// fallbackPolicyAllValue is the string value for the "try every provider"
+// fallback policy. Mirrors the unexported fallbackPolicyAll constant in the
+// production package; declared here so test files can reference it without
+// repeating the literal.
+const fallbackPolicyAllValue = "all"
+
 // countingStore wraps mockStore and records how many times GetImageCache is
 // called for each provider name. This lets tests assert that the exhausted
 // short-circuit prevents repeated DB reads on the fallback chain.
@@ -56,6 +62,29 @@ func (p *countingNotFoundProvider) Calls() int64 {
 	return p.callCount.Load()
 }
 
+// countingTransientFailureProvider returns a non-ErrImageNotFound error on
+// every fetch (simulating a network outage, DB error, or provider init
+// failure) and records how many times Fetch was invoked. Critically, the
+// returned error must NOT satisfy errors.Is(err, ErrImageNotFound).
+type countingTransientFailureProvider struct {
+	callCount atomic.Int64
+}
+
+func (p *countingTransientFailureProvider) Fetch(_ string) (imageprovider.BirdImage, error) {
+	p.callCount.Add(1)
+	// A plain sentinel error that is unrelated to ErrImageNotFound. This
+	// is exactly the kind of failure that historically poisoned the
+	// exhausted-species cache.
+	return imageprovider.BirdImage{}, errors.Newf("simulated transient network failure").
+		Component("imageprovider").
+		Category(errors.CategoryNetwork).
+		Build()
+}
+
+func (p *countingTransientFailureProvider) Calls() int64 {
+	return p.callCount.Load()
+}
+
 // setupExhaustedCacheTest constructs a primary (avicommons) + fallback
 // (wikimedia) cache pair backed by a counting store. Both providers are
 // countingNotFoundProvider so every fetch yields ErrImageNotFound — the
@@ -63,9 +92,18 @@ func (p *countingNotFoundProvider) Calls() int64 {
 func setupExhaustedCacheTest(t *testing.T) (primary *imageprovider.BirdImageCache, primaryProv, fallbackProv *countingNotFoundProvider, trackedStore *countingStore) {
 	t.Helper()
 
+	// Capture and restore the global settings instance so tests in this
+	// package do not bleed into each other. conf.SetTestSettings replaces a
+	// process-wide singleton, so an unrestored mutation can flip the
+	// fallback policy for any later test that calls conf.Setting().
+	previousSettings := conf.GetSettings()
+	t.Cleanup(func() {
+		conf.SetTestSettings(previousSettings)
+	})
+
 	settings := conf.GetTestSettings()
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
-	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "all"
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = fallbackPolicyAllValue
 	conf.SetTestSettings(settings)
 
 	trackedStore = newCountingStore()
@@ -86,6 +124,85 @@ func setupExhaustedCacheTest(t *testing.T) (primary *imageprovider.BirdImageCach
 	fallbackCache.SetRegistry(registry)
 
 	return primary, primaryProv, fallbackProv, trackedStore
+}
+
+// setupTransientFallbackTest constructs a primary cache that returns
+// ErrImageNotFound (a legitimate "not found" condition that triggers the
+// fallback chain) and a fallback cache whose provider returns a transient
+// non-not-found error on every fetch. This is the exact scenario CodeRabbit
+// flagged: a real outage on the fallback must NOT poison the
+// exhausted-species cache for the TTL window.
+func setupTransientFallbackTest(t *testing.T) (
+	primary *imageprovider.BirdImageCache,
+	primaryProv *countingNotFoundProvider,
+	fallbackProv *countingTransientFailureProvider,
+) {
+	t.Helper()
+
+	previousSettings := conf.GetSettings()
+	t.Cleanup(func() {
+		conf.SetTestSettings(previousSettings)
+	})
+
+	settings := conf.GetTestSettings()
+	settings.Realtime.Dashboard.Thumbnails.ImageProvider = providerAvicommons
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = fallbackPolicyAllValue
+	conf.SetTestSettings(settings)
+
+	store := newMockStore()
+	primaryProv = &countingNotFoundProvider{}
+	fallbackProv = &countingTransientFailureProvider{}
+
+	primary = imageprovider.InitCache(providerAvicommons, primaryProv, nil, store)
+	t.Cleanup(func() { assert.NoError(t, primary.Close()) })
+
+	fallbackCache := imageprovider.InitCache(providerWikimedia, fallbackProv, nil, store)
+	t.Cleanup(func() { assert.NoError(t, fallbackCache.Close()) })
+
+	registry := imageprovider.NewImageProviderRegistry()
+	require.NoError(t, registry.Register(providerAvicommons, primary))
+	require.NoError(t, registry.Register(providerWikimedia, fallbackCache))
+
+	primary.SetRegistry(registry)
+	fallbackCache.SetRegistry(registry)
+
+	return primary, primaryProv, fallbackProv
+}
+
+// TestExhaustedSpeciesCache_DoesNotRecordOnTransientFailure verifies the
+// CORRECTNESS gate added in response to CodeRabbit feedback: when the primary
+// returns ErrImageNotFound but a fallback fails with a non-not-found error
+// (network error, DB error, provider init failure), the species must NOT be
+// marked as exhausted. The next Get() must retry the fallback chain so the
+// transient failure self-heals instead of being masked for the TTL window.
+//
+// Indirect observation strategy: after the first call, call Get() a second
+// time. If the species had been incorrectly marked exhausted, the second
+// call would short-circuit and the fallback provider's call count would NOT
+// increase. With the fix in place, the fallback IS retried.
+func TestExhaustedSpeciesCache_DoesNotRecordOnTransientFailure(t *testing.T) {
+	const species = "Turdus merula"
+
+	primaryCache, primaryProvider, fallbackProvider := setupTransientFallbackTest(t)
+
+	// First call: primary returns not-found, fallback returns a transient
+	// network error. The first Get must surface an error.
+	_, err := primaryCache.Get(species)
+	require.Error(t, err, "first Get should return an error")
+
+	primaryAfterFirst := primaryProvider.Calls()
+	fallbackAfterFirst := fallbackProvider.Calls()
+	require.Equal(t, int64(1), primaryAfterFirst, "primary should be called once")
+	require.Equal(t, int64(1), fallbackAfterFirst, "fallback should be called once")
+
+	// Second call: because the fallback failure was transient (not
+	// ErrImageNotFound), the exhausted-species cache must NOT have been
+	// poisoned. The fallback chain must run again.
+	_, err = primaryCache.Get(species)
+	require.Error(t, err, "second Get should still return an error")
+
+	assert.Equal(t, int64(2), fallbackProvider.Calls(),
+		"fallback provider must be retried after a transient failure (not silently masked)")
 }
 
 // TestExhaustedSpeciesCache_RecordsAfterFallbackFails verifies that after the

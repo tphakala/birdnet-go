@@ -1192,7 +1192,13 @@ func (c *BirdImageCache) Get(scientificName string) (BirdImage, error) {
 		// the last time the chain ran to completion. Metrics are deliberately
 		// unchanged here to mirror the pre-fix behavior for the primary
 		// negative-cache path (which also did not emit a hit/miss metric).
-		if c.isSpeciesExhausted(scientificName) {
+		//
+		// IMPORTANT: only short-circuit when the primary itself returned
+		// ErrImageNotFound. Transient failures (network errors, DB errors,
+		// provider initialization errors) must NOT be silently converted
+		// into a 15-minute "not found" response — those should still try
+		// the fallback chain so a working provider can serve the request.
+		if errors.Is(err, ErrImageNotFound) && c.isSpeciesExhausted(scientificName) {
 			log.Debug("Species already exhausted by all providers, skipping fallback chain")
 			return c.synthesizeExhaustedResponse(scientificName)
 		}
@@ -1567,6 +1573,16 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 	var foundImage BirdImage
 	found := false
 
+	// Track whether every fallback failure we observed was specifically
+	// ErrImageNotFound. Only when ALL fallbacks (and the primary, by virtue
+	// of having been tried before this function is called) report
+	// "not found" do we record the species as exhausted. Transient failures
+	// (network errors, DB errors, provider init failures) must not poison
+	// the exhausted-species cache for the TTL window — they should be
+	// retried on the next Get().
+	allFallbacksNotFound := true
+	anyFallbackTried := false
+
 	// Create a local copy of triedProviders to avoid modifying the caller's map
 	localTriedProviders := make(map[string]bool, len(triedProviders))
 	for provider := range triedProviders {
@@ -1581,11 +1597,16 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 
 		log.Debug("Attempting fallback fetch from provider", logger.String("provider", name))
 		localTriedProviders[name] = true // Mark as tried
+		anyFallbackTried = true
 
 		// Instead of calling Get (which would recursively try fallbacks), use fetchAndStore directly
 		// to avoid the fallback chain and potential infinite loop
 		img, err := cache.fetchAndStore(scientificName)
 		if err != nil {
+			if !errors.Is(err, ErrImageNotFound) {
+				// Transient/real error — do NOT mark species exhausted.
+				allFallbacksNotFound = false
+			}
 			// Log error but continue trying other fallbacks
 			log.Warn("Fallback provider failed to get image",
 				logger.String("provider", name),
@@ -1617,7 +1638,20 @@ func (c *BirdImageCache) tryFallbackProviders(scientificName string, triedProvid
 		// The entry is keyed by species only and does not preserve which
 		// provider failed; by construction, every registered provider has
 		// been tried for this species in this invocation.
-		c.recordSpeciesExhausted(scientificName)
+		//
+		// CORRECTNESS GATE: only record exhaustion when at least one
+		// fallback was actually tried AND every failure was an
+		// ErrImageNotFound. The caller (Get -> tryFallbackOnGetError) only
+		// invokes this function after the primary returned
+		// ErrImageNotFound, so by construction every observed error in
+		// this run is "not found" when allFallbacksNotFound is true.
+		// Without this gate, a transient outage on a fallback (network
+		// timeout, DB error, provider init failure) would mask the
+		// species for the full TTL window, hiding real issues and
+		// suppressing legitimate retries.
+		if anyFallbackTried && allFallbacksNotFound {
+			c.recordSpeciesExhausted(scientificName)
+		}
 	}
 	return foundImage, found
 }
