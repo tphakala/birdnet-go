@@ -168,21 +168,15 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
-	// Check global audio equalizer settings — hot-swap filter chains.
-	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
-		c.Debug("Global audio equalizer settings changed, updating filter chains")
+	// Check audio equalizer settings (global or per-source) — hot-swap filter chains.
+	globalEQChanged := equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer)
+	perSourceEQChanged := perSourceEqualizerChanged(oldSettings, currentSettings)
+	if globalEQChanged || perSourceEQChanged {
+		c.Debug("Audio equalizer settings changed, updating filter chains")
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}
 		_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
-	}
-
-	// Check per-source equalizer settings — hot-swap filter chains for changed sources.
-	if perSourceEqualizerChanged(oldSettings, currentSettings) {
-		c.Debug("Per-source equalizer settings changed, updating filter chains")
-		if err := c.handleEqualizerChange(currentSettings); err != nil {
-			c.Debug("Failed to update per-source EQ filter chains: %v", err)
-		}
 	}
 
 	return reconfigActions, nil

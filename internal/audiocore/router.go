@@ -247,6 +247,12 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 // UpdateFilterChain atomically replaces the EQ filter chain for every route
 // on the given source. Pass nil to disable filtering. The drainer goroutine
 // picks up the new chain on the next frame — no route rebuild is needed.
+//
+// NOTE: the same chain is shared across all routes for a source. This is
+// correct because all current consumers operate at conf.SampleRate (48 kHz),
+// so no per-route resampling occurs. If routes with different output rates
+// are added in the future, this should accept a builder func(sampleRate int)
+// to construct per-route chains with correct coefficients.
 func (r *AudioRouter) UpdateFilterChain(sourceID string, chain *equalizer.FilterChain) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

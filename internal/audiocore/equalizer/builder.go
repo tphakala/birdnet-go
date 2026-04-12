@@ -54,7 +54,8 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 
 // BuildFilterChainForSource resolves the effective EQ settings for a source
 // (per-source override or global default) and builds a FilterChain.
-// Returns nil when EQ is disabled, has no filters, or sourceCfg is nil.
+// Returns nil when EQ is disabled or has no filters. Falls back to global
+// settings if sourceCfg is nil or has no per-source override.
 func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *FilterChain {
 	eqSettings := globalEQ
 	if sourceCfg != nil && sourceCfg.Equalizer != nil {
