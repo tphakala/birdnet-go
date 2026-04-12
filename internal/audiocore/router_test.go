@@ -362,6 +362,130 @@ func (c *panicOnWriteConsumer) Write(_ AudioFrame) error { //nolint:gocritic // 
 	panic("consumer exploded")
 }
 
+// TestRouter_DrainRouteAppliesGain verifies that per-route gain amplifies,
+// attenuates, or leaves audio data unchanged depending on the dB value.
+func TestRouter_DrainRouteAppliesGain(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		gainDB     float64
+		inputPCM   []int16
+		wantScaled bool // true if output should differ from input
+	}{
+		{
+			name:       "positive_gain_amplifies",
+			gainDB:     6.0,
+			inputPCM:   []int16{1000, -1000, 500, -500},
+			wantScaled: true,
+		},
+		{
+			name:       "negative_gain_attenuates",
+			gainDB:     -6.0,
+			inputPCM:   []int16{1000, -1000, 500, -500},
+			wantScaled: true,
+		},
+		{
+			name:       "zero_gain_no_change",
+			gainDB:     0.0,
+			inputPCM:   []int16{1000, -1000, 500, -500},
+			wantScaled: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			router := NewAudioRouter(GetLogger())
+			defer router.Close()
+
+			consumer := newMockConsumer("c1")
+			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB)
+			require.NoError(t, err)
+
+			// Build PCM byte data from int16 samples.
+			inputBytes := make([]byte, len(tt.inputPCM)*2)
+			for i, s := range tt.inputPCM {
+				inputBytes[i*2] = byte(s)
+				inputBytes[i*2+1] = byte(s >> 8)
+			}
+
+			router.Dispatch(AudioFrame{
+				SourceID:   "src-1",
+				SourceName: "Test",
+				Data:       inputBytes,
+				SampleRate: 48000,
+				BitDepth:   16,
+				Channels:   1,
+			})
+
+			var received AudioFrame
+			select {
+			case received = <-consumer.frames:
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out waiting for frame")
+			}
+
+			if tt.wantScaled {
+				assert.NotEqual(t, inputBytes, received.Data,
+					"gain %.1f dB should change the audio data", tt.gainDB)
+			} else {
+				assert.Equal(t, inputBytes, received.Data,
+					"0 dB gain should leave audio data unchanged")
+			}
+		})
+	}
+}
+
+// TestRouter_GainClipping verifies that high gain correctly clips signals
+// to the int16 range rather than producing corrupted output.
+func TestRouter_GainClipping(t *testing.T) {
+	t.Parallel()
+
+	router := NewAudioRouter(GetLogger())
+	defer router.Close()
+
+	consumer := newMockConsumer("c1")
+	// +40 dB is 100x linear — will clip a signal near max.
+	err := router.AddRoute("src-1", consumer, 48000, 40.0)
+	require.NoError(t, err)
+
+	// Input: near-max signal (30000 out of 32767).
+	inputPCM := []int16{30000, -30000}
+	inputBytes := make([]byte, len(inputPCM)*2)
+	for i, s := range inputPCM {
+		inputBytes[i*2] = byte(s)
+		inputBytes[i*2+1] = byte(s >> 8)
+	}
+
+	router.Dispatch(AudioFrame{
+		SourceID:   "src-1",
+		SourceName: "Test",
+		Data:       inputBytes,
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	})
+
+	var received AudioFrame
+	select {
+	case received = <-consumer.frames:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for frame")
+	}
+
+	// Verify output is clipped to max int16 range, not corrupted.
+	require.Len(t, received.Data, 4)
+	sample0 := int16(received.Data[0]) | int16(received.Data[1])<<8
+	sample1 := int16(received.Data[2]) | int16(received.Data[3])<<8
+
+	// Float64ToBytesPCM16 clamps to [-1.0, 1.0] before conversion,
+	// so output should be at or near ±32767.
+	assert.InDelta(t, 32767, int(sample0), 1, "positive sample should clip to max")
+	assert.InDelta(t, -32767, int(sample1), 1, "negative sample should clip to min")
+}
+
 // TestRouter_AddRouteWithGain verifies that AddRoute correctly converts
 // a dB gain value to the corresponding linear multiplier and stores it
 // on the Route.

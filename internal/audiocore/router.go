@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -437,6 +438,14 @@ func (r *AudioRouter) drainRoute(route *Route) {
 					Timestamp:  frame.Timestamp,
 				}
 			}
+			// Apply per-route gain when not unity (0 dB).
+			if route.gainLinear != 1.0 {
+				gained, err := r.applyGain(frame, route)
+				if err != nil {
+					continue
+				}
+				frame = gained
+			}
 			if err := route.Consumer.Write(frame); err != nil {
 				errCount := route.errors.Add(1)
 				if errCount%errorLogInterval == 1 {
@@ -453,4 +462,33 @@ func (r *AudioRouter) drainRoute(route *Route) {
 			return
 		}
 	}
+}
+
+// applyGain scales the PCM data in frame by the route's linear gain multiplier.
+// It converts S16 PCM bytes to float64, scales via SIMD, and converts back with
+// clamping. Returns the modified frame or an error if the back-conversion fails.
+func (r *AudioRouter) applyGain(frame AudioFrame, route *Route) (AudioFrame, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+	floats := convert.BytesToFloat64PCM16(frame.Data)
+	convert.ScaleFloat64Slice(floats, route.gainLinear)
+	out := make([]byte, len(floats)*2)
+	if err := convert.Float64ToBytesPCM16(floats, out); err != nil {
+		errCount := route.errors.Add(1)
+		if errCount%errorLogInterval == 1 {
+			r.log.Warn("gain conversion error",
+				logger.String("source_id", route.SourceID),
+				logger.String("consumer_id", route.Consumer.ID()),
+				logger.Int64("total_errors", errCount),
+				logger.Error(err))
+		}
+		return AudioFrame{}, err
+	}
+	return AudioFrame{
+		SourceID:   frame.SourceID,
+		SourceName: frame.SourceName,
+		Data:       out,
+		SampleRate: frame.SampleRate,
+		BitDepth:   frame.BitDepth,
+		Channels:   frame.Channels,
+		Timestamp:  frame.Timestamp,
+	}, nil
 }
