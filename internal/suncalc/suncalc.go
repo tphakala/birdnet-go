@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/sj14/astral/pkg/astral"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
@@ -59,8 +58,11 @@ func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	start := time.Now()
 
-	// Format the date as a string key for the cache
-	dateKey := date.Format(time.DateOnly)
+	// Normalize date to observer timezone before generating cache key.
+	// This ensures requests for the same local date hit the same cache entry,
+	// even if the input time has a different timezone (e.g., UTC).
+	localDate := date.In(sc.location)
+	dateKey := localDate.Format(time.DateOnly)
 
 	// Acquire a read lock and check if the date is in the cache
 	sc.lock.RLock()
@@ -72,7 +74,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	sc.lock.RUnlock()
 
 	// If the date exists in the cache and matches the requested date, return the cached times
-	if exists && entry.date.Equal(date) {
+	if exists && entry.date.Format(time.DateOnly) == dateKey {
 		if sc.metrics != nil {
 			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
 			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
@@ -86,8 +88,8 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 		sc.metrics.RecordSunCalcCacheMiss("get_sun_events")
 	}
 
-	// If not in cache, calculate the sun event times
-	times, err := sc.calculateSunEventTimes(date)
+	// If not in cache, calculate the sun event times using the local date
+	times, err := sc.calculateSunEventTimes(localDate)
 	if err != nil {
 		if sc.metrics != nil {
 			sc.metrics.RecordSunCalcOperation("get_sun_events", "error")
@@ -98,7 +100,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 
 	// Acquire a write lock and update the cache with the new times
 	sc.lock.Lock()
-	sc.cache[dateKey] = cacheEntry{times: times, date: date}
+	sc.cache[dateKey] = cacheEntry{times: times, date: localDate}
 	sc.lock.Unlock()
 
 	// Record successful operation and update sun time gauges
@@ -123,7 +125,6 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	return times, nil
 }
 
-// calculateSunEventTimes calculates the sun event times for a given date
 func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error) {
 	// Calculate sunrise
 	sunrise, err := astral.Sunrise(sc.observer, date)
@@ -145,41 +146,18 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 			Build()
 	}
 
-	// Convert sunrise UTC to local time
-	localSunrise, err := conf.ConvertUTCToLocal(sunrise)
-	if err != nil {
-		return SunEventTimes{}, errors.New(err).
-			Component("suncalc").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "convert_sunrise_to_local").
-			Build()
-	}
-
-	// Convert sunset UTC to local time
-	localSunset, err := conf.ConvertUTCToLocal(sunset)
-	if err != nil {
-		return SunEventTimes{}, errors.New(err).
-			Component("suncalc").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "convert_sunset_to_local").
-			Build()
-	}
+	// Convert sunrise and sunset from UTC to observer's local timezone
+	localSunrise := sunrise.In(sc.location)
+	localSunset := sunset.In(sc.location)
 
 	// Try to calculate civil dawn, but fall back to sunrise if it fails
 	// (this handles polar day conditions like midsummer in high latitudes)
 	civilDawn, err := astral.Dawn(sc.observer, date, astral.DepressionCivil)
 	var localCivilDawn time.Time
 	if err != nil {
-		// Civil dawn calculation failed (likely due to polar day conditions)
-		// Fall back to using sunrise time
 		localCivilDawn = localSunrise
 	} else {
-		// Convert civil dawn UTC to local time
-		localCivilDawn, err = conf.ConvertUTCToLocal(civilDawn)
-		if err != nil {
-			// If conversion fails, fall back to sunrise
-			localCivilDawn = localSunrise
-		}
+		localCivilDawn = civilDawn.In(sc.location)
 	}
 
 	// Try to calculate civil dusk, but fall back to sunset if it fails
@@ -187,19 +165,11 @@ func (sc *SunCalc) calculateSunEventTimes(date time.Time) (SunEventTimes, error)
 	civilDusk, err := astral.Dusk(sc.observer, date, astral.DepressionCivil)
 	var localCivilDusk time.Time
 	if err != nil {
-		// Civil dusk calculation failed (likely due to polar day conditions)
-		// Fall back to using sunset time
 		localCivilDusk = localSunset
 	} else {
-		// Convert civil dusk UTC to local time
-		localCivilDusk, err = conf.ConvertUTCToLocal(civilDusk)
-		if err != nil {
-			// If conversion fails, fall back to sunset
-			localCivilDusk = localSunset
-		}
+		localCivilDusk = civilDusk.In(sc.location)
 	}
 
-	// Return the calculated sun event times
 	return SunEventTimes{
 		CivilDawn: localCivilDawn,
 		Sunrise:   localSunrise,
