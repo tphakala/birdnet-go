@@ -17,8 +17,7 @@ func TestBuildFilterChain_Disabled(t *testing.T) {
 			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	assert.Nil(t, chain, "disabled EQ should return nil chain")
 }
 
@@ -28,8 +27,7 @@ func TestBuildFilterChain_EmptyFilters(t *testing.T) {
 		Enabled: true,
 		Filters: []conf.EqualizerFilter{},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	assert.Nil(t, chain, "empty filter list should return nil chain")
 }
 
@@ -41,8 +39,7 @@ func TestBuildFilterChain_HighPass(t *testing.T) {
 			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -55,8 +52,7 @@ func TestBuildFilterChain_LowPass(t *testing.T) {
 			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 2},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -69,8 +65,7 @@ func TestBuildFilterChain_BandReject(t *testing.T) {
 			{Type: "BandReject", Frequency: 1000, Width: 100, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -84,8 +79,7 @@ func TestBuildFilterChain_MultipleFilters(t *testing.T) {
 			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 2, chain.Length())
 }
@@ -100,8 +94,7 @@ func TestBuildFilterChain_UnknownTypeSkipped(t *testing.T) {
 			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 2, chain.Length(), "unknown filter type should be skipped")
 }
@@ -114,8 +107,7 @@ func TestBuildFilterChain_ZeroPassesDefaultsToOne(t *testing.T) {
 			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 0},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -128,8 +120,7 @@ func TestBuildFilterChain_BandPass(t *testing.T) {
 			{Type: "BandPass", Frequency: 2000, Width: 500, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -142,8 +133,7 @@ func TestBuildFilterChain_LowShelf(t *testing.T) {
 			{Type: "LowShelf", Frequency: 200, Q: 0.707, Gain: 6.0, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -156,8 +146,7 @@ func TestBuildFilterChain_HighShelf(t *testing.T) {
 			{Type: "HighShelf", Frequency: 8000, Q: 0.707, Gain: -3.0, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
@@ -170,8 +159,7 @@ func TestBuildFilterChain_Peaking(t *testing.T) {
 			{Type: "Peaking", Frequency: 4000, Width: 1000, Gain: 5.0, Passes: 1},
 		},
 	}
-	chain, err := equalizer.BuildFilterChain(settings, 48000)
-	require.NoError(t, err)
+	chain := equalizer.BuildFilterChain(settings, 48000)
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
