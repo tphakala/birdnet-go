@@ -228,6 +228,32 @@ func TestManager_AnalysisBuffers_ReturnsAllForSource(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// HasAnalysis tests
+// ---------------------------------------------------------------------------
+
+// TestManager_HasAnalysis verifies that HasAnalysis correctly reports whether
+// an analysis buffer has been allocated for a given (sourceID, modelID) pair.
+func TestManager_HasAnalysis(t *testing.T) {
+	t.Parallel()
+
+	m := buffer.NewManager(newTestLogger())
+
+	// Before allocation — should return false.
+	assert.False(t, m.HasAnalysis("source-1", "birdnet"))
+
+	// Allocate and check — should return true.
+	err := m.AllocateAnalysis("source-1", "birdnet", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
+	require.NoError(t, err)
+	assert.True(t, m.HasAnalysis("source-1", "birdnet"))
+
+	// Different model — should return false.
+	assert.False(t, m.HasAnalysis("source-1", "perch_v2"))
+
+	// Different source — should return false.
+	assert.False(t, m.HasAnalysis("source-2", "birdnet"))
+}
+
+// ---------------------------------------------------------------------------
 // Per-size Float32Pool tests
 // ---------------------------------------------------------------------------
 

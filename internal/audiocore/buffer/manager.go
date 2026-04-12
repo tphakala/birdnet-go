@@ -75,6 +75,15 @@ func (m *Manager) AllocateAnalysis(sourceID, modelID string, capacity, overlapSi
 	return nil
 }
 
+// HasAnalysis reports whether an analysis buffer has been allocated for
+// the given source and model pair. Safe for concurrent use.
+func (m *Manager) HasAnalysis(sourceID, modelID string) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	_, exists := m.analysisBuffers[bufferKey{sourceID: sourceID, modelID: modelID}]
+	return exists
+}
+
 // AllocateCapture creates a CaptureBuffer for the given sourceID and stores it
 // in the Manager. Returns an error if a buffer for sourceID already exists or
 // if NewCaptureBuffer fails.

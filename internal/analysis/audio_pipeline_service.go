@@ -526,6 +526,12 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			if modelInfos[i].ID == primaryInfo.ID {
 				continue
 			}
+			// If the analysis buffer already exists (e.g., gain-only reconfigure),
+			// skip allocation and mark the model as usable.
+			if bufMgr.HasAnalysis(sid, modelInfos[i].ID) {
+				allocatedModels[modelInfos[i].ID] = true
+				continue
+			}
 			spec := modelInfos[i].Spec
 			clipBytes := spec.SampleRate * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
 			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
