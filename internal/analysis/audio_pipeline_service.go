@@ -428,6 +428,12 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		slInterval = 10 // default 10-second aggregation window
 	}
 	for _, sid := range sourceIDs {
+		// Look up per-source gain from the registry.
+		gainDB := 0.0
+		if src, found := p.engine.Registry().Get(sid); found {
+			gainDB = src.Gain
+		}
+
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
@@ -444,7 +450,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, 0.0); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, gainDB); routeErr != nil {
 			log.Warn("failed to add sound level route",
 				logger.String("source_id", sid),
 				logger.Error(routeErr),
@@ -497,6 +503,12 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	bufMgr := p.engine.BufferManager()
 
 	for _, sid := range sourceIDs {
+		// Look up per-source gain from the registry.
+		gainDB := 0.0
+		if src, found := p.engine.Registry().Get(sid); found {
+			gainDB = src.Gain
+		}
+
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
 		modelInfos := resolveModelTargets(sourceModelMap[sid], allModelInfos)
@@ -555,13 +567,13 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, 0.0); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, gainDB); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, 0.0); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, gainDB); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
