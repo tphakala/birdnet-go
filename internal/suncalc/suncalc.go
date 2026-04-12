@@ -73,8 +73,8 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	}
 	sc.lock.RUnlock()
 
-	// If the date exists in the cache and matches the requested date, return the cached times
-	if exists && entry.date.Format(time.DateOnly) == dateKey {
+	// If the date exists in the cache, return the cached times
+	if exists {
 		if sc.metrics != nil {
 			sc.metrics.RecordSunCalcCacheHit("get_sun_events")
 			sc.metrics.RecordSunCalcOperation("get_sun_events", "success")
@@ -110,8 +110,8 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 
 		// Update sun time gauges for current day
 		// Compare dates in the same location to handle time zone correctly
-		now := time.Now()
-		if date.Year() == now.Year() && date.YearDay() == now.YearDay() {
+		now := time.Now().In(sc.location)
+		if localDate.Year() == now.Year() && localDate.YearDay() == now.YearDay() {
 			sc.metrics.UpdateSunTimes(
 				float64(times.Sunrise.Unix()),
 				float64(times.Sunset.Unix()),
