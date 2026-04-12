@@ -115,6 +115,17 @@ type AudioSettings struct {
 	QuietHours QuietHoursConfig  `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"` // quiet hours (global default, legacy)
 }
 
+// FindSourceByID returns a pointer to the AudioSourceConfig matching the given
+// source ID by Name or Device. Returns nil if no match is found.
+func (a *AudioSettings) FindSourceByID(sourceID string) *AudioSourceConfig {
+	for i := range a.Sources {
+		if a.Sources[i].Name == sourceID || a.Sources[i].Device == sourceID {
+			return &a.Sources[i]
+		}
+	}
+	return nil
+}
+
 // NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
 // using ffprobe to get audio file length for spectrograms (FFmpeg 5.x bug).
 // FFmpeg 7.x and later have this issue fixed.

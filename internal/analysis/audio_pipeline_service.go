@@ -428,20 +428,14 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	if slInterval <= 0 {
 		slInterval = 10 // default 10-second aggregation window
 	}
+	audioSettings := &settings.Realtime.Audio
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
 		// Resolve per-source EQ filter chain.
-		settings := conf.Setting()
-		var eqChain *equalizer.FilterChain
-		for i := range settings.Realtime.Audio.Sources {
-			src := &settings.Realtime.Audio.Sources[i]
-			if src.Name == sid || src.Device == sid {
-				eqChain = buildFilterChainForSource(src, settings.Realtime.Audio.Equalizer, conf.SampleRate)
-				break
-			}
-		}
+		srcCfg := audioSettings.FindSourceByID(sid)
+		eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
 
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
 		if slErr != nil {
@@ -510,21 +504,16 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	primaryTargets := []classifier.ModelInfo{*primaryInfo}
 
 	bufMgr := p.engine.BufferManager()
+	currentSettings := conf.Setting()
+	audioSettings := &currentSettings.Realtime.Audio
 
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
 		// Resolve per-source EQ filter chain.
-		settings := conf.Setting()
-		var eqChain *equalizer.FilterChain
-		for i := range settings.Realtime.Audio.Sources {
-			src := &settings.Realtime.Audio.Sources[i]
-			if src.Name == sid || src.Device == sid {
-				eqChain = buildFilterChainForSource(src, settings.Realtime.Audio.Equalizer, conf.SampleRate)
-				break
-			}
-		}
+		srcCfg := audioSettings.FindSourceByID(sid)
+		eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -618,29 +607,6 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			}
 		})
 	}
-}
-
-// resolveEqualizerSettings returns the effective EQ settings for a source.
-// Per-source settings take priority; if nil, the global default is used.
-func resolveEqualizerSettings(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings) conf.EqualizerSettings {
-	if sourceCfg.Equalizer != nil {
-		return *sourceCfg.Equalizer
-	}
-	return globalEQ
-}
-
-// buildFilterChainForSource resolves the effective EQ and builds a FilterChain.
-// Returns nil when EQ is disabled or has no filters.
-func buildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *equalizer.FilterChain {
-	eqSettings := resolveEqualizerSettings(sourceCfg, globalEQ)
-	chain, err := equalizer.BuildFilterChain(eqSettings, sampleRate)
-	if err != nil {
-		GetLogger().Warn("failed to build EQ filter chain",
-			logger.String("source", sourceCfg.Name),
-			logger.Error(err))
-		return nil
-	}
-	return chain
 }
 
 // reconfigureChangedSources diffs the currently running sources against the

@@ -60,29 +60,11 @@ func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error
 	}
 
 	router := c.engine.Router()
-	globalEQ := currentSettings.Realtime.Audio.Equalizer
+	audioSettings := &currentSettings.Realtime.Audio
 
 	for _, src := range c.engine.Registry().List() {
-		// Find the matching AudioSourceConfig to check for per-source EQ.
-		var sourceCfg *conf.AudioSourceConfig
-		for i := range currentSettings.Realtime.Audio.Sources {
-			cfg := &currentSettings.Realtime.Audio.Sources[i]
-			if cfg.Name == src.ID || cfg.Device == src.ID {
-				sourceCfg = cfg
-				break
-			}
-		}
-
-		eqSettings := globalEQ
-		if sourceCfg != nil && sourceCfg.Equalizer != nil {
-			eqSettings = *sourceCfg.Equalizer
-		}
-
-		chain, err := equalizer.BuildFilterChain(eqSettings, src.SampleRate)
-		if err != nil {
-			c.Debug("failed to build EQ chain for source %s: %v", src.ID, err)
-			continue
-		}
+		srcCfg := audioSettings.FindSourceByID(src.ID)
+		chain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, src.SampleRate)
 		router.UpdateFilterChain(src.ID, chain)
 	}
 

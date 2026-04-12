@@ -1540,19 +1540,9 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	// Resolve EQ filter chain for this source so HLS listeners
 	// hear the same filtered audio as the analysis pipeline.
 	settings := conf.Setting()
-	var eqChain *equalizer.FilterChain
-	sources := settings.Realtime.Audio.Sources
-	for i := range sources {
-		src := &sources[i]
-		if src.Name == sourceID || src.Device == sourceID {
-			eqSettings := settings.Realtime.Audio.Equalizer
-			if src.Equalizer != nil {
-				eqSettings = *src.Equalizer
-			}
-			eqChain, _ = equalizer.BuildFilterChain(eqSettings, sampleRate)
-			break
-		}
-	}
+	audioSettings := &settings.Realtime.Audio
+	srcCfg := audioSettings.FindSourceByID(sourceID)
+	eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, sampleRate)
 
 	// Add route on the AudioRouter
 	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {

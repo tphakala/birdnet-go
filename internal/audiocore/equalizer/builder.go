@@ -52,6 +52,29 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) (*FilterC
 	return chain, nil
 }
 
+// BuildFilterChainForSource resolves the effective EQ settings for a source
+// (per-source override or global default) and builds a FilterChain.
+// Returns nil when EQ is disabled, has no filters, or sourceCfg is nil.
+func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *FilterChain {
+	eqSettings := globalEQ
+	if sourceCfg != nil && sourceCfg.Equalizer != nil {
+		eqSettings = *sourceCfg.Equalizer
+	}
+	chain, err := BuildFilterChain(eqSettings, sampleRate)
+	if err != nil {
+		log := logger.Global().Module("audio").Module("equalizer")
+		name := "unknown"
+		if sourceCfg != nil {
+			name = sourceCfg.Name
+		}
+		log.Warn("failed to build EQ filter chain",
+			logger.String("source", name),
+			logger.Error(err))
+		return nil
+	}
+	return chain
+}
+
 // buildFilter creates a single Filter from a config entry.
 // Returns (nil, nil) for unknown filter types.
 func buildFilter(f *conf.EqualizerFilter, sampleRate float64, passes int) (*Filter, error) {
