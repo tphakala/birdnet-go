@@ -244,21 +244,21 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 	}
 }
 
+// FilterChainBuilder creates a FilterChain for a given sample rate.
+// Used by UpdateFilterChain to build per-route chains with correct
+// coefficients and independent biquad state (avoiding data races).
+type FilterChainBuilder func(sampleRate int) *equalizer.FilterChain
+
 // UpdateFilterChain atomically replaces the EQ filter chain for every route
-// on the given source. Pass nil to disable filtering. The drainer goroutine
-// picks up the new chain on the next frame — no route rebuild is needed.
-//
-// NOTE: the same chain is shared across all routes for a source. This is
-// correct because all current consumers operate at conf.SampleRate (48 kHz),
-// so no per-route resampling occurs. If routes with different output rates
-// are added in the future, this should accept a builder func(sampleRate int)
-// to construct per-route chains with correct coefficients.
-func (r *AudioRouter) UpdateFilterChain(sourceID string, chain *equalizer.FilterChain) {
+// on the given source. The builder is called once per route with the route's
+// consumer sample rate, producing a fresh chain with independent biquad state.
+// The drainer goroutine picks up the new chain on the next frame.
+func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilder) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, rt := range r.routes[sourceID] {
-		rt.filterChain.Store(chain)
+		rt.filterChain.Store(build(rt.Consumer.SampleRate()))
 	}
 }
 

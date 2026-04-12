@@ -536,13 +536,14 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	assert.Nil(t, routes[0].filterChain.Load(), "initial chain should be nil")
 	router.mu.RUnlock()
 
-	// Build a chain and update.
-	chain := equalizer.NewFilterChain()
-	hp, err := equalizer.NewHighPass(48000, 100, 0.707, 1)
-	require.NoError(t, err)
-	require.NoError(t, chain.AddFilter(hp))
-
-	router.UpdateFilterChain("src-1", chain)
+	// Build a chain via builder and update.
+	router.UpdateFilterChain("src-1", func(sampleRate int) *equalizer.FilterChain {
+		chain := equalizer.NewFilterChain()
+		hp, hpErr := equalizer.NewHighPass(float64(sampleRate), 100, 0.707, 1)
+		require.NoError(t, hpErr)
+		require.NoError(t, chain.AddFilter(hp))
+		return chain
+	})
 
 	router.mu.RLock()
 	routes = router.routes["src-1"]
@@ -552,7 +553,9 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	router.mu.RUnlock()
 
 	// Update to nil (disable EQ).
-	router.UpdateFilterChain("src-1", nil)
+	router.UpdateFilterChain("src-1", func(_ int) *equalizer.FilterChain {
+		return nil
+	})
 
 	router.mu.RLock()
 	routes = router.routes["src-1"]

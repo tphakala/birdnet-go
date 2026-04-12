@@ -64,8 +64,9 @@ func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error
 
 	for _, src := range c.engine.Registry().List() {
 		srcCfg := audioSettings.FindSourceByID(src.ID)
-		chain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, src.SampleRate)
-		router.UpdateFilterChain(src.ID, chain)
+		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
+			return equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, sampleRate)
+		})
 	}
 
 	c.Debug("EQ filter chains updated for all sources")
