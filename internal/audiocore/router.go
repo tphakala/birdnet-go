@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -55,6 +56,11 @@ type Route struct {
 	// resampler converts source-rate PCM to the consumer's expected rate.
 	// Nil when no rate conversion is required.
 	resampler *resample.Resampler
+
+	// filterChain holds the current EQ filter chain for this route.
+	// Accessed atomically so it can be swapped without rebuilding the route.
+	// Nil means no EQ filtering is applied.
+	filterChain atomic.Pointer[equalizer.FilterChain]
 
 	// inbox is the bounded channel between Dispatch and the drainer goroutine.
 	inbox chan AudioFrame
@@ -127,7 +133,7 @@ func NewAudioRouter(log logger.Logger) *AudioRouter {
 // the consumer ID for logging, metrics, and route lookup. Duplicate IDs on
 // different sources will not cause an error but may produce confusing log
 // output and make RemoveRoute ambiguous.
-func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64) error {
+func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64, filterChain *equalizer.FilterChain) error {
 	// Reject routes after the router has been closed.
 	if r.ctx.Err() != nil {
 		return fmt.Errorf("router is closed: %w", r.ctx.Err())
@@ -161,6 +167,8 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),
 	}
+
+	route.filterChain.Store(filterChain)
 
 	// Create a resampler when the source and consumer rates differ.
 	if sourceSampleRate != consumer.SampleRate() {
@@ -233,6 +241,18 @@ func (r *AudioRouter) RemoveAllRoutes(sourceID string) {
 		r.log.Info("all routes removed",
 			logger.String("source_id", sourceID),
 			logger.Int("count", len(routes)))
+	}
+}
+
+// UpdateFilterChain atomically replaces the EQ filter chain for every route
+// on the given source. Pass nil to disable filtering. The drainer goroutine
+// picks up the new chain on the next frame — no route rebuild is needed.
+func (r *AudioRouter) UpdateFilterChain(sourceID string, chain *equalizer.FilterChain) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, rt := range r.routes[sourceID] {
+		rt.filterChain.Store(chain)
 	}
 }
 

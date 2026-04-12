@@ -1537,7 +1537,7 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	gainDB, _ := c.engine.Registry().GetGain(sourceID)
 
 	// Add route on the AudioRouter
-	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB); routeErr != nil {
+	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, nil); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 

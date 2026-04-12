@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 )
 
 // mockConsumer implements AudioConsumer for testing.
@@ -87,7 +88,7 @@ func TestRouter_AddAndRemoveRoute(t *testing.T) {
 
 	consumer := newMockConsumer("consumer-1")
 
-	err := router.AddRoute("src-1", consumer, 48000, 0.0)
+	err := router.AddRoute("src-1", consumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 	assert.True(t, router.HasConsumers("src-1"))
 
@@ -104,7 +105,7 @@ func TestRouter_DispatchSingleConsumer(t *testing.T) {
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("consumer-1")
-	err := router.AddRoute("src-1", consumer, 48000, 0.0)
+	err := router.AddRoute("src-1", consumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 
 	frame := testFrame("src-1")
@@ -129,8 +130,8 @@ func TestRouter_DispatchFanOut(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0, nil))
 
 	frame := testFrame("src-1")
 	router.Dispatch(frame)
@@ -166,7 +167,7 @@ func TestRouter_DropOnFullInbox(t *testing.T) {
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newBlockingConsumer("slow-consumer")
-	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0, nil))
 
 	// Fill the inbox buffer (capacity 64) plus extra to guarantee drops.
 	const totalFrames = 128
@@ -190,8 +191,8 @@ func TestRouter_RemoveAllRoutes(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0, nil))
 	assert.True(t, router.HasConsumers("src-1"))
 
 	router.RemoveAllRoutes("src-1")
@@ -210,9 +211,9 @@ func TestRouter_DuplicateRouteError(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-1") // same ID
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
 
-	err := router.AddRoute("src-1", c2, 48000, 0.0)
+	err := router.AddRoute("src-1", c2, 48000, 0.0, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRouteExists)
 }
@@ -231,7 +232,7 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 	consumer.sampleRate = 32000
 
 	// Add route with source at 48kHz.
-	err := router.AddRoute("src-resample", consumer, 48000, 0.0)
+	err := router.AddRoute("src-resample", consumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 
 	// Build a 48kHz frame with 4800 samples (100 ms of 16-bit PCM, 9600 bytes).
@@ -285,8 +286,8 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
-	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0, nil))
 
 	const goroutines = 8
 	const framesPerGoroutine = 100
@@ -326,7 +327,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 		sampleRate: 48000,
 	}
 
-	err := router.AddRoute("src1", panicConsumer, 48000, 0.0)
+	err := router.AddRoute("src1", panicConsumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 
 	// Dispatch a frame — the consumer will panic on Write.
@@ -401,7 +402,7 @@ func TestRouter_DrainRouteAppliesGain(t *testing.T) {
 			defer router.Close()
 
 			consumer := newMockConsumer("c1")
-			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB)
+			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB, nil)
 			require.NoError(t, err)
 
 			// Build PCM byte data from int16 samples.
@@ -448,7 +449,7 @@ func TestRouter_GainClipping(t *testing.T) {
 
 	consumer := newMockConsumer("c1")
 	// +40 dB is 100x linear — will clip a signal near max.
-	err := router.AddRoute("src-1", consumer, 48000, 40.0)
+	err := router.AddRoute("src-1", consumer, 48000, 40.0, nil)
 	require.NoError(t, err)
 
 	// Input: near-max signal (30000 out of 32767).
@@ -508,7 +509,7 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 			router := NewAudioRouter(GetLogger())
 			t.Cleanup(func() { router.Close() })
 			consumer := newMockConsumer("c1")
-			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB)
+			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB, nil)
 			require.NoError(t, err)
 			router.mu.RLock()
 			routes := router.routes["src-1"]
@@ -517,4 +518,43 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 			router.mu.RUnlock()
 		})
 	}
+}
+
+func TestRouter_UpdateFilterChain(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger())
+	t.Cleanup(func() { router.Close() })
+
+	consumer := newMockConsumer("c1")
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0, nil))
+
+	// Initially nil.
+	router.mu.RLock()
+	routes := router.routes["src-1"]
+	require.Len(t, routes, 1)
+	assert.Nil(t, routes[0].filterChain.Load(), "initial chain should be nil")
+	router.mu.RUnlock()
+
+	// Build a chain and update.
+	chain := equalizer.NewFilterChain()
+	hp, err := equalizer.NewHighPass(48000, 100, 0.707, 1)
+	require.NoError(t, err)
+	require.NoError(t, chain.AddFilter(hp))
+
+	router.UpdateFilterChain("src-1", chain)
+
+	router.mu.RLock()
+	routes = router.routes["src-1"]
+	loaded := routes[0].filterChain.Load()
+	assert.NotNil(t, loaded, "chain should be set after update")
+	assert.Equal(t, 1, loaded.Length())
+	router.mu.RUnlock()
+
+	// Update to nil (disable EQ).
+	router.UpdateFilterChain("src-1", nil)
+
+	router.mu.RLock()
+	routes = router.routes["src-1"]
+	assert.Nil(t, routes[0].filterChain.Load(), "chain should be nil after disable")
+	router.mu.RUnlock()
 }
