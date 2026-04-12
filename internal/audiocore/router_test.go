@@ -1,6 +1,7 @@
 package audiocore
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -557,4 +558,120 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	routes = router.routes["src-1"]
 	assert.Nil(t, routes[0].filterChain.Load(), "chain should be nil after disable")
 	router.mu.RUnlock()
+}
+
+// TestRouter_ApplyProcessing_EQOnly verifies that a frame is filtered by the
+// EQ chain when gain is unity (1.0) and a filter chain is set.
+func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger())
+	t.Cleanup(func() { router.Close() })
+
+	consumer := newMockConsumer("c1")
+
+	// Build a HighPass at 8000 Hz — should strongly attenuate a 100 Hz tone.
+	chain := equalizer.NewFilterChain()
+	hp, err := equalizer.NewHighPass(48000, 8000, 0.707, 2)
+	require.NoError(t, err)
+	require.NoError(t, chain.AddFilter(hp))
+
+	require.NoError(t, router.AddRoute("src-eq", consumer, 48000, 0.0, chain))
+
+	// Generate a 100 Hz sine wave as 16-bit PCM (480 samples = 10ms at 48kHz).
+	const numSamples = 480
+	input := make([]byte, numSamples*2)
+	for i := range numSamples {
+		// 100 Hz sine at ~50% amplitude.
+		val := int16(16000 * math.Sin(2*math.Pi*100*float64(i)/48000))
+		input[i*2] = byte(val)
+		input[i*2+1] = byte(val >> 8)
+	}
+
+	frame := AudioFrame{
+		SourceID:   "src-eq",
+		SourceName: "test",
+		Data:       input,
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+	router.Dispatch(frame)
+
+	// Wait for the consumer to receive the filtered frame.
+	var received AudioFrame
+	select {
+	case received = <-consumer.frames:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for filtered frame")
+	}
+
+	// The 100 Hz signal should be heavily attenuated by the 8 kHz highpass.
+	inputRMS := rmsOfPCM16(input)
+	outputRMS := rmsOfPCM16(received.Data)
+	assert.Less(t, outputRMS, inputRMS*0.1,
+		"8 kHz highpass should attenuate 100 Hz signal by >90%%")
+}
+
+// TestRouter_ApplyProcessing_EQAndGain verifies that EQ and gain are both
+// applied in a single conversion pass.
+func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger())
+	t.Cleanup(func() { router.Close() })
+
+	consumer := newMockConsumer("c1")
+
+	// Use a simple LowPass that passes a 100 Hz signal, combined with +6 dB gain.
+	chain := equalizer.NewFilterChain()
+	lp, err := equalizer.NewLowPass(48000, 15000, 0.707, 1)
+	require.NoError(t, err)
+	require.NoError(t, chain.AddFilter(lp))
+
+	require.NoError(t, router.AddRoute("src-both", consumer, 48000, 6.0, chain))
+
+	// 100 Hz sine, well below the 15kHz cutoff — should pass through LowPass.
+	const numSamples = 480
+	input := make([]byte, numSamples*2)
+	for i := range numSamples {
+		val := int16(8000 * math.Sin(2*math.Pi*100*float64(i)/48000))
+		input[i*2] = byte(val)
+		input[i*2+1] = byte(val >> 8)
+	}
+
+	frame := AudioFrame{
+		SourceID:   "src-both",
+		SourceName: "test",
+		Data:       input,
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+	router.Dispatch(frame)
+
+	var received AudioFrame
+	select {
+	case received = <-consumer.frames:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for processed frame")
+	}
+
+	// Signal passes through LowPass mostly unchanged, then +6 dB ≈ 2x amplitude.
+	inputRMS := rmsOfPCM16(input)
+	outputRMS := rmsOfPCM16(received.Data)
+	assert.InDelta(t, inputRMS*2.0, outputRMS, inputRMS*0.5,
+		"output should be ~2x input (6 dB gain) after passing through LowPass")
+}
+
+// rmsOfPCM16 computes the RMS of 16-bit little-endian PCM samples.
+func rmsOfPCM16(data []byte) float64 {
+	n := len(data) / 2
+	if n == 0 {
+		return 0
+	}
+	var sumSq float64
+	for i := range n {
+		sample := float64(int16(data[i*2]) | int16(data[i*2+1])<<8)
+		sumSq += sample * sample
+	}
+	return math.Sqrt(sumSq / float64(n))
 }

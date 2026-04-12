@@ -463,14 +463,15 @@ func (r *AudioRouter) drainRoute(route *Route) {
 					Timestamp:  frame.Timestamp,
 				}
 			}
-			// Apply per-route gain when not unity (0 dB).
-			// Gain application requires 16-bit PCM; skip for other formats.
-			if route.gainLinear != 1.0 && frame.BitDepth == 16 {
-				gained, err := r.applyGain(frame, route)
+			// Apply per-route EQ filtering and/or gain adjustment.
+			// Both require 16-bit PCM; skip for other formats.
+			chain := route.filterChain.Load()
+			if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
+				processed, err := r.applyProcessing(frame, route, chain)
 				if err != nil {
 					continue
 				}
-				frame = gained
+				frame = processed
 			}
 			if err := route.Consumer.Write(frame); err != nil {
 				errCount := route.errors.Add(1)
@@ -490,17 +491,27 @@ func (r *AudioRouter) drainRoute(route *Route) {
 	}
 }
 
-// applyGain scales the PCM data in frame by the route's linear gain multiplier.
-// It converts S16 PCM bytes to float64, scales via SIMD, and converts back with
-// clamping. Returns the modified frame or an error if the back-conversion fails.
-func (r *AudioRouter) applyGain(frame AudioFrame, route *Route) (AudioFrame, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+// applyProcessing applies EQ filtering and/or gain scaling to a frame in a
+// single float64 conversion pass. The chain may be nil (EQ disabled); gain
+// at 1.0 means no scaling. At least one must be active for this to be called.
+func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (AudioFrame, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	floats := convert.BytesToFloat64PCM16(frame.Data)
-	convert.ScaleFloat64Slice(floats, route.gainLinear)
+
+	// EQ first — filters operate on the original signal shape.
+	if chain != nil {
+		chain.ApplyBatch(floats)
+	}
+
+	// Gain second — scales the (possibly filtered) signal.
+	if route.gainLinear != 1.0 {
+		convert.ScaleFloat64Slice(floats, route.gainLinear)
+	}
+
 	out := make([]byte, len(floats)*2)
 	if err := convert.Float64ToBytesPCM16(floats, out); err != nil {
 		errCount := route.errors.Add(1)
 		if errCount%errorLogInterval == 1 {
-			r.log.Warn("gain conversion error",
+			r.log.Warn("audio processing conversion error",
 				logger.String("source_id", route.SourceID),
 				logger.String("consumer_id", route.Consumer.ID()),
 				logger.Int64("total_errors", errCount),
