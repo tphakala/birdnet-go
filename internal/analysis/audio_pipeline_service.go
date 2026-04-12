@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/alerting"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -431,6 +432,17 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
+		// Resolve per-source EQ filter chain.
+		settings := conf.Setting()
+		var eqChain *equalizer.FilterChain
+		for i := range settings.Realtime.Audio.Sources {
+			src := &settings.Realtime.Audio.Sources[i]
+			if src.Name == sid || src.Device == sid {
+				eqChain = buildFilterChainForSource(src, settings.Realtime.Audio.Equalizer, conf.SampleRate)
+				break
+			}
+		}
+
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
@@ -447,7 +459,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, gainDB, nil); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, gainDB, eqChain); routeErr != nil {
 			log.Warn("failed to add sound level route",
 				logger.String("source_id", sid),
 				logger.Error(routeErr),
@@ -502,6 +514,17 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
+
+		// Resolve per-source EQ filter chain.
+		settings := conf.Setting()
+		var eqChain *equalizer.FilterChain
+		for i := range settings.Realtime.Audio.Sources {
+			src := &settings.Realtime.Audio.Sources[i]
+			if src.Name == sid || src.Device == sid {
+				eqChain = buildFilterChainForSource(src, settings.Realtime.Audio.Equalizer, conf.SampleRate)
+				break
+			}
+		}
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -567,13 +590,13 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, gainDB, nil); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, gainDB, eqChain); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, gainDB, nil); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, gainDB, eqChain); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
@@ -595,6 +618,29 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			}
 		})
 	}
+}
+
+// resolveEqualizerSettings returns the effective EQ settings for a source.
+// Per-source settings take priority; if nil, the global default is used.
+func resolveEqualizerSettings(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings) conf.EqualizerSettings {
+	if sourceCfg.Equalizer != nil {
+		return *sourceCfg.Equalizer
+	}
+	return globalEQ
+}
+
+// buildFilterChainForSource resolves the effective EQ and builds a FilterChain.
+// Returns nil when EQ is disabled or has no filters.
+func buildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *equalizer.FilterChain {
+	eqSettings := resolveEqualizerSettings(sourceCfg, globalEQ)
+	chain, err := equalizer.BuildFilterChain(eqSettings, sampleRate)
+	if err != nil {
+		GetLogger().Warn("failed to build EQ filter chain",
+			logger.String("source", sourceCfg.Name),
+			logger.Error(err))
+		return nil
+	}
+	return chain
 }
 
 // reconfigureChangedSources diffs the currently running sources against the
