@@ -404,12 +404,16 @@ func ParseWeekday(day string) (time.Weekday, error) {
 	}
 }
 
-// GetLocalTimezone returns the local time zone of the system.
+// Deprecated: GetLocalTimezone returns the local time zone of the system.
+// Use coordinate-based timezone resolution in the suncalc package instead.
+// This function relies on the system TZ which may be incorrect in containers.
 func GetLocalTimezone() (*time.Location, error) {
 	return time.Local, nil
 }
 
-// ConvertUTCToLocal converts a UTC time to the local time zone.
+// Deprecated: ConvertUTCToLocal converts a UTC time to the local time zone.
+// Use coordinate-based timezone resolution in the suncalc package instead.
+// This function relies on the system TZ which may be incorrect in containers.
 func ConvertUTCToLocal(utcTime time.Time) (time.Time, error) {
 	localLoc, err := GetLocalTimezone()
 	if err != nil {
