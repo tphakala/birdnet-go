@@ -4,6 +4,7 @@ package api
 import (
 	"reflect"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -49,12 +50,59 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 	return !reflect.DeepEqual(oldSettings, newSettings)
 }
 
-// handleEqualizerChange updates the audio filter chain when equalizer settings change
-func (c *Controller) handleEqualizerChange(_ *conf.Settings) error {
-	// TODO: Equalizer filter chains need to be migrated to audiocore.
-	// For now, this is a no-op; equalizer settings changes will take effect on restart.
-	c.Debug("Equalizer filter chain update is a no-op pending audiocore filter migration")
+// handleEqualizerChange rebuilds EQ filter chains and hot-swaps them on all
+// affected routes. Sources with per-source EQ are updated only when their own
+// settings changed; sources using the global default are updated when the
+// global EQ changed.
+func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error {
+	if c.engine == nil {
+		return nil
+	}
+
+	router := c.engine.Router()
+	globalEQ := currentSettings.Realtime.Audio.Equalizer
+
+	for _, src := range c.engine.Registry().List() {
+		// Find the matching AudioSourceConfig to check for per-source EQ.
+		var sourceCfg *conf.AudioSourceConfig
+		for i := range currentSettings.Realtime.Audio.Sources {
+			cfg := &currentSettings.Realtime.Audio.Sources[i]
+			if cfg.Name == src.ID || cfg.Device == src.ID {
+				sourceCfg = cfg
+				break
+			}
+		}
+
+		eqSettings := globalEQ
+		if sourceCfg != nil && sourceCfg.Equalizer != nil {
+			eqSettings = *sourceCfg.Equalizer
+		}
+
+		chain, err := equalizer.BuildFilterChain(eqSettings, src.SampleRate)
+		if err != nil {
+			c.Debug("failed to build EQ chain for source %s: %v", src.ID, err)
+			continue
+		}
+		router.UpdateFilterChain(src.ID, chain)
+	}
+
+	c.Debug("EQ filter chains updated for all sources")
 	return nil
+}
+
+// perSourceEqualizerChanged checks if any per-source equalizer settings have changed.
+func perSourceEqualizerChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldSources := oldSettings.Realtime.Audio.Sources
+	newSources := currentSettings.Realtime.Audio.Sources
+	if len(oldSources) != len(newSources) {
+		return true
+	}
+	for i := range oldSources {
+		if !reflect.DeepEqual(oldSources[i].Equalizer, newSources[i].Equalizer) {
+			return true
+		}
+	}
+	return false
 }
 
 // getAudioBlockedFields returns the blocked fields map for the audio section
@@ -138,10 +186,21 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
-	// Check audio equalizer settings
+	// Check global audio equalizer settings — hot-swap filter chains.
 	if equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer) {
-		c.Debug("Audio equalizer settings changed; will take effect on restart (audiocore filter migration pending)")
-		_ = c.SendToast("Equalizer settings saved. Restart required to apply changes.", "warning", toastDurationExtended)
+		c.Debug("Global audio equalizer settings changed, updating filter chains")
+		if err := c.handleEqualizerChange(currentSettings); err != nil {
+			c.Debug("Failed to update EQ filter chains: %v", err)
+		}
+		_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+	}
+
+	// Check per-source equalizer settings — hot-swap filter chains for changed sources.
+	if perSourceEqualizerChanged(oldSettings, currentSettings) {
+		c.Debug("Per-source equalizer settings changed, updating filter chains")
+		if err := c.handleEqualizerChange(currentSettings); err != nil {
+			c.Debug("Failed to update per-source EQ filter chains: %v", err)
+		}
 	}
 
 	return reconfigActions, nil
