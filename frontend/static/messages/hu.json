@@ -392,7 +392,7 @@
         "reconfiguringSpeciesTracking": "Faj követés frissítése...",
         "webserverRestartRequired": "Webszerver beállítások megváltoztak. Újraindítás szükséges.",
         "reconfiguringSoundLevel": "Hangszint monitorozás frissítése...",
-        "audioDeviceRestartRequired": "Hang eszköz megváltozott. Újraindítás szükséges.",
+        "reconfiguringAudioSources": "Hangforrások újrakonfigurálása...",
         "extendedCaptureRestartRequired": "Kiterjesztett rögzítés beállítások megváltoztak. Újraindítás szükséges.",
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",

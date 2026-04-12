@@ -394,7 +394,7 @@
         "reconfiguringDynamicThresholds": "Pārkonfigurē dinamiskos sliekšņus...",
         "webserverRestartRequired": "Tīmekļa servera iestatījumi mainīti. Nepieciešama restartēšana.",
         "reconfiguringSoundLevel": "Atjaunina skaņas līmeņa uzraudzību...",
-        "audioDeviceRestartRequired": "Audio ierīce mainīta. Nepieciešama restartēšana.",
+        "reconfiguringAudioSources": "Audio avotu pārkonfigurēšana...",
         "rebuildingExtendedCapture": "Pārbūvē paplašinātās ierakstīšanas filtru...",
         "extendedCaptureRestartRequired": "Paplašinātās ierakstīšanas iestatījumi mainīti. Nepieciešama restartēšana.",
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",

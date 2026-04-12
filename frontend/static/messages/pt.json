@@ -395,7 +395,7 @@
         "reconfiguringDynamicThresholds": "A reconfigurar limiares dinâmicos...",
         "webserverRestartRequired": "Definições do servidor web alteradas. Reinício necessário.",
         "reconfiguringSoundLevel": "A atualizar monitorização do nível de som...",
-        "audioDeviceRestartRequired": "Dispositivo de áudio alterado. Reinício necessário.",
+        "reconfiguringAudioSources": "A reconfigurar fontes de áudio...",
         "rebuildingExtendedCapture": "A reconstruir filtro de captura estendida...",
         "extendedCaptureRestartRequired": "Definições de captura estendida alteradas. Reinício necessário.",
         "equalizerUpdateFailed": "Falha ao atualizar definições do equalizador de áudio",

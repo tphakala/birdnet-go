@@ -394,7 +394,7 @@
         "reconfiguringDynamicThresholds": "Prekonfigurovanie dynamických prahov...",
         "webserverRestartRequired": "Nastavenia webového servera zmenené. Vyžaduje sa reštart.",
         "reconfiguringSoundLevel": "Aktualizácia monitorovania úrovne zvuku...",
-        "audioDeviceRestartRequired": "Audio zariadenie zmenené. Vyžaduje sa reštart.",
+        "reconfiguringAudioSources": "Prekonfigurovanie zvukových zdrojov...",
         "rebuildingExtendedCapture": "Prestavba filtra rozšíreného nahrávania...",
         "extendedCaptureRestartRequired": "Nastavenia rozšíreného nahrávania zmenené. Vyžaduje sa reštart.",
         "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",

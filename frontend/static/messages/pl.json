@@ -395,7 +395,7 @@
         "reconfiguringDynamicThresholds": "Ponowna konfiguracja progów dynamicznych...",
         "webserverRestartRequired": "Ustawienia serwera WWW zmienione. Wymagany restart.",
         "reconfiguringSoundLevel": "Aktualizacja monitorowania poziomu dźwięku...",
-        "audioDeviceRestartRequired": "Zmieniono urządzenie audio. Wymagany restart.",
+        "reconfiguringAudioSources": "Ponowna konfiguracja źródeł audio...",
         "rebuildingExtendedCapture": "Przebudowa filtru rozszerzonego nagrywania...",
         "extendedCaptureRestartRequired": "Zmieniono ustawienia rozszerzonego nagrywania. Wymagany restart.",
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",

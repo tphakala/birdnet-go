@@ -332,7 +332,7 @@ export type TranslationKey =
   | 'notifications.content.settings.reconfiguringSpeciesTracking'
   | 'notifications.content.settings.webserverRestartRequired'
   | 'notifications.content.settings.reconfiguringSoundLevel'
-  | 'notifications.content.settings.audioDeviceRestartRequired'
+  | 'notifications.content.settings.reconfiguringAudioSources'
   | 'notifications.content.settings.extendedCaptureRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'

@@ -394,7 +394,7 @@
         "reconfiguringDynamicThresholds": "Riconfigurazione delle soglie dinamiche...",
         "webserverRestartRequired": "Impostazioni del server web modificate. Riavvio necessario.",
         "reconfiguringSoundLevel": "Aggiornamento del monitoraggio del livello sonoro...",
-        "audioDeviceRestartRequired": "Dispositivo audio modificato. Riavvio necessario.",
+        "reconfiguringAudioSources": "Riconfigurazione sorgenti audio...",
         "rebuildingExtendedCapture": "Ricostruzione del filtro di cattura estesa...",
         "extendedCaptureRestartRequired": "Impostazioni di cattura estesa modificate. Riavvio necessario.",
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",

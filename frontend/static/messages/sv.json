@@ -394,7 +394,7 @@
         "reconfiguringDynamicThresholds": "Konfigurerar om dynamiska tröskelvärden...",
         "webserverRestartRequired": "Webbserverinställningar ändrade. Omstart krävs.",
         "reconfiguringSoundLevel": "Uppdaterar ljudnivååvervakning...",
-        "audioDeviceRestartRequired": "Ljudenhet ändrad. Omstart krävs.",
+        "reconfiguringAudioSources": "Konfigurerar om ljudkällor...",
         "rebuildingExtendedCapture": "Bygger om filter för utökad inspelning...",
         "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
         "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",

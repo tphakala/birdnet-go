@@ -395,7 +395,7 @@
         "reconfiguringDynamicThresholds": "Reconfiguration des seuils dynamiques...",
         "webserverRestartRequired": "Les paramètres du serveur web ont changé. Redémarrage requis.",
         "reconfiguringSoundLevel": "Mise à jour de la surveillance du niveau sonore...",
-        "audioDeviceRestartRequired": "Périphérique audio modifié. Redémarrage requis.",
+        "reconfiguringAudioSources": "Reconfiguration des sources audio...",
         "rebuildingExtendedCapture": "Reconstruction du filtre de capture étendue...",
         "extendedCaptureRestartRequired": "Paramètres de capture étendue modifiés. Redémarrage requis.",
         "equalizerUpdateFailed": "Échec de la mise à jour des paramètres de l'égaliseur audio",

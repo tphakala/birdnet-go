@@ -395,7 +395,7 @@
         "reconfiguringDynamicThresholds": "Dynamische drempels worden opnieuw geconfigureerd...",
         "webserverRestartRequired": "Webserverinstellingen gewijzigd. Herstart vereist.",
         "reconfiguringSoundLevel": "Geluidsniveaubewaking wordt bijgewerkt...",
-        "audioDeviceRestartRequired": "Audioapparaat gewijzigd. Herstart vereist.",
+        "reconfiguringAudioSources": "Audiobronnen worden opnieuw geconfigureerd...",
         "rebuildingExtendedCapture": "Filter voor uitgebreide opname wordt opnieuw opgebouwd...",
         "extendedCaptureRestartRequired": "Instellingen voor uitgebreide opname gewijzigd. Herstart vereist.",
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",

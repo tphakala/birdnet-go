@@ -395,7 +395,7 @@
         "reconfiguringDynamicThresholds": "Dynamische Schwellenwerte werden neu konfiguriert...",
         "webserverRestartRequired": "Webserver-Einstellungen geändert. Neustart erforderlich.",
         "reconfiguringSoundLevel": "Lautstärkeüberwachung wird aktualisiert...",
-        "audioDeviceRestartRequired": "Audiogerät geändert. Neustart erforderlich.",
+        "reconfiguringAudioSources": "Audioquellen werden neu konfiguriert...",
         "rebuildingExtendedCapture": "Erweiterter Aufnahmefilter wird neu aufgebaut...",
         "extendedCaptureRestartRequired": "Erweiterte Aufnahmeeinstellungen geändert. Neustart erforderlich.",
         "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",

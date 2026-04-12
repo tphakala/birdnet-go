@@ -394,7 +394,7 @@
         "reconfiguringDynamicThresholds": "Genkonfigurerer dynamiske tærskler...",
         "webserverRestartRequired": "Webserverindstillinger ændret. Genstart påkrævet.",
         "reconfiguringSoundLevel": "Opdaterer lydniveauovervågning...",
-        "audioDeviceRestartRequired": "Lydenhed ændret. Genstart påkrævet.",
+        "reconfiguringAudioSources": "Genkonfigurerer lydkilder...",
         "rebuildingExtendedCapture": "Genopbygger udvidet optagelsesfilter...",
         "extendedCaptureRestartRequired": "Udvidede optagelsesindstillinger ændret. Genstart påkrævet.",
         "equalizerUpdateFailed": "Kunne ikke opdatere lyd-equalizerindstillinger",
