@@ -429,10 +429,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	}
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
-		gainDB := 0.0
-		if src, found := p.engine.Registry().Get(sid); found {
-			gainDB = src.Gain
-		}
+		gainDB, _ := p.engine.Registry().GetGain(sid)
 
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
 		if slErr != nil {
@@ -504,10 +501,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 	for _, sid := range sourceIDs {
 		// Look up per-source gain from the registry.
-		gainDB := 0.0
-		if src, found := p.engine.Registry().Get(sid); found {
-			gainDB = src.Gain
-		}
+		gainDB, _ := p.engine.Registry().GetGain(sid)
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.

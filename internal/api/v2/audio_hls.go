@@ -1534,10 +1534,7 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 
 	// Look up per-source gain from the registry so HLS listeners
 	// hear the same gain-adjusted audio as the analysis pipeline.
-	gainDB := 0.0
-	if src, found := c.engine.Registry().Get(sourceID); found {
-		gainDB = src.Gain
-	}
+	gainDB, _ := c.engine.Registry().GetGain(sourceID)
 
 	// Add route on the AudioRouter
 	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB); routeErr != nil {

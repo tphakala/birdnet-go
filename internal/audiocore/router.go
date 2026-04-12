@@ -444,7 +444,8 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				}
 			}
 			// Apply per-route gain when not unity (0 dB).
-			if route.gainLinear != 1.0 {
+			// Gain application requires 16-bit PCM; skip for other formats.
+			if route.gainLinear != 1.0 && frame.BitDepth == 16 {
 				gained, err := r.applyGain(frame, route)
 				if err != nil {
 					continue

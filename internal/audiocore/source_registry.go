@@ -252,6 +252,18 @@ func (r *SourceRegistry) UpdateGain(sourceID string, gain float64) bool {
 	return true
 }
 
+// GetGain returns the current gain (in dB) for the given source, under
+// the registry read lock. Returns 0.0 and false if the source does not exist.
+func (r *SourceRegistry) GetGain(sourceID string) (float64, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		return 0.0, false
+	}
+	return src.Gain, true
+}
+
 // AddListener registers a callback that is called for every SourceEvent.
 // Callbacks are invoked synchronously; they must not block.
 func (r *SourceRegistry) AddListener(l SourceEventListener) {
