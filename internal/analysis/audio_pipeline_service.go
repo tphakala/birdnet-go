@@ -625,6 +625,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	alreadyRunning := make(map[string]string) // connStr → sourceID (for sources that stay)
 	sourceModelMap := make(map[string][]string)
 	var newSourceIDs []string
+	var gainChangedIDs []string
 	var keptCount int
 
 	for connStr, scm := range desired {
@@ -633,6 +634,17 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			alreadyRunning[connStr] = src.ID
 			sourceModelMap[src.ID] = scm.modelIDs
 			keptCount++
+
+			// Detect gain-only changes on kept sources.
+			if src.Gain != scm.config.Gain {
+				log.Info("gain changed for kept source, rebuilding routes",
+					logger.String("source_id", src.ID),
+					logger.Float64("old_gain_db", src.Gain),
+					logger.Float64("new_gain_db", scm.config.Gain),
+					logger.String("operation", "reconfigure_diff"))
+				src.Gain = scm.config.Gain
+				gainChangedIDs = append(gainChangedIDs, src.ID)
+			}
 		} else {
 			// New source — add it.
 			log.Info("adding new stream from config",
@@ -682,6 +694,17 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(newSourceIDs, "reconfigure_diff")
 	}
 
+	// Rebuild routes for sources whose gain changed. The capture device
+	// stays running — only the routes are torn down and re-created so
+	// drainRoute picks up the new gainLinear value.
+	if len(gainChangedIDs) > 0 {
+		for _, sid := range gainChangedIDs {
+			p.engine.Router().RemoveAllRoutes(sid)
+		}
+		p.registerConsumersForSources(gainChangedIDs, sourceModelMap, audioLevelChan, "gain_change")
+		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")
+	}
+
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
@@ -697,6 +720,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("kept", keptCount),
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
+		logger.Int("gain_changed", len(gainChangedIDs)),
 		logger.String("operation", "reconfigure_diff"))
 }
 
