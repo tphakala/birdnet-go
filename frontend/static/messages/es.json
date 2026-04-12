@@ -2532,7 +2532,7 @@
       },
       "audioFilters": {
         "title": "Filtros de audio",
-        "description": "Configurar filtros de procesamiento de audio",
+        "description": "Configurar filtros de audio predeterminados aplicados a todas las fuentes. Los ajustes de EQ por fuente están disponibles en la configuración de cada tarjeta de sonido.",
         "enableEqualizer": "Habilitar ecualizador de audio",
         "enableEqualizerHelp": "Aplica filtrado de frecuencia para mejorar la detección de cantos de aves reduciendo el ruido no deseado y frecuencias.",
         "filterType": "Tipo de filtro",

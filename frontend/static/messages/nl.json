@@ -2759,7 +2759,7 @@
       },
       "audioFilters": {
         "title": "Audiofilters",
-        "description": "Configureer audio verwerkings filters",
+        "description": "Standaard audiofilters configureren voor alle bronnen. Per-bron EQ-instellingen zijn beschikbaar in de instellingen van elke geluidskaart.",
         "enableEqualizer": "Schakel Audio Equalizer in",
         "enableEqualizerHelp": "Pas frequentie filtering toe om vogelroep detectie te verbeteren door ongewenste ruis en frequenties te verminderen.",
         "filterType": "Filtertype",

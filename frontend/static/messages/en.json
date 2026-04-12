@@ -2951,7 +2951,7 @@
       },
       "audioFilters": {
         "title": "Audio Filters",
-        "description": "Configure audio processing filters",
+        "description": "Configure default audio filters applied to all sources. Per-source EQ overrides are available in each sound card's settings.",
         "enableEqualizer": "Enable Audio Equalizer",
         "enableEqualizerHelp": "Apply frequency filtering to improve bird call detection by reducing unwanted noise and frequencies.",
         "filterType": "Filter Type",

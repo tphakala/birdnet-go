@@ -2759,7 +2759,7 @@
       },
       "audioFilters": {
         "title": "Audiofilter",
-        "description": "Audioverarbeitungsfilter konfigurieren",
+        "description": "Standard-Audiofilter für alle Quellen konfigurieren. Quellenspezifische EQ-Einstellungen sind in den jeweiligen Soundkarten-Einstellungen verfügbar.",
         "enableEqualizer": "Audio-Equalizer aktivieren",
         "enableEqualizerHelp": "Frequenzfilterung anwenden, um die Vogelruferkennung zu verbessern, indem unerwünschte Geräusche und Frequenzen reduziert werden.",
         "filterType": "Filtertyp",

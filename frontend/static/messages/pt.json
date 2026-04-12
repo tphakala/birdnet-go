@@ -2532,7 +2532,7 @@
       },
       "audioFilters": {
         "title": "Filtros de áudio",
-        "description": "Configurar filtros de processamento de áudio",
+        "description": "Configurar filtros de áudio padrão aplicados a todas as fontes. Ajustes de EQ por fonte estão disponíveis nas configurações de cada placa de som.",
         "enableEqualizer": "Ativar equalizador de áudio",
         "enableEqualizerHelp": "Aplicar filtragem de frequência para melhorar a detecção de cantos de pássaros, reduzindo ruídos e frequências indesejadas.",
         "filterType": "Tipo de filtro",

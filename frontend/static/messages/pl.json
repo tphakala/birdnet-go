@@ -2765,7 +2765,7 @@
       },
       "audioFilters": {
         "title": "Filtry Audio",
-        "description": "Konfiguruj filtry przetwarzania audio",
+        "description": "Skonfiguruj domyślne filtry audio stosowane do wszystkich źródeł. Ustawienia korektora dla poszczególnych źródeł są dostępne w ustawieniach każdej karty dźwiękowej.",
         "enableEqualizer": "Włącz Equalizer Audio",
         "enableEqualizerHelp": "Zastosuj filtrowanie częstotliwości, aby poprawić detekcję odgłosów ptaków, redukując niechciany hałas i częstotliwości.",
         "filterType": "Typ Filtra",

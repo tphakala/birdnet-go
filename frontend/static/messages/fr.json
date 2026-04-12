@@ -2759,7 +2759,7 @@
       },
       "audioFilters": {
         "title": "Filtres audio",
-        "description": "Configurer les filtres de traitement audio",
+        "description": "Configurer les filtres audio par défaut appliqués à toutes les sources. Les réglages d'égaliseur par source sont disponibles dans les paramètres de chaque carte son.",
         "enableEqualizer": "Activer l'égaliseur audio",
         "enableEqualizerHelp": "Appliquer un filtrage de fréquence pour améliorer la détection des chants d'oiseaux en réduisant les bruits et fréquences indésirables.",
         "filterType": "Type de filtre",

@@ -2532,7 +2532,7 @@
       },
       "audioFilters": {
         "title": "Äänisuodattimet",
-        "description": "Määritä äänenkäsittelysuodattimet",
+        "description": "Määritä oletusäänisuodattimet kaikille lähteille. Lähdekohtaiset taajuuskorjainasetukset ovat saatavilla kunkin äänikortin asetuksissa.",
         "enableEqualizer": "Ota taajuuskorjain käyttöön",
         "enableEqualizerHelp": "Käytä taajuussuodatusta parantaaksesi lintuäänten tunnistusta vähentämällä ei-toivottua melua ja taajuuksia.",
         "filterType": "Suodatintyyppi",
