@@ -26,6 +26,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -1536,8 +1537,25 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	// hear the same gain-adjusted audio as the analysis pipeline.
 	gainDB, _ := c.engine.Registry().GetGain(sourceID)
 
+	// Resolve EQ filter chain for this source so HLS listeners
+	// hear the same filtered audio as the analysis pipeline.
+	settings := conf.Setting()
+	var eqChain *equalizer.FilterChain
+	sources := settings.Realtime.Audio.Sources
+	for i := range sources {
+		src := &sources[i]
+		if src.Name == sourceID || src.Device == sourceID {
+			eqSettings := settings.Realtime.Audio.Equalizer
+			if src.Equalizer != nil {
+				eqSettings = *src.Equalizer
+			}
+			eqChain, _ = equalizer.BuildFilterChain(eqSettings, sampleRate)
+			break
+		}
+	}
+
 	// Add route on the AudioRouter
-	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, nil); routeErr != nil {
+	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {
 		return nil, nil, fmt.Errorf("failed to add HLS route: %w", routeErr)
 	}
 
