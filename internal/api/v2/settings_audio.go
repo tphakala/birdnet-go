@@ -117,10 +117,10 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 
 	// Check audio device settings
 	if audioDeviceSettingChanged(oldSettings, currentSettings) {
-		c.Debug("Audio device changed. A restart will be required.")
-		// Send toast notification about restart requirement
-		_ = c.SendToastWithKey("Audio device changed. Restart required to apply changes.", "warning", toastDurationExtended,
-			notification.MsgSettingsAudioDeviceRestart, nil)
+		c.Debug("Audio device settings changed, triggering reconfiguration")
+		reconfigActions = append(reconfigActions, "reconfigure_audio_sources")
+		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
+			notification.MsgSettingsReconfiguringAudioSources, nil)
 	}
 
 	// Check extended capture filter settings (hot-reloadable: Enabled, Species, MaxDuration)

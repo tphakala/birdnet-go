@@ -45,7 +45,7 @@ const (
 
 	// Audio settings toasts
 	MsgSettingsReconfiguringSoundLevel   = "notifications.content.settings.reconfiguringSoundLevel"
-	MsgSettingsAudioDeviceRestart        = "notifications.content.settings.audioDeviceRestartRequired"
+	MsgSettingsReconfiguringAudioSources = "notifications.content.settings.reconfiguringAudioSources"
 	MsgSettingsRebuildingExtendedCapture = "notifications.content.settings.rebuildingExtendedCapture"
 	MsgSettingsExtendedCaptureRestart    = "notifications.content.settings.extendedCaptureRestartRequired"
 	MsgSettingsEqualizerFailed           = "notifications.content.settings.equalizerUpdateFailed"
