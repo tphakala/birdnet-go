@@ -144,6 +144,11 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		return fmt.Errorf("%w: source=%s consumer=%s", ErrRouteExists, sourceID, consumer.ID())
 	}
 
+	// Reject NaN/Inf gain values before conversion.
+	if math.IsNaN(gainDB) || math.IsInf(gainDB, 0) {
+		return fmt.Errorf("invalid gain value for source=%s consumer=%s: %f", sourceID, consumer.ID(), gainDB)
+	}
+
 	// Convert dB to linear gain. 0 dB -> 1.0 (no change).
 	gainLinear := math.Pow(10, gainDB/20)
 

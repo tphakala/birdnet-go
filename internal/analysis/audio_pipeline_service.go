@@ -642,7 +642,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.Float64("old_gain_db", src.Gain),
 					logger.Float64("new_gain_db", scm.config.Gain),
 					logger.String("operation", "reconfigure_diff"))
-				src.Gain = scm.config.Gain
+				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
 		} else {

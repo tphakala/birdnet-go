@@ -239,6 +239,19 @@ func (r *SourceRegistry) UpdateState(sourceID string, state SourceState) error {
 	return nil
 }
 
+// UpdateGain updates the Gain field of the source with the given ID.
+// Returns false if the source does not exist.
+func (r *SourceRegistry) UpdateGain(sourceID string, gain float64) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	src, ok := r.sources[sourceID]
+	if !ok {
+		return false
+	}
+	src.Gain = gain
+	return true
+}
+
 // AddListener registers a callback that is called for every SourceEvent.
 // Callbacks are invoked synchronously; they must not block.
 func (r *SourceRegistry) AddListener(l SourceEventListener) {
