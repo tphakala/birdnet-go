@@ -729,6 +729,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 				SampleRate:       conf.SampleRate,
 				BitDepth:         conf.BitDepth,
 				Channels:         1,
+				Gain:             src.Gain,
 			},
 			modelIDs: src.Models,
 		})

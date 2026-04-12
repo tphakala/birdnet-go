@@ -134,6 +134,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 		SampleRate:   cfg.SampleRate,
 		BitDepth:     cfg.BitDepth,
 		Channels:     cfg.Channels,
+		Gain:         cfg.Gain,
 		State:        SourceInactive,
 		RegisteredAt: time.Now(),
 		LastSeen:     time.Now(),

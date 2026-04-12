@@ -109,6 +109,9 @@ type AudioSource struct {
 	// Channels is the number of capture channels (e.g., 1 for mono).
 	Channels int `json:"channels"`
 
+	// Gain is the configured input gain in dB. 0 means no adjustment.
+	Gain float64 `json:"gain"`
+
 	// State is the current operational state of the source.
 	State SourceState `json:"state"`
 
@@ -196,4 +199,8 @@ type SourceConfig struct {
 
 	// Channels is the desired number of capture channels.
 	Channels int
+
+	// Gain is the input gain adjustment in dB. 0 means no adjustment.
+	// Positive values amplify, negative values attenuate.
+	Gain float64
 }

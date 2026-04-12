@@ -231,6 +231,45 @@ func TestSourceRegistry_ConcurrentAccess(t *testing.T) {
 	assert.LessOrEqual(t, len(list), goroutines)
 }
 
+// TestSourceRegistry_RegisterCopiesGain verifies that the Gain field from SourceConfig
+// is correctly copied into the registered AudioSource.
+func TestSourceRegistry_RegisterCopiesGain(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	cfg := &SourceConfig{
+		ConnectionString: "hw:1,0",
+		Type:             SourceTypeAudioCard,
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+		Gain:             6.5,
+	}
+
+	src, err := r.Register(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, src)
+	assert.InDelta(t, 6.5, src.Gain, 1e-9, "registered AudioSource.Gain must match SourceConfig.Gain")
+}
+
+// TestSourceRegistry_RegisterDefaultGain verifies that Gain defaults to 0 when not set.
+func TestSourceRegistry_RegisterDefaultGain(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	cfg := &SourceConfig{
+		ConnectionString: "rtsp://192.168.1.50/stream",
+		SampleRate:       48000,
+		BitDepth:         16,
+		Channels:         1,
+	}
+
+	src, err := r.Register(cfg)
+	require.NoError(t, err)
+	require.NotNil(t, src)
+	assert.InDelta(t, 0.0, src.Gain, 1e-9, "Gain should default to 0 when not specified")
+}
+
 // TestSourceRegistry_TypeDetection verifies that source types are detected from connection strings.
 func TestSourceRegistry_TypeDetection(t *testing.T) {
 	t.Parallel()
