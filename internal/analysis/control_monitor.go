@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime/debug"
 	"strconv"
 	"sync"
 	"time"
@@ -718,8 +719,14 @@ func (cm *ControlMonitor) handleReconfigureAudioSources() {
 
 	defer func() {
 		if r := recover(); r != nil {
-			GetLogger().Error("panic during audio source reconfiguration",
-				logger.Any("panic", r))
+			var err error
+			if e, ok := r.(error); ok {
+				err = fmt.Errorf("panic during audio source reconfiguration: %w", e)
+			} else {
+				err = fmt.Errorf("panic during audio source reconfiguration: %v", r)
+			}
+			GetLogger().Error(err.Error(),
+				logger.String("stack", string(debug.Stack())))
 		}
 	}()
 
