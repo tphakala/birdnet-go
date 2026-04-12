@@ -225,6 +225,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigurePushNotifications()
 	case "rebuild_extended_capture":
 		cm.handleRebuildExtendedCapture()
+	case "reconfigure_audio_sources":
+		cm.handleReconfigureAudioSources()
 	case "recalculate_dynamic_thresholds":
 		cm.handleRecalculateDynamicThresholds()
 	case "reconfigure_dynamic_thresholds":
@@ -706,6 +708,31 @@ func (cm *ControlMonitor) handleRebuildExtendedCapture() {
 
 	GetLogger().Info("Extended capture species filter rebuilt successfully")
 	cm.notifySuccess("Extended capture species filter rebuilt successfully")
+}
+
+// handleReconfigureAudioSources reconfigures audio capture sources (sound cards)
+// when their settings (device, gain, model) change. It delegates to the same
+// diff-based reconfiguration used for RTSP stream changes.
+func (cm *ControlMonitor) handleReconfigureAudioSources() {
+	GetLogger().Info("Reconfiguring audio sources")
+
+	defer func() {
+		if r := recover(); r != nil {
+			GetLogger().Error("panic during audio source reconfiguration",
+				logger.Any("panic", r))
+		}
+	}()
+
+	cm.reconfigureSourcesFn()
+
+	// Re-evaluate quiet hours after reconfiguration to ensure
+	// newly added sources respect their quiet hours settings.
+	if cm.quietHoursScheduler != nil {
+		cm.quietHoursScheduler.Evaluate()
+	}
+
+	GetLogger().Info("Audio sources reconfigured successfully")
+	cm.notifySuccess("Audio sources reconfigured successfully")
 }
 
 // handleRecalculateDynamicThresholds recalculates all dynamic threshold CurrentValue entries
