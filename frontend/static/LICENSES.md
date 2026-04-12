@@ -247,6 +247,11 @@ Source: MIT
 License: https://github.com/mattn/go-sqlite3/blob/v1.14.42/LICENSE
 Source: MIT
 
+### github.com/mitchellh/mapstructure
+
+License: https://github.com/mitchellh/mapstructure/blob/v1.5.0/LICENSE
+Source: MIT
+
 ### github.com/munnerz/goautoneg
 
 License: https://github.com/munnerz/goautoneg/blob/a7dc8b61c822/LICENSE
@@ -265,6 +270,11 @@ Source: MIT
 ### github.com/patrickmn/go-cache
 
 License: https://github.com/patrickmn/go-cache/blob/v2.1.0/LICENSE
+Source: MIT
+
+### github.com/paulmach/orb
+
+License: https://github.com/paulmach/orb/blob/v0.12.0/LICENSE.md
 Source: MIT
 
 ### github.com/pelletier/go-toml/v2
@@ -301,6 +311,16 @@ Source: Apache-2.0
 
 License: https://github.com/prometheus/procfs/blob/v0.20.1/LICENSE
 Source: Apache-2.0
+
+### github.com/ringsaturn/tzf
+
+License: https://github.com/ringsaturn/tzf/blob/v1.0.4/LICENSE
+Source: MIT
+
+### github.com/ringsaturn/tzf-rel-lite
+
+License: Unknown
+Source: Unknown
 
 ### github.com/sagikazarmark/locafero
 
@@ -362,6 +382,21 @@ Source: MIT
 License: https://github.com/subosito/gotenv/blob/v1.6.0/LICENSE
 Source: MIT
 
+### github.com/tidwall/geoindex/child
+
+License: https://github.com/tidwall/geoindex/blob/v1.7.0/LICENSE
+Source: MIT
+
+### github.com/tidwall/geojson/geometry
+
+License: https://github.com/tidwall/geojson/blob/v1.4.6/LICENSE
+Source: MIT
+
+### github.com/tidwall/rtree
+
+License: https://github.com/tidwall/rtree/blob/v1.10.0/LICENSE
+Source: MIT
+
 ### github.com/tklauser/go-sysconf
 
 License: https://github.com/tklauser/go-sysconf/blob/v0.3.16/LICENSE
@@ -417,6 +452,11 @@ Source: MIT
 License: https://github.com/tphakala/simd/blob/v1.0.22/LICENSE
 Source: MIT
 
+### github.com/twpayne/go-polyline
+
+License: https://github.com/twpayne/go-polyline/blob/v1.1.1/LICENSE
+Source: BSD-2-Clause
+
 ### github.com/valyala/bytebufferpool
 
 License: https://github.com/valyala/bytebufferpool/blob/v1.0.0/LICENSE
@@ -426,6 +466,11 @@ Source: MIT
 
 License: https://github.com/valyala/fasttemplate/blob/v1.2.2/LICENSE
 Source: MIT
+
+### go.mongodb.org/mongo-driver
+
+License: https://github.com/mongodb/mongo-go-driver/blob/v1.11.4/LICENSE
+Source: Apache-2.0
 
 ### go.opentelemetry.io/auto/sdk
 
