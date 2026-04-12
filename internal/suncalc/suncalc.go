@@ -35,6 +35,7 @@ type SunCalc struct {
 	cache    map[string]cacheEntry   // Cache of sun event times for dates
 	lock     sync.RWMutex            // Lock for cache access
 	observer astral.Observer         // Observer for sun event calculations
+	location *time.Location          // Timezone derived from observer coordinates
 	metrics  *metrics.SunCalcMetrics // Metrics for observability
 }
 
@@ -43,6 +44,7 @@ func NewSunCalc(latitude, longitude float64) *SunCalc {
 	return &SunCalc{
 		cache:    make(map[string]cacheEntry),
 		observer: astral.Observer{Latitude: latitude, Longitude: longitude},
+		location: resolveTimezone(latitude, longitude),
 	}
 }
 
