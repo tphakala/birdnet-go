@@ -4,6 +4,7 @@ package audiocore
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -45,6 +46,10 @@ type Route struct {
 
 	// sourceSampleRate is the sample rate of the source producing frames.
 	sourceSampleRate int
+
+	// gainLinear is the linear gain multiplier derived from the dB value.
+	// 1.0 means no gain (0 dB). Set at route creation time and immutable.
+	gainLinear float64
 
 	// resampler converts source-rate PCM to the consumer's expected rate.
 	// Nil when no rate conversion is required.
@@ -121,7 +126,7 @@ func NewAudioRouter(log logger.Logger) *AudioRouter {
 // the consumer ID for logging, metrics, and route lookup. Duplicate IDs on
 // different sources will not cause an error but may produce confusing log
 // output and make RemoveRoute ambiguous.
-func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int) error {
+func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSampleRate int, gainDB float64) error {
 	// Reject routes after the router has been closed.
 	if r.ctx.Err() != nil {
 		return fmt.Errorf("router is closed: %w", r.ctx.Err())
@@ -138,10 +143,14 @@ func (r *AudioRouter) AddRoute(sourceID string, consumer AudioConsumer, sourceSa
 		return fmt.Errorf("%w: source=%s consumer=%s", ErrRouteExists, sourceID, consumer.ID())
 	}
 
+	// Convert dB to linear gain. 0 dB -> 1.0 (no change).
+	gainLinear := math.Pow(10, gainDB/20)
+
 	route := &Route{
 		SourceID:         sourceID,
 		Consumer:         consumer,
 		sourceSampleRate: sourceSampleRate,
+		gainLinear:       gainLinear,
 		inbox:            make(chan AudioFrame, routeInboxCapacity),
 		done:             make(chan struct{}),
 		stopped:          make(chan struct{}),

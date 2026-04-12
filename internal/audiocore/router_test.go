@@ -87,7 +87,7 @@ func TestRouter_AddAndRemoveRoute(t *testing.T) {
 
 	consumer := newMockConsumer("consumer-1")
 
-	err := router.AddRoute("src-1", consumer, 48000)
+	err := router.AddRoute("src-1", consumer, 48000, 0.0)
 	require.NoError(t, err)
 	assert.True(t, router.HasConsumers("src-1"))
 
@@ -104,7 +104,7 @@ func TestRouter_DispatchSingleConsumer(t *testing.T) {
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("consumer-1")
-	err := router.AddRoute("src-1", consumer, 48000)
+	err := router.AddRoute("src-1", consumer, 48000, 0.0)
 	require.NoError(t, err)
 
 	frame := testFrame("src-1")
@@ -129,8 +129,8 @@ func TestRouter_DispatchFanOut(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
 
 	frame := testFrame("src-1")
 	router.Dispatch(frame)
@@ -166,7 +166,7 @@ func TestRouter_DropOnFullInbox(t *testing.T) {
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newBlockingConsumer("slow-consumer")
-	require.NoError(t, router.AddRoute("src-1", consumer, 48000))
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0))
 
 	// Fill the inbox buffer (capacity 64) plus extra to guarantee drops.
 	const totalFrames = 128
@@ -190,8 +190,8 @@ func TestRouter_RemoveAllRoutes(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
 	assert.True(t, router.HasConsumers("src-1"))
 
 	router.RemoveAllRoutes("src-1")
@@ -210,9 +210,9 @@ func TestRouter_DuplicateRouteError(t *testing.T) {
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-1") // same ID
 
-	require.NoError(t, router.AddRoute("src-1", c1, 48000))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
 
-	err := router.AddRoute("src-1", c2, 48000)
+	err := router.AddRoute("src-1", c2, 48000, 0.0)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrRouteExists)
 }
@@ -231,7 +231,7 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 	consumer.sampleRate = 32000
 
 	// Add route with source at 48kHz.
-	err := router.AddRoute("src-resample", consumer, 48000)
+	err := router.AddRoute("src-resample", consumer, 48000, 0.0)
 	require.NoError(t, err)
 
 	// Build a 48kHz frame with 4800 samples (100 ms of 16-bit PCM, 9600 bytes).
@@ -285,8 +285,8 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 
 	c1 := newMockConsumer("consumer-1")
 	c2 := newMockConsumer("consumer-2")
-	require.NoError(t, router.AddRoute("src-1", c1, 48000))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000))
+	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0))
+	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0))
 
 	const goroutines = 8
 	const framesPerGoroutine = 100
@@ -326,7 +326,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 		sampleRate: 48000,
 	}
 
-	err := router.AddRoute("src1", panicConsumer, 48000)
+	err := router.AddRoute("src1", panicConsumer, 48000, 0.0)
 	require.NoError(t, err)
 
 	// Dispatch a frame — the consumer will panic on Write.
@@ -360,4 +360,37 @@ func (c *panicOnWriteConsumer) Channels() int   { return 1 }
 func (c *panicOnWriteConsumer) Close() error    { return nil }
 func (c *panicOnWriteConsumer) Write(_ AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	panic("consumer exploded")
+}
+
+// TestRouter_AddRouteWithGain verifies that AddRoute correctly converts
+// a dB gain value to the corresponding linear multiplier and stores it
+// on the Route.
+func TestRouter_AddRouteWithGain(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name       string
+		gainDB     float64
+		wantLinear float64
+	}{
+		{"zero_dB_no_change", 0.0, 1.0},
+		{"positive_6dB", 6.0, 1.9953},
+		{"negative_6dB", -6.0, 0.5012},
+		{"max_40dB", 40.0, 100.0},
+		{"min_neg40dB", -40.0, 0.01},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			router := NewAudioRouter(GetLogger())
+			t.Cleanup(func() { router.Close() })
+			consumer := newMockConsumer("c1")
+			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB)
+			require.NoError(t, err)
+			router.mu.RLock()
+			routes := router.routes["src-1"]
+			require.Len(t, routes, 1)
+			assert.InDelta(t, tt.wantLinear, routes[0].gainLinear, 0.01)
+			router.mu.RUnlock()
+		})
+	}
 }

@@ -444,7 +444,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, slc, conf.SampleRate, 0.0); routeErr != nil {
 			log.Warn("failed to add sound level route",
 				logger.String("source_id", sid),
 				logger.Error(routeErr),
@@ -555,13 +555,13 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, 0.0); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate); routeErr != nil {
+		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, 0.0); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
