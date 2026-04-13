@@ -1280,6 +1280,17 @@ type LiveSpectrogramSettings struct {
 	BatchIntervalMs int    `yaml:"batchintervalms" json:"batchIntervalMs"`
 }
 
+// EffectiveSampleRate returns the sample rate used for live streaming. If the
+// user-configured value is 0 or negative, it falls back to the project-wide
+// SampleRate constant. Producers and metadata-builders must call this so the
+// rate shown to clients matches what the FFT consumer actually runs at.
+func (ls LiveStreamSettings) EffectiveSampleRate() int {
+	if ls.SampleRate > 0 {
+		return ls.SampleRate
+	}
+	return SampleRate
+}
+
 // BackupRetention defines backup retention policy
 type BackupRetention struct {
 	MaxAge     string `yaml:"maxage" json:"maxAge"`         // Duration string for the maximum age of backups to keep (e.g., "30d" for 30 days, "6m" for 6 months, "1y" for 1 year). Backups older than this may be deleted.

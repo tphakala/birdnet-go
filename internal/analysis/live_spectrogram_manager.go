@@ -24,8 +24,9 @@ type LiveSpectrogramManager struct {
 	engine   *engine.AudioEngine
 	outChan  chan apiv2.LiveSpectrogramBatch
 
-	mu      sync.Mutex
-	sources map[string]*liveSpectrogramSourceState
+	mu         sync.Mutex
+	sources    map[string]*liveSpectrogramSourceState
+	forwarders sync.WaitGroup
 }
 
 func NewLiveSpectrogramManager(settings *conf.Settings, audioEngine *engine.AudioEngine, outChan chan apiv2.LiveSpectrogramBatch) *LiveSpectrogramManager {
@@ -59,10 +60,7 @@ func (m *LiveSpectrogramManager) Acquire(sourceID string) error {
 		return fmt.Errorf("live spectrogram streaming is disabled")
 	}
 
-	targetSampleRate := conf.SampleRate
-	if m.settings.WebServer.LiveStream.SampleRate > 0 {
-		targetSampleRate = m.settings.WebServer.LiveStream.SampleRate
-	}
+	targetSampleRate := m.settings.WebServer.LiveStream.EffectiveSampleRate()
 
 	consumerID := "spectrogram_" + sourceID
 	consumer, consumerOut, err := NewSpectrogramConsumer(
@@ -83,11 +81,21 @@ func (m *LiveSpectrogramManager) Acquire(sourceID string) error {
 		return fmt.Errorf("failed to add live spectrogram route: %w", err)
 	}
 
+	m.forwarders.Add(1)
 	go func() {
+		defer m.forwarders.Done()
+		var drops int64
 		for batch := range consumerOut {
 			select {
 			case m.outChan <- batch:
 			default:
+				drops++
+				if drops == 1 || drops%spectrogramDropLogInterval == 0 {
+					GetLogger().Warn("live spectrogram batch dropped at manager forwarder",
+						logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+						logger.String("consumer_id", consumerID),
+						logger.Int64("total_drops", drops))
+				}
 			}
 		}
 	}()
@@ -134,16 +142,20 @@ func (m *LiveSpectrogramManager) Release(sourceID string) {
 		logger.String("consumer_id", "spectrogram_"+sourceID))
 }
 
+// Close tears down every active source and waits for the per-source
+// forwarding goroutines to exit. Callers must not close m.outChan until Close
+// has returned — otherwise the forwarders may send on a closed channel.
 func (m *LiveSpectrogramManager) Close() {
 	if m == nil {
 		return
 	}
 
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	for sourceID, state := range m.sources {
 		state.cleanup()
 		delete(m.sources, sourceID)
 	}
+	m.mu.Unlock()
+
+	m.forwarders.Wait()
 }

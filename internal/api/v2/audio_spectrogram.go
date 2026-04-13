@@ -3,15 +3,20 @@ package api
 import (
 	"context"
 	"encoding/json"
-	stderrors "errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 const (
@@ -69,17 +74,32 @@ type liveSpectrogramEvent struct {
 	Columns   []LiveSpectrogramColumn `json:"columns,omitempty"`
 }
 
+// liveSpectrogramSubscriber holds per-SSE-client state for the broadcaster.
+// drops is incremented (under the subscribersMu read lock) whenever the
+// bounded channel is full and the batch has to be skipped.
+type liveSpectrogramSubscriber struct {
+	ch       chan LiveSpectrogramBatch
+	sourceID string
+	clientIP string
+	drops    atomic.Int64
+}
+
+// liveSpectrogramDropLogInterval controls how often per-subscriber drop
+// warnings are emitted by the broadcaster. Matches the innermost consumer
+// interval so the three log streams line up.
+const liveSpectrogramDropLogInterval int64 = 100
+
 type liveSpectrogramManager struct {
 	activeConnections sync.Map
 	connectionMu      sync.Mutex
-	subscribers       map[string]map[chan LiveSpectrogramBatch]struct{}
+	subscribers       map[string]map[*liveSpectrogramSubscriber]struct{}
 	subscribersMu     sync.RWMutex
 	broadcasterOnce   sync.Once
 	broadcasterCancel context.CancelFunc
 }
 
 var liveSpectrogramMgr = &liveSpectrogramManager{
-	subscribers: make(map[string]map[chan LiveSpectrogramBatch]struct{}),
+	subscribers: make(map[string]map[*liveSpectrogramSubscriber]struct{}),
 }
 
 func (c *Controller) SetLiveSpectrogramChan(ch chan LiveSpectrogramBatch) {
@@ -102,20 +122,27 @@ func runLiveSpectrogramBroadcaster(ctx context.Context, sourceChan chan LiveSpec
 			if !ok {
 				liveSpectrogramMgr.subscribersMu.Lock()
 				for _, subscribers := range liveSpectrogramMgr.subscribers {
-					for ch := range subscribers {
-						close(ch)
+					for sub := range subscribers {
+						close(sub.ch)
 					}
 				}
-				liveSpectrogramMgr.subscribers = make(map[string]map[chan LiveSpectrogramBatch]struct{})
+				liveSpectrogramMgr.subscribers = make(map[string]map[*liveSpectrogramSubscriber]struct{})
 				liveSpectrogramMgr.subscribersMu.Unlock()
 				return
 			}
 
 			liveSpectrogramMgr.subscribersMu.RLock()
-			for ch := range liveSpectrogramMgr.subscribers[data.SourceID] {
+			for sub := range liveSpectrogramMgr.subscribers[data.SourceID] {
 				select {
-				case ch <- data:
+				case sub.ch <- data:
 				default:
+					drops := sub.drops.Add(1)
+					if drops == 1 || drops%liveSpectrogramDropLogInterval == 0 {
+						GetLogger().Warn("live spectrogram batch dropped at subscriber",
+							logger.String("source_id", privacy.SanitizeRTSPUrl(sub.sourceID)),
+							logger.String("client_ip", sub.clientIP),
+							logger.Int64("total_drops", drops))
+					}
 				}
 			}
 			liveSpectrogramMgr.subscribersMu.RUnlock()
@@ -123,24 +150,28 @@ func runLiveSpectrogramBroadcaster(ctx context.Context, sourceChan chan LiveSpec
 	}
 }
 
-func subscribeToLiveSpectrogram(sourceID string) chan LiveSpectrogramBatch {
-	ch := make(chan LiveSpectrogramBatch, liveSpectrogramChannelBuffer)
+func subscribeToLiveSpectrogram(sourceID, clientIP string) *liveSpectrogramSubscriber {
+	sub := &liveSpectrogramSubscriber{
+		ch:       make(chan LiveSpectrogramBatch, liveSpectrogramChannelBuffer),
+		sourceID: sourceID,
+		clientIP: clientIP,
+	}
 	liveSpectrogramMgr.subscribersMu.Lock()
 	defer liveSpectrogramMgr.subscribersMu.Unlock()
 	if liveSpectrogramMgr.subscribers[sourceID] == nil {
-		liveSpectrogramMgr.subscribers[sourceID] = make(map[chan LiveSpectrogramBatch]struct{})
+		liveSpectrogramMgr.subscribers[sourceID] = make(map[*liveSpectrogramSubscriber]struct{})
 	}
-	liveSpectrogramMgr.subscribers[sourceID][ch] = struct{}{}
-	return ch
+	liveSpectrogramMgr.subscribers[sourceID][sub] = struct{}{}
+	return sub
 }
 
-func unsubscribeFromLiveSpectrogram(sourceID string, ch chan LiveSpectrogramBatch) {
+func unsubscribeFromLiveSpectrogram(sub *liveSpectrogramSubscriber) {
 	liveSpectrogramMgr.subscribersMu.Lock()
 	defer liveSpectrogramMgr.subscribersMu.Unlock()
-	if subscribers := liveSpectrogramMgr.subscribers[sourceID]; subscribers != nil {
-		delete(subscribers, ch)
+	if subscribers := liveSpectrogramMgr.subscribers[sub.sourceID]; subscribers != nil {
+		delete(subscribers, sub)
 		if len(subscribers) == 0 {
-			delete(liveSpectrogramMgr.subscribers, sourceID)
+			delete(liveSpectrogramMgr.subscribers, sub.sourceID)
 		}
 	}
 }
@@ -182,9 +213,9 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 	}
 	liveSpectrogramMgr.connectionMu.Unlock()
 
-	subscriberChan := subscribeToLiveSpectrogram(sourceID)
+	subscriber := subscribeToLiveSpectrogram(sourceID, clientIP)
 	defer func() {
-		unsubscribeFromLiveSpectrogram(sourceID, subscriberChan)
+		unsubscribeFromLiveSpectrogram(subscriber)
 		liveSpectrogramMgr.connectionMu.Lock()
 		if countPtr, ok := liveSpectrogramMgr.activeConnections.Load(clientIP); ok {
 			newCount := atomic.AddInt32(countPtr.(*int32), -1)
@@ -219,34 +250,28 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 			return nil
 		case <-c.ctx.Done():
 			return nil
-		case batch, ok := <-subscriberChan:
+		case batch, ok := <-subscriber.ch:
 			if !ok {
 				return nil
 			}
 			if conn, ok := resp.Writer.(WriteDeadlineSetter); ok {
 				_ = conn.SetWriteDeadline(time.Now().Add(liveSpectrogramWriteDeadline))
 			}
-			err := c.sendSSEMessage(ctx, "spectrogram-columns", liveSpectrogramEvent{
+			if err := c.sendSSEMessage(ctx, "spectrogram-columns", liveSpectrogramEvent{
 				Type:     "spectrogram-columns",
 				SourceID: batch.SourceID,
 				Columns:  batch.Columns,
-			})
-			if isClosedNetworkError(err) {
-				return nil
-			}
-			if err != nil {
+			}); err != nil {
+				c.logLiveSpectrogramWriteError(ctx, err, "spectrogram-columns", sourceID)
 				return nil
 			}
 		case <-heartbeat.C:
-			err := c.sendSSEMessage(ctx, "heartbeat", liveSpectrogramEvent{
+			if err := c.sendSSEMessage(ctx, "heartbeat", liveSpectrogramEvent{
 				Type:      "heartbeat",
 				SourceID:  sourceID,
 				Timestamp: time.Now().UnixMilli(),
-			})
-			if isClosedNetworkError(err) {
-				return nil
-			}
-			if err != nil {
+			}); err != nil {
+				c.logLiveSpectrogramWriteError(ctx, err, "heartbeat", sourceID)
 				return nil
 			}
 		}
@@ -255,16 +280,19 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 
 func (c *Controller) buildLiveSpectrogramMeta(sourceID string) LiveSpectrogramMeta {
 	cfg := c.Settings.WebServer.LiveStream.Spectrogram
+	// Use the same fallback the manager applies when creating the consumer so
+	// the reported sample rate matches the FFT that's actually running.
+	sampleRate := c.Settings.WebServer.LiveStream.EffectiveSampleRate()
 	meta := LiveSpectrogramMeta{
 		Type:            "spectrogram-meta",
 		SourceID:        sourceID,
-		SampleRate:      c.Settings.WebServer.LiveStream.SampleRate,
+		SampleRate:      sampleRate,
 		FFTSize:         cfg.FFTSize,
 		HopSize:         cfg.HopSize,
 		Window:          cfg.Window,
 		BinCount:        cfg.FFTSize / 2,
 		MinFrequencyHz:  0,
-		MaxFrequencyHz:  c.Settings.WebServer.LiveStream.SampleRate / 2,
+		MaxFrequencyHz:  sampleRate / 2,
 		BatchIntervalMs: cfg.BatchIntervalMs,
 	}
 	if stream := c.getHLSStream(sourceID); stream != nil && !stream.streamEpoch.IsZero() {
@@ -273,10 +301,42 @@ func (c *Controller) buildLiveSpectrogramMeta(sourceID string) LiveSpectrogramMe
 	return meta
 }
 
-func isClosedNetworkError(err error) bool {
+// isClientDisconnectError reports whether err indicates that the SSE client has
+// gone away (closed connection, reset peer, broken pipe, canceled request,
+// write deadline expired). Transient write failures such as DNS lookup or
+// dial-refused errors are NOT matched here — those are genuine faults and
+// should be logged rather than silently swallowed.
+func isClientDisconnectError(err error) bool {
 	if err == nil {
 		return false
 	}
-	var netErr *net.OpError
-	return stderrors.Is(err, context.Canceled) || stderrors.As(err, &netErr)
+	switch {
+	case errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded),
+		errors.Is(err, io.EOF),
+		errors.Is(err, io.ErrClosedPipe),
+		errors.Is(err, io.ErrUnexpectedEOF),
+		errors.Is(err, net.ErrClosed),
+		errors.Is(err, syscall.EPIPE),
+		errors.Is(err, syscall.ECONNRESET),
+		errors.Is(err, os.ErrDeadlineExceeded):
+		return true
+	}
+	// http.ErrAbortHandler surfaces when the client aborts the request.
+	if errors.Is(err, http.ErrAbortHandler) {
+		return true
+	}
+	return false
+}
+
+// logLiveSpectrogramWriteError logs unexpected SSE write errors at warn level
+// while staying silent for client-disconnect noise.
+func (c *Controller) logLiveSpectrogramWriteError(ctx echo.Context, err error, event, sourceID string) {
+	if isClientDisconnectError(err) {
+		return
+	}
+	c.logAPIRequest(ctx, logger.LogLevelWarn, "Live spectrogram SSE write failed",
+		logger.String("event", event),
+		logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)),
+		logger.Error(err))
 }
