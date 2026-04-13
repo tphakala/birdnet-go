@@ -6,6 +6,7 @@ import (
 
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -77,13 +78,22 @@ func (m *LiveSpectrogramManager) Acquire(sourceID string) error {
 		return fmt.Errorf("failed to create live spectrogram consumer: %w", err)
 	}
 
-	if err := m.engine.Router().AddRoute(sourceID, consumer, targetSampleRate); err != nil {
+	// Look up per-source gain and EQ so the spectrogram reflects exactly
+	// what the user hears via HLS on the Live Audio page. The HLS
+	// consumer uses the same lookups (see audio_hls.go), so the visual
+	// waterfall stays in lockstep with the audible stream even after
+	// runtime gain/EQ changes.
+	gainDB, _ := m.engine.Registry().GetGain(sourceID)
+	liveSettings := conf.Setting()
+	audioSettings := &liveSettings.Realtime.Audio
+	srcCfg := audioSettings.FindSourceByID(sourceID)
+	eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, targetSampleRate)
+
+	if err := m.engine.Router().AddRoute(sourceID, consumer, targetSampleRate, gainDB, eqChain); err != nil {
 		return fmt.Errorf("failed to add live spectrogram route: %w", err)
 	}
 
-	m.forwarders.Add(1)
-	go func() {
-		defer m.forwarders.Done()
+	m.forwarders.Go(func() {
 		var drops int64
 		for batch := range consumerOut {
 			select {
@@ -98,7 +108,7 @@ func (m *LiveSpectrogramManager) Acquire(sourceID string) error {
 				}
 			}
 		}
-	}()
+	})
 
 	m.sources[sourceID] = &liveSpectrogramSourceState{
 		refCount: 1,

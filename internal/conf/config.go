@@ -1284,7 +1284,7 @@ type LiveSpectrogramSettings struct {
 // user-configured value is 0 or negative, it falls back to the project-wide
 // SampleRate constant. Producers and metadata-builders must call this so the
 // rate shown to clients matches what the FFT consumer actually runs at.
-func (ls LiveStreamSettings) EffectiveSampleRate() int {
+func (ls *LiveStreamSettings) EffectiveSampleRate() int {
 	if ls.SampleRate > 0 {
 		return ls.SampleRate
 	}

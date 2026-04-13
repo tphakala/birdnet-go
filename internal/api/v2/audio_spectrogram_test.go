@@ -36,7 +36,7 @@ func TestSpectrogramBinsMarshalJSON(t *testing.T) {
 			// element-wise so a nil input matches an empty decoded slice.
 			var decoded []uint8
 			require.NoError(t, json.Unmarshal(got, &decoded))
-			assert.Equal(t, len(tt.bins), len(decoded))
+			assert.Len(t, decoded, len(tt.bins))
 			for i := range tt.bins {
 				assert.Equal(t, tt.bins[i], decoded[i])
 			}
@@ -68,7 +68,7 @@ func BenchmarkSpectrogramBinsMarshalJSON(b *testing.B) {
 	}
 	b.ReportAllocs()
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for b.Loop() {
 		_, _ = bins.MarshalJSON()
 	}
 }

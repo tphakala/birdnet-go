@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -113,7 +114,7 @@ func (c *SpectrogramConsumer) Write(frame audiocore.AudioFrame) error { //nolint
 	if c.closed.Load() {
 		return audiocore.ErrConsumerClosed
 	}
-	samples := c.decodeFrame(frame)
+	samples := c.decodeFrame(&frame)
 	if len(samples) == 0 {
 		return nil
 	}
@@ -155,8 +156,8 @@ func (c *SpectrogramConsumer) Close() error {
 // (Write) immediately appends the result into c.rolling, which copies, so
 // returning the scratch buffer directly is safe — the next Write call may
 // overwrite it. Multi-channel input is downmixed in place at the front of
-// the same buffer.
-func (c *SpectrogramConsumer) decodeFrame(frame audiocore.AudioFrame) []float64 {
+// the same buffer. Takes *AudioFrame to avoid copying the ~100-byte struct.
+func (c *SpectrogramConsumer) decodeFrame(frame *audiocore.AudioFrame) []float64 {
 	evenLen := len(frame.Data) &^ 1
 	if evenLen == 0 {
 		return nil
@@ -178,10 +179,10 @@ func (c *SpectrogramConsumer) decodeFrame(frame audiocore.AudioFrame) []float64 
 	// unread sample. Requires channels >= 2, which is guaranteed here.
 	monoCount := sampleCount / frame.Channels
 	invChannels := 1.0 / float64(frame.Channels)
-	for i := 0; i < monoCount; i++ {
+	for i := range monoCount {
 		sum := 0.0
 		base := i * frame.Channels
-		for ch := 0; ch < frame.Channels; ch++ {
+		for ch := range frame.Channels {
 			sum += c.scratchPCM[base+ch]
 		}
 		c.scratchPCM[i] = sum * invChannels
@@ -191,13 +192,13 @@ func (c *SpectrogramConsumer) decodeFrame(frame audiocore.AudioFrame) []float64 
 
 func (c *SpectrogramConsumer) makeColumn() apiv2.LiveSpectrogramColumn {
 	windowed := make([]float64, c.fftSize)
-	for i := 0; i < c.fftSize; i++ {
+	for i := range c.fftSize {
 		windowed[i] = c.rolling[i] * c.windowCoeffs[i]
 	}
 
 	coeffs := c.fft.Coefficients(nil, windowed)
 	bins := make([]uint8, c.fftSize/2)
-	for i := 0; i < len(bins); i++ {
+	for i := range bins {
 		mag := math.Hypot(real(coeffs[i]), imag(coeffs[i]))
 		db := 20 * math.Log10(mag+1e-12)
 		scaled := ((db + 100) / 100) * 255
@@ -232,7 +233,7 @@ func (c *SpectrogramConsumer) flush(sourceID string) {
 		HopSize:         c.hopSize,
 		Window:          c.window,
 		BatchIntervalMs: c.batchIntervalMs,
-		Columns:         append([]apiv2.LiveSpectrogramColumn(nil), c.batch...),
+		Columns:         slices.Clone(c.batch),
 	}
 	c.batch = c.batch[:0]
 
@@ -262,7 +263,7 @@ func buildWindow(window string, size int) []float64 {
 	coeffs := make([]float64, size)
 	switch window {
 	case "hann":
-		for i := 0; i < size; i++ {
+		for i := range size {
 			coeffs[i] = 0.5 - 0.5*math.Cos((2*math.Pi*float64(i))/float64(size-1))
 		}
 	default:
