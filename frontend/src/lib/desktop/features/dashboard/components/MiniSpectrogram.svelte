@@ -107,9 +107,11 @@
   // Initialize composable during component init (must be at top level for $effect cleanup)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: false });
 
+  const STREAM_COLUMNS_MAX = 1024;
+
   function startLiveSpectrogram(sourceId: string) {
     closeLiveSpectrogramStream?.();
-    streamColumns = [];
+    streamColumns.length = 0;
     closeLiveSpectrogramStream = connectLiveSpectrogramStream(sourceId, {
       onMeta: meta => {
         streamSampleRate = meta.sampleRate;
@@ -117,7 +119,18 @@
         streamHopSize = meta.hopSize;
       },
       onColumns: event => {
-        streamColumns = [...streamColumns, ...event.columns].slice(-1024);
+        // Mutate in place: push new columns onto the reactive buffer and
+        // trim from the front if we exceed the rolling window. Avoids
+        // the per-event [...old, ...new].slice(-N) allocation (Svelte 5
+        // reactivity handles array mutations and coalesces updates in
+        // a single microtask).
+        for (const column of event.columns) {
+          streamColumns.push(column);
+        }
+        const overflow = streamColumns.length - STREAM_COLUMNS_MAX;
+        if (overflow > 0) {
+          streamColumns.splice(0, overflow);
+        }
       },
     });
   }
@@ -125,7 +138,7 @@
   function stopLiveSpectrogram() {
     closeLiveSpectrogramStream?.();
     closeLiveSpectrogramStream = null;
-    streamColumns = [];
+    streamColumns.length = 0;
     streamSampleRate = 48000;
     streamFFTSize = FFT_SIZE;
     streamHopSize = 128;

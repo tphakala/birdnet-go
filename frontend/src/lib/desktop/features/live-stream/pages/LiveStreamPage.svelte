@@ -151,9 +151,11 @@
     }
   }
 
+  const STREAM_COLUMNS_MAX = 2048;
+
   function startLiveSpectrogramStream(sourceId: string) {
     closeLiveSpectrogramStream?.();
-    streamColumns = [];
+    streamColumns.length = 0;
     closeLiveSpectrogramStream = connectLiveSpectrogramStream(sourceId, {
       onMeta: meta => {
         streamSampleRate = meta.sampleRate;
@@ -161,7 +163,17 @@
         streamHopSize = meta.hopSize;
       },
       onColumns: event => {
-        streamColumns = [...streamColumns, ...event.columns].slice(-2048);
+        // Mutate in place: push new columns onto the reactive buffer
+        // and trim from the front on overflow. Avoids the per-event
+        // [...old, ...new].slice(-N) allocation; Svelte 5 reactivity
+        // coalesces mutations within a single microtask.
+        for (const column of event.columns) {
+          streamColumns.push(column);
+        }
+        const overflow = streamColumns.length - STREAM_COLUMNS_MAX;
+        if (overflow > 0) {
+          streamColumns.splice(0, overflow);
+        }
       },
     });
   }
@@ -169,7 +181,7 @@
   function stopLiveSpectrogramStream() {
     closeLiveSpectrogramStream?.();
     closeLiveSpectrogramStream = null;
-    streamColumns = [];
+    streamColumns.length = 0;
     streamSampleRate = 48000;
     streamFFTSize = FFT_SIZE;
     streamHopSize = 128;

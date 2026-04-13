@@ -96,8 +96,15 @@
   // CSS pixel dimensions (from ResizeObserver)
   let cssWidth = $state(800);
   let cssHeight = $state(300);
-  let queuedStreamColumns = $state<LiveSpectrogramColumn[]>([]);
-  let lastQueuedStreamUnixMs = $state(0);
+  // Non-reactive FIFO queue of pending stream columns. Held as a plain array
+  // with an integer head index so the animation loop can dequeue in O(1)
+  // instead of calling queuedStreamColumns.slice(1) on every drained column.
+  // Only the feed $effect and the animation loop touch these — neither path
+  // needs Svelte reactivity on this buffer.
+  let queuedStreamColumns: LiveSpectrogramColumn[] = [];
+  let queuedStreamHead = 0;
+  let lastQueuedStreamUnixMs = 0;
+  const QUEUED_STREAM_COMPACT_THRESHOLD = 256;
 
   // DPR tracking
   let dpr = $state(globalThis.devicePixelRatio ?? 1);
@@ -174,21 +181,24 @@
 
   function aggregateStreamColumns(
     columns: Array<number[] | Uint8Array<ArrayBuffer>>,
-    binCount: number
+    binCount: number,
+    start = 0,
+    end: number = columns.length
   ): Uint8Array<ArrayBuffer> {
     const aggregated = new Uint8Array(binCount);
-    if (columns.length === 0) return aggregated;
+    const count = end - start;
+    if (count <= 0) return aggregated;
 
     for (let bin = 0; bin < binCount; bin++) {
       let totalValue = 0;
-      for (const column of columns) {
-        /* eslint-disable security/detect-object-injection -- bin is a bounded loop index for dense FFT column arrays */
-        const value = column[bin] ?? 0;
+      for (let i = start; i < end; i++) {
+        /* eslint-disable security/detect-object-injection -- bin and i are bounded loop indices for dense FFT column arrays */
+        const value = columns[i][bin] ?? 0;
         /* eslint-enable security/detect-object-injection */
         totalValue += value;
       }
       /* eslint-disable security/detect-object-injection -- bin is a bounded loop index for dense FFT column arrays */
-      aggregated[bin] = Math.round(totalValue / columns.length);
+      aggregated[bin] = Math.round(totalValue / count);
       /* eslint-enable security/detect-object-injection */
     }
 
@@ -197,24 +207,37 @@
 
   $effect(() => {
     if (renderMode !== 'stream') {
-      queuedStreamColumns = [];
+      queuedStreamColumns.length = 0;
+      queuedStreamHead = 0;
       lastQueuedStreamUnixMs = 0;
       return;
     }
 
-    const nextColumns: LiveSpectrogramColumn[] = [];
+    let appended = 0;
     for (const column of streamColumns) {
       if (column.tUnixMs > lastQueuedStreamUnixMs) {
-        nextColumns.push(column);
+        queuedStreamColumns.push(column);
+        lastQueuedStreamUnixMs = column.tUnixMs;
+        appended++;
       }
     }
-    if (nextColumns.length === 0) return;
+    if (appended === 0) return;
 
-    queuedStreamColumns = [...queuedStreamColumns, ...nextColumns];
-    lastQueuedStreamUnixMs = nextColumns[nextColumns.length - 1].tUnixMs;
+    // Cap the queue to prevent unbounded growth if the animation loop
+    // stops draining (e.g., tab backgrounded). Trim from the unread head.
+    const live = queuedStreamColumns.length - queuedStreamHead;
+    if (live > 4096) {
+      queuedStreamHead += live - 4096;
+    }
 
-    if (queuedStreamColumns.length > 4096) {
-      queuedStreamColumns = queuedStreamColumns.slice(-4096);
+    // Periodically compact when the head has advanced far enough that
+    // the prefix of already-consumed columns dominates the array.
+    if (
+      queuedStreamHead > QUEUED_STREAM_COMPACT_THRESHOLD &&
+      queuedStreamHead * 2 > queuedStreamColumns.length
+    ) {
+      queuedStreamColumns = queuedStreamColumns.slice(queuedStreamHead);
+      queuedStreamHead = 0;
     }
   });
 
@@ -340,7 +363,11 @@
     // Track whether overlay was drawn last frame to avoid clearing an already-empty canvas
     let overlayHadContent = false;
     let lastStreamBins: number[] | Uint8Array<ArrayBuffer> | null = null;
+    // Head-indexed FIFO of FFT columns ready to paint. Append via push(),
+    // consume via head++ to avoid O(N) slice() calls per dequeue.
     let renderReadyColumns: Array<number[] | Uint8Array<ArrayBuffer>> = [];
+    let renderReadyHead = 0;
+    const RENDER_READY_COMPACT_THRESHOLD = 256;
     let streamColumnAccumulator = 0;
     let hasRenderedStreamColumns = false;
     let clearedStreamPrimingCanvas = false;
@@ -385,22 +412,37 @@
 
       if (renderMode === 'analyser') {
         analyser?.getByteFrequencyData(frequencyData);
-      } else if (queuedStreamColumns.length > 0) {
+      } else if (queuedStreamColumns.length - queuedStreamHead > 0) {
         const playheadUnixMs = wallClockAtPlayhead > 0 ? Math.floor(wallClockAtPlayhead * 1000) : 0;
 
+        // O(1) head-index dequeue — no slice() copies per column.
+        /* eslint-disable security/detect-object-injection -- queuedStreamHead is a monotonic index into an internal FIFO */
         while (
-          queuedStreamColumns.length > 0 &&
+          queuedStreamHead < queuedStreamColumns.length &&
           playheadUnixMs > 0 &&
-          queuedStreamColumns[0].tUnixMs <= playheadUnixMs
+          queuedStreamColumns[queuedStreamHead].tUnixMs <= playheadUnixMs
         ) {
-          dueStreamColumns.push(queuedStreamColumns[0]);
-          queuedStreamColumns = queuedStreamColumns.slice(1);
+          dueStreamColumns.push(queuedStreamColumns[queuedStreamHead]);
+          queuedStreamHead++;
+        }
+        /* eslint-enable security/detect-object-injection */
+        // Compact opportunistically once the consumed prefix is large
+        // enough to make the one-shot copy worth it.
+        if (
+          queuedStreamHead > QUEUED_STREAM_COMPACT_THRESHOLD &&
+          queuedStreamHead * 2 > queuedStreamColumns.length
+        ) {
+          queuedStreamColumns = queuedStreamColumns.slice(queuedStreamHead);
+          queuedStreamHead = 0;
         }
         if (dueStreamColumns.length > 0) {
           const dueBins = dueStreamColumns.map(column => column.bins);
           renderReadyColumns.push(...dueBins);
-          if (renderReadyColumns.length > MAX_RENDER_READY_COLUMNS) {
-            renderReadyColumns = renderReadyColumns.slice(-MAX_RENDER_READY_COLUMNS);
+          // Trim from the unread head instead of slicing — matches the
+          // queuedStreamColumns head-index pattern below.
+          const renderLive = renderReadyColumns.length - renderReadyHead;
+          if (renderLive > MAX_RENDER_READY_COLUMNS) {
+            renderReadyHead += renderLive - MAX_RENDER_READY_COLUMNS;
           }
           lastStreamBins = dueBins[dueBins.length - 1];
         }
@@ -483,31 +525,40 @@
             streamColumnAccumulator -= columnsToConsume;
           }
 
-          if (renderReadyColumns.length > 0 && columnsToConsume === 0) {
+          const renderReadyAvailable = renderReadyColumns.length - renderReadyHead;
+          if (renderReadyAvailable > 0 && columnsToConsume === 0) {
             columnsToConsume = 1;
           }
 
-          if (columnsToConsume > renderReadyColumns.length) {
-            columnsToConsume = renderReadyColumns.length;
+          if (columnsToConsume > renderReadyAvailable) {
+            columnsToConsume = renderReadyAvailable;
           }
 
           if (columnsToConsume > 0) {
             if (!hasRenderedStreamColumns) {
               pixelsToScroll = Math.min(pixelsToScroll, Math.max(1, columnsToConsume));
             }
-            const consumedColumns = renderReadyColumns.slice(0, columnsToConsume);
-            renderReadyColumns = renderReadyColumns.slice(columnsToConsume);
+            // View slice against the live head; advance head without copying.
+            const consumeStart = renderReadyHead;
+            const consumeEnd = renderReadyHead + columnsToConsume;
+            renderReadyHead = consumeEnd;
             hasRenderedStreamColumns = true;
             clearedStreamPrimingCanvas = false;
-            const columnsPerPixel = consumedColumns.length / pixelsToScroll;
+            const columnsPerPixel = columnsToConsume / pixelsToScroll;
 
             for (let col = 0; col < pixelsToScroll; col++) {
-              const start = Math.floor(col * columnsPerPixel);
-              const end = Math.max(start + 1, Math.floor((col + 1) * columnsPerPixel));
-              const slice = consumedColumns.slice(start, end);
+              const offsetStart = Math.floor(col * columnsPerPixel);
+              const offsetEnd = Math.max(offsetStart + 1, Math.floor((col + 1) * columnsPerPixel));
+              const sliceStart = consumeStart + offsetStart;
+              const sliceEnd = Math.min(consumeStart + offsetEnd, consumeEnd);
               streamPixels.push(
-                slice.length > 0
-                  ? aggregateStreamColumns(slice, frequencyData.length)
+                sliceEnd > sliceStart
+                  ? aggregateStreamColumns(
+                      renderReadyColumns,
+                      frequencyData.length,
+                      sliceStart,
+                      sliceEnd
+                    )
                   : (lastStreamBins ?? [])
               );
             }
@@ -515,6 +566,17 @@
             for (let col = 0; col < pixelsToScroll; col++) {
               streamPixels.push(lastStreamBins);
             }
+          }
+
+          // Compact the ready-column buffer once the consumed prefix
+          // dominates the backing array. Amortised O(1) per column since
+          // compaction only runs at threshold * 2 intervals.
+          if (
+            renderReadyHead > RENDER_READY_COMPACT_THRESHOLD &&
+            renderReadyHead * 2 > renderReadyColumns.length
+          ) {
+            renderReadyColumns = renderReadyColumns.slice(renderReadyHead);
+            renderReadyHead = 0;
           }
         }
 

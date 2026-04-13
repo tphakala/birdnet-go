@@ -2,12 +2,12 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -33,14 +33,27 @@ type LiveSpectrogramColumn struct {
 
 type SpectrogramBins []uint8
 
-// MarshalJSON forces FFT bins to be emitted as a numeric JSON array instead
-// of the default []byte base64 encoding used by encoding/json for []uint8.
+// MarshalJSON emits FFT bins as a numeric JSON array. encoding/json would
+// base64-encode a []uint8 by default, so we override. The hand-written
+// digit serializer avoids the intermediate []int allocation (~4 KB per
+// column) and the reflection-based json.Marshal call — this runs at ~375
+// columns/s × N subscribers in the SSE fan-out, so cutting the per-column
+// allocation to a single output buffer is a meaningful win.
 func (b SpectrogramBins) MarshalJSON() ([]byte, error) {
-	values := make([]int, len(b))
-	for i, v := range b {
-		values[i] = int(v)
+	if len(b) == 0 {
+		return []byte("[]"), nil
 	}
-	return json.Marshal(values)
+	// Upper bound: '[' + len*4 (up to "255,") + ']'.
+	buf := make([]byte, 0, 2+len(b)*4)
+	buf = append(buf, '[')
+	for i, v := range b {
+		if i > 0 {
+			buf = append(buf, ',')
+		}
+		buf = strconv.AppendUint(buf, uint64(v), 10)
+	}
+	buf = append(buf, ']')
+	return buf, nil
 }
 
 type LiveSpectrogramBatch struct {
