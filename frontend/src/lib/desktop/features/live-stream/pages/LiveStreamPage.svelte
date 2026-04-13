@@ -25,7 +25,11 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { loggers } from '$lib/utils/logger';
-  import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
+  import {
+    COLOR_MAPS,
+    DEFAULT_COLOR_MAP,
+    type ColorMapName,
+  } from '$lib/utils/spectrogramColorMaps';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { connectLiveSpectrogramStream } from '$lib/utils/liveSpectrogramStream';
   import type { LiveSpectrogramColumn } from '$lib/types/liveSpectrogram';
@@ -48,6 +52,41 @@
   const LABEL_POLL_INTERVAL_MS = 200;
   /** Maximum label age (ms) before pruning from overlay */
   const LABEL_MAX_AGE_MS = 60000;
+  /** localStorage key for persisting the user's Live Audio color map choice */
+  const COLOR_MAP_STORAGE_KEY = 'birdnet-live-audio-color-map';
+
+  /**
+   * Load the persisted color map from localStorage, validating it against
+   * the authoritative set of registered color maps. Falls back to the
+   * default if the key is unset, invalid, or localStorage is unavailable
+   * (private browsing, strict privacy modes). Scoped to the Live Audio
+   * page only — the dashboard widget and Recent Detections have their
+   * own rendering and are intentionally not affected.
+   */
+  function loadPersistedColorMap(): ColorMapName {
+    try {
+      const stored = globalThis.localStorage?.getItem(COLOR_MAP_STORAGE_KEY);
+      if (stored && stored in COLOR_MAPS) {
+        return stored as ColorMapName;
+      }
+    } catch {
+      /* localStorage not available — fall through to default */
+    }
+    return DEFAULT_COLOR_MAP;
+  }
+
+  /**
+   * Persist the user's color map choice for next visit. Swallows errors
+   * from localStorage being unavailable so the UI stays functional even
+   * in strict-privacy browser modes.
+   */
+  function persistColorMap(choice: ColorMapName): void {
+    try {
+      globalThis.localStorage?.setItem(COLOR_MAP_STORAGE_KEY, choice);
+    } catch {
+      /* localStorage not available — silent no-op */
+    }
+  }
 
   const sessionId = generateSessionId();
 
@@ -72,7 +111,14 @@
 
   // Spectrogram config
   let frequencyRange = $state<[number, number]>([0, 15000]);
-  let colorMap = $state<ColorMapName>('inferno');
+  let colorMap = $state<ColorMapName>(loadPersistedColorMap());
+
+  // Persist the color map whenever the user changes it. $effect fires on
+  // initial mount with the currently-loaded value, which is a safe no-op
+  // (writing the same value we just read).
+  $effect(() => {
+    persistColorMap(colorMap);
+  });
   let gainDb = $state(0);
   let audioOutput = $state(true);
 
