@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, cleanup } from '@testing-library/svelte';
 import { renderTyped } from '../../../../test/render-helpers';
 import SoundCardCard from './SoundCardCard.svelte';
@@ -30,6 +30,10 @@ describe('SoundCardCard defensive model guards', () => {
     device: 'sysdefault',
     gain: 0,
   };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   afterEach(() => {
     cleanup();

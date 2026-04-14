@@ -34,6 +34,7 @@ describe('TimelinePopover', () => {
       timestamp: timestamp.toISOString(),
       reason,
     } as StateTransition,
+    key: `${timestamp.getTime()}_state_${toState}_0`,
   });
 
   const createErrorEvent = (
@@ -56,6 +57,7 @@ describe('TimelinePopover', () => {
       target_host: options.target_host,
       target_port: options.target_port,
     } as ErrorContext,
+    key: `${timestamp.getTime()}_error_${errorType}_0`,
   });
 
   let mockAnchorEl: HTMLElement;

@@ -392,8 +392,8 @@ describe('StreamTimeline', () => {
 
     it('renders identical events sharing timestamp, type, and discriminator', () => {
       // Worst case: two events with timestamp, type, and discriminator all
-      // identical. The list-index tiebreaker in the composite key keeps each
-      // block entry unique.
+      // identical. The per-duplicate ordinal in the composite key keeps each
+      // block entry unique without relying on the sliding-window render index.
       const errorHistory: ErrorContext[] = [
         createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
         createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
@@ -407,6 +407,82 @@ describe('StreamTimeline', () => {
 
       const buttons = screen.getAllByRole('button');
       expect(buttons.length).toBe(2);
+    });
+
+    it('toggles the popover on click for events sharing a timestamp', async () => {
+      // Regression: earlier implementation used the render index in the
+      // composite key and stored the clicked index, so clicking two events
+      // that collided on timestamp could fail to close the popover.
+      const stateHistory: StateTransition[] = [
+        createStateTransition('idle', 'running', SHARED_TIMESTAMP),
+      ];
+      const errorHistory: ErrorContext[] = [
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+      ];
+
+      timelineTest.render({ stateHistory, errorHistory });
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(2);
+
+      // Click the first node — popover opens.
+      await fireEvent.click(buttons[0]);
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      // Click the same node again — popover closes (composite-key equality).
+      await fireEvent.click(buttons[0]);
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+
+      // Click the second node — popover opens for the other event.
+      await fireEvent.click(buttons[1]);
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+    });
+  });
+
+  describe('Sliding-window key stability', () => {
+    // Regression: earlier implementation included the render index in the
+    // each-key. Because timelineEvents is capped at the last 10 events, any
+    // new event shifts the indices of all older survivors and forces Svelte
+    // to recreate their DOM nodes. This test confirms two events that
+    // survive a window shift keep stable keys and therefore stable elements.
+    it('keeps surviving events on stable keys as older events drop off', async () => {
+      const base = new Date('2026-04-14T10:00:00.000Z').getTime();
+      const ts = (offset: number) => new Date(base + offset).toISOString();
+
+      // Render with 10 events so the window is full.
+      const initialHistory: StateTransition[] = Array.from({ length: 10 }, (_, i) =>
+        createStateTransition('idle', `state${i}`, ts(i * 1000))
+      );
+      const rendered = timelineTest.render({ stateHistory: initialHistory });
+
+      const initialButtons = screen.getAllByRole('button');
+      expect(initialButtons.length).toBe(10);
+      const survivorBefore = initialButtons[9]; // newest at the end
+
+      // Append one more event — the oldest drops off.
+      const withShift: StateTransition[] = [
+        ...initialHistory,
+        createStateTransition('idle', 'state10', ts(10 * 1000)),
+      ];
+      rendered.rerender({ stateHistory: withShift });
+
+      await waitFor(() => {
+        const after = screen.getAllByRole('button');
+        expect(after.length).toBe(10);
+      });
+
+      const afterButtons = screen.getAllByRole('button');
+      // state10 is now the newest; the previously-newest survivor (state9)
+      // should still be represented by the same DOM node because its key
+      // did not change.
+      const survivorAfter = afterButtons[8];
+      expect(survivorAfter).toBe(survivorBefore);
     });
   });
 });

@@ -22,6 +22,11 @@
     type: 'state' | 'error';
     timestamp: Date;
     data: StateTransition | ErrorContext;
+    // Stable per-event key precomputed during derivation. Combines timestamp,
+    // type, discriminator (to_state / error_type), and a per-duplicate ordinal
+    // so multiple events with identical data still produce distinct keys
+    // without depending on the sliding render index (BIRDNET-GO-1A0).
+    key: string;
   }
 
   interface Props {
@@ -31,9 +36,11 @@
 
   let { stateHistory = [], errorHistory = [] }: Props = $props();
 
-  // Selected event for popover
+  // Selected event for popover, tracked by its stable key so SSE-driven list
+  // changes (slice(-10)) cannot invalidate the selection before the user
+  // toggles it off.
   let selectedEvent = $state<TimelineEvent | null>(null);
-  let selectedIndex = $state<number>(-1);
+  let selectedKey = $state<string | null>(null);
   let selectedNodeEl = $state<HTMLElement | null>(null);
 
   // Format timestamp for display (24-hour format, using app locale)
@@ -52,15 +59,26 @@
     return isNaN(date.getTime()) ? null : date;
   }
 
-  // Merge and sort state and error history into unified timeline
+  // Returns the discriminator string for an event (state name for transitions,
+  // error type for errors). Used in the composite key and aria-label.
+  function eventDiscriminator(event: Omit<TimelineEvent, 'key'>): string {
+    return event.type === 'error'
+      ? ((event.data as ErrorContext).error_type ?? '')
+      : ((event.data as StateTransition).to_state ?? '');
+  }
+
+  // Merge and sort state and error history into unified timeline, assigning
+  // a stable composite key to each event. The per-duplicate ordinal is
+  // computed over the sorted list (pre-slice) so an event's key does not
+  // change when the sliding window drops older events.
   let timelineEvents = $derived.by(() => {
-    const events: TimelineEvent[] = [];
+    const raw: Omit<TimelineEvent, 'key'>[] = [];
 
     // Add state transitions (filter invalid timestamps)
     for (const state of stateHistory ?? []) {
       const timestamp = parseTimestamp(state.timestamp);
       if (timestamp) {
-        events.push({
+        raw.push({
           type: 'state',
           timestamp,
           data: state,
@@ -72,7 +90,7 @@
     for (const error of errorHistory ?? []) {
       const timestamp = parseTimestamp(error.timestamp);
       if (timestamp) {
-        events.push({
+        raw.push({
           type: 'error',
           timestamp,
           data: error,
@@ -81,10 +99,22 @@
     }
 
     // Sort by timestamp ascending (oldest first)
-    events.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    raw.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-    // Limit to last 10 events
-    return events.slice(-10);
+    // Assign a deterministic per-(timestamp,type,discriminator) ordinal so
+    // true duplicate events still produce unique keys without relying on
+    // the sliding-window render index (Gemini / Sentry / CodeRabbit review).
+    const occurrence = new Map<string, number>();
+    const keyed: TimelineEvent[] = raw.map(event => {
+      const base = `${event.timestamp.getTime()}_${event.type}_${eventDiscriminator(event)}`;
+      const ordinal = occurrence.get(base) ?? 0;
+      occurrence.set(base, ordinal + 1);
+      return { ...event, key: `${base}_${ordinal}` };
+    });
+
+    // Limit to last 10 events; ordinals were assigned pre-slice so surviving
+    // events keep their keys when older events drop off.
+    return keyed.slice(-10);
   });
 
   // Get node color based on event type and data
@@ -119,26 +149,23 @@
     return toState === 'restarting' || toState === 'backoff';
   }
 
-  function handleNodeClick(event: TimelineEvent, index: number, nodeEl: HTMLElement) {
-    // Compare by composite key so two events sharing a millisecond do not
-    // collide (BIRDNET-GO-1A0). Keys are stable within the derived list.
-    const sameNode =
-      selectedEvent != null &&
-      timelineEventKey(selectedEvent, selectedIndex) === timelineEventKey(event, index);
-    if (sameNode) {
+  function handleNodeClick(event: TimelineEvent, nodeEl: HTMLElement) {
+    // Compare by the event's stable key so SSE-driven list updates cannot
+    // stale the selection (BIRDNET-GO-1A0).
+    if (selectedKey === event.key) {
       selectedEvent = null;
-      selectedIndex = -1;
+      selectedKey = null;
       selectedNodeEl = null;
     } else {
       selectedEvent = event;
-      selectedIndex = index;
+      selectedKey = event.key;
       selectedNodeEl = nodeEl;
     }
   }
 
   function handleClosePopover() {
     selectedEvent = null;
-    selectedIndex = -1;
+    selectedKey = null;
     selectedNodeEl = null;
   }
 
@@ -146,21 +173,6 @@
     if (e.key === 'Escape') {
       handleClosePopover();
     }
-  }
-
-  // Build a composite key for {#each} that stays unique even when multiple
-  // events fire in the same millisecond (BIRDNET-GO-1A0). Primary uniqueness
-  // comes from timestamp + event type + discriminator (to_state / error_type);
-  // the list index is appended as a final tiebreaker for the rare case where
-  // two events with identical timestamp, type, and discriminator collide.
-  // `timelineEvents` is derived deterministically (sorted by timestamp), so
-  // the index is stable within a single render pass.
-  function timelineEventKey(event: TimelineEvent, index: number): string {
-    const discriminator =
-      event.type === 'error'
-        ? (event.data as ErrorContext).error_type
-        : (event.data as StateTransition).to_state;
-    return `${event.timestamp.getTime()}_${event.type}_${discriminator}_${index}`;
   }
 </script>
 
@@ -179,9 +191,10 @@
         ></div>
       {/if}
 
-      {#each timelineEvents as event, _idx (timelineEventKey(event, _idx))}
+      {#each timelineEvents as event (event.key)}
         {@const colors = getNodeColor(event)}
         {@const hollow = isHollow(event)}
+        {@const discriminator = eventDiscriminator(event)}
         <div class="flex flex-col items-center w-14 flex-shrink-0">
           <!-- Node -->
           <button
@@ -192,10 +205,10 @@
               colors.border,
               hollow ? 'bg-[var(--color-base-100)]' : colors.bg
             )}
-            onclick={e => handleNodeClick(event, _idx, e.currentTarget)}
-            aria-label={t('settings.audio.streams.timeline.eventAt', {
+            onclick={e => handleNodeClick(event, e.currentTarget)}
+            aria-label={`${t('settings.audio.streams.timeline.eventAt', {
               time: formatTime(event.timestamp),
-            })}
+            })} — ${event.type === 'error' ? t('settings.audio.streams.timeline.error') : ''} ${discriminator}`.trim()}
           ></button>
 
           <!-- Timestamp -->
