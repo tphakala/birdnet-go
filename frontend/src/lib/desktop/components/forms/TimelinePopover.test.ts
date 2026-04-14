@@ -35,6 +35,7 @@ describe('TimelinePopover', () => {
       reason,
     } as StateTransition,
     discriminator: toState,
+    ordinal: 0,
     key: `${timestamp.getTime()}_state_${toState}_0`,
   });
 
@@ -59,6 +60,7 @@ describe('TimelinePopover', () => {
       target_port: options.target_port,
     } as ErrorContext,
     discriminator: errorType,
+    ordinal: 0,
     key: `${timestamp.getTime()}_error_${errorType}_0`,
   });
 

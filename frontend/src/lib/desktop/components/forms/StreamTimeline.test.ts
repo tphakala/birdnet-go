@@ -409,6 +409,32 @@ describe('StreamTimeline', () => {
       expect(buttons.length).toBe(2);
     });
 
+    it('gives identical-tuple duplicates distinct accessible names', () => {
+      // Screen-reader regression (CodeRabbit round-3): when timestamp, type,
+      // and discriminator all match, aria-label must include an ordinal
+      // tiebreaker so the duplicates are distinguishable. First occurrence
+      // keeps the plain label; subsequent ones get "(2)", "(3)", …
+      const errorHistory: ErrorContext[] = [
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+      ];
+
+      timelineTest.render({ errorHistory });
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(3);
+
+      const labels = buttons.map(btn => btn.getAttribute('aria-label'));
+      const unique = new Set(labels);
+      expect(unique.size).toBe(3);
+
+      // First duplicate has no tiebreaker; second and third have (2) / (3).
+      expect(labels[0]).not.toMatch(/\(\d+\)$/);
+      expect(labels[1]).toMatch(/\(2\)$/);
+      expect(labels[2]).toMatch(/\(3\)$/);
+    });
+
     it('toggles the popover on click for events sharing a timestamp', async () => {
       // Regression: earlier implementation used the render index in the
       // composite key and stored the clicked index, so clicking two events

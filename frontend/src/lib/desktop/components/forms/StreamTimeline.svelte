@@ -26,10 +26,15 @@
     // errors). Precomputed during derivation so the template and aria-label
     // can access it without repeated union narrowing.
     discriminator: string;
+    // Per-(timestamp, type, discriminator) occurrence count, 0-based. Only
+    // > 0 for true duplicates (same data repeated in the same millisecond).
+    // Used both in the composite `key` and in the aria-label tiebreaker so
+    // screen-reader users can tell duplicate events apart.
+    ordinal: number;
     // Stable per-event key precomputed during derivation. Combines timestamp,
-    // type, discriminator, and a per-duplicate ordinal so multiple events
-    // with identical data still produce distinct keys without depending on
-    // the sliding render index (BIRDNET-GO-1A0).
+    // type, discriminator, and ordinal so multiple events with identical
+    // data still produce distinct keys without depending on the sliding
+    // render index (BIRDNET-GO-1A0).
     key: string;
   }
 
@@ -122,7 +127,7 @@
       const base = `${event.timestamp.getTime()}_${event.type}_${discriminator}`;
       const ordinal = occurrence.get(base) ?? 0;
       occurrence.set(base, ordinal + 1);
-      return { ...event, discriminator, key: `${base}_${ordinal}` };
+      return { ...event, discriminator, ordinal, key: `${base}_${ordinal}` };
     });
 
     // Limit to last 10 events; ordinals were assigned pre-slice so surviving
@@ -246,6 +251,11 @@
               }),
               event.type === 'error' ? t('settings.audio.streams.timeline.error') : '',
               event.discriminator,
+              // Tiebreaker for true duplicates (same timestamp + type +
+              // discriminator). Adds "(2)", "(3)", … so screen readers can
+              // tell otherwise-identical events apart. First occurrence
+              // (ordinal 0) omits the suffix to keep the common case clean.
+              event.ordinal > 0 ? `(${event.ordinal + 1})` : '',
             ]
               .filter(Boolean)
               .join(' — ')}
