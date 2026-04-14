@@ -166,7 +166,14 @@ func TestGetDashboardSettings_DoesNotLeakSecrets(t *testing.T) {
 	e.ServeHTTP(rec, req)
 	require.Equal(t, http.StatusOK, rec.Code)
 
-	bodyLower := strings.ToLower(rec.Body.String())
+	body := rec.Body.String()
+	// The redaction marker must not appear in the dashboard response. Its
+	// presence would indicate a secret-bearing field slipped into the Dashboard
+	// struct and was redacted by sanitizeSettingsForAPI but still serialized.
+	assert.NotContains(t, body, redactedValue,
+		"dashboard response must not contain the redaction marker %q", redactedValue)
+
+	bodyLower := strings.ToLower(body)
 	// None of these substrings should appear in the dashboard payload.
 	forbidden := []string{"password", "secret", "token", "apikey", "api_key", "client_secret"}
 	for _, s := range forbidden {
