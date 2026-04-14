@@ -22,7 +22,13 @@ type Note struct {
 	Date       string `gorm:"index:idx_notes_date;index:idx_notes_date_commonname_confidence;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:2"`
 	Time       string `gorm:"index:idx_notes_time"`
 	//InputFile      string
-	Source      AudioSource         `gorm:"-"` // Runtime only, not stored in database
+	// Source is runtime-only: the AudioSource display metadata is built from
+	// the audiocore source registry during detection processing and persisted
+	// separately by the v2 datastore's AudioSource entity (see
+	// internal/datastore/v2/entities). On the legacy v1 datastore the field is
+	// never rehydrated on read, so the detections API returns a nil Source for
+	// historical detections saved through that path.
+	Source      AudioSource         `gorm:"-"`
 	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	BeginTime   time.Time
 	EndTime     time.Time
