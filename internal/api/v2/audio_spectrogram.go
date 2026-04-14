@@ -102,6 +102,14 @@ type liveSpectrogramSubscriber struct {
 // interval so the three log streams line up.
 const liveSpectrogramDropLogInterval int64 = 100
 
+// liveSpectrogramManager holds per-Controller SSE broadcaster state for the
+// live spectrogram endpoint. Every Controller gets its own instance via
+// newLiveSpectrogramManager so the embedded sync.Once resets on each
+// Controller lifecycle — this is what lets a programmatic server restart
+// rebind a fresh broadcaster goroutine to the new liveSpectrogramChan.
+// A package-level singleton would leave the sync.Once permanently fired
+// after the first start and silently drop data on every subsequent
+// restart (Sentry flagged this on PR #2745).
 type liveSpectrogramManager struct {
 	activeConnections sync.Map
 	connectionMu      sync.Mutex
@@ -111,41 +119,49 @@ type liveSpectrogramManager struct {
 	broadcasterCancel context.CancelFunc
 }
 
-var liveSpectrogramMgr = &liveSpectrogramManager{
-	subscribers: make(map[string]map[*liveSpectrogramSubscriber]struct{}),
+// newLiveSpectrogramManager constructs a zero-initialized manager with an
+// empty subscribers map. Called once per Controller from api.go New().
+func newLiveSpectrogramManager() *liveSpectrogramManager {
+	return &liveSpectrogramManager{
+		subscribers: make(map[string]map[*liveSpectrogramSubscriber]struct{}),
+	}
 }
 
 func (c *Controller) SetLiveSpectrogramChan(ch chan LiveSpectrogramBatch) {
 	c.liveSpectrogramChan = ch
 	c.logInfoIfEnabled("Live spectrogram channel connected to API v2 controller")
 
-	liveSpectrogramMgr.broadcasterOnce.Do(func() {
+	c.liveSpectrogramMgr.broadcasterOnce.Do(func() {
 		ctx, cancel := context.WithCancel(c.ctx)
-		liveSpectrogramMgr.broadcasterCancel = cancel
-		go runLiveSpectrogramBroadcaster(ctx, ch)
+		c.liveSpectrogramMgr.broadcasterCancel = cancel
+		go c.liveSpectrogramMgr.runBroadcaster(ctx, ch)
 	})
 }
 
-func runLiveSpectrogramBroadcaster(ctx context.Context, sourceChan chan LiveSpectrogramBatch) {
+// runBroadcaster reads batches from sourceChan and fans them out to every
+// subscriber registered for the matching source ID. Exits when ctx is
+// cancelled or sourceChan is closed (draining the subscribers map in the
+// latter case).
+func (m *liveSpectrogramManager) runBroadcaster(ctx context.Context, sourceChan chan LiveSpectrogramBatch) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case data, ok := <-sourceChan:
 			if !ok {
-				liveSpectrogramMgr.subscribersMu.Lock()
-				for _, subscribers := range liveSpectrogramMgr.subscribers {
+				m.subscribersMu.Lock()
+				for _, subscribers := range m.subscribers {
 					for sub := range subscribers {
 						close(sub.ch)
 					}
 				}
-				liveSpectrogramMgr.subscribers = make(map[string]map[*liveSpectrogramSubscriber]struct{})
-				liveSpectrogramMgr.subscribersMu.Unlock()
+				m.subscribers = make(map[string]map[*liveSpectrogramSubscriber]struct{})
+				m.subscribersMu.Unlock()
 				return
 			}
 
-			liveSpectrogramMgr.subscribersMu.RLock()
-			for sub := range liveSpectrogramMgr.subscribers[data.SourceID] {
+			m.subscribersMu.RLock()
+			for sub := range m.subscribers[data.SourceID] {
 				select {
 				case sub.ch <- data:
 				default:
@@ -158,33 +174,37 @@ func runLiveSpectrogramBroadcaster(ctx context.Context, sourceChan chan LiveSpec
 					}
 				}
 			}
-			liveSpectrogramMgr.subscribersMu.RUnlock()
+			m.subscribersMu.RUnlock()
 		}
 	}
 }
 
-func subscribeToLiveSpectrogram(sourceID, clientIP string) *liveSpectrogramSubscriber {
+// subscribe registers a new SSE subscriber for the given source ID and
+// returns it. Safe to call concurrently with runBroadcaster.
+func (m *liveSpectrogramManager) subscribe(sourceID, clientIP string) *liveSpectrogramSubscriber {
 	sub := &liveSpectrogramSubscriber{
 		ch:       make(chan LiveSpectrogramBatch, liveSpectrogramChannelBuffer),
 		sourceID: sourceID,
 		clientIP: clientIP,
 	}
-	liveSpectrogramMgr.subscribersMu.Lock()
-	defer liveSpectrogramMgr.subscribersMu.Unlock()
-	if liveSpectrogramMgr.subscribers[sourceID] == nil {
-		liveSpectrogramMgr.subscribers[sourceID] = make(map[*liveSpectrogramSubscriber]struct{})
+	m.subscribersMu.Lock()
+	defer m.subscribersMu.Unlock()
+	if m.subscribers[sourceID] == nil {
+		m.subscribers[sourceID] = make(map[*liveSpectrogramSubscriber]struct{})
 	}
-	liveSpectrogramMgr.subscribers[sourceID][sub] = struct{}{}
+	m.subscribers[sourceID][sub] = struct{}{}
 	return sub
 }
 
-func unsubscribeFromLiveSpectrogram(sub *liveSpectrogramSubscriber) {
-	liveSpectrogramMgr.subscribersMu.Lock()
-	defer liveSpectrogramMgr.subscribersMu.Unlock()
-	if subscribers := liveSpectrogramMgr.subscribers[sub.sourceID]; subscribers != nil {
+// unsubscribe removes a subscriber from its source's subscriber set, and
+// removes the source key entirely if no subscribers remain.
+func (m *liveSpectrogramManager) unsubscribe(sub *liveSpectrogramSubscriber) {
+	m.subscribersMu.Lock()
+	defer m.subscribersMu.Unlock()
+	if subscribers := m.subscribers[sub.sourceID]; subscribers != nil {
 		delete(subscribers, sub)
 		if len(subscribers) == 0 {
-			delete(liveSpectrogramMgr.subscribers, sub.sourceID)
+			delete(m.subscribers, sub.sourceID)
 		}
 	}
 }
@@ -208,35 +228,36 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 	defer c.releaseLiveSpectrogram(sourceID)
 
 	clientIP := c.extractRemoteAddr(ctx)
-	liveSpectrogramMgr.connectionMu.Lock()
-	countPtr, loaded := liveSpectrogramMgr.activeConnections.Load(clientIP)
+	mgr := c.liveSpectrogramMgr
+	mgr.connectionMu.Lock()
+	countPtr, loaded := mgr.activeConnections.Load(clientIP)
 	var count int32
 	if loaded {
 		count = atomic.LoadInt32(countPtr.(*int32))
 	}
 	if count >= liveSpectrogramMaxConnectionsPerIP {
-		liveSpectrogramMgr.connectionMu.Unlock()
+		mgr.connectionMu.Unlock()
 		return c.HandleError(ctx, nil, fmt.Sprintf("Maximum %d live spectrogram stream connections per client reached", liveSpectrogramMaxConnectionsPerIP), http.StatusTooManyRequests)
 	}
 	if !loaded {
 		var newCount int32 = 1
-		liveSpectrogramMgr.activeConnections.Store(clientIP, &newCount)
+		mgr.activeConnections.Store(clientIP, &newCount)
 	} else {
 		atomic.AddInt32(countPtr.(*int32), 1)
 	}
-	liveSpectrogramMgr.connectionMu.Unlock()
+	mgr.connectionMu.Unlock()
 
-	subscriber := subscribeToLiveSpectrogram(sourceID, clientIP)
+	subscriber := mgr.subscribe(sourceID, clientIP)
 	defer func() {
-		unsubscribeFromLiveSpectrogram(subscriber)
-		liveSpectrogramMgr.connectionMu.Lock()
-		if countPtr, ok := liveSpectrogramMgr.activeConnections.Load(clientIP); ok {
+		mgr.unsubscribe(subscriber)
+		mgr.connectionMu.Lock()
+		if countPtr, ok := mgr.activeConnections.Load(clientIP); ok {
 			newCount := atomic.AddInt32(countPtr.(*int32), -1)
 			if newCount <= 0 {
-				liveSpectrogramMgr.activeConnections.Delete(clientIP)
+				mgr.activeConnections.Delete(clientIP)
 			}
 		}
-		liveSpectrogramMgr.connectionMu.Unlock()
+		mgr.connectionMu.Unlock()
 	}()
 
 	resp := ctx.Response()

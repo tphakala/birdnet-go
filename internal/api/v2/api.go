@@ -97,6 +97,15 @@ type Controller struct {
 	liveSpectrogramChan    chan LiveSpectrogramBatch
 	acquireLiveSpectrogram func(string) error
 	releaseLiveSpectrogram func(string)
+	// liveSpectrogramMgr holds the SSE broadcaster state for the live
+	// spectrogram endpoint. It MUST live on the Controller, not at package
+	// scope — the embedded sync.Once for the broadcaster goroutine resets
+	// on each Controller construction, which is what allows a
+	// programmatic server restart to rebind a fresh broadcaster to a new
+	// liveSpectrogramChan. A package-level singleton would leave the
+	// broadcaster bound to the first channel forever and silently drop
+	// data after any restart (caught by Sentry on PR #2745).
+	liveSpectrogramMgr *liveSpectrogramManager
 
 	// engine provides access to the unified audio subsystem (sources, buffers, routing).
 	engine *engine.AudioEngine
@@ -374,6 +383,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		cancel:               cancel,
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+		liveSpectrogramMgr:   newLiveSpectrogramManager(),
 	}
 
 	// Initialize audio processing cache and concurrency limiter
