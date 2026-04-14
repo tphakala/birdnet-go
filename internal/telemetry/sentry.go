@@ -62,10 +62,18 @@ const (
 
 // Process start time, captured once via sync.Once so repeated InitSentry
 // calls (e.g. from tests) do not reset the effective uptime seen by BeforeSend.
+// Initialized from the package `init()` below so the baseline reflects
+// actual process start, not the moment telemetry is configured — any delay
+// between binary start and InitSentry would otherwise under-report uptime
+// and misbucket early failures as `startup` (CodeRabbit review on #2762).
 var (
 	appStartTime     time.Time
 	appStartTimeOnce sync.Once
 )
+
+func init() {
+	initAppStartTime()
+}
 
 // initAppStartTime records the process start time. It is idempotent: repeated
 // calls are no-ops so test harnesses and reconfiguration flows do not rewind
@@ -199,10 +207,6 @@ func collectPlatformInfo() PlatformInfo {
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user
 func InitSentry(settings *conf.Settings) error {
-	// Record process start time on first call so BeforeSend can annotate
-	// events with uptime. Repeat calls are no-ops.
-	initAppStartTime()
-
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
@@ -282,6 +286,14 @@ func initializeSentrySDK(settings *conf.Settings) error {
 // so uptime annotation runs inside this hook after privacy filtering.
 func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		// Guard against a nil event before the privacy filters dereference
+		// it. `enrichEventWithUptime` is already nil-safe, but the filter
+		// helpers are not. Returning nil drops the event cleanly (CodeRabbit
+		// review on #2762).
+		if event == nil {
+			return nil
+		}
+
 		var filtered *sentry.Event
 		if settings.Sentry.Debug {
 			filtered = applyPrivacyFiltersWithLogging(event)

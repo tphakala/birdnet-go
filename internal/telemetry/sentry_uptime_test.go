@@ -7,6 +7,8 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // TestUptimeBucket verifies the bucket boundaries documented in the package
@@ -161,4 +163,61 @@ func TestInitAppStartTime_Idempotent(t *testing.T) {
 
 	initAppStartTime()
 	assert.Equal(t, first, appStartTime, "sync.Once must prevent re-initialization")
+}
+
+// TestAppStartTimeInitializedAtPackageInit verifies that the baseline is set
+// at package load time (via `init()`), not deferred until InitSentry runs. A
+// zero-value appStartTime here would signal that the init was moved or lost.
+func TestAppStartTimeInitializedAtPackageInit(t *testing.T) {
+	t.Parallel()
+	assert.False(t, appStartTime.IsZero(),
+		"appStartTime must be populated by package init() before any test runs")
+}
+
+// TestCreateBeforeSendHook_NilEvent verifies that the hook returned by
+// createBeforeSendHook handles a nil event safely (returns nil, no panic).
+// Without this guard, applyPrivacyFilters would dereference nil before
+// enrichEventWithUptime could clean up.
+func TestCreateBeforeSendHook_NilEvent(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{
+		Sentry: conf.SentrySettings{Enabled: true, Debug: false},
+	}
+	hook := createBeforeSendHook(settings)
+
+	var got *sentry.Event
+	require.NotPanics(t, func() {
+		got = hook(nil, nil)
+	})
+	assert.Nil(t, got, "hook must drop a nil event cleanly")
+
+	// Same guarantee in debug mode — the debug privacy filter also
+	// dereferences event and would panic without the guard.
+	settings.Sentry.Debug = true
+	hook = createBeforeSendHook(settings)
+	require.NotPanics(t, func() {
+		got = hook(nil, nil)
+	})
+	assert.Nil(t, got, "hook must drop a nil event cleanly (debug branch)")
+}
+
+// TestCreateBeforeSendHook_EnrichesEvent verifies the hook still annotates
+// non-nil events with uptime after privacy filtering, i.e. the nil guard
+// did not break the happy path.
+func TestCreateBeforeSendHook_EnrichesEvent(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{
+		Sentry: conf.SentrySettings{Enabled: true, Debug: false},
+	}
+	hook := createBeforeSendHook(settings)
+
+	event := &sentry.Event{}
+	got := hook(event, nil)
+	require.NotNil(t, got, "hook must not drop a non-nil event")
+	require.NotNil(t, got.Tags)
+	assert.Contains(t, got.Tags, uptimeTagKey, "hook must attach uptime_bucket tag")
+	require.NotNil(t, got.Contexts)
+	assert.Contains(t, got.Contexts, uptimeContextKey, "hook must attach runtime_state context")
 }
