@@ -451,3 +451,111 @@ describe('Settings Store - Model/Label Path Null Conversion', () => {
     );
   });
 });
+
+describe('Settings Store - UI Locale Preservation (#2756/#2760)', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Default mock behaviour: runtime locale = "en", all locales valid.
+    const { getLocale, setLocale, isValidLocale } = await import('$lib/i18n/index.js');
+    vi.mocked(getLocale).mockReturnValue('en');
+    vi.mocked(isValidLocale).mockReturnValue(true);
+    vi.mocked(setLocale).mockReset();
+  });
+
+  /**
+   * Helper: seed the store so formData and originalData share the same
+   * backend-loaded locale. Tests then mutate formData.realtime.dashboard.locale
+   * to simulate either (a) no locale change in this save session or (b) a
+   * genuine locale change via the Settings > UI Language page.
+   */
+  const seedStore = (backendLocale: string) => {
+    const snapshot: SettingsFormData = {
+      main: { name: 'TestNode' },
+      birdnet: {
+        modelPath: '/path/to/model.tflite',
+        labelPath: '/path/to/labels.txt',
+        sensitivity: 1.0,
+        threshold: 0.8,
+        overlap: 0.0,
+        locale: 'en',
+        threads: 4,
+        latitude: 0,
+        longitude: 0,
+        locationConfigured: true,
+        rangeFilter: { threshold: 0.03, speciesCount: null, species: [] },
+      },
+      realtime: {
+        dashboard: {
+          thumbnails: {
+            summary: false,
+            recent: false,
+            imageProvider: 'auto',
+            fallbackPolicy: 'all',
+          },
+          summaryLimit: 100,
+          locale: backendLocale,
+        },
+      },
+    } as unknown as SettingsFormData;
+
+    settingsStore.set({
+      formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      originalData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      restartRequired: false,
+    });
+  };
+
+  it('does NOT call setLocale when formData locale matches originalData, even if runtime locale differs (sidebar-set)', async () => {
+    // Backend loaded "en". Sidebar changed runtime locale to "hu" (localStorage
+    // only, not synced to backend). formData and originalData both still "en".
+    seedStore('en');
+    const { getLocale, setLocale } = await import('$lib/i18n/index.js');
+    vi.mocked(getLocale).mockReturnValue('hu');
+
+    await settingsActions.saveSettings();
+
+    // Critical: must NOT overwrite the sidebar-set runtime locale.
+    expect(setLocale).not.toHaveBeenCalled();
+  });
+
+  it('calls setLocale(newLocale) when user actually changed locale via the Settings UI', async () => {
+    seedStore('en');
+    // User selects German on the UI Language page.
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        thumbnails: { summary: false, recent: false, imageProvider: 'auto', fallbackPolicy: 'all' },
+        summaryLimit: 100,
+        locale: 'de',
+      },
+    });
+
+    const { setLocale } = await import('$lib/i18n/index.js');
+
+    await settingsActions.saveSettings();
+
+    expect(setLocale).toHaveBeenCalledTimes(1);
+    expect(setLocale).toHaveBeenCalledWith('de');
+  });
+
+  it('does NOT call setLocale when formData locale is invalid', async () => {
+    seedStore('en');
+    settingsActions.updateSection('realtime', {
+      dashboard: {
+        thumbnails: { summary: false, recent: false, imageProvider: 'auto', fallbackPolicy: 'all' },
+        summaryLimit: 100,
+        locale: 'xx-invalid',
+      },
+    });
+
+    const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+    vi.mocked(isValidLocale).mockReturnValue(false);
+
+    await settingsActions.saveSettings();
+
+    expect(setLocale).not.toHaveBeenCalled();
+  });
+});

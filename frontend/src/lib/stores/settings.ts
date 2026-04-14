@@ -1264,13 +1264,17 @@ export const settingsActions = {
         logger.error('Failed to refresh restart status after settings save:', e);
       }
 
-      // Check if UI locale changed and apply it
+      // Apply UI locale only when the user actually changed it in this save
+      // session. Comparing formData to currentState.originalData (the snapshot
+      // loaded from the backend) avoids clobbering a locale chosen via the
+      // sidebar LanguageSelector (which updates localStorage but not the
+      // backend) with whatever stale value the backend still holds.
       const newLocale = currentState.formData.realtime?.dashboard?.locale;
-      if (newLocale) {
+      const origLocale = currentState.originalData.realtime?.dashboard?.locale;
+      if (newLocale && newLocale !== origLocale) {
         // Dynamically import i18n functions to avoid circular dependencies
-        const { getLocale, setLocale, isValidLocale } = await import('$lib/i18n/index.js');
-        const currentLocale = getLocale();
-        if (newLocale !== currentLocale && isValidLocale(newLocale)) {
+        const { isValidLocale, setLocale } = await import('$lib/i18n/index.js');
+        if (isValidLocale(newLocale)) {
           setLocale(newLocale);
         }
       }
