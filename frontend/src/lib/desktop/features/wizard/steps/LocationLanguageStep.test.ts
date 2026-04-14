@@ -186,6 +186,34 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
   });
 
+  it('heals drift-on-entry: saves backend-merged locale when runtime differs from persisted at mount, even without interaction', async () => {
+    // Simulate runtime/localStorage drift: the i18n runtime already holds "hu"
+    // (e.g. a prior wizard run set localStorage but failed to persist to
+    // config.yaml). The backend still shows "en" (the default).
+    currentLocale = 'hu';
+
+    const { unmount } = render(LocationLanguageStep, { props: {} });
+    await flushAsync();
+
+    // User does NOT interact with the wizard — no setLocale, no field edits.
+    unmount();
+    await flushAsync();
+
+    // The unmount handler must still fire the realtime update so the backend
+    // is healed to match the runtime choice.
+    const realtimeCall = (
+      settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.find(([section]) => section === 'realtime');
+    expect(realtimeCall).toBeDefined();
+    const [, payload] = realtimeCall as [string, { dashboard: Record<string, unknown> }];
+    expect(payload.dashboard.locale).toBe('hu');
+    // Dashboard fields from the store snapshot must be preserved (shallow merge)
+    expect(payload.dashboard.summaryLimit).toBe(100);
+    expect(payload.dashboard.thumbnails).toBeDefined();
+
+    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
+  });
+
   it('does NOT save when UI locale is unchanged and dirty is false', async () => {
     const { unmount } = render(LocationLanguageStep, { props: {} });
     await flushAsync();

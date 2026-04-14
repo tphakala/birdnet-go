@@ -28,7 +28,22 @@
   let geolocating = $state(false);
   let hasGeolocation = $state(false);
   let dirty = $state(false);
-  let initialUILocale = $state('');
+
+  // Baseline the UI locale against the PERSISTED backend value (not the
+  // runtime locale). This has two effects:
+  //   1) If the user picks a different UI language in the wizard, the
+  //      unmount handler detects the change and writes it to the backend.
+  //   2) If runtime/localStorage has already drifted from the backend
+  //      before the wizard opens (e.g. a previous wizard run set
+  //      localStorage but failed to persist to config.yaml), unmounting
+  //      still writes the runtime value so the drift is healed rather
+  //      than silently preserved.
+  // Initializing at the declaration also avoids a false-positive on rapid
+  // unmount-before-onMount, which would otherwise compare getLocale()
+  // against an empty string and always trigger a save.
+  let initialUILocale = $state<string>(
+    get(settingsStore).formData?.realtime?.dashboard?.locale ?? getLocale()
+  );
 
   $effect(() => {
     untrack(() => onValidChange?.(true));
@@ -43,8 +58,6 @@
       longitude = store.formData.birdnet.longitude ?? 0;
       speciesLocale = store.formData.birdnet.locale ?? 'en';
     }
-
-    initialUILocale = getLocale();
 
     api
       .get<Record<string, string>>('/api/v2/settings/locales')
@@ -114,12 +127,19 @@
 
       if (uiLocaleChanged) {
         const store = get(settingsStore);
-        const currentDashboard: Partial<Dashboard> = store?.formData?.realtime?.dashboard ?? {};
-        // Shallow merge preserves existing Dashboard fields so other settings are not wiped
-        const mergedDashboard = { ...currentDashboard, locale: getLocale() } as Dashboard;
-        settingsActions.updateSection('realtime', {
-          dashboard: mergedDashboard,
-        });
+        const currentDashboard = store?.formData?.realtime?.dashboard;
+        // Only update when we have an existing Dashboard snapshot to merge
+        // into. settingsActions.updateSection does a shallow merge at the
+        // realtime level, so writing a locale-only stub here would wipe the
+        // rest of the dashboard. In practice createEmptySettings() always
+        // populates this object; the guard is defensive against future
+        // refactors.
+        if (currentDashboard) {
+          const mergedDashboard: Dashboard = { ...currentDashboard, locale: getLocale() };
+          settingsActions.updateSection('realtime', {
+            dashboard: mergedDashboard,
+          });
+        }
       }
 
       settingsActions.saveSettings().catch(err => {
