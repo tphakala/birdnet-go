@@ -546,6 +546,16 @@
             clearedStreamPrimingCanvas = false;
             const columnsPerPixel = columnsToConsume / pixelsToScroll;
 
+            // In stream mode the bin count is dictated by the server's FFT
+            // size (streamed via the spectrogram-meta event and forwarded
+            // into the fftSize prop), not by frequencyData.length — which
+            // is fixed at the client's AnalyserNode fftSize/2 and exists
+            // only for the analyser-mode render path. If the server is
+            // configured with fftSize != 1024 the two numbers differ and
+            // aggregation would truncate the output, leaving the extra
+            // bins undefined and producing black unrendered bands in the
+            // waterfall (sentry-io flagged this on PR #2745).
+            const streamBinCount = fftSize / 2;
             for (let col = 0; col < pixelsToScroll; col++) {
               const offsetStart = Math.floor(col * columnsPerPixel);
               const offsetEnd = Math.max(offsetStart + 1, Math.floor((col + 1) * columnsPerPixel));
@@ -553,12 +563,7 @@
               const sliceEnd = Math.min(consumeStart + offsetEnd, consumeEnd);
               streamPixels.push(
                 sliceEnd > sliceStart
-                  ? aggregateStreamColumns(
-                      renderReadyColumns,
-                      frequencyData.length,
-                      sliceStart,
-                      sliceEnd
-                    )
+                  ? aggregateStreamColumns(renderReadyColumns, streamBinCount, sliceStart, sliceEnd)
                   : (lastStreamBins ?? [])
               );
             }
