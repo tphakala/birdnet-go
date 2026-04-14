@@ -131,7 +131,7 @@ jobs:
           echo "latest_tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
       
       - name: Add Artifacts to GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: birdnet-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ github.ref_name }}.tar.gz
           # For release events, use the triggering release
