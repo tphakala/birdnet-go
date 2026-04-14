@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.45.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.45.1/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -274,7 +274,7 @@ Source: MIT
 
 ### github.com/paulmach/orb
 
-License: https://github.com/paulmach/orb/blob/v0.12.0/LICENSE.md
+License: https://github.com/paulmach/orb/blob/v0.13.0/LICENSE.md
 Source: MIT
 
 ### github.com/pelletier/go-toml/v2
@@ -467,9 +467,9 @@ Source: MIT
 License: https://github.com/valyala/fasttemplate/blob/v1.2.2/LICENSE
 Source: MIT
 
-### go.mongodb.org/mongo-driver
+### go.mongodb.org/mongo-driver/v2
 
-License: https://github.com/mongodb/mongo-go-driver/blob/v1.11.4/LICENSE
+License: https://github.com/mongodb/mongo-go-driver/blob/v2.5.0/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/auto/sdk
@@ -554,7 +554,7 @@ Source: BSD-3-Clause
 
 ### gonum.org/v1/gonum/dsp/fourier
 
-License: https://github.com/gonum/gonum/blob/v0.17.0/LICENSE
+License: Unknown
 Source: BSD-3-Clause
 
 ### google.golang.org/api
@@ -564,7 +564,7 @@ Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/6f92a3bedf2d/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/afd174a4e478/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
