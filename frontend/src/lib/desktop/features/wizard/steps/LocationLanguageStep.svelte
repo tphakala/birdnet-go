@@ -1,12 +1,12 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
   import { api } from '$lib/utils/api';
   import LanguageSelector from '$lib/desktop/components/ui/LanguageSelector.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
   import NumberField from '$lib/desktop/components/forms/NumberField.svelte';
   import LocationPickerMap from '../components/LocationPickerMap.svelte';
-  import { settingsActions, settingsStore } from '$lib/stores/settings';
+  import { settingsActions, settingsStore, type Dashboard } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { MapPin } from '@lucide/svelte';
   import FlagIcon, { type FlagLocale } from '$lib/desktop/components/ui/FlagIcon.svelte';
@@ -28,6 +28,7 @@
   let geolocating = $state(false);
   let hasGeolocation = $state(false);
   let dirty = $state(false);
+  let initialUILocale = $state('');
 
   $effect(() => {
     untrack(() => onValidChange?.(true));
@@ -42,6 +43,8 @@
       longitude = store.formData.birdnet.longitude ?? 0;
       speciesLocale = store.formData.birdnet.locale ?? 'en';
     }
+
+    initialUILocale = getLocale();
 
     api
       .get<Record<string, string>>('/api/v2/settings/locales')
@@ -98,12 +101,27 @@
   // Save on unmount — only if user made changes
   $effect(() => {
     return () => {
-      if (!dirty) return;
-      settingsActions.updateSection('birdnet', {
-        latitude,
-        longitude,
-        locale: speciesLocale,
-      });
+      const uiLocaleChanged = getLocale() !== initialUILocale;
+      if (!dirty && !uiLocaleChanged) return;
+
+      if (dirty) {
+        settingsActions.updateSection('birdnet', {
+          latitude,
+          longitude,
+          locale: speciesLocale,
+        });
+      }
+
+      if (uiLocaleChanged) {
+        const store = get(settingsStore);
+        const currentDashboard: Partial<Dashboard> = store?.formData?.realtime?.dashboard ?? {};
+        // Shallow merge preserves existing Dashboard fields so other settings are not wiped
+        const mergedDashboard = { ...currentDashboard, locale: getLocale() } as Dashboard;
+        settingsActions.updateSection('realtime', {
+          dashboard: mergedDashboard,
+        });
+      }
+
       settingsActions.saveSettings().catch(err => {
         logger.error('Failed to save location/language settings', err);
       });
