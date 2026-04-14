@@ -1,7 +1,6 @@
 package processor
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -33,7 +32,7 @@ func TestSaveAudioActionExecute_DefersUntilCaptureReady(t *testing.T) {
 		readyAt:   time.Now().Add(100 * time.Millisecond),
 	}
 
-	err := action.Execute(context.Background(), nil)
+	err := action.Execute(t.Context(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "deferred")
 }
@@ -69,12 +68,12 @@ func TestSaveAudioActionExecute_ReadsDeferredCaptureWhenReady(t *testing.T) {
 		readyAt:   time.Now().Add(-time.Second),
 	}
 
-	require.NoError(t, action.Execute(context.Background(), nil))
+	require.NoError(t, action.Execute(t.Context(), nil))
 
 	outputPath := filepath.Join(tmpDir, "deferred.wav")
 	info, err := os.Stat(outputPath)
 	require.NoError(t, err)
-	assert.Greater(t, info.Size(), int64(0))
+	assert.Positive(t, info.Size())
 }
 
 func TestGetJobQueueRetryConfig_SaveAudioDeferredRead(t *testing.T) {
