@@ -30,7 +30,7 @@
   let dirty = $state(false);
 
   // Baseline the UI locale against the PERSISTED backend value (not the
-  // runtime locale). This has two effects:
+  // runtime locale). This has three effects:
   //   1) If the user picks a different UI language in the wizard, the
   //      unmount handler detects the change and writes it to the backend.
   //   2) If runtime/localStorage has already drifted from the backend
@@ -38,11 +38,16 @@
   //      localStorage but failed to persist to config.yaml), unmounting
   //      still writes the runtime value so the drift is healed rather
   //      than silently preserved.
-  // Initializing at the declaration also avoids a false-positive on rapid
-  // unmount-before-onMount, which would otherwise compare getLocale()
-  // against an empty string and always trigger a save.
-  let initialUILocale = $state<string>(
-    get(settingsStore).formData?.realtime?.dashboard?.locale ?? getLocale()
+  //   3) On a fresh install the backend's Dashboard.Locale field is an
+  //      empty string (Go zero value), which the API serializes as
+  //      `undefined` thanks to the `omitempty` JSON tag. Leaving the
+  //      baseline as `undefined` makes `getLocale() !== initialUILocale`
+  //      true on unmount, so the runtime/browser-detected locale gets
+  //      persisted to the backend on first save — no user interaction
+  //      required. The rapid-unmount-before-load risk is mitigated by
+  //      the `isLoading` guard in the unmount effect below.
+  let initialUILocale = $state<string | undefined>(
+    get(settingsStore).formData?.realtime?.dashboard?.locale
   );
 
   $effect(() => {
@@ -114,6 +119,12 @@
   // Save on unmount — only if user made changes
   $effect(() => {
     return () => {
+      // Skip if settings are still loading: the baseline might not yet
+      // reflect the backend's real value, so any "change" we detect could
+      // be spurious and would clobber whatever the fetch is about to
+      // deliver.
+      if (get(settingsStore).isLoading) return;
+
       const uiLocaleChanged = getLocale() !== initialUILocale;
       if (!dirty && !uiLocaleChanged) return;
 

@@ -97,7 +97,12 @@ import LocationLanguageStep from './LocationLanguageStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { setLocale } from '$lib/i18n';
 
-// Helper to flush pending microtasks (e.g. onMount continuations)
+// Helper to flush pending microtasks (e.g. onMount continuations).
+// Double Promise.resolve() processes both the immediate microtask and
+// any follow-up microtasks queued during the first flush. Svelte's
+// $effect cleanup and onMount initializers commonly chain a second
+// microtask, so a single await can miss them. Revisit if new async
+// layers are introduced and tests start flaking.
 async function flushAsync() {
   await Promise.resolve();
   await Promise.resolve();
@@ -212,6 +217,52 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
     expect(payload.dashboard.thumbnails).toBeDefined();
 
     expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('heals drift-on-entry when backend locale is undefined (fresh-install case): runtime locale gets persisted without interaction', async () => {
+    // Fresh install scenario: backend Dashboard.Locale is the Go zero
+    // value "" which the API's `omitempty` tag serializes as undefined.
+    // The browser is in Hungarian, so the runtime locale is "hu".
+    currentLocale = 'hu';
+    settingsStore.update(state => {
+      const realtime = state.formData.realtime as Record<string, unknown>;
+      const dashboard = realtime.dashboard as Record<string, unknown>;
+      delete dashboard.locale;
+      return state;
+    });
+
+    const { unmount } = render(LocationLanguageStep, { props: {} });
+    await flushAsync();
+
+    // User does not interact.
+    unmount();
+    await flushAsync();
+
+    // Unmount must still persist the runtime locale so the backend is
+    // initialized to match what the user is seeing.
+    const realtimeCall = (
+      settingsActions.updateSection as unknown as ReturnType<typeof vi.fn>
+    ).mock.calls.find(([section]) => section === 'realtime');
+    expect(realtimeCall).toBeDefined();
+    const [, payload] = realtimeCall as [string, { dashboard: Record<string, unknown> }];
+    expect(payload.dashboard.locale).toBe('hu');
+    expect(payload.dashboard.summaryLimit).toBe(100);
+
+    expect(settingsActions.saveSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT save when settings are still loading (avoids clobbering in-flight fetch)', async () => {
+    currentLocale = 'hu';
+    settingsStore.update(state => ({ ...state, isLoading: true }));
+
+    const { unmount } = render(LocationLanguageStep, { props: {} });
+    await flushAsync();
+
+    unmount();
+    await flushAsync();
+
+    expect(settingsActions.updateSection).not.toHaveBeenCalled();
+    expect(settingsActions.saveSettings).not.toHaveBeenCalled();
   });
 
   it('does NOT save when UI locale is unchanged and dirty is false', async () => {
