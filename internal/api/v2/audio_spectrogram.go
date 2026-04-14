@@ -24,6 +24,12 @@ const (
 	liveSpectrogramWriteDeadline       = 10 * time.Second
 	liveSpectrogramChannelBuffer       = 32
 	liveSpectrogramMaxConnectionsPerIP = 5
+	// liveSpectrogramMaxDuration caps the lifetime of a single SSE
+	// subscription. Matches the 30-minute cap in audio_level.go and
+	// prevents resource leaks from clients that never disconnect
+	// gracefully. After the cap expires the handler exits cleanly and
+	// the client can reconnect if they still want data.
+	liveSpectrogramMaxDuration = 30 * time.Minute
 )
 
 type LiveSpectrogramColumn struct {
@@ -271,7 +277,13 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 		flusher.Flush()
 	}
 
-	if err := c.sendSSEMessage(ctx, "spectrogram-meta", c.buildLiveSpectrogramMeta(sourceID)); err != nil {
+	// Cap the total subscription lifetime. Prevents resource leaks when
+	// clients never disconnect gracefully and matches the 30-minute cap
+	// enforced by the sibling audio-level SSE endpoint in audio_level.go.
+	streamCtx, streamCancel := context.WithTimeout(req.Context(), liveSpectrogramMaxDuration)
+	defer streamCancel()
+
+	if err := c.sendLiveSpectrogramEvent(ctx, "spectrogram-meta", sourceID, c.buildLiveSpectrogramMeta(sourceID)); err != nil {
 		return nil
 	}
 
@@ -280,7 +292,7 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 
 	for {
 		select {
-		case <-req.Context().Done():
+		case <-streamCtx.Done():
 			return nil
 		case <-c.ctx.Done():
 			return nil
@@ -288,28 +300,45 @@ func (c *Controller) StreamLiveSpectrogram(ctx echo.Context) error {
 			if !ok {
 				return nil
 			}
-			if conn, ok := resp.Writer.(WriteDeadlineSetter); ok {
-				_ = conn.SetWriteDeadline(time.Now().Add(liveSpectrogramWriteDeadline))
-			}
-			if err := c.sendSSEMessage(ctx, "spectrogram-columns", liveSpectrogramEvent{
+			if err := c.sendLiveSpectrogramEvent(ctx, "spectrogram-columns", sourceID, liveSpectrogramEvent{
 				Type:     "spectrogram-columns",
 				SourceID: batch.SourceID,
 				Columns:  batch.Columns,
 			}); err != nil {
-				c.logLiveSpectrogramWriteError(ctx, err, "spectrogram-columns", sourceID)
 				return nil
 			}
 		case <-heartbeat.C:
-			if err := c.sendSSEMessage(ctx, "heartbeat", liveSpectrogramEvent{
+			if err := c.sendLiveSpectrogramEvent(ctx, "heartbeat", sourceID, liveSpectrogramEvent{
 				Type:      "heartbeat",
 				SourceID:  sourceID,
 				Timestamp: time.Now().UnixMilli(),
 			}); err != nil {
-				c.logLiveSpectrogramWriteError(ctx, err, "heartbeat", sourceID)
 				return nil
 			}
 		}
 	}
+}
+
+// sendLiveSpectrogramEvent is the single code path for writing SSE events
+// to a live-spectrogram subscriber. It applies the per-write deadline
+// (checking the SetWriteDeadline error rather than silently dropping it)
+// before handing the payload to the generic SSE serializer, and routes
+// any write failure through logLiveSpectrogramWriteError so unexpected
+// errors are surfaced at warn level while client-disconnect noise stays
+// silent. Callers are expected to return nil on a non-nil return to
+// terminate the handler cleanly.
+func (c *Controller) sendLiveSpectrogramEvent(ctx echo.Context, event, sourceID string, payload any) error {
+	if conn, ok := ctx.Response().Writer.(WriteDeadlineSetter); ok {
+		if err := conn.SetWriteDeadline(time.Now().Add(liveSpectrogramWriteDeadline)); err != nil {
+			c.logLiveSpectrogramWriteError(ctx, err, event, sourceID)
+			return err
+		}
+	}
+	if err := c.sendSSEMessage(ctx, event, payload); err != nil {
+		c.logLiveSpectrogramWriteError(ctx, err, event, sourceID)
+		return err
+	}
+	return nil
 }
 
 func (c *Controller) buildLiveSpectrogramMeta(sourceID string) LiveSpectrogramMeta {
