@@ -484,5 +484,43 @@ describe('StreamTimeline', () => {
       const survivorAfter = afterButtons[8];
       expect(survivorAfter).toBe(survivorBefore);
     });
+
+    // Regression: earlier revisions left `selectedKey` / `selectedEvent`
+    // set after the selected event dropped out of the sliding window, so
+    // the popover remained mounted against a detached node (CodeRabbit
+    // round-3). The $effect must reconcile the selection and close the
+    // popover when the selected event is no longer in the visible window.
+    it('closes the popover when the selected event drops out of the window', async () => {
+      const base = new Date('2026-04-14T10:00:00.000Z').getTime();
+      const ts = (offset: number) => new Date(base + offset).toISOString();
+
+      const initialHistory: StateTransition[] = Array.from({ length: 10 }, (_, i) =>
+        createStateTransition('idle', `state${i}`, ts(i * 1000))
+      );
+      const rendered = timelineTest.render({ stateHistory: initialHistory });
+
+      // Open the popover on the OLDEST visible event — the one that will
+      // drop off when a new event arrives.
+      const initialButtons = screen.getAllByRole('button');
+      await fireEvent.click(initialButtons[0]);
+      await waitFor(() => {
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      // Push 3 new events so the original oldest falls outside slice(-10).
+      const withShift: StateTransition[] = [
+        ...initialHistory,
+        createStateTransition('idle', 'state10', ts(10 * 1000)),
+        createStateTransition('idle', 'state11', ts(11 * 1000)),
+        createStateTransition('idle', 'state12', ts(12 * 1000)),
+      ];
+      rendered.rerender({ stateHistory: withShift });
+
+      // The selected event is gone — the popover must close automatically
+      // rather than linger against a detached DOM node.
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+    });
   });
 });

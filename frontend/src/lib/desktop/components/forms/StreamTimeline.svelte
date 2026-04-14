@@ -187,6 +187,28 @@
       handleClosePopover();
     }
   }
+
+  // When live updates shift the 10-item window, the previously selected
+  // event may drop off (slice(-10)) and its DOM node detach. Without this,
+  // the popover would stay mounted against a stale node and show outdated
+  // data (CodeRabbit review on #2761). Reconcile on every derivation: if
+  // the selected key still has a matching event, refresh the cached
+  // reference; otherwise close the popover. Identity is tracked by
+  // `selectedKey` (string) — NOT by comparing `$state` proxies, which
+  // Svelte 5 warns against.
+  $effect(() => {
+    if (!selectedKey) return;
+
+    const next = timelineEvents.find(event => event.key === selectedKey);
+    if (!next) {
+      handleClosePopover();
+      return;
+    }
+    // Always refresh the cached reference so the popover sees the latest
+    // payload. Svelte's fine-grained reactivity makes repeated same-value
+    // assignments cheap.
+    selectedEvent = next;
+  });
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
