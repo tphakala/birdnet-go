@@ -104,6 +104,30 @@ describe('parseSearchQuery', () => {
     });
   });
 
+  it('should parse source filter', () => {
+    const result = parseSearchQuery('Robin source:rtsp_87b89761');
+
+    expect(result.textQuery).toBe('Robin');
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0]).toEqual({
+      type: 'source',
+      operator: ':',
+      value: 'rtsp_87b89761',
+      raw: 'source:rtsp_87b89761',
+    });
+    expect(result.errors).toHaveLength(0);
+  });
+
+  it('should trim whitespace from source filter value', () => {
+    const result = parseSearchQuery('source:rtsp_front  ');
+
+    expect(result.filters).toHaveLength(1);
+    expect(result.filters[0]).toMatchObject({
+      type: 'source',
+      value: 'rtsp_front',
+    });
+  });
+
   it('should handle complex queries with text and multiple filters', () => {
     const result = parseSearchQuery('American Robin confidence:>=85 time:dawn date:today');
 
@@ -140,6 +164,20 @@ describe('formatFiltersForAPI', () => {
 
     const result = formatFiltersForAPI(filters);
     expect(result).toEqual({ timeOfDay: 'dawn' });
+  });
+
+  it('should map source filter to location API param', () => {
+    const filters = [
+      {
+        type: 'source' as const,
+        operator: ':' as const,
+        value: 'rtsp_87b89761',
+        raw: 'source:rtsp_87b89761',
+      },
+    ];
+
+    const result = formatFiltersForAPI(filters);
+    expect(result).toEqual({ location: 'rtsp_87b89761' });
   });
 
   it('should format multiple filters', () => {
@@ -198,5 +236,10 @@ describe('getFilterSuggestions', () => {
     expect(result).toEqual(
       expect.arrayContaining(['verified:true', 'verified:false', 'verified:human'])
     );
+  });
+
+  it('should include source: in filter-type suggestions', () => {
+    const result = getFilterSuggestions('sou');
+    expect(result).toContain('source:');
   });
 });

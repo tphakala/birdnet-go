@@ -66,6 +66,8 @@
           {detection.time}
           {#if detection.source?.displayName}
             <span class="ml-1">· {detection.source.displayName}</span>
+          {:else if detection.source?.id}
+            <span class="ml-1 opacity-70">· {detection.source.id}</span>
           {/if}
         </div>
       </div>

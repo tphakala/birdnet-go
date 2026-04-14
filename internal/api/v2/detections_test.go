@@ -2335,3 +2335,83 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 		})
 	}
 }
+
+// TestNoteToDetectionResponse_SourceInfo verifies that noteToDetectionResponse
+// populates DetectionResponse.Source as *SourceInfo when note.Source.ID is set,
+// leaves it nil when ID is empty, and derives Type from the SafeString.
+func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "unit")
+	t.Attr("feature", "source-info")
+
+	controller := &Controller{Settings: newValidTestSettings()}
+
+	tests := []struct {
+		name        string
+		source      datastore.AudioSource
+		wantNil     bool
+		wantID      string
+		wantType    string
+		wantDisplay string
+	}{
+		{
+			name:    "empty source stays nil",
+			source:  datastore.AudioSource{},
+			wantNil: true,
+		},
+		{
+			name: "rtsp source populates id, type, and display name",
+			source: datastore.AudioSource{
+				ID:          "rtsp_87b89761",
+				SafeString:  "rtsp://camera.local/stream",
+				DisplayName: "Front Yard",
+			},
+			wantID:      "rtsp_87b89761",
+			wantType:    "rtsp",
+			wantDisplay: "Front Yard",
+		},
+		{
+			name: "alsa source without friendly name falls back to raw device",
+			source: datastore.AudioSource{
+				ID:          "hw:1,0",
+				SafeString:  "hw:1,0",
+				DisplayName: "hw:1,0",
+			},
+			wantID:      "hw:1,0",
+			wantType:    "alsa",
+			wantDisplay: "hw:1,0",
+		},
+		{
+			name: "unknown safe string yields type unknown",
+			source: datastore.AudioSource{
+				ID:         "custom-source",
+				SafeString: "file:///tmp/audio.wav",
+			},
+			wantID:   "custom-source",
+			wantType: "unknown",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			note := &datastore.Note{
+				ID:     42,
+				Date:   "2026-04-14",
+				Time:   "09:30:00",
+				Source: tt.source,
+			}
+			resp := controller.noteToDetectionResponse(note, false, nil)
+
+			if tt.wantNil {
+				assert.Nil(t, resp.Source, "Source should be nil when note.Source.ID is empty")
+				return
+			}
+			require.NotNil(t, resp.Source, "Source should be populated when note.Source.ID is set")
+			assert.Equal(t, tt.wantID, resp.Source.ID)
+			assert.Equal(t, tt.wantType, resp.Source.Type)
+			assert.Equal(t, tt.wantDisplay, resp.Source.DisplayName)
+		})
+	}
+}

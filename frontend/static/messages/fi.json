@@ -762,7 +762,7 @@
     "headers": {
       "dateTime": "Päivä ja aika",
       "weather": "Sää",
-      "source": "Lahde",
+      "source": "Lähde",
       "species": "Laji",
       "confidence": "Luottamus",
       "thumbnail": "Pienoiskuva",
