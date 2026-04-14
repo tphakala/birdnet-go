@@ -1265,11 +1265,13 @@ export const settingsActions = {
       }
 
       // Apply UI locale only when the user actually changed it in this save
-      // session. Comparing formData to currentState.originalData (the snapshot
-      // loaded from the backend) avoids clobbering a locale chosen via the
-      // sidebar LanguageSelector (which updates localStorage but not the
-      // backend) with whatever stale value the backend still holds.
-      const newLocale = currentState.formData.realtime?.dashboard?.locale;
+      // session. Read newLocale from coercedFormData (the value we actually
+      // persisted) and compare to originalData (the snapshot loaded from
+      // the backend). This avoids clobbering a locale chosen via the sidebar
+      // LanguageSelector — which updates localStorage but not the backend —
+      // with whatever stale value the backend still holds, and matches the
+      // coercedFormData-based comparison used by the TLS check below.
+      const newLocale = coercedFormData.realtime?.dashboard?.locale;
       const origLocale = currentState.originalData.realtime?.dashboard?.locale;
       if (newLocale && newLocale !== origLocale) {
         // Dynamically import i18n functions to avoid circular dependencies
