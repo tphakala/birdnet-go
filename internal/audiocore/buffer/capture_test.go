@@ -374,15 +374,12 @@ func TestCaptureBuffer_ReadSegmentInsufficientDataAfterWrap(t *testing.T) {
 	readStart := bufStart.Add(time.Duration(durationSeconds) * time.Second)
 	readEnd := readStart.Add(1 * time.Second)
 
+	// The request ends 3 seconds past bufStart (6144 bytes at 1024 Hz × 2 B/sample),
+	// while writtenBytes is capped at 4096 after wrap — so the guard must fire.
+	// Any nil here would be a regression in the post-wrap branch, not timing
+	// variance, so assert failure directly instead of skipping.
 	seg, err := cb.ReadSegment(readStart, readEnd)
-	if err == nil {
-		// If the internal math aligns exactly, the read may just barely
-		// succeed. Skip the assertion in that unlikely case — the goal is
-		// to exercise the post-wrap branch, not enforce a specific timing
-		// outcome.
-		t.Skip("ReadSegment did not produce ErrInsufficientData on this run; timing-sensitive post-wrap branch")
-	}
-	require.Error(t, err)
+	require.Error(t, err, "expected ErrInsufficientData: readEnd=%s bufStart=%s", readEnd, bufStart)
 	assert.Nil(t, seg)
 	require.ErrorIs(t, err, buffer.ErrInsufficientData)
 

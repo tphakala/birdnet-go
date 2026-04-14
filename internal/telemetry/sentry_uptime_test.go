@@ -123,6 +123,32 @@ func TestEnrichEventWithUptime_PreservesExistingTags(t *testing.T) {
 	assert.Equal(t, "BirdNET-Go", appCtx["name"])
 }
 
+// TestEnrichEventWithUptime_MergesExistingRuntimeContext verifies that if the
+// runtime_state context already has fields (added by another part of the
+// system in the future), enrichment adds uptime_seconds without dropping
+// those fields.
+func TestEnrichEventWithUptime_MergesExistingRuntimeContext(t *testing.T) {
+	initAppStartTime()
+
+	event := &sentry.Event{
+		Contexts: map[string]sentry.Context{
+			uptimeContextKey: {
+				"some_other_field": "preserved",
+			},
+		},
+	}
+
+	enrichEventWithUptime(event)
+
+	runtimeCtx, ok := event.Contexts[uptimeContextKey]
+	require.True(t, ok)
+	assert.Equal(t, "preserved", runtimeCtx["some_other_field"],
+		"existing context fields must survive uptime enrichment")
+
+	_, hasUptime := runtimeCtx[uptimeContextField]
+	assert.True(t, hasUptime, "uptime_seconds must be added alongside existing fields")
+}
+
 // TestInitAppStartTime_Idempotent verifies that calling initAppStartTime
 // multiple times does not rewind the clock.
 func TestInitAppStartTime_Idempotent(t *testing.T) {

@@ -107,11 +107,14 @@ func enrichEventWithUptime(event *sentry.Event) {
 	if event.Contexts == nil {
 		event.Contexts = make(map[string]sentry.Context)
 	}
-	// Truncate to integer seconds; fractional precision is not useful here
-	// and would needlessly inflate cardinality.
-	event.Contexts[uptimeContextKey] = sentry.Context{
-		uptimeContextField: int(uptime.Seconds()),
+	// Merge into any existing context under the same key rather than
+	// overwriting — another part of the system may already have added
+	// fields here. Truncate to integer seconds: fractional precision is
+	// not useful and would needlessly inflate cardinality.
+	if event.Contexts[uptimeContextKey] == nil {
+		event.Contexts[uptimeContextKey] = sentry.Context{}
 	}
+	event.Contexts[uptimeContextKey][uptimeContextField] = int(uptime.Seconds())
 }
 
 // sentryDSN is the Sentry DSN for the BirdNET-Go project
