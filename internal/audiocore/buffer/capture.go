@@ -1,16 +1,25 @@
 package buffer
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
 // captureBufferAlignment is the byte alignment used when sizing the backing
 // slice. Buffer sizes are rounded up to the nearest multiple of this value
 // to ensure PCM sample boundaries are always respected.
 const captureBufferAlignment = 2048
+
+// getLogger returns a module-scoped logger for capture buffer diagnostics.
+// It is fetched dynamically so it always reflects the currently configured
+// central logger (e.g. after SetGlobal during startup).
+func getLogger() logger.Logger {
+	return logger.Global().Module("audiocore").Module("buffer")
+}
 
 // ErrInsufficientData is returned by ReadSegment when the requested time range
 // extends beyond the data that has actually been written to the buffer. This
@@ -244,6 +253,22 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 	// Before the buffer is fully populated, regions beyond writtenBytes
 	// contain zero-filled memory which would produce silent audio.
 	if endByteOffset > cb.writtenBytes {
+		// Warmup window: the circular buffer has not completed its first
+		// lap, so a read beyond the written region is an expected outcome
+		// immediately after startup rather than a bug. Log at debug level
+		// with structured fields and return a plain wrapped error that
+		// still satisfies errors.Is(err, ErrInsufficientData) but is not
+		// routed to Sentry via the enhanced-error builder.
+		if !cb.wrapped {
+			getLogger().Debug("capture buffer read segment during warmup",
+				logger.String("source", cb.source),
+				logger.Int("requested_end_byte", endByteOffset),
+				logger.Int("written_bytes", cb.writtenBytes),
+				logger.Bool("wrapped", cb.wrapped),
+			)
+			return nil, fmt.Errorf("capture_buffer_read_segment during warmup: %w", ErrInsufficientData)
+		}
+
 		return nil, errors.New(ErrInsufficientData).
 			Component("audiocore").
 			Category(errors.CategoryValidation).

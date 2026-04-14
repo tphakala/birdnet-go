@@ -25,6 +25,95 @@ const (
 	errorMessageMaxLen = 60
 )
 
+// Uptime bucket thresholds used to tag Sentry events with a coarse-grained
+// "how long has this process been running" label. The exact integer seconds
+// are attached as a context value; the bucket is exposed as a tag so Sentry
+// queries can filter "issues that happen during startup" without aggregating
+// over raw seconds.
+//
+// Boundaries are inclusive of the lower side: exactly 60s becomes "warmup",
+// exactly 600s becomes "running".
+const (
+	// uptimeStartupCutoff is the duration below which an event is tagged as
+	// happening during initial startup.
+	uptimeStartupCutoff = 60 * time.Second
+	// uptimeWarmupCutoff is the duration below which an event is tagged as
+	// happening during the post-startup warmup window.
+	uptimeWarmupCutoff = 10 * time.Minute
+
+	// uptimeBucketStartup is the tag value for events below uptimeStartupCutoff.
+	uptimeBucketStartup = "startup"
+	// uptimeBucketWarmup is the tag value for events at or above
+	// uptimeStartupCutoff but below uptimeWarmupCutoff.
+	uptimeBucketWarmup = "warmup"
+	// uptimeBucketRunning is the tag value for events at or above
+	// uptimeWarmupCutoff.
+	uptimeBucketRunning = "running"
+
+	// uptimeTagKey is the tag key attached to every Sentry event.
+	uptimeTagKey = "uptime_bucket"
+	// uptimeContextKey is the Sentry context block that carries the exact
+	// integer uptime seconds at the time the event was captured.
+	uptimeContextKey = "runtime_state"
+	// uptimeContextField is the field name inside uptimeContextKey that holds
+	// the integer uptime seconds.
+	uptimeContextField = "uptime_seconds"
+)
+
+// Process start time, captured once via sync.Once so repeated InitSentry
+// calls (e.g. from tests) do not reset the effective uptime seen by BeforeSend.
+var (
+	appStartTime     time.Time
+	appStartTimeOnce sync.Once
+)
+
+// initAppStartTime records the process start time. It is idempotent: repeated
+// calls are no-ops so test harnesses and reconfiguration flows do not rewind
+// the uptime clock observed by Sentry events.
+func initAppStartTime() {
+	appStartTimeOnce.Do(func() {
+		appStartTime = time.Now()
+	})
+}
+
+// uptimeBucket returns a coarse-grained label describing how long the process
+// has been running. Boundaries are inclusive of the lower side.
+func uptimeBucket(d time.Duration) string {
+	switch {
+	case d < uptimeStartupCutoff:
+		return uptimeBucketStartup
+	case d < uptimeWarmupCutoff:
+		return uptimeBucketWarmup
+	default:
+		return uptimeBucketRunning
+	}
+}
+
+// enrichEventWithUptime attaches the uptime bucket tag and integer uptime
+// seconds context to the given event. Safe to call with a nil event (no-op);
+// initializes Tags and Contexts maps if they are nil.
+func enrichEventWithUptime(event *sentry.Event) {
+	if event == nil {
+		return
+	}
+
+	uptime := time.Since(appStartTime)
+
+	if event.Tags == nil {
+		event.Tags = make(map[string]string)
+	}
+	event.Tags[uptimeTagKey] = uptimeBucket(uptime)
+
+	if event.Contexts == nil {
+		event.Contexts = make(map[string]sentry.Context)
+	}
+	// Truncate to integer seconds; fractional precision is not useful here
+	// and would needlessly inflate cardinality.
+	event.Contexts[uptimeContextKey] = sentry.Context{
+		uptimeContextField: int(uptime.Seconds()),
+	}
+}
+
 // sentryDSN is the Sentry DSN for the BirdNET-Go project
 // Defined at package level to avoid duplication across initialization functions
 const sentryDSN = "https://b9269b6c0f8fae154df65be5a97e0435@o4509553065525248.ingest.de.sentry.io/4509553112186960"
@@ -107,6 +196,10 @@ func collectPlatformInfo() PlatformInfo {
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user
 func InitSentry(settings *conf.Settings) error {
+	// Record process start time on first call so BeforeSend can annotate
+	// events with uptime. Repeat calls are no-ops.
+	initAppStartTime()
+
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
@@ -181,13 +274,25 @@ func initializeSentrySDK(settings *conf.Settings) error {
 	return nil
 }
 
-// createBeforeSendHook creates the BeforeSend hook for privacy filtering
+// createBeforeSendHook creates the BeforeSend hook for privacy filtering and
+// uptime enrichment. Only one BeforeSend can be attached to the Sentry client,
+// so uptime annotation runs inside this hook after privacy filtering.
 func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
+		var filtered *sentry.Event
 		if settings.Sentry.Debug {
-			return applyPrivacyFiltersWithLogging(event)
+			filtered = applyPrivacyFiltersWithLogging(event)
+		} else {
+			filtered = applyPrivacyFilters(event)
 		}
-		return applyPrivacyFilters(event)
+
+		// Annotate the event with process uptime so Sentry queries can tell
+		// "happened right after restart" apart from "happened after long
+		// runtime". Done last so privacy filtering cannot strip the newly
+		// added tag / context.
+		enrichEventWithUptime(filtered)
+
+		return filtered
 	}
 }
 
