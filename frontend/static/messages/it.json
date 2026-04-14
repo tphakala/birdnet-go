@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Mostra/nascondi etichette di rilevamento",
       "toggleTimeAxis": "Mostra/nascondi asse temporale"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

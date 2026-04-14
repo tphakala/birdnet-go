@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Detectielabels aan/uit",
       "toggleTimeAxis": "Tijdas aan/uit"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

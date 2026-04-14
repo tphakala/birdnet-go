@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Przełącz etykiety wykrywania",
       "toggleTimeAxis": "Przełącz oś czasu"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

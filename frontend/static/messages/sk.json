@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Prepnúť štítky detekcie",
       "toggleTimeAxis": "Prepnúť časovú os"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

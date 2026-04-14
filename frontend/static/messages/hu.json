@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Detektálási címkék kapcsolása",
       "toggleTimeAxis": "Időtengely kapcsolása"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

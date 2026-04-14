@@ -496,7 +496,12 @@
         const w = plotWidth;
         const h = plotHeight;
 
-        // Self-blit: shift existing content left (GPU-composited)
+        // Self-blit: shift existing content left (GPU-composited).
+        // Always uses pixelsToScroll (not drawColumns below) so the
+        // canvas shift matches the logical scroll distance. This branch
+        // is mutually exclusive with the drawColumns clamp below: the
+        // clamp only runs when !hasRenderedStreamColumns, which is the
+        // same condition that skips the blit on the first priming frame.
         if (hasRenderedStreamColumns || renderMode === 'analyser') {
           ctx.drawImage(
             canvasEl!,
@@ -511,9 +516,18 @@
           );
         }
 
-        // Draw new column(s) at right edge using device pixel dimensions
-        const imgData = ctx.createImageData(pixelsToScroll, h);
-        const data = imgData.data;
+        // drawColumns is the final width of the new-content strip we
+        // draw at the right edge. Defaults to pixelsToScroll but may
+        // be clamped smaller below on priming frames when
+        // columnsToConsume < pixelsToScroll. All ImageData allocation,
+        // indexing, and placement below use drawColumns so the buffer
+        // stride always matches the loop's actual write width —
+        // previously the buffer was allocated with pixelsToScroll BEFORE
+        // the clamp and then indexed with the clamped value afterwards,
+        // producing a stride/offset mismatch that corrupted pixels on
+        // the very first frame with stream data (CodeRabbit flagged
+        // this on PR #2745).
+        let drawColumns = pixelsToScroll;
         const currentBinMap = pixelToBinMap;
         const currentLUT = colorLUT;
         let streamPixels: Array<number[] | Uint8Array<ArrayBuffer>> = [];
@@ -536,7 +550,7 @@
 
           if (columnsToConsume > 0) {
             if (!hasRenderedStreamColumns) {
-              pixelsToScroll = Math.min(pixelsToScroll, Math.max(1, columnsToConsume));
+              drawColumns = Math.min(drawColumns, Math.max(1, columnsToConsume));
             }
             // View slice against the live head; advance head without copying.
             const consumeStart = renderReadyHead;
@@ -544,7 +558,7 @@
             renderReadyHead = consumeEnd;
             hasRenderedStreamColumns = true;
             clearedStreamPrimingCanvas = false;
-            const columnsPerPixel = columnsToConsume / pixelsToScroll;
+            const columnsPerPixel = columnsToConsume / drawColumns;
 
             // In stream mode the bin count is dictated by the server's FFT
             // size (streamed via the spectrogram-meta event and forwarded
@@ -556,7 +570,7 @@
             // bins undefined and producing black unrendered bands in the
             // waterfall (sentry-io flagged this on PR #2745).
             const streamBinCount = fftSize / 2;
-            for (let col = 0; col < pixelsToScroll; col++) {
+            for (let col = 0; col < drawColumns; col++) {
               const offsetStart = Math.floor(col * columnsPerPixel);
               const offsetEnd = Math.max(offsetStart + 1, Math.floor((col + 1) * columnsPerPixel));
               const sliceStart = consumeStart + offsetStart;
@@ -568,7 +582,7 @@
               );
             }
           } else if (lastStreamBins) {
-            for (let col = 0; col < pixelsToScroll; col++) {
+            for (let col = 0; col < drawColumns; col++) {
               streamPixels.push(lastStreamBins);
             }
           }
@@ -585,7 +599,13 @@
           }
         }
 
-        for (let col = 0; col < pixelsToScroll; col++) {
+        // Allocate the ImageData here, AFTER drawColumns has been
+        // finalized inside the stream branch, so the buffer stride
+        // matches the write loop below.
+        const imgData = ctx.createImageData(drawColumns, h);
+        const data = imgData.data;
+
+        for (let col = 0; col < drawColumns; col++) {
           let columnBins: number[] | Uint8Array<ArrayBuffer> = frequencyData;
           if (renderMode === 'stream') {
             /* eslint-disable security/detect-object-injection -- col is a bounded loop index for the scroll buffer */
@@ -597,7 +617,7 @@
             const binIndex = currentBinMap[y];
             const magnitude = columnBins[binIndex] ?? 0;
             const rgba = currentLUT[magnitude];
-            const offset = (y * pixelsToScroll + col) * 4;
+            const offset = (y * drawColumns + col) * 4;
             data[offset] = rgba & 0xff;
             data[offset + 1] = (rgba >>> 8) & 0xff;
             data[offset + 2] = (rgba >>> 16) & 0xff;
@@ -606,8 +626,10 @@
           }
         }
 
-        // putImageData works in raw device pixel coordinates (no transform needed)
-        ctx.putImageData(imgData, plotOffsetX + w - pixelsToScroll, 0);
+        // putImageData works in raw device pixel coordinates (no transform needed).
+        // Placement uses drawColumns so the buffer's right edge lines up
+        // with the canvas's right edge regardless of any priming clamp.
+        ctx.putImageData(imgData, plotOffsetX + w - drawColumns, 0);
       }
 
       // --- Overlay: detection labels + debug time markers ---
@@ -652,7 +674,12 @@
 
           olCtx.textBaseline = 'top';
           olCtx.textAlign = 'left';
-          olCtx.fillText('kHz', 4 * dpr, 4 * dpr);
+          // Unit label routed through i18n per frontend/CLAUDE.md —
+          // "kHz" is the same string in every target locale but the
+          // key indirection satisfies the "no hardcoded user-facing
+          // text" rule enforced by CodeRabbit and gives a single
+          // place to change the label if ever needed.
+          olCtx.fillText(t('spectrogram.axis.kHz'), 4 * dpr, 4 * dpr);
           olCtx.restore();
         }
 

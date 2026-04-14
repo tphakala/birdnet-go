@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Växla detekteringsetiketter",
       "toggleTimeAxis": "Växla tidsaxel"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

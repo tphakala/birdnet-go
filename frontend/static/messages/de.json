@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Erkennungslabels umschalten",
       "toggleTimeAxis": "Zeitachse umschalten"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

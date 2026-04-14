@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Näytä/piilota tunnistusmerkinnät",
       "toggleTimeAxis": "Näytä/piilota aikajana"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

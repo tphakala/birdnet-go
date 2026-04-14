@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Alternar rótulos de deteção",
       "toggleTimeAxis": "Alternar eixo temporal"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

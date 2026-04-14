@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Pārslēgt noteikšanas etiķetes",
       "toggleTimeAxis": "Pārslēgt laika asi"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

@@ -969,6 +969,9 @@
     "labels": {
       "toggle": "Skift detekteringsetiketter",
       "toggleTimeAxis": "Skift tidsakse"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

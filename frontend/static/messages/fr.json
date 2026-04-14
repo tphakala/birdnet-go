@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Basculer les étiquettes de détection",
       "toggleTimeAxis": "Basculer l'axe du temps"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

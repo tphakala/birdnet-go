@@ -970,6 +970,9 @@
     "labels": {
       "toggle": "Toggle detection labels",
       "toggleTimeAxis": "Toggle time axis"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {
