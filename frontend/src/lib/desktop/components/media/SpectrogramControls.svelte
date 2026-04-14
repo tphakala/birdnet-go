@@ -243,6 +243,7 @@
         ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
         : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
       aria-label={t('spectrogram.labels.toggle')}
+      aria-pressed={showDetectionLabels}
       title={t('spectrogram.labels.toggle')}
     >
       <Tag class="size-4" />
@@ -257,6 +258,7 @@
         ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
         : 'text-[var(--color-base-content)]/60 hover:bg-[var(--color-base-200)]'}"
       aria-label={t('spectrogram.labels.toggleTimeAxis')}
+      aria-pressed={showTimeAxis}
       title={t('spectrogram.labels.toggleTimeAxis')}
     >
       <Clock3 class="size-4" />

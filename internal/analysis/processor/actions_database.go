@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -310,9 +309,9 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		endTime := a.beginTime.Add(time.Duration(a.duration) * time.Second)
 		pcmData, err := cb.ReadSegment(a.beginTime, endTime)
 		if err != nil {
-			if stderrors.Is(err, audioBuffer.ErrInsufficientData) {
-				return err
-			}
+			// Both ErrInsufficientData and any other read error unwind to
+			// the job-queue retry layer via save_audio_action.go's retry
+			// config. No special per-error handling needed here.
 			return err
 		}
 		a.pcmData = pcmData

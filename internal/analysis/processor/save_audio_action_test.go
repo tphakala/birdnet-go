@@ -29,7 +29,11 @@ func TestSaveAudioActionExecute_DefersUntilCaptureReady(t *testing.T) {
 		sourceID:  "test-source",
 		beginTime: time.Now(),
 		duration:  2,
-		readyAt:   time.Now().Add(100 * time.Millisecond),
+		// 5 seconds is long enough to remain in the future even on a
+		// heavily-loaded CI runner that delays test dispatch, so the
+		// Execute call below reliably hits the deferred-retry code path.
+		// The previous 100ms was flaky under load.
+		readyAt: time.Now().Add(5 * time.Second),
 	}
 
 	err := action.Execute(t.Context(), nil)
