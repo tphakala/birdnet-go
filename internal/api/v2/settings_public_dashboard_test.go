@@ -102,13 +102,19 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 
 	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 	controlChan := make(chan string, testControlChannelBuf)
-	mockMetrics, _ := observability.NewMetrics()
+	mockMetrics, err := observability.NewMetrics()
+	require.NoError(t, err, "Failed to create test metrics")
 
 	oauth2Server := security.NewOAuth2ServerForTesting(settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 	authMw := auth.NewMiddleware(authService)
 
+	// Save and restore gothic.Store to avoid leaking state between tests.
+	prevGothicStore := gothic.Store
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	t.Cleanup(func() {
+		gothic.Store = prevGothicStore
+	})
 
 	controller, err := NewWithOptions(
 		e, mockDS, settings, birdImageCache, sunCalc, controlChan, mockMetrics,
