@@ -330,4 +330,83 @@ describe('StreamTimeline', () => {
       expect(stateLabels[2]).toHaveTextContent('state2');
     });
   });
+
+  describe('Duplicate Timestamps', () => {
+    // Regression coverage for BIRDNET-GO-1A0: Svelte 5 threw `each_key_duplicate`
+    // when multiple events shared the same millisecond timestamp and the #each
+    // key was `event.timestamp.getTime()`. The composite key must include the
+    // event type and data discriminator to stay unique.
+    const SHARED_TIMESTAMP = '2026-04-14T10:00:00.000Z';
+
+    it('renders a state transition and an error sharing the same timestamp', () => {
+      const stateHistory: StateTransition[] = [
+        createStateTransition('idle', 'running', SHARED_TIMESTAMP),
+      ];
+      const errorHistory: ErrorContext[] = [
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+      ];
+
+      expect(() =>
+        timelineTest.render({
+          stateHistory,
+          errorHistory,
+        })
+      ).not.toThrow();
+
+      // Both events should be rendered as distinct nodes.
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(2);
+    });
+
+    it('renders two state events with identical timestamp but different to_state', () => {
+      const stateHistory: StateTransition[] = [
+        createStateTransition('idle', 'running', SHARED_TIMESTAMP),
+        createStateTransition('running', 'restarting', SHARED_TIMESTAMP),
+      ];
+
+      expect(() =>
+        timelineTest.render({
+          stateHistory,
+        })
+      ).not.toThrow();
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(2);
+    });
+
+    it('renders two error events with identical timestamp but different error_type', () => {
+      const errorHistory: ErrorContext[] = [
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+        createErrorContext('timeout', 'Operation timed out', SHARED_TIMESTAMP),
+      ];
+
+      expect(() =>
+        timelineTest.render({
+          errorHistory,
+        })
+      ).not.toThrow();
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(2);
+    });
+
+    it('renders identical events sharing timestamp, type, and discriminator', () => {
+      // Worst case: two events with timestamp, type, and discriminator all
+      // identical. The list-index tiebreaker in the composite key keeps each
+      // block entry unique.
+      const errorHistory: ErrorContext[] = [
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+        createErrorContext('connection_failed', 'Connection refused', SHARED_TIMESTAMP),
+      ];
+
+      expect(() =>
+        timelineTest.render({
+          errorHistory,
+        })
+      ).not.toThrow();
+
+      const buttons = screen.getAllByRole('button');
+      expect(buttons.length).toBe(2);
+    });
+  });
 });

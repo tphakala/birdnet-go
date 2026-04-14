@@ -96,7 +96,7 @@
 
   // Model display names (comma-separated for multiple)
   let modelDisplayName = $derived(
-    source.models.length > 0
+    (source.models?.length ?? 0) > 0
       ? source.models.map(id => modelOptions.find(m => m.value === id)?.label ?? id).join(', ')
       : (modelOptions[0]?.label ?? '')
   );
@@ -113,7 +113,7 @@
     editName = source.name;
     editDevice = source.device;
     editGain = source.gain;
-    editModels = source.models.length > 0 ? [...source.models] : getDefaultModels();
+    editModels = (source.models?.length ?? 0) > 0 ? [...source.models] : getDefaultModels();
     editEqualizer = source.equalizer
       ? { ...source.equalizer, filters: [...source.equalizer.filters] }
       : { enabled: false, filters: [] };

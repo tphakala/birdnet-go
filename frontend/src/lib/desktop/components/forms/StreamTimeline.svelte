@@ -33,6 +33,7 @@
 
   // Selected event for popover
   let selectedEvent = $state<TimelineEvent | null>(null);
+  let selectedIndex = $state<number>(-1);
   let selectedNodeEl = $state<HTMLElement | null>(null);
 
   // Format timestamp for display (24-hour format, using app locale)
@@ -118,19 +119,26 @@
     return toState === 'restarting' || toState === 'backoff';
   }
 
-  function handleNodeClick(event: TimelineEvent, nodeEl: HTMLElement) {
-    // Compare by timestamp to avoid Svelte 5 proxy equality issues
-    if (selectedEvent?.timestamp.getTime() === event.timestamp.getTime()) {
+  function handleNodeClick(event: TimelineEvent, index: number, nodeEl: HTMLElement) {
+    // Compare by composite key so two events sharing a millisecond do not
+    // collide (BIRDNET-GO-1A0). Keys are stable within the derived list.
+    const sameNode =
+      selectedEvent != null &&
+      timelineEventKey(selectedEvent, selectedIndex) === timelineEventKey(event, index);
+    if (sameNode) {
       selectedEvent = null;
+      selectedIndex = -1;
       selectedNodeEl = null;
     } else {
       selectedEvent = event;
+      selectedIndex = index;
       selectedNodeEl = nodeEl;
     }
   }
 
   function handleClosePopover() {
     selectedEvent = null;
+    selectedIndex = -1;
     selectedNodeEl = null;
   }
 
@@ -138,6 +146,21 @@
     if (e.key === 'Escape') {
       handleClosePopover();
     }
+  }
+
+  // Build a composite key for {#each} that stays unique even when multiple
+  // events fire in the same millisecond (BIRDNET-GO-1A0). Primary uniqueness
+  // comes from timestamp + event type + discriminator (to_state / error_type);
+  // the list index is appended as a final tiebreaker for the rare case where
+  // two events with identical timestamp, type, and discriminator collide.
+  // `timelineEvents` is derived deterministically (sorted by timestamp), so
+  // the index is stable within a single render pass.
+  function timelineEventKey(event: TimelineEvent, index: number): string {
+    const discriminator =
+      event.type === 'error'
+        ? (event.data as ErrorContext).error_type
+        : (event.data as StateTransition).to_state;
+    return `${event.timestamp.getTime()}_${event.type}_${discriminator}_${index}`;
   }
 </script>
 
@@ -156,7 +179,7 @@
         ></div>
       {/if}
 
-      {#each timelineEvents as event, _idx (event.timestamp.getTime())}
+      {#each timelineEvents as event, _idx (timelineEventKey(event, _idx))}
         {@const colors = getNodeColor(event)}
         {@const hollow = isHollow(event)}
         <div class="flex flex-col items-center w-14 flex-shrink-0">
@@ -169,7 +192,7 @@
               colors.border,
               hollow ? 'bg-[var(--color-base-100)]' : colors.bg
             )}
-            onclick={e => handleNodeClick(event, e.currentTarget)}
+            onclick={e => handleNodeClick(event, _idx, e.currentTarget)}
             aria-label={t('settings.audio.streams.timeline.eventAt', {
               time: formatTime(event.timestamp),
             })}
