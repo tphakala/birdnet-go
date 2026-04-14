@@ -184,15 +184,18 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Settings (`settings.go`)
 
-| Method | Route                      | Handler                 | Auth | Description                    |
-| ------ | -------------------------- | ----------------------- | ---- | ------------------------------ |
-| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings |
-| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales          |
-| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options     |
-| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier          |
-| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section  |
-| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings            |
-| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section        |
+| Method | Route                      | Handler                 | Auth | Description                                                    |
+| ------ | -------------------------- | ----------------------- | ---- | -------------------------------------------------------------- |
+| GET    | `/settings`                | `GetAllSettings`        | ✅   | Get all configuration settings                                 |
+| GET    | `/settings/locales`        | `GetLocales`            | ✅   | Get available locales                                          |
+| GET    | `/settings/imageproviders` | `GetImageProviders`     | ✅   | Get image provider options                                     |
+| GET    | `/settings/systemid`       | `GetSystemID`           | ✅   | Get system identifier                                          |
+| GET    | `/settings/dashboard`      | `GetDashboardSettings`  | ❌   | Get dashboard display preferences (public, non-sensitive)      |
+| GET    | `/settings/:section`       | `GetSectionSettings`    | ✅   | Get specific settings section (other sections remain protected) |
+| PUT    | `/settings`                | `UpdateSettings`        | ✅   | Update all settings                                            |
+| PATCH  | `/settings/:section`       | `UpdateSectionSettings` | ✅   | Update settings section (writes to `/dashboard` still require auth) |
+
+The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 
 **Quiet Hours** (`settings_audio.go`): The `realtime` settings section includes quiet hours configuration for both individual RTSP streams (`realtime.rtsp.streams[].quietHours`) and the sound card (`realtime.audio.quietHours`). Each `QuietHoursConfig` supports:
 

@@ -45,7 +45,18 @@ type UpdateRequest struct {
 func (c *Controller) initSettingsRoutes() {
 	c.logInfoIfEnabled("Initializing settings routes")
 
-	// Create settings API group
+	// Public read-only endpoint: the Dashboard section contains only
+	// layout/display preferences (no secrets, tokens, or PII) and must be
+	// readable by unauthenticated guests so the SPA can render the dashboard
+	// (species summary limit, layout, locale, thumbnails settings, etc.)
+	// before login. The Layout is already exposed publicly via
+	// /api/v2/app/config (see PR #2402). Mutations (PATCH) on this section
+	// remain auth-protected — see the settingsGroup PATCH handler below.
+	// Registered on the parent group so that Echo's router matches this
+	// static path before the auth-protected `/:section` parameter route.
+	c.Group.GET("/settings/dashboard", c.GetDashboardSettings)
+
+	// Create auth-protected settings API group for everything else.
 	settingsGroup := c.Group.Group("/settings", c.authMiddleware)
 
 	// Routes for settings
@@ -58,10 +69,13 @@ func (c *Controller) initSettingsRoutes() {
 	// GET /api/v2/settings/systemid - Retrieves the system ID for support tracking (must be before /:section)
 	settingsGroup.GET("/systemid", c.GetSystemID)
 	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
+	// NOTE: /settings/dashboard is intentionally registered publicly above and
+	// will match before this parameterized route.
 	settingsGroup.GET("/:section", c.GetSectionSettings)
 	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
+	// (includes /settings/dashboard — writes remain auth-protected).
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
 
 	c.logInfoIfEnabled("Settings routes initialized successfully")
@@ -99,6 +113,53 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 	// Return a sanitized copy with secrets redacted
 	sanitized := sanitizeSettingsForAPI(settings)
 	return ctx.JSON(http.StatusOK, sanitized)
+}
+
+// dashboardSectionName is the settings section key used for the publicly
+// readable dashboard endpoint.
+const dashboardSectionName = "dashboard"
+
+// GetDashboardSettings handles the publicly accessible
+// GET /api/v2/settings/dashboard endpoint. It returns the sanitized Dashboard
+// section so that unauthenticated guests can render the SPA dashboard
+// (species summary limit, layout, locale, thumbnails, etc.) without first
+// completing login. The Dashboard section contains no secrets, tokens, or
+// PII — the full settings payload (which does) remains behind auth. Writes
+// to this section are handled by UpdateSectionSettings and remain
+// auth-protected.
+func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
+	c.logAPIRequest(ctx, logger.LogLevelInfo, "Getting public dashboard settings")
+
+	// Acquire read lock to ensure settings aren't being modified during read.
+	c.settingsMutex.RLock()
+	defer c.settingsMutex.RUnlock()
+
+	settings := c.Settings
+	if settings == nil {
+		// Fallback to global settings if controller settings not set.
+		settings = conf.Setting()
+		if settings == nil {
+			c.logAPIRequest(ctx, logger.LogLevelError,
+				"Settings not initialized when trying to get dashboard settings")
+			return c.HandleError(ctx, fmt.Errorf("settings not initialized"),
+				"Failed to get settings", http.StatusInternalServerError)
+		}
+	}
+
+	// Sanitize first, then extract the dashboard section from the sanitized
+	// copy. The Dashboard struct has no secret-bearing fields today, but
+	// routing through sanitizeSettingsForAPI keeps this endpoint safe against
+	// future additions.
+	sanitized := sanitizeSettingsForAPI(settings)
+	sectionValue, err := getSettingsSection(sanitized, dashboardSectionName)
+	if err != nil {
+		c.logAPIRequest(ctx, logger.LogLevelError,
+			"Failed to get dashboard settings section", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to get settings section",
+			http.StatusInternalServerError)
+	}
+
+	return ctx.JSON(http.StatusOK, sectionValue)
 }
 
 // GetSectionSettings handles GET /api/v2/settings/:section
