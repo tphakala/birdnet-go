@@ -22,10 +22,14 @@
     type: 'state' | 'error';
     timestamp: Date;
     data: StateTransition | ErrorContext;
+    // Data discriminator (`to_state` for state transitions, `error_type` for
+    // errors). Precomputed during derivation so the template and aria-label
+    // can access it without repeated union narrowing.
+    discriminator: string;
     // Stable per-event key precomputed during derivation. Combines timestamp,
-    // type, discriminator (to_state / error_type), and a per-duplicate ordinal
-    // so multiple events with identical data still produce distinct keys
-    // without depending on the sliding render index (BIRDNET-GO-1A0).
+    // type, discriminator, and a per-duplicate ordinal so multiple events
+    // with identical data still produce distinct keys without depending on
+    // the sliding render index (BIRDNET-GO-1A0).
     key: string;
   }
 
@@ -60,19 +64,27 @@
   }
 
   // Returns the discriminator string for an event (state name for transitions,
-  // error type for errors). Used in the composite key and aria-label.
-  function eventDiscriminator(event: Omit<TimelineEvent, 'key'>): string {
-    return event.type === 'error'
-      ? ((event.data as ErrorContext).error_type ?? '')
-      : ((event.data as StateTransition).to_state ?? '');
+  // error type for errors). Used when building the derived list.
+  function eventDiscriminator(
+    type: 'state' | 'error',
+    data: StateTransition | ErrorContext
+  ): string {
+    return type === 'error'
+      ? ((data as ErrorContext).error_type ?? '')
+      : ((data as StateTransition).to_state ?? '');
   }
 
   // Merge and sort state and error history into unified timeline, assigning
-  // a stable composite key to each event. The per-duplicate ordinal is
-  // computed over the sorted list (pre-slice) so an event's key does not
-  // change when the sliding window drops older events.
+  // a stable composite key and precomputed discriminator to each event. The
+  // per-duplicate ordinal is computed over the sorted list (pre-slice) so an
+  // event's key does not change when the sliding window drops older events.
   let timelineEvents = $derived.by(() => {
-    const raw: Omit<TimelineEvent, 'key'>[] = [];
+    type RawEvent = {
+      type: 'state' | 'error';
+      timestamp: Date;
+      data: StateTransition | ErrorContext;
+    };
+    const raw: RawEvent[] = [];
 
     // Add state transitions (filter invalid timestamps)
     for (const state of stateHistory ?? []) {
@@ -106,10 +118,11 @@
     // the sliding-window render index (Gemini / Sentry / CodeRabbit review).
     const occurrence = new Map<string, number>();
     const keyed: TimelineEvent[] = raw.map(event => {
-      const base = `${event.timestamp.getTime()}_${event.type}_${eventDiscriminator(event)}`;
+      const discriminator = eventDiscriminator(event.type, event.data);
+      const base = `${event.timestamp.getTime()}_${event.type}_${discriminator}`;
       const ordinal = occurrence.get(base) ?? 0;
       occurrence.set(base, ordinal + 1);
-      return { ...event, key: `${base}_${ordinal}` };
+      return { ...event, discriminator, key: `${base}_${ordinal}` };
     });
 
     // Limit to last 10 events; ordinals were assigned pre-slice so surviving
@@ -194,7 +207,6 @@
       {#each timelineEvents as event (event.key)}
         {@const colors = getNodeColor(event)}
         {@const hollow = isHollow(event)}
-        {@const discriminator = eventDiscriminator(event)}
         <div class="flex flex-col items-center w-14 flex-shrink-0">
           <!-- Node -->
           <button
@@ -206,9 +218,15 @@
               hollow ? 'bg-[var(--color-base-100)]' : colors.bg
             )}
             onclick={e => handleNodeClick(event, e.currentTarget)}
-            aria-label={`${t('settings.audio.streams.timeline.eventAt', {
-              time: formatTime(event.timestamp),
-            })} — ${event.type === 'error' ? t('settings.audio.streams.timeline.error') : ''} ${discriminator}`.trim()}
+            aria-label={[
+              t('settings.audio.streams.timeline.eventAt', {
+                time: formatTime(event.timestamp),
+              }),
+              event.type === 'error' ? t('settings.audio.streams.timeline.error') : '',
+              event.discriminator,
+            ]
+              .filter(Boolean)
+              .join(' — ')}
           ></button>
 
           <!-- Timestamp -->
