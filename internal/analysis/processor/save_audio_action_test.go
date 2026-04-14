@@ -89,6 +89,15 @@ func TestGetJobQueueRetryConfig_SaveAudioDeferredRead(t *testing.T) {
 		readyAt:  time.Now().Add(time.Second),
 	})
 
+	// Lock the deferred-export retry contract to exact values so an
+	// accidental change to workers.go's retry policy (MaxRetries,
+	// InitialDelay, MaxDelay, or Multiplier) fails this test instead
+	// of silently altering production behavior. The previous
+	// GreaterOrEqual(MaxRetries, 1) assertion was too permissive to
+	// catch a regression.
 	assert.True(t, cfg.Enabled)
-	assert.GreaterOrEqual(t, cfg.MaxRetries, 1)
+	assert.Equal(t, 7, cfg.MaxRetries)
+	assert.Equal(t, time.Second, cfg.InitialDelay)
+	assert.Equal(t, 30*time.Second, cfg.MaxDelay)
+	assert.InEpsilon(t, 2.0, cfg.Multiplier, 0.001)
 }
