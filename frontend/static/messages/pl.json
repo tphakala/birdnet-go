@@ -762,7 +762,7 @@
     "headers": {
       "dateTime": "Data i Czas",
       "weather": "Pogoda",
-      "source": "Zrodlo",
+      "source": "Źródło",
       "species": "Gatunek",
       "confidence": "Pewność",
       "thumbnail": "Miniatura",
