@@ -17,56 +17,39 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStopWithTimeout_ZeroTimeout_UsesFloor verifies that a zero timeout
-// is silently floored to MinStopTimeout rather than triggering an immediate
-// telemetry-noisy timeout error.
-func TestStopWithTimeout_ZeroTimeout_UsesFloor(t *testing.T) {
+// TestStopWithTimeout_FloorBehavior is a table-driven test verifying the
+// floor contract: zero or negative timeouts are silently floored to
+// MinStopTimeout, positive timeouts are honored (but still return promptly
+// when no jobs are queued). The elapsed-time assertions use MinStopTimeout
+// so the test stays tied to the production contract rather than a magic
+// number.
+func TestStopWithTimeout_FloorBehavior(t *testing.T) {
 	t.Parallel()
 
-	q := NewJobQueue()
-	q.Start()
+	tests := []struct {
+		name    string
+		timeout time.Duration
+	}{
+		{name: "zero_timeout_is_floored", timeout: 0},
+		{name: "negative_timeout_is_floored", timeout: -5 * time.Second},
+		{name: "positive_timeout_returns_promptly_without_jobs", timeout: 2 * time.Second},
+	}
 
-	start := time.Now()
-	err := q.StopWithTimeout(0)
-	elapsed := time.Since(start)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	// With no running jobs the shutdown completes immediately — the point of
-	// the test is that we did NOT get the "timed out after 0s" error.
-	require.NoError(t, err, "zero timeout must be floored, not propagated as 0s error")
-	// Sanity: should complete fast since there are no jobs to drain.
-	assert.Less(t, elapsed, MinStopTimeout, "with no running jobs, stop is near-instant")
-}
+			q := NewJobQueue()
+			q.Start()
 
-// TestStopWithTimeout_NegativeTimeout_UsesFloor verifies that a negative
-// timeout (which callers can produce with time.Until(past_deadline)) is
-// also floored.
-func TestStopWithTimeout_NegativeTimeout_UsesFloor(t *testing.T) {
-	t.Parallel()
+			start := time.Now()
+			err := q.StopWithTimeout(tt.timeout)
+			elapsed := time.Since(start)
 
-	q := NewJobQueue()
-	q.Start()
-
-	err := q.StopWithTimeout(-5 * time.Second)
-	require.NoError(t, err,
-		"negative timeout must be floored to MinStopTimeout, not propagated as a negative-duration error")
-}
-
-// TestStopWithTimeout_PositiveTimeout_Respected verifies that callers
-// passing a positive timeout still get the exact value (regression guard so
-// the floor does not silently widen large timeouts).
-func TestStopWithTimeout_PositiveTimeout_Respected(t *testing.T) {
-	t.Parallel()
-
-	q := NewJobQueue()
-	q.Start()
-
-	start := time.Now()
-	err := q.StopWithTimeout(2 * time.Second)
-	elapsed := time.Since(start)
-
-	require.NoError(t, err)
-	// No jobs queued so it returns quickly — we just confirm we didn't sleep
-	// for the full 2s waiting for some floor math.
-	assert.Less(t, elapsed, 500*time.Millisecond,
-		"with no running jobs, stop returns promptly regardless of timeout")
+			require.NoError(t, err,
+				"stop must not propagate a timeout error when the queue is idle, regardless of caller timeout")
+			assert.Less(t, elapsed, MinStopTimeout,
+				"with no running jobs, stop should complete faster than MinStopTimeout (got %v)", elapsed)
+		})
+	}
 }

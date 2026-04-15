@@ -46,6 +46,9 @@ func makeValidSoundLevelData() soundlevel.SoundLevelData {
 //     Sentry via the errors package telemetry integration)
 func TestPublishSoundLevelToMQTT_ClientNotReady_Silent(t *testing.T) {
 	// Not parallel: conf.SetTestSettings mutates package-global state.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.SetTestSettings(prev) })
+
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "birdnet/test"
@@ -71,6 +74,9 @@ func TestPublishSoundLevelToMQTT_ClientNotReady_Silent(t *testing.T) {
 // when the broker stays unreachable.
 func TestPublishSoundLevelToMQTT_ClientNotReady_Idempotent(t *testing.T) {
 	// Not parallel: conf.SetTestSettings mutates package-global state.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.SetTestSettings(prev) })
+
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = true
 	settings.Realtime.MQTT.Topic = "birdnet/test"
@@ -92,6 +98,9 @@ func TestPublishSoundLevelToMQTT_ClientNotReady_Idempotent(t *testing.T) {
 // pre-existing "MQTT disabled" early return is not affected by the fix.
 func TestPublishSoundLevelToMQTT_MQTTDisabled_StillNoError(t *testing.T) {
 	// Not parallel: conf.SetTestSettings mutates package-global state.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.SetTestSettings(prev) })
+
 	settings := &conf.Settings{}
 	settings.Realtime.MQTT.Enabled = false // disabled
 	conf.SetTestSettings(settings)

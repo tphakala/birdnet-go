@@ -21,8 +21,9 @@ const (
 	discoveryPublishTimeout = 30 * time.Second
 )
 
-// ErrMQTTClientNotReady is returned by PublishMQTT when MQTT is enabled in
-// settings but no client reference is available. This happens when:
+// ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
+// reference is nil, regardless of whether MQTT is enabled in settings. In
+// practice this happens when MQTT is configured but:
 //   - initializeMQTT() failed to connect at startup (broker unreachable,
 //     auth failure, TLS issue, etc.)
 //   - The client is between DisconnectMQTTClient() and SetMQTTClient() during
@@ -71,10 +72,10 @@ func (p *Processor) DisconnectMQTTClient() {
 // PublishMQTT safely publishes a message using the MQTT client if available.
 // Does NOT pre-check IsConnected() to avoid TOCTOU race (GitHub #2397).
 //
-// When MQTT is enabled in settings but no client reference is available
-// (initializeMQTT() failed at startup, or between disconnect and reconfigure),
-// this returns ErrMQTTClientNotReady. Streaming publishers that run on a
-// timer (sound level publisher, etc.) should check for this sentinel with
+// When the MQTT client reference is nil (initializeMQTT() failed at startup,
+// or the client is between DisconnectMQTTClient() and SetMQTTClient()), this
+// returns ErrMQTTClientNotReady. Streaming publishers that run on a timer
+// (sound level publisher, etc.) should check for this sentinel with
 // errors.Is and silently skip to avoid flooding telemetry. See
 // internal/analysis/sound_level.go for the canonical caller pattern.
 //
