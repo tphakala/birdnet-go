@@ -1332,6 +1332,7 @@
             disabled={store.isLoading || store.isSaving}
             onInput={updateSynonymPredictions}
             onPredictionSelect={handleSynonymPredictionSelect}
+            addOnSelect={false}
             size="sm"
           />
           <TextInput

@@ -57,10 +57,21 @@
     type AudioNodeChain,
   } from '$lib/utils/audioNodes';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { getCsrfToken } from '$lib/utils/api';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
 
   const logger = loggers.audio;
+
+  // Build JSON headers with CSRF token (server rejects mutating requests without it).
+  function jsonHeadersWithCsrf(): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+    return headers;
+  }
 
   // Debug logging helper - bypasses linter warnings when debug flag is enabled
   const debugLog = (message: string, data?: unknown) => {
@@ -667,7 +678,7 @@
         buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}/clip`),
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: jsonHeadersWithCsrf(),
           body: JSON.stringify({
             start,
             end,
@@ -772,7 +783,7 @@
         buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}/process`),
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: jsonHeadersWithCsrf(),
           signal: controller.signal,
           body: JSON.stringify({
             normalize: processingNormalize,
@@ -850,7 +861,7 @@
         ),
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: jsonHeadersWithCsrf(),
           signal,
           body: JSON.stringify({
             normalize: processingNormalize,
@@ -1332,9 +1343,7 @@
 
       const response = await fetch(generateUrl.toString(), {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: jsonHeadersWithCsrf(),
       });
 
       debugLog('handleGenerateSpectrogram: response', { status: response.status });

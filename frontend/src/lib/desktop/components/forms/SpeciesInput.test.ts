@@ -181,6 +181,35 @@ describe('SpeciesInput', () => {
     });
   });
 
+  it('does not call onAdd or clear input when addOnSelect is false', async () => {
+    const onAdd = vi.fn();
+    const onPredictionSelect = vi.fn();
+
+    render(SpeciesInput, {
+      props: {
+        value: 'rob',
+        predictions: defaultPredictions,
+        addOnSelect: false,
+        onAdd,
+        onPredictionSelect,
+      },
+    });
+
+    const prediction = screen.getByText('American Robin');
+    await fireEvent.click(prediction);
+
+    expect(onPredictionSelect).toHaveBeenCalledWith('American Robin');
+
+    // Give any deferred work a chance to run, then assert onAdd stayed silent.
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(onAdd).not.toHaveBeenCalled();
+
+    // Input value should remain populated with the selected prediction so
+    // callers can read it via bind:value or a separate submit button.
+    const input = screen.getByRole('combobox') as HTMLInputElement;
+    expect(input).toHaveValue('American Robin');
+  });
+
   it('calls onInput when input value changes', async () => {
     const onInput = vi.fn();
 

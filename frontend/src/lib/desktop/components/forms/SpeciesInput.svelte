@@ -46,6 +46,13 @@
     maxPredictions?: number;
     minCharsForPredictions?: number;
     className?: string;
+    /**
+     * When true (default), selecting a prediction immediately triggers onAdd and
+     * clears the input. When false, selecting a prediction only populates the
+     * input so callers can read the current value (used for non-list inputs like
+     * the synonym BirdNET name field, which is submitted via a separate button).
+     */
+    addOnSelect?: boolean;
     onInput?: (_value: string) => void;
     onAdd?: (_value: string) => void;
     onPredictionSelect?: (_prediction: string) => void;
@@ -69,6 +76,7 @@
     maxPredictions = 10,
     minCharsForPredictions = 2,
     className = '',
+    addOnSelect = true,
     onInput,
     onAdd,
     onPredictionSelect,
@@ -358,10 +366,13 @@
     showPredictions = false;
 
     // Defer handleAdd to next event loop to ensure state updates (showPredictions = false)
-    // have propagated before triggering add operation
-    setTimeout(() => {
-      handleAdd();
-    }, 0);
+    // have propagated before triggering add operation. Skip when callers opt out
+    // of auto-add (e.g. inputs that feed a separate submit button).
+    if (addOnSelect) {
+      setTimeout(() => {
+        handleAdd();
+      }, 0);
+    }
   }
 
   function handlePredictionKeydown(event: KeyboardEvent, prediction: string, index: number) {
