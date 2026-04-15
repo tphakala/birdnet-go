@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -392,6 +393,26 @@ func publishSoundLevelToMQTT(soundData soundlevel.SoundLevelData, proc *processo
 	defer cancel()
 
 	if err := proc.PublishMQTT(ctx, topic, string(jsonData)); err != nil {
+		// Sentinel case: MQTT enabled but client not ready (startup race or
+		// connect failure). Silently drop so we don't flood Sentry with
+		// identical "client not available" events every sound-level interval.
+		// The processor emits a single warn log on the first occurrence;
+		// subsequent drops are silent by design.
+		if stderrors.Is(err, processor.ErrMQTTClientNotReady) {
+			if settings.Realtime.Audio.SoundLevel.Debug {
+				getSoundLevelLogger().Debug("sound level MQTT publish skipped: client not ready",
+					logger.String("source", soundData.Source),
+					logger.String("name", soundData.Name),
+					logger.String("topic", topic))
+			}
+			// Record a lightweight metric so the condition is still observable
+			// via Prometheus without generating Sentry events.
+			if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
+				proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "client_not_ready")
+			}
+			return nil
+		}
+
 		// Record error metric
 		if proc.Metrics != nil && proc.Metrics.SoundLevel != nil {
 			proc.Metrics.SoundLevel.RecordSoundLevelPublishingError(soundData.Source, soundData.Name, "mqtt", "publish_error")

@@ -56,45 +56,46 @@ const MinJobQueueGracePeriod = 500 * time.Millisecond
 
 // Processor represents the main processing unit for audio analysis.
 type Processor struct {
-	Settings            *conf.Settings
-	Ds                  datastore.Interface           // Legacy - to be removed after migration
-	Repo                datastore.DetectionRepository // New - preferred for detection operations
-	Bn                  *classifier.Orchestrator
-	log                 logger.Logger // Logger inherited from analysis package with "processor" child module
-	BwClient            *birdweather.BwClient
-	bwClientMutex       sync.RWMutex // Mutex to protect BwClient access
-	MqttClient          mqtt.Client
-	mqttMutex           sync.RWMutex // Mutex to protect MQTT client access
-	BirdImageCache      *imageprovider.BirdImageCache
-	EventTracker        *EventTracker
-	eventTrackerMu      sync.RWMutex            // Mutex to protect EventTracker access
-	NewSpeciesTracker   *species.SpeciesTracker // Tracks new species detections
-	speciesTrackerMu    sync.RWMutex            // Mutex to protect NewSpeciesTracker access
-	lastSyncAttempt     time.Time               // Last time sync was attempted
-	syncMutex           sync.Mutex              // Mutex to protect sync operations
-	syncInProgress      atomic.Bool             // Flag to prevent overlapping syncs
-	LastDogDetection    map[string]time.Time    // keep track of dog barks per audio source
-	LastHumanDetection  map[string]time.Time    // keep track of human vocal per audio source
-	Metrics             *observability.Metrics
-	DynamicThresholds   map[string]*DynamicThreshold
-	thresholdsMutex     sync.RWMutex        // Mutex to protect access to DynamicThresholds
-	pendingResets       map[string]struct{} // Species names pending reset, protected by thresholdsMutex
-	pendingResetAll     bool                // True if a full reset is pending, protected by thresholdsMutex
-	pendingDetections   map[string]PendingDetection
-	pendingMutex        sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
-	lastDogDetectionLog map[string]time.Time
-	dogDetectionMutex   sync.Mutex
-	detectionMutex      sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
-	controlChan         chan string
-	JobQueue            *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel        context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx       context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel    context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx          context.Context    // Context for pending detections flusher goroutine
-	flusherCancel       context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer         PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce     sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce           sync.Once          // Ensures Start() is called only once
+	Settings             *conf.Settings
+	Ds                   datastore.Interface           // Legacy - to be removed after migration
+	Repo                 datastore.DetectionRepository // New - preferred for detection operations
+	Bn                   *classifier.Orchestrator
+	log                  logger.Logger // Logger inherited from analysis package with "processor" child module
+	BwClient             *birdweather.BwClient
+	bwClientMutex        sync.RWMutex // Mutex to protect BwClient access
+	MqttClient           mqtt.Client
+	mqttMutex            sync.RWMutex // Mutex to protect MQTT client access
+	mqttNotReadyWarnOnce sync.Once    // Ensures the "client not ready" warning logs at most once per process to avoid flood
+	BirdImageCache       *imageprovider.BirdImageCache
+	EventTracker         *EventTracker
+	eventTrackerMu       sync.RWMutex            // Mutex to protect EventTracker access
+	NewSpeciesTracker    *species.SpeciesTracker // Tracks new species detections
+	speciesTrackerMu     sync.RWMutex            // Mutex to protect NewSpeciesTracker access
+	lastSyncAttempt      time.Time               // Last time sync was attempted
+	syncMutex            sync.Mutex              // Mutex to protect sync operations
+	syncInProgress       atomic.Bool             // Flag to prevent overlapping syncs
+	LastDogDetection     map[string]time.Time    // keep track of dog barks per audio source
+	LastHumanDetection   map[string]time.Time    // keep track of human vocal per audio source
+	Metrics              *observability.Metrics
+	DynamicThresholds    map[string]*DynamicThreshold
+	thresholdsMutex      sync.RWMutex        // Mutex to protect access to DynamicThresholds
+	pendingResets        map[string]struct{} // Species names pending reset, protected by thresholdsMutex
+	pendingResetAll      bool                // True if a full reset is pending, protected by thresholdsMutex
+	pendingDetections    map[string]PendingDetection
+	pendingMutex         sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
+	lastDogDetectionLog  map[string]time.Time
+	dogDetectionMutex    sync.Mutex
+	detectionMutex       sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
+	controlChan          chan string
+	JobQueue             *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel         context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx        context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel     context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx           context.Context    // Context for pending detections flusher goroutine
+	flusherCancel        context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer          PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce      sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce            sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access

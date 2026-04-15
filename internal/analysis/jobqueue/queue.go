@@ -27,6 +27,15 @@ const (
 	// ActionStatsTargetSize is the target size after cleanup (with hysteresis margin)
 	// Set to 80% of max to avoid repeated cleanup triggers
 	ActionStatsTargetSize = int(MaxActionStatsEntries * 0.8)
+
+	// MinStopTimeout is the minimum grace period enforced inside
+	// StopWithTimeout when a caller passes a zero or negative timeout. The
+	// canonical caller (processor shutdown) already floors the timeout at
+	// its own MinJobQueueGracePeriod, but this constant provides a safety
+	// net for any future caller and prevents a 0s select-case fallthrough
+	// that would report "timed out waiting for jobs to complete after 0s"
+	// to telemetry even though the shutdown is behaving correctly.
+	MinStopTimeout = 500 * time.Millisecond
 )
 
 // JobQueue manages a queue of jobs that can be retried
@@ -125,8 +134,20 @@ func (q *JobQueue) Stop() error {
 	return q.StopWithTimeout(10 * time.Second)
 }
 
-// StopWithTimeout stops the job queue processing with a timeout
+// StopWithTimeout stops the job queue processing with a timeout.
+//
+// If the supplied timeout is zero or negative, it is silently floored to
+// MinStopTimeout. This matters during shutdown: callers commonly derive the
+// timeout from context.Deadline()-time.Now(), which can already be
+// non-positive by the time Stop runs. Without a floor, the select below
+// returns immediately with a "timed out waiting for jobs to complete after
+// 0s" error that gets reported to telemetry even though the shutdown is
+// behaving correctly.
 func (q *JobQueue) StopWithTimeout(timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = MinStopTimeout
+	}
+
 	q.mu.Lock()
 	if !q.isRunning {
 		q.mu.Unlock()
