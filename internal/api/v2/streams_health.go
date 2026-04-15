@@ -240,7 +240,7 @@ func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 // @Success 200 {object} StreamHealthResponse "Stream health information"
 // @Failure 400 {object} ErrorResponse "Invalid or missing URL parameter"
 // @Failure 404 {object} ErrorResponse "Stream not found"
-// @Failure 500 {object} ErrorResponse "Internal server error"
+// @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health/{url} [get]
 func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	// Get URL parameter (URL-encoded) — may be a sourceID or a stream URL
@@ -256,7 +256,10 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 	}
 
 	if c.engine == nil {
-		return c.HandleError(ctx, nil, "Stream not found", http.StatusNotFound)
+		// Match GetAllStreamsHealth / GetStreamsStatusSummary: 503, not
+		// 404. The stream may very well exist in config — we just cannot
+		// inspect its health without the audio engine running.
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
 	// Try to find stream by sourceID first, then by connection URL
 	registry := c.engine.Registry()

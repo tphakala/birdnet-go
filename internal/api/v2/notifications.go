@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"golang.org/x/time/rate"
 )
 
 // SSE Connection configuration
@@ -145,14 +146,19 @@ func (c *Controller) initNotificationRoutes() {
 
 // SetupNotificationRoutes configures notification-related routes
 func (c *Controller) SetupNotificationRoutes() {
-	// Rate limiter configuration for SSE connections
+	// Rate limiter configuration for SSE connections. `Rate` is interpreted
+	// as tokens per second by golang.org/x/time/rate, so
+	// `rateLimitRequestsPerWindow / rateLimitWindow` gives us the intended
+	// 10 connections per minute (≈0.1667/sec). A bare `10` here would mean
+	// 10/second — 60× too permissive for an unauthenticated SSE endpoint
+	// (Sentry flagged this on PR #2775).
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      rateLimitRequestsPerWindow, // Rate limit per window
-				Burst:     rateLimitBurst,             // Rate limit burst
-				ExpiresIn: rateLimitWindow,            // Rate limit window
+				Rate:      rate.Limit(float64(rateLimitRequestsPerWindow) / rateLimitWindow.Seconds()),
+				Burst:     rateLimitBurst,  // Rate limit burst
+				ExpiresIn: rateLimitWindow, // Rate limit window
 			},
 		),
 		IdentifierExtractor: func(ctx echo.Context) (string, error) {
@@ -170,10 +176,11 @@ func (c *Controller) SetupNotificationRoutes() {
 	// PR #2763 for the precedent with /settings/dashboard.
 	//
 	// Route priority: Echo matches static path segments before parameter
-	// routes ("/:id"), so /unread/count, /stream, and /check-ntfy-server
-	// always win over the /:id routes registered in the auth group below.
-	// Register these on the parent c.Group so they are NOT wrapped by
-	// c.authMiddleware.
+	// routes ("/:id"), so /unread/count and /stream always win over the
+	// /:id routes registered in the auth group below. Register these on
+	// the parent c.Group so they are NOT wrapped by c.authMiddleware.
+	// (/check-ntfy-server is intentionally NOT public — see the auth group
+	// registration later in this function, kept authed to prevent SSRF.)
 	c.Group.GET("/notifications", c.GetNotifications, c.requireNotificationService)
 	c.Group.GET("/notifications/unread/count", c.GetUnreadCount, c.requireNotificationService)
 	c.Group.GET("/notifications/stream", c.StreamNotifications,
