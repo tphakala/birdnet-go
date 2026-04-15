@@ -34,6 +34,9 @@ const (
 	// Endpoints
 	sseEndpoint = "/api/v2/notifications/stream"
 
+	// SSE event names.
+	sseEventConnected = "connected" // Initial handshake event name emitted to every subscriber.
+
 	// Buffer sizes
 	notificationChannelBuffer = 10 // Buffer size for notification channels
 
@@ -443,7 +446,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	}
 
 	// Send initial connection message
-	if err := c.sendSSEMessage(ctx, "connected", map[string]string{
+	if err := c.sendSSEMessage(ctx, sseEventConnected, map[string]string{
 		"clientId": clientID,
 		"message":  "Connected to notification stream",
 	}); err != nil {
@@ -452,7 +455,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	}
 
 	if c.metrics != nil && c.metrics.HTTP != nil {
-		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, "connected")
+		c.metrics.HTTP.RecordSSEMessageSent(sseEndpoint, sseEventConnected)
 	}
 
 	// Log the connection

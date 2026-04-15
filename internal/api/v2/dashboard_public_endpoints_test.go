@@ -16,12 +16,18 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -240,6 +246,208 @@ func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T
 
 	assert.Equal(t, len(listPayload.Notifications), payload.UnreadCount,
 		"guest unread count must equal guest-visible unread list length")
+}
+
+// sseEvent is a parsed Server-Sent Event used by the guest SSE filter test.
+type sseEvent struct {
+	Event string
+	Data  string
+}
+
+// readSSEEvent reads one complete SSE event (lines up to the trailing blank
+// line) from r and returns it. Comment lines (":...") are ignored.
+func readSSEEvent(r *bufio.Reader) (sseEvent, error) {
+	var ev sseEvent
+	for {
+		line, err := r.ReadString('\n')
+		if err != nil {
+			return ev, err
+		}
+		trimmed := strings.TrimRight(line, "\r\n")
+		if trimmed == "" {
+			return ev, nil
+		}
+		switch {
+		case strings.HasPrefix(trimmed, ":"):
+			// SSE comment — ignore.
+		case strings.HasPrefix(trimmed, "event:"):
+			ev.Event = strings.TrimSpace(strings.TrimPrefix(trimmed, "event:"))
+		case strings.HasPrefix(trimmed, "data:"):
+			chunk := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+			if ev.Data == "" {
+				ev.Data = chunk
+			} else {
+				ev.Data += "\n" + chunk
+			}
+		}
+	}
+}
+
+// TestNotifications_GuestSSEFiltersNonDetectionAndToasts drives the
+// /api/v2/notifications/stream handler over a real HTTP connection as a guest
+// and proves the in-loop filter (notifications.go runNotificationEventLoop)
+// drops TypeError and toast-flagged payloads. The list/count tests already
+// cover the REST path — this locks in the SSE path too so that a regression
+// in the guard condition (notif.Type != TypeDetection || isToast) is caught
+// before it reaches the dashboard.
+func TestNotifications_GuestSSEFiltersNonDetectionAndToasts(t *testing.T) {
+	svc := ensureNotificationServiceInitialized(t)
+
+	e := newSettingsAuthTestEnv(t)
+	srv := httptest.NewServer(e)
+	t.Cleanup(srv.Close)
+
+	// cancel must run BEFORE t.Cleanup(wg.Wait) — otherwise the goroutine
+	// blocked on readSSEEvent would deadlock the cleanup. `defer` runs at
+	// function exit before any t.Cleanup callback, so the request context
+	// is canceled first, unblocking the read loop, then cleanups proceed in
+	// LIFO order (wg.Wait → resp.Body.Close → srv.Close).
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		srv.URL+"/api/v2/notifications/stream", http.NoBody)
+	require.NoError(t, err)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	require.Equal(t, http.StatusOK, resp.StatusCode,
+		"guest must be able to open SSE stream, got %d", resp.StatusCode)
+
+	events := make(chan sseEvent, 32)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		defer close(events)
+		reader := bufio.NewReader(resp.Body)
+		for {
+			ev, err := readSSEEvent(reader)
+			if err != nil {
+				// EOF once the context is canceled is the expected exit path.
+				if !errorsIsEOFLike(err) {
+					t.Logf("SSE read stopped: %v", err)
+				}
+				return
+			}
+			select {
+			case events <- ev:
+			case <-ctx.Done():
+				return
+			}
+		}
+	})
+	t.Cleanup(wg.Wait)
+
+	// Wait for the initial handshake event so we know the subscriber is
+	// wired up before we publish fixtures. Without this, Create() may fire
+	// before Subscribe() registers the client and the notification is lost.
+	require.Eventually(t, func() bool {
+		select {
+		case ev := <-events:
+			return ev.Event == sseEventConnected
+		default:
+			return false
+		}
+	}, 2*time.Second, 10*time.Millisecond, "did not receive connected event")
+
+	detection, err := svc.Create(notification.TypeDetection, notification.PriorityHigh,
+		"SSE test detection", "guest-visible body")
+	require.NoError(t, err)
+	adminErr, err := svc.Create(notification.TypeError, notification.PriorityHigh,
+		"SSE test error", "admin-only body")
+	require.NoError(t, err)
+	detectionToast := notification.NewNotification(notification.TypeDetection,
+		notification.PriorityLow, "SSE test toast", "toast body").
+		WithMetadata(notification.MetadataKeyIsToast, true)
+	require.NoError(t, svc.CreateWithMetadata(detectionToast))
+
+	t.Cleanup(func() {
+		for _, n := range []*notification.Notification{detection, adminErr, detectionToast} {
+			if n == nil {
+				continue
+			}
+			_ = svc.Delete(n.ID)
+		}
+	})
+
+	fixtureIDs := map[string]bool{
+		detection.ID:      true,
+		adminErr.ID:       true,
+		detectionToast.ID: true,
+	}
+
+	var sawDetection bool
+	// Drain events until we see the detection or hit the deadline. Any
+	// non-detection fixture that leaks fails the test immediately.
+	deadline := time.After(2 * time.Second)
+drain:
+	for {
+		select {
+		case <-deadline:
+			break drain
+		case ev, ok := <-events:
+			if !ok {
+				break drain
+			}
+			// Only inspect notification/toast events for our fixtures.
+			if ev.Event != "notification" && ev.Event != "toast" {
+				continue
+			}
+			var payload map[string]any
+			if err := json.Unmarshal([]byte(ev.Data), &payload); err != nil {
+				continue
+			}
+			id := extractNotificationID(payload)
+			if id == "" || !fixtureIDs[id] {
+				continue
+			}
+			switch id {
+			case detection.ID:
+				assert.Equal(t, "notification", ev.Event,
+					"detection must arrive as a notification event")
+				sawDetection = true
+			case adminErr.ID:
+				t.Fatalf("guest SSE leaked TypeError notification (id=%s)", id)
+			case detectionToast.ID:
+				t.Fatalf("guest SSE leaked toast notification (id=%s)", id)
+			}
+			if sawDetection {
+				break drain
+			}
+		}
+	}
+
+	assert.True(t, sawDetection,
+		"guest SSE must deliver the plain TypeDetection notification")
+}
+
+// extractNotificationID pulls the notification UUID out of an SSE event
+// payload, handling both the nested "notification" shape used by
+// SSENotificationData and the flat toast payload shape.
+func extractNotificationID(payload map[string]any) string {
+	if id, ok := payload["id"].(string); ok && id != "" {
+		return id
+	}
+	if inner, ok := payload["notification"].(map[string]any); ok {
+		if id, ok := inner["id"].(string); ok {
+			return id
+		}
+	}
+	return ""
+}
+
+// errorsIsEOFLike returns true for the read errors we expect when the SSE
+// stream is closed via context cancellation. Keeps the read goroutine quiet
+// in the common happy path.
+func errorsIsEOFLike(err error) bool {
+	if err == nil {
+		return true
+	}
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
+		errors.Is(err, context.Canceled) {
+		return true
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "use of closed network connection")
 }
 
 // ---- streams/health + streams/status (auth-protected) -----------------
