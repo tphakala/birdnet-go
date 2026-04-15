@@ -2,6 +2,7 @@ package notification
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -142,6 +143,81 @@ func TestErrorSuppressor_SingleFailureRecoveryNoTelemetry(t *testing.T) {
 
 	// Should NOT have captured a recovery event (only 1 failure, no suppression)
 	assert.Empty(t, reporter.events)
+}
+
+// TestNextReminderInterval_ExponentialBackoff verifies the schedule produced
+// by nextReminderInterval against the documented 5m/10m/20m/40m/... ramp with
+// the configured 24h cap. Using a direct unit test here (instead of exercising
+// ShouldReport with synctest) keeps the assertions on the pure math, so a
+// regression in the formula will surface immediately.
+func TestNextReminderInterval_ExponentialBackoff(t *testing.T) {
+	t.Parallel()
+
+	// Expected schedule derived from the constants in error_suppressor.go:
+	// base = 5m, multiplier = 2, cap = 24h.
+	tests := []struct {
+		name        string
+		reportCount int
+		want        time.Duration
+	}{
+		{"below_minimum_returns_base", 0, suppressionReminderInterval},
+		{"first_reminder_is_base", 1, 5 * time.Minute},
+		{"second_reminder_doubles", 2, 10 * time.Minute},
+		{"third_reminder_doubles_again", 3, 20 * time.Minute},
+		{"fourth_reminder_doubles_again", 4, 40 * time.Minute},
+		{"very_high_count_caps_at_max", 100, maxSuppressionReminderInterval},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := nextReminderInterval(tc.reportCount)
+			assert.Equal(t, tc.want, got,
+				"reportCount=%d: want %v, got %v", tc.reportCount, tc.want, got)
+		})
+	}
+}
+
+// TestErrorSuppressor_BackoffGrowsPerReminder checks that ShouldReport defers
+// a second reminder until the exponential schedule has elapsed. We manipulate
+// lastReportTime directly because running for real would take 5+ minutes.
+func TestErrorSuppressor_BackoffGrowsPerReminder(t *testing.T) {
+	t.Parallel()
+
+	suppressor := NewErrorSuppressor(nil, &NoopTelemetryReporter{})
+
+	// First failure is always reported and sets reportCount=1.
+	require.True(t, suppressor.ShouldReport("webhook-1"))
+
+	// Second failure within the first interval stays suppressed.
+	require.False(t, suppressor.ShouldReport("webhook-1"),
+		"consecutive failures inside the base interval must be suppressed")
+
+	// Rewind lastReportTime so the base interval appears to have elapsed;
+	// reportCount is still 1 so the next allowed report is exactly at
+	// nextReminderInterval(1) = base.
+	suppressor.mu.Lock()
+	state := suppressor.states["webhook-1"]
+	require.NotNil(t, state, "state should exist after ShouldReport")
+	require.Equal(t, 1, state.reportCount)
+	state.lastReportTime = time.Now().Add(-suppressionReminderInterval - time.Second)
+	suppressor.mu.Unlock()
+
+	// Now the second reminder should fire, advancing reportCount to 2.
+	require.True(t, suppressor.ShouldReport("webhook-1"),
+		"reminder should fire once the base interval elapses")
+
+	// A third failure *just* after the base interval must still be suppressed
+	// because the schedule has doubled to 2*base for reportCount=2.
+	suppressor.mu.Lock()
+	state = suppressor.states["webhook-1"]
+	require.Equal(t, 2, state.reportCount,
+		"reportCount must advance after a reminder is emitted")
+	state.lastReportTime = time.Now().Add(-(suppressionReminderInterval + time.Second))
+	suppressor.mu.Unlock()
+
+	assert.False(t, suppressor.ShouldReport("webhook-1"),
+		"reminder must be deferred because the interval has doubled")
 }
 
 // captureTelemetryReporter captures telemetry events for testing.

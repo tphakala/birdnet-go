@@ -17,10 +17,25 @@ import (
 )
 
 const (
-	// suppressionReminderInterval controls how often a reminder is logged/reported
-	// while errors are still being suppressed. This provides periodic visibility
-	// without flooding.
+	// suppressionReminderInterval is the INITIAL interval between repeated
+	// reminders while a provider is still failing. The effective interval
+	// doubles on each reminder (see reminderIntervalMultiplier and
+	// maxSuppressionReminderInterval) so a long-lived outage does not keep
+	// generating one Sentry event every five minutes. Starting at five minutes
+	// keeps the first reminder actionable for an operator.
 	suppressionReminderInterval = 5 * time.Minute
+
+	// reminderIntervalMultiplier controls how aggressively the reminder
+	// interval grows between successive reports. A value of 2 produces the
+	// classic 5m → 10m → 20m → 40m → ... schedule, which caps at the
+	// maxSuppressionReminderInterval ceiling below.
+	reminderIntervalMultiplier = 2
+
+	// maxSuppressionReminderInterval caps the exponential growth. Twenty-four
+	// hours keeps the rate of Sentry events at roughly once per day for long
+	// outages while still giving an operator periodic confirmation that the
+	// failure is ongoing.
+	maxSuppressionReminderInterval = 24 * time.Hour
 
 	// defaultStaleEntryMaxAge is the default duration after which an error state
 	// entry with no recent activity is considered stale and eligible for eviction.
@@ -33,6 +48,11 @@ const (
 type providerErrorState struct {
 	// consecutiveFailures counts failures since last success.
 	consecutiveFailures int
+
+	// reportCount tracks how many times we have already reported for this
+	// failure streak. Drives the exponential reminder backoff — see
+	// nextReminderInterval in error_suppressor.go.
+	reportCount int
 
 	// firstFailureTime is when the current failure streak started.
 	firstFailureTime time.Time
@@ -102,16 +122,70 @@ func (es *ErrorSuppressor) ShouldReport(providerName string) bool {
 		state.firstFailureTime = time.Now()
 		state.reported = true
 		state.lastReportTime = time.Now()
+		state.reportCount = 1
 		return true
 	}
 
-	// Check if enough time has passed for a periodic reminder
-	if time.Since(state.lastReportTime) >= suppressionReminderInterval {
+	// Check if enough time has passed for the next reminder. The interval
+	// grows exponentially with each reported reminder so a multi-hour outage
+	// does not keep emitting one Sentry event every suppressionReminderInterval.
+	if time.Since(state.lastReportTime) >= nextReminderInterval(state.reportCount) {
 		state.lastReportTime = time.Now()
+		state.reportCount++
 		return true
 	}
 
 	return false
+}
+
+// nextReminderInterval returns the wait time before the next reminder, given
+// how many reminders have already been emitted for the current failure streak.
+//
+// reportCount is 1 after the initial failure, which means the first *reminder*
+// (report 2) waits one base interval, the second reminder waits two base
+// intervals, and so on, capped at maxSuppressionReminderInterval.
+//
+// Schedule with defaults (5m base, 2x multiplier, 24h cap):
+//
+//	report 2: 5m  (5 * 2^0)
+//	report 3: 10m (5 * 2^1)
+//	report 4: 20m (5 * 2^2)
+//	report 5: 40m
+//	report 6: 80m
+//	...       capped at 24h
+func nextReminderInterval(reportCount int) time.Duration {
+	if reportCount < 1 {
+		return suppressionReminderInterval
+	}
+
+	// Exponential growth in discrete steps via bit-shift. Cap the shift at
+	// a conservative bound to prevent integer overflow; beyond ~20 shifts we
+	// would already be far past maxSuppressionReminderInterval anyway.
+	const maxShift = 20
+	shift := reportCount - 1
+	if shift > maxShift {
+		shift = maxShift
+	}
+
+	multiplier := int64(1) << shift
+	// Only allow the configured multiplier base to shape growth: e.g., with
+	// reminderIntervalMultiplier=2 the multiplier is exactly 2^shift. Keeping
+	// it configurable avoids hard-coding the factor in two places.
+	if reminderIntervalMultiplier != 2 && shift > 0 {
+		multiplier = 1
+		for range shift {
+			multiplier *= int64(reminderIntervalMultiplier)
+			if multiplier < 0 || time.Duration(multiplier)*suppressionReminderInterval > maxSuppressionReminderInterval {
+				return maxSuppressionReminderInterval
+			}
+		}
+	}
+
+	interval := time.Duration(multiplier) * suppressionReminderInterval
+	if interval <= 0 || interval > maxSuppressionReminderInterval {
+		return maxSuppressionReminderInterval
+	}
+	return interval
 }
 
 // RecordFailure records a failure for a provider without checking whether to report.

@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // GetLogger returns the birdweather package logger
@@ -116,6 +117,13 @@ type BwClient struct {
 	Longitude     float64
 	HTTPClient    *http.Client
 	lastGainWarn  atomic.Int64 // unix timestamp of last WARN-level gain log
+
+	// circuitBreaker guards outbound HTTP calls to the BirdWeather API. When the
+	// remote endpoint starts failing consistently the breaker opens and subsequent
+	// calls return ErrCircuitBreakerOpen without hitting the network, protecting
+	// both the remote service and our telemetry pipeline from a flood of retries.
+	// May be nil in legacy construction paths (tests); see callWithCircuitBreaker.
+	circuitBreaker *notification.PushCircuitBreaker
 }
 
 // maskURL masks sensitive BirdWeatherID tokens in URLs for safe logging.
@@ -175,6 +183,18 @@ func New(settings *conf.Settings) (*BwClient, error) {
 		Longitude:     settings.BirdNET.Longitude,
 		HTTPClient:    &http.Client{Timeout: httpClientTimeout},
 	}
+
+	// Attach the circuit breaker. Metrics are intentionally nil for now — the
+	// BirdWeather integration is not wired into the notification Prometheus
+	// registry and we want to avoid reaching across package boundaries just to
+	// surface state transitions. The breaker degrades gracefully when metrics
+	// are nil (see internal/notification/circuit_breaker.go).
+	client.circuitBreaker = notification.NewPushCircuitBreaker(
+		defaultBirdWeatherCircuitBreakerConfig(),
+		nil,
+		bwCircuitBreakerProvider,
+	)
+
 	return client, nil
 }
 
@@ -593,30 +613,50 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("User-Agent", "BirdNET-Go")
 
-	// Execute the request
+	// Execute the request through the circuit breaker. The breaker records
+	// transport-level failures (timeouts, DNS, TLS) AND non-2xx responses so
+	// a broken or rate-limited backend trips the breaker the same way a flaky
+	// network does. Success/failure classification mirrors the legacy behaviour
+	// the callers already expect.
 	log.Info("Uploading soundscape",
 		logger.String("url", maskedURL),
 		logger.String("format", audioExt))
-	resp, err := b.HTTPClient.Do(req)
-	if err != nil {
-		log.Error("Soundscape upload request failed",
+	var (
+		responseBody     []byte
+		soundscapeStatus int
+	)
+	cbErr := b.callWithCircuitBreaker(req.Context(), func(_ context.Context) error {
+		resp, httpErr := b.HTTPClient.Do(req)
+		if httpErr != nil {
+			log.Error("Soundscape upload request failed",
+				logger.String("url", maskedURL),
+				logger.Error(httpErr))
+			return handleNetworkError(httpErr, maskedURL, httpClientTimeout, "soundscape upload")
+		}
+		if resp == nil {
+			log.Error("Soundscape upload received nil response", logger.String("url", maskedURL))
+			return fmt.Errorf("received nil response")
+		}
+		defer closeResponseBody(resp)
+		log.Debug("Received soundscape upload response",
 			logger.String("url", maskedURL),
-			logger.Error(err))
-		return "", handleNetworkError(err, maskedURL, httpClientTimeout, "soundscape upload")
-	}
-	if resp == nil {
-		log.Error("Soundscape upload received nil response", logger.String("url", maskedURL))
-		return "", fmt.Errorf("received nil response")
-	}
-	defer closeResponseBody(resp)
-	log.Debug("Received soundscape upload response",
-		logger.String("url", maskedURL),
-		logger.Int("status_code", resp.StatusCode))
+			logger.Int("status_code", resp.StatusCode))
 
-	// Process the response using the new handler
-	responseBody, err := handleHTTPResponse(resp, http.StatusCreated, "soundscape upload", maskedURL)
-	if err != nil {
-		return "", err
+		body, handleErr := handleHTTPResponse(resp, http.StatusCreated, "soundscape upload", maskedURL)
+		if handleErr != nil {
+			return handleErr
+		}
+		responseBody = body
+		soundscapeStatus = resp.StatusCode
+		return nil
+	})
+	if cbErr != nil {
+		if isCircuitBreakerOpen(cbErr) {
+			log.Warn("Soundscape upload skipped: circuit breaker open",
+				logger.String("url", maskedURL),
+				logger.String("timestamp", timestamp))
+		}
+		return "", cbErr
 	}
 
 	if b.Settings.Realtime.Birdweather.Debug {
@@ -624,7 +664,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	}
 
 	// Parse and validate response
-	soundscapeID, err = parseSoundscapeResponse(responseBody, maskedURL, resp.StatusCode)
+	soundscapeID, err = parseSoundscapeResponse(responseBody, maskedURL, soundscapeStatus)
 	if err != nil {
 		return "", err
 	}
@@ -724,41 +764,55 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		log.Debug("Detection JSON Payload", logger.String("payload", string(postDataBytes)))
 	}
 
-	// Execute POST request
+	// Execute POST request through the circuit breaker. A persistent BirdWeather
+	// outage used to produce one Sentry event per detection; the breaker now
+	// short-circuits retries once consecutive failures cross the configured
+	// threshold, letting the remote service recover without a retry storm.
 	log.Info("Posting detection",
 		logger.String("url", maskedDetectionURL),
 		logger.String("soundscape_id", soundscapeID),
 		logger.String("scientific_name", scientificName))
-	resp, err := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
-	if err != nil {
-		log.Error("Detection post request failed",
+	cbErr := b.callWithCircuitBreaker(context.Background(), func(_ context.Context) error {
+		resp, httpErr := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
+		if httpErr != nil {
+			log.Error("Detection post request failed",
+				logger.String("url", maskedDetectionURL),
+				logger.String("soundscape_id", soundscapeID),
+				logger.Error(httpErr))
+			return handleNetworkError(httpErr, maskedDetectionURL, httpClientTimeout, "detection post")
+		}
+		if resp == nil {
+			log.Error("Detection post received nil response",
+				logger.String("url", maskedDetectionURL),
+				logger.String("soundscape_id", soundscapeID))
+			return fmt.Errorf("received nil response")
+		}
+		defer closeResponseBody(resp)
+		log.Debug("Received detection post response",
 			logger.String("url", maskedDetectionURL),
 			logger.String("soundscape_id", soundscapeID),
-			logger.Error(err))
-		return handleNetworkError(err, maskedDetectionURL, httpClientTimeout, "detection post")
-	}
-	if resp == nil {
-		log.Error("Detection post received nil response",
-			logger.String("url", maskedDetectionURL),
-			logger.String("soundscape_id", soundscapeID))
-		return fmt.Errorf("received nil response")
-	}
-	defer closeResponseBody(resp)
-	log.Debug("Received detection post response",
-		logger.String("url", maskedDetectionURL),
-		logger.String("soundscape_id", soundscapeID),
-		logger.Int("status_code", resp.StatusCode))
+			logger.Int("status_code", resp.StatusCode))
 
-	// Handle response using the new handler
-	_, err = handleHTTPResponse(resp, http.StatusCreated, "detection post", maskedDetectionURL)
-	if err != nil {
-		// Add additional context for detection-specific error
-		var enhancedErr *errors.EnhancedError
-		if errors.As(err, &enhancedErr) {
-			enhancedErr.Context["soundscape_id"] = soundscapeID
-			enhancedErr.Context["scientific_name"] = scientificName
+		_, handleErr := handleHTTPResponse(resp, http.StatusCreated, "detection post", maskedDetectionURL)
+		if handleErr != nil {
+			// Add detection-specific context before the breaker observes the error.
+			var enhancedErr *errors.EnhancedError
+			if errors.As(handleErr, &enhancedErr) {
+				enhancedErr.Context["soundscape_id"] = soundscapeID
+				enhancedErr.Context["scientific_name"] = scientificName
+			}
+			return handleErr
 		}
-		return err
+		return nil
+	})
+	if cbErr != nil {
+		if isCircuitBreakerOpen(cbErr) {
+			log.Warn("Detection post skipped: circuit breaker open",
+				logger.String("url", maskedDetectionURL),
+				logger.String("soundscape_id", soundscapeID),
+				logger.String("scientific_name", scientificName))
+		}
+		return cbErr
 	}
 
 	log.Info("Detection posted successfully",
@@ -839,14 +893,23 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 	log.Debug("Calling UploadSoundscape", logger.String("timestamp", timestamp))
 	soundscapeID, err := b.UploadSoundscape(timestamp, pcmData)
 	if err != nil {
-		// Transient network errors (DNS, timeout, connection issues) are expected
-		// external failures, not code bugs. Log at warn level and skip alerting
-		// to avoid Sentry noise and unnecessary user notifications.
-		if errors.IsTransientNetworkError(err) {
+		switch {
+		case isCircuitBreakerOpen(err):
+			// Breaker is open — the upstream BirdWeather API is still considered
+			// unhealthy. This is an operational throttling state, not a code bug,
+			// so we log at debug level and skip alerting (which would otherwise
+			// fire once per detection during extended outages).
+			log.Debug("BirdWeather soundscape upload skipped: circuit breaker open",
+				logger.String("timestamp", timestamp),
+				logger.Error(err))
+		case errors.IsTransientNetworkError(err):
+			// Transient network errors (DNS, timeout, connection issues) are expected
+			// external failures, not code bugs. Log at warn level and skip alerting
+			// to avoid Sentry noise and unnecessary user notifications.
 			log.Warn("BirdWeather soundscape upload failed due to transient network issue",
 				logger.String("timestamp", timestamp),
 				logger.Error(err))
-		} else {
+		default:
 			log.Error("Publish failed: Error during soundscape upload",
 				logger.String("timestamp", timestamp),
 				logger.Error(err))
@@ -881,6 +944,15 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 				logger.String("scientific_name", note.ScientificName),
 				logger.Error(err))
 			return nil
+		case isCircuitBreakerOpen(err):
+			// Breaker is open — treat as a short-circuited skip. No alerting,
+			// no Sentry noise (handled by shouldReportToSentry), debug-level log.
+			log.Debug("BirdWeather detection post skipped: circuit breaker open",
+				logger.String("soundscape_id", soundscapeID),
+				logger.String("timestamp", timestamp),
+				logger.String("common_name", note.CommonName),
+				logger.String("scientific_name", note.ScientificName),
+				logger.Error(err))
 		case errors.IsTransientNetworkError(err):
 			// Transient network errors during detection post are expected
 			// external failures. Log at warn level and skip alerting.
