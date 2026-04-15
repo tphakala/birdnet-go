@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // TestParseSoundscapeResponse tests the JSON response parsing helper
@@ -172,6 +173,26 @@ func TestTrackOperationTiming(t *testing.T) {
 		// The error should now be an EnhancedError
 		var enhancedErr *errors.EnhancedError
 		assert.True(t, errors.As(err, &enhancedErr), "error should be wrapped as EnhancedError")
+	})
+
+	t.Run("breaker-open error is not re-promoted to WARN or wrapped with CategoryNetwork", func(t *testing.T) {
+		t.Parallel()
+
+		// Start from the notification sentinel directly — this is what the
+		// BirdWeather client returns when its circuit breaker short-circuits.
+		var err error = notification.ErrCircuitBreakerOpen
+		startTime := time.Now()
+
+		cleanup := trackOperationTiming(&err, "short_circuit_test", startTime)
+		cleanup()
+
+		// The error passes through unchanged. The timing tracker must NOT
+		// wrap it with CategoryNetwork or otherwise mutate it — earlier review
+		// revealed the default path was promoting it to WARN which re-introduced
+		// the Sentry noise the breaker is supposed to suppress.
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, notification.ErrCircuitBreakerOpen),
+			"sentinel must pass through unchanged so callers can still detect it")
 	})
 }
 

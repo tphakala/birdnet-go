@@ -630,8 +630,11 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		// of the upstream service.
 		nonTransientErr error
 	)
-	cbErr := b.callWithCircuitBreaker(req.Context(), func(_ context.Context) error {
-		resp, httpErr := b.HTTPClient.Do(req)
+	cbErr := b.callWithCircuitBreaker(req.Context(), func(ctx context.Context) error {
+		// Use the breaker callback's ctx so cancellation propagates through
+		// to the HTTP layer (e.g., the caller aborts mid-retry) rather than
+		// stopping at the breaker boundary.
+		resp, httpErr := b.HTTPClient.Do(req.WithContext(ctx))
 		if httpErr != nil {
 			log.Error("Soundscape upload request failed",
 				logger.String("url", maskedURL),
@@ -791,8 +794,19 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 	// species validation 422s from the detection post — the common case for
 	// non-bird species) out of the breaker closure without tripping it.
 	var nonTransientErr error
-	cbErr := b.callWithCircuitBreaker(context.Background(), func(_ context.Context) error {
-		resp, httpErr := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
+	cbErr := b.callWithCircuitBreaker(context.Background(), func(ctx context.Context) error {
+		// Use http.NewRequestWithContext so the breaker callback's ctx
+		// propagates to the HTTP layer and honours cancellation. The
+		// previous HTTPClient.Post() call discarded ctx, leaving requests
+		// to run to HTTPClient.Timeout even after the breaker or caller
+		// signalled cancellation.
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodPost, detectionURL, bytes.NewBuffer(postDataBytes))
+		if reqErr != nil {
+			return fmt.Errorf("build detection post request: %w", reqErr)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("User-Agent", "BirdNET-Go")
+		resp, httpErr := b.HTTPClient.Do(req)
 		if httpErr != nil {
 			log.Error("Detection post request failed",
 				logger.String("url", maskedDetectionURL),
@@ -1180,6 +1194,19 @@ func trackOperationTiming(errPtr *error, operation string, startTime time.Time, 
 
 		duration := time.Since(startTime)
 		if *errPtr != nil {
+			// Circuit-breaker short-circuits are an operational throttle state,
+			// not a failure of the individual call. The breaker state transition
+			// is surfaced via dedicated telemetry; emitting a per-call WARN here
+			// would undo the Sentry-noise reduction the breaker exists to provide.
+			// Treat them like successful no-ops for timing-log purposes.
+			if isCircuitBreakerOpen(*errPtr) {
+				logArgs := append([]logger.Field{
+					logger.String("operation", operation),
+					logger.Int64("duration_ms", duration.Milliseconds()),
+				}, convertToFields(contextFields)...)
+				log.Debug(fmt.Sprintf("%s short-circuited: circuit breaker open", operation), logArgs...)
+				return
+			}
 			// Add timing context to error
 			var enhancedErr *errors.EnhancedError
 			if errors.As(*errPtr, &enhancedErr) {
