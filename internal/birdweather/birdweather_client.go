@@ -636,14 +636,20 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		// stopping at the breaker boundary.
 		resp, httpErr := b.HTTPClient.Do(req.WithContext(ctx))
 		if httpErr != nil {
-			log.Error("Soundscape upload request failed",
-				logger.String("url", maskedURL),
-				logger.Error(httpErr))
+			// handleNetworkError logs at Warn with classified details
+			// (timeout/DNS/connection), and the caller (Publish) logs the
+			// final outcome — so no extra log.Error here.
 			return handleNetworkError(httpErr, maskedURL, httpClientTimeout, "soundscape upload")
 		}
 		if resp == nil {
-			log.Error("Soundscape upload received nil response", logger.String("url", maskedURL))
-			return fmt.Errorf("received nil response")
+			// Defensive: Go's http.Client should not return nil resp with nil
+			// err. If it happens, let the caller handle it — don't double-log.
+			return errors.Newf("received nil response from soundscape upload").
+				Component("birdweather").
+				Category(errors.CategoryNetwork).
+				Context("operation", "soundscape_upload").
+				Context("url", maskedURL).
+				Build()
 		}
 		defer closeResponseBody(resp)
 		log.Debug("Received soundscape upload response",
@@ -808,17 +814,18 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		req.Header.Set("User-Agent", "BirdNET-Go")
 		resp, httpErr := b.HTTPClient.Do(req)
 		if httpErr != nil {
-			log.Error("Detection post request failed",
-				logger.String("url", maskedDetectionURL),
-				logger.String("soundscape_id", soundscapeID),
-				logger.Error(httpErr))
+			// handleNetworkError + Publish already log; no extra log.Error.
 			return handleNetworkError(httpErr, maskedDetectionURL, httpClientTimeout, "detection post")
 		}
 		if resp == nil {
-			log.Error("Detection post received nil response",
-				logger.String("url", maskedDetectionURL),
-				logger.String("soundscape_id", soundscapeID))
-			return fmt.Errorf("received nil response")
+			// Defensive; caller handles reporting.
+			return errors.Newf("received nil response from detection post").
+				Component("birdweather").
+				Category(errors.CategoryNetwork).
+				Context("operation", "detection_post").
+				Context("soundscape_id", soundscapeID).
+				Context("url", maskedDetectionURL).
+				Build()
 		}
 		defer closeResponseBody(resp)
 		log.Debug("Received detection post response",
