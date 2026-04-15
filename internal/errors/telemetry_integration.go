@@ -180,22 +180,20 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 
 	errorMsg := strings.ToLower(ee.Err.Error())
 
-	// Circuit-breaker open/half-open conditions are operational throttling state,
-	// not bugs. Suppress CategoryLimit producers that emit these signals from
-	// components with a per-component breaker: notification (push webhooks) and
-	// birdweather (outbound uploads). The breaker state transitions themselves
-	// are already surfaced via the dedicated CircuitBreakerStateTransition
+	// Notification circuit-breaker open/half-open conditions are operational
+	// throttling state, not bugs. BirdWeather reuses the notification package's
+	// PushCircuitBreaker, whose sentinel ErrCircuitBreakerOpen is tagged with
+	// component="notification" regardless of the caller — so this single check
+	// also covers BirdWeather's breaker-open errors. The breaker state transitions
+	// themselves are surfaced via the dedicated CircuitBreakerStateTransition
 	// telemetry path, so the per-call "circuit breaker is open" errors are pure
 	// noise when forwarded to Sentry.
 	//
 	// Other CategoryLimit producers (eBird API quota exhaustion, analysis job
-	// queue overflow, spectrogram pre-render memory limits) are NOT filtered here
-	// and continue to reach Sentry as legitimate signals.
-	if ee.Category == CategoryLimit {
-		switch ee.GetComponent() {
-		case "notification", "birdweather":
-			return false
-		}
+	// queue overflow, spectrogram pre-render memory limits) use different
+	// components and continue to reach Sentry as legitimate signals.
+	if ee.Category == CategoryLimit && ee.GetComponent() == "notification" {
+		return false
 	}
 
 	// Check for MQTT authentication/authorization errors (user config issues)

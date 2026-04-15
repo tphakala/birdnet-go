@@ -624,6 +624,11 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 	var (
 		responseBody     []byte
 		soundscapeStatus int
+		// nonTransientErr carries business-logic errors (e.g. CategoryNotFound
+		// species validation 422s) out of the breaker closure without tripping
+		// the breaker. These are expected operational outcomes, not failures
+		// of the upstream service.
+		nonTransientErr error
 	)
 	cbErr := b.callWithCircuitBreaker(req.Context(), func(_ context.Context) error {
 		resp, httpErr := b.HTTPClient.Do(req)
@@ -644,15 +649,25 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 		body, handleErr := handleHTTPResponse(resp, http.StatusCreated, "soundscape upload", maskedURL)
 		if handleErr != nil {
+			if errors.IsCategory(handleErr, errors.CategoryNotFound) {
+				nonTransientErr = handleErr
+				return nil
+			}
 			return handleErr
 		}
 		responseBody = body
 		soundscapeStatus = resp.StatusCode
 		return nil
 	})
+	if nonTransientErr != nil {
+		return "", nonTransientErr
+	}
 	if cbErr != nil {
 		if isCircuitBreakerOpen(cbErr) {
-			log.Warn("Soundscape upload skipped: circuit breaker open",
+			// Debug-level only: Publish() already emits its own debug log for the
+			// breaker-open case (see handlePublishError), and a warn here would
+			// double-log a condition that is not actionable on a per-upload basis.
+			log.Debug("Soundscape upload skipped: circuit breaker open",
 				logger.String("url", maskedURL),
 				logger.String("timestamp", timestamp))
 		}
@@ -772,6 +787,10 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 		logger.String("url", maskedDetectionURL),
 		logger.String("soundscape_id", soundscapeID),
 		logger.String("scientific_name", scientificName))
+	// nonTransientErr carries business-logic errors (e.g. CategoryNotFound
+	// species validation 422s from the detection post — the common case for
+	// non-bird species) out of the breaker closure without tripping it.
+	var nonTransientErr error
 	cbErr := b.callWithCircuitBreaker(context.Background(), func(_ context.Context) error {
 		resp, httpErr := b.HTTPClient.Post(detectionURL, "application/json", bytes.NewBuffer(postDataBytes))
 		if httpErr != nil {
@@ -795,19 +814,27 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 
 		_, handleErr := handleHTTPResponse(resp, http.StatusCreated, "detection post", maskedDetectionURL)
 		if handleErr != nil {
-			// Add detection-specific context before the breaker observes the error.
+			// Add detection-specific context regardless of classification.
 			var enhancedErr *errors.EnhancedError
 			if errors.As(handleErr, &enhancedErr) {
 				enhancedErr.Context["soundscape_id"] = soundscapeID
 				enhancedErr.Context["scientific_name"] = scientificName
 			}
+			if errors.IsCategory(handleErr, errors.CategoryNotFound) {
+				nonTransientErr = handleErr
+				return nil
+			}
 			return handleErr
 		}
 		return nil
 	})
+	if nonTransientErr != nil {
+		return nonTransientErr
+	}
 	if cbErr != nil {
 		if isCircuitBreakerOpen(cbErr) {
-			log.Warn("Detection post skipped: circuit breaker open",
+			// Debug-level only: Publish() already logs this at debug.
+			log.Debug("Detection post skipped: circuit breaker open",
 				logger.String("url", maskedDetectionURL),
 				logger.String("soundscape_id", soundscapeID),
 				logger.String("scientific_name", scientificName))

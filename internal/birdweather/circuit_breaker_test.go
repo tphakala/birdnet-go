@@ -180,3 +180,34 @@ func TestBwClient_CircuitBreaker_Nil_OK(t *testing.T) {
 	assert.True(t, called, "fn must run when no breaker is attached")
 	assert.Equal(t, notification.StateClosed, c.CircuitBreakerState())
 }
+
+// TestBwClient_CircuitBreaker_NotFoundDoesNotTrip verifies that 422 species
+// validation errors (CategoryNotFound — expected when a non-bird species is
+// sent to BirdWeather) do NOT count toward the breaker. Without this guard
+// we would open the breaker simply because the user configured a non-bird
+// species in their detection list, suppressing legitimate later uploads.
+func TestBwClient_CircuitBreaker_NotFoundDoesNotTrip(t *testing.T) {
+	t.Parallel()
+
+	// Always respond with 422 + species error body — handleHTTPResponse tags
+	// this as CategoryNotFound.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = fmt.Fprint(w, `{"species":"unknown species","error":"invalid"}`)
+	}))
+	defer server.Close()
+
+	cfg := newCBTestConfig()
+	client := newCBTestClient(t, server, cfg)
+
+	// Post far more than MaxFailures detections — every one returns 422 but
+	// the breaker must stay closed because CategoryNotFound errors are
+	// business-logic, not transient failures.
+	for range cfg.MaxFailures * 3 {
+		err := client.PostDetection("n/a", "2024-01-01T00:00:00.000+0000", "Not A Bird", "notabird", 0.9)
+		require.Error(t, err, "422 species validation must still surface as an error to the caller")
+	}
+
+	assert.Equal(t, notification.StateClosed, client.CircuitBreakerState(),
+		"CategoryNotFound (species validation) must not trip the circuit breaker")
+}
