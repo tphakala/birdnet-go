@@ -26,6 +26,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // ---- helpers -----------------------------------------------------------
@@ -57,6 +58,20 @@ func guestGet(e *echo.Echo, path string) *httptest.ResponseRecorder {
 }
 
 // ---- notifications -----------------------------------------------------
+
+// ensureNotificationServiceInitialized brings up a notification service for
+// tests that need to drive the notification path end-to-end. Callers get the
+// active service back and are responsible for cleanup of any fixtures they
+// add (the service itself is process-global and persists across tests).
+func ensureNotificationServiceInitialized(t *testing.T) *notification.Service {
+	t.Helper()
+	if !notification.IsInitialized() {
+		notification.Initialize(notification.DefaultServiceConfig())
+	}
+	svc := notification.GetService()
+	require.NotNil(t, svc, "notification service must be initialized for guest-filter tests")
+	return svc
+}
 
 // TestNotifications_PublicReadsAllowed verifies that the dashboard-facing
 // read endpoints are reachable without auth. Including the SSE endpoint is
@@ -111,6 +126,120 @@ func TestNotifications_MutationsRequireAuth(t *testing.T) {
 			assertUnauthorized(t, rec, tc.method, tc.path)
 		})
 	}
+}
+
+// TestNotifications_GuestListFiltersNonDetectionAndToasts drives the full
+// handler with an initialized notification service to prove that a guest
+// caller only sees TypeDetection non-toast notifications. This guards
+// against the toast-metadata leak path (a TypeDetection notification with
+// MetadataKeyIsToast=true must not reach unauthenticated callers).
+func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
+	svc := ensureNotificationServiceInitialized(t)
+
+	detection, err := svc.Create(notification.TypeDetection, notification.PriorityHigh,
+		"Detection: Test Bird", "guest-visible detection body")
+	require.NoError(t, err)
+
+	adminErr, err := svc.Create(notification.TypeError, notification.PriorityHigh,
+		"MQTT failed", "admin-only error body with host example.com:1883")
+	require.NoError(t, err)
+
+	detectionToast := notification.NewNotification(notification.TypeDetection,
+		notification.PriorityLow, "Detection toast title", "detection-typed toast body").
+		WithMetadata(notification.MetadataKeyIsToast, true)
+	require.NoError(t, svc.CreateWithMetadata(detectionToast))
+
+	// Best-effort cleanup so repeated runs do not accumulate fixtures in
+	// the process-global service. Ignore not-found errors (Delete may
+	// already have been issued by a parallel test).
+	t.Cleanup(func() {
+		for _, n := range []*notification.Notification{detection, adminErr, detectionToast} {
+			if n == nil {
+				continue
+			}
+			_ = svc.Delete(n.ID)
+		}
+	})
+
+	e := newSettingsAuthTestEnv(t)
+
+	rec := guestGet(e, "/api/v2/notifications?limit=50")
+	require.Equal(t, http.StatusOK, rec.Code,
+		"guest list must succeed, got: %s", rec.Body.String())
+
+	var payload struct {
+		Notifications []*notification.Notification `json:"notifications"`
+		Count         int                          `json:"count"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+
+	sawDetection := false
+	for _, n := range payload.Notifications {
+		require.NotNil(t, n)
+		assert.Equal(t, notification.TypeDetection, n.Type,
+			"guest list leaked non-detection notification %q (id=%s)", n.Type, n.ID)
+		isToast, _ := n.Metadata[notification.MetadataKeyIsToast].(bool)
+		assert.False(t, isToast,
+			"guest list leaked toast notification %q (id=%s)", n.Title, n.ID)
+		if n.ID == detection.ID {
+			sawDetection = true
+		}
+		assert.NotEqual(t, adminErr.ID, n.ID,
+			"guest list must not include admin error notification")
+		assert.NotEqual(t, detectionToast.ID, n.ID,
+			"guest list must not include detection-typed toast")
+	}
+	assert.True(t, sawDetection,
+		"expected test detection notification to be visible to guest")
+}
+
+// TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts verifies
+// that the guest /unread/count matches what the guest list actually shows.
+func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T) {
+	svc := ensureNotificationServiceInitialized(t)
+
+	det, err := svc.Create(notification.TypeDetection, notification.PriorityHigh,
+		"Detection A", "body")
+	require.NoError(t, err)
+	errNotif, err := svc.Create(notification.TypeError, notification.PriorityHigh,
+		"Error A", "body")
+	require.NoError(t, err)
+	detToast := notification.NewNotification(notification.TypeDetection,
+		notification.PriorityLow, "Detection toast", "body").
+		WithMetadata(notification.MetadataKeyIsToast, true)
+	require.NoError(t, svc.CreateWithMetadata(detToast))
+
+	t.Cleanup(func() {
+		for _, n := range []*notification.Notification{det, errNotif, detToast} {
+			if n == nil {
+				continue
+			}
+			_ = svc.Delete(n.ID)
+		}
+	})
+
+	e := newSettingsAuthTestEnv(t)
+
+	rec := guestGet(e, "/api/v2/notifications/unread/count")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var payload struct {
+		UnreadCount int `json:"unreadCount"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+
+	// The store may contain fixtures from other tests, so instead of an
+	// absolute equality we assert the count strictly matches the list the
+	// same guest would see.
+	listRec := guestGet(e, "/api/v2/notifications?status=unread&limit=1000")
+	require.Equal(t, http.StatusOK, listRec.Code)
+	var listPayload struct {
+		Notifications []*notification.Notification `json:"notifications"`
+	}
+	require.NoError(t, json.Unmarshal(listRec.Body.Bytes(), &listPayload))
+
+	assert.Equal(t, len(listPayload.Notifications), payload.UnreadCount,
+		"guest unread count must equal guest-visible unread list length")
 }
 
 // ---- streams/health + streams/status (auth-protected) -----------------

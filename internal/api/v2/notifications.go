@@ -40,6 +40,11 @@ const (
 	// Rate limits
 	rateLimitRequestsPerWindow = 10 // Maximum requests per rate limit window for notifications (increased from 1 to match other SSE endpoints)
 	rateLimitBurst             = 15 // Rate limit burst allowance (increased to handle quick navigation)
+
+	// guestUnreadCountPageSize is the page size used when counting unread
+	// detection notifications for unauthenticated dashboard viewers. Avoids
+	// the magic 1000 cap while keeping per-iteration memory bounded.
+	guestUnreadCountPageSize = 500
 )
 
 // Test notification constants
@@ -503,12 +508,16 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 				return nil
 			}
 
-			// Guest hardening: only forward bird-detection events to
-			// unauthenticated SSE subscribers so operational/admin
-			// notifications (integration errors, system warnings, toasts)
-			// are never exposed to anonymous clients.
-			if client.Guest && notif.Type != notification.TypeDetection {
-				continue
+			// Guest hardening: unauthenticated SSE subscribers only receive
+			// non-toast bird-detection events. Toast payloads are always
+			// created as TypeWarning/TypeInfo today (see toast.go), but we
+			// also check the IsToast metadata as defense-in-depth so a
+			// future TypeDetection toast cannot leak to anonymous clients.
+			if client.Guest {
+				isToast, _ := notif.Metadata[notification.MetadataKeyIsToast].(bool)
+				if notif.Type != notification.TypeDetection || isToast {
+					continue
+				}
 			}
 
 			if err := c.processNotificationEvent(ctx, client.ID, notif); err != nil {
@@ -752,6 +761,25 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to retrieve notifications", http.StatusInternalServerError)
 	}
 
+	// Guest hardening (defense-in-depth): even though the type filter above
+	// narrows to TypeDetection, post-filter out anything with the IsToast
+	// metadata flag so a TypeDetection toast (if ever created) cannot reach
+	// an unauthenticated caller. Build a new slice to avoid aliasing caller
+	// state; the underlying store is shared across subscribers.
+	if c.isGuestNotificationRequest(ctx) {
+		filtered := make([]*notification.Notification, 0, len(notifications))
+		for _, n := range notifications {
+			if n == nil {
+				continue
+			}
+			if isToast, _ := n.Metadata[notification.MetadataKeyIsToast].(bool); isToast {
+				continue
+			}
+			filtered = append(filtered, n)
+		}
+		notifications = filtered
+	}
+
 	if c.Settings != nil && c.Settings.WebServer.Debug {
 		unreadCount, err := service.GetUnreadCount()
 		if err != nil {
@@ -830,19 +858,41 @@ func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	service := notification.GetService()
 
 	if c.isGuestNotificationRequest(ctx) {
-		// Count unread detection notifications only. Use a generous limit
-		// since the badge typically caps display at 99+ anyway.
-		notifications, err := service.List(&notification.FilterOptions{
-			Types:  []notification.Type{notification.TypeDetection},
-			Status: []notification.Status{notification.StatusUnread},
-			Limit:  1000,
-		})
-		if err != nil {
-			c.logErrorIfEnabled("failed to list detection notifications for guest count", logger.Error(err))
-			return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
+		// Count unread detection non-toast notifications only. Paginate
+		// through service.List rather than relying on a single large Limit
+		// so the count is exact even if a user has thousands of unread
+		// detections. Toasts are excluded defensively (see processNotifi-
+		// cationEvent): today they are never TypeDetection, but guarding
+		// here avoids a regression if that changes.
+		total := 0
+		offset := 0
+		for {
+			notifications, err := service.List(&notification.FilterOptions{
+				Types:  []notification.Type{notification.TypeDetection},
+				Status: []notification.Status{notification.StatusUnread},
+				Limit:  guestUnreadCountPageSize,
+				Offset: offset,
+			})
+			if err != nil {
+				c.logErrorIfEnabled("failed to list detection notifications for guest count", logger.Error(err))
+				return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
+			}
+			for _, n := range notifications {
+				if n == nil {
+					continue
+				}
+				if isToast, _ := n.Metadata[notification.MetadataKeyIsToast].(bool); isToast {
+					continue
+				}
+				total++
+			}
+			if len(notifications) < guestUnreadCountPageSize {
+				break
+			}
+			offset += guestUnreadCountPageSize
 		}
 		return ctx.JSON(http.StatusOK, map[string]any{
-			"unreadCount": len(notifications),
+			"unreadCount": total,
 		})
 	}
 
