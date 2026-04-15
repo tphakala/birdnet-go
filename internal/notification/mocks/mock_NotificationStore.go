@@ -20,6 +20,62 @@ func (_m *MockNotificationStore) EXPECT() *MockNotificationStore_Expecter {
 	return &MockNotificationStore_Expecter{mock: &_m.Mock}
 }
 
+// Count provides a mock function with given fields: filter
+func (_m *MockNotificationStore) Count(filter *notification.FilterOptions) (int, error) {
+	ret := _m.Called(filter)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Count")
+	}
+
+	var r0 int
+	var r1 error
+	if rf, ok := ret.Get(0).(func(*notification.FilterOptions) (int, error)); ok {
+		return rf(filter)
+	}
+	if rf, ok := ret.Get(0).(func(*notification.FilterOptions) int); ok {
+		r0 = rf(filter)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+
+	if rf, ok := ret.Get(1).(func(*notification.FilterOptions) error); ok {
+		r1 = rf(filter)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// MockNotificationStore_Count_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Count'
+type MockNotificationStore_Count_Call struct {
+	*mock.Call
+}
+
+// Count is a helper method to define mock.On call
+//   - filter *notification.FilterOptions
+func (_e *MockNotificationStore_Expecter) Count(filter interface{}) *MockNotificationStore_Count_Call {
+	return &MockNotificationStore_Count_Call{Call: _e.mock.On("Count", filter)}
+}
+
+func (_c *MockNotificationStore_Count_Call) Run(run func(filter *notification.FilterOptions)) *MockNotificationStore_Count_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(*notification.FilterOptions))
+	})
+	return _c
+}
+
+func (_c *MockNotificationStore_Count_Call) Return(_a0 int, _a1 error) *MockNotificationStore_Count_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *MockNotificationStore_Count_Call) RunAndReturn(run func(*notification.FilterOptions) (int, error)) *MockNotificationStore_Count_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: id
 func (_m *MockNotificationStore) Delete(id string) error {
 	ret := _m.Called(id)

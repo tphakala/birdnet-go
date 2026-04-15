@@ -201,6 +201,13 @@ func (s *Service) List(filter *FilterOptions) ([]*Notification, error) {
 	return s.store.List(filter)
 }
 
+// Count returns the number of notifications matching filter. Unlike List, no
+// result slice is allocated — use this for badge counts and similar callers.
+// filter.Limit and filter.Offset are ignored.
+func (s *Service) Count(filter *FilterOptions) (int, error) {
+	return s.store.Count(filter)
+}
+
 // MarkAsRead updates a notification's status to read
 func (s *Service) MarkAsRead(id string) error {
 	if id == "" {

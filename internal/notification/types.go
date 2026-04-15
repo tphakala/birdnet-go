@@ -339,6 +339,9 @@ type NotificationStore interface {
 	Get(id string) (*Notification, error)
 	// List returns notifications with optional filtering
 	List(filter *FilterOptions) ([]*Notification, error)
+	// Count returns the number of notifications matching filter. filter.Limit
+	// and filter.Offset are ignored — pagination does not apply to a count.
+	Count(filter *FilterOptions) (int, error)
 	// Update modifies an existing notification
 	Update(notification *Notification) error
 	// Delete removes a notification
@@ -454,6 +457,24 @@ func (s *InMemoryStore) List(filter *FilterOptions) ([]*Notification, error) {
 	}
 
 	return results, nil
+}
+
+// Count returns the number of notifications matching filter. Reuses the same
+// matchesFilter predicate as List but avoids allocating a result slice, which
+// matters for callers that only need a badge count (e.g. NotificationBell
+// polling /notifications/unread/count). filter.Limit and filter.Offset are
+// ignored — a count is not paginated.
+func (s *InMemoryStore) Count(filter *FilterOptions) (int, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	count := 0
+	for _, notif := range s.notifications {
+		if s.matchesFilter(notif, filter) {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // Update modifies an existing notification
