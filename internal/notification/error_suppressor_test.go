@@ -195,13 +195,16 @@ func TestErrorSuppressor_BackoffGrowsPerReminder(t *testing.T) {
 
 	// Rewind lastReportTime so the base interval appears to have elapsed;
 	// reportCount is still 1 so the next allowed report is exactly at
-	// nextReminderInterval(1) = base.
-	suppressor.mu.Lock()
-	state := suppressor.states["webhook-1"]
-	require.NotNil(t, state, "state should exist after ShouldReport")
-	require.Equal(t, 1, state.reportCount)
-	state.lastReportTime = time.Now().Add(-suppressionReminderInterval - time.Second)
-	suppressor.mu.Unlock()
+	// nextReminderInterval(1) = base. Scope the lock in a closure so defer
+	// releases it before the next ShouldReport call (which also takes the lock).
+	func() {
+		suppressor.mu.Lock()
+		defer suppressor.mu.Unlock()
+		state := suppressor.states["webhook-1"]
+		require.NotNil(t, state, "state should exist after ShouldReport")
+		require.Equal(t, 1, state.reportCount)
+		state.lastReportTime = time.Now().Add(-suppressionReminderInterval - time.Second)
+	}()
 
 	// Now the second reminder should fire, advancing reportCount to 2.
 	require.True(t, suppressor.ShouldReport("webhook-1"),
@@ -209,12 +212,14 @@ func TestErrorSuppressor_BackoffGrowsPerReminder(t *testing.T) {
 
 	// A third failure *just* after the base interval must still be suppressed
 	// because the schedule has doubled to 2*base for reportCount=2.
-	suppressor.mu.Lock()
-	state = suppressor.states["webhook-1"]
-	require.Equal(t, 2, state.reportCount,
-		"reportCount must advance after a reminder is emitted")
-	state.lastReportTime = time.Now().Add(-(suppressionReminderInterval + time.Second))
-	suppressor.mu.Unlock()
+	func() {
+		suppressor.mu.Lock()
+		defer suppressor.mu.Unlock()
+		state := suppressor.states["webhook-1"]
+		require.Equal(t, 2, state.reportCount,
+			"reportCount must advance after a reminder is emitted")
+		state.lastReportTime = time.Now().Add(-(suppressionReminderInterval + time.Second))
+	}()
 
 	assert.False(t, suppressor.ShouldReport("webhook-1"),
 		"reminder must be deferred because the interval has doubled")
