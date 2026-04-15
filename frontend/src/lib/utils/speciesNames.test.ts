@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   buildSpeciesNameMaps,
+  looksLikeScientificName,
   resolveSpeciesDisplayNames,
+  resolveSpeciesQuery,
   isSpeciesInList,
   type SpeciesNameMaps,
   type SpeciesApiEntry,
@@ -134,5 +136,101 @@ describe('isSpeciesInList', () => {
   it('returns false when species is not in list at all', () => {
     const list = ['Tawny Owl'];
     expect(isSpeciesInList('Great Tit', list, maps)).toBe(false);
+  });
+});
+
+describe('looksLikeScientificName', () => {
+  it('accepts two-word Latin binomial with capitalised genus', () => {
+    expect(looksLikeScientificName('Strix aluco')).toBe(true);
+    expect(looksLikeScientificName('Turdus merula')).toBe(true);
+  });
+
+  it('accepts a single capitalised ASCII token (genus only)', () => {
+    expect(looksLikeScientificName('Turdus')).toBe(true);
+  });
+
+  it('rejects lowercase first letter', () => {
+    expect(looksLikeScientificName('turdus merula')).toBe(false);
+  });
+
+  it('rejects common names with three or more tokens', () => {
+    expect(looksLikeScientificName('Eurasian Blue Tit')).toBe(false);
+  });
+
+  it('rejects non-ASCII common names', () => {
+    expect(looksLikeScientificName('Lehtopöllö')).toBe(false);
+    expect(looksLikeScientificName('Mésange charbonnière')).toBe(false);
+  });
+
+  it('rejects empty or whitespace-only input', () => {
+    expect(looksLikeScientificName('')).toBe(false);
+    expect(looksLikeScientificName('   ')).toBe(false);
+  });
+
+  it('rejects strings with digits', () => {
+    expect(looksLikeScientificName('Turdus 2')).toBe(false);
+  });
+});
+
+describe('resolveSpeciesQuery', () => {
+  let maps: SpeciesNameMaps;
+
+  beforeAll(() => {
+    const sampleSpecies: SpeciesApiEntry[] = [
+      { commonName: 'Tawny Owl', scientificName: 'Strix aluco', label: 'Strix aluco_Tawny Owl' },
+      { commonName: 'Great Tit', scientificName: 'Parus major', label: 'Parus major_Great Tit' },
+      {
+        commonName: 'Lehtopöllö',
+        scientificName: 'Strix aluco',
+        label: 'Strix aluco_Lehtopöllö',
+      },
+      {
+        commonName: 'Eurasian Blue Tit',
+        scientificName: 'Cyanistes caeruleus',
+        label: 'Cyanistes caeruleus_Eurasian Blue Tit',
+      },
+    ];
+    maps = buildSpeciesNameMaps(sampleSpecies);
+  });
+
+  it('returns empty string for empty input', () => {
+    expect(resolveSpeciesQuery('', maps)).toBe('');
+    expect(resolveSpeciesQuery('   ', maps)).toBe('');
+  });
+
+  it('falls back to raw input when maps are null', () => {
+    expect(resolveSpeciesQuery('Tawny Owl', null)).toBe('Tawny Owl');
+  });
+
+  it('resolves an exact common-name hit to its scientific name', () => {
+    expect(resolveSpeciesQuery('Tawny Owl', maps)).toBe('Strix aluco');
+  });
+
+  it('resolves case-insensitively', () => {
+    expect(resolveSpeciesQuery('tawny owl', maps)).toBe('Strix aluco');
+    expect(resolveSpeciesQuery('GREAT TIT', maps)).toBe('Parus major');
+  });
+
+  it('resolves non-ASCII common names (e.g. Finnish)', () => {
+    expect(resolveSpeciesQuery('Lehtopöllö', maps)).toBe('Strix aluco');
+    expect(resolveSpeciesQuery('lehtopöllö', maps)).toBe('Strix aluco');
+  });
+
+  it('passes scientific-looking input through unchanged', () => {
+    expect(resolveSpeciesQuery('Strix aluco', maps)).toBe('Strix aluco');
+    expect(resolveSpeciesQuery('Turdus', maps)).toBe('Turdus');
+  });
+
+  it('falls back to substring match on common names', () => {
+    // "Owl" is a substring of "Tawny Owl"; should resolve to Strix aluco.
+    expect(resolveSpeciesQuery('owl', maps)).toBe('Strix aluco');
+  });
+
+  it('returns the raw input when there is no match at all', () => {
+    expect(resolveSpeciesQuery('nonexistent', maps)).toBe('nonexistent');
+  });
+
+  it('trims leading and trailing whitespace', () => {
+    expect(resolveSpeciesQuery('  Tawny Owl  ', maps)).toBe('Strix aluco');
   });
 });

@@ -28,6 +28,12 @@
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
+  import {
+    buildSpeciesNameMaps,
+    resolveSpeciesQuery,
+    type SpeciesApiEntry,
+    type SpeciesNameMaps,
+  } from '$lib/utils/speciesNames';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -172,6 +178,42 @@
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
 
+  // Species-name lookup maps for resolving user-entered common names
+  // (in the BirdNET label locale) to scientific names before querying the
+  // backend search endpoint. Loaded lazily on first search.
+  let speciesNameMaps = $state<SpeciesNameMaps | null>(null);
+  let speciesMapsLoadInFlight: Promise<SpeciesNameMaps | null> | null = null;
+
+  /**
+   * Load the full species list from /api/v2/species/all once, build
+   * bidirectional name maps, and cache the result. Subsequent calls return
+   * the cached maps. Failures are logged without surfacing to the user,
+   * since the search falls back to the raw query string.
+   */
+  async function ensureSpeciesNameMaps(): Promise<SpeciesNameMaps | null> {
+    if (speciesNameMaps) return speciesNameMaps;
+    if (speciesMapsLoadInFlight) return speciesMapsLoadInFlight;
+
+    speciesMapsLoadInFlight = (async () => {
+      try {
+        interface SpeciesListResponse {
+          species?: SpeciesApiEntry[];
+        }
+        const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
+        const maps = buildSpeciesNameMaps(data.species ?? []);
+        speciesNameMaps = maps;
+        return maps;
+      } catch (error: unknown) {
+        logger.error('Failed to load species name map for search', error);
+        return null;
+      } finally {
+        speciesMapsLoadInFlight = null;
+      }
+    })();
+
+    return speciesMapsLoadInFlight;
+  }
+
   // Localized pluralized results count using i18n keys
   function formatResultsCount(count: number) {
     if (!count || count === 0) return t('search.resultsCountZero');
@@ -220,9 +262,18 @@
     expandedItems.clear(); // Reset expanded state when loading new results
 
     try {
+      // Resolve common-name input to a scientific name before querying.
+      // The backend /api/v2/search endpoint only searches scientific names,
+      // so a user typing e.g. "Tawny Owl" (or "Lehtopöllö" when the BirdNET
+      // label locale is Finnish) needs to be mapped to "Strix aluco" first.
+      // Falls back to the raw input if the map cannot be loaded or no match
+      // is found, preserving partial scientific-name search behaviour.
+      const maps = await ensureSpeciesNameMaps();
+      const resolvedSpecies = resolveSpeciesQuery(speciesSearchTerm, maps);
+
       // Build request body
       const requestBody = {
-        species: speciesSearchTerm,
+        species: resolvedSpecies,
         dateStart: dateRange.start,
         dateEnd: dateRange.end,
         confidenceMin: confidenceRange.min / 100,

@@ -107,6 +107,73 @@ export function resolveSpeciesDisplayNames(
 }
 
 /**
+ * Heuristic check whether a query string looks like a scientific name
+ * (e.g. "Turdus merula", "Parus major"). Used to skip common-name resolution
+ * for inputs that are already scientific names or partial scientific names.
+ *
+ * Rules:
+ *   - ASCII letters, spaces, and hyphens only (no diacritics, no digits)
+ *   - One or two whitespace-separated tokens
+ *   - First token starts with an uppercase letter
+ */
+export function looksLikeScientificName(input: string): boolean {
+  const trimmed = input.trim();
+  if (!trimmed) return false;
+
+  // Reject anything with diacritics, digits, or unexpected punctuation.
+  if (!/^[A-Za-z][A-Za-z\- ]*$/.test(trimmed)) return false;
+
+  const tokens = trimmed.split(/\s+/);
+  if (tokens.length < 1 || tokens.length > 2) return false;
+
+  const firstChar = tokens[0]?.charAt(0) ?? '';
+  return firstChar >= 'A' && firstChar <= 'Z';
+}
+
+/**
+ * Resolve a free-text species query (common name or scientific name) to a
+ * scientific name suitable for the backend search filter, using a prebuilt
+ * species name map (derived from /api/v2/species/all, which follows the
+ * BirdNET label locale).
+ *
+ * Behavior:
+ *   - Empty input returns empty string.
+ *   - If a common name exactly matches (case-insensitive), returns the matching
+ *     scientific name.
+ *   - If the input looks like a scientific name, passes it through unchanged.
+ *   - Otherwise, looks for a case-insensitive substring match against common
+ *     names; returns the first hit's scientific name.
+ *   - If no match is found, returns the raw input so the backend can still
+ *     attempt a partial match on scientific names.
+ */
+export function resolveSpeciesQuery(input: string, maps: SpeciesNameMaps | null): string {
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+  if (!maps) return trimmed;
+
+  const lower = trimmed.toLowerCase();
+
+  // Exact common-name hit wins.
+  const exactCommon = maps.commonToScientific.get(lower);
+  if (exactCommon !== undefined) return exactCommon;
+
+  // Input that already looks like a scientific name: pass through so the
+  // backend can still LIKE-match partial scientific names (e.g. "Turdus").
+  if (looksLikeScientificName(trimmed)) return trimmed;
+
+  // Also pass through if it matches a known scientific name exactly.
+  if (maps.scientificToCommon.has(lower)) return trimmed;
+
+  // Fall back to substring match across common names.
+  for (const [commonLower, scientific] of maps.commonToScientific) {
+    if (commonLower.includes(lower)) return scientific;
+  }
+
+  // No match; let the backend see the raw string as a last resort.
+  return trimmed;
+}
+
+/**
  * Check if a species (by any name alias) is already in a list.
  * Prevents adding "Strix aluco" when "Tawny Owl" is already present (and vice versa).
  */
