@@ -3,7 +3,6 @@ package errors
 
 import (
 	"context"
-	stderrors "errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -154,11 +153,10 @@ func (sr *SentryReporter) IsEnabled() bool {
 }
 
 // isContextCancellation reports whether err (or any wrapped error in its
-// chain) is context.Canceled or context.DeadlineExceeded. Uses stderrors.Is
-// directly so that wrapped EnhancedError chains are unwrapped correctly.
+// chain) is context.Canceled or context.DeadlineExceeded. Uses the package's
+// Is wrapper so wrapped EnhancedError chains are unwrapped correctly.
 func isContextCancellation(err error) bool {
-	return stderrors.Is(err, context.Canceled) ||
-		stderrors.Is(err, context.DeadlineExceeded)
+	return Is(err, context.Canceled) || Is(err, context.DeadlineExceeded)
 }
 
 // shouldReportToSentry determines if an error should be sent to Sentry
