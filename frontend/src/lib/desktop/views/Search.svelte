@@ -253,12 +253,16 @@
   // Invalidate the module-level species-name cache whenever the BirdNET
   // label locale changes, so the next search refetches /api/v2/species/all
   // with labels in the new locale. This is the LABEL locale (used by the
-  // BirdNET model), not the UI display locale.
+  // BirdNET model), not the UI display locale. Track the previous locale so
+  // we only invalidate on a real transition; otherwise mounts and unrelated
+  // birdnetSettings updates would clear the module-level cache for nothing.
+  let previousLocale: string | undefined;
   $effect(() => {
-    // Subscribe to the reactive locale value; value itself is not used
-    // other than to trigger the effect when it changes.
-    void $birdnetSettings?.locale;
-    invalidateSpeciesNameMapsCache();
+    const currentLocale = $birdnetSettings?.locale;
+    if (previousLocale !== undefined && previousLocale !== currentLocale) {
+      invalidateSpeciesNameMapsCache();
+    }
+    previousLocale = currentLocale;
   });
 
   // Localized pluralized results count using i18n keys
@@ -319,10 +323,15 @@
       // so a user typing e.g. "Tawny Owl" (or "Lehtopöllö" when the BirdNET
       // label locale is Finnish) needs to be mapped to "Strix aluco" first.
       // Falls back to the raw input if the map cannot be loaded or no match
-      // is found, preserving partial scientific-name search behaviour.
-      const locale = $birdnetSettings?.locale ?? 'en';
-      const maps = await ensureSpeciesNameMapsCache(locale);
-      const resolvedSpecies = resolveSpeciesQuery(speciesSearchTerm, maps);
+      // is found, preserving partial scientific-name search behaviour. Skip
+      // the species map fetch entirely for date-only searches so we do not
+      // add an unrelated round trip to /api/v2/species/all.
+      let resolvedSpecies = '';
+      if (speciesSearchTerm.trim() !== '') {
+        const locale = $birdnetSettings?.locale ?? 'en';
+        const maps = await ensureSpeciesNameMapsCache(locale);
+        resolvedSpecies = resolveSpeciesQuery(speciesSearchTerm, maps);
+      }
 
       // Build request body
       const requestBody = {

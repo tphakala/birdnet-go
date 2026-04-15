@@ -278,9 +278,12 @@ describe('resolveSpeciesQuery', () => {
     expect(resolveSpeciesQuery('Turdus', maps)).toBe('Turdus');
   });
 
-  it('falls back to substring match on common names', () => {
-    // "Owl" is a substring of "Tawny Owl"; should resolve to Strix aluco.
-    expect(resolveSpeciesQuery('owl', maps)).toBe('Strix aluco');
+  it('passes ambiguous partial common-name fragments through verbatim', () => {
+    // "owl" is a substring of "Tawny Owl" but it is also a substring of
+    // every other owl in the BirdNET label set. The resolver must NOT
+    // collapse it to whichever entry happens to be inserted first in the
+    // map; the backend LIKE clause is responsible for partial matching.
+    expect(resolveSpeciesQuery('owl', maps)).toBe('owl');
   });
 
   it('returns the raw input when there is no match at all', () => {

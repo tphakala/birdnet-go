@@ -163,11 +163,12 @@ export function looksLikeScientificName(input: string): boolean {
  *   - Empty input returns empty string.
  *   - If a common name exactly matches (case-insensitive), returns the matching
  *     scientific name.
- *   - If the input looks like a scientific name, passes it through unchanged.
- *   - Otherwise, looks for a case-insensitive substring match against common
- *     names; returns the first hit's scientific name.
- *   - If no match is found, returns the raw input so the backend can still
- *     attempt a partial match on scientific names.
+ *   - Otherwise the input passes through unchanged so the backend can run its
+ *     own partial scientific-name match (e.g. "Turdus" matching multiple
+ *     species). We deliberately do not collapse ambiguous partial common-name
+ *     fragments like "owl" to a single arbitrary scientific name; that would
+ *     hide other matches behind whichever entry happened to be inserted first
+ *     in the underlying Map.
  */
 export function resolveSpeciesQuery(input: string, maps: SpeciesNameMaps | null): string {
   const trimmed = input.trim();
@@ -180,19 +181,9 @@ export function resolveSpeciesQuery(input: string, maps: SpeciesNameMaps | null)
   const exactCommon = maps.commonToScientific.get(lower);
   if (exactCommon !== undefined) return exactCommon;
 
-  // Input that already looks like a scientific name: pass through so the
-  // backend can still LIKE-match partial scientific names (e.g. "Turdus").
-  if (looksLikeScientificName(trimmed)) return trimmed;
-
-  // Also pass through if it matches a known scientific name exactly.
-  if (maps.scientificToCommon.has(lower)) return trimmed;
-
-  // Fall back to substring match across common names.
-  for (const [commonLower, scientific] of maps.commonToScientific) {
-    if (commonLower.includes(lower)) return scientific;
-  }
-
-  // No match; let the backend see the raw string as a last resort.
+  // Anything else (looks-like-scientific input, exact scientific match,
+  // ambiguous partial fragment, unknown text) passes through verbatim so
+  // the backend's LIKE match on scientific_name keeps working.
   return trimmed;
 }
 
