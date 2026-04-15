@@ -2,6 +2,8 @@
 package errors
 
 import (
+	"context"
+	stderrors "errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -151,12 +153,33 @@ func (sr *SentryReporter) IsEnabled() bool {
 	return sr.enabled
 }
 
+// isContextCancellation reports whether err (or any wrapped error in its
+// chain) is context.Canceled or context.DeadlineExceeded. Uses stderrors.Is
+// directly so that wrapped EnhancedError chains are unwrapped correctly.
+func isContextCancellation(err error) bool {
+	return stderrors.Is(err, context.Canceled) ||
+		stderrors.Is(err, context.DeadlineExceeded)
+}
+
 // shouldReportToSentry determines if an error should be sent to Sentry
 // It filters out operational/configuration errors that aren't code bugs
 func shouldReportToSentry(ee *EnhancedError) bool {
 	if ee.Err == nil {
 		return true
 	}
+
+	// Database operations frequently observe context.Canceled and
+	// context.DeadlineExceeded during graceful shutdown and request-timeout
+	// conditions (e.g. an HTTP client disconnects mid-query, or a caller's
+	// ctx.Done() fires while a long row iteration is in progress). These are
+	// not code bugs — the query layer correctly surfaces the cancellation to
+	// the caller, and the caller is expected to handle it. Suppressing here
+	// prevents hundreds of duplicate "[database] context canceled" events
+	// per day from drowning legitimate database errors.
+	if ee.Category == CategoryDatabase && isContextCancellation(ee.Err) {
+		return false
+	}
+
 	errorMsg := strings.ToLower(ee.Err.Error())
 
 	// Notification circuit-breaker open/half-open conditions are operational
