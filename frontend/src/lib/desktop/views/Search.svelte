@@ -47,7 +47,12 @@
         loggers.ui.error('Failed to load species name map for search', error);
         return null;
       } finally {
-        cachedSpeciesMapsInFlight = null;
+        // Only clear the in-flight marker if a newer fetch (different locale)
+        // has not already replaced it; otherwise we would orphan its promise
+        // and trigger a redundant refetch on the next caller.
+        if (cachedSpeciesMapsLocale === locale) {
+          cachedSpeciesMapsInFlight = null;
+        }
       }
     })();
 
