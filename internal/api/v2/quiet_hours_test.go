@@ -110,7 +110,10 @@ func TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort(t *testing.
 		"rtsp://user:pass@cam-z.lan/stream": false,
 	}
 	after := map[string]bool{
-		"rtsp://user:pass@cam-a.lan/stream": true, // sorts before both existing URLs
+		// cam-a sorts before both existing URLs. Use a distinct value
+		// (false) so we can prove the shift by looking at stream-1's
+		// value across the two payloads.
+		"rtsp://user:pass@cam-a.lan/stream": false,
 		"rtsp://user:pass@cam-m.lan/stream": true,
 		"rtsp://user:pass@cam-z.lan/stream": false,
 	}
@@ -118,12 +121,6 @@ func TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort(t *testing.
 	firstPayload := buildSuppressedStreamsPayload(before, true)
 	secondPayload := buildSuppressedStreamsPayload(after, true)
 
-	// The value for cam-m was true in both inputs. With the current
-	// sort-then-index scheme, the key that holds that value in `before`
-	// (stream-1) will now belong to cam-a in `after`, meaning cam-m has
-	// moved to stream-2. Assert both maps stay valid (no key collisions)
-	// and that the count is correct — but explicitly do NOT assert that
-	// stream-1's value is stable, documenting the shift.
 	require.Len(t, firstPayload, 2)
 	require.Len(t, secondPayload, 3)
 	for _, payload := range []map[string]bool{firstPayload, secondPayload} {
@@ -131,6 +128,18 @@ func TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort(t *testing.
 			assert.Regexp(t, streamPlaceholderPattern, key)
 		}
 	}
+
+	// Assert the shift explicitly: before has cam-m at stream-1 (true);
+	// after, cam-a takes stream-1 (false) and cam-m shifts to stream-2
+	// (true). If a future refactor makes placeholders hash-stable, these
+	// assertions will fail and force a deliberate contract change rather
+	// than silently breaking any consumer that keyed by placeholder name.
+	require.Contains(t, firstPayload, "stream-1")
+	require.Contains(t, secondPayload, "stream-1")
+	require.Contains(t, secondPayload, "stream-2")
+	assert.True(t, firstPayload["stream-1"], "before: cam-m (true) maps to stream-1")
+	assert.False(t, secondPayload["stream-1"], "after: prepended cam-a (false) takes stream-1")
+	assert.True(t, secondPayload["stream-2"], "after: cam-m (true) shifts from stream-1 to stream-2")
 }
 
 // TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs asserts the
@@ -160,7 +169,8 @@ func TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs(t *testing.T) 
 	}
 }
 
-// mapKeys returns a stable slice of map keys for assertion messages.
+// mapKeys returns map keys in sorted order so assertion diagnostics are
+// deterministic (map iteration order is not).
 func mapKeys[V any](m map[string]V) []string {
-	return slices.Collect(maps.Keys(m))
+	return slices.Sorted(maps.Keys(m))
 }

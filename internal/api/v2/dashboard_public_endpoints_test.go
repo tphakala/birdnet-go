@@ -56,8 +56,19 @@ func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, method, pa
 }
 
 // guestGet executes an unauthenticated GET request through the echo instance.
-func guestGet(e *echo.Echo, path string) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+//
+// The request carries a short deadline so handlers that would otherwise
+// block forever (e.g. the SSE /notifications/stream handler, whose
+// disconnect path keys on the request context) return promptly once the
+// synchronous ServeHTTP call times out on the handler side. Without this,
+// tests that hit /stream hang indefinitely when the notification service
+// is initialized, previously masked because public-reads tests ran before
+// any test initialized the service and fell through to a 503.
+func guestGet(t *testing.T, e *echo.Echo, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Second)
+	defer cancel()
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, path, http.NoBody)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 	return rec
@@ -93,7 +104,7 @@ func TestNotifications_PublicReadsAllowed(t *testing.T) {
 		"/api/v2/notifications/stream",
 	} {
 		t.Run(path, func(t *testing.T) {
-			rec := guestGet(e, path)
+			rec := guestGet(t, e, path)
 			assertNotUnauthorized(t, rec, path)
 		})
 	}
@@ -169,7 +180,7 @@ func TestNotifications_GuestListFiltersNonDetectionAndToasts(t *testing.T) {
 
 	e := newSettingsAuthTestEnv(t)
 
-	rec := guestGet(e, "/api/v2/notifications?limit=50")
+	rec := guestGet(t, e, "/api/v2/notifications?limit=50")
 	require.Equal(t, http.StatusOK, rec.Code,
 		"guest list must succeed, got: %s", rec.Body.String())
 
@@ -226,7 +237,7 @@ func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T
 
 	e := newSettingsAuthTestEnv(t)
 
-	rec := guestGet(e, "/api/v2/notifications/unread/count")
+	rec := guestGet(t, e, "/api/v2/notifications/unread/count")
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	var payload struct {
@@ -237,7 +248,7 @@ func TestNotifications_GuestUnreadCountIgnoresNonDetectionAndToasts(t *testing.T
 	// The store may contain fixtures from other tests, so instead of an
 	// absolute equality we assert the count strictly matches the list the
 	// same guest would see.
-	listRec := guestGet(e, "/api/v2/notifications?status=unread&limit=1000")
+	listRec := guestGet(t, e, "/api/v2/notifications?status=unread&limit=1000")
 	require.Equal(t, http.StatusOK, listRec.Code)
 	var listPayload struct {
 		Notifications []*notification.Notification `json:"notifications"`
@@ -295,13 +306,21 @@ func TestNotifications_GuestSSEFiltersNonDetectionAndToasts(t *testing.T) {
 
 	e := newSettingsAuthTestEnv(t)
 	srv := httptest.NewServer(e)
-	t.Cleanup(srv.Close)
+	t.Cleanup(func() {
+		// Force-close active connections before srv.Close blocks waiting
+		// for handlers to return. The SSE handler only detects a client
+		// disconnect on its next heartbeat Write (15s) in HTTP/1.1, so a
+		// plain srv.Close can stall cleanup enough to trip the test
+		// timeout when many SSE tests run in the same process.
+		srv.CloseClientConnections()
+		srv.Close()
+	})
 
-	// cancel must run BEFORE t.Cleanup(wg.Wait) — otherwise the goroutine
+	// cancel must run before t.Cleanup(wg.Wait); otherwise the goroutine
 	// blocked on readSSEEvent would deadlock the cleanup. `defer` runs at
 	// function exit before any t.Cleanup callback, so the request context
-	// is canceled first, unblocking the read loop, then cleanups proceed in
-	// LIFO order (wg.Wait → resp.Body.Close → srv.Close).
+	// is canceled first, unblocking the read loop, then cleanups proceed
+	// in LIFO order (wg.Wait, resp.Body.Close, srv.Close).
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 
@@ -358,6 +377,12 @@ func TestNotifications_GuestSSEFiltersNonDetectionAndToasts(t *testing.T) {
 	detectionToast := notification.NewNotification(notification.TypeDetection,
 		notification.PriorityLow, "SSE test toast", "toast body").
 		WithMetadata(notification.MetadataKeyIsToast, true)
+	// sendToastEvent emits the SSE toast id from Metadata["toastId"], not
+	// from the underlying notification ID. Mirror that here so
+	// extractNotificationID can recognize a leaked toast; without it,
+	// extraction returns "" and the fixture-ID gate below would swallow a
+	// regression silently.
+	detectionToast.Metadata["toastId"] = detectionToast.ID
 	require.NoError(t, svc.CreateWithMetadata(detectionToast))
 
 	t.Cleanup(func() {
@@ -467,7 +492,7 @@ func TestStreamsHealth_AllAuthProtected(t *testing.T) {
 		"/api/v2/streams/health/stream",
 	} {
 		t.Run(path, func(t *testing.T) {
-			rec := guestGet(e, path)
+			rec := guestGet(t, e, path)
 			assertUnauthorized(t, rec, http.MethodGet, path)
 		})
 	}
@@ -481,7 +506,7 @@ func TestStreamsHealth_AllAuthProtected(t *testing.T) {
 func TestQuietHours_PublicReadsAllowed(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
-	rec := guestGet(e, "/api/v2/streams/quiet-hours/status")
+	rec := guestGet(t, e, "/api/v2/streams/quiet-hours/status")
 	require.Equal(t, http.StatusOK, rec.Code,
 		"guest must be able to read quiet-hours status, got: %s", rec.Body.String())
 
@@ -513,7 +538,7 @@ func TestQuietHours_PublicReadsAllowed(t *testing.T) {
 func TestQuietHours_NoRawCredentialsInResponse(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
-	rec := guestGet(e, "/api/v2/streams/quiet-hours/status")
+	rec := guestGet(t, e, "/api/v2/streams/quiet-hours/status")
 	body := rec.Body.String()
 
 	// Walk every occurrence of a stream scheme and inspect the authority

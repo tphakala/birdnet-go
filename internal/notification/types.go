@@ -399,7 +399,11 @@ func NewInMemoryStore(maxSize int) *InMemoryStore {
 	}
 }
 
-// Save stores a notification in memory
+// Save stores a notification in memory. A deep copy is made so later
+// mutations of the caller's notification (adding metadata, changing status)
+// do not leak into the store or into concurrent subscribers reading via
+// List/Count/Get. Broadcasting already clones before sending to subscribers,
+// so storing a clone keeps the store's copy independent from both.
 func (s *InMemoryStore) Save(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -409,7 +413,7 @@ func (s *InMemoryStore) Save(notification *Notification) error {
 		s.removeOldest()
 	}
 
-	s.notifications[notification.ID] = notification
+	s.notifications[notification.ID] = notification.Clone()
 	return nil
 }
 
@@ -477,7 +481,10 @@ func (s *InMemoryStore) Count(filter *FilterOptions) (int, error) {
 	return count, nil
 }
 
-// Update modifies an existing notification
+// Update modifies an existing notification. Stores a deep copy for the same
+// reason as Save: the caller's pointer may continue to mutate after the call
+// returns (e.g. MarkAsRead builds a new status on the returned copy and
+// writes back; the store must not share map references with that copy).
 func (s *InMemoryStore) Update(notification *Notification) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -486,7 +493,7 @@ func (s *InMemoryStore) Update(notification *Notification) error {
 		return ErrNotificationNotFound
 	}
 
-	s.notifications[notification.ID] = notification
+	s.notifications[notification.ID] = notification.Clone()
 	return nil
 }
 
