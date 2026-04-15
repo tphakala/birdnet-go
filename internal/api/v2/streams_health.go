@@ -195,13 +195,14 @@ func (c *Controller) getStreamInfo(rawURL string) streamInfo {
 // @Description Returns detailed health information for all configured RTSP streams including error diagnostics
 // @Tags streams
 // @Produce json
-// @Success 200 {array} StreamHealthResponse "Array of stream health information (empty if audio engine not initialized)"
+// @Success 200 {array} StreamHealthResponse "Array of stream health information"
+// @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/health [get]
 func (c *Controller) GetAllStreamsHealth(ctx echo.Context) error {
 	if c.engine == nil {
-		// Return empty list instead of a panic when the audio engine is not
-		// initialized (e.g. during startup or in stripped-down test setups).
-		return ctx.JSON(http.StatusOK, []StreamHealthResponse{})
+		// No engine — we cannot report real stream health. Signal the
+		// caller with 503 rather than fabricating misleading zero counts.
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
 	// Get health data from the FFmpeg manager (keyed by sourceID)
 	healthData := c.engine.FFmpegManager().AllStreamHealth()
@@ -303,16 +304,15 @@ func (c *Controller) GetStreamHealth(ctx echo.Context) error {
 // @Description Returns a high-level summary including counts of healthy/unhealthy streams
 // @Tags streams
 // @Produce json
-// @Success 200 {object} StreamsStatusSummaryResponse "Streams status summary (empty if audio engine not initialized)"
+// @Success 200 {object} StreamsStatusSummaryResponse "Streams status summary"
+// @Failure 503 {object} ErrorResponse "Audio engine not initialized"
 // @Router /api/v2/streams/status [get]
 func (c *Controller) GetStreamsStatusSummary(ctx echo.Context) error {
 	if c.engine == nil {
-		// Return an empty summary rather than panicking when the audio
-		// engine is not initialized (e.g. early startup, test setups).
-		return ctx.JSON(http.StatusOK, StreamsStatusSummaryResponse{
-			StreamsSummary: []StreamSummaryResponse{},
-			Timestamp:      time.Now(),
-		})
+		// Zero counts would be technically accurate but misleading: clients
+		// cannot tell "no streams configured" apart from "audio engine not
+		// up yet". Return 503 so the UI can surface a proper state.
+		return c.HandleError(ctx, nil, "Audio engine not initialized", http.StatusServiceUnavailable)
 	}
 	// Get health data from the FFmpeg manager (keyed by sourceID)
 	healthData := c.engine.FFmpegManager().AllStreamHealth()
@@ -384,8 +384,9 @@ func convertStreamHealthToResponse(rawURL string, health *ffmpeg.StreamHealth) S
 		response.TimeSinceData = &timeSince
 	}
 
-	// Handle error message. Sanitize defensively so raw RTSP URLs with
-	// credentials cannot leak into the (now public) response.
+	// Handle error message. These endpoints remain authenticated (see
+	// initStreamHealthRoutes) but we sanitize defensively so that a future
+	// carve-out cannot regress into leaking raw RTSP userinfo.
 	if health.Error != nil {
 		response.Error = privacy.SanitizeFFmpegError(health.Error.Error())
 	}
@@ -427,10 +428,12 @@ func convertErrorContextToResponse(errCtx *ffmpeg.ErrorContext) *ErrorContextRes
 		return nil
 	}
 
-	// Defensive sanitization: ErrorContext is now returned via a public
-	// endpoint (see initStreamHealthRoutes). PrimaryMessage comes straight
-	// from the FFmpeg stderr pipeline and may contain the raw RTSP URL
-	// including credentials if the upstream sanitizer misses an edge case.
+	// Defensive sanitization: although these endpoints remain authenticated
+	// (see initStreamHealthRoutes), PrimaryMessage and UserFacingMsg come
+	// straight from the FFmpeg stderr pipeline and may still contain a raw
+	// RTSP URL with credentials if the upstream sanitizer misses an edge
+	// case. Scrubbing here guarantees no userinfo escapes to API clients
+	// even if the route becomes public in the future.
 	response := &ErrorContextResponse{
 		ErrorType:            errCtx.ErrorType,
 		PrimaryMessage:       privacy.SanitizeFFmpegError(errCtx.PrimaryMessage),

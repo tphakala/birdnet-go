@@ -17,6 +17,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -58,13 +59,17 @@ func guestGet(e *echo.Echo, path string) *httptest.ResponseRecorder {
 // ---- notifications -----------------------------------------------------
 
 // TestNotifications_PublicReadsAllowed verifies that the dashboard-facing
-// read endpoints are reachable without auth.
+// read endpoints are reachable without auth. Including the SSE endpoint is
+// important: NotificationBell opens a persistent /notifications/stream
+// subscription as soon as the page loads, and a 401 there would be more
+// visible than the list endpoint failing.
 func TestNotifications_PublicReadsAllowed(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
 	for _, path := range []string{
 		"/api/v2/notifications",
 		"/api/v2/notifications/unread/count",
+		"/api/v2/notifications/stream",
 	} {
 		t.Run(path, func(t *testing.T) {
 			rec := guestGet(e, path)
@@ -134,7 +139,8 @@ func TestStreamsHealth_AllAuthProtected(t *testing.T) {
 // ---- quiet-hours -------------------------------------------------------
 
 // TestQuietHours_PublicReadsAllowed verifies that the "Currently Hearing"
-// card's backing endpoint is reachable without auth.
+// card's backing endpoint is reachable without auth and that the response
+// shape is suitable for the frontend indicator.
 func TestQuietHours_PublicReadsAllowed(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
@@ -142,11 +148,22 @@ func TestQuietHours_PublicReadsAllowed(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code,
 		"guest must be able to read quiet-hours status, got: %s", rec.Body.String())
 
-	body := rec.Body.String()
-	// The handler sanitizes stream URLs via privacy.SanitizeStreamUrl, so
-	// no raw "user:password@" userinfo should appear in the guest response.
-	assert.NotContains(t, body, "@",
-		"quiet-hours response must not include unredacted stream URLs: %s", body)
+	var payload struct {
+		AnyActive           bool            `json:"anyActive"`
+		SoundCardSuppressed bool            `json:"soundCardSuppressed"`
+		SuppressedStreams   map[string]bool `json:"suppressedStreams"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
+
+	// The handler must not leak userinfo via the stream URL keys. For guest
+	// requests the keys are opaque placeholders ("stream-N"), so any "://"
+	// or "@" in a key indicates a regression.
+	for key := range payload.SuppressedStreams {
+		assert.NotContains(t, key, "://",
+			"guest quiet-hours response leaks stream URL in key %q", key)
+		assert.NotContains(t, key, "@",
+			"guest quiet-hours response leaks userinfo in key %q", key)
+	}
 }
 
 // ---- regression guard --------------------------------------------------

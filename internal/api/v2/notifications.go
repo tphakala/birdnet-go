@@ -89,6 +89,10 @@ type NotificationClient struct {
 	Done         chan struct{} // Signal-only channel for shutdown notification
 	SubscriberCh <-chan *notification.Notification
 	Context      context.Context
+	// Guest is true when the SSE connection was opened by an unauthenticated
+	// request. Guests receive only bird-detection events; operational/admin
+	// notifications are filtered out before being sent to the wire.
+	Guest bool
 }
 
 // notificationAction represents a notification service operation
@@ -418,7 +422,8 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 	service := notification.GetService()
 	notificationCh, notificationCtx := service.Subscribe()
 
-	// Create notification client
+	// Create notification client. Record whether the caller is a guest so
+	// the event loop can filter operational/admin payloads before serving.
 	client := &NotificationClient{
 		ID:           clientID,
 		Channel:      make(chan *notification.Notification, notificationChannelBuffer),
@@ -427,6 +432,7 @@ func (c *Controller) setupNotificationSSEClient(ctx echo.Context) (*Notification
 		Done:         make(chan struct{}, 1), // Buffered signal channel to prevent deadlock during disconnect
 		SubscriberCh: notificationCh,
 		Context:      notificationCtx,
+		Guest:        c.isGuestNotificationRequest(ctx),
 	}
 
 	// Send initial connection message
@@ -488,6 +494,14 @@ func (c *Controller) runNotificationEventLoop(ctx echo.Context, client *Notifica
 			if notif == nil {
 				// Channel closed, service is shutting down
 				return nil
+			}
+
+			// Guest hardening: only forward bird-detection events to
+			// unauthenticated SSE subscribers so operational/admin
+			// notifications (integration errors, system warnings, toasts)
+			// are never exposed to anonymous clients.
+			if client.Guest && notif.Type != notification.TypeDetection {
+				continue
 			}
 
 			if err := c.processNotificationEvent(ctx, client.ID, notif); err != nil {
@@ -656,6 +670,19 @@ func (c *Controller) logNotificationSent(clientID string, notif *notification.No
 	}
 }
 
+// isGuestNotificationRequest returns true when the current request should be
+// treated as an unauthenticated dashboard viewer. Used to restrict the public
+// notifications endpoints to detection-type notifications only so that
+// operational/admin notifications (integration errors, config problems) are
+// not leaked to anonymous clients.
+func (c *Controller) isGuestNotificationRequest(ctx echo.Context) bool {
+	if c.authService == nil {
+		// No auth service configured → auth is disabled, treat everyone as trusted.
+		return false
+	}
+	return !c.authService.IsAuthenticated(ctx)
+}
+
 // GetNotifications returns a list of notifications with optional filtering
 func (c *Controller) GetNotifications(ctx echo.Context) error {
 	service := notification.GetService()
@@ -671,6 +698,14 @@ func (c *Controller) GetNotifications(ctx echo.Context) error {
 	// Parse type filter
 	if typeParam := ctx.QueryParam("type"); typeParam != "" {
 		filter.Types = []notification.Type{notification.Type(typeParam)}
+	}
+
+	// Guest hardening: unauthenticated viewers only see bird-detection
+	// notifications, never operational/admin payloads that may contain
+	// integration errors, hostnames, or configuration hints. This overrides
+	// any type filter the caller may have supplied.
+	if c.isGuestNotificationRequest(ctx) {
+		filter.Types = []notification.Type{notification.TypeDetection}
 	}
 
 	// Parse priority filter
@@ -781,9 +816,29 @@ func (c *Controller) DeleteNotification(ctx echo.Context) error {
 	})
 }
 
-// GetUnreadCount returns the count of unread notifications
+// GetUnreadCount returns the count of unread notifications. For
+// unauthenticated dashboard requests, only unread detection notifications are
+// counted so the NotificationBell badge matches the filtered guest list.
 func (c *Controller) GetUnreadCount(ctx echo.Context) error {
 	service := notification.GetService()
+
+	if c.isGuestNotificationRequest(ctx) {
+		// Count unread detection notifications only. Use a generous limit
+		// since the badge typically caps display at 99+ anyway.
+		notifications, err := service.List(&notification.FilterOptions{
+			Types:  []notification.Type{notification.TypeDetection},
+			Status: []notification.Status{notification.StatusUnread},
+			Limit:  1000,
+		})
+		if err != nil {
+			c.logErrorIfEnabled("failed to list detection notifications for guest count", logger.Error(err))
+			return c.HandleError(ctx, err, "Failed to get unread count", http.StatusInternalServerError)
+		}
+		return ctx.JSON(http.StatusOK, map[string]any{
+			"unreadCount": len(notifications),
+		})
+	}
+
 	count, err := service.GetUnreadCount()
 	if err != nil {
 		c.logErrorIfEnabled("failed to get unread count", logger.Error(err))
