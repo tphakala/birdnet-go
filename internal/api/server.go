@@ -283,25 +283,28 @@ func (s *Server) setupMiddleware() {
 	// Go's net/http automatically suppresses the response body for HEAD.
 	s.echo.Pre(mw.NewHeadToGet())
 
-	// Base path prefix stripping — enables direct access when basepath is configured.
-	// When settings.WebServer.BasePath is "/birdnet", a request to /birdnet/ui/dashboard
-	// gets stripped to /ui/dashboard so existing route handlers match.
-	// Skipped when reverse proxy headers are present (the proxy already stripped it).
+	// Base path prefix stripping - enables direct access when basepath is in effect.
+	// The effective basepath is resolved per-request via ingressPath(), which checks
+	// (in priority order) the X-Ingress-Path header, the X-Forwarded-Prefix header,
+	// and the settings.WebServer.BasePath config value. This matches the resolver
+	// used by the context middleware below, so a callback URL emitted by the login
+	// handler (which prefixes using the same chain) always maps back to a route
+	// even when the basepath comes only from a proxy header (no YAML config).
 	//
-	// The effective basepath is read per-request from s.settings so changes to
-	// settings.WebServer.BasePath take effect without a server restart, matching
-	// the dynamic behavior of ingressPath() used by the context middleware below.
+	// Resolving per-request also means settings.WebServer.BasePath changes take
+	// effect without a server restart.
 	s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			bp := strings.TrimRight(s.settings.WebServer.BasePath, "/")
+			bp := ingressPath(c, s.settings)
 			if bp == "" {
 				return next(c)
 			}
 
 			// When a reverse proxy header is present, the proxy usually already
-			// stripped the prefix before forwarding. But only skip our stripping
-			// if the path does NOT start with the basepath — a client could send
-			// the header without an actual proxy, leaving the prefix intact.
+			// stripped the prefix before forwarding. Only skip our stripping when
+			// the path does NOT start with the basepath; a client (or a proxy that
+			// forwards paths verbatim) may send the header with the prefix still
+			// attached, in which case we must strip it ourselves.
 			req := c.Request()
 			hasProxyHeader := req.Header.Get("X-Ingress-Path") != "" || req.Header.Get("X-Forwarded-Prefix") != ""
 			if hasProxyHeader && !strings.HasPrefix(req.URL.Path, bp+"/") && req.URL.Path != bp {

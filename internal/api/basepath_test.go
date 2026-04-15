@@ -1,4 +1,4 @@
-// basepath_test.go: Tests for base path support — prefix stripping middleware,
+// basepath_test.go: Tests for base path support - prefix stripping middleware,
 // HTML asset URL rewriting, and manifest path rewriting.
 
 package api
@@ -12,16 +12,22 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 // stripMiddlewareForTest mirrors the production Pre middleware in setupMiddleware().
 // Kept in sync by hand. We can't easily instantiate a full Server in this package-level
 // unit test, so the stripping logic is duplicated here and exercised with the same
 // table-driven assertions production would see.
-func stripMiddlewareForTest(getBP func() string) echo.MiddlewareFunc {
+//
+// The middleware resolves the effective basepath through ingressPath() so that
+// header-supplied basepaths strip the request prefix even when no config basepath
+// is set. getSettings may return nil when the test does not care about config.
+func stripMiddlewareForTest(getSettings func() *conf.Settings) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			bp := strings.TrimRight(getBP(), "/")
+			bp := ingressPath(c, getSettings())
 			if bp == "" {
 				return next(c)
 			}
@@ -45,6 +51,14 @@ func stripMiddlewareForTest(getBP func() string) echo.MiddlewareFunc {
 	}
 }
 
+// settingsWithBasePath returns a *conf.Settings whose WebServer.BasePath is set
+// to the given value. Used as a compact helper for table-driven tests.
+func settingsWithBasePath(bp string) *conf.Settings {
+	s := &conf.Settings{}
+	s.WebServer.BasePath = bp
+	return s
+}
+
 // TestBasePathStripMiddleware tests the Pre middleware that strips the configured
 // basepath prefix from incoming request URLs for direct access (no proxy).
 func TestBasePathStripMiddleware(t *testing.T) {
@@ -55,6 +69,7 @@ func TestBasePathStripMiddleware(t *testing.T) {
 		basePath         string
 		requestPath      string
 		xForwardedPrefix string // if set, middleware should skip stripping
+		xIngressPath     string // if set, takes priority over X-Forwarded-Prefix
 		expectedPath     string
 	}{
 		{
@@ -118,20 +133,56 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			requestPath:  "/birdnet/ui/dashboard?tab=detections",
 			expectedPath: "/ui/dashboard",
 		},
+		{
+			// Issue #2778: the login callback URL is built from the header-derived
+			// basepath, so the strip middleware must honor the same header when
+			// no config basepath is set, otherwise the returned callback 404s.
+			name:             "strips with X-Forwarded-Prefix header and no config basepath",
+			basePath:         "",
+			requestPath:      "/birdnet/api/v2/health",
+			xForwardedPrefix: "/birdnet",
+			expectedPath:     "/api/v2/health",
+		},
+		{
+			// Same scenario but via the Home Assistant ingress header.
+			name:         "strips with X-Ingress-Path header and no config basepath",
+			basePath:     "",
+			requestPath:  "/api/hassio_ingress/TOKEN/api/v2/health",
+			xIngressPath: "/api/hassio_ingress/TOKEN",
+			expectedPath: "/api/v2/health",
+		},
+		{
+			// When the proxy already stripped the prefix but still sent the header,
+			// the request path does not start with the basepath so stripping must
+			// be skipped to avoid breaking routing.
+			name:             "no strip when proxy header present and path already stripped",
+			basePath:         "",
+			requestPath:      "/api/v2/health",
+			xForwardedPrefix: "/birdnet",
+			expectedPath:     "/api/v2/health",
+		},
+		{
+			// No source of basepath at all: neither header nor config is set,
+			// so the middleware must be a no-op.
+			name:         "no strip when no basepath from any source",
+			basePath:     "",
+			requestPath:  "/api/v2/health",
+			expectedPath: "/api/v2/health",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			bp := tt.basePath
+			settings := settingsWithBasePath(tt.basePath)
 			var capturedPath string
 			var capturedQuery string
 
 			e := echo.New()
 
 			// Exercise the strip middleware via the shared test helper that mirrors production.
-			e.Pre(stripMiddlewareForTest(func() string { return bp }))
+			e.Pre(stripMiddlewareForTest(func() *conf.Settings { return settings }))
 
 			// Catch-all handler to capture the routed path
 			e.Any("/*", func(c echo.Context) error {
@@ -143,6 +194,9 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, tt.requestPath, http.NoBody)
 			if tt.xForwardedPrefix != "" {
 				req.Header.Set("X-Forwarded-Prefix", tt.xForwardedPrefix)
+			}
+			if tt.xIngressPath != "" {
+				req.Header.Set("X-Ingress-Path", tt.xIngressPath)
 			}
 			rec := httptest.NewRecorder()
 
@@ -428,11 +482,11 @@ func TestBasePathStripMiddleware_HotReload(t *testing.T) {
 	t.Parallel()
 
 	// Mutable basepath source, simulating settings.WebServer.BasePath being
-	// updated at runtime. Access is serialized through the test — no goroutines.
+	// updated at runtime. Access is serialized through the test; no goroutines.
 	var currentBP string
 
 	e := echo.New()
-	e.Pre(stripMiddlewareForTest(func() string { return currentBP }))
+	e.Pre(stripMiddlewareForTest(func() *conf.Settings { return settingsWithBasePath(currentBP) }))
 
 	var capturedPath string
 	e.Any("/*", func(c echo.Context) error {
