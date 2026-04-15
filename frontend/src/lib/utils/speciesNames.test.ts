@@ -20,6 +20,44 @@ describe('buildSpeciesNameMaps', () => {
     },
   ];
 
+  it('accepts snake_case keys as a fallback shape', () => {
+    // Guards against regressions if an API response ever lands with
+    // snake_case keys (e.g. a different species endpoint is reused here).
+    const snakeCaseEntries: SpeciesApiEntry[] = [
+      {
+        common_name: 'Tawny Owl',
+        scientific_name: 'Strix aluco',
+        label: 'Strix aluco_Tawny Owl',
+      },
+      {
+        common_name: 'Great Tit',
+        scientific_name: 'Parus major',
+        label: 'Parus major_Great Tit',
+      },
+    ];
+    const maps = buildSpeciesNameMaps(snakeCaseEntries);
+    expect(maps.commonToScientific.get('tawny owl')).toBe('Strix aluco');
+    expect(maps.scientificToCommon.get('strix aluco')).toBe('Tawny Owl');
+    expect(maps.allNames).toContain('Tawny Owl');
+    expect(maps.allNames).toContain('Parus major');
+  });
+
+  it('prefers camelCase over snake_case when both are present', () => {
+    const entries: SpeciesApiEntry[] = [
+      {
+        commonName: 'Tawny Owl',
+        scientificName: 'Strix aluco',
+        common_name: 'WRONG',
+        scientific_name: 'WRONG',
+        label: 'Strix aluco_Tawny Owl',
+      },
+    ];
+    const maps = buildSpeciesNameMaps(entries);
+    expect(maps.commonToScientific.get('tawny owl')).toBe('Strix aluco');
+    expect(maps.scientificToCommon.get('strix aluco')).toBe('Tawny Owl');
+    expect(maps.commonToScientific.has('wrong')).toBe(false);
+  });
+
   it('builds commonToScientific map keyed by lowercase common name', () => {
     const maps = buildSpeciesNameMaps(sampleSpecies);
     expect(maps.commonToScientific.get('tawny owl')).toBe('Strix aluco');
@@ -145,8 +183,21 @@ describe('looksLikeScientificName', () => {
     expect(looksLikeScientificName('Turdus merula')).toBe(true);
   });
 
-  it('accepts a single capitalised ASCII token (genus only)', () => {
-    expect(looksLikeScientificName('Turdus')).toBe(true);
+  it('rejects single-word capitalised tokens so they fall through to the common-name resolver', () => {
+    // Short capitalised words like "Owl" or "Tit" are common English names,
+    // not binomials. They must not bypass common-name lookup.
+    expect(looksLikeScientificName('Owl')).toBe(false);
+    expect(looksLikeScientificName('Tit')).toBe(false);
+    expect(looksLikeScientificName('Pito')).toBe(false);
+    // Even a genuine genus name like "Turdus" should fall through; the
+    // resolver can still forward it to the backend for partial matching.
+    expect(looksLikeScientificName('Turdus')).toBe(false);
+  });
+
+  it('rejects binomials where the species epithet is not all lowercase', () => {
+    // Species epithets in binomial nomenclature are always lowercase.
+    expect(looksLikeScientificName('Strix Aluco')).toBe(false);
+    expect(looksLikeScientificName('Parus MAJOR')).toBe(false);
   });
 
   it('rejects lowercase first letter', () => {
@@ -218,6 +269,12 @@ describe('resolveSpeciesQuery', () => {
 
   it('passes scientific-looking input through unchanged', () => {
     expect(resolveSpeciesQuery('Strix aluco', maps)).toBe('Strix aluco');
+  });
+
+  it('passes through single-word capitalised input as raw, letting the backend partial-match', () => {
+    // "Turdus" is a genus name but no common name in the map contains the
+    // substring "turdus", so the resolver should return the raw input so
+    // the backend LIKE clause can still match scientific names.
     expect(resolveSpeciesQuery('Turdus', maps)).toBe('Turdus');
   });
 

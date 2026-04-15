@@ -1,3 +1,70 @@
+<script module lang="ts">
+  import { api } from '$lib/utils/api';
+  import { loggers } from '$lib/utils/logger';
+  import {
+    buildSpeciesNameMaps,
+    type SpeciesApiEntry,
+    type SpeciesNameMaps,
+  } from '$lib/utils/speciesNames';
+
+  // Module-level cache for species name maps. Survives component
+  // mount/unmount across route changes, so navigating away from Search and
+  // back does not refetch /api/v2/species/all. Invalidated explicitly when
+  // the BirdNET label locale changes (see the component-level $effect).
+  let cachedSpeciesNameMaps: SpeciesNameMaps | null = null;
+  let cachedSpeciesMapsLocale: string | null = null;
+  let cachedSpeciesMapsInFlight: Promise<SpeciesNameMaps | null> | null = null;
+
+  /**
+   * Load the full species list from /api/v2/species/all once per locale,
+   * build bidirectional name maps, and cache the result at module scope.
+   * Subsequent calls return the cached maps. Failures are logged without
+   * surfacing to the user, since the search falls back to the raw query.
+   */
+  export function ensureSpeciesNameMapsCache(locale: string): Promise<SpeciesNameMaps | null> {
+    if (cachedSpeciesNameMaps && cachedSpeciesMapsLocale === locale) {
+      return Promise.resolve(cachedSpeciesNameMaps);
+    }
+    if (cachedSpeciesMapsInFlight && cachedSpeciesMapsLocale === locale) {
+      return cachedSpeciesMapsInFlight;
+    }
+
+    cachedSpeciesMapsLocale = locale;
+    cachedSpeciesMapsInFlight = (async () => {
+      try {
+        interface SpeciesListResponse {
+          species?: SpeciesApiEntry[];
+        }
+        const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
+        const maps = buildSpeciesNameMaps(data.species ?? []);
+        // Only commit to cache if the locale is still the one we fetched
+        // for; otherwise, a newer fetch has superseded us.
+        if (cachedSpeciesMapsLocale === locale) {
+          cachedSpeciesNameMaps = maps;
+        }
+        return maps;
+      } catch (error: unknown) {
+        loggers.ui.error('Failed to load species name map for search', error);
+        return null;
+      } finally {
+        cachedSpeciesMapsInFlight = null;
+      }
+    })();
+
+    return cachedSpeciesMapsInFlight;
+  }
+
+  /**
+   * Invalidate the module-level species-name cache. Call when the BirdNET
+   * label locale changes so the next search refetches the label mapping.
+   */
+  export function invalidateSpeciesNameMapsCache(): void {
+    cachedSpeciesNameMaps = null;
+    cachedSpeciesMapsLocale = null;
+    cachedSpeciesMapsInFlight = null;
+  }
+</script>
+
 <script lang="ts">
   import WeatherInfo from '$lib/desktop/components/data/WeatherInfo.svelte';
   import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
@@ -6,9 +73,9 @@
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import TimeOfDayIcon from '$lib/desktop/components/ui/TimeOfDayIcon.svelte';
   import { getLocale, t } from '$lib/i18n';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { birdnetSettings, dashboardSettings } from '$lib/stores/settings';
   import { toastActions } from '$lib/stores/toast';
-  import { api, fetchWithCSRF } from '$lib/utils/api';
+  import { fetchWithCSRF } from '$lib/utils/api';
   import { getLocalDateString, parseLocalDateString } from '$lib/utils/date';
   import type { TemperatureUnit } from '$lib/utils/formatters';
   import {
@@ -27,13 +94,7 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
-  import { loggers } from '$lib/utils/logger';
-  import {
-    buildSpeciesNameMaps,
-    resolveSpeciesQuery,
-    type SpeciesApiEntry,
-    type SpeciesNameMaps,
-  } from '$lib/utils/speciesNames';
+  import { resolveSpeciesQuery } from '$lib/utils/speciesNames';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -178,41 +239,22 @@
   let hasConfidenceError = $state(false);
   let showTooltip = $state<string | null>(null);
 
-  // Species-name lookup maps for resolving user-entered common names
-  // (in the BirdNET label locale) to scientific names before querying the
-  // backend search endpoint. Loaded lazily on first search.
-  let speciesNameMaps = $state<SpeciesNameMaps | null>(null);
-  let speciesMapsLoadInFlight: Promise<SpeciesNameMaps | null> | null = null;
+  // Monotonic search ID used to drop stale results from out-of-order
+  // responses when the user fires multiple searches in quick succession.
+  // Each new search increments this; the resolver compares against the
+  // captured ID before touching reactive state.
+  let currentSearchId = 0;
 
-  /**
-   * Load the full species list from /api/v2/species/all once, build
-   * bidirectional name maps, and cache the result. Subsequent calls return
-   * the cached maps. Failures are logged without surfacing to the user,
-   * since the search falls back to the raw query string.
-   */
-  async function ensureSpeciesNameMaps(): Promise<SpeciesNameMaps | null> {
-    if (speciesNameMaps) return speciesNameMaps;
-    if (speciesMapsLoadInFlight) return speciesMapsLoadInFlight;
-
-    speciesMapsLoadInFlight = (async () => {
-      try {
-        interface SpeciesListResponse {
-          species?: SpeciesApiEntry[];
-        }
-        const data = await api.get<SpeciesListResponse>('/api/v2/species/all');
-        const maps = buildSpeciesNameMaps(data.species ?? []);
-        speciesNameMaps = maps;
-        return maps;
-      } catch (error: unknown) {
-        logger.error('Failed to load species name map for search', error);
-        return null;
-      } finally {
-        speciesMapsLoadInFlight = null;
-      }
-    })();
-
-    return speciesMapsLoadInFlight;
-  }
+  // Invalidate the module-level species-name cache whenever the BirdNET
+  // label locale changes, so the next search refetches /api/v2/species/all
+  // with labels in the new locale. This is the LABEL locale (used by the
+  // BirdNET model), not the UI display locale.
+  $effect(() => {
+    // Subscribe to the reactive locale value; value itself is not used
+    // other than to trigger the effect when it changes.
+    void $birdnetSettings?.locale;
+    invalidateSpeciesNameMapsCache();
+  });
 
   // Localized pluralized results count using i18n keys
   function formatResultsCount(count: number) {
@@ -256,6 +298,11 @@
   async function submitSearch(page = 1) {
     if (!validateForm()) return;
 
+    // Capture a unique ID for this search. If another search starts before
+    // this one resolves, that later search bumps `currentSearchId` and our
+    // response will be dropped below to prevent stale-result flicker.
+    const searchId = ++currentSearchId;
+
     isLoading = true;
     errorMessage = '';
     currentPage = page;
@@ -268,7 +315,8 @@
       // label locale is Finnish) needs to be mapped to "Strix aluco" first.
       // Falls back to the raw input if the map cannot be loaded or no match
       // is found, preserving partial scientific-name search behaviour.
-      const maps = await ensureSpeciesNameMaps();
+      const locale = $birdnetSettings?.locale ?? 'en';
+      const maps = await ensureSpeciesNameMapsCache(locale);
       const resolvedSpecies = resolveSpeciesQuery(speciesSearchTerm, maps);
 
       // Build request body
@@ -291,19 +339,32 @@
         pages: number;
       }
 
+      // `api` is imported in the <script module> block and is in scope here.
       const data = await api.post<SearchResponse>('/api/v2/search', requestBody);
+      // Ignore stale responses: a newer search has already started.
+      if (searchId !== currentSearchId) return;
+
       results = data.results ?? [];
       totalResults = data.total ?? 0;
       totalPages = data.pages ?? 1;
       formSubmitted = true;
     } catch (error: unknown) {
+      // Ignore errors from stale searches as well, so a failed older
+      // request cannot clobber results from a newer successful one.
+      if (searchId !== currentSearchId) return;
+
       // Handle search error silently
       errorMessage = t('search.errors.searchFailed', {
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       results = [];
     } finally {
-      isLoading = false;
+      // Only clear the loading spinner for the newest search; an older
+      // search finishing late must not unset isLoading while a newer one
+      // is still in flight.
+      if (searchId === currentSearchId) {
+        isLoading = false;
+      }
     }
   }
 

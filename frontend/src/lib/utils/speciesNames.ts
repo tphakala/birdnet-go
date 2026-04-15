@@ -6,10 +6,22 @@
  * (nameMaps struct with common and species maps).
  */
 
-/** Shape of a species entry from /api/v2/species/all */
+/**
+ * Shape of a species entry from /api/v2/species/all.
+ *
+ * The canonical endpoint (`RangeFilterSpecies` in internal/api/v2/range.go)
+ * serialises as camelCase. A few other species-related Go structs
+ * (e.g. `SpeciesInfo`) use snake_case tags, so this interface accepts both
+ * key shapes defensively. Callers should not rely on snake_case from
+ * `/api/v2/species/all` specifically, but the fallback keeps us safe if
+ * a different species endpoint is ever plumbed through this helper.
+ */
 export interface SpeciesApiEntry {
   commonName?: string;
   scientificName?: string;
+  // Fallback snake_case keys for endpoints that serialise in that style.
+  common_name?: string;
+  scientific_name?: string;
   label: string;
 }
 
@@ -39,8 +51,10 @@ export function buildSpeciesNameMaps(species: SpeciesApiEntry[]): SpeciesNameMap
   const namesSet = new Set<string>();
 
   for (const s of species) {
-    const commonName = s.commonName ?? s.label;
-    const scientificName = s.scientificName ?? '';
+    // Prefer camelCase (the canonical shape for /api/v2/species/all); fall
+    // back to snake_case, then to the combined `label` for common name only.
+    const commonName = s.commonName ?? s.common_name ?? s.label;
+    const scientificName = s.scientificName ?? s.scientific_name ?? '';
 
     // Always add common name to allNames for autocomplete, even without scientific name
     if (commonName) {
@@ -107,14 +121,20 @@ export function resolveSpeciesDisplayNames(
 }
 
 /**
- * Heuristic check whether a query string looks like a scientific name
+ * Heuristic check whether a query string looks like a full Latin binomial
  * (e.g. "Turdus merula", "Parus major"). Used to skip common-name resolution
- * for inputs that are already scientific names or partial scientific names.
+ * for inputs that already look like a binomial.
  *
  * Rules:
  *   - ASCII letters, spaces, and hyphens only (no diacritics, no digits)
- *   - One or two whitespace-separated tokens
- *   - First token starts with an uppercase letter
+ *   - Exactly two whitespace-separated tokens
+ *   - First token (genus) starts with an uppercase letter
+ *   - Second token (species epithet) is entirely lowercase, matching
+ *     standard binomial nomenclature
+ *
+ * Single-word capitalised inputs like "Owl", "Tit", or even "Turdus" are
+ * rejected so they fall through to the common-name resolver, which can
+ * still pass them to the backend for partial scientific-name matching.
  */
 export function looksLikeScientificName(input: string): boolean {
   const trimmed = input.trim();
@@ -124,10 +144,13 @@ export function looksLikeScientificName(input: string): boolean {
   if (!/^[A-Za-z][A-Za-z\- ]*$/.test(trimmed)) return false;
 
   const tokens = trimmed.split(/\s+/);
-  if (tokens.length < 1 || tokens.length > 2) return false;
+  if (tokens.length !== 2) return false;
 
   const firstChar = tokens[0]?.charAt(0) ?? '';
-  return firstChar >= 'A' && firstChar <= 'Z';
+  if (firstChar < 'A' || firstChar > 'Z') return false;
+
+  const secondToken = tokens[1] ?? '';
+  return secondToken.length > 0 && secondToken === secondToken.toLowerCase();
 }
 
 /**
