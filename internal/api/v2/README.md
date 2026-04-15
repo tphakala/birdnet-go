@@ -156,15 +156,15 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                                                                   |
 | ------ | ---------------------------------- | ---------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/notifications/stream`            | `StreamNotifications`              | ✅⚡ | SSE notification & toast stream (authenticated)                                                                                                               |
-| GET    | `/notifications`                   | `GetNotifications`                 | ✅   | List notifications                                                                                                                                            |
+| GET    | `/notifications/stream`            | `StreamNotifications`              | ❌⚡ | SSE notification & toast stream (public read-only, rate-limited). Used by dashboard NotificationBell.                                                         |
+| GET    | `/notifications`                   | `GetNotifications`                 | ❌   | List notifications (public read-only). Used by dashboard NotificationBell.                                                                                    |
 | GET    | `/notifications/:id`               | `GetNotification`                  | ✅   | Get specific notification                                                                                                                                     |
 | PUT    | `/notifications/:id/read`          | `MarkNotificationRead`             | ✅   | Mark notification as read                                                                                                                                     |
 | PUT    | `/notifications/:id/acknowledge`   | `MarkNotificationAcknowledged`     | ✅   | Acknowledge notification                                                                                                                                      |
 | DELETE | `/notifications/:id`               | `DeleteNotification`               | ✅   | Delete notification                                                                                                                                           |
-| GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ✅   | Count unread notifications                                                                                                                                    |
+| GET    | `/notifications/unread/count`      | `GetUnreadCount`                   | ❌   | Count unread notifications (public read-only). Used by dashboard NotificationBell.                                                                            |
 | POST   | `/notifications/test/new-species`  | `CreateTestNewSpeciesNotification` | ✅   | Create test new-species notification                                                                                                                          |
-| GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity. Query: `host=<hostname[:port]>`. Response: `{"recommended":"https\|http\|unreachable","https":bool,"http":bool}` |
+| GET    | `/notifications/check-ntfy-server` | `CheckNtfyServer`                  | ✅   | Probe NTFY host for HTTPS/HTTP connectivity (authenticated to prevent SSRF relay). Query: `host=<hostname[:port]>`.                                           |
 
 ### Range Filter (`range.go`)
 
@@ -339,16 +339,16 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 | Method | Route                    | Handler                   | Auth | Description                                               |
 | ------ | ------------------------ | ------------------------- | ---- | --------------------------------------------------------- |
-| GET    | `/streams/health`        | `GetAllStreamsHealth`     | ✅   | Get detailed health status of all RTSP streams            |
-| GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream      |
-| GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts |
-| GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE                   |
+| GET    | `/streams/health`        | `GetAllStreamsHealth`     | ✅   | Get detailed health status of all RTSP streams (settings-only; URLs sanitized)        |
+| GET    | `/streams/health/:url`   | `GetStreamHealth`         | ✅   | Get detailed health status of a specific RTSP stream (settings-only; URLs sanitized)  |
+| GET    | `/streams/status`        | `GetStreamsStatusSummary` | ✅   | Get high-level summary of all stream statuses with counts (settings-only)             |
+| GET    | `/streams/health/stream` | `StreamHealthUpdates`     | ✅⚡ | Real-time stream health updates via SSE (settings page, not dashboard)                |
 
 ### Quiet Hours Status (`quiet_hours.go`)
 
 | Method | Route                         | Handler               | Auth | Description                                               |
 | ------ | ----------------------------- | --------------------- | ---- | --------------------------------------------------------- |
-| GET    | `/streams/quiet-hours/status` | `GetQuietHoursStatus` | ✅   | Get current quiet hours suppression state for all sources |
+| GET    | `/streams/quiet-hours/status` | `GetQuietHoursStatus` | ❌   | Get current quiet hours suppression state for all sources (URLs sanitized). Used by dashboard "Currently Hearing" card. |
 
 **Response Format:**
 

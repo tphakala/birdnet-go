@@ -21,8 +21,12 @@ type QuietHoursStatusResponse struct {
 
 // initQuietHoursRoutes registers quiet hours API routes.
 func (c *Controller) initQuietHoursRoutes() {
-	authMiddleware := c.authMiddleware
-	c.Group.GET("/streams/quiet-hours/status", c.GetQuietHoursStatus, authMiddleware)
+	// Public read-only endpoint: the dashboard's "Currently Hearing" card
+	// polls this to show whether any source is in a quiet-hours window.
+	// Stream URLs are sanitized via privacy.SanitizeStreamUrl before the
+	// response is serialized, so raw RTSP credentials are never leaked.
+	// Mirrors the PR #2763 pattern for other dashboard read-only endpoints.
+	c.Group.GET("/streams/quiet-hours/status", c.GetQuietHoursStatus)
 }
 
 // GetQuietHoursStatus returns the current quiet hours suppression state for all sources.

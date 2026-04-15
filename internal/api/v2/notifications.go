@@ -160,25 +160,33 @@ func (c *Controller) SetupNotificationRoutes() {
 		},
 	}
 
-	// SSE endpoint for notification stream (authenticated, requires notification service)
-	c.Group.GET("/notifications/stream", c.StreamNotifications, c.authMiddleware, c.requireNotificationService, middleware.RateLimiterWithConfig(rateLimiterConfig))
+	// Public read-only endpoints: the dashboard's NotificationBell (list,
+	// unread count, live SSE updates) must work for guests when auth is
+	// enabled, matching the "dashboard is public read-only" design. See
+	// PR #2763 for the precedent with /settings/dashboard.
+	//
+	// Route priority: Echo matches static path segments before parameter
+	// routes ("/:id"), so /unread/count, /stream, and /check-ntfy-server
+	// always win over the /:id routes registered in the auth group below.
+	// Register these on the parent c.Group so they are NOT wrapped by
+	// c.authMiddleware.
+	c.Group.GET("/notifications", c.GetNotifications, c.requireNotificationService)
+	c.Group.GET("/notifications/unread/count", c.GetUnreadCount, c.requireNotificationService)
+	c.Group.GET("/notifications/stream", c.StreamNotifications,
+		c.requireNotificationService, middleware.RateLimiterWithConfig(rateLimiterConfig))
 
-	// REST endpoints for notification management (authenticated)
-	// All notification endpoints require authentication when security is enabled
+	// Auth-protected endpoints: per-item read, mutations, the test-notification
+	// trigger, and the NTFY connectivity probe (kept authed to avoid being
+	// used as an SSRF relay by unauthenticated callers).
 	notificationsGroup := c.Group.Group("/notifications", c.authMiddleware)
 
-	// Endpoints that require the notification service to be initialized
 	notifServiceGroup := notificationsGroup.Group("", c.requireNotificationService)
-	notifServiceGroup.GET("", c.GetNotifications)
 	notifServiceGroup.GET("/:id", c.GetNotification)
 	notifServiceGroup.PUT("/:id/read", c.MarkNotificationRead)
 	notifServiceGroup.PUT("/:id/acknowledge", c.MarkNotificationAcknowledged)
 	notifServiceGroup.DELETE("/:id", c.DeleteNotification)
-	notifServiceGroup.GET("/unread/count", c.GetUnreadCount)
 	notifServiceGroup.POST("/test/new-species", c.CreateTestNewSpeciesNotification)
 
-	// Endpoints that do NOT require the notification service
-	// NTFY server connectivity probe (authenticated)
 	notificationsGroup.GET("/check-ntfy-server", c.CheckNtfyServer)
 }
 
