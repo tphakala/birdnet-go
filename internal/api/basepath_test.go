@@ -44,6 +44,15 @@ func stripMiddlewareForTest(getSettings func() *conf.Settings) echo.MiddlewareFu
 						rest = "/"
 					}
 					req.URL.Path = rest
+					// Mirror production: also rewrite RawPath when set,
+					// so percent-encoded paths route correctly under test.
+					if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
+						raw := req.URL.RawPath[len(bp):]
+						if raw == "" {
+							raw = "/"
+						}
+						req.URL.RawPath = raw
+					}
 				}
 			}
 			return next(c)
