@@ -28,6 +28,9 @@ var (
 	// float32Pool is a global pool for float32 conversion buffers.
 	// See float32_pool.go for a note on why this is separate from buffer.Manager's pool.
 	float32Pool *Float32Pool
+	// volumeSuspendTracker manages volume-based analysis suspension for all sources
+	volumeSuspendTracker     *VolumeSuspendTracker
+	volumeSuspendTrackerOnce sync.Once
 )
 
 const (
@@ -161,6 +164,14 @@ func InitFloat32Pool() error {
 	return nil
 }
 
+// GetVolumeSuspendTracker returns the global volume suspend tracker, initializing it if needed.
+func GetVolumeSuspendTracker() *VolumeSuspendTracker {
+	volumeSuspendTrackerOnce.Do(func() {
+		volumeSuspendTracker = NewVolumeSuspendTracker()
+	})
+	return volumeSuspendTracker
+}
+
 // ReturnFloat32Buffer returns a float32 buffer to the pool if possible.
 // This should be called after the buffer is no longer needed.
 func ReturnFloat32Buffer(buffer []float32) {
@@ -175,6 +186,36 @@ func ReturnFloat32Buffer(buffer []float32) {
 // to control cancellation and deadlines.
 func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
 	log := GetLogger()
+	settings := conf.Setting()
+
+	// Check if low-noise auto-suspend is enabled for this source
+	sourceConfig := settings.Realtime.Audio.FindSourceByID(source)
+	if sourceConfig != nil && sourceConfig.LowNoiseAutoSleep.Enabled {
+		// Calculate current audio level from PCM data
+		audioLevel := calculateAudioLevel(data, source, sourceConfig.Name)
+
+		// Check if analysis should be suspended based on volume
+		tracker := GetVolumeSuspendTracker()
+		shouldSkip, reason := tracker.ShouldSuspendAnalysis(source, audioLevel.Level)
+
+		if shouldSkip {
+			// Record metric for skipped analysis
+			processMetricsMutex.RLock()
+			pm := processMetrics
+			processMetricsMutex.RUnlock()
+			if pm != nil {
+				pm.RecordAudioQueueOperation(source, "analysis_suspended", reason)
+			}
+
+			// Skip inference - audio data is not lost, just not analyzed
+			log.Debug("skipping analysis due to low audio level",
+				logger.String("source", source),
+				logger.Int("audio_level", audioLevel.Level),
+				logger.String("reason", reason))
+			return nil
+		}
+	}
+
 	// get current time to track processing time
 	predictStart := time.Now()
 

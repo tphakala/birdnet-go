@@ -1127,6 +1127,13 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 		return err
 	}
 
+	// Validate low-noise auto-suspend settings for each audio source
+	for i := range settings.Audio.Sources {
+		if err := validateLowNoiseAutoSuspendSettings(&settings.Audio.Sources[i].LowNoiseAutoSleep, settings.Audio.Sources[i].Name); err != nil {
+			return err
+		}
+	}
+
 	// Validate species settings
 	if err := validateSpeciesConfigSettings(&settings.Species); err != nil {
 		return err
@@ -1198,6 +1205,67 @@ func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 				Build()
 		}
 	}
+	return nil
+}
+
+// validateLowNoiseAutoSuspendSettings validates the low-noise auto-suspend settings for an audio source.
+func validateLowNoiseAutoSuspendSettings(settings *LowNoiseAutoSuspendSettings, sourceName string) error {
+	// Only validate if enabled
+	if !settings.Enabled {
+		return nil
+	}
+
+	// Validate suspend threshold (0-100)
+	if settings.SuspendThreshold < 0 || settings.SuspendThreshold > 100 {
+		return errors.Newf("low-noise auto-suspend threshold must be between 0 and 100, got %d for source %s", settings.SuspendThreshold, sourceName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "low-noise-suspend-threshold").
+			Context("source_name", sourceName).
+			Context("suspend_threshold", settings.SuspendThreshold).
+			Build()
+	}
+
+	// Validate resume threshold (0-100)
+	if settings.ResumeThreshold < 0 || settings.ResumeThreshold > 100 {
+		return errors.Newf("low-noise auto-resume threshold must be between 0 and 100, got %d for source %s", settings.ResumeThreshold, sourceName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "low-noise-resume-threshold").
+			Context("source_name", sourceName).
+			Context("resume_threshold", settings.ResumeThreshold).
+			Build()
+	}
+
+	// Resume threshold must be higher than suspend threshold (hysteresis)
+	if settings.ResumeThreshold <= settings.SuspendThreshold {
+		return errors.Newf("low-noise auto-resume threshold (%d) must be higher than suspend threshold (%d) for source %s to prevent oscillation", settings.ResumeThreshold, settings.SuspendThreshold, sourceName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "low-noise-threshold-hysteresis").
+			Context("source_name", sourceName).
+			Context("suspend_threshold", settings.SuspendThreshold).
+			Context("resume_threshold", settings.ResumeThreshold).
+			Build()
+	}
+
+	// Validate minimum suspend frames (must be positive)
+	if settings.MinSuspendFrames < 0 {
+		return errors.Newf("low-noise minimum suspend frames must be non-negative, got %d for source %s", settings.MinSuspendFrames, sourceName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "low-noise-min-suspend-frames").
+			Context("source_name", sourceName).
+			Context("min_suspend_frames", settings.MinSuspendFrames).
+			Build()
+	}
+
+	// Validate minimum resume frames (must be positive)
+	if settings.MinResumeFrames < 0 {
+		return errors.Newf("low-noise minimum resume frames must be non-negative, got %d for source %s", settings.MinResumeFrames, sourceName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "low-noise-min-resume-frames").
+			Context("source_name", sourceName).
+			Context("min_resume_frames", settings.MinResumeFrames).
+			Build()
+	}
+
 	return nil
 }
 

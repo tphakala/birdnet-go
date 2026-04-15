@@ -357,6 +357,7 @@ func (p *AudioPipelineService) restartAudioCapture() {
 // removeAllSources removes all audio sources from the engine.
 // The operation parameter is used for log messages to distinguish callers.
 func (p *AudioPipelineService) removeAllSources(operation string) {
+	tracker := GetVolumeSuspendTracker()
 	for _, src := range p.engine.Registry().List() {
 		if err := p.engine.RemoveSource(src.ID); err != nil {
 			GetLogger().Warn("failed to remove source",
@@ -364,6 +365,8 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 				logger.Error(err),
 				logger.String("operation", operation))
 		}
+		// Clean up volume suspend tracking for removed source
+		tracker.RemoveSource(src.ID)
 	}
 }
 
@@ -403,6 +406,9 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	// Register buffer, audio level, and sound level consumers for all sources.
 	p.registerConsumersForSources(sourceIDs, sourceModelMap, audioLevelChan, operation)
 	p.registerSoundLevelConsumers(sourceIDs, operation)
+
+	// Initialize volume suspend tracking for sources with low-noise auto-suspend enabled
+	p.initializeVolumeSuspendTracking(sourceIDs, operation)
 
 	// Update buffer monitors for the new sources.
 	if len(sourceIDs) > 0 {
@@ -609,6 +615,26 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				}
 			}
 		})
+	}
+}
+
+// initializeVolumeSuspendTracking initializes volume-based suspend tracking
+// for sources that have low-noise auto-suspend enabled in their configuration.
+func (p *AudioPipelineService) initializeVolumeSuspendTracking(sourceIDs []string, operation string) {
+	log := GetLogger()
+	settings := conf.Setting()
+	tracker := GetVolumeSuspendTracker()
+
+	for _, sid := range sourceIDs {
+		srcCfg := settings.Realtime.Audio.FindSourceByID(sid)
+		if srcCfg != nil && srcCfg.LowNoiseAutoSleep.Enabled {
+			tracker.InitializeSource(sid, srcCfg.LowNoiseAutoSleep)
+			log.Info("initialized volume suspend tracking for source",
+				logger.String("source_id", sid),
+				logger.Int("suspend_threshold", srcCfg.LowNoiseAutoSleep.SuspendThreshold),
+				logger.Int("resume_threshold", srcCfg.LowNoiseAutoSleep.ResumeThreshold),
+				logger.String("operation", operation))
+		}
 	}
 }
 

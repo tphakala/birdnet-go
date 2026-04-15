@@ -87,15 +87,27 @@ type SoundLevelSettings struct {
 	DebugRealtimeLogging bool `yaml:"debug_realtime_logging" mapstructure:"debug_realtime_logging" json:"debugRealtimeLogging"` // true to log debug messages for every realtime update, false to log only at configured interval
 }
 
+// LowNoiseAutoSuspendSettings configures automatic analysis suspension during low-noise periods.
+// When enabled, analysis is paused when audio level drops below SuspendThreshold and resumes
+// when it rises above ResumeThreshold, reducing unnecessary computation during quiet periods.
+type LowNoiseAutoSuspendSettings struct {
+	Enabled          bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                            // Enable automatic suspension during low noise
+	SuspendThreshold int  `yaml:"suspendthreshold" json:"suspendThreshold" mapstructure:"suspendThreshold"` // Audio level (0-100) below which to suspend analysis
+	ResumeThreshold  int  `yaml:"resumethreshold" json:"resumeThreshold" mapstructure:"resumeThreshold"`    // Audio level (0-100) above which to resume analysis
+	MinSuspendFrames int  `yaml:"minsuspendframes" json:"minSuspendFrames" mapstructure:"minSuspendFrames"` // Minimum consecutive low-volume frames before suspending (default: 3)
+	MinResumeFrames  int  `yaml:"minresumeframes" json:"minResumeFrames" mapstructure:"minResumeFrames"`    // Minimum consecutive high-volume frames before resuming (default: 2)
+}
+
 // AudioSourceConfig represents a single audio capture device with per-source settings.
 type AudioSourceConfig struct {
-	Name       string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard Mic"
-	Device     string             `yaml:"device" json:"device" mapstructure:"device"`                              // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
-	Gain       float64            `yaml:"gain" json:"gain" mapstructure:"gain"`                                    // Input gain in dB (0 = no adjustment)
-	Model      string             `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`             // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
-	Models     []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this source (e.g., ["birdnet", "perch_v2"])
-	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-source EQ (nil = use global)
-	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Per-source quiet hours
+	Name              string                      `yaml:"name" json:"name" mapstructure:"name"`                                        // Required: descriptive name like "Front Yard Mic"
+	Device            string                      `yaml:"device" json:"device" mapstructure:"device"`                                  // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
+	Gain              float64                     `yaml:"gain" json:"gain" mapstructure:"gain"`                                        // Input gain in dB (0 = no adjustment)
+	Model             string                      `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`                 // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
+	Models            []string                    `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`              // Model IDs for this source (e.g., ["birdnet", "perch_v2"])
+	Equalizer         *EqualizerSettings          `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"`     // Per-source EQ (nil = use global)
+	QuietHours        QuietHoursConfig            `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                      // Per-source quiet hours
+	LowNoiseAutoSleep LowNoiseAutoSuspendSettings `yaml:"lownoiseautosleep" json:"lowNoiseAutoSleep" mapstructure:"lowNoiseAutoSleep"` // Low-noise auto-suspend settings
 }
 
 type AudioSettings struct {
