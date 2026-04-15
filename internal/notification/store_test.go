@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -166,4 +167,83 @@ func TestInMemoryStoreDelete(t *testing.T) {
 	// Delete unread notification - count should decrease
 	mustStoreDelete(t, store, notif1.ID)
 	assertStoreUnreadCount(t, store, 0, "Unread count after deleting unread notification")
+}
+
+// TestInMemoryStoreUnreadCountExcludesToasts locks in that toast-flagged
+// notifications are not counted by GetUnreadCount. Regression guard: the
+// previous counter-based implementation blindly incremented on every Save,
+// which caused the guest NotificationBell badge to include ephemeral toasts
+// even though they never appeared in the list view.
+func TestInMemoryStoreUnreadCountExcludesToasts(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+
+	regular := NewNotification(TypeDetection, PriorityHigh, "Detection", "body")
+	mustStoreSave(t, store, regular)
+
+	toast := NewNotification(TypeInfo, PriorityLow, "Toast", "toast body").
+		WithMetadata(MetadataKeyIsToast, true)
+	mustStoreSave(t, store, toast)
+
+	// GetUnreadCount must count only the non-toast unread notification.
+	assertStoreUnreadCount(t, store, 1, "toast must not be counted in unread")
+
+	// Opt-in via Count with IncludeToasts still sees the toast when asked.
+	total, err := store.Count(&FilterOptions{
+		Status:        []Status{StatusUnread},
+		IncludeToasts: true,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, 2, total, "IncludeToasts must surface toast entries")
+}
+
+// TestInMemoryStoreCountWithFilter exercises the typed Count method directly,
+// covering the filter paths callers rely on (type-only, status-only, empty,
+// and IncludeToasts opt-in).
+func TestInMemoryStoreCountWithFilter(t *testing.T) {
+	t.Parallel()
+
+	store := NewInMemoryStore(100)
+
+	detectionUnread := NewNotification(TypeDetection, PriorityHigh, "Det unread", "body")
+	detectionRead := NewNotification(TypeDetection, PriorityHigh, "Det read", "body")
+	detectionRead.MarkAsRead()
+	errorUnread := NewNotification(TypeError, PriorityCritical, "Err", "body")
+	toast := NewNotification(TypeInfo, PriorityLow, "Toast", "body").
+		WithMetadata(MetadataKeyIsToast, true)
+
+	for _, n := range []*Notification{detectionUnread, detectionRead, errorUnread, toast} {
+		mustStoreSave(t, store, n)
+	}
+
+	cases := []struct {
+		name   string
+		filter *FilterOptions
+		want   int
+	}{
+		{"nil filter excludes toast", nil, 3},
+		{"empty filter excludes toast", &FilterOptions{}, 3},
+		{"detection only", &FilterOptions{Types: []Type{TypeDetection}}, 2},
+		{"unread only", &FilterOptions{Status: []Status{StatusUnread}}, 2},
+		{"detection + unread", &FilterOptions{
+			Types:  []Type{TypeDetection},
+			Status: []Status{StatusUnread},
+		}, 1},
+		{"include toasts", &FilterOptions{IncludeToasts: true}, 4},
+		{"include toasts + unread", &FilterOptions{
+			Status:        []Status{StatusUnread},
+			IncludeToasts: true,
+		}, 3},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := store.Count(tc.filter)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, got)
+		})
+	}
 }
