@@ -19,17 +19,11 @@ import (
 const (
 	// suppressionReminderInterval is the INITIAL interval between repeated
 	// reminders while a provider is still failing. The effective interval
-	// doubles on each reminder (see reminderIntervalMultiplier and
+	// doubles on each reminder (see nextReminderInterval and
 	// maxSuppressionReminderInterval) so a long-lived outage does not keep
 	// generating one Sentry event every five minutes. Starting at five minutes
 	// keeps the first reminder actionable for an operator.
 	suppressionReminderInterval = 5 * time.Minute
-
-	// reminderIntervalMultiplier controls how aggressively the reminder
-	// interval grows between successive reports. A value of 2 produces the
-	// classic 5m → 10m → 20m → 40m → ... schedule, which caps at the
-	// maxSuppressionReminderInterval ceiling below.
-	reminderIntervalMultiplier = 2
 
 	// maxSuppressionReminderInterval caps the exponential growth. Twenty-four
 	// hours keeps the rate of Sentry events at roughly once per day for long
@@ -158,9 +152,11 @@ func nextReminderInterval(reportCount int) time.Duration {
 		return suppressionReminderInterval
 	}
 
-	// Exponential growth in discrete steps via bit-shift. Cap the shift at
-	// a conservative bound to prevent integer overflow; beyond ~20 shifts we
-	// would already be far past maxSuppressionReminderInterval anyway.
+	// Exponential growth via bit-shift — multiplier is hard-coded to 2 for a
+	// 5m → 10m → 20m → 40m → ... schedule. Cap the shift at a bound that
+	// comfortably exceeds
+	// maxSuppressionReminderInterval to avoid any chance of signed-int
+	// overflow if reportCount grows unbounded during a very long outage.
 	const maxShift = 20
 	shift := reportCount - 1
 	if shift > maxShift {
@@ -168,19 +164,6 @@ func nextReminderInterval(reportCount int) time.Duration {
 	}
 
 	multiplier := int64(1) << shift
-	// Only allow the configured multiplier base to shape growth: e.g., with
-	// reminderIntervalMultiplier=2 the multiplier is exactly 2^shift. Keeping
-	// it configurable avoids hard-coding the factor in two places.
-	if reminderIntervalMultiplier != 2 && shift > 0 {
-		multiplier = 1
-		for range shift {
-			multiplier *= int64(reminderIntervalMultiplier)
-			if multiplier < 0 || time.Duration(multiplier)*suppressionReminderInterval > maxSuppressionReminderInterval {
-				return maxSuppressionReminderInterval
-			}
-		}
-	}
-
 	interval := time.Duration(multiplier) * suppressionReminderInterval
 	if interval <= 0 || interval > maxSuppressionReminderInterval {
 		return maxSuppressionReminderInterval

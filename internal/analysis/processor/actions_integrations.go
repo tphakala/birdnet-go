@@ -108,8 +108,10 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 		// Circuit breaker open/half-open: the BirdWeather client's breaker
 		// has short-circuited this upload because the upstream service is
 		// currently flapping. This is an operational throttle state, not a
-		// code bug. Log at debug and return a retryable CategoryLimit error
-		// so the job queue backs off without generating Sentry noise.
+		// code bug. Return the sentinel unchanged so the job queue still
+		// retries (any non-nil error triggers retry with backoff) while
+		// shouldReportToSentry suppresses it via the notification-component
+		// filter — wrapping here would hide the sentinel from that filter.
 		if errors.Is(err, notification.ErrCircuitBreakerOpen) || errors.Is(err, notification.ErrTooManyRequests) {
 			GetLogger().Debug("BirdWeather upload short-circuited: circuit breaker open",
 				logger.String("component", "analysis.processor.actions"),
@@ -117,13 +119,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 				logger.String("species", a.Result.Species.CommonName),
 				logger.String("scientific_name", a.Result.Species.ScientificName),
 				logger.String("operation", "birdweather_upload_breaker_open"))
-			return errors.New(err).
-				Component("analysis.processor").
-				Category(errors.CategoryLimit).
-				Context("operation", "birdweather_upload").
-				Context("integration", "birdweather").
-				Context("retryable", true).
-				Build()
+			return err
 		}
 
 		// Transient network errors (DNS, timeout, connection issues) are expected

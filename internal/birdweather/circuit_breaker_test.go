@@ -181,6 +181,35 @@ func TestBwClient_CircuitBreaker_Nil_OK(t *testing.T) {
 	assert.Equal(t, notification.StateClosed, c.CircuitBreakerState())
 }
 
+// TestBwClient_CircuitBreaker_MalformedUploadResponseTripsBreaker verifies
+// that parseSoundscapeResponse() failures (HTML served with 201, invalid
+// JSON, success:false payloads) count as breaker failures. Without this,
+// a degraded upstream returning 201s with broken bodies would silently pass
+// the closure's HTTP checks while clients kept hammering the endpoint.
+func TestBwClient_CircuitBreaker_MalformedUploadResponseTripsBreaker(t *testing.T) {
+	t.Parallel()
+
+	// Respond with 201 Created but an invalid JSON body — handleHTTPResponse
+	// accepts the status code, but parseSoundscapeResponse fails.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = fmt.Fprint(w, `<html><body>gateway timeout</body></html>`)
+	}))
+	defer server.Close()
+
+	cfg := newCBTestConfig()
+	client := newCBTestClient(t, server, cfg)
+
+	for range cfg.MaxFailures {
+		_, err := client.UploadSoundscape("2024-01-01T00:00:00.000+0000", []byte{0, 0, 0, 0})
+		require.Error(t, err, "malformed response must surface as error")
+	}
+
+	assert.Equal(t, notification.StateOpen, client.CircuitBreakerState(),
+		"parseSoundscapeResponse failures must trip the breaker — otherwise a degraded upstream returning 201s with broken bodies would silently pass the closure")
+}
+
 // TestBwClient_CircuitBreaker_NotFoundDoesNotTrip verifies that 422 species
 // validation errors (CategoryNotFound — expected when a non-bird species is
 // sent to BirdWeather) do NOT count toward the breaker. Without this guard
