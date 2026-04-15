@@ -622,8 +622,7 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 		logger.String("url", maskedURL),
 		logger.String("format", audioExt))
 	var (
-		responseBody     []byte
-		soundscapeStatus int
+		responseBody []byte
 		// nonTransientErr carries business-logic errors (e.g. CategoryNotFound
 		// species validation 422s) out of the breaker closure without tripping
 		// the breaker. These are expected operational outcomes, not failures
@@ -665,7 +664,17 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 			return handleErr
 		}
 		responseBody = body
-		soundscapeStatus = resp.StatusCode
+
+		// Validate the response inside the closure so that malformed bodies
+		// (HTML with 201, invalid JSON, success:false payloads) count as
+		// failures against the circuit breaker — otherwise a degraded
+		// upstream could silently pass the closure and never trip the
+		// breaker.
+		id, parseErr := parseSoundscapeResponse(body, maskedURL, resp.StatusCode)
+		if parseErr != nil {
+			return parseErr
+		}
+		soundscapeID = id
 		return nil
 	})
 	if nonTransientErr != nil {
@@ -685,12 +694,6 @@ func (b *BwClient) UploadSoundscape(timestamp string, pcmData []byte) (soundscap
 
 	if b.Settings.Realtime.Birdweather.Debug {
 		log.Debug("Soundscape response body", logger.String("body", string(responseBody)))
-	}
-
-	// Parse and validate response
-	soundscapeID, err = parseSoundscapeResponse(responseBody, maskedURL, soundscapeStatus)
-	if err != nil {
-		return "", err
 	}
 
 	log.Info("Soundscape uploaded successfully",
