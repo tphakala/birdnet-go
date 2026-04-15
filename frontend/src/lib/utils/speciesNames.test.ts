@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import {
   buildSpeciesNameMaps,
-  looksLikeScientificName,
   resolveSpeciesDisplayNames,
   resolveSpeciesQuery,
   isSpeciesInList,
@@ -174,52 +173,6 @@ describe('isSpeciesInList', () => {
   it('returns false when species is not in list at all', () => {
     const list = ['Tawny Owl'];
     expect(isSpeciesInList('Great Tit', list, maps)).toBe(false);
-  });
-});
-
-describe('looksLikeScientificName', () => {
-  it('accepts two-word Latin binomial with capitalised genus', () => {
-    expect(looksLikeScientificName('Strix aluco')).toBe(true);
-    expect(looksLikeScientificName('Turdus merula')).toBe(true);
-  });
-
-  it('rejects single-word capitalised tokens so they fall through to the common-name resolver', () => {
-    // Short capitalised words like "Owl" or "Tit" are common English names,
-    // not binomials. They must not bypass common-name lookup.
-    expect(looksLikeScientificName('Owl')).toBe(false);
-    expect(looksLikeScientificName('Tit')).toBe(false);
-    expect(looksLikeScientificName('Pito')).toBe(false);
-    // Even a genuine genus name like "Turdus" should fall through; the
-    // resolver can still forward it to the backend for partial matching.
-    expect(looksLikeScientificName('Turdus')).toBe(false);
-  });
-
-  it('rejects binomials where the species epithet is not all lowercase', () => {
-    // Species epithets in binomial nomenclature are always lowercase.
-    expect(looksLikeScientificName('Strix Aluco')).toBe(false);
-    expect(looksLikeScientificName('Parus MAJOR')).toBe(false);
-  });
-
-  it('rejects lowercase first letter', () => {
-    expect(looksLikeScientificName('turdus merula')).toBe(false);
-  });
-
-  it('rejects common names with three or more tokens', () => {
-    expect(looksLikeScientificName('Eurasian Blue Tit')).toBe(false);
-  });
-
-  it('rejects non-ASCII common names', () => {
-    expect(looksLikeScientificName('Lehtopöllö')).toBe(false);
-    expect(looksLikeScientificName('Mésange charbonnière')).toBe(false);
-  });
-
-  it('rejects empty or whitespace-only input', () => {
-    expect(looksLikeScientificName('')).toBe(false);
-    expect(looksLikeScientificName('   ')).toBe(false);
-  });
-
-  it('rejects strings with digits', () => {
-    expect(looksLikeScientificName('Turdus 2')).toBe(false);
   });
 });
 

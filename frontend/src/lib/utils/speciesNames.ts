@@ -121,39 +121,6 @@ export function resolveSpeciesDisplayNames(
 }
 
 /**
- * Heuristic check whether a query string looks like a full Latin binomial
- * (e.g. "Turdus merula", "Parus major"). Used to skip common-name resolution
- * for inputs that already look like a binomial.
- *
- * Rules:
- *   - ASCII letters, spaces, and hyphens only (no diacritics, no digits)
- *   - Exactly two whitespace-separated tokens
- *   - First token (genus) starts with an uppercase letter
- *   - Second token (species epithet) is entirely lowercase, matching
- *     standard binomial nomenclature
- *
- * Single-word capitalised inputs like "Owl", "Tit", or even "Turdus" are
- * rejected so they fall through to the common-name resolver, which can
- * still pass them to the backend for partial scientific-name matching.
- */
-export function looksLikeScientificName(input: string): boolean {
-  const trimmed = input.trim();
-  if (!trimmed) return false;
-
-  // Reject anything with diacritics, digits, or unexpected punctuation.
-  if (!/^[A-Za-z][A-Za-z\- ]*$/.test(trimmed)) return false;
-
-  const tokens = trimmed.split(/\s+/);
-  if (tokens.length !== 2) return false;
-
-  const firstChar = tokens[0]?.charAt(0) ?? '';
-  if (firstChar < 'A' || firstChar > 'Z') return false;
-
-  const secondToken = tokens[1] ?? '';
-  return secondToken.length > 0 && secondToken === secondToken.toLowerCase();
-}
-
-/**
  * Resolve a free-text species query (common name or scientific name) to a
  * scientific name suitable for the backend search filter, using a prebuilt
  * species name map (derived from /api/v2/species/all, which follows the

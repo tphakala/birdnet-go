@@ -330,6 +330,10 @@
       if (speciesSearchTerm.trim() !== '') {
         const locale = $birdnetSettings?.locale ?? 'en';
         const maps = await ensureSpeciesNameMapsCache(locale);
+        // Drop stale results: a newer search may have started while we were
+        // waiting on the species map; firing the backend request anyway
+        // would race the newer call.
+        if (searchId !== currentSearchId) return;
         resolvedSpecies = resolveSpeciesQuery(speciesSearchTerm, maps);
       }
 
