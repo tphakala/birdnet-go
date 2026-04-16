@@ -214,20 +214,26 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	current := conf.GetSettings()
+	// Read the controller-cached snapshot when set (tests inject this
+	// directly); fall back to the global publisher. In production these are
+	// the same pointer at boot and stay in sync because every successful
+	// publish below updates both c.Settings and conf.settingsInstance.
+	current := c.getSettingsOrFallback()
 	if current == nil {
-		// Fallback: initialise the global settings once if not yet loaded.
-		current = conf.Setting()
-		if current == nil {
-			c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Build a mutable clone; never mutate current in place. Readers holding
 	// current through conf.GetSettings continue to see a consistent snapshot
 	// until StoreSettings publishes the new one.
 	updated := conf.CloneSettings(current)
+
+	// Only publish to the global atomic pointer when this controller is the
+	// one that owns it (production path). In tests that inject a controller-
+	// local *conf.Settings without touching the global, skip the publish so
+	// we don't leak state into other tests.
+	publishGlobal := current == conf.GetSettings()
 
 	// Parse the request body
 	var updatedSettings conf.Settings
@@ -274,23 +280,37 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid settings", http.StatusBadRequest)
 	}
 
-	// Publish the new snapshot atomically. Readers via conf.GetSettings
-	// immediately see this version; existing pointer holders stay on the old.
-	conf.StoreSettings(updated)
+	// Publish the new snapshot. conf.StoreSettings publishes atomically to
+	// the global (readers via conf.GetSettings immediately see this version;
+	// existing pointer holders stay on the old). c.Settings updates the
+	// controller-cached pointer so read handlers that still dereference
+	// c.Settings (GetAllSettings, GetDashboardSettings, etc.) return the
+	// freshly published snapshot. The write is safe under c.settingsMutex
+	// which all c.Settings readers also acquire.
+	if publishGlobal {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
 
 	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
 	// against the published pair. handleSettingsChanges is read-only on both.
 	if err := c.handleSettingsChanges(current, updated); err != nil {
 		// Rollback: republish the previous snapshot so in-memory state matches
 		// what is on disk (which was never overwritten).
-		conf.StoreSettings(current)
+		if publishGlobal {
+			conf.StoreSettings(current)
+		}
+		c.Settings = current
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	if err := conf.SaveSettings(); err != nil {
 		// Rollback in-memory; disk write never happened successfully.
-		conf.StoreSettings(current)
+		if publishGlobal {
+			conf.StoreSettings(current)
+		}
+		c.Settings = current
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
@@ -544,7 +564,13 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 	return requestBody, nil
 }
 
-// UpdateSectionSettings handles PATCH /api/v2/settings/:section
+// UpdateSectionSettings handles PATCH /api/v2/settings/:section.
+//
+// Uses the same copy-on-write flow as UpdateSettings: clone the current
+// *conf.Settings snapshot, apply the section merge to the clone, validate,
+// and publish via conf.StoreSettings. Rollback on failure republishes the
+// previous snapshot. Keeps PATCH race-free against basepath middleware reads
+// and any other reader that goes through conf.GetSettings().
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -554,12 +580,19 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	settings := c.getSettingsOrFallback()
-	if settings == nil {
+	current := c.getSettingsOrFallback()
+	if current == nil {
 		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
-	oldSettings := *settings
+	// Build a mutable clone; never mutate current in place. Readers holding
+	// current through conf.GetSettings keep seeing a consistent snapshot
+	// until StoreSettings publishes the new one.
+	updated := conf.CloneSettings(current)
+
+	// Only publish globally when the controller owns the global snapshot
+	// (production path); skip when tests inject a standalone c.Settings.
+	publishGlobal := current == conf.GetSettings()
 
 	requestBody, err := parseAndValidateJSON(ctx)
 	if err != nil {
@@ -567,49 +600,59 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	}
 
 	var skippedFields []string
-	if err := updateSettingsSectionWithTracking(settings, section, requestBody, &skippedFields); err != nil {
+	if err := updateSettingsSectionWithTracking(updated, section, requestBody, &skippedFields); err != nil {
 		if len(skippedFields) > 0 {
 			c.Debug("Protected fields that were skipped in update of section %s: %s", section, strings.Join(skippedFields, ", "))
 		}
 		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 	}
 
-	// Restore redacted secret fields to their current values so the
-	// merge does not overwrite real secrets with the placeholder.
-	if err := restoreRedactedSecrets(&oldSettings, settings); err != nil {
-		*settings = oldSettings
+	// Restore redacted secret fields to their current values so the merge
+	// does not overwrite real secrets with the placeholder. current is the
+	// source of truth for the pre-update values.
+	if err := restoreRedactedSecrets(current, updated); err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
-	// This handles the case where the frontend sends coordinates without the flag,
-	// and provides backward compatibility with older frontend versions.
+	// Backward compatibility with older frontends that don't send the flag.
 	if strings.EqualFold(section, SettingsSectionBirdnet) {
-		if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
-			settings.BirdNET.LocationConfigured = true
+		if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
+			updated.BirdNET.LocationConfigured = true
 		}
 	}
 
-	// Migrate legacy single audio source if a cached frontend sent it
-	settings.MigrateAudioSourceConfig()
+	// Migrate legacy single audio source if a cached frontend sent it.
+	updated.MigrateAudioSourceConfig()
 
-	// Run full settings validation after section merge to catch invalid values
-	// (e.g., malformed telemetry listen address, invalid port ranges, etc.)
-	if err := conf.ValidateSettings(settings); err != nil {
-		*settings = oldSettings
+	// Validate the clone before publishing. No rollback needed on validation
+	// failure: we simply never publish.
+	if err := conf.ValidateSettings(updated); err != nil {
 		return c.HandleError(ctx, err,
 			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 	}
 
-	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
-		*settings = oldSettings
+	// Publish the new snapshot atomically when we own the global.
+	if publishGlobal {
+		conf.StoreSettings(updated)
+	}
+	c.Settings = updated
+
+	if err := c.handleSettingsChanges(current, updated); err != nil {
+		if publishGlobal {
+			conf.StoreSettings(current)
+		}
+		c.Settings = current
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	if !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
-			*settings = oldSettings
+			if publishGlobal {
+				conf.StoreSettings(current)
+			}
+			c.Settings = current
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
 	}
@@ -617,7 +660,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 
 	// Rebuild taxonomy synonym lookup cache if overrides changed
-	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, settings.BirdNET.Labels)
+	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       fmt.Sprintf("%s settings updated successfully", section),
