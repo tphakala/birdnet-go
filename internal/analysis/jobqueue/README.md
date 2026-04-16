@@ -178,8 +178,7 @@ queue.Stop()
 
 1. **Queue Size**: Set appropriate queue size limits based on memory constraints
 2. **Retry Policy**: Configure retry policies based on the nature of the work
-3. **Archive Limits**: Set appropriate archive limits to prevent memory leaks
-4. **Processing Interval**: Adjust the processing interval based on workload characteristics
+3. **Processing Interval**: Adjust the processing interval based on workload characteristics
 
 ### Monitoring
 
@@ -209,7 +208,7 @@ backoff *= jitterFactor
 The queue implements several mechanisms to manage memory:
 
 1. **Maximum Queue Size**: Limits the number of pending jobs
-2. **Archive Limit**: Limits the number of completed/failed jobs kept in memory
+2. **Completed-Job Discard**: Completed and failed jobs are dropped from the active queue on the next cleanup tick, making their Action payloads eligible for garbage collection
 3. **Job Dropping**: Can drop oldest jobs when the queue is full
 
 ### Panic Recovery

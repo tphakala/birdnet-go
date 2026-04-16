@@ -630,7 +630,6 @@ internal/analysis/jobqueue/
 - **Retry with Exponential Backoff**: Configurable retry policies per action type
 - **Graceful Degradation**: Failed jobs don't block new detections
 - **Queue Limits**: Bounded queue prevents memory exhaustion (default: 1000 jobs)
-- **Job Archival**: Completed/failed jobs archived for debugging (max 100)
 - **Statistics Tracking**: Per-action success/failure rates
 
 **Action Types** (internal/analysis/processor/actions.go):
@@ -661,7 +660,7 @@ Detection → ProcessDetection() → CreateActions() → EnqueueTask()
                                    ↓                                   ↓
                             Success/Failure            Exponential Backoff
                                    ↓                                   ↓
-                            Archive Job              Retry or Mark Failed
+                            Drop Job                 Retry or Mark Failed
 ```
 
 **Retry Configuration:**
@@ -684,8 +683,8 @@ type RetryConfig struct {
 2. EnqueueTask() adds job to queue (non-blocking)
 3. Job executes in background goroutine
 4. If upload fails (network error): retry after 5s, then 10s, then 20s
-5. If max retries exceeded: mark as failed, log error, archive job
-6. Success: archive job with success status
+5. If max retries exceeded: mark as failed, log error, drop job
+6. Success: drop job with success status
 
 **CompositeAction for Sequential Execution:**
 
@@ -798,7 +797,6 @@ BirdNET-Go uses a job queue system for concurrent action processing:
 // Initialize job queue with capacity and options
 processor.JobQueue = jobqueue.NewJobQueueWithOptions(
     1000,  // maxJobs: queue capacity
-    100,   // maxArchivedJobs: keep completed jobs for debugging
     false, // logAllSuccesses: only log retries by default
 )
 
@@ -828,7 +826,7 @@ The job queue runs a background goroutine that:
 1. Checks for jobs ready to execute (pending or retrying after backoff)
 2. Executes actions in separate goroutines (concurrent execution)
 3. Handles retry logic with exponential backoff on failure
-4. Archives completed/failed jobs for debugging
+4. Drops completed and failed jobs from the active queue so their Action payloads become GC-eligible
 5. Respects queue capacity limits to prevent memory exhaustion
 
 **Graceful Shutdown:**
