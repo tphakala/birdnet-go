@@ -31,8 +31,7 @@ func (a *BirdNETAnalyzer) Name() string {
 	return birdNETAnalyzerName
 }
 
-// Start initializes the BirdNET interpreter, builds the species range filter,
-// and initializes the audio conversion pool.
+// Start initializes the BirdNET interpreter and builds the species range filter.
 // Model initialization failures are non-retryable (missing files, insufficient resources).
 func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 	bn, err := classifier.NewOrchestrator(a.settings)
@@ -50,15 +49,6 @@ func (a *BirdNETAnalyzer) Start(_ context.Context) error {
 			Component("analysis").
 			Category(errors.CategoryModelInit).
 			Context("operation", "build_range_filter").
-			Build()
-	}
-
-	if err := InitFloat32Pool(); err != nil {
-		bn.Delete()
-		return errors.New(err).
-			Component("analysis").
-			Category(errors.CategoryAudio).
-			Context("operation", "initialize_float32_pool").
 			Build()
 	}
 

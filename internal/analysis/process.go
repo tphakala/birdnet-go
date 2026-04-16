@@ -26,9 +26,6 @@ var (
 	processMetrics      *metrics.MyAudioMetrics // Global metrics instance for audio processing operations
 	processMetricsMutex sync.RWMutex            // Mutex for thread-safe access to processMetrics
 	processMetricsOnce  sync.Once               // Ensures metrics are only set once
-	// float32Pool is a global pool for float32 conversion buffers.
-	// See float32_pool.go for a note on why this is separate from buffer.Manager's pool.
-	float32Pool *Float32Pool
 )
 
 const (
@@ -148,26 +145,6 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 		defer processMetricsMutex.Unlock()
 		processMetrics = myAudioMetrics
 	})
-}
-
-// InitFloat32Pool initializes the global float32 pool for audio conversion.
-// This should be called during application startup.
-func InitFloat32Pool() error {
-	var err error
-	float32Pool, err = NewFloat32Pool(Float32BufferSize)
-	if err != nil {
-		return fmt.Errorf("failed to initialize float32 pool: %w", err)
-	}
-
-	return nil
-}
-
-// ReturnFloat32Buffer returns a float32 buffer to the pool if possible.
-// This should be called after the buffer is no longer needed.
-func ReturnFloat32Buffer(buf []float32) {
-	if float32Pool != nil && len(buf) == Float32BufferSize {
-		float32Pool.Put(buf)
-	}
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
