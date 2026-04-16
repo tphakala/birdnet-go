@@ -324,7 +324,11 @@ func (s *Server) setupMiddleware() {
 	// effect without a server restart.
 	s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			bp := ingressPath(c, s.settings)
+			// Read the current *conf.Settings through the atomic pointer so a
+			// settings hot-reload (CoW publish via conf.StoreSettings) takes
+			// effect for the next request without restart, and so readers
+			// never observe a torn view of the basepath field.
+			bp := ingressPath(c, conf.GetSettings())
 			if bp == "" {
 				return next(c)
 			}
@@ -388,7 +392,7 @@ func (s *Server) setupMiddleware() {
 	// proxy headers and config in priority order.
 	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			c.Set("basePath", ingressPath(c, s.settings))
+			c.Set("basePath", ingressPath(c, conf.GetSettings()))
 			return next(c)
 		}
 	})
@@ -724,7 +728,7 @@ func (s *Server) IsDevMode() bool {
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
-		return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
 	})
 
 	// Public routes (no authentication required)
@@ -853,7 +857,7 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 			logger.String("email", user.Email),
 		)
 		// User is already authenticated, redirect to dashboard
-		return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
 	}
 
 	// Begin OAuth flow - this will redirect to the provider
@@ -958,7 +962,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	)
 
 	// Redirect to dashboard after successful authentication
-	return c.Redirect(http.StatusFound, ingressPath(c, s.settings)+"/ui/dashboard")
+	return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
 }
 
 // isValidOAuthProvider checks if the provider name is a valid goth provider name.

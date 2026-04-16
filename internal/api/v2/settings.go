@@ -199,95 +199,104 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, sectionValue)
 }
 
-// UpdateSettings handles PUT /api/v2/settings
+// UpdateSettings handles PUT /api/v2/settings.
+//
+// The flow is copy-on-write: we clone the current *conf.Settings snapshot,
+// apply the inbound update to the clone, validate, and atomically publish the
+// clone via conf.StoreSettings. Readers on the hot path (e.g. the basepath
+// strip middleware in internal/api/server.go) see either the old snapshot or
+// the new one, never a torn view. Rollback after a validation or disk-write
+// failure is a republish of the previous snapshot.
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Attempting to update settings")
-	// Acquire write lock to prevent concurrent settings updates
+	// Serialise concurrent PUT /api/v2/settings calls; each must see the
+	// latest published snapshot as its baseline.
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	settings := c.Settings
-	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
+	current := conf.GetSettings()
+	if current == nil {
+		// Fallback: initialise the global settings once if not yet loaded.
+		current = conf.Setting()
+		if current == nil {
 			c.logAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
 			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 		}
 	}
 
-	// Create a backup of current settings for rollback if needed
-	oldSettings := *settings
+	// Build a mutable clone; never mutate current in place. Readers holding
+	// current through conf.GetSettings continue to see a consistent snapshot
+	// until StoreSettings publishes the new one.
+	updated := conf.CloneSettings(current)
 
 	// Parse the request body
 	var updatedSettings conf.Settings
 	if err := ctx.Bind(&updatedSettings); err != nil {
-		// Log binding error
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to bind request body for settings update", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	// Restore redacted secret fields to their current values so the
-	// update logic does not overwrite real secrets with the placeholder.
-	if err := restoreRedactedSecrets(settings, &updatedSettings); err != nil {
+	// Restore redacted secret fields to their current values so the update
+	// logic does not overwrite real secrets with the placeholder. Operate on
+	// updated (clone) as the canonical destination, not on current.
+	if err := restoreRedactedSecrets(updated, &updatedSettings); err != nil {
 		c.logAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
 		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 	}
 
-	// Update only the fields that are allowed to be changed
-	skippedFields, err := updateAllowedSettingsWithTracking(settings, &updatedSettings)
+	// Apply allowed field updates to the clone.
+	skippedFields, err := updateAllowedSettingsWithTracking(updated, &updatedSettings)
 	if err != nil {
-		// Log error during field update attempt
 		c.logAPIRequest(ctx, logger.LogLevelError, "Error updating allowed settings fields", logger.Error(err), logger.Any("skipped_fields", skippedFields))
 		return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 	}
 	if len(skippedFields) > 0 {
-		// Log skipped fields at Debug level
 		c.logAPIRequest(ctx, logger.LogLevelDebug, "Skipped protected fields during settings update", logger.Any("skipped_fields", skippedFields))
 	}
 
-	// Normalize species config keys to lowercase for case-insensitive matching
-	if settings.Realtime.Species.Config != nil {
-		settings.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(settings.Realtime.Species.Config)
+	// Normalize species config keys to lowercase for case-insensitive matching.
+	if updated.Realtime.Species.Config != nil {
+		updated.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(updated.Realtime.Species.Config)
 	}
 
 	// Ensure LocationConfigured is set when birdnet coordinates are present.
-	// This provides backward compatibility with older frontend versions that
-	// don't send the locationConfigured flag.
-	if settings.BirdNET.Latitude != 0 || settings.BirdNET.Longitude != 0 {
-		settings.BirdNET.LocationConfigured = true
+	// Backward compatibility with older frontends that don't send the flag.
+	if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
+		updated.BirdNET.LocationConfigured = true
 	}
 
-	// Migrate legacy single audio source if a cached frontend sent it
-	settings.MigrateAudioSourceConfig()
+	// Migrate legacy single audio source if a cached frontend sent it.
+	updated.MigrateAudioSourceConfig()
 
-	// Run full settings validation after field updates
-	if err := conf.ValidateSettings(settings); err != nil {
-		*settings = oldSettings
+	// Validate the clone before publishing. No rollback needed on validation
+	// failure: we simply never publish.
+	if err := conf.ValidateSettings(updated); err != nil {
 		return c.HandleError(ctx, err, "Invalid settings", http.StatusBadRequest)
 	}
 
-	// Check if any important settings have changed and trigger actions as needed
-	if err := c.handleSettingsChanges(&oldSettings, settings); err != nil {
-		// Attempt to rollback changes if applying them failed
-		*settings = oldSettings
+	// Publish the new snapshot atomically. Readers via conf.GetSettings
+	// immediately see this version; existing pointer holders stay on the old.
+	conf.StoreSettings(updated)
+
+	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
+	// against the published pair. handleSettingsChanges is read-only on both.
+	if err := c.handleSettingsChanges(current, updated); err != nil {
+		// Rollback: republish the previous snapshot so in-memory state matches
+		// what is on disk (which was never overwritten).
+		conf.StoreSettings(current)
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	// Save settings to disk
 	if err := conf.SaveSettings(); err != nil {
-		// Attempt to rollback changes if saving failed
-		*settings = oldSettings
+		// Rollback in-memory; disk write never happened successfully.
+		conf.StoreSettings(current)
 		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	// Update the cached telemetry state after settings change
 	telemetry.UpdateTelemetryEnabled()
-
-	// Rebuild taxonomy synonym lookup cache if overrides changed
-	imageprovider.SetCustomSynonyms(settings.TaxonomySynonyms, settings.BirdNET.Labels)
+	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
 	c.logAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully", logger.Int("skipped_fields_count", len(skippedFields)))
 	return ctx.JSON(http.StatusOK, map[string]any{
