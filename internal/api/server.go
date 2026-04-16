@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -101,6 +102,34 @@ func ingressPath(c echo.Context, settings *conf.Settings) string {
 		return strings.TrimRight(settings.WebServer.BasePath, "/")
 	}
 	return ""
+}
+
+// hasPercentEncodedPrefix reports whether rawPath begins with encodedPrefix,
+// matching the hex digits inside any %XX sequences case-insensitively so that
+// reverse proxies that forward lowercase hex (%c3%9c) still match Go's
+// canonical uppercase form (%C3%9C). All non-%-prefixed bytes are compared
+// byte-for-byte because URL path components are case-sensitive.
+// Returns the matched prefix length (in rawPath bytes), or -1 on mismatch.
+func hasPercentEncodedPrefix(rawPath, encodedPrefix string) int {
+	i := 0
+	for i < len(encodedPrefix) {
+		if i >= len(rawPath) {
+			return -1
+		}
+		if encodedPrefix[i] == '%' && rawPath[i] == '%' &&
+			i+2 < len(encodedPrefix) && i+2 < len(rawPath) {
+			if !strings.EqualFold(rawPath[i+1:i+3], encodedPrefix[i+1:i+3]) {
+				return -1
+			}
+			i += 3
+			continue
+		}
+		if rawPath[i] != encodedPrefix[i] {
+			return -1
+		}
+		i++
+	}
+	return i
 }
 
 // isSafePathPrefix validates that a path prefix (typically from a proxy header)
@@ -319,13 +348,25 @@ func (s *Server) setupMiddleware() {
 						rest = "/"
 					}
 					req.URL.Path = rest
-					// Also update RawPath if set (percent-encoded paths).
-					if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
-						raw := req.URL.RawPath[len(bp):]
-						if raw == "" {
-							raw = "/"
+					// Also update RawPath if set (percent-encoded paths). The
+					// decoded bp must be encoded before the prefix check
+					// because RawPath is always in escaped form; comparing a
+					// decoded prefix against an encoded string breaks for
+					// basepaths that require encoding (spaces, non-ASCII),
+					// leaving Path stripped and RawPath prefixed. Echo then
+					// sees mismatched Path/RawPath and may route inconsistently.
+					// hasPercentEncodedPrefix treats %XX hex digits
+					// case-insensitively so lowercase-hex-forwarding proxies
+					// also match. Fixes Forgejo #447.
+					if req.URL.RawPath != "" {
+						encodedBP := (&url.URL{Path: bp}).EscapedPath()
+						if n := hasPercentEncodedPrefix(req.URL.RawPath, encodedBP); n >= 0 {
+							raw := req.URL.RawPath[n:]
+							if raw == "" {
+								raw = "/"
+							}
+							req.URL.RawPath = raw
 						}
-						req.URL.RawPath = raw
 					}
 				}
 			}

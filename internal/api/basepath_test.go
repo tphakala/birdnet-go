@@ -6,6 +6,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -44,14 +45,21 @@ func stripMiddlewareForTest(getSettings func() *conf.Settings) echo.MiddlewareFu
 						rest = "/"
 					}
 					req.URL.Path = rest
-					// Mirror production: also rewrite RawPath when set,
-					// so percent-encoded paths route correctly under test.
-					if req.URL.RawPath != "" && strings.HasPrefix(req.URL.RawPath, bp) {
-						raw := req.URL.RawPath[len(bp):]
-						if raw == "" {
-							raw = "/"
+					// Mirror production: also rewrite RawPath when set.
+					// Encode bp before the prefix check so encoded basepaths
+					// (spaces, non-ASCII) route correctly, and use the shared
+					// hasPercentEncodedPrefix helper so lowercase-hex proxy
+					// forms match. Kept in lockstep with the production
+					// middleware in internal/api/server.go by hand.
+					if req.URL.RawPath != "" {
+						encodedBP := (&url.URL{Path: bp}).EscapedPath()
+						if n := hasPercentEncodedPrefix(req.URL.RawPath, encodedBP); n >= 0 {
+							raw := req.URL.RawPath[n:]
+							if raw == "" {
+								raw = "/"
+							}
+							req.URL.RawPath = raw
 						}
-						req.URL.RawPath = raw
 					}
 				}
 			}
@@ -178,6 +186,32 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			requestPath:  "/api/v2/health",
 			expectedPath: "/api/v2/health",
 		},
+		{
+			// Issue #447: RawPath is set on the parsed request only when the
+			// raw input differs from Go's default path encoding, e.g. when a
+			// proxy forwards non-canonical escape sequences (%2F for a slash
+			// or lowercase hex). In that case both URL.Path and URL.RawPath
+			// must be stripped in lockstep. Without the fix in Task 4 the
+			// HasPrefix check compares the decoded bp against the percent-
+			// encoded RawPath, fails for basepaths that require encoding, and
+			// leaves RawPath prefixed while Path is stripped.
+			//
+			// Space-in-basepath case: the %2F in the trailing segment forces
+			// RawPath to be non-empty so the bug path is actually exercised.
+			name:         "strips encoded basepath with space",
+			basePath:     "/birdnet go",
+			requestPath:  "/birdnet%20go/ui/a%2Fb",
+			expectedPath: "/ui/a/b",
+		},
+		{
+			// Non-ASCII basepath with lowercase hex encoding from the proxy.
+			// Go's default escape uses uppercase hex, so the raw input is
+			// non-canonical and RawPath is populated on the parsed request.
+			name:         "strips encoded basepath with non-ASCII",
+			basePath:     "/Übersicht",
+			requestPath:  "/%c3%9cbersicht/ui/dashboard",
+			expectedPath: "/ui/dashboard",
+		},
 	}
 
 	for _, tt := range tests {
@@ -186,6 +220,7 @@ func TestBasePathStripMiddleware(t *testing.T) {
 
 			settings := settingsWithBasePath(tt.basePath)
 			var capturedPath string
+			var capturedRawPath string
 			var capturedQuery string
 
 			e := echo.New()
@@ -196,6 +231,7 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			// Catch-all handler to capture the routed path
 			e.Any("/*", func(c echo.Context) error {
 				capturedPath = c.Request().URL.Path
+				capturedRawPath = c.Request().URL.RawPath
 				capturedQuery = c.Request().URL.RawQuery
 				return c.NoContent(http.StatusOK)
 			})
@@ -212,6 +248,18 @@ func TestBasePathStripMiddleware(t *testing.T) {
 			e.ServeHTTP(rec, req)
 
 			assert.Equal(t, tt.expectedPath, capturedPath, "path after stripping")
+			// RawPath must stay in sync with Path once stripping runs; otherwise
+			// Echo's router sees mismatched values and can route inconsistently.
+			// RawPath preserves the original encoding (e.g. %2F stays as %2F),
+			// so compare the decoded form rather than a literal match. Only
+			// checked when RawPath was populated on the parsed request (which
+			// happens only for non-canonically encoded request paths).
+			if capturedRawPath != "" {
+				decoded, err := url.PathUnescape(capturedRawPath)
+				require.NoError(t, err, "URL.RawPath after stripping must decode")
+				assert.Equal(t, tt.expectedPath, decoded,
+					"URL.RawPath, decoded, must match Path after stripping")
+			}
 			if strings.Contains(tt.requestPath, "?") {
 				assert.NotEmpty(t, capturedQuery, "query string should be preserved")
 			}
