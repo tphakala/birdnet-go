@@ -62,8 +62,9 @@ describe('detectionUrls', () => {
 
     it('includes numResults and offset when provided', () => {
       const url = buildSpeciesDetectionUrl('Turdus merula', '2026-04-15', 50, 10);
-      expect(url).toContain('numResults=50');
-      expect(url).toContain('offset=10');
+      expect(url).toBe(
+        '/ui/detections?queryType=species&species=Turdus+merula&date=2026-04-15&numResults=50&offset=10'
+      );
     });
   });
 
@@ -78,13 +79,16 @@ describe('detectionUrls', () => {
     it('prepends basepath when set', () => {
       setBasePath('/birdnet');
       const url = buildSpeciesHourUrl('Turdus merula', '2026-04-15', 7, 2);
-      expect(url.startsWith('/birdnet/ui/detections?')).toBe(true);
-      expect(url).toContain('species=Turdus+merula');
+      expect(url).toBe(
+        '/birdnet/ui/detections?queryType=species&species=Turdus+merula&date=2026-04-15&hour=7&duration=2'
+      );
     });
 
     it('encodes species names with non-ASCII characters', () => {
       const url = buildSpeciesHourUrl('Pöllö lajinimi', '2026-04-15', 7, 1);
-      expect(url).toContain('species=P%C3%B6ll%C3%B6+lajinimi');
+      expect(url).toBe(
+        '/ui/detections?queryType=species&species=P%C3%B6ll%C3%B6+lajinimi&date=2026-04-15&hour=7&duration=1'
+      );
     });
   });
 });
