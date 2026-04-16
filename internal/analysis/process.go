@@ -183,11 +183,17 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	results, err := bn.PredictModel(ctx, modelID, sampleData)
 	inferenceDuration := time.Since(inferenceStart)
 
-	// Return float32 buffer to pool after prediction. Safe because Predict
-	// copies the samples into the model's input tensor before returning.
-	// The Manager's lazy per-size pool map routes the slice back to the
-	// pool sized for its actual length, so non-standard sizes are handled
-	// too.
+	// Return float32 buffer to pool after prediction. The Manager's lazy
+	// per-size pool map routes the slice back to the pool sized for its
+	// actual length, so non-standard sizes are handled too.
+	//
+	// INVARIANT: bn.PredictModel must copy the samples into the model's
+	// input tensor before returning; it must not retain a reference to
+	// sampleData past Predict. The pool may hand the same backing array to
+	// another caller as soon as Put returns, so any retained reference
+	// would become a use-after-free. Classifier backends plugged into the
+	// Orchestrator are required to honour this contract; see
+	// internal/classifier for the implementing side.
 	if conf.BitDepth == 16 && len(sampleData) > 0 {
 		if pool := bufMgr.Float32Pool(len(sampleData[0])); pool != nil {
 			pool.Put(sampleData[0])
