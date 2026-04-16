@@ -1806,30 +1806,46 @@ func TestCompletedJobIsGarbageCollectable(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 
-	// Force GC. If the queue still retains the action (archive regression),
-	// the cleanup callback never runs.
-	for range 3 {
+	// Poll for the cleanup callback. runtime.AddCleanup is asynchronous with
+	// no fixed timing relative to runtime.GC(); the Go runtime may only queue
+	// callbacks during GC and run them later on a separate goroutine. Forcing
+	// GC plus yielding the scheduler on each iteration reliably drives the
+	// callback on slow CI where a fixed wait would flake.
+	require.Eventually(t, func() bool {
 		runtime.GC()
-	}
-
-	select {
-	case <-finalized:
-		// Action was reclaimed. Queue released its reference. Pass.
-	case <-time.After(2 * time.Second):
-		t.Fatalf("completed job action was not garbage-collected within 2s after cleanup; jobqueue is retaining it")
-	}
+		runtime.Gosched()
+		select {
+		case <-finalized:
+			return true
+		default:
+			return false
+		}
+	}, 2*time.Second, 25*time.Millisecond,
+		"completed job action was not garbage-collected after cleanup; jobqueue is retaining it")
 }
 
 // TestNewJobQueueWithOptions_ClampsNonPositiveMaxJobs verifies that passing
 // maxJobs <= 0 is clamped to 1 so the queue remains usable instead of silently
-// rejecting every Enqueue with ErrQueueFull.
+// rejecting every Enqueue with ErrQueueFull. Covers the field accessor AND the
+// observable Enqueue behavior, since the user-visible bug is queue-full
+// rejection rather than the internal counter.
 func TestNewJobQueueWithOptions_ClampsNonPositiveMaxJobs(t *testing.T) {
 	t.Parallel()
 
 	for _, maxJobs := range []int{0, -1, -100} {
-		q := NewJobQueueWithOptions(maxJobs, false)
-		assert.Equal(t, 1, q.GetMaxJobs(),
-			"maxJobs=%d should clamp to 1; got %d", maxJobs, q.GetMaxJobs())
+		t.Run(fmt.Sprintf("maxJobs=%d", maxJobs), func(t *testing.T) {
+			t.Parallel()
+
+			q := setupTestQueue(t, maxJobs, false)
+			t.Cleanup(func() { _ = q.StopWithTimeout(1 * time.Second) })
+
+			assert.Equal(t, 1, q.GetMaxJobs(),
+				"maxJobs=%d should clamp to 1; got %d", maxJobs, q.GetMaxJobs())
+
+			_, err := q.Enqueue(t.Context(), &MockAction{}, &TestData{ID: "smoke"}, RetryConfig{Enabled: false})
+			require.NoError(t, err,
+				"clamped queue should accept its first job instead of returning ErrQueueFull")
+		})
 	}
 }
 

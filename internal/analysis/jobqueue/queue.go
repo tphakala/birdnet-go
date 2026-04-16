@@ -363,11 +363,11 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	}
 }
 
-// cleanupStaleJobs drops completed and failed jobs from the active queue so
-// the Job struct, its Action, and any buffers it holds become eligible for
-// garbage collection on the next GC cycle. The per-action stats and queue-wide
-// counters (StaleJobs, FailedJobs, SuccessfulJobs) already record every
-// outcome, so no per-job state is preserved after completion.
+// cleanupStaleJobs drops terminal-state jobs (completed, failed, or cancelled)
+// from the active queue so the Job struct, its Action, and any buffers it holds
+// become eligible for garbage collection on the next GC cycle. The per-action
+// stats and queue-wide counters (StaleJobs, FailedJobs, SuccessfulJobs) already
+// record every outcome, so no per-job state is preserved after completion.
 func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 	if ctx.Err() != nil {
 		return
@@ -376,12 +376,17 @@ func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	// Compact in place: keep only jobs still pending, running, retrying, or
-	// cancelled. Completed and failed jobs are dropped entirely.
+	// Compact in place: keep only jobs still pending, running, or retrying.
+	// Completed, failed, and cancelled jobs are dropped entirely; leaving
+	// cancelled jobs in the active slice would otherwise pin their payloads
+	// and, because maxJobs caps the active queue, eventually cause legitimate
+	// Enqueue calls to fail with ErrQueueFull.
 	var staleCount int
 	kept := 0
 	for _, job := range q.jobs {
-		if job.Status == JobStatusCompleted || job.Status == JobStatusFailed {
+		if job.Status == JobStatusCompleted ||
+			job.Status == JobStatusFailed ||
+			job.Status == JobStatusCancelled {
 			staleCount++
 			continue
 		}
