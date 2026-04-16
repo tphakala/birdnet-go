@@ -438,7 +438,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 				beginTimeOffset := time.Duration(conf.Setting().Realtime.Audio.Export.PreCapture)*time.Second + detectionOffset
 				startTime := time.Now().Add(-beginTimeOffset)
 
-				if processErr := ProcessData(context.Background(), m.bn, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
+				if processErr := ProcessData(context.Background(), m.bn, m.bufferMgr, data, startTime, audioCapturedAt, cfg.sourceID, cfg.modelID); processErr != nil {
 					m.logger.Error("error processing data",
 						logger.String("source_id", cfg.sourceID),
 						logger.String("model_id", cfg.modelID),

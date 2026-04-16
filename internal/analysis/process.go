@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -163,23 +164,34 @@ func InitFloat32Pool() error {
 
 // ReturnFloat32Buffer returns a float32 buffer to the pool if possible.
 // This should be called after the buffer is no longer needed.
-func ReturnFloat32Buffer(buffer []float32) {
-	if float32Pool != nil && len(buffer) == Float32BufferSize {
-		float32Pool.Put(buffer)
+func ReturnFloat32Buffer(buf []float32) {
+	if float32Pool != nil && len(buf) == Float32BufferSize {
+		float32Pool.Put(buf)
 	}
 }
 
-// ProcessData processes the given audio data to detect bird species, logs the detected species
-// and optionally saves the audio clip if a bird species is detected above the configured threshold.
-// The ctx parameter is propagated to the model inference call, allowing upstream callers
-// to control cancellation and deadlines.
-func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
+// ProcessData processes the given audio data to detect bird species, logs the
+// detected species and optionally saves the audio clip if a bird species is
+// detected above the configured threshold.
+//
+// ctx is propagated to the model inference call for cancellation and deadlines.
+// bufMgr is the audiocore buffer manager owning the Float32Pool that the
+// 16-bit conversion hot path draws from. Must be non-nil; callers that reach
+// ProcessData without a manager have a plumbing bug.
+func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffer.Manager, data []byte, startTime, audioCapturedAt time.Time, source, modelID string) error {
+	if bufMgr == nil {
+		return errors.Newf("buffer manager must not be nil").
+			Component("analysis").
+			Category(errors.CategoryValidation).
+			Context("operation", "process_data").
+			Build()
+	}
 	log := GetLogger()
 	// get current time to track processing time
 	predictStart := time.Now()
 
 	// convert audio data to float32
-	sampleData, err := convertToFloat32WithPool(data, conf.BitDepth)
+	sampleData, err := convertToFloat32WithPool(bufMgr, data, conf.BitDepth)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
@@ -194,10 +206,15 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, 
 	results, err := bn.PredictModel(ctx, modelID, sampleData)
 	inferenceDuration := time.Since(inferenceStart)
 
-	// Return float32 buffer to pool after prediction
-	// This is safe because Predict copies the data to the input tensor
-	if conf.BitDepth == 16 && len(sampleData) > 0 && len(sampleData[0]) == Float32BufferSize {
-		ReturnFloat32Buffer(sampleData[0])
+	// Return float32 buffer to pool after prediction. Safe because Predict
+	// copies the samples into the model's input tensor before returning.
+	// The Manager's lazy per-size pool map routes the slice back to the
+	// pool sized for its actual length, so non-standard sizes are handled
+	// too.
+	if conf.BitDepth == 16 && len(sampleData) > 0 {
+		if pool := bufMgr.Float32Pool(len(sampleData[0])); pool != nil {
+			pool.Put(sampleData[0])
+		}
 	}
 
 	// Record inference duration metric (always, even on error)
@@ -327,36 +344,34 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, 
 	return nil
 }
 
-// convertToFloat32WithPool converts a byte slice representing samples to a 2D slice of float32 samples.
-// For 16-bit audio, it uses the float32 pool when available for reduced allocations.
-// For other bit depths, it delegates to audiocore/convert.ConvertToFloat32.
-func convertToFloat32WithPool(sample []byte, bitDepth int) ([][]float32, error) {
+func convertToFloat32WithPool(bufMgr *buffer.Manager, sample []byte, bitDepth int) ([][]float32, error) {
 	if bitDepth == 16 {
-		return [][]float32{convert16BitToFloat32WithPool(sample)}, nil
+		return [][]float32{convert16BitToFloat32WithPool(bufMgr, sample)}, nil
 	}
-	// Delegate non-16-bit conversions to audiocore/convert
+	// Delegate non-16-bit conversions to audiocore/convert (no pooling needed here;
+	// non-16-bit paths are cold and handled separately by PR B2).
 	return convert.ConvertToFloat32(sample, bitDepth)
 }
 
-// convert16BitToFloat32WithPool converts 16-bit samples to float32, using the pool when available.
-func convert16BitToFloat32WithPool(sample []byte) []float32 {
+// convert16BitToFloat32WithPool converts 16-bit PCM samples to float32 using
+// the size-specific pool from bufMgr. The Manager lazily creates a per-size
+// Float32Pool on first use, so any length the pipeline produces is pooled.
+func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []float32 {
 	length := len(sample) / 2
+	pool := bufMgr.Float32Pool(length)
 
-	// Try to get buffer from pool if available
 	var float32Data []float32
-	if float32Pool != nil && length == Float32BufferSize {
-		float32Data = float32Pool.Get()
+	if pool != nil {
+		float32Data = pool.Get()
 	} else {
-		// Fallback to allocation for non-standard sizes or if pool not initialized
+		// length == 0 (or exceedingly rare pool construction failure) falls through to a fresh slice.
 		float32Data = make([]float32, length)
 	}
 
-	divisor := float32(32768.0)
-
+	const divisor = float32(32768.0)
 	for i := range length {
-		sample := int16(sample[i*2]) | int16(sample[i*2+1])<<8
-		float32Data[i] = float32(sample) / divisor
+		s := int16(sample[i*2]) | int16(sample[i*2+1])<<8
+		float32Data[i] = float32(s) / divisor
 	}
-
 	return float32Data
 }
