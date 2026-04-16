@@ -381,7 +381,7 @@ func TestEnqueueTask(t *testing.T) {
 	t.Run("FullQueue", func(t *testing.T) {
 		t.Parallel()
 		// Create a queue with a very small capacity
-		tinyQueue := jobqueue.NewJobQueueWithOptions(2, 1, false)
+		tinyQueue := jobqueue.NewJobQueueWithOptions(2, false)
 		tinyQueue.Start()
 		defer func() {
 			assert.NoError(t, tinyQueue.Stop(), "Failed to stop queue")

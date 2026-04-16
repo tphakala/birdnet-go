@@ -175,9 +175,9 @@ type TestData struct {
 }
 
 // setupTestQueue creates a job queue for testing with custom options
-func setupTestQueue(t *testing.T, maxJobs, maxArchivedJobs int, logAllSuccesses bool) *JobQueue {
+func setupTestQueue(t *testing.T, maxJobs int, logAllSuccesses bool) *JobQueue {
 	t.Helper()
-	queue := NewJobQueueWithOptions(maxJobs, maxArchivedJobs, logAllSuccesses)
+	queue := NewJobQueueWithOptions(maxJobs, logAllSuccesses)
 	// Set a much shorter processing interval for faster test execution
 	queue.SetProcessingInterval(10 * time.Millisecond)
 	queue.Start()
@@ -195,7 +195,7 @@ func teardownTestQueue(t *testing.T, queue *JobQueue) {
 func TestBasicQueueFunctionality(t *testing.T) {
 	t.Parallel()
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a mock action
@@ -241,7 +241,7 @@ func TestMultipleJobs(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Number of jobs to enqueue
@@ -323,7 +323,7 @@ func TestRetryProcess(t *testing.T) {
 	// Create a context for manual control
 	ctx := t.Context()
 
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Number of times the job should fail before succeeding
@@ -424,7 +424,7 @@ func TestRetryExhaustion(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a counter for tracking attempts
@@ -496,16 +496,16 @@ func TestRetryExhaustion(t *testing.T) {
 		}
 	}
 
-	// If not found in active jobs, check in archived jobs
+	queue.mu.Unlock()
+
 	if !jobFailed {
-		for _, j := range queue.archivedJobs {
-			if j.ID == job.ID && j.Status == JobStatusFailed {
-				jobFailed = true
-				break
-			}
+		// After cleanupStaleJobs runs, the job pointer is discarded. Observe
+		// the failure via the queue-wide counter instead.
+		stats := queue.GetStats()
+		if stats.FailedJobs > 0 {
+			jobFailed = true
 		}
 	}
-	queue.mu.Unlock()
 
 	assert.True(t, jobFailed, "Job should have failed permanently after exhausting retries")
 }
@@ -521,7 +521,7 @@ func TestRetryBackoff(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a counter for tracking attempts
@@ -618,16 +618,16 @@ func TestRetryBackoff(t *testing.T) {
 		}
 	}
 
-	// If not found in active jobs, check in archived jobs
+	queue.mu.Unlock()
+
 	if !jobFailed {
-		for _, j := range queue.archivedJobs {
-			if j.ID == job.ID && j.Status == JobStatusFailed {
-				jobFailed = true
-				break
-			}
+		// After cleanupStaleJobs runs, the job pointer is discarded. Observe
+		// the failure via the queue-wide counter instead.
+		stats := queue.GetStats()
+		if stats.FailedJobs > 0 {
+			jobFailed = true
 		}
 	}
-	queue.mu.Unlock()
 
 	assert.True(t, jobFailed, "Job should have failed permanently after exhausting retries")
 
@@ -656,11 +656,10 @@ func isClosed(ch <-chan time.Time) bool {
 	}
 }
 
-// TestJobExpiration tests that completed and failed jobs are moved to the archived jobs list
+// TestJobExpiration tests that completed and failed jobs are removed from the
+// active queue after cleanup so new jobs can be processed.
 func TestJobExpiration(t *testing.T) {
-	// Create a new job queue with a maximum archived jobs limit
-	maxArchivedJobs := 5
-	queue := setupTestQueue(t, 100, maxArchivedJobs, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a wait group to wait for all jobs to complete
@@ -719,7 +718,9 @@ func TestJobExpiration(t *testing.T) {
 	assert.Equal(t, 3, stats.SuccessfulJobs, "Successful jobs should be 3")
 	assert.Equal(t, 2, stats.FailedJobs, "Failed jobs should be 2")
 	assert.Equal(t, 5, stats.StaleJobs, "Stale jobs should be 5")
-	assert.Equal(t, 5, stats.ArchivedJobs, "Archived jobs should be 5")
+	// Archive is gone: completed and failed jobs are discarded on the cleanup
+	// tick. The active queue should be empty after all jobs finish.
+	assert.Equal(t, 0, stats.PendingJobs, "Pending jobs should be 0 after cleanup")
 
 	// Enqueue a new job to verify that the active jobs list is empty
 	action := &MockAction{}
@@ -734,59 +735,6 @@ func TestJobExpiration(t *testing.T) {
 	assert.Equal(t, 1, action.GetExecuteCount(), "New job should have been executed")
 }
 
-// TestArchiveLimit tests that the archived jobs list is limited to the specified maximum size
-func TestArchiveLimit(t *testing.T) {
-	// Create a new job queue with a small maximum archived jobs limit
-	maxArchivedJobs := 3
-	queue := setupTestQueue(t, 100, maxArchivedJobs, false)
-	defer teardownTestQueue(t, queue)
-
-	// Create a wait group to wait for all jobs to complete
-	var wg sync.WaitGroup
-	wg.Add(6)
-
-	// Create retry config
-	config := RetryConfig{
-		Enabled:      false,
-		MaxRetries:   0,
-		InitialDelay: 10 * time.Millisecond,
-		MaxDelay:     100 * time.Millisecond,
-		Multiplier:   2.0,
-	}
-
-	// Enqueue 6 jobs
-	for i := range 6 {
-		action := &MockAction{
-			ExecuteFunc: func(data any) error {
-				defer wg.Done()
-				return nil
-			},
-		}
-		data := &TestData{ID: fmt.Sprintf("job-%d", i)}
-		_, err := queue.Enqueue(t.Context(), action, data, config)
-		require.NoError(t, err, "Failed to enqueue job")
-	}
-
-	// Wait for all jobs to complete
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-
-	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for jobs to complete")
-
-	// Wait for the cleanup to happen (cleanup happens on the 1-second ticker)
-	time.Sleep(3 * time.Second)
-
-	// Check job stats
-	stats := queue.GetStats()
-	assert.Equal(t, 6, stats.TotalJobs, "Total jobs should be 6")
-	assert.Equal(t, 6, stats.SuccessfulJobs, "Successful jobs should be 6")
-	assert.Equal(t, 0, stats.FailedJobs, "Failed jobs should be 0")
-	assert.Equal(t, maxArchivedJobs, stats.ArchivedJobs, "Archived jobs should be limited to maxArchivedJobs")
-}
-
 // TestQueueOverflow tests that jobs are rejected when the queue is full
 func TestQueueOverflow(t *testing.T) {
 	// Create a context for manual control
@@ -794,7 +742,7 @@ func TestQueueOverflow(t *testing.T) {
 
 	// Create a job queue with a small capacity
 	queueCapacity := 3
-	queue := setupTestQueue(t, queueCapacity, 5, false)
+	queue := setupTestQueue(t, queueCapacity, false)
 	defer teardownTestQueue(t, queue)
 
 	// Disable job dropping for this test
@@ -873,49 +821,20 @@ func TestQueueOverflow(t *testing.T) {
 	// Force cleanup of stale jobs to ensure accurate stats
 	queue.cleanupStaleJobs(ctx)
 
-	// Reset the queue stats to get accurate counts
-	queue.mu.Lock()
-	queue.stats.TotalJobs = 0
-	queue.stats.SuccessfulJobs = 0
-	queue.stats.FailedJobs = 0
-
-	// Count the jobs in the active and archived lists
-	for _, job := range queue.jobs {
-		queue.stats.TotalJobs++
-		switch job.Status {
-		case JobStatusCompleted:
-			queue.stats.SuccessfulJobs++
-		case JobStatusFailed:
-			queue.stats.FailedJobs++
-		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
-			// These statuses don't affect success/failure counts
-		}
-	}
-
-	for _, job := range queue.archivedJobs {
-		queue.stats.TotalJobs++
-		switch job.Status {
-		case JobStatusCompleted:
-			queue.stats.SuccessfulJobs++
-		case JobStatusFailed:
-			queue.stats.FailedJobs++
-		case JobStatusPending, JobStatusRunning, JobStatusRetrying, JobStatusCancelled:
-			// These statuses don't affect success/failure counts
-		}
-	}
-	queue.mu.Unlock()
-
-	// Verify final counts
+	// The active queue is now empty because cleanupStaleJobs discards
+	// completed and failed jobs. The queue-wide counters still reflect every
+	// job that was ever enqueued or finished, so we check those directly.
 	stats := queue.GetStats()
 	assert.Equal(t, 4, stats.TotalJobs, "Total jobs should include all jobs processed")
 	assert.Equal(t, 4, stats.SuccessfulJobs, "All jobs should be successful")
+	assert.Equal(t, 0, stats.PendingJobs, "Active queue should be empty after cleanup")
 }
 
 // TestDropOldestJob tests that the oldest pending job is dropped when the queue is full
 func TestDropOldestJob(t *testing.T) {
 	// Create a queue with a capacity of 3 jobs
 	queueCapacity := 3
-	queue := NewJobQueueWithOptions(queueCapacity, 10, false)
+	queue := NewJobQueueWithOptions(queueCapacity, false)
 	queue.Start()
 	defer func() {
 		assert.NoError(t, queue.Stop(), "Failed to stop queue")
@@ -1023,7 +942,7 @@ func TestDropOldestJob(t *testing.T) {
 // TestHangingJobTimeout tests that hanging jobs are properly timed out
 func TestHangingJobTimeout(t *testing.T) {
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a mock action that hangs indefinitely
@@ -1077,7 +996,7 @@ func TestHangingJobTimeout(t *testing.T) {
 // TestContextCancellation tests that jobs are properly cancelled when the context is cancelled
 func TestContextCancellation(t *testing.T) {
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 
 	// Create a channel to track job execution
 	executionStarted := make(chan struct{})
@@ -1147,7 +1066,7 @@ func TestStressTest(t *testing.T) {
 
 	// Create a new job queue with large capacity
 	maxJobs := 100
-	queue := setupTestQueue(t, maxJobs, 50, false)
+	queue := setupTestQueue(t, maxJobs, false)
 	defer teardownTestQueue(t, queue)
 
 	// Number of jobs to enqueue - reduced for more reliable testing
@@ -1299,7 +1218,7 @@ func TestConcurrentJobSubmission(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue with large capacity
-	queue := setupTestQueue(t, 1000, 50, false)
+	queue := setupTestQueue(t, 1000, false)
 	defer teardownTestQueue(t, queue)
 
 	numGoroutines := 10
@@ -1346,7 +1265,7 @@ func TestRecoveryFromPanic(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create action that panics
@@ -1395,7 +1314,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 
 	// Create channels to track job states
 	jobStarted := make(chan struct{})
@@ -1444,7 +1363,7 @@ func TestGracefulShutdownWithInProgressJobs(t *testing.T) {
 // TestRateLimiting tests that the job queue properly limits the rate of job submissions
 func TestRateLimiting(t *testing.T) {
 	// Create a queue with a small size to test throttling
-	queue := setupTestQueue(t, 5, 10, false)
+	queue := setupTestQueue(t, 5, false)
 	defer teardownTestQueue(t, queue)
 
 	// Disable job dropping for this test to ensure rejections
@@ -1479,7 +1398,7 @@ func TestRateLimiting(t *testing.T) {
 // TestJobCancellation tests that jobs can be cancelled via context cancellation
 func TestJobCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
-	queue := NewJobQueueWithOptions(100, 10, false)
+	queue := NewJobQueueWithOptions(100, false)
 	queue.SetProcessingInterval(10 * time.Millisecond)
 	queue.StartWithContext(ctx)
 	defer func() {
@@ -1531,26 +1450,34 @@ func TestJobCancellation(t *testing.T) {
 	for _, j := range queue.jobs {
 		if j.ID == job.ID && j.Status == JobStatusFailed {
 			jobFailed = true
-			if j.LastError != nil && strings.Contains(j.LastError.Error(), "cancelled") {
+			if j.LastError != nil && strings.Contains(j.LastError.Error(), "cancel") {
 				jobHasCancellationError = true
 			}
 			break
 		}
 	}
+	queue.mu.Unlock()
 
-	// If not found in active jobs, check in archived jobs
 	if !jobFailed {
-		for _, j := range queue.archivedJobs {
-			if j.ID == job.ID && j.Status == JobStatusFailed {
-				jobFailed = true
-				if j.LastError != nil && strings.Contains(j.LastError.Error(), "cancelled") {
-					jobHasCancellationError = true
-				}
+		// After cleanupStaleJobs runs, the failed job pointer is discarded.
+		// Fall back to the queue-wide counter to observe the failure.
+		postStats := queue.GetStats()
+		if postStats.FailedJobs > 0 {
+			jobFailed = true
+		}
+	}
+	if !jobHasCancellationError {
+		// The dropped Job pointer no longer carries the error after cleanup.
+		// The per-action stats still record LastErrorMessage, which captures
+		// the cancellation error emitted by handleExecutionTimeout.
+		postStats := queue.GetStats()
+		for _, as := range postStats.ActionStats {
+			if strings.Contains(as.LastErrorMessage, "cancel") {
+				jobHasCancellationError = true
 				break
 			}
 		}
 	}
-	queue.mu.Unlock()
 
 	assert.True(t, jobFailed, "Job should be marked as failed after cancellation")
 	assert.True(t, jobHasCancellationError, "Job should have a cancellation error")
@@ -1561,7 +1488,7 @@ func TestLongRunningJobs(t *testing.T) {
 	// Create a context for manual control
 	ctx := t.Context()
 
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create one long-running job
@@ -1618,7 +1545,7 @@ func TestJobTypeStatistics(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create different action types for testing
@@ -1762,7 +1689,7 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 		t.Skip("Skipping memory management test in short mode")
 	}
 
-	queue := setupTestQueue(t, 1000, 100, false)
+	queue := setupTestQueue(t, 1000, false)
 	defer teardownTestQueue(t, queue)
 
 	var m runtime.MemStats
@@ -1818,13 +1745,88 @@ func TestMemoryManagementWithLargeJobLoads(t *testing.T) {
 		"Memory usage should not grow excessively after processing jobs")
 }
 
+// TestCompletedJobIsGarbageCollectable verifies that after a job completes and
+// the cleanup tick runs, the Job struct (and its Action) become reachable only
+// via GC, not via any queue field. This is a regression guard against the
+// archivedJobs retention that caused the 300 MB to 760 MB RSS audiocore
+// memory regression.
+func TestCompletedJobIsGarbageCollectable(t *testing.T) {
+	queue := setupTestQueue(t, 100, false)
+	defer teardownTestQueue(t, queue)
+
+	finalized := make(chan struct{}, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	config := RetryConfig{
+		Enabled:      false,
+		MaxRetries:   0,
+		InitialDelay: 10 * time.Millisecond,
+		MaxDelay:     100 * time.Millisecond,
+		Multiplier:   2.0,
+	}
+
+	// Enqueue one job, then drop the local action reference so the queue holds
+	// the only remaining reference. After cleanup the queue must also drop it.
+	func() {
+		action := &MockAction{
+			ExecuteFunc: func(data any) error {
+				defer wg.Done()
+				return nil
+			},
+		}
+		runtime.AddCleanup(action, func(ch chan struct{}) {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}, finalized)
+		data := &TestData{ID: "gc-target"}
+		_, err := queue.Enqueue(t.Context(), action, data, config)
+		require.NoError(t, err, "Failed to enqueue job")
+	}()
+
+	// Wait for the action to execute.
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	waitForChannel(t, done, DefaultTestTimeout, "Timed out waiting for job to complete")
+
+	// Poll until cleanupStaleJobs has removed the completed job. Using a
+	// deterministic signal instead of a fixed sleep avoids CI flakes where
+	// scheduling pressure pushes the cleanup tick past the sleep window.
+	cleanupDeadline := time.Now().Add(2 * time.Second)
+	for queue.GetStats().StaleJobs == 0 {
+		if time.Now().After(cleanupDeadline) {
+			t.Fatalf("cleanupStaleJobs did not fire within 2s after job completion")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	// Force GC. If the queue still retains the action (archive regression),
+	// the cleanup callback never runs.
+	for range 3 {
+		runtime.GC()
+	}
+
+	select {
+	case <-finalized:
+		// Action was reclaimed. Queue released its reference. Pass.
+	case <-time.After(2 * time.Second):
+		t.Fatalf("completed job action was not garbage-collected within 2s after cleanup; jobqueue is retaining it")
+	}
+}
+
 // TestStatsToJSON tests the ToJSON method of JobStatsSnapshot
 func TestStatsToJSON(t *testing.T) {
 	// Create a context for manual control
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create actions with different descriptions

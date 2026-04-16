@@ -28,7 +28,6 @@ type JobStats struct {
 	SuccessfulJobs int
 	FailedJobs     int
 	StaleJobs      int
-	ArchivedJobs   int // Track number of archived jobs
 	DroppedJobs    int // Track number of jobs dropped due to queue full
 	RetryAttempts  int
 	ActionStats    map[string]ActionStats // Key is the type name of the action
@@ -41,7 +40,6 @@ type JobStatsSnapshot struct {
 	SuccessfulJobs int
 	FailedJobs     int
 	StaleJobs      int
-	ArchivedJobs   int
 	DroppedJobs    int
 	RetryAttempts  int
 
@@ -123,7 +121,6 @@ func (s *JobStatsSnapshot) toJSON(prettyPrint bool) (string, error) {
 			"successful":    s.SuccessfulJobs,
 			"failed":        s.FailedJobs,
 			"stale":         s.StaleJobs,
-			"archived":      s.ArchivedJobs,
 			"dropped":       s.DroppedJobs,
 			"retryAttempts": s.RetryAttempts,
 			"pending":       s.PendingJobs,

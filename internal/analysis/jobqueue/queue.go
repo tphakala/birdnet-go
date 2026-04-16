@@ -41,13 +41,11 @@ const (
 // JobQueue manages a queue of jobs that can be retried
 type JobQueue struct {
 	jobs               []*Job
-	archivedJobs       []*Job // Store stale jobs here instead of discarding
 	mu                 sync.Mutex
 	stats              JobStats
 	stopCh             chan struct{}
 	runningJobs        sync.WaitGroup // Track running jobs for graceful shutdown
 	isRunning          bool
-	maxArchivedJobs    int  // Maximum number of archived jobs to keep
 	maxJobs            int  // Maximum number of pending jobs in the queue
 	droppedJobs        int  // Counter for jobs dropped due to queue full
 	logAllSuccesses    bool // Whether to log all successful jobs, not just retries
@@ -59,16 +57,14 @@ type JobQueue struct {
 
 // NewJobQueue creates a new job queue with default settings
 func NewJobQueue() *JobQueue {
-	return NewJobQueueWithOptions(1000, 100, false)
+	return NewJobQueueWithOptions(1000, false)
 }
 
 // NewJobQueueWithOptions creates a new job queue with custom settings
-func NewJobQueueWithOptions(maxJobs, maxArchivedJobs int, logAllSuccesses bool) *JobQueue {
+func NewJobQueueWithOptions(maxJobs int, logAllSuccesses bool) *JobQueue {
 	return &JobQueue{
 		jobs:               make([]*Job, 0),
-		archivedJobs:       make([]*Job, 0),
 		stopCh:             make(chan struct{}),
-		maxArchivedJobs:    maxArchivedJobs,
 		maxJobs:            maxJobs,
 		logAllSuccesses:    logAllSuccesses,
 		allowJobDropping:   true,            // Default to allowing job dropping when queue is full
@@ -362,9 +358,12 @@ func (q *JobQueue) processJobs(ctx context.Context) {
 	}
 }
 
-// cleanupStaleJobs moves completed and failed jobs to the archived jobs list
+// cleanupStaleJobs drops completed and failed jobs from the active queue so
+// the Job struct, its Action, and any buffers it holds become eligible for
+// garbage collection on the next GC cycle. The per-action stats and queue-wide
+// counters (StaleJobs, FailedJobs, SuccessfulJobs) already record every
+// outcome, so no per-job state is preserved after completion.
 func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
-	// Quick check for context cancellation
 	if ctx.Err() != nil {
 		return
 	}
@@ -372,32 +371,25 @@ func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	var activeJobs []*Job
-	var staleJobs []*Job
-
-	// Identify stale jobs (completed or failed)
+	// Compact in place: keep only jobs still pending, running, retrying, or
+	// cancelled. Completed and failed jobs are dropped entirely.
+	var staleCount int
+	kept := 0
 	for _, job := range q.jobs {
 		if job.Status == JobStatusCompleted || job.Status == JobStatusFailed {
-			staleJobs = append(staleJobs, job)
-		} else {
-			activeJobs = append(activeJobs, job)
+			staleCount++
+			continue
 		}
+		q.jobs[kept] = job
+		kept++
 	}
-
-	// Update the jobs list to only include active jobs
-	q.jobs = activeJobs
-
-	// Add stale jobs to the archived jobs list
-	q.archivedJobs = append(q.archivedJobs, staleJobs...)
-	q.stats.StaleJobs += len(staleJobs)
-	q.stats.ArchivedJobs = len(q.archivedJobs)
-
-	// Trim archived jobs if needed
-	if len(q.archivedJobs) > q.maxArchivedJobs {
-		excess := len(q.archivedJobs) - q.maxArchivedJobs
-		q.archivedJobs = q.archivedJobs[excess:]
-		q.stats.ArchivedJobs = len(q.archivedJobs)
+	// Null out the tail so the discarded *Job pointers (and the Action plus
+	// any payload they reference) become eligible for garbage collection.
+	for i := kept; i < len(q.jobs); i++ {
+		q.jobs[i] = nil
 	}
+	q.jobs = q.jobs[:kept]
+	q.stats.StaleJobs += staleCount
 }
 
 // calculateBackoffDelay calculates the delay before the next retry attempt
@@ -857,7 +849,6 @@ func (q *JobQueue) GetStats() JobStatsSnapshot {
 		SuccessfulJobs: q.stats.SuccessfulJobs,
 		FailedJobs:     q.stats.FailedJobs,
 		StaleJobs:      q.stats.StaleJobs,
-		ArchivedJobs:   q.stats.ArchivedJobs,
 		DroppedJobs:    q.stats.DroppedJobs,
 		RetryAttempts:  q.stats.RetryAttempts,
 

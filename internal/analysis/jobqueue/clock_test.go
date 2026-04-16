@@ -19,7 +19,7 @@ func TestRetryBackoffWithMockClock(t *testing.T) {
 	ctx := t.Context()
 
 	// Create a new job queue
-	queue := setupTestQueue(t, 100, 10, false)
+	queue := setupTestQueue(t, 100, false)
 	defer teardownTestQueue(t, queue)
 
 	// Create a mock clock with a known start time
