@@ -21,7 +21,10 @@ import (
 // writers on a clone and publishes via atomic.Pointer.Store; readers always
 // see one of the two valid snapshots.
 func TestIngressPath_RaceAgainstStoreSettings(t *testing.T) {
-	t.Parallel()
+	// Intentionally NOT t.Parallel(): this test mutates conf.settingsInstance
+	// via StoreSettings. A parallel sibling that publishes its own snapshot
+	// would make the "/alpha"/"/beta" assertion flaky even though the
+	// atomic.Pointer itself is race-safe.
 
 	const iterations = 5_000
 

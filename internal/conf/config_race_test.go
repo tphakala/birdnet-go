@@ -15,7 +15,12 @@ import (
 // update via atomic.Pointer, so readers always see one of the two valid
 // values.
 func TestSettings_GetStore_NoRace(t *testing.T) {
-	t.Parallel()
+	// Intentionally NOT t.Parallel(): this test mutates the package-global
+	// settingsInstance via StoreSettings. Running in parallel with any
+	// sibling test that touches the global (now or in the future) would
+	// race even though the atomic.Pointer is itself safe, because the
+	// sibling could publish a snapshot with WebServer.BasePath neither
+	// "/a" nor "/b" and the reader goroutine would flag a torn read.
 
 	const iterations = 10_000
 

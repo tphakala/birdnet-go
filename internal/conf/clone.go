@@ -154,6 +154,18 @@ func cloneDashboardElements(in []DashboardElement) []DashboardElement {
 		e := in[i]
 		if e.Banner != nil {
 			b := *e.Banner
+			// BannerConfig carries two *bool fields (ShowPin,
+			// MapExpandable). Independently clone each so a future
+			// writer that toggles the boolean through the cloned
+			// pointer does not mutate the snapshot readers hold.
+			if b.ShowPin != nil {
+				showPin := *b.ShowPin
+				b.ShowPin = &showPin
+			}
+			if b.MapExpandable != nil {
+				mapExpandable := *b.MapExpandable
+				b.MapExpandable = &mapExpandable
+			}
 			e.Banner = &b
 		}
 		if e.Video != nil {
@@ -259,6 +271,8 @@ func cloneAnyValue(v any) any {
 	switch val := v.(type) {
 	case map[string]any:
 		return cloneStringAnyMap(val)
+	case map[string]string:
+		return maps.Clone(val)
 	case []any:
 		out := make([]any, len(val))
 		for i := range val {
@@ -266,6 +280,8 @@ func cloneAnyValue(v any) any {
 		}
 		return out
 	case []string:
+		return slices.Clone(val)
+	case []byte:
 		return slices.Clone(val)
 	case []int:
 		return slices.Clone(val)

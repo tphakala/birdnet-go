@@ -1509,9 +1509,15 @@ var ConfigPath string
 // Store() in Load/StoreSettings/SetTestSettings; read via Load() in
 // GetSettings. Lock-free reads keep the request hot path fast while copy-on-
 // write writes in api/v2.UpdateSettings keep readers race-free.
+//
+// loadMu guards the on-demand Load() that Setting() performs when
+// settingsInstance is nil. A plain sync.Mutex is used rather than sync.Once
+// so that cleanup paths which call SetTestSettings(nil) can trigger a fresh
+// Load on the next Setting() call; sync.Once cannot be reset safely from a
+// parallel test without racing on the Once value itself.
 var (
 	settingsInstance atomic.Pointer[Settings]
-	once             sync.Once
+	loadMu           sync.Mutex
 )
 
 // persistMigration saves the config file after a successful migration.
@@ -2306,16 +2312,21 @@ func SaveSettings() error {
 			Build()
 	}
 
-	// Create a shallow copy of the settings
-	settingsCopy := *current
+	// Deep-clone the published snapshot before mutating it in
+	// prepareSettingsForSave. A shallow copy would leave slice and map
+	// backing arrays shared with concurrent readers that hold current;
+	// any transformation that mutates one of those nested fields would
+	// race against them.
+	settingsCopy := *CloneSettings(current)
 
-	// Create a separate copy of the species list with proper locking
-	// Note: This MUST stay here to maintain correct mutex semantics
+	// Refresh the species list under its dedicated lock so the runtime
+	// list (shared across Species.Include/Exclude updates) is captured
+	// atomically rather than via the clone that predates the save.
 	speciesListMutex.RLock()
 	settingsCopy.BirdNET.RangeFilter.Species = slices.Clone(current.BirdNET.RangeFilter.Species)
 	speciesListMutex.RUnlock()
 
-	// Apply data transformations (seasonal tracking, etc.)
+	// Apply data transformations (seasonal tracking, etc.) on the clone.
 	settingsCopy = prepareSettingsForSave(&settingsCopy, current.BirdNET.Latitude)
 
 	// Find the path of the current config file
@@ -2342,21 +2353,30 @@ func SaveSettings() error {
 
 // Setting returns the current settings instance, initializing it if necessary
 func Setting() *Settings {
-	once.Do(func() {
-		if settingsInstance.Load() == nil {
-			_, err := Load()
-			if err != nil {
-				// Fatal error loading settings - application cannot continue
-				enhancedErr := errors.New(err).
-					Category(errors.CategoryConfiguration).
-					Context("operation", "load-settings-init").
-					Build()
-				GetLogger().Error("Error loading settings", logger.Error(enhancedErr))
-				os.Exit(1)
-			}
-		}
-	})
-	return GetSettings()
+	// Fast path: settings already published.
+	if s := settingsInstance.Load(); s != nil {
+		return s
+	}
+	// Slow path: lazy-load from disk. Serialise concurrent first-callers
+	// through loadMu; the atomic check inside the lock collapses the extras.
+	loadMu.Lock()
+	if s := settingsInstance.Load(); s != nil {
+		loadMu.Unlock()
+		return s
+	}
+	if _, err := Load(); err != nil {
+		// Fatal error loading settings - application cannot continue.
+		// Release the lock explicitly because os.Exit does not run defers.
+		enhancedErr := errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "load-settings-init").
+			Build()
+		GetLogger().Error("Error loading settings", logger.Error(enhancedErr))
+		loadMu.Unlock()
+		os.Exit(1)
+	}
+	loadMu.Unlock()
+	return settingsInstance.Load()
 }
 
 // SetTestSettings allows tests to inject their own settings instance.
@@ -2364,10 +2384,10 @@ func Setting() *Settings {
 // This is intended for testing purposes only.
 func SetTestSettings(settings *Settings) {
 	// Publish atomically; readers on the hot path see the new snapshot
-	// immediately via GetSettings. The sync.Once guarding Setting()'s one-
-	// shot Load() is not reset: its body is a no-op once settingsInstance
-	// holds a non-nil value, and resetting would introduce a data race on
-	// the Once itself when parallel tests each call SetTestSettings.
+	// immediately via GetSettings. Setting() will re-Load() from disk on
+	// the next call if settings is nil, so cleanup paths that restore a
+	// previously-nil snapshot do not leave downstream consumers with a
+	// nil dereference.
 	settingsInstance.Store(settings)
 }
 

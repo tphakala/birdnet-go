@@ -306,14 +306,18 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	if err := conf.SaveSettings(); err != nil {
-		// Rollback in-memory; disk write never happened successfully.
-		if publishGlobal {
+	// Persist to disk only when this controller owns the global snapshot
+	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
+	// reads conf.GetSettings internally; persisting from a test that injected
+	// a standalone c.Settings would save an unrelated snapshot.
+	if publishGlobal && !c.DisableSaveSettings {
+		if err := conf.SaveSettings(); err != nil {
+			// Rollback in-memory; disk write never happened successfully.
 			conf.StoreSettings(current)
+			c.Settings = current
+			c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
+			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
-		c.Settings = current
-		c.logAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
-		return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
 	telemetry.UpdateTelemetryEnabled()
@@ -650,11 +654,13 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
 	}
 
-	if !c.DisableSaveSettings {
+	// Persist to disk only when this controller owns the global snapshot
+	// AND the test did not disable save. conf.SaveSettings persists the
+	// conf.GetSettings value, which would be wrong under a standalone
+	// c.Settings injected by a test that bypassed the global publish.
+	if publishGlobal && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
-			if publishGlobal {
-				conf.StoreSettings(current)
-			}
+			conf.StoreSettings(current)
 			c.Settings = current
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}

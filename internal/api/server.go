@@ -85,6 +85,19 @@ type Server struct {
 	startTime time.Time
 }
 
+// currentSettings returns the latest *conf.Settings snapshot published via
+// conf.StoreSettings, or the server's constructor-provided pointer when no
+// snapshot has been published yet (test harnesses that skip the global
+// publish, or early startup before the first Load). Routing the hot-path
+// middleware through this helper keeps the basepath resolution race-free
+// while still handling the uninitialised-global case gracefully.
+func (s *Server) currentSettings() *conf.Settings {
+	if cur := conf.GetSettings(); cur != nil {
+		return cur
+	}
+	return s.settings
+}
+
 // ingressPath returns the effective base path prefix for the current request.
 // Priority: X-Ingress-Path header > X-Forwarded-Prefix header > config BasePath > empty.
 //
@@ -327,8 +340,10 @@ func (s *Server) setupMiddleware() {
 			// Read the current *conf.Settings through the atomic pointer so a
 			// settings hot-reload (CoW publish via conf.StoreSettings) takes
 			// effect for the next request without restart, and so readers
-			// never observe a torn view of the basepath field.
-			bp := ingressPath(c, conf.GetSettings())
+			// never observe a torn view of the basepath field. Fall back to
+			// the constructor-provided pointer if no snapshot has been
+			// published yet (test harnesses that skip the global publish).
+			bp := ingressPath(c, s.currentSettings())
 			if bp == "" {
 				return next(c)
 			}
@@ -392,7 +407,7 @@ func (s *Server) setupMiddleware() {
 	// proxy headers and config in priority order.
 	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			c.Set("basePath", ingressPath(c, conf.GetSettings()))
+			c.Set("basePath", ingressPath(c, s.currentSettings()))
 			return next(c)
 		}
 	})
@@ -728,7 +743,7 @@ func (s *Server) IsDevMode() bool {
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
-		return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 	})
 
 	// Public routes (no authentication required)
@@ -857,7 +872,7 @@ func (s *Server) handleOAuthBegin(c echo.Context) error {
 			logger.String("email", user.Email),
 		)
 		// User is already authenticated, redirect to dashboard
-		return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
+		return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 	}
 
 	// Begin OAuth flow - this will redirect to the provider
@@ -962,7 +977,7 @@ func (s *Server) handleOAuthCallback(c echo.Context) error {
 	)
 
 	// Redirect to dashboard after successful authentication
-	return c.Redirect(http.StatusFound, ingressPath(c, conf.GetSettings())+"/ui/dashboard")
+	return c.Redirect(http.StatusFound, ingressPath(c, s.currentSettings())+"/ui/dashboard")
 }
 
 // isValidOAuthProvider checks if the provider name is a valid goth provider name.
