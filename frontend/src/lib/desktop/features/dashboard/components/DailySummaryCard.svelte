@@ -52,6 +52,11 @@ Responsive Breakpoints:
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import { getLocalDateString, getLocalTimeString, parseLocalDateString } from '$lib/utils/date';
+  import {
+    buildHourlyDetectionUrl,
+    buildSpeciesDetectionUrl,
+    buildSpeciesHourUrl,
+  } from '$lib/utils/detectionUrls';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { loggers } from '$lib/utils/logger';
   import { LRUCache } from '$lib/utils/LRUCache';
@@ -610,14 +615,15 @@ Responsive Breakpoints:
     urlBuilders.species = (species: DailySpeciesSummary) => {
       const cacheKey = `species:${species.scientific_name}:${selectedDate}`;
       if (!urlCache.has(cacheKey)) {
-        const params = new URLSearchParams({
-          queryType: 'species',
-          species: species.scientific_name,
-          date: selectedDate,
-          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
-          offset: '0',
-        });
-        urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
+        urlCache.set(
+          cacheKey,
+          buildSpeciesDetectionUrl(
+            species.scientific_name,
+            selectedDate,
+            CONFIG.QUERY.DEFAULT_NUM_RESULTS,
+            0
+          )
+        );
       }
       return urlCache.get(cacheKey)!;
     };
@@ -629,16 +635,17 @@ Responsive Breakpoints:
     ) => {
       const cacheKey = `species-hour:${species.scientific_name}:${selectedDate}:${hour}:${duration}`;
       if (!urlCache.has(cacheKey)) {
-        const params = new URLSearchParams({
-          queryType: 'species',
-          species: species.scientific_name,
-          date: selectedDate,
-          hour: hour.toString(),
-          duration: duration.toString(),
-          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
-          offset: '0',
-        });
-        urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
+        urlCache.set(
+          cacheKey,
+          buildSpeciesHourUrl(
+            species.scientific_name,
+            selectedDate,
+            hour,
+            duration,
+            CONFIG.QUERY.DEFAULT_NUM_RESULTS,
+            0
+          )
+        );
       }
       return urlCache.get(cacheKey)!;
     };
@@ -646,15 +653,10 @@ Responsive Breakpoints:
     urlBuilders.hourly = (hour: number, duration: number = 1) => {
       const cacheKey = `hourly:${selectedDate}:${hour}:${duration}`;
       if (!urlCache.has(cacheKey)) {
-        const params = new URLSearchParams({
-          queryType: 'hourly',
-          date: selectedDate,
-          hour: hour.toString(),
-          duration: duration.toString(),
-          numResults: CONFIG.QUERY.DEFAULT_NUM_RESULTS.toString(),
-          offset: '0',
-        });
-        urlCache.set(cacheKey, `/ui/detections?${params.toString()}`);
+        urlCache.set(
+          cacheKey,
+          buildHourlyDetectionUrl(selectedDate, hour, duration, CONFIG.QUERY.DEFAULT_NUM_RESULTS, 0)
+        );
       }
       return urlCache.get(cacheKey)!;
     };
