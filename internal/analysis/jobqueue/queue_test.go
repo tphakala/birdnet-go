@@ -1820,6 +1820,19 @@ func TestCompletedJobIsGarbageCollectable(t *testing.T) {
 	}
 }
 
+// TestNewJobQueueWithOptions_ClampsNonPositiveMaxJobs verifies that passing
+// maxJobs <= 0 is clamped to 1 so the queue remains usable instead of silently
+// rejecting every Enqueue with ErrQueueFull.
+func TestNewJobQueueWithOptions_ClampsNonPositiveMaxJobs(t *testing.T) {
+	t.Parallel()
+
+	for _, maxJobs := range []int{0, -1, -100} {
+		q := NewJobQueueWithOptions(maxJobs, false)
+		assert.Equal(t, 1, q.GetMaxJobs(),
+			"maxJobs=%d should clamp to 1; got %d", maxJobs, q.GetMaxJobs())
+	}
+}
+
 // TestStatsToJSON tests the ToJSON method of JobStatsSnapshot
 func TestStatsToJSON(t *testing.T) {
 	// Create a context for manual control

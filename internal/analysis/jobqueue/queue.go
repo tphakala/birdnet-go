@@ -60,8 +60,13 @@ func NewJobQueue() *JobQueue {
 	return NewJobQueueWithOptions(1000, false)
 }
 
-// NewJobQueueWithOptions creates a new job queue with custom settings
+// NewJobQueueWithOptions creates a new job queue with custom settings.
+// A non-positive maxJobs is clamped to 1 so callers cannot silently produce
+// a queue that rejects every Enqueue with ErrQueueFull.
 func NewJobQueueWithOptions(maxJobs int, logAllSuccesses bool) *JobQueue {
+	if maxJobs < 1 {
+		maxJobs = 1
+	}
 	return &JobQueue{
 		jobs:               make([]*Job, 0),
 		stopCh:             make(chan struct{}),
