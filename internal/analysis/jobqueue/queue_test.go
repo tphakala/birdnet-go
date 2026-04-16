@@ -1837,7 +1837,10 @@ func TestNewJobQueueWithOptions_ClampsNonPositiveMaxJobs(t *testing.T) {
 			t.Parallel()
 
 			q := setupTestQueue(t, maxJobs, false)
-			t.Cleanup(func() { _ = q.StopWithTimeout(1 * time.Second) })
+			t.Cleanup(func() {
+				assert.NoError(t, q.StopWithTimeout(1*time.Second),
+					"StopWithTimeout should not error during test cleanup")
+			})
 
 			assert.Equal(t, 1, q.GetMaxJobs(),
 				"maxJobs=%d should clamp to 1; got %d", maxJobs, q.GetMaxJobs())
