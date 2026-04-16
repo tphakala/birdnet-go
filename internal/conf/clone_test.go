@@ -128,8 +128,23 @@ func newPopulatedSettings() *Settings {
 		{Provider: "google", Scopes: []string{"openid", "email"}},
 	}
 
+	// Include nested slices and nested maps inside the Settings map[string]any
+	// so the clone test catches a regression if the deep copy ever degrades
+	// back to a plain maps.Clone on the outer map only. rsync-style options
+	// are the realistic case: a []string value shared through map[string]any.
 	s.Backup.Targets = []BackupTarget{
-		{Type: "local", Enabled: true, Settings: map[string]any{"path": "/backups"}},
+		{
+			Type:    "rsync",
+			Enabled: true,
+			Settings: map[string]any{
+				"path":    "/backups",
+				"options": []any{"--archive", "--compress"},
+				"ssh": map[string]any{
+					"keyPath": "/home/user/.ssh/id_rsa",
+					"ports":   []any{22, 2222},
+				},
+			},
+		},
 	}
 	s.Backup.Schedules = []BackupScheduleConfig{{Enabled: true, Hour: 3}}
 
@@ -143,10 +158,15 @@ func newPopulatedSettings() *Settings {
 				{URL: "https://a", Headers: map[string]string{"X-Custom": "1"}},
 			},
 			Filter: PushFilterConfig{
-				Types:           []string{"new_species"},
-				Priorities:      []string{"high"},
-				Components:      []string{"detection"},
-				MetadataFilters: map[string]any{"location": "garden"},
+				Types:      []string{"new_species"},
+				Priorities: []string{"high"},
+				Components: []string{"detection"},
+				// Nested slice inside MetadataFilters exercises the deep-clone
+				// path (same concern as BackupTarget.Settings above).
+				MetadataFilters: map[string]any{
+					"location": "garden",
+					"tags":     []any{"urgent", "bird-of-prey"},
+				},
 			},
 		},
 	}
@@ -220,6 +240,19 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Security.OAuthProviders[0].Scopes[0] = mutated
 
 	dst.Backup.Targets[0].Settings["path"] = mutated
+	// Mutate nested slice and nested map inside the any-typed Settings so
+	// src keeps its original values only if cloneStringAnyMap walks the
+	// tree. If a future refactor degrades this to a plain maps.Clone the
+	// assertions in assertSourceUnchanged will flag the regression.
+	if opts, ok := dst.Backup.Targets[0].Settings["options"].([]any); ok {
+		opts[0] = mutated
+	}
+	if ssh, ok := dst.Backup.Targets[0].Settings["ssh"].(map[string]any); ok {
+		ssh["keyPath"] = mutated
+		if ports, ok := ssh["ports"].([]any); ok {
+			ports[0] = 0
+		}
+	}
 	dst.Backup.Schedules[0].Hour = 99
 
 	pp := dst.Notification.Push.Providers[0]
@@ -232,6 +265,9 @@ func mutateCloneEverywhere(dst *Settings) {
 	pp.Filter.Priorities[0] = mutated
 	pp.Filter.Components[0] = mutated
 	pp.Filter.MetadataFilters["location"] = mutated
+	if tags, ok := pp.Filter.MetadataFilters["tags"].([]any); ok {
+		tags[0] = mutated
+	}
 	dst.Notification.Push.Providers[0] = pp
 }
 
@@ -312,7 +348,18 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.Equal(t, []string{"openid", "email"}, src.Security.OAuthProviders[0].Scopes)
 
 	require.Len(t, src.Backup.Targets, 1)
-	assert.Equal(t, map[string]any{"path": "/backups"}, src.Backup.Targets[0].Settings)
+	assert.Equal(t, "/backups", src.Backup.Targets[0].Settings["path"])
+	// Nested slice value through any survived the clone without leaking
+	// the mutation from dst back to src.
+	assert.Equal(t, []any{"--archive", "--compress"}, src.Backup.Targets[0].Settings["options"],
+		"nested []any inside Settings must be independently cloned")
+	// Nested map + its nested slice both stay pristine.
+	ssh, ok := src.Backup.Targets[0].Settings["ssh"].(map[string]any)
+	require.True(t, ok, "ssh sub-map must still be a map[string]any")
+	assert.Equal(t, "/home/user/.ssh/id_rsa", ssh["keyPath"],
+		"nested map[string]any inside Settings must be independently cloned")
+	assert.Equal(t, []any{22, 2222}, ssh["ports"],
+		"deeply nested []any inside nested map must be independently cloned")
 	require.Len(t, src.Backup.Schedules, 1)
 	assert.Equal(t, 3, src.Backup.Schedules[0].Hour)
 
@@ -327,5 +374,7 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.Equal(t, []string{"new_species"}, pp.Filter.Types)
 	assert.Equal(t, []string{"high"}, pp.Filter.Priorities)
 	assert.Equal(t, []string{"detection"}, pp.Filter.Components)
-	assert.Equal(t, map[string]any{"location": "garden"}, pp.Filter.MetadataFilters)
+	assert.Equal(t, "garden", pp.Filter.MetadataFilters["location"])
+	assert.Equal(t, []any{"urgent", "bird-of-prey"}, pp.Filter.MetadataFilters["tags"],
+		"nested []any inside MetadataFilters must be independently cloned")
 }

@@ -282,11 +282,12 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 
 	// Publish the new snapshot. conf.StoreSettings publishes atomically to
 	// the global (readers via conf.GetSettings immediately see this version;
-	// existing pointer holders stay on the old). c.Settings updates the
-	// controller-cached pointer so read handlers that still dereference
-	// c.Settings (GetAllSettings, GetDashboardSettings, etc.) return the
-	// freshly published snapshot. The write is safe under c.settingsMutex
-	// which all c.Settings readers also acquire.
+	// existing pointer holders stay on the old). c.Settings keeps the
+	// controller-cached pointer in sync so read handlers that still
+	// dereference c.Settings return the freshly published snapshot. The
+	// write is safe under c.settingsMutex which all c.Settings readers
+	// also acquire, except for c.Debug which deliberately reads via
+	// conf.GetSettings() to stay race-free without grabbing the lock.
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}
@@ -633,7 +634,9 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 	}
 
-	// Publish the new snapshot atomically when we own the global.
+	// Publish the new snapshot atomically when we own the global; keep
+	// c.Settings in sync. See the matching comment in UpdateSettings for
+	// why c.Debug reads via conf.GetSettings() rather than c.Settings.
 	if publishGlobal {
 		conf.StoreSettings(updated)
 	}

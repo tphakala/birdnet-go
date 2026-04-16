@@ -913,9 +913,20 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 	return echo.NewHTTPError(code, fullMessage)
 }
 
-// Debug logs debug messages when debug mode is enabled
+// Debug logs debug messages when debug mode is enabled.
+//
+// Reads the debug flag via conf.GetSettings() rather than c.Settings so the
+// check is race-free against concurrent c.Settings writes in the settings
+// handlers: c.Settings is plain a *conf.Settings field with no locking on
+// the Debug read path, while conf.GetSettings() is a lock-free atomic.Load.
+// Falls back to c.Settings when the global snapshot has not been set (tests
+// that inject a standalone Controller without touching the global).
 func (c *Controller) Debug(format string, v ...any) {
-	if c.Settings.WebServer.Debug {
+	settings := conf.GetSettings()
+	if settings == nil {
+		settings = c.Settings
+	}
+	if settings != nil && settings.WebServer.Debug {
 		msg := fmt.Sprintf(format, v...)
 		c.logDebugIfEnabled(msg)
 	}

@@ -218,17 +218,71 @@ func cloneOAuthProviders(in []OAuthProviderConfig) []OAuthProviderConfig {
 }
 
 // cloneBackupTargets deep-copies the backup target slice, ensuring each
-// target's Settings map is independent.
+// target's Settings map is independent. The Settings map is type-deep-cloned
+// because backup-type-specific config (rsync options, S3 prefixes, etc.) can
+// nest slices or maps inside the any values; a plain maps.Clone would leave
+// those backing arrays shared between src and dst.
 func cloneBackupTargets(in []BackupTarget) []BackupTarget {
 	if in == nil {
 		return nil
 	}
 	out := make([]BackupTarget, len(in))
 	for i, t := range in {
-		t.Settings = maps.Clone(t.Settings)
+		t.Settings = cloneStringAnyMap(t.Settings)
 		out[i] = t
 	}
 	return out
+}
+
+// cloneStringAnyMap returns a deep copy of a map[string]any whose values may
+// themselves be maps or slices. Plain maps.Clone only copies the outer map;
+// a writer appending to a shared nested slice would race against readers
+// holding the previous snapshot. The copy is type-aware so numeric types
+// (viper unmarshals int/float64 from YAML) are preserved exactly; a JSON
+// round-trip would coerce int to float64 and break downstream consumers.
+func cloneStringAnyMap(m map[string]any) map[string]any {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		out[k] = cloneAnyValue(v)
+	}
+	return out
+}
+
+// cloneAnyValue walks a value that came out of map[string]any and returns a
+// deep copy for the composite cases (nested maps and slices). Scalar types
+// (string, numbers, bool, time.Time, etc.) are value-copied by the caller
+// when they are assigned through any, so they don't need special handling.
+func cloneAnyValue(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		return cloneStringAnyMap(val)
+	case []any:
+		out := make([]any, len(val))
+		for i := range val {
+			out[i] = cloneAnyValue(val[i])
+		}
+		return out
+	case []string:
+		return slices.Clone(val)
+	case []int:
+		return slices.Clone(val)
+	case []int64:
+		return slices.Clone(val)
+	case []float64:
+		return slices.Clone(val)
+	case []bool:
+		return slices.Clone(val)
+	default:
+		// Scalar, typed struct, or pointer. For scalars (int, string, bool,
+		// float64, time.Time) the any box copies the value. For typed
+		// structs/pointers reaching this branch we trust the upstream
+		// producer: the mutation pattern in api/v2 settings handlers
+		// replaces whole any values rather than mutating through them.
+		return val
+	}
 }
 
 // cloneModuleOutputs deep-copies the module outputs map, including each
@@ -265,7 +319,7 @@ func clonePushProviders(in []PushProviderConfig) []PushProviderConfig {
 		p.Filter.Types = slices.Clone(p.Filter.Types)
 		p.Filter.Priorities = slices.Clone(p.Filter.Priorities)
 		p.Filter.Components = slices.Clone(p.Filter.Components)
-		p.Filter.MetadataFilters = maps.Clone(p.Filter.MetadataFilters)
+		p.Filter.MetadataFilters = cloneStringAnyMap(p.Filter.MetadataFilters)
 		out[i] = p
 	}
 	return out
