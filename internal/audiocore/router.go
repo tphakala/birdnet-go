@@ -605,6 +605,20 @@ func (p *processingResult) release() {
 // that construct routers with a nil Manager.
 func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	evenLen := len(frame.Data) &^ 1
+	if evenLen != len(frame.Data) {
+		// Odd-length PCM16 input: convert/pcm.go silently truncates the trailing
+		// byte, which can hide upstream producer bugs. Throttled via the shared
+		// route.errors counter (one log per errorLogInterval events) so we stay
+		// visible without spamming the log on a persistent misbehaving source.
+		errCount := route.errors.Add(1)
+		if errCount%errorLogInterval == 1 {
+			r.log.Info("odd-length PCM16 frame truncated",
+				logger.String("source_id", route.SourceID),
+				logger.String("consumer_id", route.Consumer.ID()),
+				logger.Int("frame_bytes", len(frame.Data)),
+				logger.Int64("total_errors", errCount))
+		}
+	}
 	sampleCount := evenLen / 2
 
 	var floatPool *buffer.Float64Pool
