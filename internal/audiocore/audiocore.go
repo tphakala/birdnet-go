@@ -12,12 +12,13 @@ package audiocore
 import "time"
 
 // AudioFrame is the universal unit of audio data flowing through the system.
-// Data is read-only after creation — consumers must not modify it.
+// Data is read-only after creation; consumers must not modify it.
 //
-// TODO: Consider object pooling (sync.Pool) for AudioFrame if profiling shows
-// allocation pressure from high-frequency frame creation. The Data slice would
-// need careful lifetime management to avoid use-after-return races — frames
-// must not be returned to the pool until all consumers have finished reading.
+// Data may be backed by a pooled slice. When Ref is non-nil, the slice is
+// managed by a FrameRef and must not be retained beyond the consumer's Write
+// return. AudioRouter.Dispatch retains the ref once per successful enqueue and
+// the drainer releases after Write; producers that do not pool leave Ref nil,
+// in which case Data's lifetime is governed by GC as before.
 type AudioFrame struct {
 	// SourceID uniquely identifies the audio source that produced this frame.
 	SourceID string
@@ -40,6 +41,13 @@ type AudioFrame struct {
 
 	// Timestamp when this frame was captured.
 	Timestamp time.Time
+
+	// Ref, when non-nil, tracks pooled ownership of Data. Producers that
+	// allocate Data from a buffer.Manager pool attach a FrameRef whose
+	// release closure returns the slice. Ref is nil when Data is a plain
+	// make() allocation (tests, legacy construction, streams without a
+	// wired bufMgr).
+	Ref *FrameRef
 }
 
 // AudioConsumer receives audio frames from the router.

@@ -58,3 +58,12 @@ func TestFrameRef_ConcurrentRetainRelease(t *testing.T) {
 	ref.Release()
 	require.EqualValues(t, 1, released.Load())
 }
+
+func TestAudioFrame_RefIsOptional(t *testing.T) {
+	t.Parallel()
+	// Zero-value AudioFrame with nil Ref must work. Many tests construct
+	// frames this way.
+	frame := AudioFrame{Data: []byte{1, 2, 3}}
+	assert.Nil(t, frame.Ref)
+	assert.NotPanics(t, func() { frame.Ref.Release() })
+}
