@@ -184,9 +184,7 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 // Read is safe for concurrent use. The returned release func is bound to a
 // single call chain and must not be invoked from multiple goroutines; in
 // practice callers "defer release()" in the same goroutine as the Read call.
-//
-//nolint:gocritic // unnamedResult: naming the three results would shadow the internal `window`, `release`, and `err` locals used below; result positions are documented above.
-func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
+func (ab *AnalysisBuffer) Read() (window []byte, release func(), err error) {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
 
@@ -194,7 +192,6 @@ func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
 		return nil, noopRelease, nil
 	}
 
-	var window []byte
 	if ab.windowPool != nil {
 		window = ab.windowPool.Get()
 	} else {
@@ -209,12 +206,12 @@ func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
 		}
 	}
 
-	n, err := ab.ring.Read(window[ab.overlapSize : ab.overlapSize+ab.readSize])
-	if err != nil {
+	n, readErr := ab.ring.Read(window[ab.overlapSize : ab.overlapSize+ab.readSize])
+	if readErr != nil {
 		if ab.windowPool != nil {
 			ab.windowPool.Put(window)
 		}
-		return nil, noopRelease, errors.New(err).
+		return nil, noopRelease, errors.New(readErr).
 			Component("audiocore").
 			Category(errors.CategorySystem).
 			Context("operation", "analysis_buffer_read").
@@ -243,7 +240,7 @@ func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
 
 	pool := ab.windowPool
 	released := false
-	release := func() {
+	release = func() {
 		if released || pool == nil {
 			return
 		}

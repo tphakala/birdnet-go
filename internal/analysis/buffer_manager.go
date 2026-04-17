@@ -404,7 +404,7 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 		case <-quitChan:
 			return
 		case <-ticker.C:
-			keepRunning, newHasReadBuffer := m.processMonitorTick(cfg, analysisWindowBytes, detectionOffset, hasReadBuffer)
+			keepRunning, newHasReadBuffer := m.processMonitorTick(quitChan, cfg, analysisWindowBytes, detectionOffset, hasReadBuffer)
 			hasReadBuffer = newHasReadBuffer
 			if !keepRunning {
 				return
@@ -417,15 +417,16 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 // up the current AnalysisBuffer for (sourceID, modelID), reads one window,
 // and dispatches it to ProcessData when a full readSize window is present.
 //
-// Returns keepRunning=false when the buffer was not found and the goroutine
-// should terminate. The updated hasReadBuffer flag is propagated back so the
-// caller can toggle its "once seen, log on later loss" log-level preference
-// across ticks.
+// Returns keepRunning=false when the buffer was not found OR the goroutine was
+// asked to shut down during a backoff. The updated hasReadBuffer flag is
+// propagated back so the caller can toggle its "once seen, log on later loss"
+// log-level preference across ticks.
 //
 // The window's backing slice is always returned to its pool via a
 // "defer release()" immediately after Read, so every exit path including the
 // try-again-later (nil data), error, and partial-read branches releases.
 func (m *BufferManager) processMonitorTick(
+	quitChan <-chan struct{},
 	cfg monitorConfig,
 	analysisWindowBytes int,
 	detectionOffset time.Duration,
@@ -453,8 +454,14 @@ func (m *BufferManager) processMonitorTick(
 			logger.String("source_id", cfg.sourceID),
 			logger.String("model_id", cfg.modelID),
 			logger.Error(readErr))
-		time.Sleep(1 * time.Second)
-		return true, hasReadBuffer
+		// Backoff one second, but exit immediately if the goroutine is
+		// told to shut down during the sleep.
+		select {
+		case <-time.After(1 * time.Second):
+			return true, hasReadBuffer
+		case <-quitChan:
+			return false, hasReadBuffer
+		}
 	}
 
 	// Exact equality is required: AnalysisBuffer.Read returns overlapSize +
