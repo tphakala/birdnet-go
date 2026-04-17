@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -128,7 +127,7 @@ func (m *Manager) DeallocateSource(sourceID string) {
 }
 
 // AnalysisBuffer returns the AnalysisBuffer allocated for the given
-// (sourceID, modelID) pair. Returns audiocore.ErrBufferNotFound if no buffer
+// (sourceID, modelID) pair. Returns ErrBufferNotFound if no buffer
 // has been allocated for that composite key.
 func (m *Manager) AnalysisBuffer(sourceID, modelID string) (*AnalysisBuffer, error) {
 	m.mu.RLock()
@@ -136,7 +135,7 @@ func (m *Manager) AnalysisBuffer(sourceID, modelID string) (*AnalysisBuffer, err
 	m.mu.RUnlock()
 
 	if !ok {
-		return nil, audiocore.ErrBufferNotFound
+		return nil, ErrBufferNotFound
 	}
 	return ab, nil
 }
@@ -158,7 +157,7 @@ func (m *Manager) AnalysisBuffers(sourceID string) map[string]*AnalysisBuffer {
 }
 
 // CaptureBuffer returns the CaptureBuffer allocated for the given sourceID.
-// Returns audiocore.ErrBufferNotFound if no buffer has been allocated for
+// Returns ErrBufferNotFound if no buffer has been allocated for
 // sourceID.
 func (m *Manager) CaptureBuffer(sourceID string) (*CaptureBuffer, error) {
 	m.mu.RLock()
@@ -166,7 +165,7 @@ func (m *Manager) CaptureBuffer(sourceID string) (*CaptureBuffer, error) {
 	m.mu.RUnlock()
 
 	if !ok {
-		return nil, audiocore.ErrBufferNotFound
+		return nil, ErrBufferNotFound
 	}
 	return cb, nil
 }

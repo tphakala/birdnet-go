@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
@@ -107,17 +108,26 @@ type AudioRouter struct {
 	// log is the router's logger.
 	log logger.Logger
 
+	// bufMgr is the shared buffer manager used to obtain per-size pools on the
+	// hot path. When nil (legacy constructions / test mockery), the router falls
+	// back to plain make() allocations.
+	bufMgr *buffer.Manager
+
 	// ctx and cancel control the lifetime of all drainer goroutines.
 	ctx    context.Context
 	cancel context.CancelFunc
 }
 
-// NewAudioRouter creates an AudioRouter ready to accept routes and dispatch frames.
-func NewAudioRouter(log logger.Logger) *AudioRouter {
+// NewAudioRouter creates an AudioRouter ready to accept routes and dispatch
+// frames. bufMgr is the shared buffer.Manager used to obtain per-size pools on
+// the hot path; when nil (legacy constructions or test mockery), the router
+// falls back to plain make() allocations.
+func NewAudioRouter(log logger.Logger, bufMgr *buffer.Manager) *AudioRouter {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &AudioRouter{
 		routes: make(map[string][]*Route),
 		log:    log.With(logger.String("component", "audio_router")),
+		bufMgr: bufMgr,
 		ctx:    ctx,
 		cancel: cancel,
 	}

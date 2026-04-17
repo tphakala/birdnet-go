@@ -165,8 +165,8 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 
 	engineCtx, cancel := context.WithCancelCause(ctx)
 
-	router := audiocore.NewAudioRouter(log)
 	bufMgr := buffer.NewManager(log)
+	router := audiocore.NewAudioRouter(log, bufMgr)
 	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
 		router.Dispatch(frame)
 	}, nil, log)

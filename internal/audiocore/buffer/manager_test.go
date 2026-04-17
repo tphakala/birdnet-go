@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 )
 
@@ -70,11 +69,11 @@ func TestBufferManager_DeallocateSource(t *testing.T) {
 	m.DeallocateSource("source-3")
 
 	ab, err := m.AnalysisBuffer("source-3", managerTestModelID)
-	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+	require.ErrorIs(t, err, buffer.ErrBufferNotFound)
 	assert.Nil(t, ab)
 
 	cb, err := m.CaptureBuffer("source-3")
-	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+	require.ErrorIs(t, err, buffer.ErrBufferNotFound)
 	assert.Nil(t, cb)
 }
 
@@ -190,13 +189,13 @@ func TestManager_DeallocateSource_RemovesAllModels(t *testing.T) {
 	m.DeallocateSource(source)
 
 	_, err := m.AnalysisBuffer(source, "birdnet-v2.4")
-	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+	require.ErrorIs(t, err, buffer.ErrBufferNotFound)
 
 	_, err = m.AnalysisBuffer(source, "perch-v2")
-	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+	require.ErrorIs(t, err, buffer.ErrBufferNotFound)
 
 	_, err = m.CaptureBuffer(source)
-	require.ErrorIs(t, err, audiocore.ErrBufferNotFound)
+	require.ErrorIs(t, err, buffer.ErrBufferNotFound)
 
 	// AnalysisBuffers should return an empty map.
 	assert.Empty(t, m.AnalysisBuffers(source))

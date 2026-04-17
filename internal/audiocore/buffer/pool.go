@@ -14,6 +14,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// ErrBufferNotFound is returned by Manager when a requested buffer has not
+// been allocated for the given source or model key.
+var ErrBufferNotFound = errors.Newf("buffer not found").
+	Component("audiocore").Category(errors.CategoryBuffer).Build()
+
 // BytePool provides a thread-safe pool of byte slices to reduce allocations.
 // It uses sync.Pool internally and validates buffer sizes on return to ensure
 // correctness. Buffers that do not match the expected size are discarded.

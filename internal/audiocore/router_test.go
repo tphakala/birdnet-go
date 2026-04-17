@@ -84,7 +84,7 @@ func testFrame(sourceID string) AudioFrame {
 // removed, with HasConsumers reflecting the correct state at each step.
 func TestRouter_AddAndRemoveRoute(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("consumer-1")
@@ -102,7 +102,7 @@ func TestRouter_AddAndRemoveRoute(t *testing.T) {
 // a single registered consumer.
 func TestRouter_DispatchSingleConsumer(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("consumer-1")
@@ -125,7 +125,7 @@ func TestRouter_DispatchSingleConsumer(t *testing.T) {
 // consumers registered for the same source.
 func TestRouter_DispatchFanOut(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	c1 := newMockConsumer("consumer-1")
@@ -151,7 +151,7 @@ func TestRouter_DispatchFanOut(t *testing.T) {
 // no registered routes does not panic.
 func TestRouter_DispatchNoConsumers(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	// Should not panic.
@@ -164,7 +164,7 @@ func TestRouter_DispatchNoConsumers(t *testing.T) {
 // the frame is dropped and the drop counter increments.
 func TestRouter_DropOnFullInbox(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newBlockingConsumer("slow-consumer")
@@ -186,7 +186,7 @@ func TestRouter_DropOnFullInbox(t *testing.T) {
 // route for a given source.
 func TestRouter_RemoveAllRoutes(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	c1 := newMockConsumer("consumer-1")
@@ -206,7 +206,7 @@ func TestRouter_RemoveAllRoutes(t *testing.T) {
 // twice for the same source returns ErrRouteExists.
 func TestRouter_DuplicateRouteError(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	c1 := newMockConsumer("consumer-1")
@@ -225,7 +225,7 @@ func TestRouter_DuplicateRouteError(t *testing.T) {
 // resampled data (approximately 2/3 the length for a 48kHz→32kHz conversion).
 func TestRouter_DispatchWithResampling(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	// Consumer expects 32kHz; source produces 48kHz.
@@ -282,7 +282,7 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 // multiple goroutines does not trigger data races (run with -race).
 func TestRouter_ConcurrentDispatch(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	c1 := newMockConsumer("consumer-1")
@@ -320,7 +320,7 @@ done:
 func TestDrainRoutePanicRecovery(t *testing.T) {
 	t.Parallel()
 
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	panicConsumer := &panicOnWriteConsumer{
@@ -399,7 +399,7 @@ func TestRouter_DrainRouteAppliesGain(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			router := NewAudioRouter(GetLogger())
+			router := NewAudioRouter(GetLogger(), nil)
 			defer router.Close()
 
 			consumer := newMockConsumer("c1")
@@ -445,7 +445,7 @@ func TestRouter_DrainRouteAppliesGain(t *testing.T) {
 func TestRouter_GainClipping(t *testing.T) {
 	t.Parallel()
 
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	defer router.Close()
 
 	consumer := newMockConsumer("c1")
@@ -507,7 +507,7 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			router := NewAudioRouter(GetLogger())
+			router := NewAudioRouter(GetLogger(), nil)
 			t.Cleanup(func() { router.Close() })
 			consumer := newMockConsumer("c1")
 			err := router.AddRoute("src-1", consumer, 48000, tt.gainDB, nil)
@@ -523,7 +523,7 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 
 func TestRouter_UpdateFilterChain(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("c1")
@@ -567,7 +567,7 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 // EQ chain when gain is unity (1.0) and a filter chain is set.
 func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("c1")
@@ -619,7 +619,7 @@ func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
 // applied in a single conversion pass.
 func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 	t.Parallel()
-	router := NewAudioRouter(GetLogger())
+	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(func() { router.Close() })
 
 	consumer := newMockConsumer("c1")
