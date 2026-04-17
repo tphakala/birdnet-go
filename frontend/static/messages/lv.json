@@ -957,6 +957,7 @@
       "title": "Tiešraides audio",
       "sourceLabel": "Audio avots",
       "connected": "Savienots",
+      "syncingAudio": "Sinhronizē tiešraides audio...",
       "enterFullscreen": "Pilnekrāna režīms",
       "exitFullscreen": "Iziet no pilnekrāna"
     },
@@ -966,7 +967,11 @@
       "grayscale": "Pelēktoņu"
     },
     "labels": {
-      "toggle": "Pārslēgt noteikšanas etiķetes"
+      "toggle": "Pārslēgt noteikšanas etiķetes",
+      "toggleTimeAxis": "Pārslēgt laika asi"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

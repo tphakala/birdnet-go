@@ -1899,6 +1899,23 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// Read PCM data from the capture buffer NOW, while the data is still in the
 	// ring buffer. By the time the job queue picks up the SaveAudioAction, the
 	// buffer may have been overwritten with newer audio data.
+	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
+	if captureEndTime.After(time.Now()) {
+		return &SaveAudioAction{
+			Settings:      p.Settings,
+			ClipName:      det.Result.ClipName,
+			bufferMgr:     p.BufferMgr,
+			sourceID:      det.Result.AudioSource.ID,
+			beginTime:     det.Result.BeginTime,
+			duration:      captureLength,
+			readyAt:       captureEndTime,
+			NoteID:        det.Result.ID,
+			PreRenderer:   p.preRenderer,
+			DetectionCtx:  detectionCtx,
+			CorrelationID: det.CorrelationID,
+		}
+	}
+
 	pcmData, err := p.readCaptureSegment(det.Result.AudioSource.ID, det.Result.BeginTime, captureLength)
 	if err != nil {
 		GetLogger().Error("Failed to read capture buffer for audio export",

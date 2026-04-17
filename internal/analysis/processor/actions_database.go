@@ -5,6 +5,7 @@ package processor
 
 import (
 	"context"
+	stderrors "errors"
 	"os"
 	"path/filepath"
 	"time"
@@ -293,6 +294,27 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			logger.String("clip_name", a.ClipName),
 			logger.String("operation", "audio_export_disabled"))
 		return nil
+	}
+
+	if len(a.pcmData) == 0 && a.bufferMgr != nil && a.duration > 0 {
+		if wait := time.Until(a.readyAt); wait > 0 {
+			return stderrors.New("audio export deferred until capture tail is available")
+		}
+
+		cb, err := a.bufferMgr.CaptureBuffer(a.sourceID)
+		if err != nil {
+			return err
+		}
+
+		endTime := a.beginTime.Add(time.Duration(a.duration) * time.Second)
+		pcmData, err := cb.ReadSegment(a.beginTime, endTime)
+		if err != nil {
+			// Both ErrInsufficientData and any other read error unwind to
+			// the job-queue retry layer via save_audio_action.go's retry
+			// config. No special per-error handling needed here.
+			return err
+		}
+		a.pcmData = pcmData
 	}
 
 	// If PCM data was not captured (e.g., buffer read failed), skip export.

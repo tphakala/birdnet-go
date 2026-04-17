@@ -258,6 +258,59 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 }
 ```
 
+### Live Spectrogram SSE (`audio_spectrogram.go`)
+
+| Method | Route                           | Handler                | Auth | Description                       |
+| ------ | ------------------------------- | ---------------------- | ---- | --------------------------------- |
+| GET    | `/streams/spectrogram/:sourceID` | `StreamLiveSpectrogram` | ❌   | Real-time live spectrogram SSE    |
+
+**Features:**
+
+- Server-side FFT/STFT generation for the live waterfall
+- Cross-browser live spectrogram rendering without relying on browser Web Audio analyzers
+- Viewer-driven lifecycle: FFT production is active only while clients are connected
+- Connection limiting: up to 5 concurrent connections per client IP
+- Heartbeat interval: 15 seconds
+
+**Event Types:**
+
+- `spectrogram-meta` - stream metadata sent immediately after connection
+- `spectrogram-columns` - batched FFT columns for waterfall rendering
+- `heartbeat` - keepalive event
+
+**Meta Event Format:**
+
+```json
+{
+  "type": "spectrogram-meta",
+  "sourceId": "audio_card_01",
+  "streamEpochUnixMs": 1712592000000,
+  "sampleRate": 48000,
+  "fftSize": 1024,
+  "hopSize": 128,
+  "window": "hann",
+  "binCount": 512,
+  "minFrequencyHz": 0,
+  "maxFrequencyHz": 24000,
+  "batchIntervalMs": 16
+}
+```
+
+**Columns Event Format:**
+
+```json
+{
+  "type": "spectrogram-columns",
+  "sourceId": "audio_card_01",
+  "columns": [
+    {
+      "tUnixMs": 1712592004123,
+      "bins": [0, 1, 3, 8, 14, 22, 19, 10]
+    }
+  ]
+}
+```
+
 ### HLS Streaming (`audio_hls.go`)
 
 | Method | Route                                            | Handler            | Auth                 | Description                    |

@@ -333,6 +333,11 @@ func setDefaultConfig() {
 	viper.SetDefault("webserver.livestream.sampleRate", 48000)
 	viper.SetDefault("webserver.livestream.segmentLength", 2)
 	viper.SetDefault("webserver.livestream.ffmpegLogLevel", "warning")
+	viper.SetDefault("webserver.livestream.spectrogram.enabled", true)
+	viper.SetDefault("webserver.livestream.spectrogram.fftsize", 1024)
+	viper.SetDefault("webserver.livestream.spectrogram.hopsize", 128)
+	viper.SetDefault("webserver.livestream.spectrogram.window", "hann")
+	viper.SetDefault("webserver.livestream.spectrogram.batchintervalms", 16)
 
 	// File output configuration
 	viper.SetDefault("output.file.enabled", true)

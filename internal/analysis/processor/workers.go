@@ -96,6 +96,17 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
 	case *MqttAction:
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
+	case *SaveAudioAction:
+		if !a.readyAt.IsZero() || (a.bufferMgr != nil && a.duration > 0) {
+			return jobqueue.RetryConfig{
+				Enabled:      true,
+				MaxRetries:   7,
+				InitialDelay: 1 * time.Second,
+				MaxDelay:     30 * time.Second,
+				Multiplier:   2.0,
+			}
+		}
+		return jobqueue.RetryConfig{Enabled: false}
 	default:
 		// Default no retry for actions that don't support it
 		return jobqueue.RetryConfig{Enabled: false}

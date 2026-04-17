@@ -35,14 +35,16 @@ type APIServerService struct {
 	metrics    *observability.Metrics
 	engine     *engine.AudioEngine
 
-	server         *api.Server
-	proc           *processor.Processor
-	birdImageCache *imageprovider.BirdImageCache
-	sunCalc        *suncalc.SunCalc
-	oauth2Server   *security.OAuth2Server
-	systemMonitor  *monitor.SystemMonitor
-	controlChan    chan string
-	audioLevelChan chan audiocore.AudioLevelData
+	server              *api.Server
+	proc                *processor.Processor
+	birdImageCache      *imageprovider.BirdImageCache
+	sunCalc             *suncalc.SunCalc
+	oauth2Server        *security.OAuth2Server
+	systemMonitor       *monitor.SystemMonitor
+	controlChan         chan string
+	audioLevelChan      chan audiocore.AudioLevelData
+	liveSpectrogramChan chan apiv2.LiveSpectrogramBatch
+	liveSpectrogramMgr  *LiveSpectrogramManager
 }
 
 // NewAPIServerService creates a new APIServerService with the given dependencies.
@@ -153,6 +155,8 @@ func (s *APIServerService) Start(_ context.Context) error {
 	// Create channels.
 	s.controlChan = make(chan string, 1)
 	s.audioLevelChan = make(chan audiocore.AudioLevelData, 100)
+	s.liveSpectrogramChan = make(chan apiv2.LiveSpectrogramBatch, 100)
+	s.liveSpectrogramMgr = NewLiveSpectrogramManager(s.settings, s.engine, s.liveSpectrogramChan)
 
 	// Create OAuth2 server.
 	s.oauth2Server = security.NewOAuth2Server()
@@ -167,6 +171,8 @@ func (s *APIServerService) Start(_ context.Context) error {
 		api.WithMetrics(s.metrics),
 		api.WithControlChannel(s.controlChan),
 		api.WithAudioLevelChannel(s.audioLevelChan),
+		api.WithLiveSpectrogramChannel(s.liveSpectrogramChan),
+		api.WithLiveSpectrogramLifecycle(s.liveSpectrogramMgr.Acquire, s.liveSpectrogramMgr.Release),
 		api.WithOAuth2Server(s.oauth2Server),
 		api.WithSunCalc(s.sunCalc),
 		api.WithV2Manager(s.dbService.V2Manager()),
@@ -249,6 +255,14 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 	if s.audioLevelChan != nil {
 		close(s.audioLevelChan)
 		s.audioLevelChan = nil
+	}
+	if s.liveSpectrogramMgr != nil {
+		s.liveSpectrogramMgr.Close()
+		s.liveSpectrogramMgr = nil
+	}
+	if s.liveSpectrogramChan != nil {
+		close(s.liveSpectrogramChan)
+		s.liveSpectrogramChan = nil
 	}
 
 	return nil

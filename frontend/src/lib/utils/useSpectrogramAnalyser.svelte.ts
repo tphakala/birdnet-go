@@ -20,6 +20,7 @@
 import {
   getAudioContext,
   isAudioContextSupported,
+  primeAudioContext,
   releaseAudioContext,
 } from './audioContextManager';
 import { dbToGain } from './audio';
@@ -86,6 +87,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     }
 
     try {
+      await primeAudioContext();
       audioContext = await getAudioContext();
       sampleRate = audioContext.sampleRate;
 
@@ -131,12 +133,6 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
       frequencyData = new Uint8Array(analyserNode.frequencyBinCount);
       analyser = analyserNode;
       isActive = true;
-
-      logger.debug('Spectrogram analyser connected', {
-        fftSize,
-        sampleRate: audioContext.sampleRate,
-        audioOutput,
-      });
     } catch (error) {
       logger.error('Failed to connect spectrogram analyser', error);
       // Clean up any partially built graph

@@ -959,6 +959,7 @@
       "title": "Áudio em Direto",
       "sourceLabel": "Fonte de Áudio",
       "connected": "Conectado",
+      "syncingAudio": "A sincronizar áudio em direto...",
       "enterFullscreen": "Tela cheia",
       "exitFullscreen": "Sair da tela cheia"
     },
@@ -968,7 +969,11 @@
       "grayscale": "Escala de Cinzentos"
     },
     "labels": {
-      "toggle": "Alternar rótulos de deteção"
+      "toggle": "Alternar rótulos de deteção",
+      "toggleTimeAxis": "Alternar eixo temporal"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

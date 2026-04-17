@@ -68,8 +68,11 @@ type Server struct {
 	engine *engine.AudioEngine
 
 	// Channels
-	controlChan    chan string
-	audioLevelChan chan audiocore.AudioLevelData
+	controlChan            chan string
+	audioLevelChan         chan audiocore.AudioLevelData
+	liveSpectrogramChan    chan apiv2.LiveSpectrogramBatch
+	acquireLiveSpectrogram func(string) error
+	releaseLiveSpectrogram func(string)
 
 	// API controller
 	apiController *apiv2.Controller
@@ -226,6 +229,22 @@ func WithControlChannel(ch chan string) ServerOption {
 func WithAudioLevelChannel(ch chan audiocore.AudioLevelData) ServerOption {
 	return func(s *Server) {
 		s.audioLevelChan = ch
+	}
+}
+
+// WithLiveSpectrogramChannel sets the live spectrogram channel for SSE streaming.
+func WithLiveSpectrogramChannel(ch chan apiv2.LiveSpectrogramBatch) ServerOption {
+	return func(s *Server) {
+		s.liveSpectrogramChan = ch
+	}
+}
+
+// WithLiveSpectrogramLifecycle sets callbacks that attach and detach the
+// server-side live spectrogram producer on demand.
+func WithLiveSpectrogramLifecycle(acquire func(string) error, release func(string)) ServerOption {
+	return func(s *Server) {
+		s.acquireLiveSpectrogram = acquire
+		s.releaseLiveSpectrogram = release
 	}
 }
 
@@ -485,6 +504,7 @@ func (s *Server) setupRoutes() error {
 		apiv2.WithV2Manager(s.v2Manager),
 		apiv2.WithMetricsStore(observability.NewMemoryStore(apiv2.MetricsHistoryMaxPoints)),
 		apiv2.WithAudioEngine(s.engine),
+		apiv2.WithLiveSpectrogramLifecycle(s.acquireLiveSpectrogram, s.releaseLiveSpectrogram),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to initialize API v2: %w", err)
@@ -508,6 +528,9 @@ func (s *Server) setupRoutes() error {
 	// Set audio level channel if available
 	if s.audioLevelChan != nil {
 		s.apiController.SetAudioLevelChan(s.audioLevelChan)
+	}
+	if s.liveSpectrogramChan != nil {
+		s.apiController.SetLiveSpectrogramChan(s.liveSpectrogramChan)
 	}
 
 	// Register SPA routes (after API controller for auth middleware access)

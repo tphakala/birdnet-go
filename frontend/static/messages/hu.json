@@ -957,6 +957,7 @@
       "title": "Élő hang",
       "sourceLabel": "Hangforrás",
       "connected": "Csatlakoztatva",
+      "syncingAudio": "Élő hang szinkronizálása...",
       "enterFullscreen": "Teljes képernyő",
       "exitFullscreen": "Teljes képernyőből kilépés"
     },
@@ -966,7 +967,11 @@
       "grayscale": "Szürkeárnyalatos"
     },
     "labels": {
-      "toggle": "Detektálási címkék kapcsolása"
+      "toggle": "Detektálási címkék kapcsolása",
+      "toggleTimeAxis": "Időtengely kapcsolása"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

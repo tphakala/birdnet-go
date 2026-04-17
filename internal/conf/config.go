@@ -1265,11 +1265,31 @@ type WebServerSettings struct {
 }
 
 type LiveStreamSettings struct {
-	Debug          bool   `yaml:"debug" json:"debug"`                   // true to enable debug mode
-	BitRate        int    `yaml:"bitrate" json:"bitRate"`               // bitrate for live stream in kbps
-	SampleRate     int    `yaml:"samplerate" json:"sampleRate"`         // sample rate for live stream in Hz
-	SegmentLength  int    `yaml:"segmentlength" json:"segmentLength"`   // length of each segment in seconds
-	FfmpegLogLevel string `yaml:"ffmpegloglevel" json:"ffmpegLogLevel"` // log level for ffmpeg
+	Debug          bool                    `yaml:"debug" json:"debug"`                   // true to enable debug mode
+	BitRate        int                     `yaml:"bitrate" json:"bitRate"`               // bitrate for live stream in kbps
+	SampleRate     int                     `yaml:"samplerate" json:"sampleRate"`         // sample rate for live stream in Hz
+	SegmentLength  int                     `yaml:"segmentlength" json:"segmentLength"`   // length of each segment in seconds
+	FfmpegLogLevel string                  `yaml:"ffmpegloglevel" json:"ffmpegLogLevel"` // log level for ffmpeg
+	Spectrogram    LiveSpectrogramSettings `yaml:"spectrogram" json:"spectrogram"`       // live spectrogram stream configuration
+}
+
+type LiveSpectrogramSettings struct {
+	Enabled         bool   `yaml:"enabled" json:"enabled"`
+	FFTSize         int    `yaml:"fftsize" json:"fftSize"`
+	HopSize         int    `yaml:"hopsize" json:"hopSize"`
+	Window          string `yaml:"window" json:"window"`
+	BatchIntervalMs int    `yaml:"batchintervalms" json:"batchIntervalMs"`
+}
+
+// EffectiveSampleRate returns the sample rate used for live streaming. If the
+// user-configured value is 0 or negative, it falls back to the project-wide
+// SampleRate constant. Producers and metadata-builders must call this so the
+// rate shown to clients matches what the FFT consumer actually runs at.
+func (ls *LiveStreamSettings) EffectiveSampleRate() int {
+	if ls.SampleRate > 0 {
+		return ls.SampleRate
+	}
+	return SampleRate
 }
 
 // BackupRetention defines backup retention policy

@@ -1,10 +1,10 @@
 <!--
   LiveStreamPage.svelte — Full-page live audio spectrogram viewer
 
-  Connects to the HLS audio stream via hls.js, feeds it through the
-  useSpectrogramAnalyser composable, and renders a scrolling waterfall
-  spectrogram. Includes source picker (discovered via SSE audio-level stream),
-  spectrogram controls, and heartbeat mechanism to keep the backend stream alive.
+  Connects to the HLS audio stream for playback and renders a scrolling
+  waterfall spectrogram from the server-side FFT stream. Includes source picker
+  (discovered via SSE audio-level stream), spectrogram controls, and a
+  heartbeat mechanism to keep the backend stream alive.
 -->
 
 <script lang="ts">
@@ -19,13 +19,20 @@
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import SpectrogramControls from '$lib/desktop/components/media/SpectrogramControls.svelte';
   import SelectDropdown from '$lib/desktop/components/forms/SelectDropdown.svelte';
+  import { primeAudioContext } from '$lib/utils/audioContextManager';
   import type { SelectOption } from '$lib/desktop/components/forms/SelectDropdown.types';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { loggers } from '$lib/utils/logger';
-  import type { ColorMapName } from '$lib/utils/spectrogramColorMaps';
+  import {
+    COLOR_MAPS,
+    DEFAULT_COLOR_MAP,
+    type ColorMapName,
+  } from '$lib/utils/spectrogramColorMaps';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
+  import { connectLiveSpectrogramStream } from '$lib/utils/liveSpectrogramStream';
+  import type { LiveSpectrogramColumn } from '$lib/types/liveSpectrogram';
   import type { PendingDetection } from '$lib/types/pending.types';
   import type { OverlayLabel, QueuedLabel } from '$lib/utils/detectionOverlay';
   import {
@@ -45,6 +52,41 @@
   const LABEL_POLL_INTERVAL_MS = 200;
   /** Maximum label age (ms) before pruning from overlay */
   const LABEL_MAX_AGE_MS = 60000;
+  /** localStorage key for persisting the user's Live Audio color map choice */
+  const COLOR_MAP_STORAGE_KEY = 'birdnet-live-audio-color-map';
+
+  /**
+   * Load the persisted color map from localStorage, validating it against
+   * the authoritative set of registered color maps. Falls back to the
+   * default if the key is unset, invalid, or localStorage is unavailable
+   * (private browsing, strict privacy modes). Scoped to the Live Audio
+   * page only — the dashboard widget and Recent Detections have their
+   * own rendering and are intentionally not affected.
+   */
+  function loadPersistedColorMap(): ColorMapName {
+    try {
+      const stored = globalThis.localStorage?.getItem(COLOR_MAP_STORAGE_KEY);
+      if (stored && stored in COLOR_MAPS) {
+        return stored as ColorMapName;
+      }
+    } catch {
+      /* localStorage not available — fall through to default */
+    }
+    return DEFAULT_COLOR_MAP;
+  }
+
+  /**
+   * Persist the user's color map choice for next visit. Swallows errors
+   * from localStorage being unavailable so the UI stays functional even
+   * in strict-privacy browser modes.
+   */
+  function persistColorMap(choice: ColorMapName): void {
+    try {
+      globalThis.localStorage?.setItem(COLOR_MAP_STORAGE_KEY, choice);
+    } catch {
+      /* localStorage not available — silent no-op */
+    }
+  }
 
   const sessionId = generateSessionId();
 
@@ -70,12 +112,20 @@
 
   // Spectrogram config
   let frequencyRange = $state<[number, number]>([0, 15000]);
-  let colorMap = $state<ColorMapName>('inferno');
+  let colorMap = $state<ColorMapName>(loadPersistedColorMap());
+
+  // Persist the color map whenever the user changes it. $effect fires on
+  // initial mount with the currently-loaded value, which is a safe no-op
+  // (writing the same value we just read).
+  $effect(() => {
+    persistColorMap(colorMap);
+  });
   let gainDb = $state(0);
   let audioOutput = $state(true);
 
   // Detection overlay state
   let showDetectionLabels = $state(true);
+  let showTimeAxis = $state(true);
   let debugOverlay = $state(false);
   let overlayLabels = $state<OverlayLabel[]>([]);
   let labelQueue: QueuedLabel[] = [];
@@ -84,6 +134,10 @@
   let slotCounter = 0;
   let detectionEventSource: ReconnectingEventSource | null = null;
   let currentWallClockAtPlayhead = $state(0);
+  let streamColumns = $state<LiveSpectrogramColumn[]>([]);
+  let streamSampleRate = $state(48000);
+  let streamFFTSize = $state(FFT_SIZE);
+  let streamHopSize = $state(128);
   const MAX_OVERLAY_SLOTS = 7;
 
   // Internal state
@@ -94,6 +148,7 @@
   let abortController: AbortController | null = null;
   let activeStreamToken: string | null = null;
   let activeSourceId: string | null = null;
+  let closeLiveSpectrogramStream: (() => void) | null = null;
 
   // Initialize composable during component init (registers cleanup $effect)
   const spectro = useSpectrogramAnalyser({ fftSize: FFT_SIZE, audioOutput: true });
@@ -149,21 +204,46 @@
     }
   }
 
-  // Describe the buffered time ranges of an audio element for diagnostics.
-  // Returns a string like "0.00-4.12, 6.00-8.50" showing all buffered ranges,
-  // which helps identify buffer holes that cause audio gaps.
-  function describeBuffered(el: HTMLAudioElement | null): string {
-    if (!el?.buffered || el.buffered.length === 0) return 'empty';
-    const ranges: string[] = [];
-    for (let i = 0; i < el.buffered.length; i++) {
-      ranges.push(`${el.buffered.start(i).toFixed(2)}-${el.buffered.end(i).toFixed(2)}`);
-    }
-    return ranges.join(', ');
+  const STREAM_COLUMNS_MAX = 2048;
+
+  function startLiveSpectrogramStream(sourceId: string) {
+    closeLiveSpectrogramStream?.();
+    streamColumns.length = 0;
+    closeLiveSpectrogramStream = connectLiveSpectrogramStream(sourceId, {
+      onMeta: meta => {
+        streamSampleRate = meta.sampleRate;
+        streamFFTSize = meta.fftSize;
+        streamHopSize = meta.hopSize;
+      },
+      onColumns: event => {
+        // Mutate in place: push new columns onto the reactive buffer
+        // and trim from the front on overflow. Avoids the per-event
+        // [...old, ...new].slice(-N) allocation; Svelte 5 reactivity
+        // coalesces mutations within a single microtask.
+        for (const column of event.columns) {
+          streamColumns.push(column);
+        }
+        const overflow = streamColumns.length - STREAM_COLUMNS_MAX;
+        if (overflow > 0) {
+          streamColumns.splice(0, overflow);
+        }
+      },
+    });
+  }
+
+  function stopLiveSpectrogramStream() {
+    closeLiveSpectrogramStream?.();
+    closeLiveSpectrogramStream = null;
+    streamColumns.length = 0;
+    streamSampleRate = 48000;
+    streamFFTSize = FFT_SIZE;
+    streamHopSize = 128;
   }
 
   async function startStream() {
     if (!selectedSourceId) return;
 
+    await primeAudioContext();
     await stopStream();
     isConnecting = true;
     connectionError = null;
@@ -199,129 +279,25 @@
       // Create audio element
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
-
-      // Audio element debug listeners for buffer underrun diagnosis
-      let hasStalled = false;
-      audioElement.addEventListener('waiting', () => {
-        hasStalled = true;
-        logger.warn('Audio element: waiting (buffer underrun)', {
-          currentTime: audioElement?.currentTime?.toFixed(3),
-          readyState: audioElement?.readyState,
-          networkState: audioElement?.networkState,
-          buffered: describeBuffered(audioElement),
-        });
-      });
-      audioElement.addEventListener('stalled', () => {
-        hasStalled = true;
-        logger.warn('Audio element: stalled (network stall)', {
-          currentTime: audioElement?.currentTime?.toFixed(3),
-          buffered: describeBuffered(audioElement),
-        });
-      });
-      audioElement.addEventListener('playing', () => {
-        if (!hasStalled) return; // Ignore initial play — only log stall recovery
-        hasStalled = false;
-        logger.warn('Audio element: resumed from stall', {
-          currentTime: audioElement?.currentTime?.toFixed(3),
-          buffered: describeBuffered(audioElement),
-        });
-      });
-      audioElement.addEventListener('error', () => {
-        const err = audioElement?.error;
-        logger.error('Audio element: error', {
-          code: err?.code,
-          message: err?.message,
-        });
-      });
+      audioElement.muted = !audioOutput;
+      audioElement.volume = Math.max(0, Math.min(1, Math.pow(10, gainDb / 20)));
 
       if (Hls.isSupported()) {
         hls = new Hls(HLS_AUDIO_CONFIG);
         hls.loadSource(hlsUrl);
         hls.attachMedia(audioElement);
-
         let fragmentsBuffered = 0;
         let playbackAttempted = false;
 
-        // Fragment load timing: track how long each fragment takes to download.
-        // Keyed by string to handle both numeric sn and 'initSegment'.
-        const fragLoadStartTimes = new Map<string, number>();
-
-        hls.on(Hls.Events.FRAG_LOADING, (_event, data) => {
-          if (signal.aborted) return;
-          const snKey = String(data.frag.sn);
-          fragLoadStartTimes.set(snKey, globalThis.performance.now());
-          // Cap map size to prevent leaks from abandoned loads
-          if (fragLoadStartTimes.size > 20) {
-            const oldest = fragLoadStartTimes.keys().next().value;
-            if (oldest !== undefined) fragLoadStartTimes.delete(oldest);
-          }
-          logger.debug('HLS frag loading', { sn: data.frag.sn, url: data.frag.relurl });
-        });
-
-        hls.on(Hls.Events.FRAG_LOADED, (_event, data) => {
-          if (signal.aborted) return;
-          const snKey = String(data.frag.sn);
-          const startTime = fragLoadStartTimes.get(snKey);
-          fragLoadStartTimes.delete(snKey);
-
-          const now = globalThis.performance.now();
-          const loadMs = startTime ? now - startTime : 0;
-          const loadDurationMs = startTime ? loadMs.toFixed(0) : '?';
-          const bytes = data.payload?.byteLength ?? data.frag.stats?.total ?? 0;
-          // Warn if fragment download took unusually long (>2s for a ~2s segment)
-          if (loadMs > 2000) {
-            logger.warn('Slow fragment download (possible network/server I/O stall)', {
-              sn: data.frag.sn,
-              loadDurationMs,
-              fragDuration: data.frag.duration?.toFixed(2),
-              bytes,
-            });
-          } else {
-            logger.debug('HLS frag loaded', { sn: data.frag.sn, loadDurationMs, bytes });
-          }
-        });
-
-        hls.on(Hls.Events.FRAG_BUFFERED, (_event, data) => {
+        hls.on(Hls.Events.FRAG_BUFFERED, () => {
           if (signal.aborted) return;
           fragmentsBuffered++;
-
-          // Buffer diagnostics
-          const bufferInfo = describeBuffered(audioElement);
-          const currentTime = audioElement?.currentTime ?? 0;
-          const buffered = audioElement?.buffered;
-          let bufferAhead = 0;
-          if (buffered && buffered.length > 0) {
-            bufferAhead = buffered.end(buffered.length - 1) - currentTime;
-          }
-
-          // Warn if buffer is getting dangerously low
-          if (playbackAttempted && bufferAhead < 1.0) {
-            logger.warn('HLS buffer running low', {
-              sn: data.frag.sn,
-              bufferAhead: bufferAhead.toFixed(2) + 's',
-              buffered: bufferInfo,
-              currentTime: currentTime.toFixed(3),
-            });
-          } else {
-            logger.debug('HLS frag buffered', {
-              sn: data.frag.sn,
-              total: fragmentsBuffered,
-              bufferAhead: bufferAhead.toFixed(2) + 's',
-            });
-          }
-
           if (
             !playbackAttempted &&
             fragmentsBuffered >= BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY
           ) {
             playbackAttempted = true;
-            audioElement?.play().catch((err: Error) => {
-              if (err.name === 'NotAllowedError') {
-                logger.warn('Autoplay blocked by browser');
-              } else {
-                logger.warn('Playback start error', err);
-              }
-            });
+            audioElement?.play().catch(() => {});
           }
         });
 
@@ -335,6 +311,9 @@
             spectro.disconnect();
             return;
           }
+          if (activeSourceId) {
+            startLiveSpectrogramStream(activeSourceId);
+          }
           startHeartbeat(activeStreamToken!);
           if (activeSourceId) {
             connectDetectionStream(activeSourceId);
@@ -347,63 +326,21 @@
           if (signal.aborted) return;
           if (data.fatal) {
             connectionError = t('spectrogram.error.connectionFailed');
-            logger.error('Fatal HLS error', {
-              type: data.type,
-              details: data.details,
-              buffered: describeBuffered(audioElement),
-              currentTime: audioElement?.currentTime?.toFixed(3),
-            });
+            logger.error('Fatal HLS error', { type: data.type, details: data.details });
             stopStream();
-          } else {
-            // Non-fatal errors — log for debugging buffer issues
-            const info: Record<string, unknown> = {
-              type: data.type,
-              details: data.details,
-              buffered: describeBuffered(audioElement),
-              currentTime: audioElement?.currentTime?.toFixed(3),
-            };
-            if ('frag' in data && data.frag) {
-              const fragSn = (data.frag as { sn?: number | string }).sn;
-              info.fragSn = fragSn;
-              // Clean up fragment timing entry on error (FRAG_LOADED won't fire)
-              fragLoadStartTimes.delete(String(fragSn));
-            }
-            // Buffer stall events are key diagnostic signals
-            if (
-              data.details === 'bufferStalledError' ||
-              data.details === 'bufferNudgeOnStall' ||
-              data.details === 'bufferSeekOverHole'
-            ) {
-              logger.warn('HLS buffer stall event', info);
-            } else {
-              logger.warn('HLS non-fatal error', info);
-            }
           }
         });
-
-        // Level/track switching diagnostics
-        hls.on(Hls.Events.BUFFER_FLUSHING, () => {
-          if (signal.aborted) return;
-          logger.warn('HLS buffer flushing', {
-            currentTime: audioElement?.currentTime?.toFixed(3),
-            buffered: describeBuffered(audioElement),
-          });
-        });
       } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari)
+        // Native HLS fallback path
         audioElement.src = hlsUrl;
         try {
           await audioElement.play();
-        } catch (e) {
-          if ((e as Error).name === 'NotAllowedError') {
-            logger.warn('Autoplay blocked by browser');
-          }
+        } catch {
+          // Native autoplay may be blocked until a user gesture occurs.
         }
         if (signal.aborted || !audioElement) return;
-        await spectro.connect(audioElement);
-        if (signal.aborted) {
-          spectro.disconnect();
-          return;
+        if (activeSourceId) {
+          startLiveSpectrogramStream(activeSourceId);
         }
         startHeartbeat(activeStreamToken!);
         if (activeSourceId) {
@@ -525,6 +462,7 @@
 
     stopHeartbeat();
     disconnectDetectionStream();
+    stopLiveSpectrogramStream();
     currentWallClockAtPlayhead = 0;
     spectro.disconnect();
 
@@ -560,12 +498,18 @@
 
   function handleAudioOutputToggle() {
     audioOutput = !audioOutput;
+    if (audioElement) {
+      audioElement.muted = !audioOutput;
+    }
     spectro.setAudioOutput(audioOutput);
   }
 
   function handleGainChange(db: number) {
     gainDb = db;
     spectro.setGain(db);
+    if (audioElement) {
+      audioElement.volume = Math.max(0, Math.min(1, Math.pow(10, db / 20)));
+    }
   }
 
   // Use onMount (NOT $effect) to avoid reactive dependency loops.
@@ -630,76 +574,6 @@
       startStream();
     }
   }
-
-  // Periodic buffer health monitor — logs buffer state every 10s to help
-  // diagnose intermittent audio gaps. Uses warn level so it appears in production.
-  $effect(() => {
-    if (!audioElement || !isStreaming) return;
-
-    let lastCurrentTime = audioElement.currentTime;
-    let lastCheckTime = globalThis.performance.now();
-    let stallCount = 0;
-
-    const interval = globalThis.setInterval(() => {
-      if (!audioElement) return;
-
-      const now = globalThis.performance.now();
-      const elapsed = (now - lastCheckTime) / 1000;
-      const currentTime = audioElement.currentTime;
-      const playbackDelta = currentTime - lastCurrentTime;
-
-      // Detect playback stall: if currentTime hasn't advanced in 10s while
-      // we're supposed to be streaming, something is wrong.
-      // Skip when paused (e.g., browser tab backgrounded) to avoid false positives.
-      if (elapsed > 9 && playbackDelta < 0.5 && currentTime > 0 && !audioElement.paused) {
-        stallCount++;
-        logger.warn('Playback stall detected: currentTime not advancing', {
-          currentTime: currentTime.toFixed(3),
-          expectedAdvance: elapsed.toFixed(1) + 's',
-          actualAdvance: playbackDelta.toFixed(3) + 's',
-          stallCount,
-          readyState: audioElement.readyState,
-          paused: audioElement.paused,
-          buffered: describeBuffered(audioElement),
-          hlsLatency: hls?.latency?.toFixed(2),
-        });
-      }
-
-      // Periodic buffer health snapshot (every 10s)
-      const buffered = audioElement.buffered;
-      let bufferAhead = 0;
-      let bufferRangeCount = 0;
-      if (buffered && buffered.length > 0) {
-        bufferAhead = buffered.end(buffered.length - 1) - currentTime;
-        bufferRangeCount = buffered.length;
-      }
-
-      const healthInfo = {
-        currentTime: currentTime.toFixed(3),
-        bufferAhead: bufferAhead.toFixed(2) + 's',
-        bufferRanges: bufferRangeCount,
-        buffered: describeBuffered(audioElement),
-        readyState: audioElement.readyState,
-        hlsLatency: hls?.latency?.toFixed(2),
-        hlsBandwidth: hls?.bandwidthEstimate
-          ? (hls.bandwidthEstimate / 1000).toFixed(0) + 'kbps'
-          : undefined,
-      };
-
-      // Use warn for unhealthy state (low buffer, multiple ranges = holes),
-      // debug for normal operation to avoid spamming production console
-      if (bufferAhead < 2.0 || bufferRangeCount > 1) {
-        logger.warn('HLS buffer health: degraded', healthInfo);
-      } else {
-        logger.debug('HLS buffer health', healthInfo);
-      }
-
-      lastCurrentTime = currentTime;
-      lastCheckTime = now;
-    }, 10000);
-
-    return () => globalThis.clearInterval(interval);
-  });
 
   // Promote queued detection labels when playhead catches up.
   // Prefers hls.playingDate (accurate), falls back to seekable-based
@@ -841,11 +715,17 @@
         <SpectrogramCanvas
           analyser={spectro.analyser}
           frequencyData={spectro.frequencyData}
-          sampleRate={spectro.sampleRate}
-          fftSize={spectro.fftSize}
+          sampleRate={streamSampleRate}
+          fftSize={streamFFTSize}
+          showFrequencyAxis={true}
+          frequencyAxisMode="adaptive"
+          {showTimeAxis}
           {frequencyRange}
           {colorMap}
-          isActive={spectro.isActive}
+          isActive={isStreaming}
+          renderMode="stream"
+          {streamColumns}
+          {streamHopSize}
           overlayLabels={showDetectionLabels ? overlayLabels : []}
           debug={debugOverlay}
           wallClockAtPlayhead={currentWallClockAtPlayhead}
@@ -880,12 +760,16 @@
         {gainDb}
         {audioOutput}
         {showDetectionLabels}
+        {showTimeAxis}
         onFrequencyRangeChange={range => (frequencyRange = range)}
         onColorMapChange={map => (colorMap = map)}
         onGainChange={handleGainChange}
         onAudioOutputToggle={handleAudioOutputToggle}
         onDetectionLabelsToggle={() => {
           showDetectionLabels = !showDetectionLabels;
+        }}
+        onTimeAxisToggle={() => {
+          showTimeAxis = !showTimeAxis;
         }}
       />
     </div>

@@ -15,9 +15,9 @@
     DEFAULT_COLOR_MAP,
     type ColorMapName,
   } from '$lib/utils/spectrogramColorMaps';
-  import { loggers } from '$lib/utils/logger';
+  import { t } from '$lib/i18n';
+  import type { LiveSpectrogramColumn } from '$lib/types/liveSpectrogram';
 
-  const logger = loggers.audio;
   /** Interval between debug time markers on the waterfall (seconds) */
   const DEBUG_MARKER_INTERVAL_SEC = 5;
 
@@ -54,6 +54,18 @@
     debug?: boolean;
     /** Current wall-clock time at playhead (Unix seconds) — used for debug time markers */
     wallClockAtPlayhead?: number;
+    /** Rendering mode: analyser bins or server-streamed bins */
+    renderMode?: 'analyser' | 'stream';
+    /** Timestamped FFT columns streamed from the backend */
+    streamColumns?: LiveSpectrogramColumn[];
+    /** Hop size for streamed FFT columns */
+    streamHopSize?: number;
+    /** Whether to show a frequency axis on the left side */
+    showFrequencyAxis?: boolean;
+    /** Frequency axis density mode */
+    frequencyAxisMode?: 'compact' | 'adaptive';
+    /** Whether to show a time axis along the bottom edge */
+    showTimeAxis?: boolean;
   }
 
   let {
@@ -70,6 +82,12 @@
     overlayFontSize = 11,
     debug = false,
     wallClockAtPlayhead = 0,
+    renderMode = 'analyser',
+    streamColumns = [],
+    streamHopSize = 128,
+    showFrequencyAxis = false,
+    frequencyAxisMode = 'adaptive',
+    showTimeAxis = false,
   }: Props = $props();
 
   let canvasEl: HTMLCanvasElement | undefined = $state();
@@ -78,6 +96,15 @@
   // CSS pixel dimensions (from ResizeObserver)
   let cssWidth = $state(800);
   let cssHeight = $state(300);
+  // Non-reactive FIFO queue of pending stream columns. Held as a plain array
+  // with an integer head index so the animation loop can dequeue in O(1)
+  // instead of calling queuedStreamColumns.slice(1) on every drained column.
+  // Only the feed $effect and the animation loop touch these — neither path
+  // needs Svelte reactivity on this buffer.
+  let queuedStreamColumns: LiveSpectrogramColumn[] = [];
+  let queuedStreamHead = 0;
+  let lastQueuedStreamUnixMs = 0;
+  const QUEUED_STREAM_COMPACT_THRESHOLD = 256;
 
   // DPR tracking
   let dpr = $state(globalThis.devicePixelRatio ?? 1);
@@ -85,6 +112,16 @@
   // Device pixel dimensions
   let deviceWidth = $derived(Math.round(cssWidth * dpr));
   let deviceHeight = $derived(Math.round(cssHeight * dpr));
+  let frequencyAxisWidthCss = $derived.by(() => {
+    if (!showFrequencyAxis) return 0;
+    return frequencyAxisMode === 'compact' ? 42 : 50;
+  });
+  let frequencyAxisWidth = $derived(Math.round(frequencyAxisWidthCss * dpr));
+  let plotOffsetX = $derived(showFrequencyAxis ? frequencyAxisWidth : 0);
+  let timeAxisHeightCss = $derived(showTimeAxis ? 22 : 0);
+  let timeAxisHeight = $derived(Math.round(timeAxisHeightCss * dpr));
+  let plotHeight = $derived(Math.max(1, deviceHeight - timeAxisHeight));
+  let plotWidth = $derived(Math.max(1, deviceWidth - plotOffsetX));
 
   // Precomputed bin-to-pixel mapping: maps each DEVICE pixel row to FFT bin index
   // y=0 is top of canvas = highest frequency
@@ -92,7 +129,7 @@
     const binCount = fftSize / 2;
     const nyquist = sampleRate / 2;
     const [minFreq, maxFreq] = frequencyRange;
-    const height = deviceHeight;
+    const height = plotHeight;
     const map = new Uint16Array(height);
 
     for (let y = 0; y < height; y++) {
@@ -110,6 +147,99 @@
   // Selected color LUT
   // eslint-disable-next-line security/detect-object-injection -- colorMap is typed as ColorMapName
   let colorLUT = $derived(COLOR_MAPS[colorMap] ?? COLOR_MAPS[DEFAULT_COLOR_MAP]);
+  const MAX_RENDER_READY_COLUMNS = 8192;
+
+  function getFrequencyTickCount(): number {
+    if (!showFrequencyAxis) return 0;
+    if (frequencyAxisMode === 'compact') return 3;
+    if (cssHeight < 260) return 3;
+    if (cssHeight < 520) return 5;
+    return 7;
+  }
+
+  function formatFrequencyLabel(hz: number): string {
+    const khz = hz / 1000;
+    const rounded = Math.round(khz * 10) / 10;
+    return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+  }
+
+  function buildFrequencyTicks(count: number): Array<{ y: number; label: string }> {
+    if (!showFrequencyAxis || count < 2 || plotHeight <= 0) return [];
+    const [minFreq, maxFreq] = frequencyRange;
+    const ticks: Array<{ y: number; label: string }> = [];
+    for (let i = 0; i < count; i++) {
+      const ratio = count === 1 ? 0 : i / (count - 1);
+      const freq = minFreq + ratio * (maxFreq - minFreq);
+      const y = plotHeight - ratio * plotHeight;
+      ticks.push({
+        y,
+        label: formatFrequencyLabel(freq),
+      });
+    }
+    return ticks;
+  }
+
+  function aggregateStreamColumns(
+    columns: Array<number[] | Uint8Array<ArrayBuffer>>,
+    binCount: number,
+    start = 0,
+    end: number = columns.length
+  ): Uint8Array<ArrayBuffer> {
+    const aggregated = new Uint8Array(binCount);
+    const count = end - start;
+    if (count <= 0) return aggregated;
+
+    for (let bin = 0; bin < binCount; bin++) {
+      let totalValue = 0;
+      for (let i = start; i < end; i++) {
+        /* eslint-disable security/detect-object-injection -- bin and i are bounded loop indices for dense FFT column arrays */
+        const value = columns[i][bin] ?? 0;
+        /* eslint-enable security/detect-object-injection */
+        totalValue += value;
+      }
+      /* eslint-disable security/detect-object-injection -- bin is a bounded loop index for dense FFT column arrays */
+      aggregated[bin] = Math.round(totalValue / count);
+      /* eslint-enable security/detect-object-injection */
+    }
+
+    return aggregated;
+  }
+
+  $effect(() => {
+    if (renderMode !== 'stream') {
+      queuedStreamColumns.length = 0;
+      queuedStreamHead = 0;
+      lastQueuedStreamUnixMs = 0;
+      return;
+    }
+
+    let appended = 0;
+    for (const column of streamColumns) {
+      if (column.tUnixMs > lastQueuedStreamUnixMs) {
+        queuedStreamColumns.push(column);
+        lastQueuedStreamUnixMs = column.tUnixMs;
+        appended++;
+      }
+    }
+    if (appended === 0) return;
+
+    // Cap the queue to prevent unbounded growth if the animation loop
+    // stops draining (e.g., tab backgrounded). Trim from the unread head.
+    const live = queuedStreamColumns.length - queuedStreamHead;
+    if (live > 4096) {
+      queuedStreamHead += live - 4096;
+    }
+
+    // Periodically compact when the head has advanced far enough that
+    // the prefix of already-consumed columns dominates the array.
+    if (
+      queuedStreamHead > QUEUED_STREAM_COMPACT_THRESHOLD &&
+      queuedStreamHead * 2 > queuedStreamColumns.length
+    ) {
+      queuedStreamColumns = queuedStreamColumns.slice(queuedStreamHead);
+      queuedStreamHead = 0;
+    }
+  });
 
   // ResizeObserver with debouncing (100ms)
   $effect(() => {
@@ -184,7 +314,6 @@
             overlayCanvasEl.width = newW;
             overlayCanvasEl.height = newH;
           }
-          logger.debug('Canvas resized with content preserved', { oldW, oldH, newW, newH });
           return;
         }
       } catch {
@@ -203,7 +332,8 @@
 
   // Main animation loop
   $effect(() => {
-    if (!analyser || !isActive || !canvasEl) return;
+    if (!isActive || !canvasEl) return;
+    if (renderMode === 'analyser' && !analyser) return;
 
     const ctx = canvasEl.getContext('2d');
     if (!ctx) return;
@@ -232,6 +362,18 @@
     let frameId: number;
     // Track whether overlay was drawn last frame to avoid clearing an already-empty canvas
     let overlayHadContent = false;
+    let lastStreamBins: number[] | Uint8Array<ArrayBuffer> | null = null;
+    // Head-indexed FIFO of FFT columns ready to paint. Append via push(),
+    // consume via head++ to avoid O(N) slice() calls per dequeue.
+    let renderReadyColumns: Array<number[] | Uint8Array<ArrayBuffer>> = [];
+    let renderReadyHead = 0;
+    const RENDER_READY_COMPACT_THRESHOLD = 256;
+    let streamColumnAccumulator = 0;
+    let hasRenderedStreamColumns = false;
+    let clearedStreamPrimingCanvas = false;
+    let wasStreamPriming = false;
+    const streamColumnsPerSecond =
+      renderMode === 'stream' ? sampleRate / Math.max(1, streamHopSize) : 0;
 
     // Convert CSS px/s to device px/s
     const deviceScrollSpeed = scrollSpeed * dpr;
@@ -265,52 +407,286 @@
       const now = performance.now();
       const deltaTime = (now - lastFrameTime) / 1000;
       lastFrameTime = now;
+      let dueStreamColumns: LiveSpectrogramColumn[] = [];
+      let streamPriming = false;
 
-      // Read frequency data from analyser
-      analyser.getByteFrequencyData(frequencyData);
+      if (renderMode === 'analyser') {
+        analyser?.getByteFrequencyData(frequencyData);
+      } else if (queuedStreamColumns.length - queuedStreamHead > 0) {
+        const playheadUnixMs = wallClockAtPlayhead > 0 ? Math.floor(wallClockAtPlayhead * 1000) : 0;
+
+        // O(1) head-index dequeue — no slice() copies per column.
+        /* eslint-disable security/detect-object-injection -- queuedStreamHead is a monotonic index into an internal FIFO */
+        while (
+          queuedStreamHead < queuedStreamColumns.length &&
+          playheadUnixMs > 0 &&
+          queuedStreamColumns[queuedStreamHead].tUnixMs <= playheadUnixMs
+        ) {
+          dueStreamColumns.push(queuedStreamColumns[queuedStreamHead]);
+          queuedStreamHead++;
+        }
+        /* eslint-enable security/detect-object-injection */
+        // Compact opportunistically once the consumed prefix is large
+        // enough to make the one-shot copy worth it.
+        if (
+          queuedStreamHead > QUEUED_STREAM_COMPACT_THRESHOLD &&
+          queuedStreamHead * 2 > queuedStreamColumns.length
+        ) {
+          queuedStreamColumns = queuedStreamColumns.slice(queuedStreamHead);
+          queuedStreamHead = 0;
+        }
+        if (dueStreamColumns.length > 0) {
+          const dueBins = dueStreamColumns.map(column => column.bins);
+          renderReadyColumns.push(...dueBins);
+          // Trim from the unread head instead of slicing — matches the
+          // queuedStreamColumns head-index pattern below.
+          const renderLive = renderReadyColumns.length - renderReadyHead;
+          if (renderLive > MAX_RENDER_READY_COLUMNS) {
+            renderReadyHead += renderLive - MAX_RENDER_READY_COLUMNS;
+          }
+          lastStreamBins = dueBins[dueBins.length - 1];
+        }
+      } else if (renderMode === 'stream' && wallClockAtPlayhead > 0) {
+        streamPriming = true;
+      }
+
+      if (
+        renderMode === 'stream' &&
+        !hasRenderedStreamColumns &&
+        dueStreamColumns.length === 0 &&
+        renderReadyColumns.length === 0
+      ) {
+        streamPriming = true;
+      }
+
+      if (streamPriming && !clearedStreamPrimingCanvas) {
+        ctx.clearRect(0, 0, deviceWidth, deviceHeight);
+        clearedStreamPrimingCanvas = true;
+      }
+
+      if (showFrequencyAxis && plotOffsetX > 0) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, plotOffsetX, plotHeight);
+      }
+      if (showTimeAxis && timeAxisHeight > 0) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(plotOffsetX, plotHeight, plotWidth, timeAxisHeight);
+      }
 
       // Compute device pixels to scroll
       scrollAccumulator += deviceScrollSpeed * deltaTime;
-      const pixelsToScroll = Math.floor(scrollAccumulator);
-      scrollAccumulator -= pixelsToScroll;
+      let pixelsToScroll = Math.floor(scrollAccumulator);
+      if (streamPriming) {
+        scrollAccumulator = 0;
+        pixelsToScroll = 0;
+      } else {
+        if (wasStreamPriming) {
+          scrollAccumulator = 0;
+          streamColumnAccumulator = 0;
+          pixelsToScroll = 0;
+          if (!hasRenderedStreamColumns) {
+            ctx.clearRect(0, 0, deviceWidth, deviceHeight);
+          }
+        }
+        scrollAccumulator -= pixelsToScroll;
+      }
+      wasStreamPriming = streamPriming;
 
       if (pixelsToScroll > 0) {
-        const w = deviceWidth;
-        const h = deviceHeight;
+        const w = plotWidth;
+        const h = plotHeight;
 
-        // Self-blit: shift existing content left (GPU-composited)
-        ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
+        // Self-blit: shift existing content left (GPU-composited).
+        // Always uses pixelsToScroll (not drawColumns below) so the
+        // canvas shift matches the logical scroll distance. This branch
+        // is mutually exclusive with the drawColumns clamp below: the
+        // clamp only runs when !hasRenderedStreamColumns, which is the
+        // same condition that skips the blit on the first priming frame.
+        if (hasRenderedStreamColumns || renderMode === 'analyser') {
+          ctx.drawImage(
+            canvasEl!,
+            plotOffsetX + pixelsToScroll,
+            0,
+            Math.max(0, w - pixelsToScroll),
+            h,
+            plotOffsetX,
+            0,
+            Math.max(0, w - pixelsToScroll),
+            h
+          );
+        }
 
-        // Draw new column(s) at right edge using device pixel dimensions
-        const imgData = ctx.createImageData(pixelsToScroll, h);
-        const data = new Uint32Array(imgData.data.buffer);
+        // drawColumns is the final width of the new-content strip we
+        // draw at the right edge. Defaults to pixelsToScroll but may
+        // be clamped smaller below on priming frames when
+        // columnsToConsume < pixelsToScroll. All ImageData allocation,
+        // indexing, and placement below use drawColumns so the buffer
+        // stride always matches the loop's actual write width —
+        // previously the buffer was allocated with pixelsToScroll BEFORE
+        // the clamp and then indexed with the clamped value afterwards,
+        // producing a stride/offset mismatch that corrupted pixels on
+        // the very first frame with stream data (CodeRabbit flagged
+        // this on PR #2745).
+        let drawColumns = pixelsToScroll;
         const currentBinMap = pixelToBinMap;
         const currentLUT = colorLUT;
+        let streamPixels: Array<number[] | Uint8Array<ArrayBuffer>> = [];
 
-        for (let col = 0; col < pixelsToScroll; col++) {
+        if (renderMode === 'stream') {
+          streamColumnAccumulator += streamColumnsPerSecond * deltaTime;
+          let columnsToConsume = Math.floor(streamColumnAccumulator);
+          if (columnsToConsume > 0) {
+            streamColumnAccumulator -= columnsToConsume;
+          }
+
+          const renderReadyAvailable = renderReadyColumns.length - renderReadyHead;
+          if (renderReadyAvailable > 0 && columnsToConsume === 0) {
+            columnsToConsume = 1;
+          }
+
+          if (columnsToConsume > renderReadyAvailable) {
+            columnsToConsume = renderReadyAvailable;
+          }
+
+          if (columnsToConsume > 0) {
+            if (!hasRenderedStreamColumns) {
+              drawColumns = Math.min(drawColumns, Math.max(1, columnsToConsume));
+            }
+            // View slice against the live head; advance head without copying.
+            const consumeStart = renderReadyHead;
+            const consumeEnd = renderReadyHead + columnsToConsume;
+            renderReadyHead = consumeEnd;
+            hasRenderedStreamColumns = true;
+            clearedStreamPrimingCanvas = false;
+            const columnsPerPixel = columnsToConsume / drawColumns;
+
+            // In stream mode the bin count is dictated by the server's FFT
+            // size (streamed via the spectrogram-meta event and forwarded
+            // into the fftSize prop), not by frequencyData.length — which
+            // is fixed at the client's AnalyserNode fftSize/2 and exists
+            // only for the analyser-mode render path. If the server is
+            // configured with fftSize != 1024 the two numbers differ and
+            // aggregation would truncate the output, leaving the extra
+            // bins undefined and producing black unrendered bands in the
+            // waterfall (sentry-io flagged this on PR #2745).
+            const streamBinCount = fftSize / 2;
+            for (let col = 0; col < drawColumns; col++) {
+              const offsetStart = Math.floor(col * columnsPerPixel);
+              const offsetEnd = Math.max(offsetStart + 1, Math.floor((col + 1) * columnsPerPixel));
+              const sliceStart = consumeStart + offsetStart;
+              const sliceEnd = Math.min(consumeStart + offsetEnd, consumeEnd);
+              streamPixels.push(
+                sliceEnd > sliceStart
+                  ? aggregateStreamColumns(renderReadyColumns, streamBinCount, sliceStart, sliceEnd)
+                  : (lastStreamBins ?? [])
+              );
+            }
+          } else if (lastStreamBins) {
+            for (let col = 0; col < drawColumns; col++) {
+              streamPixels.push(lastStreamBins);
+            }
+          }
+
+          // Compact the ready-column buffer once the consumed prefix
+          // dominates the backing array. Amortised O(1) per column since
+          // compaction only runs at threshold * 2 intervals.
+          if (
+            renderReadyHead > RENDER_READY_COMPACT_THRESHOLD &&
+            renderReadyHead * 2 > renderReadyColumns.length
+          ) {
+            renderReadyColumns = renderReadyColumns.slice(renderReadyHead);
+            renderReadyHead = 0;
+          }
+        }
+
+        // Allocate the ImageData here, AFTER drawColumns has been
+        // finalized inside the stream branch, so the buffer stride
+        // matches the write loop below.
+        const imgData = ctx.createImageData(drawColumns, h);
+        const data = imgData.data;
+
+        for (let col = 0; col < drawColumns; col++) {
+          let columnBins: number[] | Uint8Array<ArrayBuffer> = frequencyData;
+          if (renderMode === 'stream') {
+            /* eslint-disable security/detect-object-injection -- col is a bounded loop index for the scroll buffer */
+            columnBins = streamPixels[col] ?? lastStreamBins ?? [];
+            /* eslint-enable security/detect-object-injection */
+          }
           for (let y = 0; y < h; y++) {
             /* eslint-disable security/detect-object-injection -- loop indices and typed array lookups */
             const binIndex = currentBinMap[y];
-            const magnitude = frequencyData[binIndex];
-            data[y * pixelsToScroll + col] = currentLUT[magnitude];
+            const magnitude = columnBins[binIndex] ?? 0;
+            const rgba = currentLUT[magnitude];
+            const offset = (y * drawColumns + col) * 4;
+            data[offset] = rgba & 0xff;
+            data[offset + 1] = (rgba >>> 8) & 0xff;
+            data[offset + 2] = (rgba >>> 16) & 0xff;
+            data[offset + 3] = (rgba >>> 24) & 0xff;
             /* eslint-enable security/detect-object-injection */
           }
         }
 
-        // putImageData works in raw device pixel coordinates (no transform needed)
-        ctx.putImageData(imgData, w - pixelsToScroll, 0);
+        // putImageData works in raw device pixel coordinates (no transform needed).
+        // Placement uses drawColumns so the buffer's right edge lines up
+        // with the canvas's right edge regardless of any priming clamp.
+        ctx.putImageData(imgData, plotOffsetX + w - drawColumns, 0);
       }
 
       // --- Overlay: detection labels + debug time markers ---
-      const hasOverlayContent = overlayLabels.length > 0 || debug;
+      const hasOverlayContent =
+        showFrequencyAxis || showTimeAxis || overlayLabels.length > 0 || debug || streamPriming;
 
       if (olCtx && hasOverlayContent) {
         olCtx.clearRect(0, 0, deviceWidth, deviceHeight);
 
+        if (showFrequencyAxis && plotOffsetX > 0) {
+          const axisFontSize = Math.max(
+            9,
+            Math.round((frequencyAxisMode === 'compact' ? 9 : 10) * dpr)
+          );
+          const ticks = buildFrequencyTicks(getFrequencyTickCount());
+
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.strokeStyle = 'rgba(255, 255, 255, 0.26)';
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          olCtx.lineWidth = 1 * dpr;
+          olCtx.font = `${axisFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'right';
+
+          olCtx.beginPath();
+          olCtx.moveTo(plotOffsetX - 0.5 * dpr, 0);
+          olCtx.lineTo(plotOffsetX - 0.5 * dpr, plotHeight);
+          olCtx.stroke();
+
+          const topAxisPadding =
+            frequencyAxisMode === 'compact' ? axisFontSize * 1.1 : axisFontSize;
+          for (const tick of ticks) {
+            const y = Math.max(topAxisPadding, Math.min(plotHeight - axisFontSize, tick.y));
+            olCtx.beginPath();
+            olCtx.moveTo(plotOffsetX - 6 * dpr, y);
+            olCtx.lineTo(plotOffsetX - 1.5 * dpr, y);
+            olCtx.stroke();
+            olCtx.fillText(tick.label, plotOffsetX - 8 * dpr, y);
+          }
+
+          olCtx.textBaseline = 'top';
+          olCtx.textAlign = 'left';
+          // Unit label routed through i18n per frontend/CLAUDE.md —
+          // "kHz" is the same string in every target locale but the
+          // key indirection satisfies the "no hardcoded user-facing
+          // text" rule enforced by CodeRabbit and gives a single
+          // place to change the label if ever needed.
+          olCtx.fillText(t('spectrogram.axis.kHz'), 4 * dpr, 4 * dpr);
+          olCtx.restore();
+        }
+
         // --- Debug time markers: vertical lines every 5s with HH:MM:SS ---
         if (debug && wallClockAtPlayhead > 0) {
           const debugFontSize = Math.round(9 * dpr);
-          const visibleSeconds = deviceWidth / deviceScrollSpeed;
+          const visibleSeconds = plotWidth / deviceScrollSpeed;
 
           // Draw markers from right edge backwards
           // Right edge = wallClockAtPlayhead, left edge = wallClockAtPlayhead - visibleSeconds
@@ -331,8 +707,8 @@
             t -= DEBUG_MARKER_INTERVAL_SEC
           ) {
             const ageSeconds = rightEdgeTime - t;
-            const x = deviceWidth - ageSeconds * deviceScrollSpeed;
-            if (x < 0 || x > deviceWidth) continue;
+            const x = plotOffsetX + plotWidth - ageSeconds * deviceScrollSpeed;
+            if (x < plotOffsetX || x > deviceWidth) continue;
 
             // Vertical dashed line
             olCtx.strokeStyle = 'rgba(255, 255, 0, 0.4)';
@@ -340,7 +716,7 @@
             olCtx.setLineDash([4 * dpr, 4 * dpr]);
             olCtx.beginPath();
             olCtx.moveTo(x, 0);
-            olCtx.lineTo(x, deviceHeight);
+            olCtx.lineTo(x, plotHeight);
             olCtx.stroke();
             olCtx.setLineDash([]);
 
@@ -349,7 +725,7 @@
             olCtx.font = `${debugFontSize}px monospace`;
             olCtx.fillStyle = 'rgba(255, 255, 0, 0.8)';
             olCtx.textBaseline = 'bottom';
-            olCtx.fillText(timeStr, x + 2 * dpr, deviceHeight - 2 * dpr);
+            olCtx.fillText(timeStr, x + 2 * dpr, plotHeight - 2 * dpr);
           }
 
           // Debug info panel (top-left corner)
@@ -359,17 +735,80 @@
           const playheadStr = formatTimeCached(wallClockAtPlayhead);
           const nowStr = formatTimeCached(Date.now() / 1000);
           const hlsDelay = (Date.now() / 1000 - wallClockAtPlayhead).toFixed(1);
-          olCtx.fillText(`playhead: ${playheadStr}`, 4 * dpr, 4 * dpr);
+          olCtx.fillText(`playhead: ${playheadStr}`, plotOffsetX + 4 * dpr, 4 * dpr);
           olCtx.fillText(
             `wall: ${nowStr}  HLS lag: ${hlsDelay}s`,
-            4 * dpr,
+            plotOffsetX + 4 * dpr,
             4 * dpr + debugFontSize + 2 * dpr
           );
           olCtx.fillText(
             `queue: ${overlayLabels.length} labels`,
-            4 * dpr,
+            plotOffsetX + 4 * dpr,
             4 * dpr + (debugFontSize + 2 * dpr) * 2
           );
+
+          olCtx.restore();
+        }
+
+        if (streamPriming) {
+          const primingFontSize = Math.max(10, Math.round(10 * dpr));
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+          olCtx.font = `${primingFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'center';
+          olCtx.fillText(
+            t('spectrogram.page.syncingAudio'),
+            plotOffsetX + plotWidth / 2,
+            plotHeight / 2
+          );
+          olCtx.restore();
+        }
+
+        if (showTimeAxis && wallClockAtPlayhead > 0) {
+          const axisFontSize = Math.max(9, Math.round(10 * dpr));
+          const visibleSeconds = plotWidth / deviceScrollSpeed;
+          const leftEdgeTime = wallClockAtPlayhead - visibleSeconds;
+          const midpointTime = leftEdgeTime + visibleSeconds / 2;
+          const timeLabels = [
+            { x: plotOffsetX + 8 * dpr, time: leftEdgeTime, align: 'left' as const },
+            { x: plotOffsetX + plotWidth / 2, time: midpointTime, align: 'center' as const },
+            {
+              x: plotOffsetX + plotWidth - 8 * dpr,
+              time: wallClockAtPlayhead,
+              align: 'right' as const,
+            },
+          ];
+
+          olCtx.save();
+          olCtx.shadowColor = 'transparent';
+          olCtx.shadowBlur = 0;
+          olCtx.strokeStyle = 'rgba(255, 255, 255, 0.22)';
+          olCtx.fillStyle = 'rgba(255, 255, 255, 0.78)';
+          olCtx.lineWidth = 1 * dpr;
+          olCtx.font = `${axisFontSize}px sans-serif`;
+          olCtx.textBaseline = 'middle';
+          olCtx.textAlign = 'center';
+
+          olCtx.beginPath();
+          olCtx.moveTo(plotOffsetX, plotHeight + 0.5 * dpr);
+          olCtx.lineTo(plotOffsetX + plotWidth, plotHeight + 0.5 * dpr);
+          olCtx.stroke();
+
+          for (const label of timeLabels) {
+            olCtx.textAlign = label.align;
+            olCtx.beginPath();
+            olCtx.moveTo(label.x, plotHeight + 1.5 * dpr);
+            olCtx.lineTo(label.x, plotHeight + 6 * dpr);
+            olCtx.stroke();
+            olCtx.fillText(
+              formatTimeCached(label.time),
+              label.x,
+              plotHeight + timeAxisHeight / 2 + 1 * dpr
+            );
+          }
 
           olCtx.restore();
         }
@@ -385,15 +824,15 @@
           olCtx.shadowOffsetY = 1 * dpr;
           olCtx.textBaseline = 'middle';
 
-          const maxSlots = Math.max(2, Math.floor(deviceHeight / (fontSize * 2.5)));
+          const maxSlots = Math.max(2, Math.floor(plotHeight / (fontSize * 2.5)));
 
           for (const label of overlayLabels) {
             const labelAge = (now - label.birthTime) / 1000;
-            const x = deviceWidth - labelAge * deviceScrollSpeed;
+            const x = plotOffsetX + plotWidth - labelAge * deviceScrollSpeed;
 
-            if (x < -200 * dpr || x > deviceWidth) continue;
+            if (x < plotOffsetX - 200 * dpr || x > deviceWidth) continue;
 
-            const slotHeight = deviceHeight / (maxSlots + 1);
+            const slotHeight = plotHeight / (maxSlots + 1);
             const y = slotHeight * (1 + (label.ySlot % maxSlots));
 
             if (debug && label.firstDetected) {

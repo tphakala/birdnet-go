@@ -959,6 +959,7 @@
       "title": "Live audio",
       "sourceLabel": "Audiobron",
       "connected": "Verbonden",
+      "syncingAudio": "Live-audio synchroniseren...",
       "enterFullscreen": "Volledig scherm",
       "exitFullscreen": "Volledig scherm sluiten"
     },
@@ -968,7 +969,11 @@
       "grayscale": "Grijstinten"
     },
     "labels": {
-      "toggle": "Detectielabels aan/uit"
+      "toggle": "Detectielabels aan/uit",
+      "toggleTimeAxis": "Tijdas aan/uit"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {

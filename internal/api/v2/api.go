@@ -93,7 +93,19 @@ type Controller struct {
 
 	// Audio level channel for SSE streaming
 	// TODO: Consider moving to a dedicated audio manager
-	audioLevelChan chan audiocore.AudioLevelData
+	audioLevelChan         chan audiocore.AudioLevelData
+	liveSpectrogramChan    chan LiveSpectrogramBatch
+	acquireLiveSpectrogram func(string) error
+	releaseLiveSpectrogram func(string)
+	// liveSpectrogramMgr holds the SSE broadcaster state for the live
+	// spectrogram endpoint. It MUST live on the Controller, not at package
+	// scope — the embedded sync.Once for the broadcaster goroutine resets
+	// on each Controller construction, which is what allows a
+	// programmatic server restart to rebind a fresh broadcaster to a new
+	// liveSpectrogramChan. A package-level singleton would leave the
+	// broadcaster bound to the first channel forever and silently drop
+	// data after any restart (caught by Sentry on PR #2745).
+	liveSpectrogramMgr *liveSpectrogramManager
 
 	// engine provides access to the unified audio subsystem (sources, buffers, routing).
 	engine *engine.AudioEngine
@@ -168,6 +180,15 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
 		c.engine = e
+	}
+}
+
+// WithLiveSpectrogramLifecycle injects callbacks that activate and release the
+// server-side live spectrogram producer for a source.
+func WithLiveSpectrogramLifecycle(acquire func(string) error, release func(string)) Option {
+	return func(c *Controller) {
+		c.acquireLiveSpectrogram = acquire
+		c.releaseLiveSpectrogram = release
 	}
 }
 
@@ -362,6 +383,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		cancel:               cancel,
 		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+		liveSpectrogramMgr:   newLiveSpectrogramManager(),
 	}
 
 	// Initialize audio processing cache and concurrency limiter
@@ -571,6 +593,7 @@ func (c *Controller) initRoutes() {
 		{"stream health routes", c.initStreamHealthRoutes},
 		{"quiet hours routes", c.initQuietHoursRoutes},
 		{"audio level routes", c.initAudioLevelRoutes},
+		{"audio spectrogram routes", c.initAudioSpectrogramRoutes},
 		{"hls streaming routes", c.initHLSRoutes},
 		{"integration routes", c.initIntegrationsRoutes},
 		{"control routes", c.initControlRoutes},

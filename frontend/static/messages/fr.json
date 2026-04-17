@@ -959,6 +959,7 @@
       "title": "Audio en direct",
       "sourceLabel": "Source audio",
       "connected": "Connecté",
+      "syncingAudio": "Synchronisation de l'audio en direct...",
       "enterFullscreen": "Plein écran",
       "exitFullscreen": "Quitter le plein écran"
     },
@@ -968,7 +969,11 @@
       "grayscale": "Niveaux de gris"
     },
     "labels": {
-      "toggle": "Basculer les étiquettes de détection"
+      "toggle": "Basculer les étiquettes de détection",
+      "toggleTimeAxis": "Basculer l'axe du temps"
+    },
+    "axis": {
+      "kHz": "kHz"
     }
   },
   "system": {
