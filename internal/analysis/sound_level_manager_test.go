@@ -116,7 +116,11 @@ func TestSoundLevelManagerChannelCommunication(t *testing.T) {
 func TestHotReloadIntegrationBasic(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		soundLevelChan := make(chan soundlevel.SoundLevelData, 100)
+		defer close(soundLevelChan)
 		manager := NewSoundLevelManager(soundLevelChan, nil, nil, nil)
+		// Defer inside the bubble so cleanup also runs if require.NoError
+		// below aborts; t.Cleanup would run after synctest.Test returns.
+		defer manager.Stop()
 
 		var wg sync.WaitGroup
 		var restartErr error
@@ -127,9 +131,6 @@ func TestHotReloadIntegrationBasic(t *testing.T) {
 
 		wg.Wait()
 		require.NoError(t, restartErr, "Restart should not error")
-
-		manager.Stop()
-		close(soundLevelChan)
 	})
 }
 
