@@ -31,6 +31,32 @@ func TestResolveTimezone_FallbackOnZeroCoordinates(t *testing.T) {
 	require.NotNil(t, loc, "resolveTimezone returned nil for (0,0)")
 }
 
+func TestResolveTimezone_CacheReturnsSameLocation(t *testing.T) {
+	first := resolveTimezone(testLatitude, testLongitude)
+	second := resolveTimezone(testLatitude, testLongitude)
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+	// Cache hit returns the exact same *time.Location pointer, so the
+	// per-coord load path runs at most once.
+	assert.Same(t, first, second, "repeat resolveTimezone should return the cached pointer")
+
+	tzMu.Lock()
+	_, ok := tzCache[tzCacheKey(testLatitude, testLongitude)]
+	tzMu.Unlock()
+	assert.True(t, ok, "cache should be populated after first resolve")
+}
+
+func TestResolveTimezone_NearbyCoordsShareCacheEntry(t *testing.T) {
+	// Coordinates within ~11 m (the 4-decimal cache precision) must
+	// share a cache entry, so tiny config drift does not re-load the
+	// 32 MB tzf dataset.
+	first := resolveTimezone(testLatitude, testLongitude)
+	second := resolveTimezone(testLatitude+0.00001, testLongitude+0.00001)
+	require.NotNil(t, first)
+	require.NotNil(t, second)
+	assert.Same(t, first, second, "nearby coordinates should resolve to the cached *time.Location")
+}
+
 func TestNewSunCalc_StoresLocation(t *testing.T) {
 	sc := NewSunCalc(testLatitude, testLongitude)
 	require.NotNil(t, sc.location, "SunCalc.location is nil after construction")
