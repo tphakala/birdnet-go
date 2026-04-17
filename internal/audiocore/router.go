@@ -464,13 +464,24 @@ func (r *AudioRouter) drainRoute(route *Route) {
 // writes it to the route's consumer. It is called from drainRoute's select loop
 // and is extracted to keep drainRoute under the cognitive-complexity limit.
 //
-// Pool discipline for the resample buffer:
-//   - Allocated from the pool before the consumer write, returned after.
-//   - If processing replaces frame.Data, the resample buffer is returned before
-//     reassignment so the wrong (processed) slice is never put back.
-//   - If resampling or processing fails, the buffer is returned before continue.
+// Pool discipline:
+//   - Resample buffer: allocated before resampling, returned after Write (or on error).
+//     When processing follows, the resample buffer is returned before frame.Data is
+//     reassigned so the wrong (processed) slice is never put back to the resample pool.
+//   - Processing float64 scratch and output byte buffers: allocated inside
+//     applyProcessing, returned at the trailing guards after Write returns.
+//   - processingOutPool and resamplePool cannot both be non-nil at the trailing
+//     guards by construction, so the two trailing Puts are mutually exclusive.
 func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	var resamplePool *buffer.BytePool // nil when not pooled
+
+	// Declare processing pool handles here so they are in scope for the
+	// trailing release guards below.
+	var (
+		processingFloatPool *buffer.Float64Pool
+		processingFloatBuf  []float64
+		processingOutPool   *buffer.BytePool
+	)
 
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
@@ -513,11 +524,10 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// Both require 16-bit PCM; skip for other formats.
 	chain := route.filterChain.Load()
 	if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
-		processed, err := r.applyProcessing(frame, route, chain)
+		processed, floatPool, floatBuf, outPool, err := r.applyProcessing(frame, route, chain)
 		if err != nil {
-			// Release the resample buffer on error before skipping the frame.
-			// applyProcessing owns its own output buffer, so frame.Data still
-			// points to the resample slice here.
+			// applyProcessing already released its own pool buffers on error.
+			// Release the resample buffer (frame.Data still points to it here).
 			if resamplePool != nil {
 				resamplePool.Put(frame.Data)
 			}
@@ -532,6 +542,9 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 			resamplePool = nil
 		}
 		frame = processed
+		processingFloatPool = floatPool
+		processingFloatBuf = floatBuf
+		processingOutPool = outPool
 	}
 	if err := route.Consumer.Write(frame); err != nil {
 		errCount := route.errors.Add(1)
@@ -543,9 +556,18 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 				logger.Error(err))
 		}
 	}
-	// Release the resample buffer after Consumer.Write returns. All in-tree
-	// consumers copy synchronously, so the slice is safe to recycle. When
-	// processing succeeded, resamplePool was nilled above and this is a no-op.
+	// Release processing output buffer (frame.Data when processing ran).
+	// All in-tree consumers copy synchronously, so the slice is safe to recycle.
+	if processingOutPool != nil {
+		processingOutPool.Put(frame.Data)
+	}
+	// Release processing float scratch buffer.
+	if processingFloatPool != nil {
+		processingFloatPool.Put(processingFloatBuf)
+	}
+	// Release resample buffer when processing did NOT run (processing branch
+	// nilled resamplePool before reassigning frame.Data). When processing ran,
+	// resamplePool is nil here and this is a no-op.
 	if resamplePool != nil {
 		resamplePool.Put(frame.Data)
 	}
@@ -554,32 +576,76 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 // applyProcessing applies EQ filtering and/or gain scaling to a frame in a
 // single float64 conversion pass. The chain may be nil (EQ disabled); gain
 // at 1.0 means no scaling. At least one must be active for this to be called.
-func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (AudioFrame, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
-	floats := convert.BytesToFloat64PCM16(frame.Data)
+//
+// Return contract: on success, the caller owns floatPool/floatBuf and outPool
+// and must Put them after Consumer.Write returns. On error, applyProcessing has
+// already released both buffers internally and zeroed the returned pointers, so
+// the caller must NOT Put them again. This means the caller should Put only when
+// err == nil.
+//
+// When bufMgr is nil or a pool lookup returns nil, the function falls back to
+// make() with no corresponding Put, preserving legacy behaviour for unit tests
+// that construct routers with a nil Manager.
+func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processed AudioFrame, floatPool *buffer.Float64Pool, floatBuf []float64, outPool *buffer.BytePool, err error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+	evenLen := len(frame.Data) &^ 1
+	sampleCount := evenLen / 2
 
-	// EQ first — filters operate on the original signal shape.
+	if r.bufMgr != nil {
+		floatPool = r.bufMgr.Float64PoolFor(sampleCount)
+	}
+	if floatPool != nil {
+		floatBuf = floatPool.Get()
+	} else {
+		floatBuf = make([]float64, sampleCount)
+	}
+	convert.BytesToFloat64PCM16Into(floatBuf, frame.Data[:evenLen])
+
+	// EQ first - filters operate on the original signal shape.
 	if chain != nil {
-		chain.ApplyBatch(floats)
+		chain.ApplyBatch(floatBuf)
 	}
 
-	// Gain second — scales the (possibly filtered) signal.
+	// Gain second - scales the (possibly filtered) signal.
 	if route.gainLinear != 1.0 {
-		convert.ScaleFloat64Slice(floats, route.gainLinear)
+		convert.ScaleFloat64Slice(floatBuf, route.gainLinear)
 	}
 
-	out := make([]byte, len(floats)*2)
-	if err := convert.Float64ToBytesPCM16(floats, out); err != nil {
+	outLen := sampleCount * 2
+	var out []byte
+	if r.bufMgr != nil {
+		outPool = r.bufMgr.BytePoolFor(outLen)
+	}
+	if outPool != nil {
+		out = outPool.Get()
+	} else {
+		out = make([]byte, outLen)
+	}
+
+	if convErr := convert.Float64ToBytesPCM16(floatBuf, out); convErr != nil {
 		errCount := route.errors.Add(1)
 		if errCount%errorLogInterval == 1 {
 			r.log.Warn("audio processing conversion error",
 				logger.String("source_id", route.SourceID),
 				logger.String("consumer_id", route.Consumer.ID()),
 				logger.Int64("total_errors", errCount),
-				logger.Error(err))
+				logger.Error(convErr))
 		}
-		return AudioFrame{}, err
+		// Return buffers on error so pools do not leak.
+		if floatPool != nil {
+			floatPool.Put(floatBuf)
+		}
+		if outPool != nil {
+			outPool.Put(out)
+		}
+		// Zero the return values so the caller does not try to Put again.
+		floatPool = nil
+		floatBuf = nil
+		outPool = nil
+		err = convErr
+		return
 	}
-	return AudioFrame{
+
+	processed = AudioFrame{
 		SourceID:   frame.SourceID,
 		SourceName: frame.SourceName,
 		Data:       out,
@@ -587,5 +653,6 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 		BitDepth:   frame.BitDepth,
 		Channels:   frame.Channels,
 		Timestamp:  frame.Timestamp,
-	}, nil
+	}
+	return
 }
