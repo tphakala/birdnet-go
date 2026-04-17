@@ -381,36 +381,75 @@ func formatBitDepth(format malgo.FormatType, requested int) int {
 // S16 (16-bit signed PCM). If the source is already S16 or U8, the data is
 // copied as-is. This ensures the capture buffer and downstream pipeline always
 // receive consistent 16-bit PCM regardless of the hardware's native format.
+//
+// A fresh slice is allocated on every call. Callers that can supply their own
+// destination (pooled producers) should use convertToS16IfNeededInto to avoid
+// the allocation.
 func convertToS16IfNeeded(samples []byte, format malgo.FormatType, requestedBitDepth int) (data []byte, bitDepth int) {
+	out := make([]byte, s16OutputSize(samples, format))
+	bitDepth = convertToS16IfNeededInto(out, samples, format)
+	if bitDepth == 0 {
+		// U8 or unknown format: resolve bit depth from the requested value.
+		bitDepth = formatBitDepth(format, requestedBitDepth)
+	}
+	return out, bitDepth
+}
+
+// s16OutputSize returns the number of bytes produced by convertToS16IfNeeded
+// for the given input and format. Pool-aware callers use this to size the
+// destination slice before calling convertToS16IfNeededInto.
+func s16OutputSize(samples []byte, format malgo.FormatType) int {
 	switch format {
 	case malgo.FormatS16:
-		// Already 16-bit — just copy.
-		out := make([]byte, len(samples))
-		copy(out, samples)
-		return out, 16
-
+		return len(samples)
 	case malgo.FormatS24:
-		return convertS24ToS16(samples), 16
-
-	case malgo.FormatS32:
-		return convertS32ToS16(samples), 16
-
-	case malgo.FormatF32:
-		return convertF32ToS16(samples), 16
-
+		return (len(samples) / 3) * 2
+	case malgo.FormatS32, malgo.FormatF32:
+		return (len(samples) / 4) * 2
 	default:
-		// U8 or unknown — copy as-is with original bit depth.
-		out := make([]byte, len(samples))
-		copy(out, samples)
-		return out, formatBitDepth(format, requestedBitDepth)
+		// U8 or unknown formats are copied as-is.
+		return len(samples)
+	}
+}
+
+// convertToS16IfNeededInto writes the converted output into dst. dst must be
+// sized by s16OutputSize(samples, format). Returns 16 for the explicit
+// S16/S24/S32/F32 paths and 0 for the U8/default copy path (callers resolve
+// the bit depth via formatBitDepth in that case).
+func convertToS16IfNeededInto(dst, samples []byte, format malgo.FormatType) int {
+	switch format {
+	case malgo.FormatS16:
+		copy(dst, samples)
+		return 16
+	case malgo.FormatS24:
+		convertS24ToS16Into(dst, samples)
+		return 16
+	case malgo.FormatS32:
+		convertS32ToS16Into(dst, samples)
+		return 16
+	case malgo.FormatF32:
+		convertF32ToS16Into(dst, samples)
+		return 16
+	default:
+		// U8 or unknown format: copy as-is. Caller resolves bit depth.
+		copy(dst, samples)
+		return 0
 	}
 }
 
 // convertS24ToS16 converts 24-bit signed integer PCM to 16-bit signed PCM.
+// Allocating wrapper retained for legacy callers; delegates to the Into variant.
 func convertS24ToS16(samples []byte) []byte {
+	out := make([]byte, (len(samples)/3)*2)
+	convertS24ToS16Into(out, samples)
+	return out
+}
+
+// convertS24ToS16Into writes 16-bit PCM from 24-bit samples into dst. dst must
+// be sized (len(samples)/3)*2.
+func convertS24ToS16Into(dst, samples []byte) {
 	const srcBytes = 3
 	sampleCount := len(samples) / srcBytes
-	out := make([]byte, sampleCount*2)
 
 	for i := range sampleCount {
 		srcIdx := i * srcBytes
@@ -428,38 +467,52 @@ func convertS24ToS16(samples []byte) []byte {
 		} else if val < -32768 {
 			val = -32768
 		}
-		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped to 16-bit range
+		binary.LittleEndian.PutUint16(dst[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped to 16-bit range
 	}
-	return out
 }
 
 // convertS32ToS16 converts 32-bit signed integer PCM to 16-bit signed PCM.
+// Allocating wrapper retained for legacy callers; delegates to the Into variant.
 func convertS32ToS16(samples []byte) []byte {
+	out := make([]byte, (len(samples)/4)*2)
+	convertS32ToS16Into(out, samples)
+	return out
+}
+
+// convertS32ToS16Into writes 16-bit PCM from 32-bit samples into dst. dst must
+// be sized (len(samples)/4)*2.
+func convertS32ToS16Into(dst, samples []byte) {
 	const srcBytes = 4
 	sampleCount := len(samples) / srcBytes
-	out := make([]byte, sampleCount*2)
 
 	for i := range sampleCount {
 		srcIdx := i * srcBytes
 		dstIdx := i * 2
 
-		val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+srcBytes])) //nolint:gosec // G115: 32→32 bit
+		val := int32(binary.LittleEndian.Uint32(samples[srcIdx : srcIdx+srcBytes])) //nolint:gosec // G115: 32-bit to 32-bit reinterpretation
 		val >>= 16
 		if val > 32767 {
 			val = 32767
 		} else if val < -32768 {
 			val = -32768
 		}
-		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped
+		binary.LittleEndian.PutUint16(dst[dstIdx:dstIdx+2], uint16(val)) //nolint:gosec // G115: val clamped
 	}
-	return out
 }
 
 // convertF32ToS16 converts 32-bit float PCM [-1.0, 1.0] to 16-bit signed PCM.
+// Allocating wrapper retained for legacy callers; delegates to the Into variant.
 func convertF32ToS16(samples []byte) []byte {
+	out := make([]byte, (len(samples)/4)*2)
+	convertF32ToS16Into(out, samples)
+	return out
+}
+
+// convertF32ToS16Into writes 16-bit PCM from float32 samples into dst. dst must
+// be sized (len(samples)/4)*2.
+func convertF32ToS16Into(dst, samples []byte) {
 	const srcBytes = 4
 	sampleCount := len(samples) / srcBytes
-	out := make([]byte, sampleCount*2)
 
 	for i := range sampleCount {
 		srcIdx := i * srcBytes
@@ -473,7 +526,6 @@ func convertF32ToS16(samples []byte) []byte {
 		} else if val < -32768.0 {
 			val = -32768.0
 		}
-		binary.LittleEndian.PutUint16(out[dstIdx:dstIdx+2], uint16(int16(val))) //nolint:gosec // G115: val clamped
+		binary.LittleEndian.PutUint16(dst[dstIdx:dstIdx+2], uint16(int16(val))) //nolint:gosec // G115: val clamped
 	}
-	return out
 }
