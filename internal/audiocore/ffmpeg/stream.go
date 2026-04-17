@@ -1068,22 +1068,15 @@ func (s *Stream) readStdout(stdout io.ReadCloser, readCh chan<- readResult, read
 			ref *audiocore.FrameRef
 		)
 		if s.bufMgr != nil {
+			// ffmpegBufferSize is a positive compile-time constant so
+			// BytePoolFor returns non-nil. BytePool.Get guarantees
+			// len(out) == ffmpegBufferSize (pool rejects mismatches on
+			// Put and reallocates on Get). The release closure captures
+			// the full-length slice so pool.Put receives a correctly
+			// sized buffer regardless of how downstream reslices it.
 			pool := s.bufMgr.BytePoolFor(ffmpegBufferSize)
-			if pool != nil {
-				buf := pool.Get()
-				if cap(buf) < ffmpegBufferSize {
-					// Defensive: pool returned a short slice. Fall back to a
-					// fresh allocation and leave ref nil so the oversized slice
-					// is never returned to the pool.
-					out = make([]byte, ffmpegBufferSize)
-				} else {
-					out = buf[:ffmpegBufferSize]
-					full := out
-					ref = audiocore.NewFrameRef(func() { pool.Put(full) })
-				}
-			} else {
-				out = make([]byte, ffmpegBufferSize)
-			}
+			out = pool.Get()
+			ref = audiocore.NewFrameRef(func() { pool.Put(out) })
 		} else {
 			out = make([]byte, ffmpegBufferSize)
 		}

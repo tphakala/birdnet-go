@@ -270,18 +270,13 @@ func startCapture(
 			ref *FrameRef
 		)
 		if bufMgr != nil {
-			pool := bufMgr.BytePoolFor(outSize)
-			if pool != nil {
-				buf := pool.Get()
-				if cap(buf) < outSize {
-					// Defensive: pool returned a short slice. Fall back to a
-					// fresh allocation and leave ref nil so the oversized slice
-					// is never returned to the pool.
-					out = make([]byte, outSize)
-				} else {
-					out = buf[:outSize]
-					ref = NewFrameRef(func() { pool.Put(out) })
-				}
+			// BytePoolFor returns nil for non-positive sizes; s16OutputSize
+			// can yield 0 on degenerate-length input, so the nil guard stays.
+			if pool := bufMgr.BytePoolFor(outSize); pool != nil {
+				// BytePool.Get guarantees len(out) == outSize (pool rejects
+				// size mismatches on Put and reallocates on Get if needed).
+				out = pool.Get()
+				ref = NewFrameRef(func() { pool.Put(out) })
 			} else {
 				out = make([]byte, outSize)
 			}
