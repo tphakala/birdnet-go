@@ -13,8 +13,9 @@ import (
 )
 
 // benchS32FrameBytes is the size of one representative malgo frame for the
-// capture path: 480 stereo samples at 32-bit, the worst case for per-frame
-// churn (convertS32ToS16 drops the width to 16-bit and halves the byte count).
+// capture path: 1920 s32 sample values (960 stereo frames) at 4 bytes each,
+// the worst case for per-frame churn (convertS32ToS16 drops the width to
+// 16-bit and halves the byte count).
 const benchS32FrameBytes = 1920 * 4
 
 // BenchmarkConvertS32ToS16_Pooled measures the pool-friendly path used by
