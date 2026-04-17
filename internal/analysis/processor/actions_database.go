@@ -14,9 +14,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
+
+// errAudioExportDeferred signals that SaveAudioAction cannot yet read the
+// requested capture segment because the tail of the clip is still being
+// written (Extended Capture). The job queue's retry mechanism re-runs the
+// action after a backoff delay until the buffer has caught up.
+var errAudioExportDeferred = errors.NewStd("audio export deferred until capture tail is available")
 
 // Execute logs the note to the log file.
 // Note: File logging errors are logged but not returned. This is intentional because:
@@ -293,6 +300,34 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 			logger.String("clip_name", a.ClipName),
 			logger.String("operation", "audio_export_disabled"))
 		return nil
+	}
+
+	// Deferred-read path: Extended Capture may schedule an export whose tail
+	// still has not been written to the ring buffer. buildSaveAudioAction
+	// populates bufferMgr/sourceID/beginTime/duration/readyAt and leaves
+	// pcmData empty in that case. If readyAt is still in the future, return
+	// errAudioExportDeferred so the job queue retries with backoff; once the
+	// window has fully written, read the segment and fall through to encode.
+	if len(a.pcmData) == 0 && a.bufferMgr != nil && a.duration > 0 {
+		if time.Until(a.readyAt) > 0 {
+			return errAudioExportDeferred
+		}
+
+		cb, err := a.bufferMgr.CaptureBuffer(a.sourceID)
+		if err != nil {
+			return err
+		}
+
+		endTime := a.beginTime.Add(time.Duration(a.duration) * time.Second)
+		pcmData, err := cb.ReadSegment(a.beginTime, endTime)
+		if err != nil {
+			// ErrInsufficientData and any other read error unwind to the
+			// job-queue retry layer via the SaveAudioAction case in
+			// getJobQueueRetryConfig (workers.go). No special per-error
+			// handling is needed here.
+			return err
+		}
+		a.pcmData = pcmData
 	}
 
 	// If PCM data was not captured (e.g., buffer read failed), skip export.

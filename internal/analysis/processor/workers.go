@@ -24,6 +24,43 @@ const (
 	DefaultEnqueueTimeout = 5 * time.Second
 )
 
+// Retry backoff parameters for deferred SaveAudioAction executions (Extended
+// Capture). The delay schedule grows exponentially (1s, 2s, 4s, 8s, 16s)
+// before saturating at MaxDelay=30s. The first 6 retries cover ~61 seconds;
+// each additional retry adds another 30 seconds. MaxRetries is computed per
+// action from the capture duration so a 30-second tail gets a tight budget
+// while a 20-minute tail (MaxExtendedCaptureDuration) still has time to
+// complete.
+const (
+	saveAudioDeferredInitialDelay = 1 * time.Second
+	saveAudioDeferredMaxDelay     = 30 * time.Second
+	saveAudioDeferredMultiplier   = 2.0
+
+	// saveAudioDeferredExpPhaseRetries is the number of retries whose
+	// cumulative delay equals saveAudioDeferredExpPhaseSpan. Kept in sync
+	// with the backoff parameters above: 1s + 2s + 4s + 8s + 16s + 30s.
+	saveAudioDeferredExpPhaseRetries = 6
+	saveAudioDeferredExpPhaseSpan    = 61 * time.Second
+
+	// saveAudioDeferredMarginSeconds is an additional cushion over the
+	// capture duration, covering queue wait time and buffer writer jitter.
+	saveAudioDeferredMarginSeconds = 30
+)
+
+// saveAudioDeferredMaxRetries returns the number of retry attempts needed to
+// cover a capture window of durationSeconds, so a short clip fails fast while
+// a long Extended Capture tail has time to finish writing to the ring buffer.
+func saveAudioDeferredMaxRetries(durationSeconds int) int {
+	budget := time.Duration(durationSeconds+saveAudioDeferredMarginSeconds) * time.Second
+	if budget <= saveAudioDeferredExpPhaseSpan {
+		return saveAudioDeferredExpPhaseRetries
+	}
+	extra := budget - saveAudioDeferredExpPhaseSpan
+	// Round up so the schedule always reaches at least `budget` seconds.
+	extraRetries := int((extra + saveAudioDeferredMaxDelay - 1) / saveAudioDeferredMaxDelay)
+	return saveAudioDeferredExpPhaseRetries + extraRetries
+}
+
 // Sentinel errors for processor operations
 var (
 	ErrNilTask = errors.Newf("cannot enqueue nil task").
@@ -96,6 +133,20 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
 	case *MqttAction:
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
+	case *SaveAudioAction:
+		// Only deferred SaveAudioActions (those waiting for an Extended
+		// Capture tail) need retry. Regular eager-read actions return
+		// with pcmData already populated and never need to retry.
+		if a.bufferMgr != nil && a.duration > 0 {
+			return jobqueue.RetryConfig{
+				Enabled:      true,
+				MaxRetries:   saveAudioDeferredMaxRetries(a.duration),
+				InitialDelay: saveAudioDeferredInitialDelay,
+				MaxDelay:     saveAudioDeferredMaxDelay,
+				Multiplier:   saveAudioDeferredMultiplier,
+			}
+		}
+		return jobqueue.RetryConfig{Enabled: false}
 	default:
 		// Default no retry for actions that don't support it
 		return jobqueue.RetryConfig{Enabled: false}

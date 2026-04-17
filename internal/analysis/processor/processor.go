@@ -1896,6 +1896,31 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 		captureLength = bufferCap
 	}
 
+	// Extended Capture may request a segment whose tail has not yet been
+	// written to the ring buffer (e.g. BeginTime was a few seconds ago but
+	// the configured capture length runs well into the future). Reading
+	// immediately would fail with ErrInsufficientData and silently drop the
+	// clip. Defer the read to SaveAudioAction so the job-queue retry
+	// mechanism picks it up once the buffer has caught up to captureEndTime.
+	// Only take this path when BufferMgr is available; if it is nil the
+	// eager read below will produce a proper error log and no-op action.
+	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
+	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
+		return &SaveAudioAction{
+			Settings:      p.Settings,
+			ClipName:      det.Result.ClipName,
+			bufferMgr:     p.BufferMgr,
+			sourceID:      det.Result.AudioSource.ID,
+			beginTime:     det.Result.BeginTime,
+			duration:      captureLength,
+			readyAt:       captureEndTime,
+			NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
+			PreRenderer:   p.preRenderer,
+			DetectionCtx:  detectionCtx,
+			CorrelationID: det.CorrelationID,
+		}
+	}
+
 	// Read PCM data from the capture buffer NOW, while the data is still in the
 	// ring buffer. By the time the job queue picks up the SaveAudioAction, the
 	// buffer may have been overwritten with newer audio data.
