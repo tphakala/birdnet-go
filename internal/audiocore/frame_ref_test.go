@@ -67,3 +67,8 @@ func TestAudioFrame_RefIsOptional(t *testing.T) {
 	assert.Nil(t, frame.Ref)
 	assert.NotPanics(t, func() { frame.Ref.Release() })
 }
+
+func TestNewFrameRef_NilReleasePanics(t *testing.T) {
+	t.Parallel()
+	assert.Panics(t, func() { _ = NewFrameRef(nil) })
+}

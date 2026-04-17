@@ -297,6 +297,12 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 // reference at frame creation and is responsible for calling Release once
 // after Dispatch returns, so the pool slice is released exactly when the
 // last holder is done.
+//
+// Ordering invariant: Retain MUST run before the non-blocking send. If it
+// ran after a successful enqueue, the drainer could dequeue, Write, and
+// Release before the retain lands, firing the release closure while the
+// frame is still in flight. Do not "optimise" by moving Retain inside the
+// success arm of the select.
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
 	defer r.mu.RUnlock()
