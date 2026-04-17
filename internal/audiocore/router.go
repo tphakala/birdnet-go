@@ -464,24 +464,24 @@ func (r *AudioRouter) drainRoute(route *Route) {
 // writes it to the route's consumer. It is called from drainRoute's select loop
 // and is extracted to keep drainRoute under the cognitive-complexity limit.
 //
-// Pool discipline:
-//   - Resample buffer: allocated before resampling, returned after Write (or on error).
-//     When processing follows, the resample buffer is returned before frame.Data is
-//     reassigned so the wrong (processed) slice is never put back to the resample pool.
+// Pool discipline (three release sites, seven scenarios):
+//   - Resample buffer: allocated before resampling, returned after Write (or on
+//     error). When processing follows, the resample buffer is returned before
+//     frame.Data is reassigned so the wrong (processed) slice is never put back
+//     to the resample pool; resamplePool is nilled so the trailing guard is a
+//     no-op.
 //   - Processing float64 scratch and output byte buffers: allocated inside
-//     applyProcessing, returned at the trailing guards after Write returns.
-//   - processingOutPool and resamplePool cannot both be non-nil at the trailing
-//     guards by construction, so the two trailing Puts are mutually exclusive.
+//     applyProcessing, bundled in procResult. procResult.release() is called
+//     unconditionally in the trailing guards; it is a no-op on a zero-value
+//     result (processing never ran or errored with internal cleanup).
+//   - procResult.OutPool and resamplePool cannot both be non-nil at the trailing
+//     guards by construction, so their Put calls are mutually exclusive.
 func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	var resamplePool *buffer.BytePool // nil when not pooled
 
-	// Declare processing pool handles here so they are in scope for the
-	// trailing release guards below.
-	var (
-		processingFloatPool *buffer.Float64Pool
-		processingFloatBuf  []float64
-		processingOutPool   *buffer.BytePool
-	)
+	// procResult holds the processing output and pool handles. Zero value is
+	// safe: release() is a no-op when all pool pointers are nil.
+	var procResult processingResult
 
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
@@ -524,7 +524,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// Both require 16-bit PCM; skip for other formats.
 	chain := route.filterChain.Load()
 	if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
-		processed, floatPool, floatBuf, outPool, err := r.applyProcessing(frame, route, chain)
+		result, err := r.applyProcessing(frame, route, chain)
 		if err != nil {
 			// applyProcessing already released its own pool buffers on error.
 			// Release the resample buffer (frame.Data still points to it here).
@@ -541,10 +541,8 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 			resamplePool.Put(frame.Data)
 			resamplePool = nil
 		}
-		frame = processed
-		processingFloatPool = floatPool
-		processingFloatBuf = floatBuf
-		processingOutPool = outPool
+		frame = result.Frame
+		procResult = result
 	}
 	if err := route.Consumer.Write(frame); err != nil {
 		errCount := route.errors.Add(1)
@@ -556,15 +554,10 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 				logger.Error(err))
 		}
 	}
-	// Release processing output buffer (frame.Data when processing ran).
-	// All in-tree consumers copy synchronously, so the slice is safe to recycle.
-	if processingOutPool != nil {
-		processingOutPool.Put(frame.Data)
-	}
-	// Release processing float scratch buffer.
-	if processingFloatPool != nil {
-		processingFloatPool.Put(processingFloatBuf)
-	}
+	// Release processing buffers (output byte slice and float64 scratch).
+	// Safe to call unconditionally: no-op when procResult is zero value.
+	// All in-tree consumers copy synchronously, so recycling is safe here.
+	procResult.release()
 	// Release resample buffer when processing did NOT run (processing branch
 	// nilled resamplePool before reassigning frame.Data). When processing ran,
 	// resamplePool is nil here and this is a no-op.
@@ -573,26 +566,50 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	}
 }
 
+// processingResult carries an EQ / gain processed frame plus the pooled
+// buffers that must be returned to their pools after the consumer has
+// synchronously observed the frame. A zero-value result (all pools nil)
+// is safe: release() is a no-op.
+type processingResult struct {
+	Frame     AudioFrame
+	FloatPool *buffer.Float64Pool
+	FloatBuf  []float64
+	OutPool   *buffer.BytePool
+}
+
+// release returns the processing pool buffers to their pools. Safe to call
+// on a zero-value result. Callers invoke this after the consumer's Write
+// returns so the recycled slices are not concurrently read.
+func (p *processingResult) release() {
+	if p.FloatPool != nil {
+		p.FloatPool.Put(p.FloatBuf)
+	}
+	if p.OutPool != nil {
+		p.OutPool.Put(p.Frame.Data)
+	}
+}
+
 // applyProcessing applies EQ filtering and/or gain scaling to a frame in a
 // single float64 conversion pass. The chain may be nil (EQ disabled); gain
 // at 1.0 means no scaling. At least one must be active for this to be called.
 //
-// Return contract: on success, the caller owns floatPool/floatBuf and outPool
-// and must Put them after Consumer.Write returns. On error, applyProcessing has
-// already released both buffers internally and zeroed the returned pointers, so
-// the caller must NOT Put them again. This means the caller should Put only when
-// err == nil.
+// Return contract: on success, the caller owns the returned processingResult
+// and must call release() after Consumer.Write returns. On error, applyProcessing
+// releases both buffers internally and returns a zero-value result, so
+// release() on the zero value is always safe (it is a no-op).
 //
 // When bufMgr is nil or a pool lookup returns nil, the function falls back to
 // make() with no corresponding Put, preserving legacy behaviour for unit tests
 // that construct routers with a nil Manager.
-func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processed AudioFrame, floatPool *buffer.Float64Pool, floatBuf []float64, outPool *buffer.BytePool, err error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	evenLen := len(frame.Data) &^ 1
 	sampleCount := evenLen / 2
 
+	var floatPool *buffer.Float64Pool
 	if r.bufMgr != nil {
 		floatPool = r.bufMgr.Float64PoolFor(sampleCount)
 	}
+	var floatBuf []float64
 	if floatPool != nil {
 		floatBuf = floatPool.Get()
 	} else {
@@ -611,10 +628,11 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 	}
 
 	outLen := sampleCount * 2
-	var out []byte
+	var outPool *buffer.BytePool
 	if r.bufMgr != nil {
 		outPool = r.bufMgr.BytePoolFor(outLen)
 	}
+	var out []byte
 	if outPool != nil {
 		out = outPool.Get()
 	} else {
@@ -630,29 +648,28 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 				logger.Int64("total_errors", errCount),
 				logger.Error(convErr))
 		}
-		// Return buffers on error so pools do not leak.
+		// Release the buffers we obtained; caller will see a zero-value result.
 		if floatPool != nil {
 			floatPool.Put(floatBuf)
 		}
 		if outPool != nil {
 			outPool.Put(out)
 		}
-		// Zero the return values so the caller does not try to Put again.
-		floatPool = nil
-		floatBuf = nil
-		outPool = nil
-		err = convErr
-		return
+		return processingResult{}, convErr
 	}
 
-	processed = AudioFrame{
-		SourceID:   frame.SourceID,
-		SourceName: frame.SourceName,
-		Data:       out,
-		SampleRate: frame.SampleRate,
-		BitDepth:   frame.BitDepth,
-		Channels:   frame.Channels,
-		Timestamp:  frame.Timestamp,
-	}
-	return
+	return processingResult{
+		Frame: AudioFrame{
+			SourceID:   frame.SourceID,
+			SourceName: frame.SourceName,
+			Data:       out,
+			SampleRate: frame.SampleRate,
+			BitDepth:   frame.BitDepth,
+			Channels:   frame.Channels,
+			Timestamp:  frame.Timestamp,
+		},
+		FloatPool: floatPool,
+		FloatBuf:  floatBuf,
+		OutPool:   outPool,
+	}, nil
 }
