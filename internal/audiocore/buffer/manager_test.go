@@ -276,3 +276,63 @@ func TestManager_Float32Pool_LazySizes(t *testing.T) {
 	pool1Again := m.Float32Pool(144384)
 	assert.Same(t, pool1, pool1Again, "same size must return same pool")
 }
+
+// ---------------------------------------------------------------------------
+// Per-size BytePool tests
+// ---------------------------------------------------------------------------
+
+// TestManager_BytePoolFor_LazyPerSize verifies that BytePoolFor returns
+// distinct pools for different sizes and the same pool for the same size.
+func TestManager_BytePoolFor_LazyPerSize(t *testing.T) {
+	t.Parallel()
+	m := buffer.NewManager(newTestLogger())
+
+	pool1 := m.BytePoolFor(144384)
+	require.NotNil(t, pool1)
+
+	pool2 := m.BytePoolFor(288000)
+	require.NotNil(t, pool2)
+	assert.NotSame(t, pool1, pool2, "different sizes must yield different pools")
+
+	pool1Again := m.BytePoolFor(144384)
+	assert.Same(t, pool1, pool1Again, "same size must yield same pool")
+}
+
+// TestManager_BytePoolFor_NonPositiveReturnsNil verifies that BytePoolFor
+// returns nil for zero and negative sizes.
+func TestManager_BytePoolFor_NonPositiveReturnsNil(t *testing.T) {
+	t.Parallel()
+	m := buffer.NewManager(newTestLogger())
+	assert.Nil(t, m.BytePoolFor(0))
+	assert.Nil(t, m.BytePoolFor(-1))
+}
+
+// ---------------------------------------------------------------------------
+// Per-size Float64Pool tests
+// ---------------------------------------------------------------------------
+
+// TestManager_Float64PoolFor_LazyPerSize verifies that Float64PoolFor returns
+// distinct pools for different sizes and the same pool for the same size.
+func TestManager_Float64PoolFor_LazyPerSize(t *testing.T) {
+	t.Parallel()
+	m := buffer.NewManager(newTestLogger())
+
+	pool1 := m.Float64PoolFor(72192)
+	require.NotNil(t, pool1)
+
+	pool2 := m.Float64PoolFor(80000)
+	require.NotNil(t, pool2)
+	assert.NotSame(t, pool1, pool2, "different sizes must yield different pools")
+
+	pool1Again := m.Float64PoolFor(72192)
+	assert.Same(t, pool1, pool1Again, "same size must yield same pool")
+}
+
+// TestManager_Float64PoolFor_NonPositiveReturnsNil verifies that Float64PoolFor
+// returns nil for zero and negative sizes.
+func TestManager_Float64PoolFor_NonPositiveReturnsNil(t *testing.T) {
+	t.Parallel()
+	m := buffer.NewManager(newTestLogger())
+	assert.Nil(t, m.Float64PoolFor(0))
+	assert.Nil(t, m.Float64PoolFor(-1))
+}

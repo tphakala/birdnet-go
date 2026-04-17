@@ -32,6 +32,10 @@ type Manager struct {
 	bytePool        *BytePool
 	float32Pools    map[int]*Float32Pool
 	float32PoolMu   sync.Mutex // protects float32Pools; separate from mu to avoid contention
+	bytePools       map[int]*BytePool
+	bytePoolMu      sync.Mutex // protects bytePools; separate from mu to avoid contention
+	float64Pools    map[int]*Float64Pool
+	float64PoolMu   sync.Mutex // protects float64Pools; separate from mu to avoid contention
 	mu              sync.RWMutex
 	logger          logger.Logger
 }
@@ -50,6 +54,8 @@ func NewManager(log logger.Logger) *Manager {
 		captureBuffers:  make(map[string]*CaptureBuffer),
 		bytePool:        bytePool,
 		float32Pools:    make(map[int]*Float32Pool),
+		bytePools:       make(map[int]*BytePool),
+		float64Pools:    make(map[int]*Float64Pool),
 		logger:          log,
 	}
 }
@@ -188,5 +194,49 @@ func (m *Manager) Float32Pool(size int) *Float32Pool {
 		return nil
 	}
 	m.float32Pools[size] = pool
+	return pool
+}
+
+// BytePoolFor returns a BytePool for the given buffer size, creating one
+// lazily if needed. Returns nil for non-positive sizes. Thread-safe via a
+// dedicated mutex.
+func (m *Manager) BytePoolFor(size int) *BytePool {
+	if size <= 0 {
+		return nil
+	}
+	m.bytePoolMu.Lock()
+	defer m.bytePoolMu.Unlock()
+	if pool, ok := m.bytePools[size]; ok {
+		return pool
+	}
+	pool, err := NewBytePool(size)
+	if err != nil {
+		m.logger.Error("failed to create BytePool",
+			logger.Int("size", size), logger.Error(err))
+		return nil
+	}
+	m.bytePools[size] = pool
+	return pool
+}
+
+// Float64PoolFor returns a Float64Pool for the given slice length, creating
+// one lazily if needed. Returns nil for non-positive sizes. Thread-safe via a
+// dedicated mutex.
+func (m *Manager) Float64PoolFor(size int) *Float64Pool {
+	if size <= 0 {
+		return nil
+	}
+	m.float64PoolMu.Lock()
+	defer m.float64PoolMu.Unlock()
+	if pool, ok := m.float64Pools[size]; ok {
+		return pool
+	}
+	pool, err := NewFloat64Pool(size)
+	if err != nil {
+		m.logger.Error("failed to create Float64Pool",
+			logger.Int("size", size), logger.Error(err))
+		return nil
+	}
+	m.float64Pools[size] = pool
 	return pool
 }
