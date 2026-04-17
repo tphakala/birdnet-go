@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -59,6 +60,10 @@ type Manager struct {
 	logger    logger.Logger
 	metrics   audiocore.StreamMetrics // optional, nil-safe
 
+	// Optional buffer manager forwarded to each Stream so stdout reads can
+	// pool their read buffers via FrameRef. May be nil (legacy allocation).
+	bufMgr *buffer.Manager
+
 	// Watchdog state: tracks when each stream was last force-reset.
 	lastForceReset   map[string]time.Time
 	lastForceResetMu sync.Mutex
@@ -75,7 +80,12 @@ type Manager struct {
 // given sourceID. It may be nil.
 //
 // log is used for structured logging. If nil, the audiocore module logger is used.
-func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger) *Manager {
+//
+// bufMgr is an optional buffer manager forwarded to each Stream; when non-nil,
+// stdout reads borrow their read buffer from a size-specific BytePool and
+// attach a FrameRef whose release closure returns the slice. When nil, streams
+// fall back to per-iteration allocation.
+func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceID string), log logger.Logger, bufMgr *buffer.Manager) *Manager {
 	if log == nil {
 		log = audiocore.GetLogger()
 	}
@@ -87,6 +97,7 @@ func NewManager(ctx context.Context, onFrame FrameCallback, onReset func(sourceI
 		onFrame:        onFrame,
 		onReset:        onReset,
 		logger:         log,
+		bufMgr:         bufMgr,
 		lastForceReset: make(map[string]time.Time),
 	}
 }
@@ -130,9 +141,7 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 	}
 
 	// Hold the lock only for the map check and insertion.
-	// bufMgr is wired in a follow-up step; pass nil for now so readStdout
-	// stays on the allocating fallback.
-	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics, nil)
+	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics, m.bufMgr)
 
 	m.mu.Lock()
 	if _, exists := m.streams[cfg.SourceID]; exists {
