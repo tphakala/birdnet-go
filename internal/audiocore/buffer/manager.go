@@ -41,9 +41,10 @@ type Manager struct {
 }
 
 // NewManager creates a Manager with a shared BytePool pre-allocated at the
-// default size and an empty Float32Pool map that lazily creates pools on first
-// request for each size. The provided logger is forwarded to each
-// AnalysisBuffer created by AllocateAnalysis.
+// default size and empty per-size maps for BytePool, Float32Pool, and
+// Float64Pool that lazily create pools on first request for each size. The
+// provided logger is forwarded to each AnalysisBuffer created by
+// AllocateAnalysis.
 func NewManager(log logger.Logger) *Manager {
 	// Errors from the pool constructors are only possible when size <= 0, which
 	// cannot happen with compile-time positive constants.
@@ -175,10 +176,10 @@ func (m *Manager) BytePool() *BytePool {
 	return m.bytePool
 }
 
-// Float32Pool returns a pool for the given buffer size, creating one lazily if
-// needed. Thread-safe via a dedicated mutex separate from the Manager's main
-// RWMutex.
-func (m *Manager) Float32Pool(size int) *Float32Pool {
+// Float32PoolFor returns a Float32Pool for the given slice length, creating
+// one lazily if needed. Returns nil for non-positive sizes. Thread-safe via a
+// dedicated mutex.
+func (m *Manager) Float32PoolFor(size int) *Float32Pool {
 	if size <= 0 {
 		return nil
 	}

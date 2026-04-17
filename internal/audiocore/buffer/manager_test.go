@@ -120,7 +120,7 @@ func TestBufferManager_PoolAccessors(t *testing.T) {
 	m := buffer.NewManager(newTestLogger())
 
 	assert.NotNil(t, m.BytePool())
-	assert.NotNil(t, m.Float32Pool(2048))
+	assert.NotNil(t, m.Float32PoolFor(2048))
 }
 
 // ---------------------------------------------------------------------------
@@ -257,23 +257,23 @@ func TestManager_HasAnalysis(t *testing.T) {
 // Per-size Float32Pool tests
 // ---------------------------------------------------------------------------
 
-// TestManager_Float32Pool_LazySizes verifies that Float32Pool returns distinct
-// pools for different sizes and the same pool for the same size.
-func TestManager_Float32Pool_LazySizes(t *testing.T) {
+// TestManager_Float32PoolFor_LazySizes verifies that Float32PoolFor returns
+// distinct pools for different sizes and the same pool for the same size.
+func TestManager_Float32PoolFor_LazySizes(t *testing.T) {
 	t.Parallel()
 	m := buffer.NewManager(newTestLogger())
 
 	// Request two different sizes.
-	pool1 := m.Float32Pool(144384)
+	pool1 := m.Float32PoolFor(144384)
 	require.NotNil(t, pool1)
 
-	pool2 := m.Float32Pool(160000)
+	pool2 := m.Float32PoolFor(160000)
 	require.NotNil(t, pool2)
 
 	assert.NotSame(t, pool1, pool2, "different sizes must have distinct pools")
 
 	// Same size returns same pool.
-	pool1Again := m.Float32Pool(144384)
+	pool1Again := m.Float32PoolFor(144384)
 	assert.Same(t, pool1, pool1Again, "same size must return same pool")
 }
 

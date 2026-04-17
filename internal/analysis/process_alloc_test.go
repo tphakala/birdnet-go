@@ -74,7 +74,7 @@ func TestConvert16BitToFloat32WithPool_ZeroAllocs(t *testing.T) {
 			assert.InDelta(t, expectedFirst, warm[0], 1e-6,
 				"first converted sample should match scalar decode of pcm[0..2]")
 
-			if p := mgr.Float32Pool(len(warm)); p != nil {
+			if p := mgr.Float32PoolFor(len(warm)); p != nil {
 				p.Put(warm)
 			}
 
@@ -83,7 +83,7 @@ func TestConvert16BitToFloat32WithPool_ZeroAllocs(t *testing.T) {
 			allocs := testing.AllocsPerRun(100, func() {
 				out := convert16BitToFloat32WithPool(mgr, pcm)
 				sink = out
-				if p := mgr.Float32Pool(len(out)); p != nil {
+				if p := mgr.Float32PoolFor(len(out)); p != nil {
 					p.Put(out)
 				}
 			})

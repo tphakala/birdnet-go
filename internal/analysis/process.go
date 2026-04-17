@@ -195,7 +195,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 	// Orchestrator are required to honour this contract; see
 	// internal/classifier for the implementing side.
 	if conf.BitDepth == 16 && len(sampleData) > 0 {
-		if pool := bufMgr.Float32Pool(len(sampleData[0])); pool != nil {
+		if pool := bufMgr.Float32PoolFor(len(sampleData[0])); pool != nil {
 			pool.Put(sampleData[0])
 		}
 	}
@@ -341,7 +341,7 @@ func convertToFloat32WithPool(bufMgr *buffer.Manager, sample []byte, bitDepth in
 // Float32Pool on first use, so any length the pipeline produces is pooled.
 func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []float32 {
 	length := len(sample) / 2
-	pool := bufMgr.Float32Pool(length)
+	pool := bufMgr.Float32PoolFor(length)
 
 	var float32Data []float32
 	if pool != nil {
