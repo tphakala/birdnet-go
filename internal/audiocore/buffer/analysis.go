@@ -17,6 +17,10 @@ const (
 	analysisOverwriteNotifyCooldown = 1 * time.Hour   // minimum time between warnings per source
 )
 
+// noopRelease is returned from Read when no pool is in use or when there was
+// no window to release. Safe to call any number of times.
+func noopRelease() {}
+
 // AnalysisBuffer is a lock-protected ring buffer designed for audio analysis.
 // It maintains per-instance overlap tracking so that consecutive reads share
 // a configurable number of bytes from the previous read, enabling BirdNET's
@@ -170,28 +174,36 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 	return nil
 }
 
-// Read returns the next analysis window as a byte slice of length
-// overlapSize+readSize. The first overlapSize bytes are the tail of the
-// previous successful read (the overlap region); the remaining readSize bytes
-// are freshly consumed from the ring buffer.
+// Read returns the next analysis window plus a release func that returns the
+// window's backing slice to the pool. release is never nil and is idempotent:
+// callers should "defer release()" to guarantee the slice is returned even on
+// error paths.
 //
-// Returns (nil, nil) when there is not yet enough data in the ring buffer for
-// a full readSize-byte read. Callers should treat nil data as "try again
-// later" rather than an error.
+// (nil, noopRelease, nil) is still the "try again later" signal when the ring
+// has not yet accumulated readSize bytes.
 //
-// Read is safe for concurrent use.
-func (ab *AnalysisBuffer) Read() ([]byte, error) {
+// Read is safe for concurrent use. The returned release func is bound to a
+// single call chain and must not be invoked from multiple goroutines; in
+// practice callers "defer release()" in the same goroutine as the Read call.
+//
+// would shadow the internal `window`, `release`, and `err` locals used below.
+//
+//nolint:gocritic // unnamedResult: result positions are documented; naming them
+func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
 
-	// Wait until the ring holds at least readSize bytes.
 	if ab.ring.Length() < ab.readSize {
-		return nil, nil
+		return nil, noopRelease, nil
 	}
 
-	window := make([]byte, ab.windowSize)
+	var window []byte
+	if ab.windowPool != nil {
+		window = ab.windowPool.Get()
+	} else {
+		window = make([]byte, ab.windowSize)
+	}
 
-	// Overlap prefix: copy prevData when we have a valid tail, zero otherwise.
 	if ab.overlapSize > 0 {
 		if len(ab.prevData) == ab.overlapSize {
 			copy(window[:ab.overlapSize], ab.prevData)
@@ -200,10 +212,12 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 		}
 	}
 
-	// Read fresh bytes directly into the window's fresh region.
 	n, err := ab.ring.Read(window[ab.overlapSize : ab.overlapSize+ab.readSize])
 	if err != nil {
-		return nil, errors.New(err).
+		if ab.windowPool != nil {
+			ab.windowPool.Put(window)
+		}
+		return nil, noopRelease, errors.New(err).
 			Component("audiocore").
 			Category(errors.CategorySystem).
 			Context("operation", "analysis_buffer_read").
@@ -213,14 +227,10 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 			Build()
 	}
 
-	// Defensive: zero any tail bytes the ring could not supply. In steady
-	// state n == readSize because of the Length precheck above; short reads
-	// are a defensive edge case.
 	if n < ab.readSize {
 		clear(window[ab.overlapSize+n:])
 	}
 
-	// Advance the overlap cursor from the freshly-read region.
 	if ab.overlapSize > 0 {
 		if ab.prevData == nil {
 			ab.prevData = make([]byte, ab.overlapSize)
@@ -234,7 +244,16 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 		}
 	}
 
-	return window, nil
+	pool := ab.windowPool
+	released := false
+	release := func() {
+		if released || pool == nil {
+			return
+		}
+		released = true
+		pool.Put(window)
+	}
+	return window, release, nil
 }
 
 // OverwriteCount returns the number of overwrite events recorded in the

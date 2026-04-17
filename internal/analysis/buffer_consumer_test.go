@@ -129,7 +129,8 @@ func TestBufferConsumer_WritesToBothBuffers(t *testing.T) {
 	}
 	require.NoError(t, consumer.Write(bigFrame))
 
-	data, readErr := ab.Read()
+	data, release, readErr := ab.Read()
+	defer release()
 	require.NoError(t, readErr)
 	assert.NotNil(t, data, "analysis buffer should return data after sufficient writes")
 
@@ -348,14 +349,16 @@ func TestBufferConsumer_FanOut_MultiModel(t *testing.T) {
 	// Verify birdnet buffer received data (no resampling).
 	ab48, err := mgr.AnalysisBuffer(sourceID, birdnetModel)
 	require.NoError(t, err)
-	data48, readErr := ab48.Read()
+	data48, release48, readErr := ab48.Read()
+	defer release48()
 	require.NoError(t, readErr)
 	require.NotNil(t, data48, "48 kHz buffer should have data after write")
 
 	// Verify perch buffer received resampled data.
 	ab32, err := mgr.AnalysisBuffer(sourceID, perchModel)
 	require.NoError(t, err)
-	data32, readErr := ab32.Read()
+	data32, release32, readErr := ab32.Read()
+	defer release32()
 	require.NoError(t, readErr)
 	require.NotNil(t, data32, "32 kHz buffer should have resampled data after write")
 
@@ -434,10 +437,11 @@ func TestBufferConsumer_SingleModel_FullPipeline(t *testing.T) {
 		require.NoError(t, consumer.Write(frame))
 	}
 
-	// Read from the analysis buffer — should return data.
+	// Read from the analysis buffer, should return data.
 	ab, err := mgr.AnalysisBuffer("mic1", "birdnet-v2.4")
 	require.NoError(t, err)
-	data, err := ab.Read()
+	data, release, err := ab.Read()
+	defer release()
 	require.NoError(t, err)
 	assert.NotNil(t, data, "should have enough data for a full read")
 }

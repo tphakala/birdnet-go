@@ -404,34 +404,40 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 		case <-quitChan:
 			return
 		case <-ticker.C:
-			ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
-			if err != nil {
-				if hasReadBuffer {
-					m.logger.Info("analysis buffer removed, stopping monitor",
-						logger.String("source_id", cfg.sourceID),
-						logger.String("model_id", cfg.modelID))
-				} else {
-					m.logger.Warn("analysis buffer not found for monitor, may not be allocated",
-						logger.String("source_id", cfg.sourceID),
-						logger.String("model_id", cfg.modelID))
+			shouldReturn := false
+			func() {
+				ab, err := m.bufferMgr.AnalysisBuffer(cfg.sourceID, cfg.modelID)
+				if err != nil {
+					if hasReadBuffer {
+						m.logger.Info("analysis buffer removed, stopping monitor",
+							logger.String("source_id", cfg.sourceID),
+							logger.String("model_id", cfg.modelID))
+					} else {
+						m.logger.Warn("analysis buffer not found for monitor, may not be allocated",
+							logger.String("source_id", cfg.sourceID),
+							logger.String("model_id", cfg.modelID))
+					}
+					shouldReturn = true
+					return
 				}
-				return
-			}
-			hasReadBuffer = true
-			data, readErr := ab.Read()
-			if readErr != nil {
-				m.logger.Error("buffer read error",
-					logger.String("source_id", cfg.sourceID),
-					logger.String("model_id", cfg.modelID),
-					logger.Error(readErr))
-				time.Sleep(1 * time.Second)
-				continue
-			}
+				hasReadBuffer = true
+				data, release, readErr := ab.Read()
+				defer release()
+				if readErr != nil {
+					m.logger.Error("buffer read error",
+						logger.String("source_id", cfg.sourceID),
+						logger.String("model_id", cfg.modelID),
+						logger.Error(readErr))
+					time.Sleep(1 * time.Second)
+					return
+				}
 
-			// Exact equality is required: AnalysisBuffer.Read() returns
-			// overlapSize + readSize bytes or nil. A partial read means
-			// the buffer hasn't accumulated enough data yet.
-			if len(data) == analysisWindowBytes {
+				// Exact equality is required: AnalysisBuffer.Read() returns
+				// overlapSize + readSize bytes or nil. A partial read means
+				// the buffer hasn't accumulated enough data yet.
+				if len(data) != analysisWindowBytes {
+					return
+				}
 				audioCapturedAt := time.Now()
 
 				// Calculate the offset dynamically to pick up runtime configuration changes
@@ -444,6 +450,9 @@ func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monito
 						logger.String("model_id", cfg.modelID),
 						logger.Error(processErr))
 				}
+			}()
+			if shouldReturn {
+				return
 			}
 		}
 	}
