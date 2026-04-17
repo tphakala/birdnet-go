@@ -189,8 +189,19 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 		return nil, nil
 	}
 
-	fresh := make([]byte, ab.readSize)
-	n, err := ab.ring.Read(fresh)
+	window := make([]byte, ab.windowSize)
+
+	// Overlap prefix: copy prevData when we have a valid tail, zero otherwise.
+	if ab.overlapSize > 0 {
+		if len(ab.prevData) == ab.overlapSize {
+			copy(window[:ab.overlapSize], ab.prevData)
+		} else {
+			clear(window[:ab.overlapSize])
+		}
+	}
+
+	// Read fresh bytes directly into the window's fresh region.
+	n, err := ab.ring.Read(window[ab.overlapSize : ab.overlapSize+ab.readSize])
 	if err != nil {
 		return nil, errors.New(err).
 			Component("audiocore").
@@ -202,26 +213,24 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 			Build()
 	}
 
-	// Build the full window: overlap prefix + fresh bytes.
-	window := make([]byte, ab.overlapSize+ab.readSize)
-	if ab.overlapSize > 0 && len(ab.prevData) == ab.overlapSize {
-		copy(window[:ab.overlapSize], ab.prevData)
+	// Defensive: zero any tail bytes the ring could not supply. In steady
+	// state n == readSize because of the Length precheck above; short reads
+	// are a defensive edge case.
+	if n < ab.readSize {
+		clear(window[ab.overlapSize+n:])
 	}
-	copy(window[ab.overlapSize:], fresh[:n])
 
-	// Advance the overlap cursor: save the last overlapSize bytes of fresh data.
+	// Advance the overlap cursor from the freshly-read region.
 	if ab.overlapSize > 0 {
 		if ab.prevData == nil {
 			ab.prevData = make([]byte, ab.overlapSize)
 		}
+		freshEnd := ab.overlapSize + n
 		if n >= ab.overlapSize {
-			copy(ab.prevData, fresh[n-ab.overlapSize:n])
+			copy(ab.prevData, window[freshEnd-ab.overlapSize:freshEnd])
 		} else {
-			// Fewer fresh bytes than overlap, zero-pad the beginning,
-			// place available data at the end so the overlap slice
-			// always has exactly overlapSize length.
 			clear(ab.prevData)
-			copy(ab.prevData[ab.overlapSize-n:], fresh[:n])
+			copy(ab.prevData[ab.overlapSize-n:], window[ab.overlapSize:freshEnd])
 		}
 	}
 

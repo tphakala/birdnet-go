@@ -185,3 +185,46 @@ func TestOverwriteTracker_RateCalculation(t *testing.T) {
 	tracker.Reset()
 	assert.InDelta(t, 0.0, tracker.OverwriteRate(), 0.01, "rate should be zero after Reset")
 }
+
+// TestAnalysisBuffer_Read_ContentParity asserts that consecutive Read calls
+// return byte-identical windows to what the pre-refactor implementation would
+// produce: an overlapSize prefix of prior fresh tail bytes, followed by
+// readSize fresh bytes from the ring. Guards the in-place ring.Read refactor
+// against off-by-one errors and prevData advancement regressions.
+func TestAnalysisBuffer_Read_ContentParity(t *testing.T) {
+	t.Parallel()
+	const (
+		capacity    = 4096
+		overlapSize = 32
+		readSize    = 128
+	)
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "parity-source", newTestLogger(), nil)
+	require.NoError(t, err)
+
+	// Write a monotonically increasing byte stream so we can predict contents.
+	stream := make([]byte, readSize*4)
+	for i := range stream {
+		stream[i] = byte(i & 0xFF)
+	}
+	require.NoError(t, ab.Write(stream))
+
+	// First Read: no prior overlap; prefix is zero-filled, fresh region is
+	// stream[0:readSize].
+	win1, err := ab.Read()
+	require.NoError(t, err)
+	require.Len(t, win1, overlapSize+readSize)
+
+	wantPrefix1 := make([]byte, overlapSize) // zeros
+	assert.Equal(t, wantPrefix1, win1[:overlapSize], "first Read prefix must be zero")
+	assert.Equal(t, stream[0:readSize], win1[overlapSize:], "first Read fresh region")
+
+	// Second Read: prefix is the tail overlapSize bytes of the previous
+	// fresh region (stream[readSize-overlapSize:readSize]); fresh is
+	// stream[readSize:2*readSize].
+	win2, err := ab.Read()
+	require.NoError(t, err)
+	require.Len(t, win2, overlapSize+readSize)
+
+	assert.Equal(t, stream[readSize-overlapSize:readSize], win2[:overlapSize], "second Read prefix")
+	assert.Equal(t, stream[readSize:2*readSize], win2[overlapSize:], "second Read fresh region")
+}
