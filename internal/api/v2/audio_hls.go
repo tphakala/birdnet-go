@@ -1478,8 +1478,7 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 	}
 
 	// Copy once up front. Both select arms below need an owned slice.
-	buf := make([]byte, len(frame.Data))
-	copy(buf, frame.Data)
+	buf := slices.Clone(frame.Data)
 
 	select {
 	case h.ch <- buf:
