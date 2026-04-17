@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -293,41 +294,61 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 
 // TestRouter_ConcurrentDispatch verifies that concurrent dispatch from
 // multiple goroutines does not trigger data races (run with -race).
+// Uses testing/synctest so the drain assertion does not race the per-route
+// drainer goroutine on loaded CI runners (see Forgejo #453).
 func TestRouter_ConcurrentDispatch(t *testing.T) {
-	t.Parallel()
-	router := NewAudioRouter(GetLogger(), nil)
-	t.Cleanup(func() { router.Close() })
+	synctest.Test(t, func(t *testing.T) {
+		router := NewAudioRouter(GetLogger(), nil)
+		// Close inside the bubble so the drainer goroutines exit before
+		// synctest.Test waits for bubble goroutines to finish; t.Cleanup
+		// runs after synctest.Test returns and would deadlock.
+		defer router.Close()
 
-	c1 := newMockConsumer("consumer-1")
-	c2 := newMockConsumer("consumer-2")
-	require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
-	require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0, nil))
+		c1 := newMockConsumer("consumer-1")
+		c2 := newMockConsumer("consumer-2")
+		require.NoError(t, router.AddRoute("src-1", c1, 48000, 0.0, nil))
+		require.NoError(t, router.AddRoute("src-1", c2, 48000, 0.0, nil))
 
-	const goroutines = 8
-	const framesPerGoroutine = 100
+		const goroutines = 8
+		const framesPerGoroutine = 100
 
-	var wg sync.WaitGroup
-	for range goroutines {
-		wg.Go(func() {
-			for range framesPerGoroutine {
-				router.Dispatch(testFrame("src-1"))
-			}
-		})
-	}
-	wg.Wait()
-
-	// Drain what we can — the point is no race detected.
-	drained := 0
-	for {
-		select {
-		case <-c1.frames:
-			drained++
-		default:
-			goto done
+		var wg sync.WaitGroup
+		for range goroutines {
+			wg.Go(func() {
+				for range framesPerGoroutine {
+					router.Dispatch(testFrame("src-1"))
+				}
+			})
 		}
-	}
-done:
-	assert.Positive(t, drained, "at least some frames should have been delivered")
+		wg.Wait()
+
+		// Drain both consumer channels until the drainer goroutines are
+		// blocked on empty inboxes. synctest.Wait lets the drainer make
+		// progress; each outer iteration that pulls zero frames proves
+		// the drainers are parked on the select rather than on a full
+		// consumer channel, so forwarding is complete.
+		drained := 0
+		for {
+			synctest.Wait()
+			got := 0
+		drain:
+			for {
+				select {
+				case <-c1.frames:
+					drained++
+					got++
+				case <-c2.frames:
+					got++
+				default:
+					break drain
+				}
+			}
+			if got == 0 {
+				break
+			}
+		}
+		assert.Positive(t, drained, "at least some frames should have been delivered")
+	})
 }
 
 func TestDrainRoutePanicRecovery(t *testing.T) {
