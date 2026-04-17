@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -76,7 +77,12 @@ type DeviceManager struct {
 	// dispatcher receives AudioFrames produced by active capture sessions.
 	dispatcher AudioDispatcher
 
-	// active maps sourceID → running capture session.
+	// bufMgr, when non-nil, provides pooled byte slices for the malgo capture
+	// callback's S16 conversion output. Nil leaves each capture session on the
+	// allocating fallback path (used by tests and legacy construction).
+	bufMgr *buffer.Manager
+
+	// active maps sourceID to the running capture session.
 	active map[string]*ActiveDevice
 
 	// mu guards the active map.
@@ -87,10 +93,14 @@ type DeviceManager struct {
 }
 
 // NewDeviceManager creates a DeviceManager that dispatches captured frames
-// to the given AudioDispatcher.
-func NewDeviceManager(dispatcher AudioDispatcher, log logger.Logger) *DeviceManager {
+// to the given AudioDispatcher. When bufMgr is non-nil, the malgo capture
+// callback borrows its S16 conversion output from bufMgr's size-specific
+// BytePool and attaches a FrameRef for coordinated release. Pass nil to
+// preserve the allocating fallback path (tests, legacy construction).
+func NewDeviceManager(dispatcher AudioDispatcher, bufMgr *buffer.Manager, log logger.Logger) *DeviceManager {
 	return &DeviceManager{
 		dispatcher: dispatcher,
+		bufMgr:     bufMgr,
 		active:     make(map[string]*ActiveDevice),
 		log:        log.With(logger.String("component", "device_manager")),
 	}
@@ -133,7 +143,7 @@ func (dm *DeviceManager) StartCapture(sourceID, deviceID string, cfg DeviceConfi
 		cancel:   cancel,
 	}
 
-	info, done, err := startCapture(ctx, sourceID, deviceID, cfg, dm.dispatcher, dm.log)
+	info, done, err := startCapture(ctx, sourceID, deviceID, cfg, dm.dispatcher, dm.bufMgr, dm.log)
 	if err != nil {
 		cancel()
 		return fmt.Errorf("start capture for source %s: %w", sourceID, err)

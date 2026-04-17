@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gen2brain/malgo"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -172,6 +173,7 @@ func startCapture(
 	deviceID string,
 	cfg DeviceConfig,
 	dispatcher AudioDispatcher,
+	bufMgr *buffer.Manager,
 	log logger.Logger,
 ) (DeviceInfo, chan struct{}, error) {
 
@@ -256,19 +258,59 @@ func startCapture(
 		// Convert non-S16 formats to S16 so the rest of the pipeline
 		// (capture buffer, BirdNET analysis) receives consistent 16-bit PCM.
 		// Devices like the Scarlett 2i2 capture at 32-bit natively.
-		data, bitDepth := convertToS16IfNeeded(pSamples, formatType, cfg.BitDepth)
+		//
+		// Pooling: when bufMgr is wired, borrow a destination slice from the
+		// size-specific BytePool and attach a FrameRef whose release closure
+		// returns the slice. When bufMgr is nil (tests, legacy construction)
+		// fall back to a fresh allocation and leave Ref nil.
+		outSize := s16OutputSize(pSamples, formatType)
+
+		var (
+			out []byte
+			ref *FrameRef
+		)
+		if bufMgr != nil {
+			pool := bufMgr.BytePoolFor(outSize)
+			if pool != nil {
+				buf := pool.Get()
+				if cap(buf) < outSize {
+					// Defensive: pool returned a short slice. Fall back to a
+					// fresh allocation and leave ref nil so the oversized slice
+					// is never returned to the pool.
+					out = make([]byte, outSize)
+				} else {
+					out = buf[:outSize]
+					ref = NewFrameRef(func() { pool.Put(out) })
+				}
+			} else {
+				out = make([]byte, outSize)
+			}
+		} else {
+			out = make([]byte, outSize)
+		}
+
+		bitDepth := convertToS16IfNeededInto(out, pSamples, formatType)
+		if bitDepth == 0 {
+			// U8 or unknown format: resolve bit depth from the requested value.
+			bitDepth = formatBitDepth(formatType, cfg.BitDepth)
+		}
 
 		frame := AudioFrame{
 			SourceID:   sourceID,
 			SourceName: selectedDevInfo.Name,
-			Data:       data,
+			Data:       out,
 			SampleRate: cfg.SampleRate,
 			BitDepth:   bitDepth,
 			Channels:   cfg.Channels,
 			Timestamp:  time.Now(),
+			Ref:        ref,
 		}
 
 		dispatcher.Dispatch(frame)
+		// Release the producer's own reference. If routes retained, the final
+		// release happens when the last drainer completes; if no routes or all
+		// dropped, the pool slice returns here. Release is nil-safe.
+		ref.Release()
 	}
 
 	callbacks := malgo.DeviceCallbacks{

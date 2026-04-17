@@ -33,7 +33,8 @@ func newTestDeviceManager(t *testing.T) (*DeviceManager, *mockDispatcher) {
 	t.Helper()
 	disp := &mockDispatcher{}
 	log := logger.Global().Module("test_device_manager")
-	dm := NewDeviceManager(disp, log)
+	// Pass nil bufMgr so the test exercises the allocating fallback path.
+	dm := NewDeviceManager(disp, nil, log)
 	return dm, disp
 }
 
