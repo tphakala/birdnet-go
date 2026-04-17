@@ -15,6 +15,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
 
 // TestHLSStreamInfoStruct tests the HLSStreamInfo struct
@@ -580,4 +582,48 @@ func TestResolveClientID(t *testing.T) {
 		assert.Contains(t, clientID, "Browser")
 		assert.NotContains(t, clientID, "not-a-valid-uuid")
 	})
+}
+
+// TestHLSConsumer_WriteDoesNotRetainFrameData verifies that hlsConsumer.Write
+// copies the frame data before forwarding it on the channel, so the caller's
+// buffer can be safely reused after Write returns. This is the correctness
+// invariant that lets the audiocore router pool its output slices without
+// racing against FFmpeg reads.
+func TestHLSConsumer_WriteDoesNotRetainFrameData(t *testing.T) {
+	t.Parallel()
+
+	ch := make(chan []byte, 1)
+	h := &hlsConsumer{
+		id:       "test",
+		sourceID: "src",
+		ch:       ch,
+		rate:     48000,
+		depth:    16,
+		channels: 1,
+	}
+
+	original := []byte{0x01, 0x02, 0x03, 0x04}
+	frame := audiocore.AudioFrame{
+		SourceID:   "src",
+		Data:       original,
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+
+	require.NoError(t, h.Write(frame))
+
+	// Mutate the caller's slice after Write returns. If hlsConsumer retained
+	// the slice header, the mutation would be visible on the channel.
+	for i := range original {
+		original[i] = 0xFF
+	}
+
+	select {
+	case received := <-ch:
+		assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, received,
+			"hlsConsumer must copy frame.Data, not retain the caller's slice")
+	case <-time.After(time.Second):
+		t.Fatal("no frame delivered to channel")
+	}
 }
