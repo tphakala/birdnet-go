@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1655,10 +1656,13 @@ func TestStream_DispatchAttachesFrameRef_WhenPooled(t *testing.T) {
 		gotRef = frame.Ref
 	}, nil, nil, bufMgr)
 
-	ref := audiocore.NewFrameRef(func() {})
+	var released atomic.Int32
+	ref := audiocore.NewFrameRef(func() { released.Add(1) })
 	stream.dispatchAudioData([]byte{1, 2, 3}, ref)
 
 	require.NotNil(t, gotRef, "pooled Stream must forward FrameRef to dispatched frames")
+	assert.EqualValues(t, 1, released.Load(),
+		"dispatchAudioData must release the producer's reference exactly once")
 }
 
 // TestStream_DispatchNilRef_WhenNoBufMgr verifies that when no buffer
@@ -1679,4 +1683,24 @@ func TestStream_DispatchNilRef_WhenNoBufMgr(t *testing.T) {
 	stream.dispatchAudioData([]byte{1, 2, 3}, nil)
 
 	assert.Nil(t, gotRef, "non-pooled Stream must dispatch with nil Ref")
+}
+
+// TestStream_DispatchEmptyData_ReleasesRef verifies that the empty-data
+// early-return path in dispatchAudioData still releases the producer's
+// reference exactly once, so pool slices are not leaked when a read
+// returns zero useful bytes.
+func TestStream_DispatchEmptyData_ReleasesRef(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	stream := NewStream(&cfg, func(frame audiocore.AudioFrame) {
+		t.Fatalf("onFrame must not be called for empty data")
+	}, nil, nil, nil)
+
+	var released atomic.Int32
+	ref := audiocore.NewFrameRef(func() { released.Add(1) })
+	stream.dispatchAudioData(nil, ref)
+
+	assert.EqualValues(t, 1, released.Load(),
+		"empty-data dispatch must release the producer's reference exactly once")
 }

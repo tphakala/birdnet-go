@@ -975,6 +975,19 @@ func (s *Stream) processAudio() error {
 	// readerDone is closed when the main event loop exits to unblock the
 	// reader goroutine if readCh is full, preventing a goroutine leak.
 	readerDone := make(chan struct{})
+	// Defers run LIFO: close(readerDone) fires first (so any reader send
+	// blocked on readCh unblocks via the readerDone branch and releases
+	// its own ref there), then the drain runs to catch at most one
+	// readResult the reader already buffered into readCh before we
+	// signalled. Without this drain the pooled slice would leak from the
+	// pool's perspective (GC still reclaims it).
+	defer func() {
+		select {
+		case pending := <-readCh:
+			pending.ref.Release()
+		default:
+		}
+	}()
 	defer close(readerDone)
 
 	// Launch a dedicated reader goroutine. It exits when stdout is closed
