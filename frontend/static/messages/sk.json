@@ -3412,9 +3412,10 @@
       },
       "synonyms": {
         "tabLabel": "Synonymá",
-        "description": "Priraďte názvy druhov BirdNET k vašim preferovaným názvom. Keď detekcia zodpovedá synonymu, použije sa aktualizovaný názov.",
+        "description": "Priraďte vedecké názvy BirdNET k ich aktualizovaným ekvivalentom v novšej taxonómii. Používa sa len ako záložná možnosť pri vyhľadávaní fotografií vtákov na Wikipédii a AviCommons; nepremenuje druhy v detekciách ani na ovládacom paneli.",
+        "helpText": "Ak chcete zmeniť, pod akým názvom sa druh zobrazuje v rozhraní, upravte súbor menoviek BirdNET (nastavenie \"Cesta k štítkom\" v hlavných nastaveniach).",
         "birdnetName": "Názov BirdNET",
-        "updatedName": "Aktualizovaný názov",
+        "updatedName": "Aktualizovaný vedecký názov",
         "addButton": "Pridať synonymum",
         "emptyState": "Žiadne taxonomické synonymá nie sú nakonfigurované",
         "errors": {

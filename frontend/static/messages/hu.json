@@ -3443,9 +3443,10 @@
       },
       "synonyms": {
         "tabLabel": "Szinonimák",
-        "description": "BirdNET faj nevek leképezése az Ön preferált neveire. Amikor egy detektálás egyezik egy szinonimával, a frissített név kerül használatra.",
+        "description": "Rendelje hozzá a BirdNET tudományos fajneveit újabb taxonómia szerinti megfelelőikhez. Csak tartalékként használatos a madárképek Wikipédiáról és AviCommonsról való lekérésekor; nem nevezi át a fajokat a detektálásokban vagy az irányítópulton.",
+        "helpText": "Ha módosítani szeretné egy faj felületen megjelenő nevét, szerkessze a BirdNET címkefájlját (a „Címke útvonal” beállítás a fő beállítások között).",
         "birdnetName": "BirdNET név",
-        "updatedName": "Frissített név",
+        "updatedName": "Frissített tudományos név",
         "addButton": "Szinonima hozzáadása",
         "emptyState": "Nincs taxonómia szinonima konfigurálva",
         "errors": {

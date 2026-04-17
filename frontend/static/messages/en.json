@@ -3480,9 +3480,10 @@
       },
       "synonyms": {
         "tabLabel": "Synonyms",
-        "description": "Map BirdNET species names to your preferred names. When a detection matches a synonym, the updated name is used instead.",
+        "description": "Map BirdNET scientific names to their updated equivalents in newer taxonomy. Used only as a fallback when looking up bird photos from Wikipedia and AviCommons; does not rename species in detections or on the dashboard.",
+        "helpText": "To change how a species is named in the UI, edit your BirdNET labels file (the \"Label Path\" setting under Main settings).",
         "birdnetName": "BirdNET Name",
-        "updatedName": "Updated Name",
+        "updatedName": "Updated scientific name",
         "addButton": "Add Synonym",
         "emptyState": "No taxonomy synonyms configured",
         "errors": {

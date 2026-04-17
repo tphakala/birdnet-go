@@ -1302,6 +1302,9 @@
   <div class="space-y-4">
     <SettingsNote>
       <p>{t('settings.species.synonyms.description')}</p>
+      <p class="mt-2 text-xs text-muted">
+        {t('settings.species.synonyms.helpText')}
+      </p>
     </SettingsNote>
 
     <!-- Add Synonym Form -->

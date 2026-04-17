@@ -3450,9 +3450,10 @@
       },
       "synonyms": {
         "tabLabel": "Synonimy",
-        "description": "Przypisz nazwy gatunków BirdNET do preferowanych nazw. Gdy wykrycie pasuje do synonimu, zostanie użyta zaktualizowana nazwa.",
+        "description": "Przypisz naukowe nazwy BirdNET do ich zaktualizowanych odpowiedników w nowszej taksonomii. Używane wyłącznie jako rozwiązanie awaryjne przy pobieraniu zdjęć ptaków z Wikipedii i AviCommons; nie zmienia nazw gatunków w wykryciach ani na panelu.",
+        "helpText": "Aby zmienić nazwę, pod którą gatunek pojawia się w interfejsie, edytuj swój plik etykiet BirdNET (ustawienie \"Ścieżka Etykiet\" w ustawieniach głównych).",
         "birdnetName": "Nazwa BirdNET",
-        "updatedName": "Zaktualizowana nazwa",
+        "updatedName": "Zaktualizowana nazwa naukowa",
         "addButton": "Dodaj synonim",
         "emptyState": "Nie skonfigurowano synonimów taksonomicznych",
         "errors": {

@@ -3442,9 +3442,10 @@
       },
       "synonyms": {
         "tabLabel": "Synonymer",
-        "description": "Knyt BirdNET-artsnavne til dine foretrukne navne. Når en detektion matcher et synonym, bruges det opdaterede navn i stedet.",
+        "description": "Knyt BirdNETs videnskabelige artsnavne til deres opdaterede modstykker i nyere taksonomi. Bruges kun som reserve ved opslag af fuglebilleder fra Wikipedia og AviCommons; omdøber ikke arter i detektioner eller på dashboardet.",
+        "helpText": "For at ændre hvordan en art vises i brugerfladen skal du redigere din BirdNET-etiketfil (indstillingen \"Labelsti\" under Hovedindstillinger).",
         "birdnetName": "BirdNET-navn",
-        "updatedName": "Opdateret navn",
+        "updatedName": "Opdateret videnskabeligt navn",
         "addButton": "Tilføj synonym",
         "emptyState": "Ingen taksonomi-synonymer konfigureret",
         "errors": {

@@ -3442,9 +3442,10 @@
       },
       "synonyms": {
         "tabLabel": "Sinonīmi",
-        "description": "Saistiet BirdNET sugu nosaukumus ar vēlamajiem nosaukumiem. Kad noteikšana atbilst sinonīmam, tiks izmantots atjauninātais nosaukums.",
+        "description": "Saistiet BirdNET zinātniskos sugu nosaukumus ar to atjauninātajiem ekvivalentiem jaunākajā taksonomijā. Tiek izmantots tikai kā rezerves variants, meklējot putnu fotoattēlus Wikipedia un AviCommons; nepārsauc sugas atklājumos vai informācijas panelī.",
+        "helpText": "Lai mainītu, kā suga tiek attēlota saskarnē, rediģējiet savu BirdNET etiķešu failu (iestatījums \"Etiķešu ceļš\" galvenajos iestatījumos).",
         "birdnetName": "BirdNET nosaukums",
-        "updatedName": "Atjaunināts nosaukums",
+        "updatedName": "Atjaunināts zinātniskais nosaukums",
         "addButton": "Pievienot sinonīmu",
         "emptyState": "Nav konfigurēti taksonomijas sinonīmi",
         "errors": {

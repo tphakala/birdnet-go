@@ -3215,9 +3215,10 @@
       },
       "synonyms": {
         "tabLabel": "Synonyme",
-        "description": "Ordnen Sie BirdNET-Artennamen Ihren bevorzugten Namen zu. Bei einer Erkennung wird der aktualisierte Name verwendet.",
+        "description": "Ordnen Sie wissenschaftliche BirdNET-Namen ihren aktualisierten Entsprechungen in einer neueren Taxonomie zu. Wird nur als Fallback beim Abrufen von Vogelbildern von Wikipedia und AviCommons verwendet; benennt Arten weder in Erkennungen noch im Dashboard um.",
+        "helpText": "Um den in der Oberfläche angezeigten Namen einer Art zu ändern, bearbeiten Sie Ihre BirdNET-Labeldatei (Einstellung \"Label-Pfad\" unter Haupteinstellungen).",
         "birdnetName": "BirdNET-Name",
-        "updatedName": "Neuer Name",
+        "updatedName": "Aktualisierter wissenschaftlicher Name",
         "addButton": "Synonym hinzufügen",
         "emptyState": "Keine Taxonomie-Synonyme konfiguriert",
         "errors": {
