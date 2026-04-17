@@ -327,7 +327,7 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 		// progress; each outer iteration that pulls zero frames proves
 		// the drainers are parked on the select rather than on a full
 		// consumer channel, so forwarding is complete.
-		drained := 0
+		d1, d2 := 0, 0
 		for {
 			synctest.Wait()
 			got := 0
@@ -335,9 +335,10 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 			for {
 				select {
 				case <-c1.frames:
-					drained++
+					d1++
 					got++
 				case <-c2.frames:
+					d2++
 					got++
 				default:
 					break drain
@@ -347,7 +348,8 @@ func TestRouter_ConcurrentDispatch(t *testing.T) {
 				break
 			}
 		}
-		assert.Positive(t, drained, "at least some frames should have been delivered")
+		assert.Positive(t, d1, "c1 should receive at least one frame")
+		assert.Positive(t, d2, "c2 should receive at least one frame")
 	})
 }
 
