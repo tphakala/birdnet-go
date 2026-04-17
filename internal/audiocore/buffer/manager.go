@@ -72,7 +72,7 @@ func (m *Manager) AllocateAnalysis(sourceID, modelID string, capacity, overlapSi
 		return fmt.Errorf("analysis buffer already allocated for source %q model %q", sourceID, modelID)
 	}
 
-	ab, err := NewAnalysisBuffer(capacity, overlapSize, readSize, sourceID, m.logger)
+	ab, err := NewAnalysisBuffer(capacity, overlapSize, readSize, sourceID, m.logger, m)
 	if err != nil {
 		return err
 	}

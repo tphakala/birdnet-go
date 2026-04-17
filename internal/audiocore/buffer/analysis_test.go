@@ -29,7 +29,7 @@ func TestAnalysisBuffer_WriteRead(t *testing.T) {
 		readSize    = 1024
 	)
 
-	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "test-source", newTestLogger())
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "test-source", newTestLogger(), nil)
 	require.NoError(t, err)
 
 	// Write enough data so that one full read is possible (readSize bytes).
@@ -67,7 +67,7 @@ func TestAnalysisBuffer_Overwrite(t *testing.T) {
 		readSize    = 256
 	)
 
-	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "overwrite-source", newTestLogger())
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "overwrite-source", newTestLogger(), nil)
 	require.NoError(t, err)
 
 	// Write data that exceeds the buffer capacity to force overwrites.
@@ -94,7 +94,7 @@ func TestAnalysisBuffer_Overwrite(t *testing.T) {
 func TestAnalysisBuffer_ReadSizeLessThanOverlapSize(t *testing.T) {
 	t.Parallel()
 
-	_, err := buffer.NewAnalysisBuffer(4096, 1024, 512, "test-source", newTestLogger())
+	_, err := buffer.NewAnalysisBuffer(4096, 1024, 512, "test-source", newTestLogger(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "read size 512 must be >= overlap size 1024")
 }
@@ -111,7 +111,7 @@ func TestAnalysisBuffer_OverlapRead(t *testing.T) {
 		totalSize   = overlapSize + readSize
 	)
 
-	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "overlap-source", newTestLogger())
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "overlap-source", newTestLogger(), nil)
 	require.NoError(t, err)
 
 	// Helper: write enough bytes for one full chunk to be readable.

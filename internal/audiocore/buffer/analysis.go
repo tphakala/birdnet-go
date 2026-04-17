@@ -28,10 +28,12 @@ type AnalysisBuffer struct {
 	prevData    []byte // tail of the previous read, used as overlap prefix
 	overlapSize int    // number of bytes to retain as overlap
 	readSize    int    // number of bytes to read from the ring per call
+	windowSize  int    // overlapSize + readSize, cached for pool lookups
 	sourceID    string // identifier used in log messages
 	tracker     *OverwriteTracker
 	mu          sync.Mutex
 	log         logger.Logger
+	windowPool  *BytePool // nil when unpooled; sized to windowSize when set
 }
 
 // NewAnalysisBuffer creates an AnalysisBuffer with a ring buffer of the given
@@ -40,8 +42,14 @@ type AnalysisBuffer struct {
 // fresh bytes consumed from the ring per Read call; the total returned slice
 // length is overlapSize+readSize.
 //
+// bufMgr is optional: when non-nil, the window slices are sourced from
+// bufMgr.BytePoolFor(overlapSize+readSize) and must be returned via the
+// release func that Read returns (added in a later commit). When bufMgr is
+// nil (test paths), window slices are allocated per Read and the release
+// func is a no-op.
+//
 // Returns an error if any dimension is not positive or if sourceID is empty.
-func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger) (*AnalysisBuffer, error) {
+func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger, bufMgr *Manager) (*AnalysisBuffer, error) {
 	if capacity <= 0 {
 		return nil, errors.Newf("invalid analysis buffer capacity: %d, must be greater than 0", capacity).
 			Component("audiocore").
@@ -115,13 +123,21 @@ func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log
 		Logger:         log,
 	}
 
+	windowSize := overlapSize + readSize
+	var windowPool *BytePool
+	if bufMgr != nil {
+		windowPool = bufMgr.BytePoolFor(windowSize)
+	}
+
 	return &AnalysisBuffer{
 		ring:        ring,
 		overlapSize: overlapSize,
 		readSize:    readSize,
+		windowSize:  windowSize,
 		sourceID:    sourceID,
 		tracker:     NewOverwriteTracker(trackerOpts),
 		log:         log,
+		windowPool:  windowPool,
 	}, nil
 }
 
@@ -201,7 +217,7 @@ func (ab *AnalysisBuffer) Read() ([]byte, error) {
 		if n >= ab.overlapSize {
 			copy(ab.prevData, fresh[n-ab.overlapSize:n])
 		} else {
-			// Fewer fresh bytes than overlap — zero-pad the beginning,
+			// Fewer fresh bytes than overlap, zero-pad the beginning,
 			// place available data at the end so the overlap slice
 			// always has exactly overlapSize length.
 			clear(ab.prevData)
