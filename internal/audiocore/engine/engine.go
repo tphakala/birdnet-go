@@ -167,16 +167,14 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 
 	bufMgr := buffer.NewManager(log)
 	router := audiocore.NewAudioRouter(log, bufMgr)
-	// bufMgr wiring into the ffmpeg capture path is completed in a follow-up
-	// phase. Pass nil for now so ffmpeg streams stay on the allocating
-	// fallback while the engine-level plumbing lands.
+	// Share bufMgr with both capture paths so stdout reads (ffmpeg) and
+	// convert-on-capture (malgo) go through pooled byte slices instead of
+	// allocating per-frame. The router Retain/Release path keeps pooled
+	// buffers alive across fan-out subscribers.
 	ffmpegMgr := ffmpeg.NewManager(engineCtx, func(frame audiocore.AudioFrame) {
 		router.Dispatch(frame)
-	}, nil, log, nil)
-	// bufMgr wiring into the malgo capture path is completed in a follow-up
-	// phase. Pass nil for now so DeviceManager stays on the allocating
-	// fallback while the ffmpeg side of the pool migration lands.
-	deviceMgr := audiocore.NewDeviceManager(router, nil, log)
+	}, nil, log, bufMgr)
+	deviceMgr := audiocore.NewDeviceManager(router, bufMgr, log)
 
 	e := &AudioEngine{
 		registry:             audiocore.NewSourceRegistry(log),
