@@ -60,6 +60,14 @@ type AudioConsumer interface {
 
 	// Write delivers an audio frame to this consumer.
 	// Implementations must not modify frame.Data.
+	//
+	// Buffer ownership contract:
+	// Implementations MUST NOT retain frame.Data after Write returns. The
+	// caller may recycle the underlying slice into a buffer pool immediately
+	// after Write completes, so any asynchronous use (channel send, goroutine
+	// hand-off, queue enqueue) MUST copy the data first. See hlsConsumer.Write
+	// in internal/api/v2/audio_hls.go for an example of correct
+	// copy-before-enqueue behaviour.
 	Write(frame AudioFrame) error
 
 	// Close releases resources held by this consumer.

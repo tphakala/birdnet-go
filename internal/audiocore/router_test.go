@@ -706,7 +706,6 @@ func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
 	}
 
 	b.ReportAllocs()
-	b.ResetTimer()
 
 	for b.Loop() {
 		res, err := r.applyProcessing(frame, route, nil)

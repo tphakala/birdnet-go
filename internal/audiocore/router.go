@@ -544,6 +544,8 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		frame = result.Frame
 		procResult = result
 	}
+	// See AudioConsumer.Write for the buffer ownership contract the
+	// consumer must honour so the pool recycling below is safe.
 	if err := route.Consumer.Write(frame); err != nil {
 		errCount := route.errors.Add(1)
 		if errCount%errorLogInterval == 1 {
@@ -615,6 +617,24 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 	} else {
 		floatBuf = make([]float64, sampleCount)
 	}
+
+	// releasePools guards both pool buffers. It returns them on any early
+	// exit; the success path disarms both flags before returning so the
+	// caller owns the buffers (releasing them after Consumer.Write via
+	// processingResult.release()).
+	releaseFloat := true
+	releaseOut := true
+	var outPool *buffer.BytePool
+	var out []byte
+	defer func() {
+		if releaseFloat && floatPool != nil {
+			floatPool.Put(floatBuf)
+		}
+		if releaseOut && outPool != nil {
+			outPool.Put(out)
+		}
+	}()
+
 	convert.BytesToFloat64PCM16Into(floatBuf, frame.Data[:evenLen])
 
 	// EQ first - filters operate on the original signal shape.
@@ -628,11 +648,9 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 	}
 
 	outLen := sampleCount * 2
-	var outPool *buffer.BytePool
 	if r.bufMgr != nil {
 		outPool = r.bufMgr.BytePoolFor(outLen)
 	}
-	var out []byte
 	if outPool != nil {
 		out = outPool.Get()
 	} else {
@@ -648,16 +666,13 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 				logger.Int64("total_errors", errCount),
 				logger.Error(convErr))
 		}
-		// Release the buffers we obtained; caller will see a zero-value result.
-		if floatPool != nil {
-			floatPool.Put(floatBuf)
-		}
-		if outPool != nil {
-			outPool.Put(out)
-		}
+		// defer releases both buffers; caller sees zero-value result.
 		return processingResult{}, convErr
 	}
 
+	// Success: disarm the defer so the caller owns the buffers.
+	releaseFloat = false
+	releaseOut = false
 	return processingResult{
 		Frame: AudioFrame{
 			SourceID:   frame.SourceID,
