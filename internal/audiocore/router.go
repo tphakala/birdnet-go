@@ -290,15 +290,27 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 // Note: because Dispatch takes a read lock while RemoveRoute takes a write
 // lock, a small number of in-flight frames may be lost during route removal.
 // This is expected behaviour and not a bug.
+//
+// Pool ownership: when frame.Ref is non-nil, Dispatch calls Retain once per
+// successful inbox enqueue. Each drainer calls Release after Consumer.Write
+// returns (via a defer in handleRouteFrame). The producer retains one
+// reference at frame creation and is responsible for calling Release once
+// after Dispatch returns, so the pool slice is released exactly when the
+// last holder is done.
 func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugeParam: signature required by AudioDispatcher interface
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	for _, rt := range r.routes[frame.SourceID] {
+		// Retain BEFORE attempting the send so the drainer cannot observe a
+		// stale zero count and release the slice prematurely. If the send
+		// fails (inbox full), undo the retain so the drop path is balanced.
+		frame.Ref.Retain()
 		select {
 		case rt.inbox <- frame:
-			// Frame enqueued successfully.
+			// Frame enqueued; drainer will Release after Write.
 		default:
+			frame.Ref.Release() // undo the retain we just performed
 			drops := rt.drops.Add(1)
 			if drops%dropLogInterval == 1 {
 				r.log.Warn("frames dropped for consumer",

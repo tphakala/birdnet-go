@@ -48,8 +48,11 @@ func (m *mockConsumer) Write(frame AudioFrame) error { //nolint:gocritic // huge
 }
 
 // blockingConsumer never reads from its frames channel, simulating a slow consumer.
+// Tests that need to clean up promptly can call unblock() which closes the
+// unblockCh, causing Write to return and the drainer to exit cleanly.
 type blockingConsumer struct {
 	mockConsumer
+	unblockCh chan struct{}
 }
 
 func newBlockingConsumer(id string) *blockingConsumer {
@@ -59,14 +62,22 @@ func newBlockingConsumer(id string) *blockingConsumer {
 			sampleRate: 48000,
 			bitDepth:   16,
 			channels:   1,
-			frames:     make(chan AudioFrame), // unbuffered — Write blocks forever
+			frames:     make(chan AudioFrame), // unbuffered; Write blocks until unblock
 		},
+		unblockCh: make(chan struct{}),
 	}
 }
 
 func (b *blockingConsumer) Write(frame AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
-	// Block indefinitely to simulate a permanently stalled consumer.
-	select {}
+	// Block until unblock() is called; simulates a permanently stalled
+	// consumer for the duration of the test.
+	<-b.unblockCh
+	return nil
+}
+
+// unblock releases any in-flight Write calls. Safe to call at most once.
+func (b *blockingConsumer) unblock() {
+	close(b.unblockCh)
 }
 
 func testFrame(sourceID string) AudioFrame {
@@ -170,6 +181,7 @@ func TestRouter_DropOnFullInbox(t *testing.T) {
 
 	consumer := newBlockingConsumer("slow-consumer")
 	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 0.0, nil))
+	t.Cleanup(consumer.unblock)
 
 	// Fill the inbox buffer (capacity 64) plus extra to guarantee drops.
 	const totalFrames = 128
@@ -791,4 +803,74 @@ func rmsOfPCM16(data []byte) float64 {
 		sumSq += sample * sample
 	}
 	return math.Sqrt(sumSq / float64(n))
+}
+
+// TestRouter_Dispatch_RefZeroRoutes verifies that when a frame has no
+// registered routes, the producer's own release is sufficient to fire the
+// closure (no retain/release imbalance on the no-route path).
+func TestRouter_Dispatch_RefZeroRoutes(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	var released atomic.Int32
+	ref := NewFrameRef(func() { released.Add(1) })
+	frame := AudioFrame{
+		SourceID:   "no-routes",
+		Data:       []byte{1},
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Ref:        ref,
+	}
+
+	router.Dispatch(frame)
+	ref.Release()
+
+	assert.EqualValues(t, 1, released.Load(), "no routes: producer's release alone must drop to zero")
+}
+
+// TestRouter_Dispatch_RefFullInboxDrops verifies that when Dispatch cannot
+// enqueue a frame (inbox full), the drop path releases the retain so the pool
+// slice is not leaked. The producer's own release then completes the cycle.
+func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	// Blocking consumer so inbox fills after routeInboxCapacity frames.
+	blocker := newBlockingConsumer("blocker-ref-drop")
+	require.NoError(t, router.AddRoute("src-full", blocker, 48000, 0.0, nil))
+	t.Cleanup(blocker.unblock)
+
+	var released atomic.Int32
+
+	// Fill the inbox to capacity.
+	for range routeInboxCapacity {
+		ref := NewFrameRef(func() { released.Add(1) })
+		router.Dispatch(AudioFrame{
+			SourceID:   "src-full",
+			Data:       []byte{0},
+			SampleRate: 48000,
+			BitDepth:   16,
+			Channels:   1,
+			Ref:        ref,
+		})
+		ref.Release()
+	}
+
+	// Next dispatch must drop; ref must still release cleanly via the drop path.
+	ref := NewFrameRef(func() { released.Add(1) })
+	router.Dispatch(AudioFrame{
+		SourceID:   "src-full",
+		Data:       []byte{0},
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Ref:        ref,
+	})
+	ref.Release()
+
+	// The dropped frame should have released immediately via the drop path.
+	assert.GreaterOrEqual(t, released.Load(), int32(1), "dropped frame must still release")
 }
