@@ -451,59 +451,103 @@ func (r *AudioRouter) drainRoute(route *Route) {
 	for {
 		select {
 		case frame := <-route.inbox:
-			// Apply per-route resampling when rates differ.
-			if route.resampler != nil {
-				resampled, err := route.resampler.ResampleInto(frame.Data)
-				if err != nil {
-					errCount := route.errors.Add(1)
-					if errCount%errorLogInterval == 1 {
-						r.log.Warn("resampler error",
-							logger.String("source_id", route.SourceID),
-							logger.String("consumer_id", route.Consumer.ID()),
-							logger.Int64("total_errors", errCount),
-							logger.Error(err))
-					}
-					continue
-				}
-				// Copy resampled bytes: the Resampler reuses its internal buffer,
-				// so we must not hand the slice to the consumer directly.
-				out := make([]byte, len(resampled))
-				copy(out, resampled)
-				frame = AudioFrame{
-					SourceID:   frame.SourceID,
-					SourceName: frame.SourceName,
-					Data:       out,
-					SampleRate: route.Consumer.SampleRate(),
-					BitDepth:   frame.BitDepth,
-					Channels:   frame.Channels,
-					Timestamp:  frame.Timestamp,
-				}
-			}
-			// Apply per-route EQ filtering and/or gain adjustment.
-			// Both require 16-bit PCM; skip for other formats.
-			chain := route.filterChain.Load()
-			if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
-				processed, err := r.applyProcessing(frame, route, chain)
-				if err != nil {
-					continue
-				}
-				frame = processed
-			}
-			if err := route.Consumer.Write(frame); err != nil {
-				errCount := route.errors.Add(1)
-				if errCount%errorLogInterval == 1 {
-					r.log.Warn("consumer write error",
-						logger.String("source_id", route.SourceID),
-						logger.String("consumer_id", route.Consumer.ID()),
-						logger.Int64("total_errors", errCount),
-						logger.Error(err))
-				}
-			}
+			r.handleRouteFrame(frame, route)
 		case <-route.done:
 			return
 		case <-r.ctx.Done():
 			return
 		}
+	}
+}
+
+// handleRouteFrame applies optional resampling and processing to frame, then
+// writes it to the route's consumer. It is called from drainRoute's select loop
+// and is extracted to keep drainRoute under the cognitive-complexity limit.
+//
+// Pool discipline for the resample buffer:
+//   - Allocated from the pool before the consumer write, returned after.
+//   - If processing replaces frame.Data, the resample buffer is returned before
+//     reassignment so the wrong (processed) slice is never put back.
+//   - If resampling or processing fails, the buffer is returned before continue.
+func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+	var resamplePool *buffer.BytePool // nil when not pooled
+
+	// Apply per-route resampling when rates differ.
+	if route.resampler != nil {
+		resampled, err := route.resampler.ResampleInto(frame.Data)
+		if err != nil {
+			errCount := route.errors.Add(1)
+			if errCount%errorLogInterval == 1 {
+				r.log.Warn("resampler error",
+					logger.String("source_id", route.SourceID),
+					logger.String("consumer_id", route.Consumer.ID()),
+					logger.Int64("total_errors", errCount),
+					logger.Error(err))
+			}
+			return
+		}
+		// Copy resampled bytes into an owned buffer (Resampler reuses its
+		// internal slice). When a buffer.Manager is wired, the copy lands
+		// in a pooled slice keyed by length; otherwise fall back to make().
+		if r.bufMgr != nil {
+			resamplePool = r.bufMgr.BytePoolFor(len(resampled))
+		}
+		var out []byte
+		if resamplePool != nil {
+			out = resamplePool.Get()
+		} else {
+			out = make([]byte, len(resampled))
+		}
+		copy(out, resampled)
+		frame = AudioFrame{
+			SourceID:   frame.SourceID,
+			SourceName: frame.SourceName,
+			Data:       out,
+			SampleRate: route.Consumer.SampleRate(),
+			BitDepth:   frame.BitDepth,
+			Channels:   frame.Channels,
+			Timestamp:  frame.Timestamp,
+		}
+	}
+	// Apply per-route EQ filtering and/or gain adjustment.
+	// Both require 16-bit PCM; skip for other formats.
+	chain := route.filterChain.Load()
+	if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
+		processed, err := r.applyProcessing(frame, route, chain)
+		if err != nil {
+			// Release the resample buffer on error before skipping the frame.
+			// applyProcessing owns its own output buffer, so frame.Data still
+			// points to the resample slice here.
+			if resamplePool != nil {
+				resamplePool.Put(frame.Data)
+			}
+			return
+		}
+		// Release the resample buffer BEFORE frame.Data is reassigned to the
+		// processing output, otherwise the trailing guard below would Put a
+		// processed (possibly wrong-sized) slice into the resample pool. Nil
+		// out the pointer so the trailing guard is a no-op.
+		if resamplePool != nil {
+			resamplePool.Put(frame.Data)
+			resamplePool = nil
+		}
+		frame = processed
+	}
+	if err := route.Consumer.Write(frame); err != nil {
+		errCount := route.errors.Add(1)
+		if errCount%errorLogInterval == 1 {
+			r.log.Warn("consumer write error",
+				logger.String("source_id", route.SourceID),
+				logger.String("consumer_id", route.Consumer.ID()),
+				logger.Int64("total_errors", errCount),
+				logger.Error(err))
+		}
+	}
+	// Release the resample buffer after Consumer.Write returns. All in-tree
+	// consumers copy synchronously, so the slice is safe to recycle. When
+	// processing succeeded, resamplePool was nilled above and this is a no-op.
+	if resamplePool != nil {
+		resamplePool.Put(frame.Data)
 	}
 }
 
