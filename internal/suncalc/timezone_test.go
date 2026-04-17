@@ -40,9 +40,9 @@ func TestResolveTimezone_CacheReturnsSameLocation(t *testing.T) {
 	// per-coord load path runs at most once.
 	assert.Same(t, first, second, "repeat resolveTimezone should return the cached pointer")
 
-	tzMu.Lock()
+	tzMu.RLock()
 	_, ok := tzCache[tzCacheKey(testLatitude, testLongitude)]
-	tzMu.Unlock()
+	tzMu.RUnlock()
 	assert.True(t, ok, "cache should be populated after first resolve")
 }
 
@@ -50,6 +50,16 @@ func TestResolveTimezone_NearbyCoordsShareCacheEntry(t *testing.T) {
 	// Coordinates within ~11 m (the 4-decimal cache precision) must
 	// share a cache entry, so tiny config drift does not re-load the
 	// 32 MB tzf dataset.
+	//
+	// Precondition: the two coord pairs must round to the same key.
+	// Assert it explicitly so the test fails deterministically (not
+	// flakily) if testLatitude/testLongitude is ever tweaked to sit on
+	// a 4-decimal rounding boundary like X.XXX95.
+	require.Equal(t,
+		tzCacheKey(testLatitude, testLongitude),
+		tzCacheKey(testLatitude+0.00001, testLongitude+0.00001),
+		"test precondition: both coord pairs must round to the same cache key")
+
 	first := resolveTimezone(testLatitude, testLongitude)
 	second := resolveTimezone(testLatitude+0.00001, testLongitude+0.00001)
 	require.NotNil(t, first)
