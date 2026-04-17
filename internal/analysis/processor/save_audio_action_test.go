@@ -6,6 +6,7 @@
 package processor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -16,7 +17,6 @@ import (
 
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 func TestSaveAudioActionExecute_DefersUntilCaptureReady(t *testing.T) {
@@ -191,10 +191,13 @@ func TestGetJobQueueRetryConfig_SaveAudioEagerHasNoRetry(t *testing.T) {
 }
 
 // Guard against drift: errAudioExportDeferred is a plain sentinel today but
-// if someone wraps it through the internal/errors builder chain the
-// ErrorIs() check in the deferred-path test must still hold.
+// callers may wrap it (e.g. with fmt.Errorf %w) as the deferred-read path
+// evolves. Assert the wrapped form still satisfies errors.Is so
+// DefersUntilCaptureReady's ErrorIs check cannot be defeated by a future
+// wrap/unwrap change.
 func TestErrAudioExportDeferred_IsSentinel(t *testing.T) {
 	t.Parallel()
 
-	assert.True(t, errors.Is(errAudioExportDeferred, errAudioExportDeferred))
+	wrapped := fmt.Errorf("deferred execute: %w", errAudioExportDeferred)
+	assert.ErrorIs(t, wrapped, errAudioExportDeferred)
 }
