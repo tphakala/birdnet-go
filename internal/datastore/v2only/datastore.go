@@ -843,14 +843,19 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		hasAudio = true
 	}
 
-	// Verification status from Review
+	// Verification status from Review.
+	// Emit the same vocabulary the rest of the API speaks ("correct",
+	// "false_positive", "unverified"), matching api.VerificationStatus*
+	// constants and the /api/v2/detections response. Issue #2769 was caused by
+	// this path emitting the literal "verified", which the frontend's
+	// result.verified === 'correct' check did not recognize.
 	verified := "unverified"
 	if det.Review != nil {
 		switch det.Review.Verified {
 		case entities.VerificationCorrect:
-			verified = "verified"
+			verified = string(entities.VerificationCorrect)
 		case entities.VerificationFalsePositive:
-			verified = "false_positive"
+			verified = string(entities.VerificationFalsePositive)
 		}
 	}
 

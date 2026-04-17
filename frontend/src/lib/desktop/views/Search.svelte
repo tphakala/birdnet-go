@@ -136,7 +136,7 @@
     hasAudio: boolean;
   }
 
-  type VerifiedStatus = 'any' | 'verified' | 'unverified' | 'false_positive';
+  type VerifiedStatus = 'any' | 'correct' | 'unverified' | 'false_positive';
   type LockedStatus = 'any' | 'locked' | 'unlocked';
   type TimeOfDayFilter = 'any' | 'day' | 'night' | 'sunrise' | 'sunset';
   type SortBy = 'date_desc' | 'date_asc' | 'species_asc' | 'confidence_desc';
@@ -693,7 +693,7 @@
                 </label>
                 <select id="verifiedStatusFilter" bind:value={verifiedStatus} class="select w-full">
                   <option value="any">{t('search.verifiedOptions.any')}</option>
-                  <option value="verified">{t('search.verifiedOptions.verified')}</option>
+                  <option value="correct">{t('search.verifiedOptions.verified')}</option>
                   <option value="unverified">{t('search.verifiedOptions.unverified')}</option>
                   <option value="false_positive">{t('common.review.status.falsePositive')}</option>
                 </select>
