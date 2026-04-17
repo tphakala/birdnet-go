@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 )
 
@@ -663,6 +664,120 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 	outputRMS := rmsOfPCM16(received.Data)
 	assert.InDelta(t, inputRMS*2.0, outputRMS, inputRMS*0.5,
 		"output should be ~2x input (6 dB gain) after passing through LowPass")
+}
+
+// BenchmarkApplyProcessing_PoolWarm measures steady-state per-frame allocations
+// on the applyProcessing hot path with a fully wired buffer.Manager. The pools
+// are warmed before the timed loop so the reported allocs/op reflects recycling
+// behaviour, not first-call pool misses.
+func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
+	mgr := buffer.NewManager(GetLogger())
+	r := NewAudioRouter(GetLogger(), mgr)
+	defer r.Close()
+
+	// Construct a minimal Route that exercises the gain branch.
+	// gainLinear != 1.0 ensures applyProcessing is called; nil filterChain
+	// means EQ is skipped so only gain scaling runs.
+	route := &Route{
+		gainLinear: 2.0, // +6 dB: exercises the gain path
+		inbox:      make(chan AudioFrame, 1),
+		done:       make(chan struct{}),
+		stopped:    make(chan struct{}),
+	}
+	// filterChain zero value is a nil atomic.Pointer, which Load() returns nil for.
+
+	// 2880 bytes = 1440 samples = 30 ms of 48 kHz mono 16-bit PCM.
+	frame := AudioFrame{
+		SourceID:   "bench",
+		SourceName: "bench",
+		Data:       make([]byte, 2880),
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+
+	// Warm the pools so steady-state pool reuse is established before timing.
+	for range 4 {
+		res, err := r.applyProcessing(frame, route, nil)
+		if err != nil {
+			b.Fatalf("warm-up applyProcessing failed: %v", err)
+		}
+		res.release()
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		res, err := r.applyProcessing(frame, route, nil)
+		if err != nil {
+			b.Fatal(err)
+		}
+		res.release()
+	}
+}
+
+// TestApplyProcessing_AllocationRegression guards against allocation regressions
+// on the applyProcessing hot path. It measures steady-state allocs/op after pool
+// warm-up and asserts they stay within the cap documented in maxAllowedAllocs.
+//
+// Do NOT add t.Parallel() here: sync.Pool is stateful and parallel execution
+// could pollute pool state during the alloc-sensitive measurement window.
+func TestApplyProcessing_AllocationRegression(t *testing.T) {
+	mgr := buffer.NewManager(GetLogger())
+	r := NewAudioRouter(GetLogger(), mgr)
+	defer r.Close()
+
+	route := &Route{
+		gainLinear: 2.0,
+		inbox:      make(chan AudioFrame, 1),
+		done:       make(chan struct{}),
+		stopped:    make(chan struct{}),
+	}
+
+	frame := AudioFrame{
+		SourceID:   "bench",
+		SourceName: "bench",
+		Data:       make([]byte, 2880),
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+	}
+
+	// Warm the pools before measuring.
+	for range 4 {
+		res, err := r.applyProcessing(frame, route, nil)
+		require.NoError(t, err)
+		res.release()
+	}
+
+	// Measure steady-state allocation count over 100 iterations.
+	allocs := testing.AllocsPerRun(100, func() {
+		res, err := r.applyProcessing(frame, route, nil)
+		if err != nil {
+			panic(err)
+		}
+		res.release()
+	})
+
+	// Regression gate. The baseline is not zero because sync.Pool.Put boxes
+	// the slice header into an interface{} value (see SA6002 nolint comment in
+	// internal/audiocore/buffer/pool.go). Each Put call for Float64Pool and
+	// BytePool boxes one slice header, costing one small allocation. Two Put
+	// calls per applyProcessing call produce 2 allocs/op at steady state under
+	// the benchmark (warm, isolated). Under -race with parallel tests, the GC
+	// may collect pooled items causing up to 2 additional pool-miss allocs per
+	// call; the cap is set to 4 to tolerate that noise while still catching
+	// any real regressions (e.g. extra make() calls) that would push allocs
+	// well above this threshold.
+	//
+	// Measured benchmark baseline: 2 allocs/op, 48 B/op (3 runs, -count=3).
+	// Increase this constant only after investigating WHY allocations grew.
+	const maxAllowedAllocs = 4
+
+	assert.LessOrEqual(t, int(allocs), maxAllowedAllocs,
+		"applyProcessing allocations per call exceed the regression cap of %d (got %.0f)",
+		maxAllowedAllocs, allocs)
 }
 
 // rmsOfPCM16 computes the RMS of 16-bit little-endian PCM samples.
