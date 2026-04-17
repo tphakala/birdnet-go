@@ -31,12 +31,12 @@ func TestDetectionToRecord_Verified(t *testing.T) {
 		{
 			name:   "correctly reviewed detection reports correct",
 			review: &entities.DetectionReview{Verified: entities.VerificationCorrect},
-			want:   "correct",
+			want:   string(entities.VerificationCorrect),
 		},
 		{
 			name:   "false-positive review reports false_positive",
 			review: &entities.DetectionReview{Verified: entities.VerificationFalsePositive},
-			want:   "false_positive",
+			want:   string(entities.VerificationFalsePositive),
 		},
 	}
 

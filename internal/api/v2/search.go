@@ -235,7 +235,12 @@ func (c *Controller) validateSearchStatusEnums(path, ip string, req *SearchReque
 		req.VerifiedStatus = QueryValueAny
 	} else if !validVerifiedStatus[req.VerifiedStatus] {
 		c.logErrorIfEnabled("Invalid verified status parameter", logger.String("verifiedStatus", req.VerifiedStatus), logger.String("path", path), logger.String("ip", ip))
-		return fmt.Errorf("invalid verified status '%s'. Use 'any', 'correct', 'unverified', or 'false_positive'", req.VerifiedStatus)
+		return fmt.Errorf("invalid verified status %q. Use %q, %q, %q, or %q",
+			req.VerifiedStatus,
+			QueryValueAny,
+			VerificationStatusCorrect,
+			VerificationStatusUnverified,
+			VerificationStatusFalsePositive)
 	}
 
 	validLockedStatus := map[string]bool{QueryValueAny: true, "locked": true, "unlocked": true}
