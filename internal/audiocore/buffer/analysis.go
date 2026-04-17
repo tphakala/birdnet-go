@@ -46,11 +46,10 @@ type AnalysisBuffer struct {
 // fresh bytes consumed from the ring per Read call; the total returned slice
 // length is overlapSize+readSize.
 //
-// bufMgr is optional: when non-nil, the window slices are sourced from
-// bufMgr.BytePoolFor(overlapSize+readSize) and must be returned via the
-// release func that Read returns (added in a later commit). When bufMgr is
-// nil (test paths), window slices are allocated per Read and the release
-// func is a no-op.
+// bufMgr is optional: when non-nil, the window slices that Read returns are
+// sourced from bufMgr.BytePoolFor(overlapSize+readSize) and must be returned
+// via the release func that Read returns. When bufMgr is nil (test paths),
+// window slices are allocated per Read and the release func is a no-op.
 //
 // Returns an error if any dimension is not positive or if sourceID is empty.
 func NewAnalysisBuffer(capacity, overlapSize, readSize int, sourceID string, log logger.Logger, bufMgr *Manager) (*AnalysisBuffer, error) {
@@ -186,9 +185,7 @@ func (ab *AnalysisBuffer) Write(data []byte) error {
 // single call chain and must not be invoked from multiple goroutines; in
 // practice callers "defer release()" in the same goroutine as the Read call.
 //
-// would shadow the internal `window`, `release`, and `err` locals used below.
-//
-//nolint:gocritic // unnamedResult: result positions are documented; naming them
+//nolint:gocritic // unnamedResult: naming the three results would shadow the internal `window`, `release`, and `err` locals used below; result positions are documented above.
 func (ab *AnalysisBuffer) Read() ([]byte, func(), error) {
 	ab.mu.Lock()
 	defer ab.mu.Unlock()
