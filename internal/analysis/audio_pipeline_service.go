@@ -377,6 +377,11 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 				logger.String("operation", operation))
 		}
 	}
+	// engine.RemoveSource removes router routes but has no knowledge of the
+	// soundlevel tracking map. Clear the map to keep it in sync with actual
+	// router state so the next registerSoundLevelConsumers call (e.g. after
+	// restartAudioCapture) does not skip sources due to stale entries.
+	p.untrackAllSoundLevelConsumers()
 }
 
 // setupAudioSources builds source configs from current settings, adds them to
@@ -492,7 +497,23 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 				logger.String("operation", operation))
 			continue
 		}
+		// Re-check SoundLevel.Enabled while holding the mutex to close a
+		// narrow window: a concurrent ReconfigureSoundLevel disable path
+		// could have drained the map between AddRoute above and this
+		// insert. Without the re-check the route would become orphaned
+		// because removeAllSoundLevelConsumers already ran before we
+		// inserted our entry. If the flag flipped to false, we remove the
+		// route immediately and do not track it.
 		p.soundLevelMu.Lock()
+		if !conf.Setting().Realtime.Audio.SoundLevel.Enabled {
+			p.soundLevelMu.Unlock()
+			p.engine.Router().RemoveRoute(sid, consumerID)
+			log.Debug("sound level disabled mid-register, dropped route",
+				logger.String("source_id", sid),
+				logger.String("consumer_id", consumerID),
+				logger.String("operation", operation))
+			continue
+		}
 		if p.soundLevelConsumers == nil {
 			p.soundLevelConsumers = make(map[string]string)
 		}
@@ -523,10 +544,11 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 }
 
 // ReconfigureSoundLevel reconciles the sound level pipeline with the current
-// value of Realtime.Audio.SoundLevel.Enabled. When enabled, it registers a
-// consumer for every active source that does not already have one; when
-// disabled, it tears down all tracked consumers by removing their router
-// routes (which closes the consumer and stops its drainer goroutine).
+// Realtime.Audio.SoundLevel settings. When enabled, it rebuilds the pipeline
+// for every active source so that changes to settings baked into the
+// processor (e.g. Interval) take effect; when disabled, it tears down all
+// tracked consumers by removing their router routes (which closes the
+// consumer and stops its drainer goroutine).
 //
 // This is the entry point for hot-reload. ControlMonitor.handleReconfigureSoundLevel
 // invokes it before restarting the downstream publisher so that the DSP
@@ -535,10 +557,12 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 func (p *AudioPipelineService) ReconfigureSoundLevel() {
 	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
-		// Enable path: register consumers for every active source that does
-		// not already have one. registerSoundLevelConsumers is idempotent so
-		// passing the full active source list is safe and handles the case
-		// where a source was added after the previous enable.
+		// Enable path: rebuild by tearing down any existing consumers first
+		// so settings such as Interval (captured at Processor construction
+		// time) propagate on hot-reload. registerSoundLevelConsumers is
+		// idempotent but does not recreate existing processors, so the
+		// teardown is required to apply interval changes.
+		p.removeAllSoundLevelConsumers("hot_reload_rebuild")
 		registry := p.engine.Registry()
 		active := registry.List()
 		sourceIDs := make([]string, 0, len(active))
@@ -554,6 +578,27 @@ func (p *AudioPipelineService) ReconfigureSoundLevel() {
 	// consumer, which closes its output channel and unblocks the bridge
 	// goroutine registered in registerSoundLevelConsumers.
 	p.removeAllSoundLevelConsumers("hot_reload_disable")
+}
+
+// untrackSoundLevelConsumer removes the tracking entry for sid without
+// calling Router.RemoveRoute. Callers use this when they have already removed
+// the router route via engine.RemoveSource or Router.RemoveAllRoutes so the
+// tracking map stays in sync with actual router state.
+func (p *AudioPipelineService) untrackSoundLevelConsumer(sid string) {
+	p.soundLevelMu.Lock()
+	delete(p.soundLevelConsumers, sid)
+	p.soundLevelMu.Unlock()
+}
+
+// untrackAllSoundLevelConsumers clears the tracking map without calling
+// Router.RemoveRoute. Callers use this when they have already removed every
+// source (and therefore every route) from the engine, so that a subsequent
+// registerSoundLevelConsumers call does not skip sources due to stale
+// entries.
+func (p *AudioPipelineService) untrackAllSoundLevelConsumers() {
+	p.soundLevelMu.Lock()
+	p.soundLevelConsumers = nil
+	p.soundLevelMu.Unlock()
 }
 
 // removeAllSoundLevelConsumers removes every tracked soundlevel route from the
@@ -793,6 +838,11 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("source_id", src.ID),
 					logger.Error(err))
 			}
+			// engine.RemoveSource also removes the soundlevel route. Drop the
+			// tracking entry so the idempotency check in
+			// registerSoundLevelConsumers does not skip this ID if the same
+			// source is re-added later.
+			p.untrackSoundLevelConsumer(src.ID)
 		}
 	}
 
@@ -808,6 +858,11 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	if len(gainChangedIDs) > 0 {
 		for _, sid := range gainChangedIDs {
 			p.engine.Router().RemoveAllRoutes(sid)
+			// RemoveAllRoutes also removes the soundlevel route, so drop the
+			// tracking entry. Without this, the registerSoundLevelConsumers
+			// call below would skip the source (idempotency check) and leave
+			// it permanently without sound level monitoring.
+			p.untrackSoundLevelConsumer(sid)
 		}
 		p.registerConsumersForSources(gainChangedIDs, sourceModelMap, audioLevelChan, "gain_change")
 		p.registerSoundLevelConsumers(gainChangedIDs, "gain_change")

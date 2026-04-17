@@ -106,3 +106,58 @@ func TestRemoveAllSoundLevelConsumers_DrainsMapBeforeRouterCalls(t *testing.T) {
 	require.Empty(t, p.soundLevelConsumers,
 		"tracking map must be cleared atomically before router.RemoveRoute is called")
 }
+
+// TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry verifies that the
+// helper called by reconfigureChangedSources (gain change path) and the
+// removed-source path in reconfigure_diff drops just the requested source
+// from the tracking map. Without this helper those paths would leave the map
+// out of sync with the router after RemoveAllRoutes / engine.RemoveSource
+// and re-registration would be silently skipped.
+func TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry(t *testing.T) {
+	p := &AudioPipelineService{
+		soundLevelConsumers: map[string]string{
+			"src-1": "soundlevel_src-1",
+			"src-2": "soundlevel_src-2",
+		},
+	}
+
+	p.untrackSoundLevelConsumer("src-1")
+
+	assert.NotContains(t, p.soundLevelConsumers, "src-1",
+		"targeted source must be removed from tracking map")
+	assert.Contains(t, p.soundLevelConsumers, "src-2",
+		"unrelated sources must remain tracked")
+}
+
+// TestUntrackSoundLevelConsumer_MissingSourceIsNoOp confirms the helper is
+// safe to call for a source that was never tracked (e.g. sound level
+// disabled at the time the route was added). A panic here would block
+// reconfigureChangedSources any time gain changes on a non-soundlevel run.
+func TestUntrackSoundLevelConsumer_MissingSourceIsNoOp(t *testing.T) {
+	p := &AudioPipelineService{
+		soundLevelConsumers: map[string]string{"src-1": "soundlevel_src-1"},
+	}
+
+	assert.NotPanics(t, func() { p.untrackSoundLevelConsumer("nonexistent") })
+	assert.Len(t, p.soundLevelConsumers, 1,
+		"map must be unchanged when untracking an unknown source")
+}
+
+// TestUntrackAllSoundLevelConsumers_ClearsMap confirms the full-clear helper
+// used by removeAllSources resets the map. Without this, restartAudioCapture
+// (which calls removeAllSources followed by setupAudioSources) would leave
+// stale entries that cause the subsequent registerSoundLevelConsumers call
+// to skip every source.
+func TestUntrackAllSoundLevelConsumers_ClearsMap(t *testing.T) {
+	p := &AudioPipelineService{
+		soundLevelConsumers: map[string]string{
+			"src-1": "soundlevel_src-1",
+			"src-2": "soundlevel_src-2",
+		},
+	}
+
+	p.untrackAllSoundLevelConsumers()
+
+	assert.Empty(t, p.soundLevelConsumers,
+		"all tracking entries must be cleared after untrackAllSoundLevelConsumers")
+}
