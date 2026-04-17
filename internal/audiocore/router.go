@@ -477,8 +477,29 @@ func (r *AudioRouter) drainRoute(route *Route) {
 		case frame := <-route.inbox:
 			r.handleRouteFrame(frame, route)
 		case <-route.done:
+			drainInboxRefs(route.inbox)
 			return
 		case <-r.ctx.Done():
+			drainInboxRefs(route.inbox)
+			return
+		}
+	}
+}
+
+// drainInboxRefs non-blockingly releases the pooled FrameRef on any frames
+// still queued on an inbox at drainer exit. Dispatch retains once per
+// successful enqueue; handleRouteFrame releases via defer. Frames that never
+// reach handleRouteFrame (because the drainer exited via route.done or the
+// router context was cancelled) would otherwise keep their retain outstanding
+// forever, preventing the pool slice from being returned. Called from the
+// drainer goroutine's exit paths so the balance of Retain calls from Dispatch
+// is preserved on shutdown and route removal.
+func drainInboxRefs(inbox <-chan AudioFrame) {
+	for {
+		select {
+		case f := <-inbox:
+			f.Ref.Release()
+		default:
 			return
 		}
 	}

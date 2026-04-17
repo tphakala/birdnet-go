@@ -1140,6 +1140,10 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 		ref.Release()
 		return
 	}
+	// Defer the producer's own Release so a panic inside s.onFrame does
+	// not strand the pool slice. Release is nil-safe. Routes that need the
+	// data beyond this call must already have retained via Dispatch.
+	defer ref.Release()
 
 	s.updateLastDataTime()
 
@@ -1166,12 +1170,6 @@ func (s *Stream) dispatchAudioData(data []byte, ref *audiocore.FrameRef) {
 			Ref:        ref,
 		})
 	}
-
-	// Release the producer's own reference. Routes and drainers that need
-	// the data beyond this call must have already retained. When no routes
-	// retained (or ref is nil) this is the final release and the pool slice
-	// returns immediately.
-	ref.Release()
 
 	// Update metrics if available.
 	if s.metrics != nil {

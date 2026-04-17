@@ -301,11 +301,12 @@ func startCapture(
 			Ref:        ref,
 		}
 
+		// Defer the producer's own Release so a panic inside Dispatch does
+		// not strand the pool slice. Release is nil-safe. If routes retained
+		// successfully, the final release happens when the last drainer
+		// completes; otherwise the pool slice returns here.
+		defer ref.Release()
 		dispatcher.Dispatch(frame)
-		// Release the producer's own reference. If routes retained, the final
-		// release happens when the last drainer completes; if no routes or all
-		// dropped, the pool slice returns here. Release is nil-safe.
-		ref.Release()
 	}
 
 	callbacks := malgo.DeviceCallbacks{

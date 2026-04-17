@@ -1704,3 +1704,59 @@ func TestStream_DispatchEmptyData_ReleasesRef(t *testing.T) {
 	assert.EqualValues(t, 1, released.Load(),
 		"empty-data dispatch must release the producer's reference exactly once")
 }
+
+// TestStream_ReadStdout_AttachesRefWhenPooled exercises the real pool-borrow
+// path inside readStdout: a Stream constructed with a buffer.Manager must
+// attach a non-nil FrameRef to every readResult so pool.Put can return the
+// slice when the last holder releases. This is the regression test that
+// proves the bufMgr wiring in NewStream is load-bearing.
+func TestStream_ReadStdout_AttachesRefWhenPooled(t *testing.T) {
+	t.Parallel()
+
+	bufMgr := buffer.NewManager(audiocore.GetLogger())
+	cfg := newTestConfig()
+	stream := NewStream(&cfg, nil, nil, nil, bufMgr)
+
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	readCh := make(chan readResult, 1)
+	readerDone := make(chan struct{})
+	t.Cleanup(func() { close(readerDone) })
+
+	go stream.readStdout(reader, readCh, readerDone)
+
+	select {
+	case result := <-readCh:
+		require.NoError(t, result.err)
+		require.NotNil(t, result.ref, "pooled readStdout must attach a FrameRef to every readResult")
+		assert.Equal(t, []byte{1, 2, 3}, result.data)
+		result.ref.Release()
+	case <-time.After(time.Second):
+		t.Fatal("readStdout did not produce a readResult within 1s")
+	}
+}
+
+// TestStream_ReadStdout_NilRefWhenNoBufMgr verifies that when no buffer
+// manager is wired, readStdout dispatches readResult values with nil ref so
+// the non-pooled legacy path remains intact.
+func TestStream_ReadStdout_NilRefWhenNoBufMgr(t *testing.T) {
+	t.Parallel()
+
+	cfg := newTestConfig()
+	stream := NewStream(&cfg, nil, nil, nil, nil)
+
+	reader := io.NopCloser(bytes.NewReader([]byte{1, 2, 3}))
+	readCh := make(chan readResult, 1)
+	readerDone := make(chan struct{})
+	t.Cleanup(func() { close(readerDone) })
+
+	go stream.readStdout(reader, readCh, readerDone)
+
+	select {
+	case result := <-readCh:
+		require.NoError(t, result.err)
+		assert.Nil(t, result.ref, "non-pooled readStdout must dispatch nil ref")
+		assert.Equal(t, []byte{1, 2, 3}, result.data)
+	case <-time.After(time.Second):
+		t.Fatal("readStdout did not produce a readResult within 1s")
+	}
+}
