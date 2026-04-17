@@ -72,6 +72,12 @@ type Route struct {
 	// errors counts Write failures reported by the consumer.
 	errors atomic.Int64
 
+	// truncations counts odd-length PCM16 frames observed on this route.
+	// Kept separate from errors so RouteInfo.Errors retains its "real error"
+	// semantics for operators; a misbehaving upstream does not inflate that
+	// metric.
+	truncations atomic.Int64
+
 	// done is closed to signal the drainer goroutine to exit.
 	done chan struct{}
 
@@ -606,17 +612,16 @@ func (p *processingResult) release() {
 func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equalizer.FilterChain) (processingResult, error) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
 	evenLen := len(frame.Data) &^ 1
 	if evenLen != len(frame.Data) {
-		// Odd-length PCM16 input: convert/pcm.go silently truncates the trailing
-		// byte, which can hide upstream producer bugs. Throttled via the shared
-		// route.errors counter (one log per errorLogInterval events) so we stay
-		// visible without spamming the log on a persistent misbehaving source.
-		errCount := route.errors.Add(1)
-		if errCount%errorLogInterval == 1 {
+		// Separate counter: this is a diagnostic for upstream producer bugs,
+		// not a true local error. Keeping it out of route.errors preserves the
+		// meaning of RouteInfo.Errors for operators.
+		truncCount := route.truncations.Add(1)
+		if truncCount%errorLogInterval == 1 {
 			r.log.Info("odd-length PCM16 frame truncated",
 				logger.String("source_id", route.SourceID),
 				logger.String("consumer_id", route.Consumer.ID()),
 				logger.Int("frame_bytes", len(frame.Data)),
-				logger.Int64("total_errors", errCount))
+				logger.Int64("total_truncations", truncCount))
 		}
 	}
 	sampleCount := evenLen / 2
