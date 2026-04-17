@@ -495,6 +495,10 @@ func (r *AudioRouter) drainRoute(route *Route) {
 //   - procResult.OutPool and resamplePool cannot both be non-nil at the trailing
 //     guards by construction, so their Put calls are mutually exclusive.
 func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolint:gocritic // hugeParam: AudioFrame is large but copying is intentional
+	// Balance the Retain performed by Dispatch for this route. Runs even if
+	// consumer.Write panics (drainRoute's recover catches the panic).
+	defer frame.Ref.Release()
+
 	var resamplePool *buffer.BytePool // nil when not pooled
 
 	// procResult holds the processing output and pool handles. Zero value is

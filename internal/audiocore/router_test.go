@@ -838,15 +838,18 @@ func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
 	router := NewAudioRouter(GetLogger(), nil)
 	t.Cleanup(router.Close)
 
-	// Blocking consumer so inbox fills after routeInboxCapacity frames.
+	// Blocking consumer so the inbox fills once its capacity is exceeded.
 	blocker := newBlockingConsumer("blocker-ref-drop")
 	require.NoError(t, router.AddRoute("src-full", blocker, 48000, 0.0, nil))
 	t.Cleanup(blocker.unblock)
 
 	var released atomic.Int32
 
-	// Fill the inbox to capacity.
-	for range routeInboxCapacity {
+	// Dispatch enough frames to guarantee drops: the drainer consumes at most
+	// one frame before blocking in Write, so 2*cap + 1 leaves no room for
+	// timing-related flakiness.
+	totalFrames := 2*routeInboxCapacity + 1
+	for range totalFrames {
 		ref := NewFrameRef(func() { released.Add(1) })
 		router.Dispatch(AudioFrame{
 			SourceID:   "src-full",
@@ -859,11 +862,61 @@ func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
 		ref.Release()
 	}
 
-	// Next dispatch must drop; ref must still release cleanly via the drop path.
+	// Every dropped frame should have released via the drop path. Without the
+	// drop-path Release, the refcount would stay at one and the closure would
+	// never fire. Expect at least one drop given the controlled overflow.
+	assert.Positive(t, released.Load(), "dropped frames must still release")
+}
+
+// TestRouter_Dispatch_RefHappyPath verifies that when a frame carries a
+// FrameRef and the router fans it out to multiple routes, the release closure
+// fires exactly once after every drainer has processed the frame and the
+// producer has released its own reference.
+func TestRouter_Dispatch_RefHappyPath(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	c1 := newMockConsumer("c1-ref-happy")
+	c2 := newMockConsumer("c2-ref-happy")
+	require.NoError(t, router.AddRoute("src-ref", c1, 48000, 0.0, nil))
+	require.NoError(t, router.AddRoute("src-ref", c2, 48000, 0.0, nil))
+
+	var released atomic.Int32
+	ref := NewFrameRef(func() { released.Add(1) })
+	frame := AudioFrame{
+		SourceID:   "src-ref",
+		Data:       []byte{1, 2},
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Ref:        ref,
+	}
+
+	router.Dispatch(frame)
+	ref.Release() // producer's own reference
+
+	// Wait for both drainers to process and release.
+	require.Eventually(t, func() bool { return released.Load() == 1 }, time.Second, 10*time.Millisecond)
+}
+
+// TestRouter_Dispatch_RefReleasesOnConsumerPanic verifies that the drainer's
+// defer runs even when Consumer.Write panics, so the pool slice is always
+// returned to its pool.
+func TestRouter_Dispatch_RefReleasesOnConsumerPanic(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger(), nil)
+	t.Cleanup(router.Close)
+
+	// Consumer whose Write panics.
+	panicer := &panicOnWriteConsumer{id: "panicer-ref", sampleRate: 48000}
+	require.NoError(t, router.AddRoute("src-panic", panicer, 48000, 0.0, nil))
+
+	var released atomic.Int32
 	ref := NewFrameRef(func() { released.Add(1) })
 	router.Dispatch(AudioFrame{
-		SourceID:   "src-full",
-		Data:       []byte{0},
+		SourceID:   "src-panic",
+		Data:       []byte{1},
 		SampleRate: 48000,
 		BitDepth:   16,
 		Channels:   1,
@@ -871,6 +924,45 @@ func TestRouter_Dispatch_RefFullInboxDrops(t *testing.T) {
 	})
 	ref.Release()
 
-	// The dropped frame should have released immediately via the drop path.
-	assert.GreaterOrEqual(t, released.Load(), int32(1), "dropped frame must still release")
+	require.Eventually(t, func() bool { return released.Load() == 1 }, time.Second, 10*time.Millisecond,
+		"FrameRef must release even when consumer.Write panics")
+}
+
+// TestRouter_Dispatch_RefReleasesOnShutdown verifies that closing the router
+// while frames sit in an inbox does not cause a double-release panic. It is
+// acceptable for frames stuck in the inbox during shutdown to leak from the
+// pool's perspective (GC reclaims the underlying slice); what must not happen
+// is a panic or a negative refcount that would corrupt pool accounting.
+func TestRouter_Dispatch_RefReleasesOnShutdown(t *testing.T) {
+	t.Parallel()
+	router := NewAudioRouter(GetLogger(), nil)
+
+	blocker := newBlockingConsumer("blocker-ref-shutdown")
+	require.NoError(t, router.AddRoute("src-shut", blocker, 48000, 0.0, nil))
+
+	var released atomic.Int32
+	ref := NewFrameRef(func() { released.Add(1) })
+	router.Dispatch(AudioFrame{
+		SourceID:   "src-shut",
+		Data:       []byte{1},
+		SampleRate: 48000,
+		BitDepth:   16,
+		Channels:   1,
+		Ref:        ref,
+	})
+	ref.Release()
+
+	// Closing the router while the frame sits in the inbox: the drainer exits
+	// without processing, so Release is NOT called for that enqueue. The pool
+	// slice leaks from the pool's perspective but GC will reclaim it. Verify
+	// that the producer's own Release (already called above) plus the drop
+	// path (if any) do not cause a double-release panic.
+	blocker.unblock() // allow the drainer (if running handleRouteFrame) to exit cleanly
+	router.Close()
+
+	// released is at most 1: either the drainer processed the frame before
+	// Close (count hits zero, fires) or the drainer exited without processing
+	// (count stays at 1 and never fires). Either outcome is acceptable; a
+	// double-release would push the counter negative and must not fire twice.
+	assert.LessOrEqual(t, released.Load(), int32(1), "must not double-release during shutdown")
 }
