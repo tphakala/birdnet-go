@@ -45,6 +45,13 @@ type ControlMonitor struct {
 	// duplicating source setup logic.
 	reconfigureSourcesFn func()
 
+	// reconfigureSoundLevelFn reconciles the sound level DSP pipeline (router
+	// routes, per-source Processor, bridge goroutines) with the current
+	// Realtime.Audio.SoundLevel.Enabled value. Provided by AudioPipelineService
+	// because the pipeline owns those resources; ControlMonitor only toggles
+	// the downstream publisher via soundLevelManager.
+	reconfigureSoundLevelFn func()
+
 	// Sound level manager for lifecycle management
 	soundLevelManager *SoundLevelManager
 
@@ -60,25 +67,33 @@ type ControlMonitor struct {
 }
 
 // NewControlMonitor creates a new ControlMonitor instance.
-// The reconfigureSourcesFn callback removes all existing audio sources and
-// sets up new ones from current settings; it is called during stream
-// reconfiguration to avoid duplicating source setup logic.
-func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn func()) *ControlMonitor {
+//
+// reconfigureSourcesFn removes all existing audio sources and sets up new ones
+// from current settings; it is called during stream reconfiguration to avoid
+// duplicating source setup logic.
+//
+// reconfigureSoundLevelFn reconciles the sound level DSP pipeline with the
+// current Realtime.Audio.SoundLevel.Enabled value; it is called before the
+// sound level manager is restarted so that router routes exist when the
+// publisher starts (enable) or are gone before the publisher stops (disable).
+// May be nil in contexts where no sound level pipeline is owned.
+func NewControlMonitor(wg *sync.WaitGroup, controlChan chan string, quitChan, restartChan chan struct{}, bufferManager *BufferManager, proc *processor.Processor, audioLevelChan chan audiocore.AudioLevelData, soundLevelChan chan soundlevel.SoundLevelData, apiController *apiv2.Controller, metrics *observability.Metrics, quietHoursScheduler *schedule.QuietHoursScheduler, audioEngine *engine.AudioEngine, reconfigureSourcesFn, reconfigureSoundLevelFn func()) *ControlMonitor {
 	cm := &ControlMonitor{
-		wg:                   wg,
-		controlChan:          controlChan,
-		quitChan:             quitChan,
-		restartChan:          restartChan,
-		bufferManager:        bufferManager,
-		audioLevelChan:       audioLevelChan,
-		soundLevelChan:       soundLevelChan,
-		proc:                 proc,
-		bn:                   proc.Bn,
-		apiController:        apiController,
-		metrics:              metrics,
-		quietHoursScheduler:  quietHoursScheduler,
-		engine:               audioEngine,
-		reconfigureSourcesFn: reconfigureSourcesFn,
+		wg:                      wg,
+		controlChan:             controlChan,
+		quitChan:                quitChan,
+		restartChan:             restartChan,
+		bufferManager:           bufferManager,
+		audioLevelChan:          audioLevelChan,
+		soundLevelChan:          soundLevelChan,
+		proc:                    proc,
+		bn:                      proc.Bn,
+		apiController:           apiController,
+		metrics:                 metrics,
+		quietHoursScheduler:     quietHoursScheduler,
+		engine:                  audioEngine,
+		reconfigureSourcesFn:    reconfigureSourcesFn,
+		reconfigureSoundLevelFn: reconfigureSoundLevelFn,
 	}
 
 	// Initialize the sound level manager but don't start it yet
@@ -133,7 +148,10 @@ func (cm *ControlMonitor) Stop() {
 	cm.telemetryEndpointMutex.Unlock()
 }
 
-// initializeSoundLevelIfEnabled starts sound level monitoring if it's enabled in settings
+// initializeSoundLevelIfEnabled starts sound level monitoring if it is enabled
+// in settings. The DSP-side pipeline (router routes, per-source Processor,
+// bridge goroutines) is owned by AudioPipelineService and is already set up at
+// startup via registerSoundLevelConsumers when SoundLevel.Enabled is true.
 func (cm *ControlMonitor) initializeSoundLevelIfEnabled() {
 	settings := conf.Setting()
 	if settings.Realtime.Audio.SoundLevel.Enabled {
@@ -459,9 +477,21 @@ func (cm *ControlMonitor) notifyError(message string, err error) {
 	GetLogger().Error(message, logger.Error(err))
 }
 
-// handleReconfigureSoundLevel reconfigures sound level monitoring
+// handleReconfigureSoundLevel reconfigures sound level monitoring to match the
+// current Realtime.Audio.SoundLevel settings. The DSP pipeline (router routes,
+// per-source Processor, bridge goroutines) is reconciled first via the
+// callback supplied by AudioPipelineService; the downstream publisher is then
+// restarted via SoundLevelManager. Ordering matters so that on enable the
+// routes exist before the publisher starts, and on disable the routes are
+// removed before the publisher stops.
 func (cm *ControlMonitor) handleReconfigureSoundLevel() {
 	GetLogger().Info("Reconfiguring sound level monitoring")
+
+	// Reconcile the DSP pipeline first so the state observed by the
+	// publisher matches the new settings.
+	if cm.reconfigureSoundLevelFn != nil {
+		cm.reconfigureSoundLevelFn()
+	}
 
 	// Initialize the sound level manager if not already created
 	if cm.soundLevelManager == nil {
