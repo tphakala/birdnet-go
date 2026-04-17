@@ -79,6 +79,8 @@ func TestReconfigureSoundLevel_DisableWithNoRoutes(t *testing.T) {
 // does not access p.engine when there is nothing tracked. Guards against a
 // regression where the helper would unconditionally dereference p.engine.
 func TestRemoveAllSoundLevelConsumers_EmptyMapIsNoOp(t *testing.T) {
+	t.Parallel()
+
 	p := &AudioPipelineService{}
 	assert.NotPanics(t, func() { p.removeAllSoundLevelConsumers("unit_test_empty") })
 	assert.Empty(t, p.soundLevelConsumers)
@@ -89,17 +91,26 @@ func TestRemoveAllSoundLevelConsumers_EmptyMapIsNoOp(t *testing.T) {
 // consumers while the first call is still issuing RemoveRoute.
 //
 // We simulate this by injecting a map entry and then verifying the map is
-// emptied even though the RemoveRoute call will panic on a nil engine (the
-// recover below swallows it). The post-panic state check confirms the drain
-// happened before the router call.
+// emptied even though the RemoveRoute call panics on a nil engine. The
+// deferred recover asserts the panic actually occurred so the test fails if
+// a future change allows removeAllSoundLevelConsumers to return without
+// panicking (which would silently bypass the drain guarantee we are
+// testing).
 func TestRemoveAllSoundLevelConsumers_DrainsMapBeforeRouterCalls(t *testing.T) {
+	t.Parallel()
+
 	p := &AudioPipelineService{
 		soundLevelConsumers: map[string]string{"src-1": "soundlevel_src-1"},
 	}
 
 	// Engine is nil, so RemoveRoute will panic. The drain must happen first.
 	func() {
-		defer func() { _ = recover() }()
+		defer func() {
+			r := recover()
+			require.NotNil(t, r,
+				"expected nil-engine panic from removeAllSoundLevelConsumers; "+
+					"if it returned without panicking the drain assertion below is meaningless")
+		}()
 		p.removeAllSoundLevelConsumers("unit_test_drain")
 	}()
 
@@ -114,6 +125,8 @@ func TestRemoveAllSoundLevelConsumers_DrainsMapBeforeRouterCalls(t *testing.T) {
 // out of sync with the router after RemoveAllRoutes / engine.RemoveSource
 // and re-registration would be silently skipped.
 func TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry(t *testing.T) {
+	t.Parallel()
+
 	p := &AudioPipelineService{
 		soundLevelConsumers: map[string]string{
 			"src-1": "soundlevel_src-1",
@@ -134,6 +147,8 @@ func TestUntrackSoundLevelConsumer_RemovesOnlyTargetEntry(t *testing.T) {
 // disabled at the time the route was added). A panic here would block
 // reconfigureChangedSources any time gain changes on a non-soundlevel run.
 func TestUntrackSoundLevelConsumer_MissingSourceIsNoOp(t *testing.T) {
+	t.Parallel()
+
 	p := &AudioPipelineService{
 		soundLevelConsumers: map[string]string{"src-1": "soundlevel_src-1"},
 	}
@@ -149,6 +164,8 @@ func TestUntrackSoundLevelConsumer_MissingSourceIsNoOp(t *testing.T) {
 // stale entries that cause the subsequent registerSoundLevelConsumers call
 // to skip every source.
 func TestUntrackAllSoundLevelConsumers_ClearsMap(t *testing.T) {
+	t.Parallel()
+
 	p := &AudioPipelineService{
 		soundLevelConsumers: map[string]string{
 			"src-1": "soundlevel_src-1",
