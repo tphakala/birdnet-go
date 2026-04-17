@@ -343,3 +343,41 @@ func TestAnalysisBuffer_Read_BoundedAllocsWhenWarm(t *testing.T) {
 		"AnalysisBuffer.Read + Write loop must stay within %d allocs/op once warm; got %v. A large jump usually means the window slice returned to make() rather than the pool.",
 		maxAllocsPerWarmRead, allocs)
 }
+
+// BenchmarkAnalysisBuffer_Read reports the per-Read allocation rate on the
+// pooled path. Advisory only; the regression gate is
+// TestAnalysisBuffer_Read_BoundedAllocsWhenWarm.
+func BenchmarkAnalysisBuffer_Read(b *testing.B) {
+	const (
+		capacity    = 32768
+		overlapSize = 128
+		readSize    = 512
+	)
+	mgr := buffer.NewManager(newTestLogger())
+	ab, err := buffer.NewAnalysisBuffer(capacity, overlapSize, readSize, "bench-source", newTestLogger(), mgr)
+	require.NoError(b, err)
+
+	payload := make([]byte, readSize*2)
+	for i := range payload {
+		payload[i] = byte(i)
+	}
+
+	// Warm.
+	require.NoError(b, ab.Write(payload))
+	_, release, err := ab.Read()
+	require.NoError(b, err)
+	release()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		if err := ab.Write(payload); err != nil {
+			b.Fatal(err)
+		}
+		_, release, err := ab.Read()
+		if err != nil {
+			b.Fatal(err)
+		}
+		release()
+	}
+}
