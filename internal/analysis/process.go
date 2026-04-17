@@ -283,19 +283,29 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, bufMgr *buffe
 		DisplayName: source,
 	}
 
+	// The data slice is owned by the pooled AnalysisBuffer.Read path and is
+	// returned to its BytePool as soon as ProcessData returns (via the
+	// monitor's defer release()). The queue consumer retains PCMdata through
+	// filter evaluation and clip export, which outlive ProcessData. Without
+	// this copy a subsequent Read could hand the same backing array to a new
+	// caller while the consumer goroutine is still reading from it.
+	pcmCopy := make([]byte, len(data))
+	copy(pcmCopy, data)
+
 	// Create a Results message to be sent through queue to processor
 	resultsMessage := classifier.Results{
 		StartTime:       startTime,
 		AudioCapturedAt: audioCapturedAt,
 		ElapsedTime:     elapsedTime,
-		PCMdata:         data,
+		PCMdata:         pcmCopy,
 		Results:         results,
 		Source:          audioSource,
 		ModelID:         modelID,
 	}
 
-	// Send the results to the queue
-	// Note: No copy needed - ownership transfers to the queue consumer
+	// Send the results to the queue. PCMdata is the independently owned copy
+	// made above; per classifier.ResultsQueue's ownership contract the sender
+	// must not mutate it after the send.
 	select {
 	case classifier.ResultsQueue <- resultsMessage:
 		if pm != nil {
