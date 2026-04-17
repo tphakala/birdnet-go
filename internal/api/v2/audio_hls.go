@@ -1467,13 +1467,22 @@ func (h *hlsConsumer) BitDepth() int { return h.depth }
 func (h *hlsConsumer) Channels() int { return h.channels }
 
 // Write delivers audio frame data to the HLS channel.
+//
+// The frame data is copied before being sent so the caller (the audio router)
+// may safely reuse or recycle the underlying slice after Write returns. FFmpeg
+// reads asynchronously from the channel, so any retained slice header would
+// race with the caller's buffer reuse.
 func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if h.closed.Load() {
 		return audiocore.ErrConsumerClosed
 	}
 
+	// Copy once up front. Both select arms below need an owned slice.
+	buf := make([]byte, len(frame.Data))
+	copy(buf, frame.Data)
+
 	select {
-	case h.ch <- frame.Data:
+	case h.ch <- buf:
 	default:
 		// Channel full, drop oldest to make room
 		dropped := false
@@ -1484,7 +1493,7 @@ func (h *hlsConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocriti
 		}
 		// Non-blocking send — drop if still full
 		select {
-		case h.ch <- frame.Data:
+		case h.ch <- buf:
 		default:
 		}
 
