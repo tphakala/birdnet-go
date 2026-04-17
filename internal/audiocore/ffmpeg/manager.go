@@ -130,7 +130,9 @@ func (m *Manager) StartStream(cfg *StreamConfig) error {
 	}
 
 	// Hold the lock only for the map check and insertion.
-	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics)
+	// bufMgr is wired in a follow-up step; pass nil for now so readStdout
+	// stays on the allocating fallback.
+	stream := NewStream(cfg, m.dispatchFrame, m.notifyReset, m.metrics, nil)
 
 	m.mu.Lock()
 	if _, exists := m.streams[cfg.SourceID]; exists {
