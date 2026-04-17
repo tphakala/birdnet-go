@@ -368,12 +368,21 @@ func (r *AudioRouter) Routes(sourceID string) []RouteInfo {
 // and the map is atomically swapped under the lock so subsequent calls see an
 // empty map and close no done channels.
 func (r *AudioRouter) Close() {
-	r.cancel()
-
+	// Clear the routes map BEFORE cancelling the context. Any concurrent
+	// Dispatch holding the RLock completes its Retain+enqueue before Close
+	// can acquire the write lock (RLock blocks the Lock). Once Close owns
+	// the Lock and clears the map, any later Dispatch sees an empty map
+	// and performs no Retain. Only then do we cancel the context; drainers
+	// wake up, drain their inbox via drainInboxRefs, and exit with refs
+	// balanced. The previous cancel-then-lock order allowed a drainer to
+	// exit on ctx.Done while an in-flight Dispatch still held the old route
+	// slice and enqueued a retain onto the dead drainer's inbox.
 	r.mu.Lock()
 	allRoutes := r.routes
 	r.routes = make(map[string][]*Route)
 	r.mu.Unlock()
+
+	r.cancel()
 
 	for _, routes := range allRoutes {
 		for _, rt := range routes {
@@ -465,7 +474,13 @@ func (r *AudioRouter) drainRoute(route *Route) {
 				break
 			}
 			r.mu.Unlock()
-			// Goroutine returns here — the route is removed from the map.
+			// Release any pooled refs on frames buffered in the inbox so the
+			// Retains performed by Dispatch are balanced even when the drainer
+			// unwinds via panic. Without this, up to routeInboxCapacity refs
+			// per panicking route would stay outstanding (the slices still
+			// GC, so this is pool-efficiency rather than a hard leak).
+			drainInboxRefs(route.inbox)
+			// Goroutine returns here. The route is removed from the map.
 			// Note: consumer and resampler are intentionally NOT closed here
 			// to avoid potential secondary panics during cleanup. They will
 			// be reclaimed by GC. The stopped channel is closed by the outer
