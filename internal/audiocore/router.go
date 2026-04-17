@@ -637,9 +637,10 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 		floatBuf = make([]float64, sampleCount)
 	}
 
-	// releasePools guards both pool buffers. It returns them on any early
-	// exit; the success path disarms both flags before returning so the
-	// caller owns the buffers (releasing them after Consumer.Write via
+	// The deferred closure below guards both pool buffers via the
+	// releaseFloat / releaseOut flags. It returns them on any early exit;
+	// the success path disarms both flags before returning so the caller
+	// owns the buffers (to be released after Consumer.Write via
 	// processingResult.release()).
 	releaseFloat := true
 	releaseOut := true
