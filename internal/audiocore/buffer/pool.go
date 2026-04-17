@@ -231,3 +231,110 @@ func (fp *Float32Pool) GetStats() Float32PoolStats {
 func (fp *Float32Pool) Clear() {
 	fp.pool.Store(fp.newPool())
 }
+
+// Float64Pool provides a thread-safe pool of float64 slices to reduce
+// allocations during audio processing operations. Slices with incorrect lengths
+// are discarded to maintain pool integrity.
+//
+// The pool field is an atomic.Value holding a *sync.Pool, allowing lock-free
+// Get/Put operations. Clear atomically swaps to a new *sync.Pool instance.
+type Float64Pool struct {
+	pool      atomic.Value // stores *sync.Pool
+	size      int
+	gets      atomic.Uint64
+	news      atomic.Uint64
+	discarded atomic.Uint64
+}
+
+// Float64PoolStats holds usage statistics for a Float64Pool.
+type Float64PoolStats struct {
+	Hits      uint64 // Successful reuses (Gets - News)
+	Misses    uint64 // New allocations (News)
+	Discarded uint64 // Slices discarded due to size mismatch
+}
+
+// NewFloat64Pool creates a Float64Pool where every slice has the given length.
+// Returns an error if size is not positive.
+func NewFloat64Pool(size int) (*Float64Pool, error) {
+	if size <= 0 {
+		return nil, errors.Newf("invalid float64 pool size: %d, must be greater than 0", size).
+			Component("audiocore").
+			Category(errors.CategoryValidation).
+			Context("operation", "create_float64_pool").
+			Context("requested_size", size).
+			Build()
+	}
+
+	fp := &Float64Pool{
+		size: size,
+	}
+	fp.pool.Store(fp.newPool())
+
+	return fp, nil
+}
+
+// newPool creates a fresh *sync.Pool with the correct New function.
+func (fp *Float64Pool) newPool() *sync.Pool {
+	return &sync.Pool{
+		New: func() any {
+			fp.news.Add(1)
+			return make([]float64, fp.size)
+		},
+	}
+}
+
+// Get retrieves a float64 slice from the pool. If the pool is empty, a new
+// slice is allocated. The returned slice always has the length specified in
+// NewFloat64Pool. Get is safe for concurrent use, including during Clear.
+func (fp *Float64Pool) Get() []float64 {
+	fp.gets.Add(1)
+
+	p := fp.pool.Load().(*sync.Pool) //nolint:forcetypeassert // pool always stores *sync.Pool
+	buf := p.Get().([]float64)       //nolint:forcetypeassert // pool.New always returns []float64
+	if len(buf) == fp.size {
+		return buf
+	}
+
+	// Size mismatch - discard and allocate a fresh slice.
+	fp.discarded.Add(1)
+	fp.news.Add(1)
+
+	return make([]float64, fp.size)
+}
+
+// Put returns a float64 slice to the pool for future reuse.
+// Nil slices and slices with incorrect lengths are silently discarded.
+// Put is safe for concurrent use, including during Clear.
+func (fp *Float64Pool) Put(buf []float64) {
+	if buf == nil || len(buf) != fp.size {
+		fp.discarded.Add(1)
+		return
+	}
+
+	p := fp.pool.Load().(*sync.Pool) //nolint:forcetypeassert // pool always stores *sync.Pool
+	//nolint:staticcheck // SA6002: accepted trade-off - allocation savings outweigh interface boxing overhead
+	p.Put(buf)
+}
+
+// GetStats returns a snapshot of the pool's usage statistics.
+func (fp *Float64Pool) GetStats() Float64PoolStats {
+	gets := fp.gets.Load()
+	news := fp.news.Load()
+
+	hits := uint64(0)
+	if gets > news {
+		hits = gets - news
+	}
+
+	return Float64PoolStats{
+		Hits:      hits,
+		Misses:    news,
+		Discarded: fp.discarded.Load(),
+	}
+}
+
+// Clear replaces the internal sync.Pool with a fresh one, allowing all pooled
+// slices to be garbage-collected. Clear is safe for concurrent use.
+func (fp *Float64Pool) Clear() {
+	fp.pool.Store(fp.newPool())
+}

@@ -274,3 +274,61 @@ func TestFloat32Pool_ClearConcurrent(t *testing.T) {
 		assert.Equal(t, size, bufLen, "all slices must have correct size")
 	}
 }
+
+func TestNewFloat64Pool_InvalidSize(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		size int
+	}{
+		{"zero", 0},
+		{"negative", -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pool, err := buffer.NewFloat64Pool(tt.size)
+			require.Error(t, err)
+			assert.Nil(t, pool)
+		})
+	}
+}
+
+func TestFloat64Pool_GetReturnsCorrectSize(t *testing.T) {
+	t.Parallel()
+	const size = 72192
+	pool, err := buffer.NewFloat64Pool(size)
+	require.NoError(t, err)
+
+	buf := pool.Get()
+	assert.Len(t, buf, size)
+
+	pool.Put(buf)
+
+	stats := pool.GetStats()
+	assert.Equal(t, uint64(1), stats.Misses, "first Get allocates")
+}
+
+func TestFloat64Pool_ReuseAfterPut(t *testing.T) {
+	t.Parallel()
+	pool, err := buffer.NewFloat64Pool(1024)
+	require.NoError(t, err)
+
+	buf := pool.Get()
+	pool.Put(buf)
+
+	buf2 := pool.Get()
+	assert.Len(t, buf2, 1024)
+}
+
+func TestFloat64Pool_PutDiscardsWrongSize(t *testing.T) {
+	t.Parallel()
+	pool, err := buffer.NewFloat64Pool(1024)
+	require.NoError(t, err)
+
+	pool.Put(make([]float64, 512))
+	pool.Put(nil)
+
+	stats := pool.GetStats()
+	assert.Equal(t, uint64(2), stats.Discarded)
+}
