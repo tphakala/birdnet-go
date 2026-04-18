@@ -602,6 +602,11 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 	case queryTypeSpecies:
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSearch:
+		// Resolve a locale common name (e.g. Finnish "lehtopöllö") to its
+		// scientific name so the downstream LIKE query matches the DB column.
+		if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
+			params.Search = resolved
+		}
 		// Use advanced search if filters are present
 		if hasAdvancedFilters {
 			return c.getSearchDetectionsAdvanced(params)
