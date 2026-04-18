@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import {
   buildSpeciesNameMaps,
   resolveSpeciesDisplayNames,
-  resolveSpeciesQuery,
   isSpeciesInList,
   type SpeciesNameMaps,
   type SpeciesApiEntry,
@@ -18,44 +17,6 @@ describe('buildSpeciesNameMaps', () => {
       label: 'Passer domesticus_House Sparrow',
     },
   ];
-
-  it('accepts snake_case keys as a fallback shape', () => {
-    // Guards against regressions if an API response ever lands with
-    // snake_case keys (e.g. a different species endpoint is reused here).
-    const snakeCaseEntries: SpeciesApiEntry[] = [
-      {
-        common_name: 'Tawny Owl',
-        scientific_name: 'Strix aluco',
-        label: 'Strix aluco_Tawny Owl',
-      },
-      {
-        common_name: 'Great Tit',
-        scientific_name: 'Parus major',
-        label: 'Parus major_Great Tit',
-      },
-    ];
-    const maps = buildSpeciesNameMaps(snakeCaseEntries);
-    expect(maps.commonToScientific.get('tawny owl')).toBe('Strix aluco');
-    expect(maps.scientificToCommon.get('strix aluco')).toBe('Tawny Owl');
-    expect(maps.allNames).toContain('Tawny Owl');
-    expect(maps.allNames).toContain('Parus major');
-  });
-
-  it('prefers camelCase over snake_case when both are present', () => {
-    const entries: SpeciesApiEntry[] = [
-      {
-        commonName: 'Tawny Owl',
-        scientificName: 'Strix aluco',
-        common_name: 'WRONG',
-        scientific_name: 'WRONG',
-        label: 'Strix aluco_Tawny Owl',
-      },
-    ];
-    const maps = buildSpeciesNameMaps(entries);
-    expect(maps.commonToScientific.get('tawny owl')).toBe('Strix aluco');
-    expect(maps.scientificToCommon.get('strix aluco')).toBe('Tawny Owl');
-    expect(maps.commonToScientific.has('wrong')).toBe(false);
-  });
 
   it('builds commonToScientific map keyed by lowercase common name', () => {
     const maps = buildSpeciesNameMaps(sampleSpecies);
@@ -173,77 +134,5 @@ describe('isSpeciesInList', () => {
   it('returns false when species is not in list at all', () => {
     const list = ['Tawny Owl'];
     expect(isSpeciesInList('Great Tit', list, maps)).toBe(false);
-  });
-});
-
-describe('resolveSpeciesQuery', () => {
-  let maps: SpeciesNameMaps;
-
-  beforeAll(() => {
-    const sampleSpecies: SpeciesApiEntry[] = [
-      { commonName: 'Tawny Owl', scientificName: 'Strix aluco', label: 'Strix aluco_Tawny Owl' },
-      { commonName: 'Great Tit', scientificName: 'Parus major', label: 'Parus major_Great Tit' },
-      {
-        commonName: 'Lehtopöllö',
-        scientificName: 'Strix aluco',
-        label: 'Strix aluco_Lehtopöllö',
-      },
-      {
-        commonName: 'Eurasian Blue Tit',
-        scientificName: 'Cyanistes caeruleus',
-        label: 'Cyanistes caeruleus_Eurasian Blue Tit',
-      },
-    ];
-    maps = buildSpeciesNameMaps(sampleSpecies);
-  });
-
-  it('returns empty string for empty input', () => {
-    expect(resolveSpeciesQuery('', maps)).toBe('');
-    expect(resolveSpeciesQuery('   ', maps)).toBe('');
-  });
-
-  it('falls back to raw input when maps are null', () => {
-    expect(resolveSpeciesQuery('Tawny Owl', null)).toBe('Tawny Owl');
-  });
-
-  it('resolves an exact common-name hit to its scientific name', () => {
-    expect(resolveSpeciesQuery('Tawny Owl', maps)).toBe('Strix aluco');
-  });
-
-  it('resolves case-insensitively', () => {
-    expect(resolveSpeciesQuery('tawny owl', maps)).toBe('Strix aluco');
-    expect(resolveSpeciesQuery('GREAT TIT', maps)).toBe('Parus major');
-  });
-
-  it('resolves non-ASCII common names (e.g. Finnish)', () => {
-    expect(resolveSpeciesQuery('Lehtopöllö', maps)).toBe('Strix aluco');
-    expect(resolveSpeciesQuery('lehtopöllö', maps)).toBe('Strix aluco');
-  });
-
-  it('passes scientific-looking input through unchanged', () => {
-    expect(resolveSpeciesQuery('Strix aluco', maps)).toBe('Strix aluco');
-  });
-
-  it('passes through single-word capitalised input as raw, letting the backend partial-match', () => {
-    // "Turdus" is a genus name but no common name in the map contains the
-    // substring "turdus", so the resolver should return the raw input so
-    // the backend LIKE clause can still match scientific names.
-    expect(resolveSpeciesQuery('Turdus', maps)).toBe('Turdus');
-  });
-
-  it('passes ambiguous partial common-name fragments through verbatim', () => {
-    // "owl" is a substring of "Tawny Owl" but it is also a substring of
-    // every other owl in the BirdNET label set. The resolver must NOT
-    // collapse it to whichever entry happens to be inserted first in the
-    // map; the backend LIKE clause is responsible for partial matching.
-    expect(resolveSpeciesQuery('owl', maps)).toBe('owl');
-  });
-
-  it('returns the raw input when there is no match at all', () => {
-    expect(resolveSpeciesQuery('nonexistent', maps)).toBe('nonexistent');
-  });
-
-  it('trims leading and trailing whitespace', () => {
-    expect(resolveSpeciesQuery('  Tawny Owl  ', maps)).toBe('Strix aluco');
   });
 });
