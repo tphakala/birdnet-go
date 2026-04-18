@@ -131,6 +131,34 @@ export function useDetectionActions(options: DetectionActionOptions) {
     showConfirmModal = true;
   }
 
+  async function postReview(detection: Detection, verified: 'correct' | 'false_positive') {
+    try {
+      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified }),
+      });
+      detection.verified = verified;
+      toastActions.success(
+        verified === 'correct'
+          ? t('search.review.markedCorrect')
+          : t('search.review.markedFalsePositive')
+      );
+      options.onRefresh?.();
+    } catch (err) {
+      toastActions.error(t('search.review.failed'));
+      logger.error('Error setting verification status:', err);
+    }
+  }
+
+  function handleMarkCorrect(detection: Detection) {
+    postReview(detection, 'correct');
+  }
+
+  function handleMarkFalsePositive(detection: Detection) {
+    postReview(detection, 'false_positive');
+  }
+
   function closeModal() {
     showConfirmModal = false;
     selectedDetection = null;
@@ -155,6 +183,8 @@ export function useDetectionActions(options: DetectionActionOptions) {
       return confirmModalConfig;
     },
     handleReview,
+    handleMarkCorrect,
+    handleMarkFalsePositive,
     handleToggleSpecies,
     handleToggleLock,
     handleDelete,
