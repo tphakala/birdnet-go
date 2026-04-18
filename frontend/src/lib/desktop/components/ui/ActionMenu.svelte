@@ -26,6 +26,8 @@
     LockOpen,
     Trash2,
     Download,
+    CircleCheck,
+    CircleX,
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { auth } from '$lib/stores/auth';
@@ -38,6 +40,10 @@
     detection: Detection;
     /** Whether the species is currently excluded from detection */
     isExcluded?: boolean;
+    /** Callback fired when user marks the detection as correct */
+    onMarkCorrect?: () => void;
+    /** Callback fired when user marks the detection as false positive */
+    onMarkFalsePositive?: () => void;
     /** Callback fired when user clicks review action */
     onReview?: () => void;
     /** Callback fired when user toggles species visibility */
@@ -61,6 +67,8 @@
   let {
     detection,
     isExcluded = false,
+    onMarkCorrect,
+    onMarkFalsePositive,
     onReview,
     onToggleSpecies,
     onToggleLock,
@@ -221,6 +229,46 @@
         class="fixed menu p-2 shadow-lg bg-[var(--color-base-100)] rounded-box w-52 border border-[var(--color-base-300)]"
         role="menu"
       >
+        {#if !detection.locked}
+          <li>
+            <button
+              onclick={() => handleAction(onMarkCorrect)}
+              class="text-sm w-full text-left"
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <CircleCheck class="size-4 text-[var(--color-success)]" />
+                <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
+                {#if detection.verified === 'correct'}
+                  <span
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                    >✓</span
+                  >
+                {/if}
+              </div>
+            </button>
+          </li>
+          <li>
+            <button
+              onclick={() => handleAction(onMarkFalsePositive)}
+              class="text-sm w-full text-left"
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <CircleX class="size-4 text-[var(--color-error)]" />
+                <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
+                {#if detection.verified === 'false_positive'}
+                  <span
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                    >✗</span
+                  >
+                {/if}
+              </div>
+            </button>
+          </li>
+          <li class="my-1 h-px bg-[var(--color-base-300)]" aria-hidden="true"></li>
+        {/if}
+
         <li>
           <button
             onclick={() => handleAction(onReview)}

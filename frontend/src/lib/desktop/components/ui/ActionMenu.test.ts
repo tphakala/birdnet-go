@@ -283,7 +283,7 @@ describe('ActionMenu', () => {
     const button = screen.getByRole('button', { name: /actions menu/i });
     await fireEvent.click(button);
 
-    expect(screen.getByText('✓')).toBeInTheDocument();
+    expect(screen.getAllByText('✓').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows false positive badge when detection is verified as false positive', async () => {
@@ -298,7 +298,7 @@ describe('ActionMenu', () => {
     const button = screen.getByRole('button', { name: /actions menu/i });
     await fireEvent.click(button);
 
-    expect(screen.getByText('✗')).toBeInTheDocument();
+    expect(screen.getAllByText('✗').length).toBeGreaterThanOrEqual(1);
   });
 
   it('handles action without callback gracefully', async () => {
@@ -404,5 +404,51 @@ describe('ActionMenu', () => {
     const item = screen.getByRole('menuitem', { name: /download/i });
     await fireEvent.click(item);
     expect(onDownload).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders Correct and Incorrect quick-review items at the top', async () => {
+    render(ActionMenu, { props: { detection: createMockDetection() } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    expect(screen.getByRole('menuitem', { name: /^correct$/i })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^incorrect$/i })).toBeInTheDocument();
+  });
+
+  it('fires onMarkCorrect when Correct is clicked', async () => {
+    const onMarkCorrect = vi.fn();
+    render(ActionMenu, { props: { detection: createMockDetection(), onMarkCorrect } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: /^correct$/i }));
+    expect(onMarkCorrect).toHaveBeenCalledTimes(1);
+  });
+
+  it('fires onMarkFalsePositive when Incorrect is clicked', async () => {
+    const onMarkFalsePositive = vi.fn();
+    render(ActionMenu, { props: { detection: createMockDetection(), onMarkFalsePositive } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    await fireEvent.click(screen.getByRole('menuitem', { name: /^incorrect$/i }));
+    expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
+  });
+
+  it('hides quick-review items when detection is locked', async () => {
+    render(ActionMenu, { props: { detection: createMockDetection({ locked: true }) } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    expect(screen.queryByRole('menuitem', { name: /^correct$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: /^incorrect$/i })).not.toBeInTheDocument();
+  });
+
+  it('shows ✓ badge next to Correct when verified as correct', async () => {
+    render(ActionMenu, { props: { detection: createMockDetection({ verified: 'correct' }) } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    const correctItem = screen.getByRole('menuitem', { name: /^correct/i });
+    expect(correctItem.textContent).toContain('✓');
+  });
+
+  it('shows ✗ badge next to Incorrect when verified as false_positive', async () => {
+    render(ActionMenu, {
+      props: { detection: createMockDetection({ verified: 'false_positive' }) },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    const incorrectItem = screen.getByRole('menuitem', { name: /^incorrect/i });
+    expect(incorrectItem.textContent).toContain('✗');
   });
 });
