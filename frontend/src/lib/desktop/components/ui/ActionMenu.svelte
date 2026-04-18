@@ -39,6 +39,8 @@
     onDelete?: () => void;
     /** Additional CSS classes to apply to the component */
     className?: string;
+    /** Visual variant - `default` for in-row use, `overlay` for spectrogram overlay */
+    variant?: 'default' | 'overlay';
     /** Callback fired when menu opens */
     onMenuOpen?: () => void;
     /** Callback fired when menu closes */
@@ -53,6 +55,7 @@
     onToggleLock,
     onDelete,
     className = '',
+    variant = 'default',
     onMenuOpen,
     onMenuClose,
   }: Props = $props();
@@ -185,7 +188,12 @@
     <button
       bind:this={buttonElement}
       onclick={handleOpen}
-      class="btn btn-ghost btn-sm min-h-8 h-8 w-8 p-1"
+      class={cn(
+        'am-trigger inline-flex items-center justify-center w-8 h-8 p-1 transition-colors',
+        variant === 'overlay'
+          ? 'am-trigger-overlay text-white bg-black/50 hover:bg-slate-700/80 backdrop-blur-sm rounded-full'
+          : 'am-trigger-default text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-md'
+      )}
       aria-label="Actions menu"
       aria-haspopup="true"
       aria-expanded={isOpen}

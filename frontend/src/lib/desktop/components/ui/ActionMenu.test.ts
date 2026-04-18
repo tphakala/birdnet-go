@@ -376,4 +376,18 @@ describe('ActionMenu', () => {
       expect(screen.queryByRole('menu')).not.toBeInTheDocument();
     });
   });
+
+  it('renders the default variant trigger by default', () => {
+    render(ActionMenu, { props: { detection: createMockDetection() } });
+    const button = screen.getByRole('button', { name: /actions menu/i });
+    expect(button.className).toContain('am-trigger-default');
+  });
+
+  it('renders the overlay variant trigger when variant="overlay"', () => {
+    render(ActionMenu, {
+      props: { detection: createMockDetection(), variant: 'overlay' },
+    });
+    const button = screen.getByRole('button', { name: /actions menu/i });
+    expect(button.className).toContain('am-trigger-overlay');
+  });
 });
