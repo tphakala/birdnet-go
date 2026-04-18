@@ -135,10 +135,6 @@ func cloneStreamConfigs(in []StreamConfig) []StreamConfig {
 	out := make([]StreamConfig, len(in))
 	for i := range in {
 		s := in[i]
-		if s.Enabled != nil {
-			enabled := *s.Enabled
-			s.Enabled = &enabled
-		}
 		s.Models = slices.Clone(s.Models)
 		out[i] = s
 	}

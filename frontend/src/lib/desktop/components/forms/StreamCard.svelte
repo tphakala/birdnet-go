@@ -271,7 +271,7 @@
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
-    editEnabled = stream.enabled ?? true;
+    editEnabled = stream.enabled;
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     isEditing = true;
   }
@@ -523,7 +523,7 @@
 
           <div class="mt-2">
             <Checkbox
-              checked={stream.enabled ?? true}
+              checked={stream.enabled}
               onchange={updateEnabled}
               label="Enabled"
               disabled={disabled}

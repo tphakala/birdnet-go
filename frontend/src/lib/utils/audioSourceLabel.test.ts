@@ -9,8 +9,8 @@ const soundCards: AudioSourceConfig[] = [
 ];
 
 const rtspStreams: StreamConfig[] = [
-  { name: 'Back Garden Cam', url: 'rtsp://cam.local/stream1', type: 'rtsp' },
-  { name: '', url: 'rtsp://unnamed.local/stream2', type: 'rtsp' },
+  { name: 'Back Garden Cam', url: 'rtsp://cam.local/stream1', enabled: true, type: 'rtsp' },
+  { name: '', url: 'rtsp://unnamed.local/stream2', enabled: true, type: 'rtsp' },
 ];
 
 describe('getFriendlyAudioSourceName', () => {

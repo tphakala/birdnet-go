@@ -545,19 +545,18 @@ const DefaultTransport = "tcp"
 
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                              // Required: descriptive name like "Front Yard"
-	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                                 // Required: stream URL
-	Enabled    *bool            `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"` // nil = legacy config, defaults to true
-	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                              // Stream type: rtsp, http, hls, rtmp, udp
-	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`               // Transport: tcp or udp (for RTSP/RTMP)
-	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`            // Quiet hours configuration
-	Models     []string         `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`    // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
+	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                           // Required: descriptive name like "Front Yard"
+	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                              // Required: stream URL
+	Enabled    bool             `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                  // true when the configured stream should be active
+	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                           // Stream type: rtsp, http, hls, rtmp, udp
+	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`            // Transport: tcp or udp (for RTSP/RTMP)
+	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`         // Quiet hours configuration
+	Models     []string         `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"` // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
 }
 
 // IsEnabled returns the effective enabled state for a stream.
-// Legacy configs omit the field entirely, which defaults to enabled.
 func (s *StreamConfig) IsEnabled() bool {
-	return s == nil || s.Enabled == nil || *s.Enabled
+	return s == nil || s.Enabled
 }
 
 // RTSPSettings contains settings for audio streaming (supports multiple protocols).
@@ -1555,6 +1554,14 @@ func Load() (*Settings, error) {
 			Build()
 	}
 
+	// Legacy stream entries omitted the enabled field entirely. Materialize the
+	// missing field before unmarshal so the runtime struct can use a plain bool.
+	streamEnabledMigrated := false
+	if normalizedStreams, migrated := normalizeRTSPStreamEnabledDefaults(viper.Get("realtime.rtsp.streams")); migrated {
+		viper.Set("realtime.rtsp.streams", normalizedStreams)
+		streamEnabledMigrated = true
+	}
+
 	// Unmarshal the config into settings, with custom Duration decode hook
 	if err := viper.Unmarshal(settings, viper.DecodeHook(DurationDecodeHook())); err != nil {
 		return nil, errors.New(err).
@@ -1618,8 +1625,7 @@ func Load() (*Settings, error) {
 		persistMigration(settings, "source models")
 	}
 
-	// Materialize per-stream enabled defaults for legacy configs.
-	if settings.MigrateStreamEnabledDefaults() {
+	if streamEnabledMigrated {
 		persistMigration(settings, "stream enabled defaults")
 	}
 
@@ -2063,7 +2069,7 @@ func (s *Settings) MigrateRTSPConfig() bool {
 		stream := StreamConfig{
 			Name:      fmt.Sprintf("Stream %d", streamIndex),
 			URL:       url,
-			Enabled:   boolRef(true),
+			Enabled:   true,
 			Type:      streamType,
 			Transport: transport,
 		}
@@ -2148,22 +2154,43 @@ func (s *Settings) MigrateSourceModels() bool {
 	return migrated
 }
 
-// MigrateStreamEnabledDefaults materializes the per-stream Enabled flag for
-// legacy configs where the field did not exist. Existing streams default to
-// enabled so upgrades do not accidentally disable capture.
-func (s *Settings) MigrateStreamEnabledDefaults() bool {
+// normalizeRTSPStreamEnabledDefaults materializes enabled=true for legacy raw
+// RTSP stream entries that predate the field. It operates on Viper's raw data
+// before unmarshal so StreamConfig can keep a plain bool.
+func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
+	streams, ok := rawStreams.([]any)
+	if !ok {
+		return nil, false
+	}
+
+	normalized := make([]any, len(streams))
 	migrated := false
 
-	for i := range s.Realtime.RTSP.Streams {
-		stream := &s.Realtime.RTSP.Streams[i]
-		if stream.Enabled != nil {
+	for i, rawStream := range streams {
+		streamMap, ok := rawStream.(map[string]any)
+		if !ok {
+			normalized[i] = rawStream
 			continue
 		}
-		stream.Enabled = boolRef(true)
+		if _, exists := streamMap["enabled"]; exists {
+			normalized[i] = rawStream
+			continue
+		}
+
+		copied := make(map[string]any, len(streamMap)+1)
+		for key, value := range streamMap {
+			copied[key] = value
+		}
+		copied["enabled"] = true
+		normalized[i] = copied
 		migrated = true
 	}
 
-	return migrated
+	if !migrated {
+		return nil, false
+	}
+
+	return normalized, true
 }
 
 // ValidateModelConfig checks model-related configuration for errors and
@@ -2274,10 +2301,6 @@ func (s *Settings) MigrateLocationConfigured() {
 			GetLogger().Info("Migrated LocationConfigured flag based on existing coordinates")
 		}
 	}
-}
-
-func boolRef(v bool) *bool {
-	return &v
 }
 
 // GetOAuthProvider returns the OAuth provider configuration for the given provider ID.

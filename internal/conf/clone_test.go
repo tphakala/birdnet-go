@@ -100,7 +100,7 @@ func newPopulatedSettings() *Settings {
 	s.Realtime.DaylightFilter.Species = []string{"Strix aluco"}
 
 	s.Realtime.RTSP.Streams = []StreamConfig{
-		{Name: "front", URL: "rtsp://x", Enabled: boolRef(true), Models: []string{"birdnet"}},
+		{Name: "front", URL: "rtsp://x", Enabled: true, Models: []string{"birdnet"}},
 	}
 	s.Realtime.RTSP.URLs = []string{"rtsp://legacy"}
 	s.Realtime.RTSP.FFmpegParameters = []string{"-rtsp_transport", "tcp"}
@@ -219,7 +219,7 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.DaylightFilter.Species[0] = mutated
 
 	dst.Realtime.RTSP.Streams[0].Models[0] = mutated
-	*dst.Realtime.RTSP.Streams[0].Enabled = false
+	dst.Realtime.RTSP.Streams[0].Enabled = false
 	dst.Realtime.RTSP.URLs[0] = mutated
 	dst.Realtime.RTSP.FFmpegParameters[0] = mutated
 
@@ -324,8 +324,7 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.Equal(t, []string{"Strix aluco"}, src.Realtime.DaylightFilter.Species)
 
 	require.Len(t, src.Realtime.RTSP.Streams, 1)
-	require.NotNil(t, src.Realtime.RTSP.Streams[0].Enabled)
-	assert.True(t, *src.Realtime.RTSP.Streams[0].Enabled)
+	assert.True(t, src.Realtime.RTSP.Streams[0].Enabled)
 	assert.Equal(t, []string{"birdnet"}, src.Realtime.RTSP.Streams[0].Models)
 	assert.Equal(t, []string{"rtsp://legacy"}, src.Realtime.RTSP.URLs)
 	assert.Equal(t, []string{"-rtsp_transport", "tcp"}, src.Realtime.RTSP.FFmpegParameters)

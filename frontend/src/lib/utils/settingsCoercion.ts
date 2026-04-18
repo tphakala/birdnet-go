@@ -173,6 +173,37 @@ export function coerceObject<T extends Record<string, unknown>>(
   return defaultValue;
 }
 
+function coerceStreamConfig(stream: unknown): UnknownSettings {
+  const rawStream =
+    stream && typeof stream === 'object' && !Array.isArray(stream)
+      ? (stream as UnknownSettings)
+      : {};
+
+  return {
+    ...rawStream,
+    name: coerceString(rawStream.name, ''),
+    url: coerceString(rawStream.url, ''),
+    enabled: coerceBoolean(rawStream.enabled, true),
+    type: coerceString(rawStream.type, 'rtsp'),
+    transport:
+      rawStream.transport === 'udp' || rawStream.transport === 'tcp'
+        ? rawStream.transport
+        : undefined,
+  };
+}
+
+function coerceRTSPSettings(settings: unknown): UnknownSettings {
+  const rawRtsp =
+    settings && typeof settings === 'object' && !Array.isArray(settings)
+      ? (settings as UnknownSettings)
+      : {};
+
+  return {
+    ...rawRtsp,
+    streams: coerceArray(rawRtsp.streams, []).map(coerceStreamConfig),
+  };
+}
+
 /**
  * Validate and coerce BirdNET settings
  */
@@ -771,30 +802,7 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       }
 
       if (Object.prototype.hasOwnProperty.call(data, 'rtsp')) {
-        const rawRtsp =
-          data.rtsp && typeof data.rtsp === 'object' && !Array.isArray(data.rtsp)
-            ? (data.rtsp as UnknownSettings)
-            : {};
-        coercedRealtime.rtsp = {
-          ...rawRtsp,
-          streams: coerceArray(rawRtsp.streams, []).map(stream => {
-            const rawStream =
-              stream && typeof stream === 'object' && !Array.isArray(stream)
-                ? (stream as UnknownSettings)
-                : {};
-            return {
-              ...rawStream,
-              name: coerceString(rawStream.name, ''),
-              url: coerceString(rawStream.url, ''),
-              enabled: coerceBoolean(rawStream.enabled, true),
-              type: coerceString(rawStream.type, 'rtsp'),
-              transport:
-                rawStream.transport === 'udp' || rawStream.transport === 'tcp'
-                  ? rawStream.transport
-                  : undefined,
-            };
-          }),
-        };
+        coercedRealtime.rtsp = coerceRTSPSettings(data.rtsp);
       }
 
       if (Object.prototype.hasOwnProperty.call(data, 'falsePositiveFilter')) {

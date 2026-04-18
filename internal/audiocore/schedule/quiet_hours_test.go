@@ -351,7 +351,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
-				Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
 				QuietHours: conf.QuietHoursConfig{
 					Enabled:   true,
 					Mode:      "fixed",
@@ -377,7 +377,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
-				Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
 				QuietHours: conf.QuietHoursConfig{
 					Enabled:   true,
 					Mode:      "fixed",
@@ -406,7 +406,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
-				Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
 				QuietHours: conf.QuietHoursConfig{Enabled: false},
 			},
 		}
@@ -422,14 +422,13 @@ func TestQuietHours_Evaluate(t *testing.T) {
 
 	t.Run("disabled stream is ignored and stale suppression is cleared", func(t *testing.T) {
 		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
-		disabled := false
 
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
 				Name:      "cam1",
 				URL:       "rtsp://cam1",
-				Enabled:   &disabled,
+				Enabled:   false,
 				Transport: "tcp",
 				QuietHours: conf.QuietHoursConfig{
 					Enabled:   true,

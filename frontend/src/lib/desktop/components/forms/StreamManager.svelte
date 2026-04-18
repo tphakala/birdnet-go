@@ -147,7 +147,7 @@
     let disabledCount = 0;
 
     streams.forEach(stream => {
-      if (stream.enabled === false) {
+      if (!stream.enabled) {
         disabledCount++;
         return;
       }
@@ -177,7 +177,7 @@
 
   // Convert backend process state to UI status
   function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
-    if (stream.enabled === false) {
+    if (!stream.enabled) {
       return 'disabled';
     }
 

@@ -188,7 +188,7 @@ function createStreamConfig(
   type: 'rtsp' | 'http' | 'hls' | 'rtmp' | 'udp' = 'rtsp',
   transport: 'tcp' | 'udp' = 'tcp'
 ): StreamConfig {
-  return { name, url, type, transport };
+  return { name, url, enabled: true, type, transport };
 }
 
 describe('AudioSettingsPage - Stream Configuration', () => {
