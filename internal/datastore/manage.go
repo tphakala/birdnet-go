@@ -312,6 +312,21 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 
 	migrationLogger.Debug("Starting database migration")
 
+	// Drop stale unique indexes the GORM entities no longer declare. Must
+	// run before AutoMigrate/validateAndFixSchema because MySQL will otherwise
+	// fail AutoMigrate with Error 1062 on restart when a pre-multi-model
+	// UNIQUE(species_name) index lingers alongside the composite
+	// idx_dt_species_model. Non-fatal on failure: log and continue so a
+	// reconciler bug can't brick startup.
+	entityModels := make([]any, 0, len(legacyEntities()))
+	for _, m := range legacyEntities() {
+		entityModels = append(entityModels, m.model)
+	}
+	if err := reconcileLegacyUniqueIndexes(db, dbType, dbName, entityModels); err != nil {
+		migrationLogger.Warn("Failed to reconcile legacy unique indexes, continuing",
+			logger.Error(err))
+	}
+
 	// Validate and fix schema if needed
 	if err := validateAndFixSchema(db, dbType, dbName, debug, migrationLogger); err != nil {
 		return err
