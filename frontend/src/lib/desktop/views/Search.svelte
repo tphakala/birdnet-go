@@ -210,8 +210,12 @@
     return true;
   }
 
-  // Form submission
+  // Form submission. Guarded against overlapping calls so any caller
+  // (form submit, pagination, sort dropdown, future programmatic trigger)
+  // cannot start a new request while one is still in flight; an older
+  // response would otherwise clobber newer state on completion.
   async function submitSearch(page = 1) {
+    if (isLoading) return;
     if (!validateForm()) return;
 
     isLoading = true;
