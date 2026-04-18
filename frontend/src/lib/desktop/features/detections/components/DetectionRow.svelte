@@ -186,6 +186,34 @@
     showConfirmModal = true;
   }
 
+  async function postReview(verified: 'correct' | 'false_positive') {
+    try {
+      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verified }),
+      });
+      detection.verified = verified;
+      toastActions.success(
+        verified === 'correct'
+          ? t('search.review.markedCorrect')
+          : t('search.review.markedFalsePositive')
+      );
+      onRefresh?.();
+    } catch (error) {
+      toastActions.error(t('search.review.failed'));
+      logger.error('Error setting verification status:', error);
+    }
+  }
+
+  function handleMarkCorrect() {
+    postReview('correct');
+  }
+
+  function handleMarkFalsePositive() {
+    postReview('false_positive');
+  }
+
   function handleDelete() {
     confirmModalConfig = {
       title: t('dashboard.recentDetections.modals.deleteDetection', {
@@ -404,6 +432,8 @@
   <ActionMenu
     {detection}
     {isExcluded}
+    onMarkCorrect={handleMarkCorrect}
+    onMarkFalsePositive={handleMarkFalsePositive}
     onReview={handleReview}
     onToggleSpecies={handleToggleSpecies}
     onToggleLock={handleToggleLock}
