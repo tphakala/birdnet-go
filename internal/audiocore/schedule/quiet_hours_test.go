@@ -420,6 +420,36 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		assert.Equal(t, "rtsp://cam1", mock.started[0].sourceID)
 	})
 
+	t.Run("disabled stream is ignored and stale suppression is cleared", func(t *testing.T) {
+		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
+		disabled := false
+
+		settings := conf.GetTestSettings()
+		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+			{
+				Name:      "cam1",
+				URL:       "rtsp://cam1",
+				Enabled:   &disabled,
+				Transport: "tcp",
+				QuietHours: conf.QuietHoursConfig{
+					Enabled:   true,
+					Mode:      "fixed",
+					StartTime: "00:00",
+					EndTime:   "23:59",
+				},
+			},
+		}
+		setTestSettings(t, settings)
+
+		s := newTestScheduler(t, mock)
+		s.suppressed["rtsp://cam1"] = true
+		s.Evaluate()
+
+		assert.Empty(t, mock.stopped, "disabled streams should not be stopped by quiet hours")
+		assert.Empty(t, mock.started, "disabled streams should not be restarted by quiet hours")
+		assert.False(t, s.suppressed["rtsp://cam1"], "stale suppression should be cleared for disabled streams")
+	})
+
 	t.Run("no action when not in quiet hours", func(t *testing.T) {
 		mock := &mockManager{activeStreams: []string{"rtsp://cam1"}}
 

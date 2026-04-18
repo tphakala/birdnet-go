@@ -144,8 +144,14 @@
     let healthy = 0;
     let unhealthy = 0;
     let unknown = 0;
+    let disabledCount = 0;
 
     streams.forEach(stream => {
+      if (stream.enabled === false) {
+        disabledCount++;
+        return;
+      }
+
       const health = streamHealth[stream.url];
       if (!health) {
         unknown++;
@@ -156,7 +162,7 @@
       }
     });
 
-    return { healthy, unhealthy, unknown, total: streams.length };
+    return { healthy, unhealthy, unknown, disabled: disabledCount, total: streams.length };
   });
 
   // Check if a specific stream is suppressed by quiet hours.
@@ -171,6 +177,10 @@
 
   // Convert backend process state to UI status
   function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
+    if (stream.enabled === false) {
+      return 'disabled';
+    }
+
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
     const health = streamHealth[url];
     if (!health) {
@@ -377,6 +387,7 @@
     const newStream: StreamConfig = {
       name: trimmedName,
       url: trimmedUrl,
+      enabled: true,
       type: newStreamType,
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       quietHours: newQuietHours,
@@ -512,6 +523,13 @@
               <StatusPill
                 variant="neutral"
                 label="{healthySummary.unknown} {t('settings.audio.streams.unknown')}"
+                size="sm"
+              />
+            {/if}
+            {#if healthySummary.disabled > 0}
+              <StatusPill
+                variant="neutral"
+                label="{healthySummary.disabled} Disabled"
                 size="sm"
               />
             {/if}

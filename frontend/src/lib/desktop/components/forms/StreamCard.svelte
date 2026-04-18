@@ -34,6 +34,7 @@
   import { cn } from '$lib/utils/cn';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
+  import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
@@ -45,6 +46,7 @@
   export type StreamStatus =
     | 'connected'
     | 'connecting'
+    | 'disabled'
     | 'error'
     | 'idle'
     | 'suppressed'
@@ -134,6 +136,7 @@
   let editUrl = $state('');
   let editTransport = $state<'tcp' | 'udp'>('tcp');
   let editStreamType = $state<StreamType>('rtsp');
+  let editEnabled = $state(true);
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
 
@@ -173,6 +176,12 @@
           text: 'text-[var(--color-error)]',
           border: 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)]',
         };
+      case 'disabled':
+        return {
+          bg: 'bg-[var(--color-base-content)]/8',
+          text: 'text-[var(--color-base-content)]/55',
+          border: 'border-[var(--color-base-content)]/15',
+        };
       case 'suppressed':
         return {
           bg: 'bg-[color-mix(in_srgb,var(--color-info)_20%,transparent)]',
@@ -201,6 +210,8 @@
         return 'warning';
       case 'error':
         return 'error';
+      case 'disabled':
+        return 'neutral';
       case 'suppressed':
         return 'neutral';
       case 'idle':
@@ -218,6 +229,8 @@
         return t('settings.audio.streams.status.connecting');
       case 'error':
         return t('settings.audio.streams.status.error');
+      case 'disabled':
+        return 'Disabled';
       case 'idle':
         return t('settings.audio.streams.status.idle');
       case 'suppressed':
@@ -236,6 +249,8 @@
         return 'border-[color-mix(in_srgb,var(--color-warning)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)]';
       case 'error':
         return 'border-[color-mix(in_srgb,var(--color-error)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]';
+      case 'disabled':
+        return 'border-[var(--color-base-content)]/12 bg-[var(--color-base-content)]/4';
       case 'suppressed':
         return 'border-[color-mix(in_srgb,var(--color-info)_20%,transparent)] bg-[color-mix(in_srgb,var(--color-info)_5%,transparent)]';
       case 'idle':
@@ -256,6 +271,7 @@
     editUrl = stream.url;
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
+    editEnabled = stream.enabled ?? true;
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
     isEditing = true;
   }
@@ -270,6 +286,7 @@
       const success = onUpdate({
         name: editName.trim(),
         url: editUrl.trim(),
+        enabled: editEnabled,
         type: editStreamType,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
@@ -302,6 +319,10 @@
       event.preventDefault();
       cancelEdit();
     }
+  }
+
+  function updateEnabled(enabled: boolean) {
+    onUpdate({ ...stream, enabled });
   }
 </script>
 
@@ -409,6 +430,14 @@
           {/if}
         </div>
 
+        <Checkbox
+          checked={editEnabled}
+          onchange={checked => (editEnabled = checked)}
+          label="Enabled"
+          disabled={disabled}
+          size="sm"
+        />
+
         <!-- Quiet Hours -->
         <QuietHoursEditor
           config={editQuietHours}
@@ -491,6 +520,16 @@
           <p class="text-xs text-[var(--color-base-content)]/70 mt-1.5 mb-1">
             Total: {totalData} • Rate: {currentRate} • Last: {lastDataAgo}
           </p>
+
+          <div class="mt-2">
+            <Checkbox
+              checked={stream.enabled ?? true}
+              onchange={updateEnabled}
+              label="Enabled"
+              disabled={disabled}
+              size="sm"
+            />
+          </div>
         </div>
 
         <!-- Right Side: Protocol Tags + Actions -->

@@ -23,6 +23,7 @@ func TestStreamConfig_YAML_RoundTrip(t *testing.T) {
 			stream: StreamConfig{
 				Name:      "Front Yard",
 				URL:       "rtsp://192.168.1.10/stream",
+				Enabled:   boolRef(true),
 				Type:      StreamTypeRTSP,
 				Transport: "tcp",
 			},
@@ -113,6 +114,7 @@ func TestStreamConfig_YAML_RoundTrip(t *testing.T) {
 			// Verify all fields preserved
 			assert.Equal(t, tt.stream.Name, result.Name, "Name mismatch")
 			assert.Equal(t, tt.stream.URL, result.URL, "URL mismatch")
+			assert.Equal(t, tt.stream.IsEnabled(), result.IsEnabled(), "Enabled mismatch")
 			assert.Equal(t, tt.stream.Type, result.Type, "Type mismatch")
 			assert.Equal(t, tt.stream.Transport, result.Transport, "Transport mismatch")
 		})
@@ -125,9 +127,9 @@ func TestRTSPSettings_YAML_RoundTrip(t *testing.T) {
 
 	original := RTSPSettings{
 		Streams: []StreamConfig{
-			{Name: "Stream 1", URL: "rtsp://192.168.1.10/cam1", Type: StreamTypeRTSP, Transport: "tcp"},
+			{Name: "Stream 1", URL: "rtsp://192.168.1.10/cam1", Enabled: boolRef(true), Type: StreamTypeRTSP, Transport: "tcp"},
 			{Name: "Stream 2", URL: "http://192.168.1.20:8000/audio", Type: StreamTypeHTTP},
-			{Name: "Stream 3", URL: "udp://239.0.0.1:5004", Type: StreamTypeUDP},
+			{Name: "Stream 3", URL: "udp://239.0.0.1:5004", Enabled: boolRef(false), Type: StreamTypeUDP},
 		},
 	}
 
@@ -147,6 +149,7 @@ func TestRTSPSettings_YAML_RoundTrip(t *testing.T) {
 	for i := range original.Streams {
 		assert.Equal(t, original.Streams[i].Name, result.Streams[i].Name, "Stream %d Name mismatch", i)
 		assert.Equal(t, original.Streams[i].URL, result.Streams[i].URL, "Stream %d URL mismatch", i)
+		assert.Equal(t, original.Streams[i].IsEnabled(), result.Streams[i].IsEnabled(), "Stream %d Enabled mismatch", i)
 		assert.Equal(t, original.Streams[i].Type, result.Streams[i].Type, "Stream %d Type mismatch", i)
 		assert.Equal(t, original.Streams[i].Transport, result.Streams[i].Transport, "Stream %d Transport mismatch", i)
 	}
@@ -169,6 +172,7 @@ func TestStreamConfig_FilePersistence(t *testing.T) {
 				{
 					Name:      "Unicode Test 日本語 🐦",
 					URL:       "rtsp://user:pass@192.168.1.100:554/stream",
+					Enabled:   boolRef(true),
 					Type:      StreamTypeRTSP,
 					Transport: "tcp",
 				},
@@ -210,6 +214,7 @@ func TestStreamConfig_FilePersistence(t *testing.T) {
 		loaded := loaded.RTSP.Streams[i]
 		assert.Equal(t, orig.Name, loaded.Name, "Stream %d: Name was modified", i)
 		assert.Equal(t, orig.URL, loaded.URL, "Stream %d: URL was modified", i)
+		assert.Equal(t, orig.IsEnabled(), loaded.IsEnabled(), "Stream %d: Enabled was modified", i)
 		assert.Equal(t, orig.Type, loaded.Type, "Stream %d: Type was modified", i)
 		assert.Equal(t, orig.Transport, loaded.Transport, "Stream %d: Transport was modified", i)
 	}
@@ -223,6 +228,7 @@ func TestStreamConfig_NoDataLoss_AllFieldsPreserved(t *testing.T) {
 	original := StreamConfig{
 		Name:      "Complete Stream Config",
 		URL:       "rtsp://admin:secret123@camera.local:554/h264/main/av_stream",
+		Enabled:   boolRef(false),
 		Type:      StreamTypeRTSP,
 		Transport: "udp",
 	}
@@ -266,6 +272,35 @@ transport: "udp"
 	// Legacy fields should also be populated (before migration clears them)
 	assert.Len(t, rtsp.URLs, 1, "Legacy URLs should be preserved")
 	assert.Equal(t, "udp", rtsp.Transport, "Legacy Transport should be preserved")
+}
+
+func TestStreamConfig_IsEnabled_DefaultTrue(t *testing.T) {
+	t.Parallel()
+
+	stream := StreamConfig{Name: "Legacy Stream", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP}
+	assert.True(t, stream.IsEnabled(), "missing enabled field should default to true")
+}
+
+func TestMigrateStreamEnabledDefaults(t *testing.T) {
+	t.Parallel()
+
+	settings := Settings{
+		Realtime: RealtimeSettings{
+			RTSP: RTSPSettings{
+				Streams: []StreamConfig{
+					{Name: "Legacy Stream", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP},
+					{Name: "Disabled Stream", URL: "rtsp://192.168.1.20/stream", Enabled: boolRef(false), Type: StreamTypeRTSP},
+				},
+			},
+		},
+	}
+
+	migrated := settings.MigrateStreamEnabledDefaults()
+	require.True(t, migrated, "legacy nil enabled value should be materialized")
+	require.NotNil(t, settings.Realtime.RTSP.Streams[0].Enabled)
+	assert.True(t, *settings.Realtime.RTSP.Streams[0].Enabled)
+	require.NotNil(t, settings.Realtime.RTSP.Streams[1].Enabled)
+	assert.False(t, *settings.Realtime.RTSP.Streams[1].Enabled)
 }
 
 // TestBackwardCompatibility_LegacyOnlyConfig tests loading a pure legacy config format

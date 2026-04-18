@@ -2155,6 +2155,7 @@ func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 		newStream := &newRTSP.Streams[i]
 		if oldStream.Name != newStream.Name ||
 			oldStream.URL != newStream.URL ||
+			oldStream.IsEnabled() != newStream.IsEnabled() ||
 			oldStream.Type != newStream.Type ||
 			oldStream.Transport != newStream.Transport {
 			return true

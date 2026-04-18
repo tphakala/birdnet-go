@@ -191,7 +191,7 @@ func TestRTSPSettings_ValidateStreams(t *testing.T) {
 			rtsp: RTSPSettings{
 				Streams: []StreamConfig{
 					{Name: "Front Yard", URL: "rtsp://192.168.1.10/stream", Type: StreamTypeRTSP, Transport: "tcp"},
-					{Name: "Back Yard", URL: "rtsp://192.168.1.20/stream", Type: StreamTypeRTSP, Transport: "tcp"},
+					{Name: "Back Yard", URL: "rtsp://192.168.1.20/stream", Enabled: boolRef(false), Type: StreamTypeRTSP, Transport: "tcp"},
 				},
 			},
 			wantErr: false,
