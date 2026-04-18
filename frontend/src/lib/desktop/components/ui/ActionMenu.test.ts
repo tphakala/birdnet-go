@@ -10,16 +10,17 @@ function createMockDetection(overrides: Partial<Detection> = {}): Detection {
     id: 1,
     date: '2024-01-15',
     time: '10:30:00',
-    common_name: 'American Robin',
-    scientific_name: 'Turdus migratorius',
+    beginTime: '2024-01-15T10:30:00Z',
+    endTime: '2024-01-15T10:30:03Z',
+    speciesCode: 'amerob',
+    scientificName: 'Turdus migratorius',
+    commonName: 'American Robin',
     confidence: 0.85,
+    verified: 'unverified',
     locked: false,
-    source_type: 'microphone',
-    source_name: 'default',
-    clip_name: 'clip_001.wav',
-    spectrogram_path: '/spectrograms/clip_001.png',
+    clipName: 'clip_001.wav',
     ...overrides,
-  } as Detection;
+  };
 }
 
 describe('ActionMenu', () => {
