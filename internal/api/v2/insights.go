@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"golang.org/x/text/unicode/norm"
 )
 
 // Insights constants
@@ -148,28 +149,35 @@ type StreakInfo struct {
 
 // --- Helper functions ---
 
-// buildCommonNameMap creates a map from scientific name to common name
-// using the BirdNET labels in Settings (format: "ScientificName_CommonName").
-func buildCommonNameMap(labels []string) map[string]string {
-	m := make(map[string]string, len(labels))
-	for _, label := range labels {
-		scientificName, commonName, found := strings.Cut(label, "_")
-		if found {
-			scientificName = strings.TrimSpace(scientificName)
-			commonName = strings.TrimSpace(commonName)
-			if scientificName != "" && commonName != "" {
-				m[scientificName] = commonName
-			}
-		}
-	}
-	return m
+// nameMaps holds the bidirectional BirdNET label lookup maps. Grouping them
+// into one struct lets a single atomic.Value Store swap both maps together,
+// avoiding any window where readers could see a partially updated pair.
+type nameMaps struct {
+	// sciToCommon maps scientific name -> common name.
+	sciToCommon map[string]string
+	// commonToSci maps NFC-normalised, lowercased common name -> scientific name.
+	commonToSci map[string]string
 }
 
-// buildCommonToScientificMap creates a map from lowercase common name to scientific name
-// using the BirdNET labels in Settings (format: "ScientificName_CommonName"). Used by
-// the search handler to pre-resolve common-name queries.
-func buildCommonToScientificMap(labels []string) map[string]string {
-	m := make(map[string]string, len(labels))
+// normalizeForLookup prepares a string for case- and Unicode-form-insensitive
+// map lookup. BirdNET labels ship in composed (NFC) form, but users typing
+// on macOS or with composing keyboards may submit decomposed (NFD) bytes
+// for diacritics, so normalising both sides to NFC prevents silent misses
+// on species like "Lehtopöllö".
+func normalizeForLookup(s string) string {
+	return strings.ToLower(norm.NFC.String(s))
+}
+
+// buildNameMaps parses a BirdNET label list ("ScientificName_CommonName")
+// and builds both lookup maps in a single pass. If several labels share the
+// same common name (a cross-species collision or a locale quirk), the last
+// one wins in commonToSci; scientific names are unique so sciToCommon is not
+// affected.
+func buildNameMaps(labels []string) *nameMaps {
+	nm := &nameMaps{
+		sciToCommon: make(map[string]string, len(labels)),
+		commonToSci: make(map[string]string, len(labels)),
+	}
 	for _, label := range labels {
 		scientificName, commonName, found := strings.Cut(label, "_")
 		if !found {
@@ -180,33 +188,50 @@ func buildCommonToScientificMap(labels []string) map[string]string {
 		if scientificName == "" || commonName == "" {
 			continue
 		}
-		m[strings.ToLower(commonName)] = scientificName
+		nm.sciToCommon[scientificName] = commonName
+		nm.commonToSci[normalizeForLookup(commonName)] = scientificName
 	}
-	return m
+	return nm
+}
+
+// buildCommonNameMap returns only the scientific-to-common half of the name
+// maps. Kept as a thin wrapper for tests that pre-populate a single direction.
+func buildCommonNameMap(labels []string) map[string]string {
+	return buildNameMaps(labels).sciToCommon
+}
+
+// buildCommonToScientificMap returns only the common-to-scientific half of
+// the name maps. Kept as a thin wrapper for tests that pre-populate a single
+// direction.
+func buildCommonToScientificMap(labels []string) map[string]string {
+	return buildNameMaps(labels).commonToSci
+}
+
+// loadNameMaps returns the current name-maps struct. Always returns a non-nil
+// struct with non-nil inner maps so callers can index without guards.
+func (c *Controller) loadNameMaps() *nameMaps {
+	if nm, ok := c.nameMaps.Load().(*nameMaps); ok && nm != nil {
+		return nm
+	}
+	return &nameMaps{sciToCommon: map[string]string{}, commonToSci: map[string]string{}}
 }
 
 // loadCommonToScientificMap returns the current common-to-scientific lookup map.
 // Always returns a non-nil map.
 func (c *Controller) loadCommonToScientificMap() map[string]string {
-	if m, ok := c.commonToScientificMap.Load().(map[string]string); ok && m != nil {
-		return m
-	}
-	return make(map[string]string)
+	return c.loadNameMaps().commonToSci
 }
 
 // UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
 // Called after locale or model changes to keep insights and search endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
-	c.commonNameMap.Store(buildCommonNameMap(labels))
-	c.commonToScientificMap.Store(buildCommonToScientificMap(labels))
+	c.nameMaps.Store(buildNameMaps(labels))
 }
 
-// loadCommonNameMap returns the current common name map. Always returns a non-nil map.
+// loadCommonNameMap returns the current scientific-to-common lookup map.
+// Always returns a non-nil map.
 func (c *Controller) loadCommonNameMap() map[string]string {
-	if m, ok := c.commonNameMap.Load().(map[string]string); ok && m != nil {
-		return m
-	}
-	return make(map[string]string)
+	return c.loadNameMaps().sciToCommon
 }
 
 // resolveCommonName looks up the common name for a scientific name.
@@ -340,8 +365,7 @@ func (c *Controller) initInsightsRoutes() {
 
 	// Build both name maps once and cache on Controller
 	if c.Settings != nil {
-		c.commonNameMap.Store(buildCommonNameMap(c.Settings.BirdNET.Labels))
-		c.commonToScientificMap.Store(buildCommonToScientificMap(c.Settings.BirdNET.Labels))
+		c.UpdateCommonNameMap(c.Settings.BirdNET.Labels)
 	}
 
 	insightsGroup := c.Group.Group("/insights")

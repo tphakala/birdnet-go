@@ -19,8 +19,7 @@ var testLabels = []string{
 }
 
 // setupSearchTestController builds a minimal Controller with the given BirdNET
-// labels pre-loaded into both name maps. It mirrors the pattern in
-// setupInsightsTestController so tests share the same construction style.
+// labels pre-loaded into both name maps.
 func setupSearchTestController(t *testing.T, labels []string) *Controller {
 	t.Helper()
 	e := echo.New()
@@ -32,8 +31,7 @@ func setupSearchTestController(t *testing.T, labels []string) *Controller {
 			},
 		},
 	}
-	c.commonNameMap.Store(buildCommonNameMap(labels))
-	c.commonToScientificMap.Store(buildCommonToScientificMap(labels))
+	c.nameMaps.Store(buildNameMaps(labels))
 	return c
 }
 
@@ -102,6 +100,14 @@ func TestResolveSpeciesToScientific(t *testing.T) {
 			input: "  Tawny Owl  ",
 			want:  "Strix aluco",
 		},
+		{
+			// macOS and some composing keyboards submit NFD bytes for
+			// diacritics. The resolver must normalise to NFC so labels
+			// (which ship as NFC) still match.
+			name:  "NFD-form diacritic matches NFC-stored label",
+			input: "Lehtopo\u0308llo\u0308",
+			want:  "Strix aluco",
+		},
 	}
 
 	for _, tt := range tests {
@@ -141,4 +147,38 @@ func TestUpdateCommonNameMap_PopulatesBothMaps(t *testing.T) {
 	require.NotNil(t, commonToSci)
 	assert.Equal(t, "Strix aluco", commonToSci["tawny owl"])
 	assert.Equal(t, "Parus major", commonToSci["great tit"])
+}
+
+// TestBuildNameMaps_MalformedLabels verifies that labels missing a scientific
+// name, a common name, or the separator are silently skipped rather than
+// producing empty keys.
+func TestBuildNameMaps_MalformedLabels(t *testing.T) {
+	t.Parallel()
+
+	nm := buildNameMaps([]string{
+		"Strix aluco_Tawny Owl",
+		"_MissingScientific",
+		"MissingCommon_",
+		"NoSeparatorAtAll",
+		"",
+		"   _   ",
+	})
+	require.NotNil(t, nm)
+	assert.Len(t, nm.sciToCommon, 1)
+	assert.Len(t, nm.commonToSci, 1)
+	assert.Equal(t, "Tawny Owl", nm.sciToCommon["Strix aluco"])
+	assert.Equal(t, "Strix aluco", nm.commonToSci["tawny owl"])
+}
+
+// TestLoadNameMaps_CalledBeforeInit verifies that the load helpers return
+// non-nil empty maps when the Controller has not yet seeded nameMaps, so
+// callers can index without nil checks during the startup window.
+func TestLoadNameMaps_CalledBeforeInit(t *testing.T) {
+	t.Parallel()
+
+	c := &Controller{}
+	assert.NotNil(t, c.loadCommonNameMap())
+	assert.NotNil(t, c.loadCommonToScientificMap())
+	assert.Empty(t, c.loadCommonNameMap())
+	assert.Empty(t, c.loadCommonToScientificMap())
 }

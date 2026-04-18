@@ -68,12 +68,16 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
 	}
 
-	// Resolve common-name input to a scientific name before filtering. The backend
-	// datastore search does LIKE on scientific_name only; this pre-translation lets
-	// clients submit common names in any BirdNET label locale. Partial scientific
-	// names, ambiguous common-name substrings, and unknown text pass through
-	// unchanged.
+	originalSpecies := req.Species
 	req.Species = c.resolveSpeciesToScientific(req.Species)
+	if req.Species != originalSpecies {
+		c.logDebugIfEnabled("Resolved common-name query to scientific name",
+			logger.String("input", originalSpecies),
+			logger.String("resolved", req.Species),
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
+	}
 
 	// Log validated request parameters
 	c.logValidatedRequest(path, ip, &req)
@@ -356,7 +360,7 @@ func (c *Controller) resolveSpeciesToScientific(input string) string {
 		return ""
 	}
 	lookup := c.loadCommonToScientificMap()
-	if scientific, ok := lookup[strings.ToLower(trimmed)]; ok {
+	if scientific, ok := lookup[normalizeForLookup(trimmed)]; ok {
 		return scientific
 	}
 	return trimmed

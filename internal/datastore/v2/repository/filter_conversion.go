@@ -419,7 +419,7 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 	// (*Controller).resolveSpeciesToScientific in internal/api/v2/search.go.
 	// The limit of 100 is intentional for Simple Search: a broader term returning
 	// 100+ species indicates the user should refine the query.
-	// TODO: restore partial-common-name search via a persistent common_name column.
+	// TODO: support partial common-name search once a persistent common_name column exists.
 	labels, err := deps.LabelRepo.Search(ctx, species, 100)
 	if err != nil {
 		return nil, err
