@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -66,6 +67,13 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	if err := c.validateAndNormalizeSearchRequest(ctx, &req); err != nil {
 		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
 	}
+
+	// Resolve common-name input to a scientific name before filtering. The backend
+	// datastore search does LIKE on scientific_name only; this pre-translation lets
+	// clients submit common names in any BirdNET label locale. Partial scientific
+	// names, ambiguous common-name substrings, and unknown text pass through
+	// unchanged.
+	req.Species = c.resolveSpeciesToScientific(req.Species)
 
 	// Log validated request parameters
 	c.logValidatedRequest(path, ip, &req)
@@ -329,4 +337,27 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 		}
 	}
 	return nil
+}
+
+// resolveSpeciesToScientific maps a free-form species search term to a scientific
+// name when the input is an exact case-insensitive match for a common name in the
+// currently loaded BirdNET label list. Non-matching input (partial common-name
+// fragments, Latin substrings, unknown text) is returned unchanged so the existing
+// LIKE search on scientific_name keeps working.
+//
+// The BirdNET label list is already cached in memory via UpdateCommonNameMap; there
+// is no I/O here. The lookup is O(1) for the common-name exact-match case.
+//
+// This is an interim fix; the proper long-term fix is a persistent species_common_names
+// table that decouples common-name storage from the active model's label file.
+func (c *Controller) resolveSpeciesToScientific(input string) string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return ""
+	}
+	lookup := c.loadCommonToScientificMap()
+	if scientific, ok := lookup[strings.ToLower(trimmed)]; ok {
+		return scientific
+	}
+	return trimmed
 }

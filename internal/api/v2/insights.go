@@ -165,10 +165,40 @@ func buildCommonNameMap(labels []string) map[string]string {
 	return m
 }
 
-// UpdateCommonNameMap rebuilds the cached common name map from updated BirdNET labels.
-// Called after locale or model changes to keep insights endpoints current.
+// buildCommonToScientificMap creates a map from lowercase common name to scientific name
+// using the BirdNET labels in Settings (format: "ScientificName_CommonName"). Used by
+// the search handler to pre-resolve common-name queries.
+func buildCommonToScientificMap(labels []string) map[string]string {
+	m := make(map[string]string, len(labels))
+	for _, label := range labels {
+		scientificName, commonName, found := strings.Cut(label, "_")
+		if !found {
+			continue
+		}
+		scientificName = strings.TrimSpace(scientificName)
+		commonName = strings.TrimSpace(commonName)
+		if scientificName == "" || commonName == "" {
+			continue
+		}
+		m[strings.ToLower(commonName)] = scientificName
+	}
+	return m
+}
+
+// loadCommonToScientificMap returns the current common-to-scientific lookup map.
+// Always returns a non-nil map.
+func (c *Controller) loadCommonToScientificMap() map[string]string {
+	if m, ok := c.commonToScientificMap.Load().(map[string]string); ok && m != nil {
+		return m
+	}
+	return make(map[string]string)
+}
+
+// UpdateCommonNameMap rebuilds both cached name maps from updated BirdNET labels.
+// Called after locale or model changes to keep insights and search endpoints current.
 func (c *Controller) UpdateCommonNameMap(labels []string) {
 	c.commonNameMap.Store(buildCommonNameMap(labels))
+	c.commonToScientificMap.Store(buildCommonToScientificMap(labels))
 }
 
 // loadCommonNameMap returns the current common name map. Always returns a non-nil map.
@@ -308,9 +338,10 @@ func (c *Controller) initInsightsRoutes() {
 	}
 	c.insightsRepo = repository.NewInsightsRepository(db, useV2Prefix, isMySQL)
 
-	// Build common name map once and cache on Controller
+	// Build both name maps once and cache on Controller
 	if c.Settings != nil {
 		c.commonNameMap.Store(buildCommonNameMap(c.Settings.BirdNET.Labels))
+		c.commonToScientificMap.Store(buildCommonToScientificMap(c.Settings.BirdNET.Labels))
 	}
 
 	insightsGroup := c.Group.Group("/insights")

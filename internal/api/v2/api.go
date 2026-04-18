@@ -109,8 +109,9 @@ type Controller struct {
 	alertEngine   *alerting.Engine
 
 	// Insights fields (initialized lazily in initInsightsRoutes)
-	insightsRepo  repository.InsightsRepository
-	commonNameMap atomic.Value // stores map[string]string; scientific name → common name
+	insightsRepo          repository.InsightsRepository
+	commonNameMap         atomic.Value // stores map[string]string; scientific name -> common name
+	commonToScientificMap atomic.Value // stores map[string]string; lowercase common name -> scientific name
 
 	// Audio processing fields
 	processingCache     *processingCache
