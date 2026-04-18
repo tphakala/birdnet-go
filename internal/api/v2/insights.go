@@ -208,19 +208,6 @@ func buildNameMaps(labels []string) *nameMaps {
 	return nm
 }
 
-// buildCommonNameMap returns only the scientific-to-common half of the name
-// maps. Kept as a thin wrapper for tests that pre-populate a single direction.
-func buildCommonNameMap(labels []string) map[string]string {
-	return buildNameMaps(labels).sciToCommon
-}
-
-// buildCommonToScientificMap returns only the common-to-scientific half of
-// the name maps. Kept as a thin wrapper for tests that pre-populate a single
-// direction.
-func buildCommonToScientificMap(labels []string) map[string]string {
-	return buildNameMaps(labels).commonToSci
-}
-
 // loadNameMaps returns the current name-maps struct. Always returns a non-nil
 // struct with non-nil inner maps so callers can index without guards.
 func (c *Controller) loadNameMaps() *nameMaps {
