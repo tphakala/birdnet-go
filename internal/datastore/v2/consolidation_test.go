@@ -264,6 +264,31 @@ func TestCleanupWALFiles_NoFilesExist(t *testing.T) {
 	cleanupWALFiles(dbPath)
 }
 
+// TestCheckAndConsolidateAtStartup_RemovesEmptyStaleSidecar ensures that a
+// 0-byte sidecar sitting next to a consolidated v2 database (the real-world
+// fault seen in production when an external deploy script touched the path)
+// is removed during the consolidation preflight instead of being silently
+// left behind to trip the subsequent startup-state check.
+func TestCheckAndConsolidateAtStartup_RemovesEmptyStaleSidecar(t *testing.T) {
+	tmpDir := t.TempDir()
+	configuredPath := filepath.Join(tmpDir, "birdnet-2025.db")
+	v2SidecarPath := filepath.Join(tmpDir, "birdnet-2025_v2.db")
+
+	createConsolidatedV2DBAt(t, configuredPath)
+
+	// Simulate the production fault: empty sidecar from an external process
+	f, err := os.Create(v2SidecarPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	consolidated, err := CheckAndConsolidateAtStartup(configuredPath, newTestLogger())
+	require.NoError(t, err)
+	assert.False(t, consolidated, "no consolidation needed; configured path is already v2")
+
+	_, err = os.Stat(v2SidecarPath)
+	assert.True(t, os.IsNotExist(err), "stale empty sidecar should have been cleaned up")
+}
+
 // testLogger is a simple logger for testing
 type testLogger struct{}
 
