@@ -407,7 +407,11 @@ describe('ActionMenu', () => {
   });
 
   it('renders Correct and Incorrect quick-review items at the top', async () => {
-    render(ActionMenu, { props: { detection: createMockDetection() } });
+    const onMarkCorrect = vi.fn();
+    const onMarkFalsePositive = vi.fn();
+    render(ActionMenu, {
+      props: { detection: createMockDetection(), onMarkCorrect, onMarkFalsePositive },
+    });
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     expect(screen.getByRole('menuitem', { name: /^correct$/i })).toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: /^incorrect$/i })).toBeInTheDocument();
@@ -415,15 +419,21 @@ describe('ActionMenu', () => {
 
   it('fires onMarkCorrect when Correct is clicked', async () => {
     const onMarkCorrect = vi.fn();
-    render(ActionMenu, { props: { detection: createMockDetection(), onMarkCorrect } });
+    const onMarkFalsePositive = vi.fn();
+    render(ActionMenu, {
+      props: { detection: createMockDetection(), onMarkCorrect, onMarkFalsePositive },
+    });
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     await fireEvent.click(screen.getByRole('menuitem', { name: /^correct$/i }));
     expect(onMarkCorrect).toHaveBeenCalledTimes(1);
   });
 
   it('fires onMarkFalsePositive when Incorrect is clicked', async () => {
+    const onMarkCorrect = vi.fn();
     const onMarkFalsePositive = vi.fn();
-    render(ActionMenu, { props: { detection: createMockDetection(), onMarkFalsePositive } });
+    render(ActionMenu, {
+      props: { detection: createMockDetection(), onMarkCorrect, onMarkFalsePositive },
+    });
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     await fireEvent.click(screen.getByRole('menuitem', { name: /^incorrect$/i }));
     expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
@@ -437,15 +447,29 @@ describe('ActionMenu', () => {
   });
 
   it('shows ✓ badge next to Correct when verified as correct', async () => {
-    render(ActionMenu, { props: { detection: createMockDetection({ verified: 'correct' }) } });
+    const onMarkCorrect = vi.fn();
+    const onMarkFalsePositive = vi.fn();
+    render(ActionMenu, {
+      props: {
+        detection: createMockDetection({ verified: 'correct' }),
+        onMarkCorrect,
+        onMarkFalsePositive,
+      },
+    });
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     const correctItem = screen.getByRole('menuitem', { name: /^correct/i });
     expect(correctItem.textContent).toContain('✓');
   });
 
   it('shows ✗ badge next to Incorrect when verified as false_positive', async () => {
+    const onMarkCorrect = vi.fn();
+    const onMarkFalsePositive = vi.fn();
     render(ActionMenu, {
-      props: { detection: createMockDetection({ verified: 'false_positive' }) },
+      props: {
+        detection: createMockDetection({ verified: 'false_positive' }),
+        onMarkCorrect,
+        onMarkFalsePositive,
+      },
     });
     await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
     const incorrectItem = screen.getByRole('menuitem', { name: /^incorrect/i });

@@ -237,7 +237,7 @@
         )}
         role="menu"
       >
-        {#if canEdit && !detection.locked}
+        {#if canEdit && !detection.locked && onMarkCorrect && onMarkFalsePositive}
           <li>
             <button
               onclick={() => handleAction(onMarkCorrect)}
@@ -296,6 +296,17 @@
               <div class="flex items-center gap-2">
                 <SquarePen class="size-4" />
                 <span>{t('dashboard.recentDetections.actions.review')}</span>
+                {#if detection.verified === 'correct'}
+                  <span
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                    >✓</span
+                  >
+                {:else if detection.verified === 'false_positive'}
+                  <span
+                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                    >✗</span
+                  >
+                {/if}
               </div>
             </button>
           </li>

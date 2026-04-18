@@ -17,6 +17,7 @@ import { fetchWithCSRF } from '$lib/utils/api';
 import { t } from '$lib/i18n';
 import { loggers } from '$lib/utils/logger';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { setDetectionVerification } from '$lib/utils/reviewDetection';
 
 const logger = loggers.ui;
 
@@ -131,32 +132,16 @@ export function useDetectionActions(options: DetectionActionOptions) {
     showConfirmModal = true;
   }
 
-  async function postReview(detection: Detection, verified: 'correct' | 'false_positive') {
-    try {
-      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verified }),
-      });
-      detection.verified = verified;
-      toastActions.success(
-        verified === 'correct'
-          ? t('search.review.markedCorrect')
-          : t('search.review.markedFalsePositive')
-      );
+  async function handleMarkCorrect(detection: Detection) {
+    if (await setDetectionVerification(detection, 'correct')) {
       options.onRefresh?.();
-    } catch (err) {
-      toastActions.error(t('search.review.failed'));
-      logger.error('Error setting verification status:', err);
     }
   }
 
-  function handleMarkCorrect(detection: Detection) {
-    postReview(detection, 'correct');
-  }
-
-  function handleMarkFalsePositive(detection: Detection) {
-    postReview(detection, 'false_positive');
+  async function handleMarkFalsePositive(detection: Detection) {
+    if (await setDetectionVerification(detection, 'false_positive')) {
+      options.onRefresh?.();
+    }
   }
 
   function closeModal() {

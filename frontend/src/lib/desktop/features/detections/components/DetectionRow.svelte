@@ -40,6 +40,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
+  import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -186,32 +187,16 @@
     showConfirmModal = true;
   }
 
-  async function postReview(verified: 'correct' | 'false_positive') {
-    try {
-      await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verified }),
-      });
-      detection.verified = verified;
-      toastActions.success(
-        verified === 'correct'
-          ? t('search.review.markedCorrect')
-          : t('search.review.markedFalsePositive')
-      );
+  async function handleMarkCorrect() {
+    if (await setDetectionVerification(detection, 'correct')) {
       onRefresh?.();
-    } catch (error) {
-      toastActions.error(t('search.review.failed'));
-      logger.error('Error setting verification status:', error);
     }
   }
 
-  function handleMarkCorrect() {
-    postReview('correct');
-  }
-
-  function handleMarkFalsePositive() {
-    postReview('false_positive');
+  async function handleMarkFalsePositive() {
+    if (await setDetectionVerification(detection, 'false_positive')) {
+      onRefresh?.();
+    }
   }
 
   function handleDelete() {
