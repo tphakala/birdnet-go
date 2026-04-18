@@ -76,6 +76,10 @@ describe('ActionMenu', () => {
     render(ActionMenu, {
       props: {
         detection: createMockDetection(),
+        onReview: vi.fn(),
+        onToggleSpecies: vi.fn(),
+        onToggleLock: vi.fn(),
+        onDelete: vi.fn(),
       },
     });
 
@@ -169,6 +173,7 @@ describe('ActionMenu', () => {
       props: {
         detection: createMockDetection(),
         isExcluded: true,
+        onToggleSpecies: vi.fn(),
       },
     });
 
@@ -182,6 +187,7 @@ describe('ActionMenu', () => {
     render(ActionMenu, {
       props: {
         detection: createMockDetection({ locked: true }),
+        onToggleLock: vi.fn(),
       },
     });
 
@@ -195,6 +201,7 @@ describe('ActionMenu', () => {
     render(ActionMenu, {
       props: {
         detection: createMockDetection({ locked: true }),
+        onDelete: vi.fn(),
       },
     });
 
@@ -277,6 +284,7 @@ describe('ActionMenu', () => {
         detection: createMockDetection({
           verified: 'correct',
         }),
+        onReview: vi.fn(),
       },
     });
 
@@ -292,6 +300,7 @@ describe('ActionMenu', () => {
         detection: createMockDetection({
           verified: 'false_positive',
         }),
+        onReview: vi.fn(),
       },
     });
 
@@ -302,18 +311,19 @@ describe('ActionMenu', () => {
   });
 
   it('handles action without callback gracefully', async () => {
-    // Test that clicking action without callback doesn't throw
+    // Test that clicking a provided action doesn't throw even when action is a no-op
+    const onReview = vi.fn();
     render(ActionMenu, {
       props: {
         detection: createMockDetection(),
-        // No callbacks provided
+        onReview,
       },
     });
 
     const button = screen.getByRole('button', { name: /actions menu/i });
     await fireEvent.click(button);
 
-    // Click review without callback - should not throw
+    // Click review - should not throw and menu should close
     const reviewButton = screen.getByRole('menuitem', { name: /review detection/i });
     await fireEvent.click(reviewButton);
 

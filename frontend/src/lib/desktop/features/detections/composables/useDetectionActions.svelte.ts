@@ -133,13 +133,15 @@ export function useDetectionActions(options: DetectionActionOptions) {
   }
 
   async function handleMarkCorrect(detection: Detection) {
-    if (await setDetectionVerification(detection, 'correct')) {
+    if (await setDetectionVerification(detection.id, 'correct')) {
+      detection.verified = 'correct';
       options.onRefresh?.();
     }
   }
 
   async function handleMarkFalsePositive(detection: Detection) {
-    if (await setDetectionVerification(detection, 'false_positive')) {
+    if (await setDetectionVerification(detection.id, 'false_positive')) {
+      detection.verified = 'false_positive';
       options.onRefresh?.();
     }
   }

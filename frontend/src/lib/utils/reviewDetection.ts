@@ -2,27 +2,26 @@ import { fetchWithCSRF } from './api';
 import { t } from '$lib/i18n';
 import { toastActions } from '$lib/stores/toast';
 import { loggers } from './logger';
-import type { Detection } from '$lib/types/detection.types';
 
 const logger = loggers.ui;
 
 /**
- * POST the given verification status to the review endpoint, update the local
- * detection object on success, and fire a success/error toast.
+ * POST the given verification status to the review endpoint and fire a toast
+ * with the outcome. Returns `true` on success, `false` on failure.
  *
- * Returns `true` on success, `false` on failure.
+ * Callers are responsible for updating their local detection state and
+ * triggering any refetch when `true` is returned.
  */
 export async function setDetectionVerification(
-  detection: Detection,
+  detectionId: number,
   verified: 'correct' | 'false_positive'
 ): Promise<boolean> {
   try {
-    await fetchWithCSRF(`/api/v2/detections/${detection.id}/review`, {
+    await fetchWithCSRF(`/api/v2/detections/${detectionId}/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ verified }),
     });
-    detection.verified = verified;
     toastActions.success(
       verified === 'correct'
         ? t('search.review.markedCorrect')

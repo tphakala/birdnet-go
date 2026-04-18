@@ -1,9 +1,9 @@
 <!--
   ActionMenu Component
-  
+
   A dropdown menu component that provides action buttons for detection items.
   Displays common actions like review, toggle species visibility, lock/unlock, and delete.
-  
+
   Features:
   - Automatically positions menu to stay within viewport
   - High z-index (9999) to appear above all other elements
@@ -11,12 +11,13 @@
   - Click-outside-to-close behavior
   - Responsive positioning (above/below button based on available space)
   - Fixed positioning to handle scrollable containers
-  
+
   @component
 -->
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
+  import type { HTMLAttributes } from 'svelte/elements';
   import {
     MoreVertical,
     SquarePen,
@@ -35,7 +36,7 @@
 
   let canEdit = $derived(!$auth.security.enabled || $auth.security.accessAllowed);
 
-  interface Props {
+  interface Props extends HTMLAttributes<HTMLDivElement> {
     /** The detection object containing data for this action menu */
     detection: Detection;
     /** Whether the species is currently excluded from detection */
@@ -78,6 +79,7 @@
     variant = 'default',
     onMenuOpen,
     onMenuClose,
+    ...rest
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -205,7 +207,7 @@
 </script>
 
 {#if canEdit || onDownload}
-  <div class={cn('relative', className)}>
+  <div {...rest} class={cn('relative', className)}>
     <button
       bind:this={buttonElement}
       onclick={handleOpen}
@@ -237,53 +239,57 @@
         )}
         role="menu"
       >
-        {#if canEdit && !detection.locked && onMarkCorrect && onMarkFalsePositive}
-          <li>
-            <button
-              onclick={() => handleAction(onMarkCorrect)}
-              class={cn(
-                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
-                itemHoverClass
-              )}
-              role="menuitem"
-            >
-              <div class="flex items-center gap-2">
-                <CircleCheck class="size-4 text-[var(--color-success)]" />
-                <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
-                {#if detection.verified === 'correct'}
-                  <span
-                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
-                    >✓</span
-                  >
-                {/if}
-              </div>
-            </button>
-          </li>
-          <li>
-            <button
-              onclick={() => handleAction(onMarkFalsePositive)}
-              class={cn(
-                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
-                itemHoverClass
-              )}
-              role="menuitem"
-            >
-              <div class="flex items-center gap-2">
-                <CircleX class="size-4 text-[var(--color-error)]" />
-                <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
-                {#if detection.verified === 'false_positive'}
-                  <span
-                    class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
-                    >✗</span
-                  >
-                {/if}
-              </div>
-            </button>
-          </li>
+        {#if canEdit && !detection.locked && (onMarkCorrect || onMarkFalsePositive)}
+          {#if onMarkCorrect}
+            <li>
+              <button
+                onclick={() => handleAction(onMarkCorrect)}
+                class={cn(
+                  'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                  itemHoverClass
+                )}
+                role="menuitem"
+              >
+                <div class="flex items-center gap-2">
+                  <CircleCheck class="size-4 text-[var(--color-success)]" />
+                  <span>{t('dashboard.recentDetections.actions.markCorrect')}</span>
+                  {#if detection.verified === 'correct'}
+                    <span
+                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                      >✓</span
+                    >
+                  {/if}
+                </div>
+              </button>
+            </li>
+          {/if}
+          {#if onMarkFalsePositive}
+            <li>
+              <button
+                onclick={() => handleAction(onMarkFalsePositive)}
+                class={cn(
+                  'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                  itemHoverClass
+                )}
+                role="menuitem"
+              >
+                <div class="flex items-center gap-2">
+                  <CircleX class="size-4 text-[var(--color-error)]" />
+                  <span>{t('dashboard.recentDetections.actions.markFalsePositive')}</span>
+                  {#if detection.verified === 'false_positive'}
+                    <span
+                      class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-[var(--color-error)]/15 text-[var(--color-error)]"
+                      >✗</span
+                    >
+                  {/if}
+                </div>
+              </button>
+            </li>
+          {/if}
           <li role="separator" class="my-1 h-px bg-[var(--color-base-300)]"></li>
         {/if}
 
-        {#if canEdit}
+        {#if canEdit && onReview}
           <li>
             <button
               onclick={() => handleAction(onReview)}
@@ -310,7 +316,9 @@
               </div>
             </button>
           </li>
+        {/if}
 
+        {#if canEdit && onToggleSpecies}
           <li>
             <button
               onclick={() => handleAction(onToggleSpecies)}
@@ -334,7 +342,9 @@
               </div>
             </button>
           </li>
+        {/if}
 
+        {#if canEdit && onToggleLock}
           <li>
             <button
               onclick={() => handleAction(onToggleLock)}
@@ -378,7 +388,8 @@
           </li>
         {/if}
 
-        {#if canEdit && !detection.locked}
+        {#if canEdit && !detection.locked && onDelete}
+          <li role="separator" class="my-1 h-px bg-[var(--color-base-300)]"></li>
           <li>
             <button
               onclick={() => handleAction(onDelete)}

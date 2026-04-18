@@ -188,13 +188,15 @@
   }
 
   async function handleMarkCorrect() {
-    if (await setDetectionVerification(detection, 'correct')) {
+    if (await setDetectionVerification(detection.id, 'correct')) {
+      detection.verified = 'correct';
       onRefresh?.();
     }
   }
 
   async function handleMarkFalsePositive() {
-    if (await setDetectionVerification(detection, 'false_positive')) {
+    if (await setDetectionVerification(detection.id, 'false_positive')) {
+      detection.verified = 'false_positive';
       onRefresh?.();
     }
   }
