@@ -596,17 +596,21 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
 		(params.SortBy != "" && params.SortBy != "date_desc")
 
+	// Resolve locale common names to scientific names before routing so every
+	// query type benefits without per-case duplication.
+	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
+		params.Species = resolved
+	}
+	if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
+		params.Search = resolved
+	}
+
 	switch params.QueryType {
 	case "hourly":
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSpecies:
 		return c.getSpeciesDetections(params.Species, params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)
 	case queryTypeSearch:
-		// Resolve a locale common name (e.g. Finnish "lehtopöllö") to its
-		// scientific name so the downstream LIKE query matches the DB column.
-		if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
-			params.Search = resolved
-		}
 		// Use advanced search if filters are present
 		if hasAdvancedFilters {
 			return c.getSearchDetectionsAdvanced(params)
