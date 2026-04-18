@@ -910,6 +910,46 @@ vi.mock('$lib/utils/security', () => ({
     if (obj == null) return { ...defaults };
     return { ...defaults, ...obj };
   }),
+  maskUrlCredentials: vi.fn((url: unknown): string => {
+    if (!url || typeof url !== 'string') {
+      return String(url ?? '');
+    }
+    try {
+      const parsed = new URL(url);
+      if (parsed.username || parsed.password) {
+        parsed.username = '***';
+        parsed.password = '***';
+        return parsed.toString();
+      }
+      return url;
+    } catch {
+      const protoEnd = url.indexOf('://');
+      if (protoEnd === -1) return url;
+      const atIndex = url.indexOf('@', protoEnd + 3);
+      if (atIndex === -1) return url;
+      return `${url.slice(0, protoEnd + 3)}***:***${url.slice(atIndex)}`;
+    }
+  }),
+  sanitizeUrlForComparison: vi.fn((url: unknown): string => {
+    if (!url || typeof url !== 'string') {
+      return String(url ?? '');
+    }
+    try {
+      const parsed = new URL(url);
+      if (parsed.username || parsed.password) {
+        parsed.username = '***';
+        parsed.password = '***';
+        return parsed.toString();
+      }
+      return url;
+    } catch {
+      const protoEnd = url.indexOf('://');
+      if (protoEnd === -1) return url;
+      const atIndex = url.indexOf('@', protoEnd + 3);
+      if (atIndex === -1) return url;
+      return `${url.slice(0, protoEnd + 3)}***:***${url.slice(atIndex)}`;
+    }
+  }),
 }));
 
 // Note: Other utility modules are not mocked globally to allow their own tests to run properly
