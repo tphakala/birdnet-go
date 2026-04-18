@@ -657,6 +657,8 @@
       },
       "actions": {
         "menuLabel": "Acties voor {species}",
+        "markCorrect": "Correct",
+        "markFalsePositive": "Onjuist",
         "review": "Herkenning beoordelen",
         "showSpecies": "Soort tonen",
         "ignoreSpecies": "Soort negeren",

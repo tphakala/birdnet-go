@@ -657,6 +657,8 @@
       },
       "actions": {
         "menuLabel": "Aktionen für {species}",
+        "markCorrect": "Richtig",
+        "markFalsePositive": "Falsch",
         "review": "Erkennung überprüfen",
         "showSpecies": "Art anzeigen",
         "ignoreSpecies": "Art ignorieren",
