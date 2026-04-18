@@ -418,12 +418,18 @@ func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log lo
 	return nil
 }
 
-// migrateTables performs the actual table migrations
-func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
-	tableMappings := []struct {
-		model any
-		name  string
-	}{
+// legacyEntityMapping holds a GORM model pointer paired with its physical table name.
+// Centralising this list lets both migrateTables and the stale-index reconciler
+// iterate the same entities in the same order.
+type legacyEntityMapping struct {
+	model any
+	name  string
+}
+
+// legacyEntities returns the ordered list of legacy-schema entities that
+// performAutoMigration manages. Callers must not mutate the returned slice.
+func legacyEntities() []legacyEntityMapping {
+	return []legacyEntityMapping{
 		{&Note{}, "notes"},
 		{&Results{}, "results"},
 		{&NoteReview{}, "note_reviews"},
@@ -436,6 +442,11 @@ func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
 		{&ThresholdEvent{}, "threshold_events"},            // BG-59: Threshold change history
 		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
 	}
+}
+
+// migrateTables performs the actual table migrations
+func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
+	tableMappings := legacyEntities()
 
 	GetLogger().Debug("Starting table migrations",
 		logger.Int("table_count", len(tableMappings)))
