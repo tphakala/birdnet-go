@@ -215,3 +215,44 @@ func TestReconcile_MySQL_EmptyDBName(t *testing.T) {
 	after := mysqlUniqueIndexNames(t, "dynamic_thresholds")
 	assert.ElementsMatch(t, before, after, "empty dbName path must be a no-op")
 }
+
+// TestReconcile_MySQL_ToleratesAlreadyDropped simulates the concurrent-drop
+// race: the reconciler reads the stale index into memory, the operator (or
+// another starting instance) drops it, and then the reconciler's DROP INDEX
+// should not bubble MySQL error 1091 back as a failure.
+func TestReconcile_MySQL_ToleratesAlreadyDropped(t *testing.T) {
+	resetMySQLDynamicThresholds(t)
+	require.NoError(t, reconTestDB.Exec(`
+		CREATE TABLE dynamic_thresholds (
+			id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+			species_name VARCHAR(200) NOT NULL,
+			model_name VARCHAR(100) NOT NULL DEFAULT 'BirdNET',
+			scientific_name VARCHAR(200),
+			level INT NOT NULL DEFAULT 0,
+			current_value DOUBLE NOT NULL,
+			base_threshold DOUBLE NOT NULL,
+			high_conf_count INT NOT NULL DEFAULT 0,
+			valid_hours INT NOT NULL,
+			expires_at DATETIME NOT NULL,
+			last_triggered DATETIME NOT NULL,
+			first_created DATETIME NOT NULL,
+			updated_at DATETIME NOT NULL,
+			trigger_count INT NOT NULL DEFAULT 0,
+			UNIQUE KEY idx_dt_species_legacy (species_name)
+		) ENGINE=InnoDB
+	`).Error)
+
+	// Directly drop the stale index first to simulate a concurrent dropper.
+	// The reconciler will still think the index exists from its earlier read,
+	// but the low-level dropUniqueIndex call must swallow MySQL error 1091.
+	idx := dbUniqueIndex{
+		Name:    "idx_dt_species_legacy",
+		Table:   "dynamic_thresholds",
+		Columns: []string{"species_name"},
+	}
+	require.NoError(t, reconTestDB.Exec(
+		"ALTER TABLE `dynamic_thresholds` DROP INDEX `idx_dt_species_legacy`").Error,
+		"precondition: first drop should succeed")
+	assert.NoError(t, dropUniqueIndex(reconTestDB, "mysql", idx),
+		"second drop via reconciler helper must swallow MySQL error 1091")
+}

@@ -654,6 +654,12 @@ const (
 	// "Duplicate key name '%s'"
 	mysqlErrDupKeyName uint16 = 1061
 
+	// mysqlErrCantDropFieldOrKey is MySQL error 1091 (ER_CANT_DROP_FIELD_OR_KEY):
+	// "Can't DROP '%s'; check that column/key exists". Returned when a DROP
+	// INDEX targets an index that no longer exists (e.g., a concurrent process
+	// already dropped it).
+	mysqlErrCantDropFieldOrKey uint16 = 1091
+
 	// mysqlErrIllegalHA is MySQL error 1031 (ER_ILLEGAL_HA):
 	// "Table storage engine for '%s' doesn't have this option"
 	// Returned when running OPTIMIZE TABLE on InnoDB tables.

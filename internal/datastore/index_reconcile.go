@@ -5,12 +5,32 @@
 // from UNIQUE(species_name) to a composite UNIQUE(species_name, model_name),
 // existing MySQL/SQLite DBs retained the old single-column index. The stale
 // constraint then blocks legitimate composite-valid inserts and, on MySQL,
-// causes AutoMigrate itself to fail on restart with Error 1062. This
-// reconciler detects DB unique indexes whose column set matches no
-// entity-declared unique index and drops them before AutoMigrate runs.
+// causes AutoMigrate itself to fail on restart with Error 1062.
+//
+// Drop policy (conservative): the reconciler only drops a live unique index
+// when its column set is a strict subset of some declared unique index's
+// column set on the same entity. Exact matches are preserved (equivalent
+// constraint). Supersets, unrelated column sets, and manually added unique
+// constraints are all preserved. This targets the realistic legacy shape of
+// narrower-precursor indexes that became part of a composite, without
+// collateral damage to admin-added indexes or newer schemas the current
+// process doesn't know about (e.g., rolling downgrade).
+//
+// Tag coverage: only indexes declared via `gorm:"uniqueIndex[:name]"` tags
+// are recognised by the GORM schema parser (stmt.Schema.ParseIndexes()). The
+// bare `gorm:"unique"` column attribute emits an inline UNIQUE constraint
+// that does NOT appear as a parseable index; adding such tags to legacy
+// entities would cause the reconciler to misclassify the corresponding DB
+// index as undeclared. Today's legacy entities use `uniqueIndex` only.
 //
 // Scope: legacy entities in internal/datastore/model.go. The v2 schema has
 // its own migration path and is out of scope.
+//
+// MySQL case sensitivity: queries against information_schema use the dbName
+// and entity table name verbatim. On hosts with `lower_case_table_names=0`
+// and mixed-case table names, introspection can silently return no rows and
+// the reconciler becomes a no-op for that table. This matches the existing
+// image_caches schema-check behaviour in validateAndFixSchema.
 //
 // Symptoms addressed: MySQL Error 1062 "Duplicate entry for key
 // idx_dt_species_model" on every service start, and SQLite "UNIQUE
@@ -105,6 +125,39 @@ func indexIsDeclared(live dbUniqueIndex, declared []entityUniqueIndex) bool {
 	return false
 }
 
+// columnSubset reports whether every column in sub is also in super. Order
+// is ignored. An empty sub is considered a subset of any super.
+func columnSubset(sub, super []string) bool {
+	if len(sub) > len(super) {
+		return false
+	}
+	seen := make(map[string]struct{}, len(super))
+	for _, c := range super {
+		seen[c] = struct{}{}
+	}
+	for _, c := range sub {
+		if _, ok := seen[c]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// indexIsLegacyPrecursor reports whether the live DB unique index is a
+// strict subset of any entity-declared unique index. This is the drop
+// criterion for the reconciler: a legacy single-column or narrower
+// composite unique index that was superseded by a broader declared
+// composite (e.g. UNIQUE(species_name) -> UNIQUE(species_name, model_name)).
+// Equal column sets are handled by indexIsDeclared and must be preserved.
+func indexIsLegacyPrecursor(live dbUniqueIndex, declared []entityUniqueIndex) bool {
+	for _, d := range declared {
+		if columnSubset(live.Columns, d.Columns) && !columnSetsEqual(live.Columns, d.Columns) {
+			return true
+		}
+	}
+	return false
+}
+
 // reconcileLegacyUniqueIndexes drops DB-side unique indexes that the given
 // GORM entities no longer declare. It is intended to run before AutoMigrate
 // so that stale constraints don't block legitimate schema evolution.
@@ -165,19 +218,29 @@ func reconcileLegacyUniqueIndexes(db *gorm.DB, dbType, dbName string, entities [
 			if indexIsDeclared(idx, declared) {
 				continue
 			}
-			GetLogger().Info("Dropping stale unique index not declared by entity",
+			if !indexIsLegacyPrecursor(idx, declared) {
+				// Preserve indexes that aren't a strict subset of a declared
+				// unique index. Covers admin-added stricter constraints,
+				// unrelated unique indexes, and any newer declarations a
+				// rolling-downgrade process would otherwise delete.
+				continue
+			}
+			GetLogger().Info("Dropping legacy precursor unique index superseded by declared composite",
 				logger.String("db_type", dialect),
 				logger.String("table", idx.Table),
 				logger.String("index", idx.Name),
 				logger.Any("columns", idx.Columns))
 			if err := dropUniqueIndex(db, dialect, idx); err != nil {
-				return errors.New(err).
-					Component("datastore").
-					Category(errors.CategoryDatabase).
-					Context("operation", "reconcile_drop_index").
-					Context("table", idx.Table).
-					Context("index", idx.Name).
-					Build()
+				// Non-fatal: log and continue so one problematic index doesn't
+				// block reconciliation of the rest. The caller already treats
+				// reconciler failures as warnings, but per-index resilience is
+				// cheaper than restarting the loop.
+				GetLogger().Warn("Failed to drop legacy precursor index, continuing",
+					logger.String("db_type", dialect),
+					logger.String("table", idx.Table),
+					logger.String("index", idx.Name),
+					logger.Error(err))
+				continue
 			}
 		}
 	}
@@ -283,11 +346,18 @@ func dropUniqueIndex(db *gorm.DB, dialect string, idx dbUniqueIndex) error {
 		if !isSafeIdentifier(idx.Name) || !isSafeIdentifier(idx.Table) {
 			return fmt.Errorf("unsafe identifier refusing drop: table=%q index=%q", idx.Table, idx.Name)
 		}
-		return db.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", idx.Table, idx.Name)).Error
+		err := db.Exec(fmt.Sprintf("ALTER TABLE `%s` DROP INDEX `%s`", idx.Table, idx.Name)).Error
+		if err != nil && isMySQLError(err, mysqlErrCantDropFieldOrKey) {
+			// Another instance (or an operator) dropped the index between our
+			// read and this statement. The intent is met; treat as success.
+			return nil
+		}
+		return err
 	case DialectSQLite:
 		if !isSafeIdentifier(idx.Name) {
 			return fmt.Errorf("unsafe identifier refusing drop: index=%q", idx.Name)
 		}
+		// SQLite's IF EXISTS already handles the concurrent-drop race.
 		return db.Exec(fmt.Sprintf("DROP INDEX IF EXISTS %q", idx.Name)).Error
 	default:
 		return fmt.Errorf("unsupported dialect: %s", dialect)

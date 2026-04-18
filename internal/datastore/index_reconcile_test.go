@@ -178,6 +178,50 @@ func TestReconcileLegacyUniqueIndexes_SQLite_IgnoresAutoIndex(t *testing.T) {
 	require.NoError(t, db.Exec(`INSERT INTO noisy(k, v) VALUES ('a', '1')`).Error)
 }
 
+// TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset verifies the
+// reconciler does NOT drop a stricter admin-added unique index whose
+// column set is a superset of a declared composite. Preserving such
+// constraints is required so the reconciler cannot relax uniqueness rules
+// the operator explicitly imposed.
+func TestReconcileLegacyUniqueIndexes_SQLite_PreservesSuperset(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
+	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
+	// Simulated admin-added stricter constraint: composite over declared
+	// (species_name, model_name) plus an extra column.
+	require.NoError(t, db.Exec(`
+		CREATE UNIQUE INDEX idx_dt_admin_superset
+		ON dynamic_thresholds(species_name, model_name, scientific_name)
+	`).Error)
+
+	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
+
+	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
+	assert.Contains(t, indexes, "idx_dt_admin_superset",
+		"superset unique index must be preserved (not a legacy precursor)")
+	assert.Contains(t, indexes, "idx_dt_species_model",
+		"declared composite must still be present")
+}
+
+// TestReconcileLegacyUniqueIndexes_SQLite_PreservesUnrelated verifies the
+// reconciler does NOT drop unique indexes whose column set does not overlap
+// with any declared unique index. Prevents collateral damage when an
+// operator added domain-specific uniqueness rules.
+func TestReconcileLegacyUniqueIndexes_SQLite_PreservesUnrelated(t *testing.T) {
+	t.Parallel()
+
+	db := openSQLiteTestDB(t)
+	require.NoError(t, db.AutoMigrate(&DynamicThreshold{}))
+	require.NoError(t, db.Exec(`CREATE UNIQUE INDEX idx_dt_unrelated ON dynamic_thresholds(scientific_name)`).Error)
+
+	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&DynamicThreshold{}}))
+
+	indexes := sqliteIndexNames(t, db, "dynamic_thresholds")
+	assert.Contains(t, indexes, "idx_dt_unrelated",
+		"unrelated unique index (columns not a subset of any declared) must be preserved")
+}
+
 // TestReconcileLegacyUniqueIndexes_SQLite_PreservesData verifies the drop
 // does not destroy existing rows.
 func TestReconcileLegacyUniqueIndexes_SQLite_PreservesData(t *testing.T) {
