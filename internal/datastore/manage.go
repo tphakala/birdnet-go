@@ -318,8 +318,9 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 	// UNIQUE(species_name) index lingers alongside the composite
 	// idx_dt_species_model. Non-fatal on failure: log and continue so a
 	// reconciler bug can't brick startup.
-	entityModels := make([]any, 0, len(legacyEntities()))
-	for _, m := range legacyEntities() {
+	mappings := legacyEntities()
+	entityModels := make([]any, 0, len(mappings))
+	for _, m := range mappings {
 		entityModels = append(entityModels, m.model)
 	}
 	if err := reconcileLegacyUniqueIndexes(db, dbType, dbName, entityModels); err != nil {

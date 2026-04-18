@@ -151,6 +151,18 @@ func TestReconcileLegacyUniqueIndexes_SQLite_Idempotent(t *testing.T) {
 	assert.ElementsMatch(t, before, after, "idempotent runs must not change index set")
 }
 
+// noisyEntity is a test-only GORM entity pinned to the "noisy" table name.
+// The explicit TableName() prevents GORM's default pluralization from
+// resolving the struct to "noisies", which would make the autoindex test
+// vacuous (the reconciler would skip a non-existent table).
+type noisyEntity struct {
+	K string `gorm:"primaryKey;column:k"`
+	V string `gorm:"column:v"`
+}
+
+// TableName overrides GORM's naming strategy for this test entity.
+func (noisyEntity) TableName() string { return "noisy" }
+
 // TestReconcileLegacyUniqueIndexes_SQLite_IgnoresAutoIndex verifies the
 // reconciler does not attempt to drop sqlite_autoindex_* internal indexes
 // that SQLite creates for PRIMARY KEY / inline UNIQUE constraints.
@@ -164,15 +176,10 @@ func TestReconcileLegacyUniqueIndexes_SQLite_IgnoresAutoIndex(t *testing.T) {
 
 	// Give the reconciler an entity that maps to the same table name but
 	// declares no unique indexes at all, so the implicit PK autoindex would
-	// be "stale" by naive column-set comparison.
-	type noisy struct {
-		K string `gorm:"primaryKey;column:k"`
-		V string `gorm:"column:v"`
-	}
-	// This must not error and must not drop anything (DROP INDEX on an
-	// autoindex name would fail with "index associated with UNIQUE or
-	// PRIMARY KEY constraint cannot be dropped").
-	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&noisy{}}))
+	// be "stale" by naive column-set comparison. The explicit TableName()
+	// method overrides GORM's default pluralization (which would resolve the
+	// struct "noisy" to "noisies" and skip the seeded table entirely).
+	require.NoError(t, reconcileLegacyUniqueIndexes(db, "sqlite", "", []any{&noisyEntity{}}))
 
 	// Verify the table is still usable.
 	require.NoError(t, db.Exec(`INSERT INTO noisy(k, v) VALUES ('a', '1')`).Error)
