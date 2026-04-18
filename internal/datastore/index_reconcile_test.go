@@ -19,17 +19,23 @@ import (
 
 // openSQLiteTestDB returns a fresh in-memory SQLite GORM DB with silent logging.
 // Callers get a clean schema each time; the DB is closed when t ends.
+//
+// SetMaxOpenConns(1) pins the pool to a single connection so the ":memory:"
+// database stays consistent across all queries in the test. Without this,
+// database/sql's default connection pool can create multiple connections,
+// each with its own independent in-memory database, leading to flaky "no
+// such table" errors under concurrent query paths.
 func openSQLiteTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	require.NoError(t, err, "open in-memory sqlite")
+	sqlDB, err := db.DB()
+	require.NoError(t, err, "retrieve *sql.DB from gorm")
+	sqlDB.SetMaxOpenConns(1)
 	t.Cleanup(func() {
-		sqlDB, err := db.DB()
-		if err == nil {
-			_ = sqlDB.Close()
-		}
+		_ = sqlDB.Close()
 	})
 	return db
 }

@@ -43,7 +43,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 )
@@ -187,11 +186,13 @@ func reconcileLegacyUniqueIndexes(db *gorm.DB, dbType, dbName string, entities [
 	for _, entity := range entities {
 		tableName, declared, err := declaredUniqueIndexes(db, entity)
 		if err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "reconcile_parse_entity").
-				Build()
+			// Per-entity failure must not block reconciliation of the rest.
+			// A parse failure here indicates a programming error on this
+			// entity only; log and move on.
+			GetLogger().Warn("Failed to parse entity for index reconciliation, skipping",
+				logger.String("entity", fmt.Sprintf("%T", entity)),
+				logger.Error(err))
+			continue
 		}
 
 		if !db.Migrator().HasTable(entity) {
@@ -206,12 +207,15 @@ func reconcileLegacyUniqueIndexes(db *gorm.DB, dbType, dbName string, entities [
 			live, err = liveUniqueIndexesMySQL(db, dbName, tableName)
 		}
 		if err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "reconcile_read_live_indexes").
-				Context("table", tableName).
-				Build()
+			// Live-index introspection failure for one table should not
+			// abort the whole reconciliation loop. A transient error or
+			// permission problem on table X shouldn't leave tables Y and Z
+			// with stale indexes.
+			GetLogger().Warn("Failed to read live indexes for table, skipping",
+				logger.String("db_type", dialect),
+				logger.String("table", tableName),
+				logger.Error(err))
+			continue
 		}
 
 		for _, idx := range live {
