@@ -226,7 +226,12 @@
         bind:this={menuElement}
         in:dropdown
         out:dropdown={{ duration: 100 }}
-        class="fixed menu p-2 shadow-lg bg-[var(--color-base-100)] rounded-box w-52 border border-[var(--color-base-300)]"
+        class={cn(
+          'fixed z-[1100] p-2 shadow-lg rounded-lg w-52 border',
+          variant === 'overlay'
+            ? 'bg-slate-800 border-slate-700 text-slate-100'
+            : 'bg-[var(--color-base-100)] border-[var(--color-base-300)]'
+        )}
         role="menu"
       >
         {#if !detection.locked}
@@ -278,11 +283,6 @@
             <div class="flex items-center gap-2">
               <SquarePen class="size-4" />
               <span>{t('dashboard.recentDetections.actions.review')}</span>
-              {#if detection.verified === 'correct'}
-                <span class="badge badge-success badge-sm">✓</span>
-              {:else if detection.verified === 'false_positive'}
-                <span class="badge badge-error badge-sm">✗</span>
-              {/if}
             </div>
           </button>
         </li>
@@ -362,10 +362,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  .menu {
-    /* Above cards and header dropdowns, below modals */
-    z-index: 1100;
-  }
-</style>
