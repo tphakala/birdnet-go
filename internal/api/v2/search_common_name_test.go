@@ -41,82 +41,120 @@ func TestResolveSpeciesToScientific(t *testing.T) {
 	c := setupSearchTestController(t, testLabels)
 
 	tests := []struct {
-		name  string
-		input string
-		want  string
+		name    string
+		input   string
+		want    string
+		wantHit bool
 	}{
 		{
-			name:  "empty string returns empty string",
-			input: "",
-			want:  "",
+			name:    "empty string returns empty string",
+			input:   "",
+			want:    "",
+			wantHit: false,
 		},
 		{
-			name:  "whitespace-only returns empty string",
-			input: "   ",
-			want:  "",
+			name:    "whitespace-only returns empty string without hit",
+			input:   "   ",
+			want:    "",
+			wantHit: false,
 		},
 		{
-			name:  "exact common-name match",
-			input: "Tawny Owl",
-			want:  "Strix aluco",
+			name:    "exact common-name match",
+			input:   "Tawny Owl",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
-			name:  "case-insensitive match lowercase",
-			input: "tawny owl",
-			want:  "Strix aluco",
+			name:    "case-insensitive match lowercase",
+			input:   "tawny owl",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
-			name:  "case-insensitive match uppercase",
-			input: "TAWNY OWL",
-			want:  "Strix aluco",
+			name:    "case-insensitive match uppercase",
+			input:   "TAWNY OWL",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
-			name:  "non-ASCII common name (Finnish)",
-			input: "Lehtopöllö",
-			want:  "Strix aluco",
+			name:    "non-ASCII common name (Finnish)",
+			input:   "Lehtopöllö",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
-			name:  "non-ASCII common name lowercase (Finnish)",
-			input: "lehtopöllö",
-			want:  "Strix aluco",
+			name:    "non-ASCII common name lowercase (Finnish)",
+			input:   "lehtopöllö",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
-			name:  "scientific name passes through unchanged",
-			input: "Strix aluco",
-			want:  "Strix aluco",
+			name:    "scientific name passes through unchanged",
+			input:   "Strix aluco",
+			want:    "Strix aluco",
+			wantHit: false,
 		},
 		{
-			name:  "partial scientific name passes through unchanged",
-			input: "Turdus",
-			want:  "Turdus",
+			name:    "partial scientific name passes through unchanged",
+			input:   "Turdus",
+			want:    "Turdus",
+			wantHit: false,
 		},
 		{
-			name:  "unknown text passes through unchanged",
-			input: "xyzzy",
-			want:  "xyzzy",
+			name:    "unknown text passes through unchanged",
+			input:   "xyzzy",
+			want:    "xyzzy",
+			wantHit: false,
 		},
 		{
-			name:  "common name with surrounding whitespace resolves correctly",
-			input: "  Tawny Owl  ",
-			want:  "Strix aluco",
+			name:    "common name with surrounding whitespace resolves correctly",
+			input:   "  Tawny Owl  ",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 		{
 			// macOS and some composing keyboards submit NFD bytes for
 			// diacritics. The resolver must normalise to NFC so labels
 			// (which ship as NFC) still match.
-			name:  "NFD-form diacritic matches NFC-stored label",
-			input: "Lehtopo\u0308llo\u0308",
-			want:  "Strix aluco",
+			name:    "NFD-form diacritic matches NFC-stored label",
+			input:   "Lehtopo\u0308llo\u0308",
+			want:    "Strix aluco",
+			wantHit: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			got := c.resolveSpeciesToScientific(tt.input)
+			got, hit := c.resolveSpeciesToScientific(tt.input)
 			assert.Equal(t, tt.want, got)
+			assert.Equal(t, tt.wantHit, hit)
 		})
 	}
+}
+
+// TestResolveSpeciesToScientific_AmbiguousCommonName verifies that when two
+// species share the same common name, the resolver passes the query through
+// untranslated (hit=false) rather than resolving it to an arbitrary species
+// based on label order.
+func TestResolveSpeciesToScientific_AmbiguousCommonName(t *testing.T) {
+	t.Parallel()
+
+	ambiguousLabels := []string{
+		"Strix aluco_Owl",
+		"Bubo bubo_Owl",
+		"Turdus merula_Eurasian Blackbird",
+	}
+	c := setupSearchTestController(t, ambiguousLabels)
+
+	resolved, hit := c.resolveSpeciesToScientific("Owl")
+	assert.Equal(t, "Owl", resolved, "ambiguous common name should pass through untranslated")
+	assert.False(t, hit, "ambiguous common name should not register as a hit")
+
+	// Non-ambiguous names must still resolve correctly.
+	resolved, hit = c.resolveSpeciesToScientific("Eurasian Blackbird")
+	assert.Equal(t, "Turdus merula", resolved)
+	assert.True(t, hit)
 }
 
 // TestUpdateCommonNameMap_PopulatesBothMaps verifies that UpdateCommonNameMap
@@ -147,6 +185,46 @@ func TestUpdateCommonNameMap_PopulatesBothMaps(t *testing.T) {
 	require.NotNil(t, commonToSci)
 	assert.Equal(t, "Strix aluco", commonToSci["tawny owl"])
 	assert.Equal(t, "Parus major", commonToSci["great tit"])
+}
+
+// TestBuildNameMaps_AmbiguousCommonName verifies that a common name mapped
+// by two different scientific names is removed from commonToSci so the
+// search resolver passes ambiguous queries through untranslated.
+func TestBuildNameMaps_AmbiguousCommonName(t *testing.T) {
+	t.Parallel()
+
+	nm := buildNameMaps([]string{
+		"Strix aluco_Owl",
+		"Bubo bubo_Owl",
+		"Parus major_Great Tit",
+	})
+	require.NotNil(t, nm)
+
+	// sciToCommon keeps both species; scientific names are always unique.
+	assert.Equal(t, "Owl", nm.sciToCommon["Strix aluco"])
+	assert.Equal(t, "Owl", nm.sciToCommon["Bubo bubo"])
+
+	// commonToSci must NOT contain the ambiguous key.
+	_, ok := nm.commonToSci["owl"]
+	assert.False(t, ok, "ambiguous common-name key should be removed")
+
+	// A third label that repeats an already-ambiguous key should not
+	// accidentally restore the key.
+	nm = buildNameMaps([]string{
+		"Strix aluco_Owl",
+		"Bubo bubo_Owl",
+		"Tyto alba_Owl",
+	})
+	_, ok = nm.commonToSci["owl"]
+	assert.False(t, ok)
+
+	// Non-ambiguous names remain.
+	nm = buildNameMaps([]string{
+		"Strix aluco_Owl",
+		"Bubo bubo_Owl",
+		"Parus major_Great Tit",
+	})
+	assert.Equal(t, "Parus major", nm.commonToSci["great tit"])
 }
 
 // TestBuildNameMaps_MalformedLabels verifies that labels missing a scientific

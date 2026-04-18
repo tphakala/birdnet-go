@@ -169,15 +169,19 @@ func normalizeForLookup(s string) string {
 }
 
 // buildNameMaps parses a BirdNET label list ("ScientificName_CommonName")
-// and builds both lookup maps in a single pass. If several labels share the
-// same common name (a cross-species collision or a locale quirk), the last
-// one wins in commonToSci; scientific names are unique so sciToCommon is not
-// affected.
+// and builds both lookup maps in a single pass. If two or more labels share
+// the same normalised common name but map to different scientific names,
+// the common-name key is removed from commonToSci so that search queries
+// matching an ambiguous common name pass through untranslated; resolving
+// them to an arbitrary species based on label order would silently hide
+// valid matches. sciToCommon is not affected because scientific names are
+// unique per label.
 func buildNameMaps(labels []string) *nameMaps {
 	nm := &nameMaps{
 		sciToCommon: make(map[string]string, len(labels)),
 		commonToSci: make(map[string]string, len(labels)),
 	}
+	ambiguous := make(map[string]struct{})
 	for _, label := range labels {
 		scientificName, commonName, found := strings.Cut(label, "_")
 		if !found {
@@ -189,7 +193,17 @@ func buildNameMaps(labels []string) *nameMaps {
 			continue
 		}
 		nm.sciToCommon[scientificName] = commonName
-		nm.commonToSci[normalizeForLookup(commonName)] = scientificName
+
+		key := normalizeForLookup(commonName)
+		if _, seen := ambiguous[key]; seen {
+			continue
+		}
+		if existing, exists := nm.commonToSci[key]; exists && existing != scientificName {
+			ambiguous[key] = struct{}{}
+			delete(nm.commonToSci, key)
+			continue
+		}
+		nm.commonToSci[key] = scientificName
 	}
 	return nm
 }
