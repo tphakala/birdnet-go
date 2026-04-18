@@ -17,7 +17,16 @@
 <script lang="ts">
   import { cn } from '$lib/utils/cn';
   import type { Detection } from '$lib/types/detection.types';
-  import { MoreVertical, SquarePen, Eye, EyeOff, Lock, LockOpen, Trash2 } from '@lucide/svelte';
+  import {
+    MoreVertical,
+    SquarePen,
+    Eye,
+    EyeOff,
+    Lock,
+    LockOpen,
+    Trash2,
+    Download,
+  } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { auth } from '$lib/stores/auth';
   import { t } from '$lib/i18n';
@@ -37,6 +46,8 @@
     onToggleLock?: () => void;
     /** Callback fired when user deletes the detection */
     onDelete?: () => void;
+    /** Callback fired when user downloads the detection audio */
+    onDownload?: () => void;
     /** Additional CSS classes to apply to the component */
     className?: string;
     /** Visual variant - `default` for in-row use, `overlay` for spectrogram overlay */
@@ -54,6 +65,7 @@
     onToggleSpecies,
     onToggleLock,
     onDelete,
+    onDownload,
     className = '',
     variant = 'default',
     onMenuOpen,
@@ -268,6 +280,21 @@
             </div>
           </button>
         </li>
+
+        {#if onDownload}
+          <li>
+            <button
+              onclick={() => handleAction(onDownload)}
+              class="text-sm w-full text-left"
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <Download class="size-4" />
+                <span>{t('media.audio.download')}</span>
+              </div>
+            </button>
+          </li>
+        {/if}
 
         {#if !detection.locked}
           <li>

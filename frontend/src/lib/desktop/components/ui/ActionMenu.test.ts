@@ -390,4 +390,19 @@ describe('ActionMenu', () => {
     const button = screen.getByRole('button', { name: /actions menu/i });
     expect(button.className).toContain('am-trigger-overlay');
   });
+
+  it('does not render Download item when onDownload is not provided', async () => {
+    render(ActionMenu, { props: { detection: createMockDetection() } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    expect(screen.queryByRole('menuitem', { name: /download/i })).not.toBeInTheDocument();
+  });
+
+  it('renders Download item and fires onDownload when provided', async () => {
+    const onDownload = vi.fn();
+    render(ActionMenu, { props: { detection: createMockDetection(), onDownload } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+    const item = screen.getByRole('menuitem', { name: /download/i });
+    await fireEvent.click(item);
+    expect(onDownload).toHaveBeenCalledTimes(1);
+  });
 });
