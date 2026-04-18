@@ -65,10 +65,7 @@ func setupInsightsTestController(t *testing.T, mock *mockInsightsRepo) (*echo.Ec
 		},
 		insightsRepo: mock,
 	}
-	controller.nameMaps.Store(buildNameMaps([]string{
-		"Turdus merula_Eurasian Blackbird",
-		"Parus major_Great Tit",
-	}))
+	controller.UpdateCommonNameMap(controller.Settings.BirdNET.Labels)
 	return e, controller
 }
 
