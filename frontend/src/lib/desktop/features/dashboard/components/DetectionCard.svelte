@@ -22,7 +22,7 @@
   import MoonBadge from './MoonBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
-  import CardActionMenu from './CardActionMenu.svelte';
+  import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import AudioSettingsButton from './AudioSettingsButton.svelte';
   import { cn } from '$lib/utils/cn';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
@@ -44,6 +44,8 @@
     onFreezeStart?: () => void;
     onFreezeEnd?: () => void;
     onReview?: () => void;
+    onMarkCorrect?: () => void;
+    onMarkFalsePositive?: () => void;
     onToggleSpecies?: () => void;
     onToggleLock?: () => void;
     onDelete?: () => void;
@@ -56,6 +58,8 @@
     onFreezeStart,
     onFreezeEnd,
     onReview,
+    onMarkCorrect,
+    onMarkFalsePositive,
     onToggleSpecies,
     onToggleLock,
     onDelete,
@@ -269,9 +273,12 @@
       onMenuOpen={handleAudioSettingsOpen}
       onMenuClose={handleAudioSettingsClose}
     />
-    <CardActionMenu
+    <ActionMenu
       {detection}
       {isExcluded}
+      variant="overlay"
+      {onMarkCorrect}
+      {onMarkFalsePositive}
       {onReview}
       {onToggleSpecies}
       {onToggleLock}
