@@ -137,6 +137,7 @@
   function handleAction(action: (() => void) | undefined) {
     isOpen = false;
     onMenuClose?.();
+    buttonElement?.focus();
     if (action) {
       action();
     }
@@ -203,8 +204,8 @@
   });
 </script>
 
-{#if canEdit}
-  <div class={cn('dropdown relative', className)}>
+{#if canEdit || onDownload}
+  <div class={cn('relative', className)}>
     <button
       bind:this={buttonElement}
       onclick={handleOpen}
@@ -222,6 +223,8 @@
     </button>
 
     {#if isOpen}
+      {@const itemHoverClass =
+        variant === 'overlay' ? 'hover:bg-white/10' : 'hover:bg-[var(--color-base-200)]'}
       <ul
         bind:this={menuElement}
         in:dropdown
@@ -229,16 +232,19 @@
         class={cn(
           'fixed z-[1100] p-2 shadow-lg rounded-lg w-52 border',
           variant === 'overlay'
-            ? 'bg-slate-800 border-slate-700 text-slate-100'
+            ? 'bg-[var(--color-base-100)]/95 border-[var(--color-base-300)]/60 backdrop-blur-md'
             : 'bg-[var(--color-base-100)] border-[var(--color-base-300)]'
         )}
         role="menu"
       >
-        {#if !detection.locked}
+        {#if canEdit && !detection.locked}
           <li>
             <button
               onclick={() => handleAction(onMarkCorrect)}
-              class="text-sm w-full text-left"
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
               role="menuitem"
             >
               <div class="flex items-center gap-2">
@@ -256,7 +262,10 @@
           <li>
             <button
               onclick={() => handleAction(onMarkFalsePositive)}
-              class="text-sm w-full text-left"
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
               role="menuitem"
             >
               <div class="flex items-center gap-2">
@@ -271,69 +280,83 @@
               </div>
             </button>
           </li>
-          <li class="my-1 h-px bg-[var(--color-base-300)]" aria-hidden="true"></li>
+          <li role="separator" class="my-1 h-px bg-[var(--color-base-300)]"></li>
         {/if}
 
-        <li>
-          <button
-            onclick={() => handleAction(onReview)}
-            class="text-sm w-full text-left"
-            role="menuitem"
-          >
-            <div class="flex items-center gap-2">
-              <SquarePen class="size-4" />
-              <span>{t('dashboard.recentDetections.actions.review')}</span>
-            </div>
-          </button>
-        </li>
+        {#if canEdit}
+          <li>
+            <button
+              onclick={() => handleAction(onReview)}
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                <SquarePen class="size-4" />
+                <span>{t('dashboard.recentDetections.actions.review')}</span>
+              </div>
+            </button>
+          </li>
 
-        <li>
-          <button
-            onclick={() => handleAction(onToggleSpecies)}
-            class="text-sm w-full text-left"
-            role="menuitem"
-          >
-            <div class="flex items-center gap-2">
-              {#if isExcluded}
-                <Eye class="size-4" />
-              {:else}
-                <EyeOff class="size-4" />
-              {/if}
-              {#if isExcluded}
-                <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
-              {:else}
-                <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
-              {/if}
-            </div>
-          </button>
-        </li>
+          <li>
+            <button
+              onclick={() => handleAction(onToggleSpecies)}
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                {#if isExcluded}
+                  <Eye class="size-4" />
+                {:else}
+                  <EyeOff class="size-4" />
+                {/if}
+                {#if isExcluded}
+                  <span>{t('dashboard.recentDetections.actions.showSpecies')}</span>
+                {:else}
+                  <span>{t('dashboard.recentDetections.actions.ignoreSpecies')}</span>
+                {/if}
+              </div>
+            </button>
+          </li>
 
-        <li>
-          <button
-            onclick={() => handleAction(onToggleLock)}
-            class="text-sm w-full text-left"
-            role="menuitem"
-          >
-            <div class="flex items-center gap-2">
-              {#if detection.locked}
-                <Lock class="size-4" />
-              {:else}
-                <LockOpen class="size-4" />
-              {/if}
-              {#if detection.locked}
-                <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
-              {:else}
-                <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
-              {/if}
-            </div>
-          </button>
-        </li>
+          <li>
+            <button
+              onclick={() => handleAction(onToggleLock)}
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
+              role="menuitem"
+            >
+              <div class="flex items-center gap-2">
+                {#if detection.locked}
+                  <Lock class="size-4" />
+                {:else}
+                  <LockOpen class="size-4" />
+                {/if}
+                {#if detection.locked}
+                  <span>{t('dashboard.recentDetections.actions.unlockDetection')}</span>
+                {:else}
+                  <span>{t('dashboard.recentDetections.actions.lockDetection')}</span>
+                {/if}
+              </div>
+            </button>
+          </li>
+        {/if}
 
         {#if onDownload}
           <li>
             <button
               onclick={() => handleAction(onDownload)}
-              class="text-sm w-full text-left"
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md transition-colors',
+                itemHoverClass
+              )}
               role="menuitem"
             >
               <div class="flex items-center gap-2">
@@ -344,11 +367,16 @@
           </li>
         {/if}
 
-        {#if !detection.locked}
+        {#if canEdit && !detection.locked}
           <li>
             <button
               onclick={() => handleAction(onDelete)}
-              class="text-sm w-full text-left text-[var(--color-error)]"
+              class={cn(
+                'text-sm w-full text-left px-3 py-2 rounded-md text-[var(--color-error)] transition-colors',
+                variant === 'overlay'
+                  ? 'hover:bg-[var(--color-error)]/20'
+                  : 'hover:bg-[var(--color-error)]/10'
+              )}
               role="menuitem"
             >
               <div class="flex items-center gap-2">
