@@ -151,7 +151,6 @@ The following components are located in their feature directories:
 - `DailySummaryCard.svelte` - Daily species summary with hourly heatmap
 - `DetectionCardGrid.svelte` - Card grid view of recent detections
 - `DetectionCard.svelte` - Individual detection card with spectrogram background
-- `CardActionMenu.svelte` - Dropdown action menu for detection cards
 - `PlayOverlay.svelte` - Audio play button overlay for detection cards
 - `ConfidenceBadge.svelte` - Confidence level badge display
 - `WeatherBadge.svelte` - Weather condition badge display
