@@ -208,13 +208,21 @@ func buildNameMaps(labels []string) *nameMaps {
 	return nm
 }
 
+// emptyNameMaps is returned by loadNameMaps when the atomic.Value has not been
+// populated yet (a narrow startup window before initInsightsRoutes runs). It
+// avoids allocating a fresh struct and two empty maps on every cold-path call.
+var emptyNameMaps = &nameMaps{
+	sciToCommon: map[string]string{},
+	commonToSci: map[string]string{},
+}
+
 // loadNameMaps returns the current name-maps struct. Always returns a non-nil
 // struct with non-nil inner maps so callers can index without guards.
 func (c *Controller) loadNameMaps() *nameMaps {
 	if nm, ok := c.nameMaps.Load().(*nameMaps); ok && nm != nil {
 		return nm
 	}
-	return &nameMaps{sciToCommon: map[string]string{}, commonToSci: map[string]string{}}
+	return emptyNameMaps
 }
 
 // loadCommonToScientificMap returns the current common-to-scientific lookup map.
