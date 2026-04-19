@@ -127,7 +127,6 @@
       await onConfirm();
     } catch (error) {
       logger.error('Modal onConfirm callback threw an error:', error);
-      throw error;
     } finally {
       isConfirming = false;
     }
