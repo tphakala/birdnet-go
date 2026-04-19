@@ -74,7 +74,6 @@ Performance Optimizations:
   } from '@lucide/svelte';
   import { flyout } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
-  import { loggers } from '$lib/utils/logger';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { resetDateToToday } from '$lib/utils/datePersistence';
   import LoginModal from '../components/modals/LoginModal.svelte';
@@ -82,8 +81,6 @@ Performance Optimizations:
   import { scheme } from '$lib/stores/scheme';
   import { logoStyle } from '$lib/stores/logoStyle';
   import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
-
-  const logger = loggers.ui;
 
   interface Props {
     securityEnabled?: boolean;
@@ -301,8 +298,9 @@ Performance Optimizations:
   async function handleLogout() {
     try {
       await authStore.logout();
-    } catch (error) {
-      logger.error('Logout failed:', error);
+    } catch {
+      // authStore.logout() already logs before rethrowing; swallow here
+      // to prevent an unhandled rejection from the non-awaited onclick.
     }
   }
 
