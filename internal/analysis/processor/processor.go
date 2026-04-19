@@ -1155,7 +1155,7 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 				logger.String("component", "processor"),
 				logger.String("action", "buildClipPath_fallback"))
 		})
-		fileType = "wav"
+		fileType = conf.AudioExportTypeWAV
 	}
 
 	var filename string
