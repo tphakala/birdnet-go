@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { HTMLAttributes } from 'svelte/elements';
-  import { cn } from '$lib/utils/cn.js';
+  import { cn } from '$lib/utils/cn';
   import GithubMarkSvg from '$lib/assets/icons/github-mark.svg?raw';
 
   interface Props extends HTMLAttributes<HTMLElement> {
