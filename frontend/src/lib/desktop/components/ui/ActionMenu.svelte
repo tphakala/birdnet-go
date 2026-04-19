@@ -215,7 +215,7 @@
         'am-trigger inline-flex items-center justify-center w-8 h-8 p-1 transition-colors',
         variant === 'overlay'
           ? 'am-trigger-overlay text-white bg-black/50 hover:bg-slate-700/80 backdrop-blur-sm rounded-full'
-          : 'am-trigger-default text-[var(--color-base-content)] hover:bg-[var(--color-base-200)] rounded-md'
+          : 'am-trigger-default text-[var(--color-base-content)] hover:bg-[var(--color-base-300)] rounded-md'
       )}
       aria-label="Actions menu"
       aria-haspopup="true"
