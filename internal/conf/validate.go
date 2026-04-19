@@ -1392,18 +1392,28 @@ func validateAudioSettings(settings *AudioSettings) error {
 	return nil
 }
 
-// validateExportBitrate validates the bitrate setting for lossy audio export formats
-// (mp3, aac, opus). It must end with "k" and be between 32 and 320 kbps.
+// Bitrate constraints for lossy audio export formats (mp3, aac, opus).
+// The suffix and kbps bounds are consumed by validateExportBitrate and
+// documented in the frontend's getBitrateConfig (audioValidation.ts).
+const (
+	audioExportBitrateSuffix  = "k"
+	minAudioExportBitrateKbps = 32
+	maxAudioExportBitrateKbps = 320
+)
+
+// validateExportBitrate validates the bitrate setting for lossy audio export
+// formats. The value must use the "k" suffix and fall within the supported
+// kbps range.
 func validateExportBitrate(exportType, bitrate string) error {
-	if !strings.HasSuffix(bitrate, "k") {
-		return errors.Newf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", exportType, bitrate).
+	if !strings.HasSuffix(bitrate, audioExportBitrateSuffix) {
+		return errors.Newf("invalid bitrate format for %s: %s. Must end with %q (e.g., '64k')", exportType, bitrate, audioExportBitrateSuffix).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-export-bitrate-format").
 			Context("export_type", exportType).
 			Context("bitrate", bitrate).
 			Build()
 	}
-	bitrateValue, err := strconv.Atoi(strings.TrimSuffix(bitrate, "k"))
+	bitrateValue, err := strconv.Atoi(strings.TrimSuffix(bitrate, audioExportBitrateSuffix))
 	if err != nil {
 		return errors.Newf("invalid bitrate value for %s: %s", exportType, bitrate).
 			Category(errors.CategoryValidation).
@@ -1412,8 +1422,9 @@ func validateExportBitrate(exportType, bitrate string) error {
 			Context("bitrate", bitrate).
 			Build()
 	}
-	if bitrateValue < 32 || bitrateValue > 320 {
-		return errors.Newf("bitrate for %s must be between 32k and 320k, got %dk", exportType, bitrateValue).
+	if bitrateValue < minAudioExportBitrateKbps || bitrateValue > maxAudioExportBitrateKbps {
+		return errors.Newf("bitrate for %s must be between %dk and %dk, got %dk",
+			exportType, minAudioExportBitrateKbps, maxAudioExportBitrateKbps, bitrateValue).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-export-bitrate-range").
 			Context("export_type", exportType).

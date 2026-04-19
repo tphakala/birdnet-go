@@ -1260,6 +1260,10 @@
                 const candidate = Array.isArray(value) ? value[0] : value;
                 if (isExportFormat(candidate)) {
                   updateExportFormat(candidate);
+                } else {
+                  logger.warn('Ignoring unknown audio export format candidate', {
+                    candidate,
+                  });
                 }
               }}
               groupBy={false}

@@ -1144,9 +1144,9 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 	month := t.Format("01")
 
 	rawExportType := p.Settings.Realtime.Audio.Export.Type
-	// GetFileExtension is a passthrough for unknown formats, so "   " (all
-	// whitespace) would leak into the filename as a ". " suffix. Trim first.
-	fileType := strings.TrimSpace(convert.GetFileExtension(strings.TrimSpace(rawExportType)))
+	// GetFileExtension is a passthrough for unknown formats, so a whitespace-
+	// only Type would otherwise leak into the filename as a ". " suffix.
+	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
 	if fileType == "" {
 		buildClipPathFallbackOnce.Do(func() {
 			buildClipPathFallbackFired.Store(true)

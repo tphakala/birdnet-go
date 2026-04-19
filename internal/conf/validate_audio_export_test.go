@@ -140,12 +140,10 @@ func TestValidateAudioSettings_NeverReturnsEmptyType(t *testing.T) {
 			settings.FfmpegPath = ffmpegPath
 
 			_ = validateAudioSettings(settings) // may or may not error
-			if settings.Export.Type == "" {
-				t.Fatalf("Export.Type is empty after validation (input=%q)", in)
-			}
-			if strings.TrimSpace(settings.Export.Type) == "" {
-				t.Fatalf("Export.Type is whitespace after validation (input=%q)", in)
-			}
+			require.NotEmpty(t, settings.Export.Type,
+				"Export.Type is empty after validation (input=%q)", in)
+			require.NotEmpty(t, strings.TrimSpace(settings.Export.Type),
+				"Export.Type is whitespace after validation (input=%q)", in)
 		})
 	}
 }
