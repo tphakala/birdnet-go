@@ -115,23 +115,6 @@
     }
   });
 
-  // Handle detection ID changes (component reuse in keyed each)
-  let previousDetectionId: number | undefined;
-  $effect(() => {
-    const currentId = detection.id;
-    if (previousDetectionId !== undefined && previousDetectionId !== currentId) {
-      audioGainValue = getDefaultAudioGain();
-      audioFilterFreq = DEFAULT_AUDIO_FILTER_FREQ;
-      audioPlaybackSpeed = DEFAULT_PLAYBACK_SPEED;
-      audioContextAvailable = true;
-
-      if (isVisible) {
-        loader.start(currentId);
-      }
-    }
-    previousDetectionId = currentId;
-  });
-
   function handleMenuOpen() {
     isMenuOpen = true;
     onFreezeStart?.();

@@ -5,6 +5,8 @@ import { loggers } from './logger';
 
 const logger = loggers.ui;
 
+const inFlightIds = new Set<number>();
+
 /**
  * POST the given verification status to the review endpoint and fire a toast
  * with the outcome. Returns `true` on success, `false` on failure.
@@ -16,6 +18,9 @@ export async function setDetectionVerification(
   detectionId: number,
   verified: 'correct' | 'false_positive'
 ): Promise<boolean> {
+  if (inFlightIds.has(detectionId)) return false;
+
+  inFlightIds.add(detectionId);
   try {
     await fetchWithCSRF(`/api/v2/detections/${detectionId}/review`, {
       method: 'POST',
@@ -32,5 +37,7 @@ export async function setDetectionVerification(
     toastActions.error(t('search.review.failed'));
     logger.error('Error setting verification status:', err);
     return false;
+  } finally {
+    inFlightIds.delete(detectionId);
   }
 }

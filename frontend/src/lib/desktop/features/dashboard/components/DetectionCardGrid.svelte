@@ -22,7 +22,6 @@
   - className?: string - Additional CSS classes
 -->
 <script lang="ts">
-  import { untrack } from 'svelte';
   import DetectionCard from './DetectionCard.svelte';
   import ConfirmModal from '$lib/desktop/components/modals/ConfirmModal.svelte';
   import type { Detection } from '$lib/types/detection.types';
@@ -65,9 +64,8 @@
     className = '',
   }: Props = $props();
 
-  // State for number of detections to show - captures initial prop value without creating dependency
-  // Uses untrack() to explicitly capture initial value only (local state is independent after init)
-  let selectedLimit = $state(untrack(() => limit));
+  // svelte-ignore state_referenced_locally
+  let selectedLimit = $state(limit);
 
   // Track excluded species by common name (session-local tracking)
   let excludedSpecies = $state(new Set<string>());

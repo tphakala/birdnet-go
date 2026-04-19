@@ -226,7 +226,7 @@
 
     {#if isOpen}
       {@const itemHoverClass =
-        variant === 'overlay' ? 'hover:bg-white/10' : 'hover:bg-[var(--color-base-200)]'}
+        variant === 'overlay' ? 'hover:bg-white/10' : 'hover:bg-[var(--color-base-300)]'}
       <ul
         bind:this={menuElement}
         in:dropdown

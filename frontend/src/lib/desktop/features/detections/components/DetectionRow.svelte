@@ -242,7 +242,7 @@
   }
 
   // Track previous URL to avoid unnecessary resets
-  let previousThumbnailUrl = $state<string | null>(null);
+  let previousThumbnailUrl: string | null = null;
 
   // Handle thumbnail loading state when detection changes
   $effect(() => {
