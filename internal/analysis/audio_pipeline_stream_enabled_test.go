@@ -73,6 +73,8 @@ func TestReconfigureChangedSources_RemovesDisabledRunningStream(t *testing.T) {
 	_, exists := engine.Registry().GetByConnection(connection)
 	require.True(t, exists, "test setup should start with the stream registered")
 
+	// bufferMgr is intentionally nil: UpdateMonitors is only called when
+	// len(allActiveIDs) > 0, and this scenario ends with zero active streams.
 	p := &AudioPipelineService{engine: engine}
 	p.reconfigureChangedSources(make(chan audiocore.AudioLevelData))
 

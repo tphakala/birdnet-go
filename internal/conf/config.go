@@ -555,6 +555,9 @@ type StreamConfig struct {
 }
 
 // IsEnabled returns the effective enabled state for a stream.
+// A nil receiver returns true so callers can safely use range-index pointers
+// without a separate nil guard; a missing stream is treated as enabled rather
+// than silently dropped.
 func (s *StreamConfig) IsEnabled() bool {
 	return s == nil || s.Enabled
 }

@@ -29,6 +29,28 @@ describe('settingsCoercion realtime rtsp streams', () => {
     });
   });
 
+  it('defaults null stream enabled flag to true', () => {
+    const result = coerceSettings('realtime', {
+      rtsp: {
+        streams: [
+          {
+            name: 'Null Stream',
+            url: 'rtsp://cam3',
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            enabled: null as any,
+            type: 'rtsp',
+          },
+        ],
+      },
+    });
+
+    expect(result).toMatchObject({
+      rtsp: {
+        streams: [{ enabled: true }],
+      },
+    });
+  });
+
   it('preserves explicit disabled streams', () => {
     const result = coerceSettings('realtime', {
       rtsp: {
