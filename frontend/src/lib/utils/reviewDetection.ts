@@ -9,7 +9,8 @@ const inFlightIds = new Set<number>();
 
 /**
  * POST the given verification status to the review endpoint and fire a toast
- * with the outcome. Returns `true` on success, `false` on failure.
+ * with the outcome. Returns `true` on success, `false` on failure or if a
+ * request for the same detectionId is already in-flight (silently dropped).
  *
  * Callers are responsible for updating their local detection state and
  * triggering any refetch when `true` is returned.
