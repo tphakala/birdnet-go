@@ -75,6 +75,15 @@ const (
 	DefaultPlaybackGain = 0.0  // Safe default if invalid value provided
 )
 
+// Audio export type constants
+const (
+	AudioExportTypeWAV  = "wav"  // Lossless PCM audio
+	AudioExportTypeFLAC = "flac" // Lossless compressed audio
+	AudioExportTypeMP3  = "mp3"  // Lossy compressed audio
+	AudioExportTypeAAC  = "aac"  // Lossy compressed audio
+	AudioExportTypeOPUS = "opus" // Lossy compressed audio
+)
+
 // Stream validation constants
 const (
 	MaxStreamNameLength      = 64
@@ -1291,7 +1300,49 @@ func validateAudioSettings(settings *AudioSettings) error {
 			Build()
 	}
 
-	// Validate audio export settings
+	// Validate audio export settings.
+	//
+	// Normalize first, validate second. Type must be normalized even when
+	// Export.Enabled is false, because the Enabled flag can be flipped back on
+	// without triggering validation of the already-persisted Type value.
+	// An empty Type previously produced extension-less clip_name rows in the
+	// DB, causing audio download and spectrogram generation to 404
+	// (GitHub #2810, #2814).
+	if strings.TrimSpace(settings.Export.Type) == "" {
+		GetLogger().Warn("audio export type is empty, normalizing to wav",
+			logger.String("previous_type", settings.Export.Type),
+			logger.String("action", "normalize_to_wav"))
+		settings.Export.Type = AudioExportTypeWAV
+	}
+
+	if settings.FfmpegPath == "" && settings.Export.Type != AudioExportTypeWAV {
+		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
+			logger.String("previous_type", settings.Export.Type))
+		settings.Export.Type = AudioExportTypeWAV
+	}
+
+	// Type must be one of the known formats regardless of Enabled, so a
+	// persisted garbage value can never silently roll forward.
+	switch settings.Export.Type {
+	case AudioExportTypeWAV, AudioExportTypeFLAC:
+		// lossless, no bitrate needed
+	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		// lossy, bitrate required - but only enforce when export is actually enabled
+		if settings.Export.Enabled {
+			if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
+				return err
+			}
+		}
+	default:
+		return errors.Newf("unsupported audio export type: %s", settings.Export.Type).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-type").
+			Context("export_type", settings.Export.Type).
+			Build()
+	}
+
+	// Remaining checks (length, pre-capture, gain, normalization) only make
+	// sense when export is actually enabled.
 	if settings.Export.Enabled {
 		// Validate capture length (10-60 seconds)
 		if settings.Export.Length < 10 || settings.Export.Length > 60 {
@@ -1327,88 +1378,79 @@ func validateAudioSettings(settings *AudioSettings) error {
 
 		// Validate normalization settings if enabled
 		if settings.Export.Normalization.Enabled {
-			// Validate target LUFS (reasonable range for EBU R128)
-			if settings.Export.Normalization.TargetLUFS < MinTargetLUFS || settings.Export.Normalization.TargetLUFS > MaxTargetLUFS {
-				return errors.Newf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, settings.Export.Normalization.TargetLUFS).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-normalization-target").
-					Context("target_lufs", settings.Export.Normalization.TargetLUFS).
-					Context("min_target_lufs", MinTargetLUFS).
-					Context("max_target_lufs", MaxTargetLUFS).
-					Build()
-			}
-
-			// Validate loudness range (dynamic range)
-			if settings.Export.Normalization.LoudnessRange < MinLoudnessRange || settings.Export.Normalization.LoudnessRange > MaxLoudnessRange {
-				return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, settings.Export.Normalization.LoudnessRange).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-normalization-range").
-					Context("loudness_range", settings.Export.Normalization.LoudnessRange).
-					Context("min_loudness_range", MinLoudnessRange).
-					Context("max_loudness_range", MaxLoudnessRange).
-					Build()
-			}
-
-			// Validate true peak (headroom to prevent clipping)
-			if settings.Export.Normalization.TruePeak < MinTruePeak || settings.Export.Normalization.TruePeak > MaxTruePeak {
-				return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, settings.Export.Normalization.TruePeak).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-normalization-peak").
-					Context("true_peak", settings.Export.Normalization.TruePeak).
-					Context("min_true_peak", MinTruePeak).
-					Context("max_true_peak", MaxTruePeak).
-					Build()
-			}
-
-			// Warn if gain is also set (normalization takes precedence)
-			if settings.Export.Gain != 0 {
-				GetLogger().Warn("Both gain and normalization are configured", logger.String("action", "Normalization will take precedence, gain setting will be ignored"))
-			}
-		}
-
-		if settings.FfmpegPath == "" {
-			settings.Export.Type = "wav"
-			GetLogger().Warn("FFmpeg not available, using WAV format for audio export")
-		} else {
-			// Validate audio type and bitrate
-			switch settings.Export.Type {
-			case "aac", "opus", "mp3":
-				if !strings.HasSuffix(settings.Export.Bitrate, "k") {
-					return errors.Newf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", settings.Export.Type, settings.Export.Bitrate).
-						Category(errors.CategoryValidation).
-						Context("validation_type", "audio-export-bitrate-format").
-						Context("export_type", settings.Export.Type).
-						Context("bitrate", settings.Export.Bitrate).
-						Build()
-				}
-				bitrateValue, err := strconv.Atoi(strings.TrimSuffix(settings.Export.Bitrate, "k"))
-				if err != nil {
-					return errors.Newf("invalid bitrate value for %s: %s", settings.Export.Type, settings.Export.Bitrate).
-						Category(errors.CategoryValidation).
-						Context("validation_type", "audio-export-bitrate-value").
-						Context("export_type", settings.Export.Type).
-						Context("bitrate", settings.Export.Bitrate).
-						Build()
-				}
-				if bitrateValue < 32 || bitrateValue > 320 {
-					return errors.Newf("bitrate for %s must be between 32k and 320k", settings.Export.Type).
-						Category(errors.CategoryValidation).
-						Context("validation_type", "audio-export-bitrate-range").
-						Context("export_type", settings.Export.Type).
-						Build()
-				}
-			case "wav", "flac":
-				// These formats don't use bitrate, so we'll ignore the bitrate setting
-			default:
-				return errors.Newf("unsupported audio export type: %s", settings.Export.Type).
-					Category(errors.CategoryValidation).
-					Context("validation_type", "audio-export-type").
-					Context("export_type", settings.Export.Type).
-					Build()
+			if err := validateNormalizationSettings(&settings.Export.Normalization, settings.Export.Gain); err != nil {
+				return err
 			}
 		}
 	}
 
+	return nil
+}
+
+// validateExportBitrate validates the bitrate setting for lossy audio export formats
+// (mp3, aac, opus). It must end with "k" and be between 32 and 320 kbps.
+func validateExportBitrate(exportType, bitrate string) error {
+	if !strings.HasSuffix(bitrate, "k") {
+		return errors.Newf("invalid bitrate format for %s: %s. Must end with 'k' (e.g., '64k')", exportType, bitrate).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-format").
+			Context("export_type", exportType).
+			Context("bitrate", bitrate).
+			Build()
+	}
+	bitrateValue, err := strconv.Atoi(strings.TrimSuffix(bitrate, "k"))
+	if err != nil {
+		return errors.Newf("invalid bitrate value for %s: %s", exportType, bitrate).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-value").
+			Context("export_type", exportType).
+			Context("bitrate", bitrate).
+			Build()
+	}
+	if bitrateValue < 32 || bitrateValue > 320 {
+		return errors.Newf("bitrate for %s must be between 32k and 320k, got %dk", exportType, bitrateValue).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-range").
+			Context("export_type", exportType).
+			Context("bitrate_value", bitrateValue).
+			Build()
+	}
+	return nil
+}
+
+// validateNormalizationSettings validates the EBU R128 normalization parameters
+// (target LUFS, loudness range, and true peak) and warns if gain is also configured.
+func validateNormalizationSettings(norm *NormalizationSettings, gain float64) error {
+	if norm.TargetLUFS < MinTargetLUFS || norm.TargetLUFS > MaxTargetLUFS {
+		return errors.Newf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, norm.TargetLUFS).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-target").
+			Context("target_lufs", norm.TargetLUFS).
+			Context("min_target_lufs", MinTargetLUFS).
+			Context("max_target_lufs", MaxTargetLUFS).
+			Build()
+	}
+	if norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange {
+		return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, norm.LoudnessRange).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-range").
+			Context("loudness_range", norm.LoudnessRange).
+			Context("min_loudness_range", MinLoudnessRange).
+			Context("max_loudness_range", MaxLoudnessRange).
+			Build()
+	}
+	if norm.TruePeak < MinTruePeak || norm.TruePeak > MaxTruePeak {
+		return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, norm.TruePeak).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-peak").
+			Context("true_peak", norm.TruePeak).
+			Context("min_true_peak", MinTruePeak).
+			Context("max_true_peak", MaxTruePeak).
+			Build()
+	}
+	if gain != 0 {
+		GetLogger().Warn("Both gain and normalization are configured", logger.String("action", "Normalization will take precedence, gain setting will be ignored"))
+	}
 	return nil
 }
 
