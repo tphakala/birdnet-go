@@ -3,12 +3,26 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// fakeFFmpegPath writes an executable stub inside t.TempDir() and returns its
+// path. Tests need a resolvable, host-agnostic FfmpegPath because
+// validateAudioSettings invokes ValidateToolPath, which clears FfmpegPath when
+// the configured path cannot be executed. A hardcoded /usr/bin/ffmpeg breaks
+// on hosts where ffmpeg lives elsewhere (e.g. /opt/homebrew/bin).
+func fakeFFmpegPath(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), GetFfmpegBinaryName())
+	require.NoError(t, os.WriteFile(path, []byte("#!/bin/sh\nexit 0\n"), 0o755))
+	return path
+}
 
 // The "missing ffmpeg forces wav" branch is not covered here because
 // validateAudioSettings calls ValidateToolPath, which falls back to
@@ -18,6 +32,7 @@ import (
 // existing integration test suite in internal/analysis.
 func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 	t.Parallel()
+	ffmpegPath := fakeFFmpegPath(t)
 
 	cases := []struct {
 		name       string
@@ -33,7 +48,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    false,
 			typeIn:     "",
 			bitrateIn:  "",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    false,
 			wantType:   "wav",
 		},
@@ -42,7 +57,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    true,
 			typeIn:     "",
 			bitrateIn:  "",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    false,
 			wantType:   "wav",
 		},
@@ -51,7 +66,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    false,
 			typeIn:     "gibberish",
 			bitrateIn:  "",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    true,
 			wantType:   "gibberish",
 		},
@@ -60,7 +75,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    true,
 			typeIn:     "wav",
 			bitrateIn:  "",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    false,
 			wantType:   "wav",
 		},
@@ -69,7 +84,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    true,
 			typeIn:     "mp3",
 			bitrateIn:  "",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    true,
 			wantType:   "mp3",
 		},
@@ -78,7 +93,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 			enabled:    true,
 			typeIn:     "mp3",
 			bitrateIn:  "128k",
-			ffmpegPath: "/usr/bin/ffmpeg",
+			ffmpegPath: ffmpegPath,
 			wantErr:    false,
 			wantType:   "mp3",
 		},
@@ -111,6 +126,7 @@ func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 // regardless of input, a successful validation must leave Export.Type non-empty.
 func TestValidateAudioSettings_NeverReturnsEmptyType(t *testing.T) {
 	t.Parallel()
+	ffmpegPath := fakeFFmpegPath(t)
 
 	inputs := []string{"", " ", "wav", "WAV", "mp3", "aac", "opus", "flac"}
 	for _, in := range inputs {
@@ -121,7 +137,7 @@ func TestValidateAudioSettings_NeverReturnsEmptyType(t *testing.T) {
 			settings.Export.Enabled = false // gates that used to skip normalization
 			settings.Export.Type = in
 			settings.Export.Bitrate = "128k"
-			settings.FfmpegPath = "/usr/bin/ffmpeg"
+			settings.FfmpegPath = ffmpegPath
 
 			_ = validateAudioSettings(settings) // may or may not error
 			if settings.Export.Type == "" {
@@ -150,6 +166,5 @@ func newMinimalAudioSettings() *AudioSettings {
 	s.Export.Bitrate = "96k"
 	s.Export.Path = "clips/"
 	s.Export.Retention.Policy = RetentionPolicyNone
-	s.FfmpegPath = "/usr/bin/ffmpeg"
 	return s
 }

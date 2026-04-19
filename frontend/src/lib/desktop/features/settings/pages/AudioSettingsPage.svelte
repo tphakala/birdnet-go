@@ -58,7 +58,7 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
-  import { chooseBitrateForFormat, type ExportFormat } from './audioExportFormat';
+  import { chooseBitrateForFormat, isExportFormat, type ExportFormat } from './audioExportFormat';
   import {
     Volume2,
     Radio,
@@ -1256,7 +1256,12 @@
               helpText={t('settings.audio.fileSettings.typeHelp')}
               options={exportFormatOptions}
               disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
-              onChange={value => updateExportFormat(value as ExportFormat)}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isExportFormat(candidate)) {
+                  updateExportFormat(candidate);
+                }
+              }}
               groupBy={false}
               menuSize="sm"
             />

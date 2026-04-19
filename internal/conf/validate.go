@@ -1315,30 +1315,35 @@ func validateAudioSettings(settings *AudioSettings) error {
 		settings.Export.Type = AudioExportTypeWAV
 	}
 
-	if settings.FfmpegPath == "" && settings.Export.Type != AudioExportTypeWAV {
-		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
-			logger.String("previous_type", settings.Export.Type))
-		settings.Export.Type = AudioExportTypeWAV
-	}
-
-	// Type must be one of the known formats regardless of Enabled, so a
-	// persisted garbage value can never silently roll forward.
+	// Reject unknown Type before any fallback runs. Doing this first means a
+	// garbage value cannot be silently rewritten to WAV by the ffmpeg-missing
+	// fallback below, which would hide the misconfiguration.
 	switch settings.Export.Type {
-	case AudioExportTypeWAV, AudioExportTypeFLAC:
-		// lossless, no bitrate needed
-	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
-		// lossy, bitrate required - but only enforce when export is actually enabled
-		if settings.Export.Enabled {
-			if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
-				return err
-			}
-		}
+	case AudioExportTypeWAV, AudioExportTypeFLAC,
+		AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		// known format
 	default:
 		return errors.Newf("unsupported audio export type: %s", settings.Export.Type).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-export-type").
 			Context("export_type", settings.Export.Type).
 			Build()
+	}
+
+	if settings.FfmpegPath == "" && settings.Export.Type != AudioExportTypeWAV {
+		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
+			logger.String("previous_type", settings.Export.Type))
+		settings.Export.Type = AudioExportTypeWAV
+	}
+
+	// Bitrate only matters for lossy formats and only when export is enabled.
+	switch settings.Export.Type {
+	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		if settings.Export.Enabled {
+			if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
+				return err
+			}
+		}
 	}
 
 	// Remaining checks (length, pre-capture, gain, normalization) only make

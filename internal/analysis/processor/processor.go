@@ -1143,13 +1143,15 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 	year := t.Format("2006")
 	month := t.Format("01")
 
-	exportType := p.Settings.Realtime.Audio.Export.Type
-	fileType := convert.GetFileExtension(exportType)
+	rawExportType := p.Settings.Realtime.Audio.Export.Type
+	// GetFileExtension is a passthrough for unknown formats, so "   " (all
+	// whitespace) would leak into the filename as a ". " suffix. Trim first.
+	fileType := strings.TrimSpace(convert.GetFileExtension(strings.TrimSpace(rawExportType)))
 	if fileType == "" {
 		buildClipPathFallbackOnce.Do(func() {
 			buildClipPathFallbackFired.Store(true)
 			GetLogger().Warn("audio export type produced empty file extension, falling back to wav",
-				logger.String("export_type", exportType),
+				logger.String("export_type", rawExportType),
 				logger.String("component", "processor"),
 				logger.String("action", "buildClipPath_fallback"))
 		})

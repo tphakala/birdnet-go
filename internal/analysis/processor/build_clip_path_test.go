@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"path"
 	"strings"
 	"sync"
 	"testing"
@@ -59,8 +60,9 @@ func TestBuildClipPath_NeverEndsInDot(t *testing.T) {
 			got := p.buildClipPath("Strix aluco", 0.94, 15, ts)
 			assert.False(t, strings.HasSuffix(got, "."),
 				"path must never end in bare dot (type=%q, got %q)", in, got)
-			assert.NotEmpty(t, strings.TrimSuffix(got, "."),
-				"path must have a non-empty extension (type=%q, got %q)", in, got)
+			ext := strings.TrimPrefix(strings.TrimSpace(path.Ext(got)), ".")
+			assert.NotEmpty(t, ext,
+				"path must have a non-empty, non-whitespace extension (type=%q, got %q)", in, got)
 		})
 	}
 }

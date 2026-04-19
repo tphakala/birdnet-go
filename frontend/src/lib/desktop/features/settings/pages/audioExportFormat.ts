@@ -7,6 +7,12 @@ import { formatBitrate, getBitrateConfig } from '$lib/utils/audioValidation';
 
 export type ExportFormat = 'wav' | 'mp3' | 'flac' | 'aac' | 'opus';
 
+const EXPORT_FORMATS: readonly ExportFormat[] = ['wav', 'mp3', 'flac', 'aac', 'opus'];
+
+export function isExportFormat(value: unknown): value is ExportFormat {
+  return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value);
+}
+
 // Parse "128k" / "128K" / "128" into a positive number, or null if the
 // input cannot be interpreted as a positive numeric bitrate. Returning
 // null lets chooseBitrateForFormat distinguish "invalid" from "valid 128k"
