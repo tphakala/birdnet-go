@@ -400,6 +400,15 @@ export function isAccessAllowed(): boolean {
 }
 
 /**
+ * Checks if the current viewer is an unauthenticated guest (security is
+ * enabled but access has not been granted). Used to suppress login redirects
+ * and hide auth-gated UI elements.
+ */
+export function isGuestMode(): boolean {
+  return appState.security.enabled && !appState.security.accessAllowed;
+}
+
+/**
  * Gets the authentication configuration.
  *
  * @returns The auth config
