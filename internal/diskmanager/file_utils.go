@@ -114,12 +114,11 @@ type walkState struct {
 	parseErrorCount int
 	firstParseError error
 	maxParseErrors  int
-	debug           bool
 }
 
 // GetAudioFiles returns a list of audio files in the directory and its subdirectories
-func GetAudioFiles(baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
-	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db, debug)
+func GetAudioFiles(baseDir string, allowedExts []string, db Interface) ([]FileInfo, error) {
+	return GetAudioFilesContext(context.Background(), baseDir, allowedExts, db)
 }
 
 // createWalkFunc creates the filepath.Walk function with all necessary context
@@ -133,7 +132,7 @@ func createWalkFunc(state *walkState) filepath.WalkFunc {
 		}
 
 		if err != nil {
-			return handleWalkError(err, path, state.debug)
+			return handleWalkError(err, path)
 		}
 
 		// Skip hidden directories (dot-prefixed) like .processing-cache
@@ -152,7 +151,7 @@ func createWalkFunc(state *walkState) filepath.WalkFunc {
 }
 
 // handleWalkError handles errors during filepath.Walk, specifically temp file race conditions
-func handleWalkError(err error, path string, _ bool) error {
+func handleWalkError(err error, path string) error {
 	// Handle race condition where temp files are renamed between directory
 	// listing and lstat call. If the error is "no such file or directory"
 	// and the path appears to be a temp file, continue walking.
@@ -213,7 +212,7 @@ func processFile(path string, info os.FileInfo, state *walkState) {
 }
 
 // GetAudioFilesContext returns a list of audio files in the directory and its subdirectories with context support for cancellation
-func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []string, db Interface, debug bool) ([]FileInfo, error) {
+func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []string, db Interface) ([]FileInfo, error) {
 	// Fast path: empty allowed extensions
 	if len(allowedExts) == 0 {
 		return nil, nil
@@ -278,7 +277,6 @@ func GetAudioFilesContext(ctx context.Context, baseDir string, allowedExts []str
 		parseErrorCount: parseErrorCount,
 		firstParseError: firstParseError,
 		maxParseErrors:  maxParseErrors,
-		debug:           debug,
 	}
 
 	err = filepath.Walk(baseDir, createWalkFunc(state))

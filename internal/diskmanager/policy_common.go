@@ -496,14 +496,12 @@ func ShouldSkipUsageBasedCleanup(retention *conf.RetentionSettings, baseDir stri
 // If proceed is false, it also returns a completed CleanupResult.
 func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, retention conf.RetentionSettings, proceed bool, result CleanupResult) {
 	settings := conf.Setting()
-	debug := settings.Realtime.Audio.Export.Retention.Debug
 	baseDir = settings.Realtime.Audio.Export.Path
 	retention = settings.Realtime.Audio.Export.Retention // Return the whole retention struct
 
 	GetLogger().Info("Preparing initial cleanup",
 		logger.String("base_dir", baseDir),
-		logger.String("policy", retention.Policy),
-		logger.Bool("debug", debug))
+		logger.String("policy", retention.Policy))
 
 	// OPTIMIZATION: For usage-based policy, check disk usage BEFORE scanning all files
 	// This avoids wasting CPU/IO scanning thousands of files when cleanup isn't needed
@@ -520,7 +518,7 @@ func prepareInitialCleanup(db Interface) (files []FileInfo, baseDir string, rete
 		}
 	}
 
-	files, err := GetAudioFiles(baseDir, allowedFileTypes, db, debug)
+	files, err := GetAudioFiles(baseDir, allowedFileTypes, db)
 	if err != nil {
 		// Try to get current disk usage for the result even if file listing failed
 		currentUsage, diskErr := GetDiskUsage(baseDir)
