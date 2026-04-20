@@ -245,7 +245,9 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 // logs one DEBUG line per candidate clip per cycle, so a "debug" default causes
 // log files to balloon to 100+ MB/day with no user-visible control.
 func TestDiskmanagerModuleDefaultLogLevelIsInfo(t *testing.T) {
-	// Not parallel: reads global viper defaults set by setDefaultConfig.
+	// Not parallel: reads/writes global viper defaults set by setDefaultConfig.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
 	setDefaultConfig()
 
 	level := viper.GetString("logging.modules.diskmanager.level")
