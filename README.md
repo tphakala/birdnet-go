@@ -136,6 +136,10 @@ Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 - [M5Stack Atom Echo RTSP Mic](https://github.com/stedrow/birdnetgo-m5stack-atom-echo-rtsp-mic) - RTSP audio streaming server for M5Stack Atom Echo, no soldering required
 - [M5Stack AtomS3 Lite PDM Mic](https://github.com/matthew73210/birdnetgo-m5stack-AtomS3-Lite-PDM-rtsp-mic) - RTSP audio streaming server for M5Stack AtomS3 Lite with MEMS PDM microphone
 
+### Mobile Apps
+
+- [Perch](https://github.com/arunrajiah/perch) - Open-source Android/iOS companion app. Connects to your BirdNET-Go station via the BirdWeather API. Live detection feed, audio playback, species browser, 14-day chart, and local notifications for favourite species. MIT licensed.
+
 ## Contributing
 
 **Want to contribute?** We welcome contributions from the community! 🎉
