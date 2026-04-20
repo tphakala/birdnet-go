@@ -289,7 +289,10 @@ describe('API utilities', () => {
         headers: new Headers(),
       });
 
-      await expect(fetchWithCSRF('/api/test')).rejects.toThrow('Authentication required');
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        message: 'errors.api.unauthorized',
+        status: 401,
+      });
       // Should NOT redirect
       expect(window.location.href).not.toBe('/ui/');
     });

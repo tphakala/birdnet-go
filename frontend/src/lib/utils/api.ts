@@ -450,7 +450,7 @@ export async function fetchWithCSRF<T = unknown>(
     // gracefully; session-expired users redirect to login.
     if (response.status === 401) {
       if (isGuestMode()) {
-        throw new ApiError('Authentication required', 401, response);
+        throw new ApiError(getSecureErrorMessage(401), 401, response);
       }
       return redirectToLogin();
     }
