@@ -32,6 +32,7 @@ export interface QuietHoursStatus {
   soundCardSuppressed: boolean;
   suppressedStreams: Record<string, boolean>;
   analysisSuspendedSources: Record<string, boolean>;
+  analysisSourceIDs: Record<string, string>;
 }
 
 let status = $state<QuietHoursStatus | null>(null);

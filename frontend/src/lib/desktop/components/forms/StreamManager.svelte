@@ -171,9 +171,11 @@
 
   function isAnalysisSuspended(url: string): boolean {
     const qhStatus = quietHoursStore.status;
-    if (!qhStatus?.analysisSuspendedSources) return false;
+    if (!qhStatus?.analysisSuspendedSources || !qhStatus.analysisSourceIDs) return false;
     const sanitized = sanitizeUrlForComparison(url);
-    return qhStatus.analysisSuspendedSources[sanitized] === true;
+    const sourceID = qhStatus.analysisSourceIDs[sanitized];
+    if (!sourceID) return false;
+    return qhStatus.analysisSuspendedSources[sourceID] === true;
   }
 
   // Convert backend process state to UI status

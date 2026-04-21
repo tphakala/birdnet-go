@@ -295,6 +295,14 @@
     onUpdateSources(updatedSources);
   }
 
+  function isAnalysisSuspended(deviceID: string): boolean {
+    const status = quietHoursStore.status;
+    if (!status?.analysisSuspendedSources) return false;
+    const sourceID = status.analysisSourceIDs?.[deviceID];
+    if (!sourceID) return false;
+    return status.analysisSuspendedSources[sourceID] === true;
+  }
+
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
     newEqualizer = {
       enabled: updated.enabled,
@@ -366,7 +374,7 @@
           {sources}
           {audioDevices}
           {modelOptions}
-          analysisSuspended={quietHoursStore.status?.analysisSuspendedSources?.[source.device] === true}
+          analysisSuspended={isAnalysisSuspended(source.device)}
           {disabled}
           onUpdate={updatedSource => updateSource(index, updatedSource)}
           onDelete={() => deleteSource(index)}

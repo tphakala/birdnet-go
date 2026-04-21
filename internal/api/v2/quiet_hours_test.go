@@ -175,44 +175,52 @@ func mapKeys[V any](m map[string]V) []string {
 	return slices.Sorted(maps.Keys(m))
 }
 
-func TestBuildAnalysisSuspendedPayload_AuthenticatedSanitizesStreamURLs(t *testing.T) {
+func TestBuildAnalysisSuspendedPayload_UsesStableSourceIDs(t *testing.T) {
 	t.Parallel()
 
 	raw := map[string]sourceAnalysisState{
 		"audio_card_1": {
+			SourceID:   "audio_card_1",
 			Connection: "sysdefault",
 			Suspended:  true,
 		},
 		"rtsp_1": {
+			SourceID:   "rtsp_1",
 			Connection: "rtsp://user:pass@cam1.lan:8554/stream",
 			Suspended:  false,
 		},
 	}
 
-	out := buildAnalysisSuspendedPayload(raw, false)
+	out, lookup := buildAnalysisSuspendedPayload(raw)
 	require.Len(t, out, 2)
-	assert.Equal(t, true, out["sysdefault"])
-	assert.Equal(t, false, out[privacy.SanitizeStreamUrl("rtsp://user:pass@cam1.lan:8554/stream")])
+	require.Len(t, lookup, 2)
+	assert.Equal(t, true, out["audio_card_1"])
+	assert.Equal(t, false, out["rtsp_1"])
+	assert.Equal(t, "audio_card_1", lookup["sysdefault"])
+	assert.Equal(t, "rtsp_1", lookup[privacy.SanitizeStreamUrl("rtsp://user:pass@cam1.lan:8554/stream")])
 }
 
-func TestBuildAnalysisSuspendedPayload_GuestObfuscatesStreamKeys(t *testing.T) {
+func TestBuildAnalysisSuspendedPayload_MultipleAudioSourcesNoCollision(t *testing.T) {
 	t.Parallel()
 
 	raw := map[string]sourceAnalysisState{
 		"audio_card_1": {
+			SourceID:   "audio_card_1",
 			Connection: "sysdefault",
 			Suspended:  true,
 		},
-		"rtsp_1": {
-			Connection: "rtsp://user:pass@cam1.lan:8554/stream",
+		"audio_card_2": {
+			SourceID:   "audio_card_2",
+			Connection: "hw:1,0",
 			Suspended:  false,
 		},
 	}
 
-	out := buildAnalysisSuspendedPayload(raw, true)
+	out, lookup := buildAnalysisSuspendedPayload(raw)
 	require.Len(t, out, 2)
-	assert.Contains(t, out, "audio-source")
-	assert.Equal(t, true, out["audio-source"])
-	assert.Contains(t, out, "stream-2")
-	assert.Equal(t, false, out["stream-2"])
+	require.Len(t, lookup, 2)
+	assert.Equal(t, true, out["audio_card_1"])
+	assert.Equal(t, false, out["audio_card_2"])
+	assert.Equal(t, "audio_card_1", lookup["sysdefault"])
+	assert.Equal(t, "audio_card_2", lookup["hw:1,0"])
 }

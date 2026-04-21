@@ -6,7 +6,6 @@ import (
 	"maps"
 	"net/http"
 	"slices"
-	"strings"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -26,6 +25,9 @@ type QuietHoursStatusResponse struct {
 	// This status is independent of quiet-hours suppression and only reflects
 	// tracker-based low-noise auto-suspend.
 	AnalysisSuspendedSources map[string]bool `json:"analysisSuspendedSources"`
+	// AnalysisSourceIDs maps source connection keys used by settings UIs
+	// (device IDs and sanitized stream URLs) to runtime source IDs.
+	AnalysisSourceIDs map[string]string `json:"analysisSourceIDs"`
 }
 
 // initQuietHoursRoutes registers quiet hours API routes.
@@ -55,6 +57,7 @@ func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 	response := QuietHoursStatusResponse{
 		SuppressedStreams:        make(map[string]bool),
 		AnalysisSuspendedSources: make(map[string]bool),
+		AnalysisSourceIDs:        make(map[string]string),
 	}
 
 	// Check if quiet hours is configured at all
@@ -70,7 +73,7 @@ func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 		response.SuppressedStreams = buildSuppressedStreamsPayload(
 			scheduler.GetSuppressedStreams(), guest)
 	}
-	response.AnalysisSuspendedSources = c.buildAnalysisSuspendedSourcesPayload(guest)
+	response.AnalysisSuspendedSources, response.AnalysisSourceIDs = c.buildAnalysisSuspendedSourcesPayload()
 
 	// Determine if any source is currently suppressed
 	if response.SoundCardSuppressed {
@@ -88,18 +91,19 @@ func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 }
 
 type sourceAnalysisState struct {
+	SourceID   string
 	Connection string
 	Suspended  bool
 }
 
-func (c *Controller) buildAnalysisSuspendedSourcesPayload(guest bool) map[string]bool {
+func (c *Controller) buildAnalysisSuspendedSourcesPayload() (map[string]bool, map[string]string) {
 	if c.engine == nil {
-		return map[string]bool{}
+		return map[string]bool{}, map[string]string{}
 	}
 
 	registry := c.engine.Registry()
 	if registry == nil {
-		return map[string]bool{}
+		return map[string]bool{}, map[string]string{}
 	}
 
 	raw := make(map[string]sourceAnalysisState)
@@ -110,12 +114,13 @@ func (c *Controller) buildAnalysisSuspendedSourcesPayload(guest bool) map[string
 			continue
 		}
 		raw[src.ID] = sourceAnalysisState{
+			SourceID:   src.ID,
 			Connection: conn,
 			Suspended:  stateSnapshot[src.ID],
 		}
 	}
 
-	return buildAnalysisSuspendedPayload(raw, guest)
+	return buildAnalysisSuspendedPayload(raw)
 }
 
 // buildSuppressedStreamsPayload returns a map representing per-stream
@@ -141,30 +146,19 @@ func buildSuppressedStreamsPayload(raw map[string]bool, guest bool) map[string]b
 	return out
 }
 
-func buildAnalysisSuspendedPayload(raw map[string]sourceAnalysisState, guest bool) map[string]bool {
+func buildAnalysisSuspendedPayload(raw map[string]sourceAnalysisState) (map[string]bool, map[string]string) {
 	out := make(map[string]bool, len(raw))
-	if !guest {
-		for _, state := range raw {
-			key := state.Connection
-			if strings.Contains(key, "://") {
-				key = privacy.SanitizeStreamUrl(key)
-			}
-			out[key] = state.Suspended
-		}
-		return out
-	}
-
+	lookup := make(map[string]string, len(raw))
 	keys := slices.Sorted(maps.Keys(raw))
 	for i, sourceID := range keys {
 		state := raw[sourceID]
+		out[state.SourceID] = state.Suspended
 		key := state.Connection
-		if strings.Contains(key, "://") {
-			key = fmt.Sprintf("stream-%d", i+1)
-		} else {
-			key = "audio-source"
+		if key == "" {
+			key = fmt.Sprintf("source-%d", i+1)
 		}
-		out[key] = state.Suspended
+		lookup[privacy.SanitizeStreamUrl(key)] = state.SourceID
 	}
 
-	return out
+	return out, lookup
 }
