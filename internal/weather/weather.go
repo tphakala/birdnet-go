@@ -175,17 +175,17 @@ func NewService(settings *conf.Settings, db datastore.Interface, weatherMetrics 
 	switch settings.Realtime.Weather.Provider {
 	case "yrno":
 		provider = NewYrNoProvider()
-		providerName = "yrno"
+		providerName = yrNoProviderName
 	case "openweather":
 		provider = NewOpenWeatherProvider()
-		providerName = "openweather"
+		providerName = openWeatherProviderName
 	case "wunderground":
 		provider = NewWundergroundProvider(nil)
-		providerName = "wunderground"
+		providerName = wundergroundProviderName
 	case "":
-		// Not configured — default to yr.no
+		// Not configured - default to yr.no
 		provider = NewYrNoProvider()
-		providerName = "yrno"
+		providerName = yrNoProviderName
 	case "none":
 		// Explicitly disabled
 		getLogger().Info("Weather provider set to none, weather service disabled")

@@ -1273,7 +1273,7 @@ func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
 	// configured their location.
 	service := &Service{
 		provider:     provider,
-		providerName: "yrno",
+		providerName: yrNoProviderName,
 		db:           nil,
 		settings:     initial,
 		metrics:      nil,
