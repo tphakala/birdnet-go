@@ -37,7 +37,7 @@ func TestBuildSourceConfigsWithModels_SkipsDisabledStreams(t *testing.T) {
 	p := &AudioPipelineService{}
 	configs := p.buildSourceConfigsWithModels()
 
-	assert.Len(t, configs, 1, "disabled streams should be excluded from active source configs")
+	require.Len(t, configs, 1, "disabled streams should be excluded from active source configs")
 	assert.Equal(t, "rtsp://cam1", configs[0].config.ConnectionString)
 }
 

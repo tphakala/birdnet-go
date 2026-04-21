@@ -373,9 +373,11 @@ realtime:
 	require.NoError(t, err)
 
 	oldPath := ConfigPath
+	oldSettings := GetSettings()
 	t.Cleanup(func() {
 		ConfigPath = oldPath
 		viper.Reset()
+		SetTestSettings(oldSettings)
 	})
 
 	ConfigPath = configPath

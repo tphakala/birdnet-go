@@ -872,11 +872,11 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
 	allActiveIDs = append(allActiveIDs, newSourceIDs...)
-	if len(allActiveIDs) > 0 {
-		monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
-		if monErr := p.bufferMgr.UpdateMonitors(monitorMap); monErr != nil {
-			log.Warn("buffer monitor update failed during reconfigure", logger.Error(monErr))
-		}
+	// Always call UpdateMonitors — even with an empty slice — so stale
+	// monitors are torn down when the last active stream is disabled.
+	monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
+	if monErr := p.bufferMgr.UpdateMonitors(monitorMap); monErr != nil {
+		log.Warn("buffer monitor update failed during reconfigure", logger.Error(monErr))
 	}
 
 	log.Info("stream reconfiguration complete",
