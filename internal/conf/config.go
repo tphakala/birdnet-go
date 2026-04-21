@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/fs"
+	"iter"
 	"os"
 	"path/filepath"
 	"slices"
@@ -570,6 +571,38 @@ type RTSPSettings struct {
 	Transport        string             `yaml:"transport,omitempty" json:"transport,omitempty" mapstructure:"transport"`  // Legacy: global default, migrated on load
 	Health           RTSPHealthSettings `yaml:"health" json:"health" mapstructure:"health"`                               // Health monitoring settings
 	FFmpegParameters []string           `yaml:"ffmpegParameters" json:"ffmpegParameters" mapstructure:"ffmpegParameters"` // Custom FFmpeg parameters
+}
+
+// AllStreams returns an iterator over all configured streams as addressable pointers,
+// regardless of enabled state. Use this when every stream must be visited (e.g.
+// migrations, validation, applying defaults). Mutations via the pointer are reflected
+// in the original slice.
+func (r *RTSPSettings) AllStreams() iter.Seq2[int, *StreamConfig] {
+	return func(yield func(int, *StreamConfig) bool) {
+		for i := range r.Streams {
+			if !yield(i, &r.Streams[i]) {
+				return
+			}
+		}
+	}
+}
+
+// EnabledStreams returns an iterator over streams that are both enabled and have a
+// non-empty URL. Call sites that process active streams should use this instead of
+// ranging over Streams directly and checking IsEnabled(). Mutations via the pointer
+// are reflected in the original slice.
+func (r *RTSPSettings) EnabledStreams() iter.Seq2[int, *StreamConfig] {
+	return func(yield func(int, *StreamConfig) bool) {
+		for i := range r.Streams {
+			s := &r.Streams[i]
+			if s.URL == "" || !s.IsEnabled() {
+				continue
+			}
+			if !yield(i, s) {
+				return
+			}
+		}
+	}
 }
 
 // CRITICAL: Legacy fields (URLs, Transport) MUST include json tags to accept
@@ -2145,8 +2178,7 @@ func (s *Settings) MigrateSourceModels() bool {
 		migrated = true
 	}
 
-	for i := range s.Realtime.RTSP.Streams {
-		stream := &s.Realtime.RTSP.Streams[i]
+	for _, stream := range s.Realtime.RTSP.AllStreams() {
 		if len(stream.Models) > 0 {
 			continue
 		}
@@ -2241,8 +2273,7 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
 			}
 		}
 	}
-	for i := range s.Realtime.RTSP.Streams {
-		stream := &s.Realtime.RTSP.Streams[i]
+	for _, stream := range s.Realtime.RTSP.AllStreams() {
 		for _, modelID := range stream.Models {
 			if !enabledSet[strings.ToLower(modelID)] {
 				issues = append(issues, "warning: stream \""+stream.Name+"\" references model \""+modelID+"\" not in models.enabled")

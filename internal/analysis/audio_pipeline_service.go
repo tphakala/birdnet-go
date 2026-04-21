@@ -904,11 +904,7 @@ func (p *AudioPipelineService) buildSourceConfigsWithModels() []sourceConfigWith
 	var result []sourceConfigWithModels
 
 	// RTSP streams.
-	for i := range settings.Realtime.RTSP.Streams {
-		stream := &settings.Realtime.RTSP.Streams[i]
-		if stream.URL == "" || !stream.IsEnabled() {
-			continue
-		}
+	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		result = append(result, sourceConfigWithModels{
 			config: &audiocore.SourceConfig{
 				DisplayName:      stream.Name,

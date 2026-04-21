@@ -657,11 +657,7 @@ func registerSoundLevelProcessorsForActiveSources(settings *conf.Settings) error
 	}
 
 	// Register for each configured RTSP source
-	for i := range settings.Realtime.RTSP.Streams {
-		stream := &settings.Realtime.RTSP.Streams[i]
-		if !stream.IsEnabled() {
-			continue
-		}
+	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		totalSources++
 
 		displayName := stream.Name
@@ -693,12 +689,7 @@ func unregisterAllSoundLevelProcessors(settings *conf.Settings) {
 	}
 
 	// Log stream source unregistrations
-	for i := range settings.Realtime.RTSP.Streams {
-		stream := &settings.Realtime.RTSP.Streams[i]
-		if !stream.IsEnabled() {
-			continue
-		}
-
+	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		displayName := stream.Name
 		if displayName == "" {
 			displayName = privacy.SanitizeStreamUrl(stream.URL)

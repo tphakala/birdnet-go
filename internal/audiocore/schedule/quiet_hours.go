@@ -210,8 +210,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	s.mu.Lock()
 
-	for i := range settings.Realtime.RTSP.Streams {
-		stream := &settings.Realtime.RTSP.Streams[i]
+	for _, stream := range settings.Realtime.RTSP.AllStreams() {
 		if !stream.IsEnabled() {
 			delete(s.suppressed, stream.URL)
 			continue
@@ -254,11 +253,7 @@ func (s *QuietHoursScheduler) Evaluate() {
 
 	// Clean up suppressed entries for streams no longer in config.
 	configuredIDs := make(map[string]bool, len(settings.Realtime.RTSP.Streams))
-	for i := range settings.Realtime.RTSP.Streams {
-		stream := &settings.Realtime.RTSP.Streams[i]
-		if !stream.IsEnabled() {
-			continue
-		}
+	for _, stream := range settings.Realtime.RTSP.EnabledStreams() {
 		configuredIDs[stream.URL] = true
 	}
 	for id := range s.suppressed {

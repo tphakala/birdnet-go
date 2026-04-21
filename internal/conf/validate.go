@@ -292,8 +292,7 @@ func (r *RTSPSettings) ApplyStreamDefaults() {
 	if globalTransport == "" {
 		globalTransport = DefaultTransport
 	}
-	for i := range r.Streams {
-		stream := &r.Streams[i]
+	for _, stream := range r.AllStreams() {
 		if stream.Transport == "" && (stream.Type == StreamTypeRTSP || stream.Type == StreamTypeRTMP) {
 			stream.Transport = globalTransport
 		}
@@ -305,8 +304,7 @@ func (r *RTSPSettings) ValidateStreams() error {
 	names := make(map[string]bool)
 	urls := make(map[string]bool)
 
-	for i := range r.Streams {
-		stream := &r.Streams[i]
+	for i, stream := range r.AllStreams() {
 		// Validate individual stream
 		if err := stream.Validate(); err != nil {
 			return fmt.Errorf("stream %d: %w", i+1, err)
