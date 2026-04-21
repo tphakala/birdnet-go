@@ -174,10 +174,7 @@ export function coerceObject<T extends Record<string, unknown>>(
 }
 
 function coerceStreamConfig(stream: unknown): UnknownSettings {
-  const rawStream =
-    stream && typeof stream === 'object' && !Array.isArray(stream)
-      ? (stream as UnknownSettings)
-      : {};
+  const rawStream = coerceObject(stream, {} as UnknownSettings);
 
   return {
     ...rawStream,
@@ -193,10 +190,7 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {
-  const rawRtsp =
-    settings && typeof settings === 'object' && !Array.isArray(settings)
-      ? (settings as UnknownSettings)
-      : {};
+  const rawRtsp = coerceObject(settings, {} as UnknownSettings);
 
   return {
     ...rawRtsp,

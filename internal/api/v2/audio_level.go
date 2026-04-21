@@ -415,14 +415,16 @@ func (c *Controller) getAudioCardSources(registry *audiocore.SourceRegistry) []*
 
 // addStreamSourcesToLevels adds all configured stream sources to the levels map.
 func (c *Controller) addStreamSourcesToLevels(registry *audiocore.SourceRegistry, levels map[string]audiocore.AudioLevelData, isAuthenticated bool) {
-	for i, stream := range c.Settings.Realtime.RTSP.EnabledStreams() {
+	anonIdx := 0
+	for _, stream := range c.Settings.Realtime.RTSP.EnabledStreams() {
 		source, ok := registry.GetByConnection(stream.URL)
 		if !ok {
 			continue
 		}
+		anonIdx++
 		displayName := source.DisplayName
 		if !isAuthenticated {
-			displayName = fmt.Sprintf("camera-%d", i+1)
+			displayName = fmt.Sprintf("camera-%d", anonIdx)
 			cacheStreamAnonymName(source.ID, displayName)
 		}
 		levels[source.ID] = createAudioLevelEntry(source.ID, displayName)
