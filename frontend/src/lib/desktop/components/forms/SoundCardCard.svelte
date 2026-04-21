@@ -23,12 +23,14 @@
   import { cn } from '$lib/utils/cn';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
+  import NumberField from './NumberField.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import type {
     AudioSourceConfig,
     EqualizerFilterType,
     QuietHoursConfig,
+    LowNoiseAutoSuspendSettings,
   } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
@@ -62,6 +64,7 @@
     sources: AudioSourceConfig[];
     audioDevices: Array<{ index: number; name: string; id: string }>;
     modelOptions: Array<{ value: string; label: string }>;
+    analysisSuspended?: boolean;
     disabled?: boolean;
     onUpdate: (_source: AudioSourceConfig) => boolean;
     onDelete: () => void;
@@ -73,6 +76,7 @@
     sources,
     audioDevices,
     modelOptions,
+    analysisSuspended = false,
     disabled = false,
     onUpdate,
     onDelete,
@@ -88,6 +92,25 @@
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
+  let editLowNoiseAutoSuspend = $state<LowNoiseAutoSuspendSettings>({
+    enabled: false,
+    suspendThreshold: 15,
+    resumeThreshold: 25,
+    minSuspendFrames: 3,
+    minResumeFrames: 2,
+  });
+
+  const lowNoiseValidationError = $derived.by(() => {
+    if (!editLowNoiseAutoSuspend.enabled) return '';
+    if (editLowNoiseAutoSuspend.resumeThreshold <= editLowNoiseAutoSuspend.suspendThreshold) {
+      return t('settings.audio.lowNoiseAutoSuspend.validation.resumeGreaterThanSuspend');
+    }
+    return '';
+  });
+
+  const canSave = $derived(
+    Boolean(editName.trim()) && Boolean(editDevice) && lowNoiseValidationError.length === 0
+  );
 
   // Device display name lookup
   let deviceDisplayName = $derived(
@@ -118,6 +141,13 @@
       ? { ...source.equalizer, filters: [...source.equalizer.filters] }
       : { enabled: false, filters: [] };
     editQuietHours = source.quietHours ? { ...source.quietHours } : { ...defaultQuietHoursConfig };
+    editLowNoiseAutoSuspend = {
+      enabled: source.lowNoiseAutoSuspend?.enabled ?? false,
+      suspendThreshold: source.lowNoiseAutoSuspend?.suspendThreshold ?? 15,
+      resumeThreshold: source.lowNoiseAutoSuspend?.resumeThreshold ?? 25,
+      minSuspendFrames: source.lowNoiseAutoSuspend?.minSuspendFrames ?? 3,
+      minResumeFrames: source.lowNoiseAutoSuspend?.minResumeFrames ?? 2,
+    };
     showEqualizer = false;
     isEditing = true;
   }
@@ -154,6 +184,7 @@
       models: editModels,
       equalizer: transformedEqualizer,
       quietHours: editQuietHours,
+      lowNoiseAutoSuspend: editLowNoiseAutoSuspend,
     };
 
     const success = onUpdate(updated);
@@ -330,6 +361,63 @@
           idPrefix="soundcard-qh-{index}"
         />
 
+        <div class="space-y-4 rounded-lg border border-[var(--border-200)] p-4">
+          <label class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)]">
+            <input
+              type="checkbox"
+              checked={editLowNoiseAutoSuspend.enabled}
+              onchange={event => {
+                const target = event.currentTarget as HTMLInputElement;
+                editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, enabled: target.checked };
+              }}
+            />
+            {t('settings.audio.lowNoiseAutoSuspend.enable')}
+          </label>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <NumberField
+              label={t('settings.audio.lowNoiseAutoSuspend.suspendThreshold')}
+              value={editLowNoiseAutoSuspend.suspendThreshold}
+              onUpdate={value =>
+                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, suspendThreshold: value })}
+              min={0}
+              max={100}
+              step={1}
+              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
+            />
+            <NumberField
+              label={t('settings.audio.lowNoiseAutoSuspend.resumeThreshold')}
+              value={editLowNoiseAutoSuspend.resumeThreshold}
+              onUpdate={value =>
+                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, resumeThreshold: value })}
+              min={0}
+              max={100}
+              step={1}
+              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
+            />
+            <NumberField
+              label={t('settings.audio.lowNoiseAutoSuspend.minSuspendFrames')}
+              value={editLowNoiseAutoSuspend.minSuspendFrames}
+              onUpdate={value =>
+                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, minSuspendFrames: value })}
+              min={0}
+              step={1}
+              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
+            />
+            <NumberField
+              label={t('settings.audio.lowNoiseAutoSuspend.minResumeFrames')}
+              value={editLowNoiseAutoSuspend.minResumeFrames}
+              onUpdate={value =>
+                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, minResumeFrames: value })}
+              min={0}
+              step={1}
+              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
+            />
+          </div>
+          {#if lowNoiseValidationError}
+            <p class="text-xs text-[var(--color-error)]">{lowNoiseValidationError}</p>
+          {/if}
+        </div>
+
         <!-- Action Buttons -->
         <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-200)]">
           <button
@@ -344,7 +432,7 @@
             type="button"
             class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             onclick={saveEdit}
-            disabled={!editName.trim() || !editDevice}
+            disabled={!canSave}
           >
             <Check class="size-4" />
             {t('common.save')}
@@ -374,6 +462,15 @@
               >
                 <Moon class="size-3" />
                 {t('settings.audio.quietHours.badge')}
+              </span>
+            {/if}
+            {#if source.lowNoiseAutoSuspend?.enabled}
+              <span
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
+              >
+                {analysisSuspended
+                  ? t('settings.audio.lowNoiseAutoSuspend.status.suspended')
+                  : t('settings.audio.lowNoiseAutoSuspend.status.active')}
               </span>
             {/if}
           </div>

@@ -169,6 +169,13 @@
     return qhStatus.suppressedStreams[sanitized] === true;
   }
 
+  function isAnalysisSuspended(url: string): boolean {
+    const qhStatus = quietHoursStore.status;
+    if (!qhStatus?.analysisSuspendedSources) return false;
+    const sanitized = sanitizeUrlForComparison(url);
+    return qhStatus.analysisSuspendedSources[sanitized] === true;
+  }
+
   // Convert backend process state to UI status
   function getStreamStatus(url: string, stream: StreamConfig): StreamStatus {
     // eslint-disable-next-line security/detect-object-injection -- URL from validated stream config, not user input
@@ -556,6 +563,7 @@
           {stream}
           {index}
           status={getStreamStatus(stream.url, stream)}
+          analysisSuspended={isAnalysisSuspended(stream.url)}
           {disabled}
           onUpdate={updatedStream => updateStream(index, updatedStream)}
           onDelete={() => deleteStream(index)}

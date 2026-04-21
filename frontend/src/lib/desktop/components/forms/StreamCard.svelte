@@ -54,12 +54,21 @@
     stream: StreamConfig;
     index: number;
     status?: StreamStatus;
+    analysisSuspended?: boolean;
     disabled?: boolean;
     onUpdate: (_stream: StreamConfig) => boolean;
     onDelete: () => void;
   }
 
-  let { stream, index, status = 'unknown', disabled = false, onUpdate, onDelete }: Props = $props();
+  let {
+    stream,
+    index,
+    status = 'unknown',
+    analysisSuspended = false,
+    disabled = false,
+    onUpdate,
+    onDelete,
+  }: Props = $props();
 
   // Get the stream health state from context - the $state object is passed directly
   // Mutations to this object are reactive and will trigger re-renders
@@ -473,6 +482,13 @@
               >
                 <Moon class="size-3" />
                 {t('settings.audio.quietHours.badge')}
+              </span>
+            {/if}
+            {#if analysisSuspended}
+              <span
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
+              >
+                {t('settings.audio.lowNoiseAutoSuspend.status.suspended')}
               </span>
             {/if}
           </div>

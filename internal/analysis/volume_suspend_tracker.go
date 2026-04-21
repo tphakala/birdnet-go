@@ -70,15 +70,15 @@ func (t *VolumeSuspendTracker) RemoveSource(sourceID string) {
 	delete(t.states, sourceID)
 }
 
-// ShouldSuspendAnalysis checks if analysis should be suspended based on current audio level.
-// Returns (shouldSkip bool, reason string).
-func (t *VolumeSuspendTracker) ShouldSuspendAnalysis(sourceID string, audioLevel int) (bool, string) {
+// UpdateAudioLevel updates suspend/resume state for a source based on audio level.
+// This is the write path and is intended to be called from the audio pipeline layer.
+func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
 	state, exists := t.states[sourceID]
 	if !exists {
-		return false, ""
+		return
 	}
 
 	log := GetLogger()
@@ -95,9 +95,6 @@ func (t *VolumeSuspendTracker) ShouldSuspendAnalysis(sourceID string, audioLevel
 		// In the hysteresis zone - maintain current state without changing counters
 	}
 
-	// State transition logic
-	previousState := state.isSuspended
-
 	if !state.isSuspended && state.lowVolumeCount >= state.minSuspendFrames {
 		// Transition to suspended
 		state.isSuspended = true
@@ -112,11 +109,11 @@ func (t *VolumeSuspendTracker) ShouldSuspendAnalysis(sourceID string, audioLevel
 	} else if state.isSuspended && state.highVolumeCount >= state.minResumeFrames {
 		// Transition to active
 		state.isSuspended = false
+		suspendDuration := now.Sub(state.lastStateChange)
 		state.lastStateChange = now
 		state.lowVolumeCount = 0
 		state.highVolumeCount = 0
 
-		suspendDuration := now.Sub(state.lastStateChange)
 		log.Info("analysis resumed due to high audio level",
 			logger.String("source", sourceID),
 			logger.Int("audio_level", audioLevel),
@@ -134,19 +131,6 @@ func (t *VolumeSuspendTracker) ShouldSuspendAnalysis(sourceID string, audioLevel
 			logger.Duration("suspended_duration", suspendDuration))
 	}
 
-	// Log state changes at debug level
-	if previousState != state.isSuspended {
-		log.Debug("volume suspend state changed",
-			logger.String("source", sourceID),
-			logger.Bool("suspended", state.isSuspended),
-			logger.Int("audio_level", audioLevel))
-	}
-
-	if state.isSuspended {
-		return true, "low audio level"
-	}
-
-	return false, ""
 }
 
 // IsSuspended returns whether analysis is currently suspended for the given source.

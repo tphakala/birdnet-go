@@ -136,6 +136,15 @@ export interface AudioSourceConfig {
   models: string[]; // e.g. ["birdnet", "perch_v2"]
   equalizer?: EqualizerSettings;
   quietHours?: QuietHoursConfig;
+  lowNoiseAutoSuspend?: LowNoiseAutoSuspendSettings;
+}
+
+export interface LowNoiseAutoSuspendSettings {
+  enabled: boolean;
+  suspendThreshold: number;
+  resumeThreshold: number;
+  minSuspendFrames: number;
+  minResumeFrames: number;
 }
 
 export interface AudioSettings {

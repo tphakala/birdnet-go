@@ -4,7 +4,7 @@ This feature allows BirdNET-Go to automatically suspend audio analysis when the 
 
 ## Configuration
 
-Add the `lowNoiseAutoSleep` section to your audio source configuration in `config.yaml`:
+Add the `lowNoiseAutoSuspend` section to your audio source configuration in `config.yaml`:
 
 ```yaml
 realtime:
@@ -12,7 +12,7 @@ realtime:
     sources:
       - name: "Front Yard Microphone"
         device: "hw:0,0"
-        lownoiseautosleep:
+        lownoiseautosuspend:
           enabled: true
           suspendthreshold: 15      # Audio level (0-100) below which to suspend analysis
           resumethreshold: 25       # Audio level (0-100) above which to resume analysis
@@ -66,7 +66,7 @@ realtime:
 
 ### Outdoor Microphone (Variable Noise)
 ```yaml
-lownoiseautosleep:
+lownoiseautosuspend:
   enabled: true
   suspendthreshold: 20
   resumethreshold: 30
@@ -76,7 +76,7 @@ lownoiseautosleep:
 
 ### Indoor Microphone (Quiet Environment)
 ```yaml
-lownoiseautosleep:
+lownoiseautosuspend:
   enabled: true
   suspendthreshold: 10   # Lower threshold for quieter environment
   resumethreshold: 20
@@ -86,7 +86,7 @@ lownoiseautosleep:
 
 ### High-Traffic Area (Frequent Activity)
 ```yaml
-lownoiseautosleep:
+lownoiseautosuspend:
   enabled: true
   suspendthreshold: 30   # Higher threshold to avoid frequent suspensions
   resumethreshold: 40

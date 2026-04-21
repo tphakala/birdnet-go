@@ -234,6 +234,32 @@ export function coerceBirdNetSettings(settings: PartialBirdNetSettings): Partial
 export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudioSettings {
   const coerced = { ...settings };
 
+  if (Array.isArray(settings.sources)) {
+    coerced.sources = settings.sources.map(source => {
+      const sourceObj =
+        source && typeof source === 'object' && !Array.isArray(source)
+          ? (source as UnknownSettings)
+          : {};
+      const existingLowNoise =
+        sourceObj.lowNoiseAutoSuspend &&
+        typeof sourceObj.lowNoiseAutoSuspend === 'object' &&
+        !Array.isArray(sourceObj.lowNoiseAutoSuspend)
+          ? (sourceObj.lowNoiseAutoSuspend as UnknownSettings)
+          : {};
+
+      return {
+        ...sourceObj,
+        lowNoiseAutoSuspend: {
+          enabled: coerceBoolean(existingLowNoise.enabled, false),
+          suspendThreshold: coerceNumber(existingLowNoise.suspendThreshold, 0, 100, 15),
+          resumeThreshold: coerceNumber(existingLowNoise.resumeThreshold, 0, 100, 25),
+          minSuspendFrames: coerceNumber(existingLowNoise.minSuspendFrames, 0, 1000, 3),
+          minResumeFrames: coerceNumber(existingLowNoise.minResumeFrames, 0, 1000, 2),
+        },
+      };
+    }) as typeof settings.sources;
+  }
+
   // Capture duration: 1 to 3600 seconds (1 hour max)
   if ('captureDuration' in settings) {
     coerced.captureDuration = coerceNumber(settings.captureDuration, 1, 3600, 3);

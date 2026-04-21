@@ -367,6 +367,7 @@ func (p *AudioPipelineService) removeAllSources(operation string) {
 		}
 		// Clean up volume suspend tracking for removed source
 		tracker.RemoveSource(src.ID)
+		audiocore.RemoveAnalysisState(src.ID)
 	}
 }
 
@@ -407,7 +408,7 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 	p.registerConsumersForSources(sourceIDs, sourceModelMap, audioLevelChan, operation)
 	p.registerSoundLevelConsumers(sourceIDs, operation)
 
-	// Initialize volume suspend tracking for sources with low-noise auto-suspend enabled
+	// Initialize volume suspend tracking for sources with low-noise auto-suspend enabled.
 	p.initializeVolumeSuspendTracking(sourceIDs, operation)
 
 	// Update buffer monitors for the new sources.
@@ -599,6 +600,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 			continue
 		}
+		tracker := GetVolumeSuspendTracker()
 		p.wg.Go(func() {
 			for {
 				select {
@@ -606,6 +608,8 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
+					tracker.UpdateAudioLevel(sid, lvl.Level)
+					audiocore.SetAnalysisSuspended(sid, tracker.IsSuspended(sid))
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
 					default:
@@ -627,12 +631,13 @@ func (p *AudioPipelineService) initializeVolumeSuspendTracking(sourceIDs []strin
 
 	for _, sid := range sourceIDs {
 		srcCfg := settings.Realtime.Audio.FindSourceByID(sid)
-		if srcCfg != nil && srcCfg.LowNoiseAutoSleep.Enabled {
-			tracker.InitializeSource(sid, srcCfg.LowNoiseAutoSleep)
+		if srcCfg != nil && srcCfg.LowNoiseAutoSuspend.Enabled {
+			tracker.InitializeSource(sid, srcCfg.LowNoiseAutoSuspend)
+			audiocore.SetAnalysisSuspended(sid, false)
 			log.Info("initialized volume suspend tracking for source",
 				logger.String("source_id", sid),
-				logger.Int("suspend_threshold", srcCfg.LowNoiseAutoSleep.SuspendThreshold),
-				logger.Int("resume_threshold", srcCfg.LowNoiseAutoSleep.ResumeThreshold),
+				logger.Int("suspend_threshold", srcCfg.LowNoiseAutoSuspend.SuspendThreshold),
+				logger.Int("resume_threshold", srcCfg.LowNoiseAutoSuspend.ResumeThreshold),
 				logger.String("operation", operation))
 		}
 	}
@@ -720,6 +725,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 					logger.String("source_id", src.ID),
 					logger.Error(err))
 			}
+			GetVolumeSuspendTracker().RemoveSource(src.ID)
+			audiocore.RemoveAnalysisState(src.ID)
 		}
 	}
 

@@ -14,18 +14,21 @@
   @component
 -->
 <script lang="ts">
+  import { onDestroy, onMount } from 'svelte';
   import { Plus, Mic, RefreshCw, ChevronDown } from '@lucide/svelte';
   import { untrack } from 'svelte';
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { toastActions } from '$lib/stores/toast';
+  import { quietHoursStore } from '$lib/stores/quietHours.svelte';
   import { api } from '$lib/utils/api';
   import { cn } from '$lib/utils/cn';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
   import InlineSlider from './InlineSlider.svelte';
+  import NumberField from './NumberField.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
   import EmptyState from '$lib/desktop/features/settings/components/EmptyState.svelte';
@@ -33,6 +36,7 @@
     AudioSourceConfig,
     EqualizerFilterType,
     QuietHoursConfig,
+    LowNoiseAutoSuspendSettings,
   } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
 
@@ -129,6 +133,20 @@
   let newEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let newQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showNewEqualizer = $state(false);
+  let newLowNoiseAutoSuspend = $state<LowNoiseAutoSuspendSettings>({
+    enabled: false,
+    suspendThreshold: 15,
+    resumeThreshold: 25,
+    minSuspendFrames: 3,
+    minResumeFrames: 2,
+  });
+  const lowNoiseValidationError = $derived.by(() => {
+    if (!newLowNoiseAutoSuspend.enabled) return '';
+    if (newLowNoiseAutoSuspend.resumeThreshold <= newLowNoiseAutoSuspend.suspendThreshold) {
+      return t('settings.audio.lowNoiseAutoSuspend.validation.resumeGreaterThanSuspend');
+    }
+    return '';
+  });
   let nameError = $state<string | null>(null);
   let deviceError = $state<string | null>(null);
 
@@ -153,6 +171,13 @@
     newModels = getDefaultModels();
     newEqualizer = { enabled: false, filters: [] };
     newQuietHours = { ...defaultQuietHoursConfig };
+    newLowNoiseAutoSuspend = {
+      enabled: false,
+      suspendThreshold: 15,
+      resumeThreshold: 25,
+      minSuspendFrames: 3,
+      minResumeFrames: 2,
+    };
     showNewEqualizer = false;
     clearErrors();
     showAddForm = false;
@@ -199,6 +224,9 @@
     if (newModels.length === 0) {
       newModels = getDefaultModels();
     }
+    if (lowNoiseValidationError) {
+      return;
+    }
 
     // Transform equalizer filters to ensure all have an id (required by store type)
     const transformedEqualizer =
@@ -219,6 +247,7 @@
       models: newModels,
       equalizer: transformedEqualizer,
       quietHours: newQuietHours,
+      lowNoiseAutoSuspend: newLowNoiseAutoSuspend,
     };
 
     onUpdateSources([...sources, newSource]);
@@ -275,6 +304,14 @@
       })),
     };
   }
+
+  onMount(() => {
+    quietHoursStore.startPolling();
+  });
+
+  onDestroy(() => {
+    quietHoursStore.stopPolling();
+  });
 </script>
 
 <div class="space-y-4">
@@ -329,6 +366,7 @@
           {sources}
           {audioDevices}
           {modelOptions}
+          analysisSuspended={quietHoursStore.status?.analysisSuspendedSources?.[source.device] === true}
           {disabled}
           onUpdate={updatedSource => updateSource(index, updatedSource)}
           onDelete={() => deleteSource(index)}
@@ -451,6 +489,63 @@
               idPrefix="new-soundcard-qh"
             />
 
+            <div class="space-y-4 rounded-lg border border-[var(--border-200)] p-4">
+              <label class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)]">
+                <input
+                  type="checkbox"
+                  checked={newLowNoiseAutoSuspend.enabled}
+                  onchange={event => {
+                    const target = event.currentTarget as HTMLInputElement;
+                    newLowNoiseAutoSuspend = { ...newLowNoiseAutoSuspend, enabled: target.checked };
+                  }}
+                />
+                {t('settings.audio.lowNoiseAutoSuspend.enable')}
+              </label>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <NumberField
+                  label={t('settings.audio.lowNoiseAutoSuspend.suspendThreshold')}
+                  value={newLowNoiseAutoSuspend.suspendThreshold}
+                  onUpdate={value =>
+                    (newLowNoiseAutoSuspend = { ...newLowNoiseAutoSuspend, suspendThreshold: value })}
+                  min={0}
+                  max={100}
+                  step={1}
+                  disabled={!newLowNoiseAutoSuspend.enabled || disabled}
+                />
+                <NumberField
+                  label={t('settings.audio.lowNoiseAutoSuspend.resumeThreshold')}
+                  value={newLowNoiseAutoSuspend.resumeThreshold}
+                  onUpdate={value =>
+                    (newLowNoiseAutoSuspend = { ...newLowNoiseAutoSuspend, resumeThreshold: value })}
+                  min={0}
+                  max={100}
+                  step={1}
+                  disabled={!newLowNoiseAutoSuspend.enabled || disabled}
+                />
+                <NumberField
+                  label={t('settings.audio.lowNoiseAutoSuspend.minSuspendFrames')}
+                  value={newLowNoiseAutoSuspend.minSuspendFrames}
+                  onUpdate={value =>
+                    (newLowNoiseAutoSuspend = { ...newLowNoiseAutoSuspend, minSuspendFrames: value })}
+                  min={0}
+                  step={1}
+                  disabled={!newLowNoiseAutoSuspend.enabled || disabled}
+                />
+                <NumberField
+                  label={t('settings.audio.lowNoiseAutoSuspend.minResumeFrames')}
+                  value={newLowNoiseAutoSuspend.minResumeFrames}
+                  onUpdate={value =>
+                    (newLowNoiseAutoSuspend = { ...newLowNoiseAutoSuspend, minResumeFrames: value })}
+                  min={0}
+                  step={1}
+                  disabled={!newLowNoiseAutoSuspend.enabled || disabled}
+                />
+              </div>
+              {#if lowNoiseValidationError}
+                <p class="text-xs text-[var(--color-error)]">{lowNoiseValidationError}</p>
+              {/if}
+            </div>
+
             <!-- Action Buttons -->
             <div class="flex gap-2 justify-end pt-2">
               <button
@@ -464,7 +559,7 @@
                 type="button"
                 class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                 onclick={addSource}
-                disabled={!newName.trim() || !newDevice || disabled}
+                disabled={!newName.trim() || !newDevice || Boolean(lowNoiseValidationError) || disabled}
               >
                 <Plus class="size-4" />
                 {t('settings.audio.soundCards.addSource')}

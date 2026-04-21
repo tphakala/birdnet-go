@@ -174,3 +174,45 @@ func TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs(t *testing.T) 
 func mapKeys[V any](m map[string]V) []string {
 	return slices.Sorted(maps.Keys(m))
 }
+
+func TestBuildAnalysisSuspendedPayload_AuthenticatedSanitizesStreamURLs(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]sourceAnalysisState{
+		"audio_card_1": {
+			Connection: "sysdefault",
+			Suspended:  true,
+		},
+		"rtsp_1": {
+			Connection: "rtsp://user:pass@cam1.lan:8554/stream",
+			Suspended:  false,
+		},
+	}
+
+	out := buildAnalysisSuspendedPayload(raw, false)
+	require.Len(t, out, 2)
+	assert.Equal(t, true, out["sysdefault"])
+	assert.Equal(t, false, out[privacy.SanitizeStreamUrl("rtsp://user:pass@cam1.lan:8554/stream")])
+}
+
+func TestBuildAnalysisSuspendedPayload_GuestObfuscatesStreamKeys(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]sourceAnalysisState{
+		"audio_card_1": {
+			Connection: "sysdefault",
+			Suspended:  true,
+		},
+		"rtsp_1": {
+			Connection: "rtsp://user:pass@cam1.lan:8554/stream",
+			Suspended:  false,
+		},
+	}
+
+	out := buildAnalysisSuspendedPayload(raw, true)
+	require.Len(t, out, 2)
+	assert.Contains(t, out, "audio-source")
+	assert.Equal(t, true, out["audio-source"])
+	assert.Contains(t, out, "stream-2")
+	assert.Equal(t, false, out["stream-2"])
+}

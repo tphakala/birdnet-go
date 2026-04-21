@@ -1129,7 +1129,7 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 
 	// Validate low-noise auto-suspend settings for each audio source
 	for i := range settings.Audio.Sources {
-		if err := validateLowNoiseAutoSuspendSettings(&settings.Audio.Sources[i].LowNoiseAutoSleep, settings.Audio.Sources[i].Name); err != nil {
+		if err := validateLowNoiseAutoSuspendSettings(&settings.Audio.Sources[i].LowNoiseAutoSuspend, settings.Audio.Sources[i].Name); err != nil {
 			return err
 		}
 	}

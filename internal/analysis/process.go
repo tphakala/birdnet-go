@@ -188,32 +188,19 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, 
 	log := GetLogger()
 	settings := conf.Setting()
 
-	// Check if low-noise auto-suspend is enabled for this source
-	sourceConfig := settings.Realtime.Audio.FindSourceByID(source)
-	if sourceConfig != nil && sourceConfig.LowNoiseAutoSleep.Enabled {
-		// Calculate current audio level from PCM data
-		audioLevel := calculateAudioLevel(data, source, sourceConfig.Name)
-
-		// Check if analysis should be suspended based on volume
-		tracker := GetVolumeSuspendTracker()
-		shouldSkip, reason := tracker.ShouldSuspendAnalysis(source, audioLevel.Level)
-
-		if shouldSkip {
-			// Record metric for skipped analysis
-			processMetricsMutex.RLock()
-			pm := processMetrics
-			processMetricsMutex.RUnlock()
-			if pm != nil {
-				pm.RecordAudioQueueOperation(source, "analysis_suspended", reason)
-			}
-
-			// Skip inference - audio data is not lost, just not analyzed
-			log.Debug("skipping analysis due to low audio level",
-				logger.String("source", source),
-				logger.Int("audio_level", audioLevel.Level),
-				logger.String("reason", reason))
-			return nil
+	// Skip inference while source is suspended by the volume tracker.
+	if GetVolumeSuspendTracker().IsSuspended(source) {
+		processMetricsMutex.RLock()
+		pm := processMetrics
+		processMetricsMutex.RUnlock()
+		if pm != nil {
+			pm.RecordAudioQueueOperation(source, "analysis_suspended", "low audio level")
 		}
+
+		log.Debug("skipping analysis due to low audio level",
+			logger.String("source", source),
+			logger.String("reason", "low audio level"))
+		return nil
 	}
 
 	// get current time to track processing time
@@ -290,7 +277,7 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, 
 	}
 
 	// Get the current settings
-	settings := conf.Setting()
+	settings = conf.Setting()
 
 	// Calculate the effective buffer duration
 	bufferDuration := 3 * time.Second // base duration

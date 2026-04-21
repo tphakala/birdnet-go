@@ -100,14 +100,14 @@ type LowNoiseAutoSuspendSettings struct {
 
 // AudioSourceConfig represents a single audio capture device with per-source settings.
 type AudioSourceConfig struct {
-	Name              string                      `yaml:"name" json:"name" mapstructure:"name"`                                        // Required: descriptive name like "Front Yard Mic"
-	Device            string                      `yaml:"device" json:"device" mapstructure:"device"`                                  // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
-	Gain              float64                     `yaml:"gain" json:"gain" mapstructure:"gain"`                                        // Input gain in dB (0 = no adjustment)
-	Model             string                      `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`                 // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
-	Models            []string                    `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`              // Model IDs for this source (e.g., ["birdnet", "perch_v2"])
-	Equalizer         *EqualizerSettings          `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"`     // Per-source EQ (nil = use global)
-	QuietHours        QuietHoursConfig            `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                      // Per-source quiet hours
-	LowNoiseAutoSleep LowNoiseAutoSuspendSettings `yaml:"lownoiseautosleep" json:"lowNoiseAutoSleep" mapstructure:"lowNoiseAutoSleep"` // Low-noise auto-suspend settings
+	Name                string                      `yaml:"name" json:"name" mapstructure:"name"`                                              // Required: descriptive name like "Front Yard Mic"
+	Device              string                      `yaml:"device" json:"device" mapstructure:"device"`                                        // Required: ALSA device ID (e.g., "sysdefault", "hw:0,0", "Loopback")
+	Gain                float64                     `yaml:"gain" json:"gain" mapstructure:"gain"`                                              // Input gain in dB (0 = no adjustment)
+	Model               string                      `yaml:"model,omitempty" json:"model,omitempty" mapstructure:"model"`                       // AI model: "" or "birdnet" (default), "perch_v2", "bat" (future)
+	Models              []string                    `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`                    // Model IDs for this source (e.g., ["birdnet", "perch_v2"])
+	Equalizer           *EqualizerSettings          `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"`           // Per-source EQ (nil = use global)
+	QuietHours          QuietHoursConfig            `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                            // Per-source quiet hours
+	LowNoiseAutoSuspend LowNoiseAutoSuspendSettings `yaml:"lownoiseautosuspend" json:"lowNoiseAutoSuspend" mapstructure:"lowNoiseAutoSuspend"` // Low-noise auto-suspend settings
 }
 
 type AudioSettings struct {

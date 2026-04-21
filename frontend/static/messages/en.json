@@ -3123,6 +3123,20 @@
         "devicesLoadFailed": "Failed to load audio devices. Please check system permissions.",
         "invalidBitrate": "Invalid bitrate value",
         "invalidRetentionPolicy": "Invalid retention policy"
+      },
+      "lowNoiseAutoSuspend": {
+        "enable": "Low noise auto suspend",
+        "suspendThreshold": "Suspend threshold",
+        "resumeThreshold": "Resume threshold",
+        "minSuspendFrames": "Min suspend frames",
+        "minResumeFrames": "Min resume frames",
+        "status": {
+          "active": "Analysis active",
+          "suspended": "Analysis suspended (low noise)"
+        },
+        "validation": {
+          "resumeGreaterThanSuspend": "Resume threshold must be greater than suspend threshold"
+        }
       }
     },
     "security": {

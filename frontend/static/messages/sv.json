@@ -3085,6 +3085,20 @@
         "devicesLoadFailed": "Kunde inte ladda ljudenheter. Kontrollera systembehörigheterna.",
         "invalidBitrate": "Ogiltigt bithastighetsvärde",
         "invalidRetentionPolicy": "Ogiltig lagringspolicy"
+      },
+      "lowNoiseAutoSuspend": {
+        "enable": "Low noise auto suspend",
+        "suspendThreshold": "Suspend threshold",
+        "resumeThreshold": "Resume threshold",
+        "minSuspendFrames": "Min suspend frames",
+        "minResumeFrames": "Min resume frames",
+        "status": {
+          "active": "Analysis active",
+          "suspended": "Analysis suspended (low noise)"
+        },
+        "validation": {
+          "resumeGreaterThanSuspend": "Resume threshold must be greater than suspend threshold"
+        }
       }
     },
     "security": {
