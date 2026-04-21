@@ -23,6 +23,7 @@ func (a *notificationAdapter) CreateAndBroadcast(notifType notification.Type, ti
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
+	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
 	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
@@ -36,6 +37,7 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
+	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
@@ -233,6 +235,54 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 		ImageURL:           imageURL,
 		DaysSinceFirstSeen: daysSinceFirstSeen,
 	}
+}
+
+// applyDetectionTemplates overrides title and message with user-configured
+// notification templates for detection events. Non-detection types pass through unchanged.
+func applyDetectionTemplates(notifType notification.Type, title, message string, eventProps map[string]any) (renderedTitle, renderedMessage string) {
+	if notifType != notification.TypeDetection {
+		return title, message
+	}
+	rt, rm := renderDetectionTemplates(eventProps)
+	if rt != "" {
+		title = rt
+	}
+	if rm != "" {
+		message = rm
+	}
+	return title, message
+}
+
+func renderDetectionTemplates(props map[string]any) (title, message string) {
+	settings := conf.GetSettings()
+	if settings == nil {
+		return "", ""
+	}
+
+	titleTmpl := settings.Notification.Templates.NewSpecies.Title
+	msgTmpl := settings.Notification.Templates.NewSpecies.Message
+	if titleTmpl == "" && msgTmpl == "" {
+		return "", ""
+	}
+
+	templateData := buildTemplateDataFromProps(props)
+	if templateData == nil {
+		return "", ""
+	}
+
+	if titleTmpl != "" {
+		if rendered, err := notification.RenderTemplate("title", titleTmpl, templateData); err == nil {
+			title = rendered
+		}
+	}
+
+	if msgTmpl != "" {
+		if rendered, err := notification.RenderTemplate("message", msgTmpl, templateData); err == nil {
+			message = rendered
+		}
+	}
+
+	return title, message
 }
 
 // Initialize creates and starts the alerting engine.
