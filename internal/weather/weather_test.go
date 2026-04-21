@@ -1313,10 +1313,10 @@ func TestNewService_PinsProviderName(t *testing.T) {
 		configured string
 		want       string
 	}{
-		{"yrno", "yrno"},
-		{"openweather", "openweather"},
-		{"wunderground", "wunderground"},
-		{"", "yrno"}, // empty defaults to yrno
+		{yrNoProviderName, yrNoProviderName},
+		{openWeatherProviderName, openWeatherProviderName},
+		{wundergroundProviderName, wundergroundProviderName},
+		{"", yrNoProviderName}, // empty defaults to yrno
 	}
 	for _, tt := range tests {
 		t.Run(tt.configured+"_pins_to_"+tt.want, func(t *testing.T) {
