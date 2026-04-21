@@ -456,7 +456,7 @@ func TestQuietHours_Evaluate(t *testing.T) {
 		settings := conf.GetTestSettings()
 		settings.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{
-				Name: "cam1", URL: "rtsp://cam1", Transport: "tcp",
+				Name: "cam1", URL: "rtsp://cam1", Enabled: true, Transport: "tcp",
 				QuietHours: conf.QuietHoursConfig{
 					Enabled:   true,
 					Mode:      "fixed",

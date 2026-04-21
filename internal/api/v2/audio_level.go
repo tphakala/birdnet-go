@@ -338,8 +338,11 @@ func (c *Controller) StreamAudioLevel(ctx echo.Context) error {
 			}
 
 		case <-activityCheck.C:
-			// Check for inactive sources and zero them out
-			if updated := c.checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime); updated {
+			// Prune sources that have been removed/disabled since the session started.
+			registry := c.engine.Registry()
+			pruned := registry != nil && c.pruneRemovedSources(registry, levels, lastUpdateTime, lastNonZeroTime)
+			// Check for inactive sources and zero them out.
+			if updated := c.checkSourceActivity(levels, lastUpdateTime, lastNonZeroTime); updated || pruned {
 				if err := c.sendAudioLevelUpdate(ctx, levels); err != nil {
 					return err
 				}
@@ -547,6 +550,26 @@ func (c *Controller) isSourceInactive(
 	noActivityTimeout := now.Sub(lastNonZero) > audioLevelInactivityThreshold
 
 	return noUpdateTimeout || noActivityTimeout
+}
+
+// pruneRemovedSources removes sources from the levels map that are no longer
+// present in the registry (e.g. a stream was disabled and torn down mid-session).
+// Returns true if any sources were pruned so the caller can send an update.
+func (c *Controller) pruneRemovedSources(
+	registry *audiocore.SourceRegistry,
+	levels map[string]audiocore.AudioLevelData,
+	lastUpdateTime, lastNonZeroTime map[string]time.Time,
+) bool {
+	pruned := false
+	for sourceID := range levels {
+		if _, ok := registry.Get(sourceID); !ok {
+			delete(levels, sourceID)
+			delete(lastUpdateTime, sourceID)
+			delete(lastNonZeroTime, sourceID)
+			pruned = true
+		}
+	}
+	return pruned
 }
 
 // checkSourceActivity checks all sources for inactivity
