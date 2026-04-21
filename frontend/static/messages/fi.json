@@ -2794,6 +2794,8 @@
       "streams": {
         "streamLabel": "Lähetys",
         "nameLabel": "Striimin nimi",
+        "enabled": "Käytössä",
+        "disabled": "Pois käytöstä",
         "namePlaceholder": "esim. Etupihan ruokinta",
         "nameHelp": "Kuvaava nimi tämän äänistriimin tunnistamiseen",
         "urlLabel": "Striimin URL",

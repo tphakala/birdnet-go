@@ -3021,6 +3021,8 @@
       "streams": {
         "streamLabel": "Stream",
         "nameLabel": "Stream-Name",
+        "enabled": "Aktiviert",
+        "disabled": "Deaktiviert",
         "namePlaceholder": "z.B. Futterhaus Vorgarten",
         "nameHelp": "Ein beschreibender Name zur Identifizierung dieses Audiostreams",
         "urlLabel": "Stream-URL",

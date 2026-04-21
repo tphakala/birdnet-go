@@ -2845,6 +2845,8 @@
       "streams": {
         "streamLabel": "Straume",
         "nameLabel": "Straumes nosaukums",
+        "enabled": "Iespējots",
+        "disabled": "Atspējots",
         "namePlaceholder": "piem., Priekšpagalma barotava",
         "nameHelp": "Aprakstošs nosaukums šīs audio straumes identificēšanai",
         "urlLabel": "Straumes URL",

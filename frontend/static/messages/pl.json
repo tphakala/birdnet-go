@@ -3027,6 +3027,8 @@
       "streams": {
         "streamLabel": "Strumień",
         "nameLabel": "Nazwa Strumienia",
+        "enabled": "Włączony",
+        "disabled": "Wyłączony",
         "namePlaceholder": "np. Karmnik w Ogrodzie",
         "nameHelp": "Opisowa nazwa do identyfikacji tego strumienia audio",
         "urlLabel": "URL Strumienia",

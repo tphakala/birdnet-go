@@ -2845,6 +2845,8 @@
       "streams": {
         "streamLabel": "Ström",
         "nameLabel": "Strömmens namn",
+        "enabled": "Aktiverad",
+        "disabled": "Inaktiverad",
         "namePlaceholder": "t.ex. Fågelmatare på framsidan",
         "nameHelp": "Ett beskrivande namn för att identifiera denna ljudström",
         "urlLabel": "Strömmens URL",

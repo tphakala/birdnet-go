@@ -529,7 +529,7 @@
             {#if healthySummary.disabled > 0}
               <StatusPill
                 variant="neutral"
-                label="{healthySummary.disabled} {t('settings.alerts.disabled')}"
+                label="{healthySummary.disabled} {t('settings.audio.streams.disabled')}"
                 size="sm"
               />
             {/if}

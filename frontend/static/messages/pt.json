@@ -2794,6 +2794,8 @@
       "streams": {
         "streamLabel": "Transmissão",
         "nameLabel": "Nome do Stream",
+        "enabled": "Ativada",
+        "disabled": "Desativada",
         "namePlaceholder": "ex. Comedouro do Jardim",
         "nameHelp": "Um nome descritivo para identificar este stream de áudio",
         "urlLabel": "URL do Stream",

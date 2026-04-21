@@ -1938,6 +1938,8 @@ export type TranslationKey =
   | 'settings.audio.streams.healthy'
   | 'settings.audio.streams.unhealthy'
   | 'settings.audio.streams.unknown'
+  | 'settings.audio.streams.enabled'
+  | 'settings.audio.streams.disabled'
   | 'settings.audio.streams.refresh'
   | 'settings.audio.streams.addStream'
   | 'settings.audio.streams.deleteConfirm'

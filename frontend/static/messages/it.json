@@ -2815,6 +2815,8 @@
       "streams": {
         "streamLabel": "Flusso",
         "nameLabel": "Nome Flusso",
+        "enabled": "Attivato",
+        "disabled": "Disattivato",
         "namePlaceholder": "es. Mangiatoia Cortile Anteriore",
         "nameHelp": "Un nome descrittivo per identificare questo flusso audio",
         "urlLabel": "URL Flusso",

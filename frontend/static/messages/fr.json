@@ -3021,6 +3021,8 @@
       "streams": {
         "streamLabel": "Flux",
         "nameLabel": "Nom du Flux",
+        "enabled": "Activé",
+        "disabled": "Désactivé",
         "namePlaceholder": "ex. Mangeoire Jardin",
         "nameHelp": "Un nom descriptif pour identifier ce flux audio",
         "urlLabel": "URL du Flux",

@@ -2815,6 +2815,8 @@
       "streams": {
         "streamLabel": "Stream",
         "nameLabel": "Názov streamu",
+        "enabled": "Povolené",
+        "disabled": "Zakázané",
         "namePlaceholder": "napr. Kŕmidlo pred domom",
         "nameHelp": "Popisný názov na identifikáciu tohto zvukového streamu",
         "urlLabel": "URL streamu",

@@ -2845,6 +2845,8 @@
       "streams": {
         "streamLabel": "Strøm",
         "nameLabel": "Strømnavn",
+        "enabled": "Aktiveret",
+        "disabled": "Deaktiveret",
         "namePlaceholder": "f.eks. Forhavens foderplads",
         "nameHelp": "Et beskrivende navn til at identificere denne lydstrøm",
         "urlLabel": "Strøm-URL",

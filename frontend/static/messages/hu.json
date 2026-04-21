@@ -2846,6 +2846,8 @@
       "streams": {
         "streamLabel": "Adatfolyam",
         "nameLabel": "Stream neve",
+        "enabled": "Engedélyezve",
+        "disabled": "Letiltva",
         "namePlaceholder": "pl., Elülső kert etető",
         "nameHelp": "Egy leíró név a hang stream azonosításához",
         "urlLabel": "Adatfolyam URL",
