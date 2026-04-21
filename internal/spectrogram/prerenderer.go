@@ -84,6 +84,13 @@ type Stats struct {
 	Skipped   int64 // Number skipped (already exist)
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// spectrogram size/raw/export path take effect on the next rendered job
+// without restarting the pre-renderer.
+func (pr *PreRenderer) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(pr.settings)
+}
+
 // normalizeSpectrogramPath converts a relative spectrogram path to absolute
 // using SecureFS base directory, avoiding path doubling when the path
 // already includes the export prefix (e.g., "clips/2026/03/file.png").
@@ -92,7 +99,7 @@ func (pr *PreRenderer) normalizeSpectrogramPath(spectrogramPath string) string {
 	if filepath.IsAbs(spectrogramPath) {
 		return spectrogramPath
 	}
-	exportPath := pr.settings.Realtime.Audio.Export.Path
+	exportPath := pr.currentSettings().Realtime.Audio.Export.Path
 	if relToExport, err := filepath.Rel(exportPath, spectrogramPath); err == nil && !strings.HasPrefix(relToExport, "..") {
 		return filepath.Join(pr.sfs.BaseDir(), relToExport)
 	}
@@ -125,8 +132,8 @@ func (pr *PreRenderer) Start() {
 	pr.logger.Info("Starting spectrogram pre-renderer",
 		logger.Int("workers", pr.workers),
 		logger.Int("queue_size", defaultQueueSize),
-		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
-		logger.Bool("raw", pr.settings.Realtime.Dashboard.Spectrogram.Raw))
+		logger.String("size", pr.currentSettings().Realtime.Dashboard.Spectrogram.Size),
+		logger.Bool("raw", pr.currentSettings().Realtime.Dashboard.Spectrogram.Raw))
 
 	for i := range pr.workers {
 		pr.wg.Add(1)
@@ -408,12 +415,12 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	}
 
 	// Convert size string to pixels
-	width, err := SizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
+	width, err := SizeToPixels(pr.currentSettings().Realtime.Dashboard.Spectrogram.Size)
 	if err != nil {
 		pr.logger.Error("Invalid spectrogram size",
 			logger.Int("worker_id", workerID),
 			logger.Any("note_id", job.NoteID),
-			logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+			logger.String("size", pr.currentSettings().Realtime.Dashboard.Spectrogram.Size),
 			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -430,11 +437,11 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	pr.logger.Info("Spectrogram generation started",
 		logger.Any("note_id", job.NoteID),
 		logger.String("audio_path", job.ClipPath),
-		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+		logger.String("size", pr.currentSettings().Realtime.Dashboard.Spectrogram.Size),
 		logger.String("operation", "spectrogram_generation_start"))
 
 	// Generate spectrogram using shared generator
-	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
+	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.currentSettings().Realtime.Dashboard.Spectrogram.Raw); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
 		if IsOperationalError(err) {

@@ -108,6 +108,13 @@ type Service struct {
 	backoff      backoffState
 }
 
+// currentSettings returns the latest settings snapshot so the service picks
+// up changes made through the UI (e.g. a new BirdNET latitude/longitude)
+// without requiring a restart.
+func (s *Service) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(s.settings)
+}
+
 // WeatherData represents the common structure for weather data across providers
 type WeatherData struct {
 	Time          time.Time
@@ -421,15 +428,22 @@ func (s *Service) Poll() error {
 // errors. For persistent authentication failures (HTTP 401), it stops retrying
 // entirely after maxConsecutiveAuthFailures.
 func (s *Service) fetchAndSave() error {
+	// Read a fresh settings snapshot so coordinate changes made via the
+	// settings UI take effect without restarting the weather service.
+	// Provider stays pinned to what NewService selected — changing provider
+	// still requires a service restart.
+	currentSettings := s.currentSettings()
+	providerName := currentSettings.Realtime.Weather.Provider
+
 	// Check if we should skip this cycle due to backoff
 	if s.backoff.shouldSkip() {
 		if s.backoff.isAuthDisabled() {
 			// Already logged when auth was disabled; emit periodic reminder at Debug level
 			getLogger().Debug("Skipping weather fetch — API authentication disabled due to repeated 401 errors",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
+				logger.String("provider", providerName))
 		} else {
 			getLogger().Debug("Skipping weather fetch — backing off after previous failures",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
+				logger.String("provider", providerName))
 		}
 		return nil
 	}
@@ -438,7 +452,7 @@ func (s *Service) fetchAndSave() error {
 	fetchStart := time.Now()
 
 	// FetchWeather should now internally log its start/end/errors
-	data, err := s.provider.FetchWeather(s.settings)
+	data, err := s.provider.FetchWeather(currentSettings)
 
 	if err != nil {
 		// Handle "not modified" as a success case — no new data to save.
@@ -446,11 +460,11 @@ func (s *Service) fetchAndSave() error {
 		// not counted as errors.
 		if errors.Is(err, ErrWeatherDataNotModified) {
 			if s.metrics != nil {
-				s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
-				s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "not_modified")
+				s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(providerName, "not_modified")
 			}
 			getLogger().Debug("Weather data not modified since last fetch",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
+				logger.String("provider", providerName))
 			s.backoff.reset()
 			return nil
 		}
@@ -459,11 +473,11 @@ func (s *Service) fetchAndSave() error {
 		// This is a valid API response, not an error condition.
 		if errors.Is(err, ErrWeatherNoData) {
 			if s.metrics != nil {
-				s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
-				s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "no_data")
+				s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
+				s.metrics.RecordWeatherFetch(providerName, "no_data")
 			}
 			getLogger().Debug("Weather station has no data available, will retry next cycle",
-				logger.String("provider", s.settings.Realtime.Weather.Provider))
+				logger.String("provider", providerName))
 			// Don't backoff — this is a normal condition for inactive stations
 			return nil
 		}
@@ -471,12 +485,12 @@ func (s *Service) fetchAndSave() error {
 
 	// Record fetch metrics for real errors and successes
 	if s.metrics != nil {
-		s.metrics.RecordWeatherFetchDuration(s.settings.Realtime.Weather.Provider, time.Since(fetchStart).Seconds())
+		s.metrics.RecordWeatherFetchDuration(providerName, time.Since(fetchStart).Seconds())
 		if err != nil {
-			s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "error")
-			s.metrics.RecordWeatherFetchError(s.settings.Realtime.Weather.Provider, "fetch_error")
+			s.metrics.RecordWeatherFetch(providerName, "error")
+			s.metrics.RecordWeatherFetchError(providerName, "fetch_error")
 		} else {
-			s.metrics.RecordWeatherFetch(s.settings.Realtime.Weather.Provider, "success")
+			s.metrics.RecordWeatherFetch(providerName, "success")
 		}
 	}
 
@@ -487,11 +501,11 @@ func (s *Service) fetchAndSave() error {
 			if stopped {
 				getLogger().Error("Weather API authentication failed repeatedly — stopping retries. "+
 					"Please check your API key in the settings and restart the service.",
-					logger.String("provider", s.settings.Realtime.Weather.Provider),
+					logger.String("provider", providerName),
 					logger.Int("consecutive_failures", maxConsecutiveAuthFailures))
 			} else {
 				getLogger().Warn("Weather API authentication failed — will retry",
-					logger.String("provider", s.settings.Realtime.Weather.Provider),
+					logger.String("provider", providerName),
 					logger.Error(err))
 			}
 			return ErrWeatherAuthFailed
@@ -500,7 +514,7 @@ func (s *Service) fetchAndSave() error {
 		// General failure: apply exponential backoff
 		backoff, failures := s.backoff.recordFailure()
 		getLogger().Error("Failed to fetch weather data from provider, backing off",
-			logger.String("provider", s.settings.Realtime.Weather.Provider),
+			logger.String("provider", providerName),
 			logger.String("backoff", backoff.String()),
 			logger.Int("consecutive_failures", failures),
 			logger.Error(err))
@@ -509,7 +523,7 @@ func (s *Service) fetchAndSave() error {
 			Component("weather").
 			Category(errors.CategoryNetwork).
 			Context("operation", "fetch_weather_data").
-			Context("provider", s.settings.Realtime.Weather.Provider).
+			Context("provider", providerName).
 			Build()
 	}
 
@@ -521,7 +535,7 @@ func (s *Service) fetchAndSave() error {
 	localTimeForLog := data.Time.In(time.Local)
 
 	getLogger().Info("Successfully fetched weather data",
-		logger.String("provider", s.settings.Realtime.Weather.Provider),
+		logger.String("provider", providerName),
 		logger.String("time", localTimeForLog.Format("2006-01-02 15:04:05-07:00")),
 		logger.Float64("temp_c", data.Temperature.Current),
 		logger.Float64("wind_mps", data.Wind.Speed),

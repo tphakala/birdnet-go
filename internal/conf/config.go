@@ -1883,6 +1883,21 @@ func GetSettings() *Settings {
 	return settingsInstance.Load()
 }
 
+// CurrentOrFallback returns the latest published settings snapshot, or the
+// supplied fallback when none has been published. It exists so long-lived
+// services can pick up UI edits without a restart: capture the initial
+// *Settings in a field, then call conf.CurrentOrFallback(s.settings) whenever
+// the value is actually read. In production the fallback is effectively
+// unreachable (settings are always loaded before services start); it's there
+// so unit tests that inject a custom *Settings into a struct literal — without
+// touching the package-global atomic pointer — keep working.
+func CurrentOrFallback(fallback *Settings) *Settings {
+	if latest := settingsInstance.Load(); latest != nil {
+		return latest
+	}
+	return fallback
+}
+
 // StoreSettings publishes a new *Settings snapshot atomically. Callers must
 // not mutate the pointee after calling StoreSettings; readers may observe the
 // snapshot concurrently through GetSettings. The canonical writer pattern is:

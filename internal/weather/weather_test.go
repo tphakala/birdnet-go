@@ -1236,6 +1236,64 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 	mockDB.AssertExpectations(t)
 }
 
+// TestFetchAndSave_HotReloadCoordinates verifies that coordinates updated via
+// conf.StoreSettings (as done by the settings UI) are picked up on the next
+// fetch without restarting the weather service. Regression test for a bug
+// where the Service cached a *conf.Settings pointer at construction and kept
+// sending lat=0, lon=0 to yr.no after the user set their location.
+func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
+	// Swap the global settings pointer for the duration of the test and
+	// restore it on cleanup so this test is isolated.
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	initial := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = 0
+		s.BirdNET.Longitude = 0
+	})
+	conf.StoreSettings(initial)
+
+	var observedLat, observedLon float64
+	provider := &mockProvider{
+		fetchFunc: func(settings *conf.Settings) (*WeatherData, error) {
+			observedLat = settings.BirdNET.Latitude
+			observedLon = settings.BirdNET.Longitude
+			return nil, errors.New("short-circuit after observing coords")
+		},
+	}
+
+	// Service is constructed with the initial (zero-coord) snapshot — this
+	// mirrors how NewService is called at startup before the user has
+	// configured their location.
+	service := &Service{
+		provider: provider,
+		db:       nil,
+		settings: initial,
+		metrics:  nil,
+	}
+
+	_ = service.fetchAndSave()
+	assert.InDelta(t, 0.0, observedLat, 1e-9, "initial fetch should use the captured coords")
+	assert.InDelta(t, 0.0, observedLon, 1e-9, "initial fetch should use the captured coords")
+
+	// Clear backoff so the second fetch runs, then publish a new snapshot
+	// with real coords — exactly what the settings UI does.
+	service.backoff.mu.Lock()
+	service.backoff.nextAllowedFetchTime = time.Time{}
+	service.backoff.mu.Unlock()
+
+	updated := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = 60.1699
+		s.BirdNET.Longitude = 24.9384
+	})
+	conf.StoreSettings(updated)
+
+	_ = service.fetchAndSave()
+	assert.InDelta(t, 60.1699, observedLat, 1e-9,
+		"fetch should pick up updated latitude from global settings")
+	assert.InDelta(t, 24.9384, observedLon, 1e-9,
+		"fetch should pick up updated longitude from global settings")
+}
+
 // TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns
 // ErrWeatherNoData for HTTP 204.
 func TestWundergroundProvider_HTTP204_NoContent(t *testing.T) {

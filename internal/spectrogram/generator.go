@@ -218,10 +218,17 @@ func (g *Generator) log() logger.Logger {
 	return GetLogger()
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// spectrogram style, dynamic range, Sox/FFmpeg paths, etc. take effect on
+// the next render without restarting the service.
+func (g *Generator) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(g.settings)
+}
+
 // getDynamicRange returns the configured dynamic range value for Sox -z parameter.
 // Returns the default value ("100") if not configured or if an invalid value is set.
 func (g *Generator) getDynamicRange() string {
-	dr := g.settings.Realtime.Dashboard.Spectrogram.DynamicRange
+	dr := g.currentSettings().Realtime.Dashboard.Spectrogram.DynamicRange
 	if dr == "" {
 		return defaultDynamicRange
 	}
@@ -408,7 +415,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 // If the file format is supported by Sox, it uses Sox directly.
 // Otherwise, it uses FFmpeg to convert to Sox format and pipes to Sox.
 func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+	soxBinary := g.currentSettings().Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -421,7 +428,7 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPa
 	ext := strings.ToLower(filepath.Ext(audioPath))
 	ext = strings.TrimPrefix(ext, ".")
 	useFFmpeg := true
-	for _, soxType := range g.settings.Realtime.Audio.SoxAudioTypes {
+	for _, soxType := range g.currentSettings().Realtime.Audio.SoxAudioTypes {
 		soxType = strings.TrimPrefix(strings.ToLower(soxType), ".")
 		if ext == soxType {
 			useFFmpeg = false
@@ -441,7 +448,7 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPa
 // generateWithSoxDirect generates a spectrogram using only Sox (no FFmpeg).
 // Used when the audio file format is natively supported by Sox.
 func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+	soxBinary := g.currentSettings().Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -521,8 +528,8 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
 // Used when the audio file format is not natively supported by Sox.
 func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+	ffmpegBinary := g.currentSettings().Realtime.Audio.FfmpegPath
+	soxBinary := g.currentSettings().Realtime.Audio.SoxPath
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
@@ -669,7 +676,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 // This bypasses FFmpeg entirely, reducing CPU overhead and memory usage.
 // PCM format: s16le, 48kHz, mono
 func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+	soxBinary := g.currentSettings().Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -702,7 +709,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	}
 
 	// Add style-specific arguments
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := g.currentSettings().Realtime.Dashboard.Spectrogram.Style
 	if styleArgs := getStyleArgs(style); styleArgs != nil {
 		args = append(args, styleArgs...)
 	}
@@ -752,7 +759,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 // generateWithFFmpeg generates a spectrogram using only FFmpeg (no Sox).
 // This is a fallback when Sox is not available or fails.
 func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
-	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
+	ffmpegBinary := g.currentSettings().Realtime.Audio.FfmpegPath
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
 		return errors.Newf("invalid FFmpeg path: %s", err).
@@ -768,7 +775,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 	// Apply style-aware color mode so FFmpeg fallback matches the Sox primary style.
 	// Without this, the FFmpeg fallback always produces the default colorful style,
 	// causing intermittent style mismatches when Sox fails under resource pressure.
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := g.currentSettings().Realtime.Dashboard.Spectrogram.Style
 	colorMode := getFFmpegColorMode(style)
 
 	var filterStr string
@@ -860,7 +867,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	}
 	if duration <= 0 {
 		// Fallback: Use configured capture length if both sox and ffprobe fail
-		captureLength := g.settings.Realtime.Audio.Export.Length
+		captureLength := g.currentSettings().Realtime.Audio.Export.Length
 		duration = float64(captureLength)
 		g.log().Warn("Duration query failed, using configured fallback duration",
 			logger.Float64("fallback_duration_seconds", duration),
@@ -879,7 +886,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	}
 
 	// Add style-specific arguments
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := g.currentSettings().Realtime.Dashboard.Spectrogram.Style
 	if styleArgs := getStyleArgs(style); styleArgs != nil {
 		args = append(args, styleArgs...)
 	}
