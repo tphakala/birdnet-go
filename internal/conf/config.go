@@ -2244,7 +2244,7 @@ func normalizeRTSPStreamEnabledDefaults(rawStreams any) ([]any, bool) {
 			normalized[i] = rawStream
 			continue
 		}
-		if _, exists := streamMap["enabled"]; exists {
+		if val, exists := streamMap["enabled"]; exists && val != nil {
 			normalized[i] = rawStream
 			continue
 		}

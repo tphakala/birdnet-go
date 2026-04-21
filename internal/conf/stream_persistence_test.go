@@ -340,6 +340,25 @@ func TestNormalizeRTSPStreamEnabledDefaults_NoChangesNeeded(t *testing.T) {
 	assert.Nil(t, normalized)
 }
 
+func TestNormalizeRTSPStreamEnabledDefaults_NilValue(t *testing.T) {
+	t.Parallel()
+
+	normalized, migrated := normalizeRTSPStreamEnabledDefaults([]any{
+		map[string]any{
+			"name":    "Null Enabled",
+			"url":     "rtsp://192.168.1.10/stream",
+			"enabled": nil,
+			"type":    StreamTypeRTSP,
+		},
+	})
+
+	require.True(t, migrated, "nil enabled value should be treated as missing")
+	require.Len(t, normalized, 1)
+	first, ok := normalized[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, true, first["enabled"])
+}
+
 func TestNormalizeRTSPStreamEnabledDefaults_NonSliceInput(t *testing.T) {
 	t.Parallel()
 
