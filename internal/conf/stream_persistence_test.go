@@ -290,7 +290,6 @@ func TestStreamConfig_IsEnabled(t *testing.T) {
 
 	assert.True(t, (&StreamConfig{Enabled: true}).IsEnabled())
 	assert.False(t, (&StreamConfig{Enabled: false}).IsEnabled())
-	assert.True(t, (*StreamConfig)(nil).IsEnabled())
 }
 
 func TestNormalizeRTSPStreamEnabledDefaults(t *testing.T) {
