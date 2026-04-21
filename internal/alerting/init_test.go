@@ -269,6 +269,7 @@ func validDetectionProps() map[string]any {
 		PropertyConfidence:     0.95,
 		PropertyEventTimestamp: time.Now(),
 		PropertyLocation:       "backyard",
+		PropertyIsNewSpecies:   true,
 	}
 }
 
@@ -324,6 +325,22 @@ func TestApplyDetectionTemplates_NonDetectionUnchanged(t *testing.T) {
 
 	title, message := applyDetectionTemplates(
 		notification.TypeWarning, "Original Title", "Original Message", validDetectionProps(),
+	)
+	assert.Equal(t, "Original Title", title)
+	assert.Equal(t, "Original Message", message)
+}
+
+func TestApplyDetectionTemplates_NonNewSpeciesUnchanged(t *testing.T) {
+	settings := conf.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	props := validDetectionProps()
+	props[PropertyIsNewSpecies] = false
+
+	title, message := applyDetectionTemplates(
+		notification.TypeDetection, "Original Title", "Original Message", props,
 	)
 	assert.Equal(t, "Original Title", title)
 	assert.Equal(t, "Original Message", message)

@@ -238,9 +238,14 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 }
 
 // applyDetectionTemplates overrides title and message with user-configured
-// notification templates for detection events. Non-detection types pass through unchanged.
+// notification templates for new-species detection events. Non-detection types
+// and non-new-species detections pass through unchanged.
 func applyDetectionTemplates(notifType notification.Type, title, message string, eventProps map[string]any) (renderedTitle, renderedMessage string) {
 	if notifType != notification.TypeDetection {
+		return title, message
+	}
+	isNew, _ := eventProps[PropertyIsNewSpecies].(bool)
+	if !isNew {
 		return title, message
 	}
 	rt, rm := renderDetectionTemplates(eventProps)
@@ -266,18 +271,25 @@ func renderDetectionTemplates(props map[string]any) (title, message string) {
 	}
 
 	templateData := buildTemplateDataFromProps(props)
-	if templateData == nil {
-		return "", ""
-	}
+
+	log := notification.GetLogger()
 
 	if titleTmpl != "" {
-		if rendered, err := notification.RenderTemplate("title", titleTmpl, templateData); err == nil {
+		rendered, err := notification.RenderTemplate("title", titleTmpl, templateData)
+		if err != nil {
+			log.Warn("failed to render detection title template",
+				logger.String("template", titleTmpl), logger.Error(err))
+		} else {
 			title = rendered
 		}
 	}
 
 	if msgTmpl != "" {
-		if rendered, err := notification.RenderTemplate("message", msgTmpl, templateData); err == nil {
+		rendered, err := notification.RenderTemplate("message", msgTmpl, templateData)
+		if err != nil {
+			log.Warn("failed to render detection message template",
+				logger.String("template", msgTmpl), logger.Error(err))
+		} else {
 			message = rendered
 		}
 	}
