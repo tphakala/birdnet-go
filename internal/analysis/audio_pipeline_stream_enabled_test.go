@@ -1,7 +1,6 @@
 package analysis
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -59,7 +58,7 @@ func TestReconfigureChangedSources_RemovesDisabledRunningStream(t *testing.T) {
 	}
 	conf.SetTestSettings(settings)
 
-	engine := enginepkg.New(context.Background(), &enginepkg.Config{}, nil)
+	engine := enginepkg.New(t.Context(), &enginepkg.Config{}, nil)
 	_, err := engine.Registry().Register(&audiocore.SourceConfig{
 		DisplayName:      "test-stream",
 		Type:             audiocore.SourceTypeRTSP,

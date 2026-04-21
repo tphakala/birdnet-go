@@ -434,7 +434,7 @@
           checked={editEnabled}
           onchange={checked => (editEnabled = checked)}
           label={t('settings.alerts.enabled')}
-          disabled={disabled}
+          {disabled}
           size="sm"
         />
 
@@ -526,7 +526,7 @@
               checked={stream.enabled}
               onchange={updateEnabled}
               label={t('settings.alerts.enabled')}
-              disabled={disabled}
+              {disabled}
               size="sm"
             />
           </div>
