@@ -109,8 +109,8 @@ type Controller struct {
 	alertEngine   *alerting.Engine
 
 	// Insights fields (initialized lazily in initInsightsRoutes)
-	insightsRepo  repository.InsightsRepository
-	commonNameMap atomic.Value // stores map[string]string; scientific name → common name
+	insightsRepo repository.InsightsRepository
+	nameMaps     atomic.Value // stores *nameMaps; see internal/api/v2/insights.go
 
 	// Audio processing fields
 	processingCache     *processingCache

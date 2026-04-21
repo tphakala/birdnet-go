@@ -1236,6 +1236,100 @@ func TestFetchAndSave_SuccessResetsBackoff(t *testing.T) {
 	mockDB.AssertExpectations(t)
 }
 
+// TestFetchAndSave_HotReloadCoordinates verifies that coordinates updated via
+// conf.StoreSettings (as done by the settings UI) are picked up on the next
+// fetch without restarting the weather service. Regression test for a bug
+// where the Service cached a *conf.Settings pointer at construction and kept
+// sending lat=0, lon=0 to yr.no after the user set their location.
+//
+// Intentionally NOT t.Parallel(): this test mutates the package-global
+// settings snapshot via conf.StoreSettings, so running in parallel with any
+// sibling test that touches the global would race. Same pattern as
+// TestSettings_GetStore_NoRace in the conf package.
+func TestFetchAndSave_HotReloadCoordinates(t *testing.T) {
+	// Capture the previous snapshot so any earlier test's state is restored
+	// on cleanup — blindly clearing with StoreSettings(nil) could perturb
+	// siblings that depend on a previously-loaded global.
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	initial := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = 0
+		s.BirdNET.Longitude = 0
+	})
+	conf.StoreSettings(initial)
+
+	var observedLat, observedLon float64
+	provider := &mockProvider{
+		fetchFunc: func(settings *conf.Settings) (*WeatherData, error) {
+			observedLat = settings.BirdNET.Latitude
+			observedLon = settings.BirdNET.Longitude
+			return nil, errors.New("short-circuit after observing coords")
+		},
+	}
+
+	// Service is constructed with the initial (zero-coord) snapshot — this
+	// mirrors how NewService is called at startup before the user has
+	// configured their location.
+	service := &Service{
+		provider:     provider,
+		providerName: yrNoProviderName,
+		db:           nil,
+		settings:     initial,
+		metrics:      nil,
+	}
+
+	_ = service.fetchAndSave()
+	assert.InDelta(t, 0.0, observedLat, 1e-9, "initial fetch should use the captured coords")
+	assert.InDelta(t, 0.0, observedLon, 1e-9, "initial fetch should use the captured coords")
+
+	// Clear backoff so the second fetch runs, then publish a new snapshot
+	// with real coords — exactly what the settings UI does.
+	service.backoff.mu.Lock()
+	service.backoff.nextAllowedFetchTime = time.Time{}
+	service.backoff.mu.Unlock()
+
+	updated := createTestSettings(t, "yrno", func(s *conf.Settings) {
+		s.BirdNET.Latitude = 60.1699
+		s.BirdNET.Longitude = 24.9384
+	})
+	conf.StoreSettings(updated)
+
+	_ = service.fetchAndSave()
+	assert.InDelta(t, 60.1699, observedLat, 1e-9,
+		"fetch should pick up updated latitude from global settings")
+	assert.InDelta(t, 24.9384, observedLon, 1e-9,
+		"fetch should pick up updated longitude from global settings")
+}
+
+// TestNewService_PinsProviderName verifies that the Service pins the
+// provider name at construction based on the actual provider implementation
+// it selected. This matters because fetchAndSave uses s.providerName in logs
+// and metrics, and reading the name from the (hot-reloadable) settings
+// snapshot instead could misreport a later UI change while s.provider still
+// points at the original implementation.
+func TestNewService_PinsProviderName(t *testing.T) {
+	tests := []struct {
+		configured string
+		want       string
+	}{
+		{yrNoProviderName, yrNoProviderName},
+		{openWeatherProviderName, openWeatherProviderName},
+		{wundergroundProviderName, wundergroundProviderName},
+		{"", yrNoProviderName}, // empty defaults to yrno
+	}
+	for _, tt := range tests {
+		t.Run(tt.configured+"_pins_to_"+tt.want, func(t *testing.T) {
+			settings := createTestSettings(t, tt.configured)
+			svc, err := NewService(settings, nil, nil)
+			require.NoError(t, err)
+			require.NotNil(t, svc)
+			assert.Equal(t, tt.want, svc.providerName,
+				"providerName should reflect the actual provider implementation, not be re-read from settings")
+		})
+	}
+}
+
 // TestWundergroundProvider_HTTP204_NoContent tests that Wunderground returns
 // ErrWeatherNoData for HTTP 204.
 func TestWundergroundProvider_HTTP204_NoContent(t *testing.T) {

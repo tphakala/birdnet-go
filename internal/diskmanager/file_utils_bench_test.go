@@ -36,7 +36,7 @@ func BenchmarkGetAudioFiles(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+		_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func BenchmarkMemoryProfile(b *testing.B) {
 			b.ReportAllocs()
 
 			for b.Loop() {
-				_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+				_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -170,7 +170,7 @@ func BenchmarkPoolEffectiveness(b *testing.B) {
 		b.ReportAllocs()
 
 		for b.Loop() {
-			_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+			_, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -213,7 +213,7 @@ func BenchmarkErrorHandling(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+		files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 		if err != nil {
 			b.Fatal(err)
 		}

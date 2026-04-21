@@ -12,6 +12,7 @@
 import { loggers } from '$lib/utils/logger';
 import {
   getCsrfToken as getAppStateCsrfToken,
+  isGuestMode,
   isSentryEnabled,
   refreshCsrfToken,
 } from '$lib/stores/appState.svelte';
@@ -445,10 +446,12 @@ export async function fetchWithCSRF<T = unknown>(
     // Any HTTP response (even 4xx/5xx) proves the backend is reachable
     markOnline();
 
-    // 401 Unauthorized means the session has expired.  Redirect to login
-    // instead of throwing an ApiError (which would flood Sentry with
-    // expected expired-session errors across every locale).
+    // Guests get an ApiError so callers handle auth-gated endpoints
+    // gracefully; session-expired users redirect to login.
     if (response.status === 401) {
+      if (isGuestMode()) {
+        throw new ApiError(getSecureErrorMessage(401), 401, response);
+      }
       return redirectToLogin();
     }
 

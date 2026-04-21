@@ -84,15 +84,24 @@ type Stats struct {
 	Skipped   int64 // Number skipped (already exist)
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// spectrogram size/raw/export path take effect on the next rendered job
+// without restarting the pre-renderer.
+func (pr *PreRenderer) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(pr.settings)
+}
+
 // normalizeSpectrogramPath converts a relative spectrogram path to absolute
 // using SecureFS base directory, avoiding path doubling when the path
 // already includes the export prefix (e.g., "clips/2026/03/file.png").
 // filepath.Rel with two relative paths is safe (no os.Getwd dependency).
-func (pr *PreRenderer) normalizeSpectrogramPath(spectrogramPath string) string {
+// settings is the snapshot captured by the caller for this unit of work so
+// any hot-reloaded values stay consistent with the caller's other reads.
+func (pr *PreRenderer) normalizeSpectrogramPath(settings *conf.Settings, spectrogramPath string) string {
 	if filepath.IsAbs(spectrogramPath) {
 		return spectrogramPath
 	}
-	exportPath := pr.settings.Realtime.Audio.Export.Path
+	exportPath := settings.Realtime.Audio.Export.Path
 	if relToExport, err := filepath.Rel(exportPath, spectrogramPath); err == nil && !strings.HasPrefix(relToExport, "..") {
 		return filepath.Join(pr.sfs.BaseDir(), relToExport)
 	}
@@ -122,11 +131,12 @@ func NewPreRenderer(parentCtx context.Context, settings *conf.Settings, sfs *sec
 
 // Start initializes the worker pool and begins processing jobs.
 func (pr *PreRenderer) Start() {
+	specSettings := pr.currentSettings().Realtime.Dashboard.Spectrogram
 	pr.logger.Info("Starting spectrogram pre-renderer",
 		logger.Int("workers", pr.workers),
 		logger.Int("queue_size", defaultQueueSize),
-		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
-		logger.Bool("raw", pr.settings.Realtime.Dashboard.Spectrogram.Raw))
+		logger.String("size", specSettings.Size),
+		logger.Bool("raw", specSettings.Raw))
 
 	for i := range pr.workers {
 		pr.wg.Add(1)
@@ -228,7 +238,7 @@ func (pr *PreRenderer) Submit(jobDTO interface {
 
 	// Make spectrogram path absolute using SecureFS base dir, stripping export
 	// prefix to avoid path doubling (e.g., "clips/clips/..."). See #2342.
-	absOut := pr.normalizeSpectrogramPath(spectrogramPath)
+	absOut := pr.normalizeSpectrogramPath(pr.currentSettings(), spectrogramPath)
 
 	relPath, err := filepath.Rel(absRoot, absOut)
 	if err != nil || relPath == ".." || strings.HasPrefix(relPath, ".."+string(os.PathSeparator)) {
@@ -366,6 +376,15 @@ func (pr *PreRenderer) worker(id int) {
 func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	start := time.Now()
 
+	// Capture a single settings snapshot for this job so size, raw, and
+	// export path are read from the same view — a UI edit that lands
+	// mid-job can't produce a mix of old/new values. The Generator below
+	// captures its own snapshot when its public entry point runs; that is
+	// a deliberate per-component boundary (Size/Raw are per-call inputs
+	// passed across, render-engine config stays on Generator's side).
+	settings := pr.currentSettings()
+	specSettings := settings.Realtime.Dashboard.Spectrogram
+
 	pr.logger.Debug("Processing pre-render job",
 		logger.Int("worker_id", workerID),
 		logger.Any("note_id", job.NoteID),
@@ -388,7 +407,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 
 	// Make spectrogram path absolute using SecureFS base dir, stripping export
 	// prefix to avoid path doubling (e.g., "clips/clips/..."). See #2342.
-	spectrogramPath = pr.normalizeSpectrogramPath(spectrogramPath)
+	spectrogramPath = pr.normalizeSpectrogramPath(settings, spectrogramPath)
 
 	// Check if spectrogram already exists
 	// Race conditions are acceptable here (idempotent operation):
@@ -408,12 +427,12 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	}
 
 	// Convert size string to pixels
-	width, err := SizeToPixels(pr.settings.Realtime.Dashboard.Spectrogram.Size)
+	width, err := SizeToPixels(specSettings.Size)
 	if err != nil {
 		pr.logger.Error("Invalid spectrogram size",
 			logger.Int("worker_id", workerID),
 			logger.Any("note_id", job.NoteID),
-			logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+			logger.String("size", specSettings.Size),
 			logger.Error(err))
 		pr.mu.Lock()
 		pr.stats.Failed++
@@ -430,11 +449,11 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 	pr.logger.Info("Spectrogram generation started",
 		logger.Any("note_id", job.NoteID),
 		logger.String("audio_path", job.ClipPath),
-		logger.String("size", pr.settings.Realtime.Dashboard.Spectrogram.Size),
+		logger.String("size", specSettings.Size),
 		logger.String("operation", "spectrogram_generation_start"))
 
 	// Generate spectrogram using shared generator
-	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, pr.settings.Realtime.Dashboard.Spectrogram.Raw); err != nil {
+	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, specSettings.Raw); err != nil {
 		// Check if this is an expected operational error (context canceled, process killed)
 		// These are normal events during shutdown, timeout, or resource management
 		if IsOperationalError(err) {

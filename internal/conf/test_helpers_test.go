@@ -11,6 +11,9 @@ import (
 // testHelper provides common assertion helpers for configuration tests.
 // These helpers reduce code duplication and improve test readability.
 
+// testAudioDeviceSysdefault is the ALSA system-default device name used in tests.
+const testAudioDeviceSysdefault = "sysdefault"
+
 // requireEnhancedError asserts that the error is an EnhancedError and returns it.
 func requireEnhancedError(t *testing.T, err error) *errors.EnhancedError {
 	t.Helper()

@@ -110,7 +110,7 @@ func TestAgeBasedFilesAfterFilter(t *testing.T) {
 	}
 
 	// Get audio files using the function that would be used by the policy
-	audioFiles, err := GetAudioFiles(testDir, allowedTypes, db, false)
+	audioFiles, err := GetAudioFiles(testDir, allowedTypes, db)
 	require.NoError(t, err, "Failed to get audio files")
 
 	// Verify only allowed audio files are returned

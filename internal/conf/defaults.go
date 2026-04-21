@@ -45,16 +45,17 @@ func setDefaultConfig() {
 	setModuleLogDefaults("ebird", false)       // eBird integration (disabled by default)
 
 	// System and support modules
-	setModuleLogDefaults("backup", true)        // Backup operations
-	setModuleLogDefaults("config", true)        // Configuration management
-	setModuleLogDefaults("diskmanager", true)   // Disk management
-	setModuleLogDefaults("events", true)        // Event bus
-	setModuleLogDefaults("imageprovider", true) // Bird image provider
-	setModuleLogDefaults("monitor", true)       // System monitoring
-	setModuleLogDefaults("notifications", true) // Push notifications
-	setModuleLogDefaults("securefs", true)      // Secure filesystem operations
-	setModuleLogDefaults("support", true)       // Support/diagnostics
-	setModuleLogDefaults("telemetry", true)     // Telemetry/metrics
+	setModuleLogDefaults("backup", true)                          // Backup operations
+	setModuleLogDefaults("config", true)                          // Configuration management
+	setModuleLogDefaults("diskmanager", true)                     // Disk management
+	viper.SetDefault("logging.modules.diskmanager.level", "info") // Override: runs per-clip, debug floods log
+	setModuleLogDefaults("events", true)                          // Event bus
+	setModuleLogDefaults("imageprovider", true)                   // Bird image provider
+	setModuleLogDefaults("monitor", true)                         // System monitoring
+	setModuleLogDefaults("notifications", true)                   // Push notifications
+	setModuleLogDefaults("securefs", true)                        // Secure filesystem operations
+	setModuleLogDefaults("support", true)                         // Support/diagnostics
+	setModuleLogDefaults("telemetry", true)                       // Telemetry/metrics
 
 	// Main configuration
 	viper.SetDefault("main.name", "BirdNET-Go")

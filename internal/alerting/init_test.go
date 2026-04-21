@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -249,7 +250,7 @@ func TestEnrichFromEventProps_FallbackImageURL(t *testing.T) {
 		PropertySpeciesName:    "Eurasian Blue Tit",
 		PropertyScientificName: "Cyanistes caeruleus",
 		PropertyConfidence:     0.9,
-		// No event_metadata with image_url — should fall back to proxy URL
+		// No event_metadata with image_url; should fall back to proxy URL
 	}
 
 	notif := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "Title", "Message")
@@ -258,4 +259,89 @@ func TestEnrichFromEventProps_FallbackImageURL(t *testing.T) {
 	// Should use the proxy URL with encoded scientific name
 	assert.Contains(t, enriched.Metadata["bg_image_url"], "/api/v2/media/species-image")
 	assert.Contains(t, enriched.Metadata["bg_image_url"], "Cyanistes+caeruleus")
+}
+
+// validDetectionProps returns a props map suitable for renderDetectionTemplates tests.
+func validDetectionProps() map[string]any {
+	return map[string]any{
+		PropertySpeciesName:    "Eurasian Blue Tit",
+		PropertyScientificName: "Cyanistes caeruleus",
+		PropertyConfidence:     0.95,
+		PropertyEventTimestamp: time.Now(),
+		PropertyLocation:       "backyard",
+		PropertyIsNewSpecies:   true,
+	}
+}
+
+func TestRenderDetectionTemplates_WithConfiguredTemplates(t *testing.T) {
+	settings := conf.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Message = "{{.CommonName}} ({{.ScientificName}}) at {{.ConfidencePercent}}%"
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	title, message := renderDetectionTemplates(validDetectionProps())
+	assert.Equal(t, "New: Eurasian Blue Tit", title)
+	assert.Contains(t, message, "Eurasian Blue Tit")
+	assert.Contains(t, message, "Cyanistes caeruleus")
+	assert.Contains(t, message, "95%")
+}
+
+func TestRenderDetectionTemplates_EmptyTemplates(t *testing.T) {
+	settings := conf.GetTestSettings()
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	title, message := renderDetectionTemplates(validDetectionProps())
+	assert.Empty(t, title)
+	assert.Empty(t, message)
+}
+
+func TestRenderDetectionTemplates_NilSettings(t *testing.T) {
+	conf.SetTestSettings(nil)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	title, message := renderDetectionTemplates(validDetectionProps())
+	assert.Empty(t, title)
+	assert.Empty(t, message)
+}
+
+func TestRenderDetectionTemplates_TitleOnlyTemplate(t *testing.T) {
+	settings := conf.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "Spotted: {{.CommonName}}"
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	title, message := renderDetectionTemplates(validDetectionProps())
+	assert.Equal(t, "Spotted: Eurasian Blue Tit", title)
+	assert.Empty(t, message)
+}
+
+func TestApplyDetectionTemplates_NonDetectionUnchanged(t *testing.T) {
+	settings := conf.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "Override: {{.CommonName}}"
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	title, message := applyDetectionTemplates(
+		notification.TypeWarning, "Original Title", "Original Message", validDetectionProps(),
+	)
+	assert.Equal(t, "Original Title", title)
+	assert.Equal(t, "Original Message", message)
+}
+
+func TestApplyDetectionTemplates_NonNewSpeciesUnchanged(t *testing.T) {
+	settings := conf.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	props := validDetectionProps()
+	props[PropertyIsNewSpecies] = false
+
+	title, message := applyDetectionTemplates(
+		notification.TypeDetection, "Original Title", "Original Message", props,
+	)
+	assert.Equal(t, "Original Title", title)
+	assert.Equal(t, "Original Message", message)
 }

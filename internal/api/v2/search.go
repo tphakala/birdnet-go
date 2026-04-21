@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -65,6 +66,18 @@ func (c *Controller) HandleSearch(ctx echo.Context) error {
 	// Validate and normalize the request
 	if err := c.validateAndNormalizeSearchRequest(ctx, &req); err != nil {
 		return c.HandleError(ctx, err, "Invalid search parameters", http.StatusBadRequest)
+	}
+
+	originalSpecies := req.Species
+	resolved, hit := c.resolveSpeciesToScientific(req.Species)
+	req.Species = resolved
+	if hit {
+		c.logDebugIfEnabled("Resolved common-name query to scientific name",
+			logger.String("input", originalSpecies),
+			logger.String("resolved", req.Species),
+			logger.String("path", path),
+			logger.String("ip", ip),
+		)
 	}
 
 	// Log validated request parameters
@@ -329,4 +342,32 @@ func (c *Controller) validateSearchSortBy(path, ip string, req *SearchRequest) e
 		}
 	}
 	return nil
+}
+
+// resolveSpeciesToScientific maps a free-form species search term to a scientific
+// name when the input is an exact case-insensitive match for a common name in the
+// currently loaded BirdNET label list. Non-matching input (partial common-name
+// fragments, Latin substrings, unknown text, ambiguous common names shared by
+// multiple species) is returned trimmed but otherwise unchanged so the existing
+// LIKE search on scientific_name keeps working.
+//
+// The BirdNET label list is already cached in memory via UpdateCommonNameMap; there
+// is no I/O here. The lookup is O(1) for the common-name exact-match case.
+//
+// Returns the resolved (or trimmed passthrough) value and a hit flag. hit is true
+// only when a common-name lookup succeeded, so callers can log resolution events
+// without false positives from whitespace-only or unmatched input.
+//
+// This is an interim fix; the proper long-term fix is a persistent species_common_names
+// table that decouples common-name storage from the active model's label file.
+func (c *Controller) resolveSpeciesToScientific(input string) (resolved string, hit bool) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", false
+	}
+	lookup := c.loadCommonToScientificMap()
+	if scientific, ok := lookup[normalizeForLookup(trimmed)]; ok {
+		return scientific, true
+	}
+	return trimmed, false
 }

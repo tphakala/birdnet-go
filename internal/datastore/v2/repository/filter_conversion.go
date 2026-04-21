@@ -413,9 +413,13 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 		return nil, nil
 	}
 
-	// Use the Search method which does LIKE matching on scientific_name and common_name.
-	// Limit of 100 is intentional for Simple Search API - a broader search term returning
-	// 100+ species indicates the user should refine their search.
+	// LabelRepo.Search does a LIKE match on scientific_name only. Common-name
+	// search is handled at the API handler layer by pre-resolving common names
+	// to scientific names before this helper is called; see
+	// (*Controller).resolveSpeciesToScientific in internal/api/v2/search.go.
+	// The limit of 100 is intentional for Simple Search: a broader term returning
+	// 100+ species indicates the user should refine the query.
+	// TODO: support partial common-name search once a persistent common_name column exists.
 	labels, err := deps.LabelRepo.Search(ctx, species, 100)
 	if err != nil {
 		return nil, err

@@ -3,10 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // Unmock the logger module for API tests since API depends on logger
 vi.unmock('$lib/utils/logger');
 
-// Mock appState module to control CSRF token in tests
+// Mock appState module to control CSRF token and security state in tests
 let mockCsrfToken = '';
+let mockGuestMode = false;
 vi.mock('$lib/stores/appState.svelte', () => ({
   getCsrfToken: () => mockCsrfToken,
+  isGuestMode: () => mockGuestMode,
   isSentryEnabled: () => false,
   refreshCsrfToken: vi.fn().mockResolvedValue(false),
 }));
@@ -22,6 +24,7 @@ describe('API utilities', () => {
 
     // Set up a default CSRF token for all tests to prevent warning logs
     mockCsrfToken = 'test-csrf-token-default';
+    mockGuestMode = false;
   });
 
   afterEach(() => {
@@ -274,6 +277,24 @@ describe('API utilities', () => {
       // window.location.href should have been set exactly once
       // (the guard prevents subsequent assignments)
       expect(window.location.href).toBe('/ui/');
+    });
+
+    it('throws ApiError instead of redirecting in guest mode', async () => {
+      mockGuestMode = true;
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized',
+        headers: new Headers(),
+      });
+
+      await expect(fetchWithCSRF('/api/test')).rejects.toMatchObject({
+        message: 'errors.api.unauthorized',
+        status: 401,
+      });
+      // Should NOT redirect
+      expect(window.location.href).not.toBe('/ui/');
     });
   });
 

@@ -1121,6 +1121,19 @@ func (p *Processor) generateClipNameWithDuration(scientificName string, confiden
 	return p.buildClipPath(scientificName, confidence, durationSeconds, detectionTime)
 }
 
+// buildClipPathFallbackOnce guards the one-shot WARN log emitted when
+// buildClipPath falls back to a wav extension because Export.Type produced
+// an empty GetFileExtension result. Post fix this branch should be
+// unreachable - the WARN exists purely as a defense-in-depth signal that a
+// previously unknown code path is writing extension-less clip paths to the
+// DB (see GitHub #2810, #2814).
+//
+//nolint:gochecknoglobals // one-shot WARN guard for defense-in-depth fallback
+var (
+	buildClipPathFallbackOnce  sync.Once
+	buildClipPathFallbackFired atomic.Bool
+)
+
 // buildClipPath constructs a clip file path with optional duration suffix.
 // When durationSeconds is 0, the duration suffix is omitted.
 func (p *Processor) buildClipPath(scientificName string, confidence float32, durationSeconds int, t time.Time) string {
@@ -1129,7 +1142,21 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 	timestamp := t.Format("20060102T150405Z")
 	year := t.Format("2006")
 	month := t.Format("01")
-	fileType := convert.GetFileExtension(p.Settings.Realtime.Audio.Export.Type)
+
+	rawExportType := p.Settings.Realtime.Audio.Export.Type
+	// GetFileExtension is a passthrough for unknown formats, so a whitespace-
+	// only Type would otherwise leak into the filename as a ". " suffix.
+	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
+	if fileType == "" {
+		buildClipPathFallbackOnce.Do(func() {
+			buildClipPathFallbackFired.Store(true)
+			GetLogger().Warn("audio export type produced empty file extension, falling back to wav",
+				logger.String("export_type", rawExportType),
+				logger.String("component", "processor"),
+				logger.String("action", "buildClipPath_fallback"))
+		})
+		fileType = conf.AudioExportTypeWAV
+	}
 
 	var filename string
 	if durationSeconds > 0 {

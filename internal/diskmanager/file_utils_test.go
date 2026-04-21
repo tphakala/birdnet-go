@@ -203,7 +203,7 @@ func TestGetAudioFilesSkipsNonBirdNETFiles(t *testing.T) {
 	}
 
 	mockDB := &MockDB{}
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 
 	require.NoError(t, err, "non-BirdNET files should not cause errors")
 	require.Len(t, files, 1)
@@ -221,7 +221,7 @@ func TestGetAudioFilesOnlyNonBirdNETFiles(t *testing.T) {
 	}
 
 	mockDB := &MockDB{}
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 
 	require.NoError(t, err, "directory with only non-BirdNET files should not error")
 	assert.Empty(t, files)
@@ -246,8 +246,7 @@ func TestGetAudioFilesContinuesOnError(t *testing.T) {
 	// Create a mock DB
 	mockDB := &MockDB{}
 
-	// Call GetAudioFiles with debug enabled to see the error messages
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, true)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 
 	// Should not return an error as long as at least one file is valid
 	require.NoError(t, err, "Should not return an error when at least one file is valid")
@@ -284,8 +283,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	// Create a mock DB
 	mockDB := &MockDB{}
 
-	// Call GetAudioFiles with debug enabled to see the error messages
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, true)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 
 	// Should not return an error as long as at least one file is valid
 	require.NoError(t, err, "Should not return an error when at least one file is valid")
@@ -311,7 +309,7 @@ func TestGetAudioFilesWithMixedFiles(t *testing.T) {
 	}
 
 	// Call GetAudioFiles with all invalid files
-	files, err = GetAudioFiles(invalidOnlyDir, allowedFileTypes, mockDB, true)
+	files, err = GetAudioFiles(invalidOnlyDir, allowedFileTypes, mockDB)
 
 	// Should return an error when all files are invalid
 	require.Error(t, err, "Should return an error when all files are invalid")
@@ -414,7 +412,7 @@ func TestGetAudioFilesIgnoresTempFiles(t *testing.T) {
 	mockDB := &MockDB{}
 
 	// Call GetAudioFiles
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 
 	// Should not return an error
 	require.NoError(t, err, "Should not return an error")
@@ -458,7 +456,7 @@ func TestGetAudioFilesHandlesTempFileRaceCondition(t *testing.T) {
 
 	// We'll test this by using a custom walk function that simulates the error
 	// First, let's verify normal operation works
-	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB, false)
+	files, err := GetAudioFiles(tempDir, allowedFileTypes, mockDB)
 	require.NoError(t, err, "Should not return an error for normal operation")
 	assert.Len(t, files, 1, "Should return the valid file")
 	assert.Equal(t, "bubo_bubo", files[0].Species, "Should process the valid file correctly")
@@ -480,21 +478,21 @@ func TestHandleWalkError(t *testing.T) {
 	tempDir := t.TempDir()
 
 	// Test case 1: os.IsNotExist error for a .temp file should be ignored
-	err := handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "foo.wav.temp"), true)
+	err := handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "foo.wav.temp"))
 	require.NoError(t, err, "missing .temp file should be ignored")
 
 	// Test case 2: os.IsNotExist error for a .TEMP file (uppercase) should be ignored
-	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "bar.wav.TEMP"), true)
+	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "bar.wav.TEMP"))
 	require.NoError(t, err, "missing .TEMP file (uppercase) should be ignored")
 
 	// Test case 3: os.IsNotExist error for a non-temp file should propagate
-	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "baz.wav"), false)
+	err = handleWalkError(os.ErrNotExist, filepath.Join(tempDir, "baz.wav"))
 	require.Error(t, err, "missing non-temp file should not be ignored")
 	require.ErrorIs(t, err, os.ErrNotExist, "should return the original error")
 
 	// Test case 4: Other errors should always propagate, even for temp files
 	permErr := os.ErrPermission
-	err = handleWalkError(permErr, filepath.Join(tempDir, "denied.wav.temp"), false)
+	err = handleWalkError(permErr, filepath.Join(tempDir, "denied.wav.temp"))
 	require.Error(t, err, "permission error should propagate even for temp files")
 	require.ErrorIs(t, err, permErr, "should return the original error")
 }

@@ -23,6 +23,7 @@ func (a *notificationAdapter) CreateAndBroadcast(notifType notification.Type, ti
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
+	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
 	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
@@ -36,6 +37,7 @@ func (a *notificationAdapter) CreateAndBroadcastWithKeys(
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
+	title, message = applyDetectionTemplates(notifType, title, message, eventProps)
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
@@ -233,6 +235,66 @@ func buildTemplateDataFromProps(props map[string]any) *notification.TemplateData
 		ImageURL:           imageURL,
 		DaysSinceFirstSeen: daysSinceFirstSeen,
 	}
+}
+
+// applyDetectionTemplates overrides title and message with user-configured
+// notification templates for new-species detection events. Non-detection types
+// and non-new-species detections pass through unchanged.
+func applyDetectionTemplates(notifType notification.Type, title, message string, eventProps map[string]any) (renderedTitle, renderedMessage string) {
+	if notifType != notification.TypeDetection {
+		return title, message
+	}
+	isNew, _ := eventProps[PropertyIsNewSpecies].(bool)
+	if !isNew {
+		return title, message
+	}
+	rt, rm := renderDetectionTemplates(eventProps)
+	if rt != "" {
+		title = rt
+	}
+	if rm != "" {
+		message = rm
+	}
+	return title, message
+}
+
+func renderDetectionTemplates(props map[string]any) (title, message string) {
+	settings := conf.GetSettings()
+	if settings == nil {
+		return "", ""
+	}
+
+	titleTmpl := settings.Notification.Templates.NewSpecies.Title
+	msgTmpl := settings.Notification.Templates.NewSpecies.Message
+	if titleTmpl == "" && msgTmpl == "" {
+		return "", ""
+	}
+
+	templateData := buildTemplateDataFromProps(props)
+
+	log := notification.GetLogger()
+
+	if titleTmpl != "" {
+		rendered, err := notification.RenderTemplate("title", titleTmpl, templateData)
+		if err != nil {
+			log.Warn("failed to render detection title template",
+				logger.String("template", titleTmpl), logger.Error(err))
+		} else {
+			title = rendered
+		}
+	}
+
+	if msgTmpl != "" {
+		rendered, err := notification.RenderTemplate("message", msgTmpl, templateData)
+		if err != nil {
+			log.Warn("failed to render detection message template",
+				logger.String("template", msgTmpl), logger.Error(err))
+		} else {
+			message = rendered
+		}
+	}
+
+	return title, message
 }
 
 // Initialize creates and starts the alerting engine.

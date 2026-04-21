@@ -134,6 +134,11 @@ Join our [Discord server](https://discord.gg/gcSCFGUtsd) for support, discussion
 - [BirdNET-Go ESP32 RTSP Microphone](https://github.com/Sukecz/birdnetgo-esp32-rtsp-mic) - ESP32-based RTSP streaming microphone for remote audio capture
 - [ESP32 Audio Streamer](https://github.com/jpmurray/esp32-audio-streamer) - Alternative ESP32 RTSP streaming solution for BirdNET-Go audio input
 - [M5Stack Atom Echo RTSP Mic](https://github.com/stedrow/birdnetgo-m5stack-atom-echo-rtsp-mic) - RTSP audio streaming server for M5Stack Atom Echo, no soldering required
+- [M5Stack AtomS3 Lite PDM Mic](https://github.com/matthew73210/birdnetgo-m5stack-AtomS3-Lite-PDM-rtsp-mic) - RTSP audio streaming server for M5Stack AtomS3 Lite with MEMS PDM microphone
+
+### Mobile Apps
+
+- [Perch](https://github.com/arunrajiah/perch) - Open-source Android/iOS companion app. Connects to your BirdNET-Go station via the BirdWeather API. Live detection feed, audio playback, species browser, 14-day chart, and local notifications for favourite species. MIT licensed.
 
 ## Contributing
 

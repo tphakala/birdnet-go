@@ -171,6 +171,8 @@ const translations: Record<string, string> = {
   'common.validation.invalid': 'Invalid value',
   'forms.placeholders.date': 'Select date',
   // Detection action menu translations
+  'dashboard.recentDetections.actions.markCorrect': 'Correct',
+  'dashboard.recentDetections.actions.markFalsePositive': 'Incorrect',
   'dashboard.recentDetections.actions.review': 'Review detection',
   'dashboard.recentDetections.actions.showSpecies': 'Show species',
   'dashboard.recentDetections.actions.ignoreSpecies': 'Ignore species',

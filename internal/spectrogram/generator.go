@@ -218,10 +218,19 @@ func (g *Generator) log() logger.Logger {
 	return GetLogger()
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// spectrogram style, dynamic range, Sox/FFmpeg paths, etc. take effect on
+// the next render without restarting the service.
+func (g *Generator) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(g.settings)
+}
+
 // getDynamicRange returns the configured dynamic range value for Sox -z parameter.
 // Returns the default value ("100") if not configured or if an invalid value is set.
-func (g *Generator) getDynamicRange() string {
-	dr := g.settings.Realtime.Dashboard.Spectrogram.DynamicRange
+// The settings snapshot is threaded in from the public entry point so the
+// whole generation sees a consistent view.
+func (g *Generator) getDynamicRange(settings *conf.Settings) string {
+	dr := settings.Realtime.Dashboard.Spectrogram.DynamicRange
 	if dr == "" {
 		return defaultDynamicRange
 	}
@@ -296,12 +305,17 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		return err
 	}
 
+	// Capture one settings snapshot for the whole generation so SoxPath,
+	// Style, DynamicRange, etc. all read from the same view. A UI edit that
+	// lands mid-generation cannot split the output across two snapshots.
+	settings := g.currentSettings()
+
 	// Create context with timeout for Sox (see function documentation for timeout layering behavior)
 	soxCtx, soxCancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer soxCancel()
 
 	// Try Sox first (faster, direct processing)
-	if err := g.generateWithSoxFile(soxCtx, audioPath, outputPath, width, raw, options.preValidatedDuration); err != nil {
+	if err := g.generateWithSoxFile(soxCtx, settings, audioPath, outputPath, width, raw, options.preValidatedDuration); err != nil {
 		g.log().Warn("Sox spectrogram generation failed, falling back to FFmpeg",
 			logger.String("audio_path", audioPath),
 			logger.Error(err),
@@ -315,7 +329,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 		defer ffmpegCancel()
 
 		// Fallback to FFmpeg pipeline with fresh context
-		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, audioPath, outputPath, width, raw); ffmpegErr != nil {
+		if ffmpegErr := g.generateWithFFmpeg(ffmpegCtx, settings, audioPath, outputPath, width, raw); ffmpegErr != nil {
 			g.log().Error("Both Sox and FFmpeg generation failed",
 				logger.String("audio_path", audioPath),
 				logger.String("sox_error", err.Error()),
@@ -386,12 +400,17 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 		return err
 	}
 
+	// Capture one settings snapshot for the whole generation so all reads
+	// (SoxPath, Style, DynamicRange, Export.Length) are consistent even if
+	// the user saves settings mid-render.
+	settings := g.currentSettings()
+
 	// Create context with timeout (see function documentation for timeout layering behavior)
 	ctx, cancel := context.WithTimeout(ctx, defaultGenerationTimeout)
 	defer cancel()
 
 	// Generate directly from PCM stdin (no FFmpeg needed)
-	if err := g.generateWithSoxPCM(ctx, pcmData, outputPath, width, raw); err != nil {
+	if err := g.generateWithSoxPCM(ctx, settings, pcmData, outputPath, width, raw); err != nil {
 		return err
 	}
 
@@ -407,8 +426,8 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 // generateWithSoxFile generates a spectrogram using Sox from an audio file.
 // If the file format is supported by Sox, it uses Sox directly.
 // Otherwise, it uses FFmpeg to convert to Sox format and pipes to Sox.
-func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+func (g *Generator) generateWithSoxFile(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
+	soxBinary := settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -421,7 +440,7 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPa
 	ext := strings.ToLower(filepath.Ext(audioPath))
 	ext = strings.TrimPrefix(ext, ".")
 	useFFmpeg := true
-	for _, soxType := range g.settings.Realtime.Audio.SoxAudioTypes {
+	for _, soxType := range settings.Realtime.Audio.SoxAudioTypes {
 		soxType = strings.TrimPrefix(strings.ToLower(soxType), ".")
 		if ext == soxType {
 			useFFmpeg = false
@@ -431,17 +450,17 @@ func (g *Generator) generateWithSoxFile(ctx context.Context, audioPath, outputPa
 
 	// If file is supported by Sox, use Sox directly
 	if !useFFmpeg {
-		return g.generateWithSoxDirect(ctx, audioPath, outputPath, width, raw, preValidatedDuration)
+		return g.generateWithSoxDirect(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration)
 	}
 
 	// Otherwise, use FFmpeg to convert to Sox format
-	return g.generateWithFFmpegSoxPipeline(ctx, audioPath, outputPath, width, raw, preValidatedDuration)
+	return g.generateWithFFmpegSoxPipeline(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration)
 }
 
 // generateWithSoxDirect generates a spectrogram using only Sox (no FFmpeg).
 // Used when the audio file format is natively supported by Sox.
-func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+func (g *Generator) generateWithSoxDirect(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
+	soxBinary := settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -451,7 +470,7 @@ func (g *Generator) generateWithSoxDirect(ctx context.Context, audioPath, output
 	}
 
 	// Build Sox arguments for file input
-	soxArgs := g.getSoxArgs(ctx, audioPath, outputPath, width, raw, SoxInputFile, preValidatedDuration)
+	soxArgs := g.getSoxArgs(ctx, settings, audioPath, outputPath, width, raw, SoxInputFile, preValidatedDuration)
 
 	g.log().Debug("Executing SoX command directly",
 		logger.String("sox_binary", soxBinary),
@@ -520,9 +539,9 @@ func (g *Generator) killSoxProcess(soxCmd *exec.Cmd, soxPid int) {
 
 // generateWithFFmpegSoxPipeline generates a spectrogram using FFmpeg piped to Sox.
 // Used when the audio file format is not natively supported by Sox.
-func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
-	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) error {
+	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
+	soxBinary := settings.Realtime.Audio.SoxPath
 
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
@@ -543,7 +562,7 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 
 	// FFmpeg converts audio to Sox format and pipes to Sox
 	ffmpegArgs := []string{"-hide_banner", "-i", audioPath, "-f", "sox", "-"}
-	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, preValidatedDuration)...)
+	soxArgs := append([]string{"-t", "sox", "-"}, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration)...)
 
 	ffmpegCmd := createCommandWithNice(ctx, ffmpegBinary, ffmpegArgs)
 	soxCmd := createCommandWithNice(ctx, soxBinary, soxArgs)
@@ -668,8 +687,8 @@ func (g *Generator) generateWithFFmpegSoxPipeline(ctx context.Context, audioPath
 // generateWithSoxPCM generates a spectrogram by feeding PCM data directly to Sox stdin.
 // This bypasses FFmpeg entirely, reducing CPU overhead and memory usage.
 // PCM format: s16le, 48kHz, mono
-func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool) error {
-	soxBinary := g.settings.Realtime.Audio.SoxPath
+func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, outputPath string, width int, raw bool) error {
+	soxBinary := settings.Realtime.Audio.SoxPath
 	if soxBinary == "" {
 		return errors.Newf("sox binary not configured").
 			Component("spectrogram").
@@ -692,7 +711,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 		"spectrogram",             // Effect: spectrogram
 		"-x", strconv.Itoa(width), // Width in pixels
 		"-y", strconv.Itoa(fftFriendlyHeight(width)), // Height in pixels (FFT-friendly 2^n + 1)
-		"-z", g.getDynamicRange(), // Dynamic range in dB
+		"-z", g.getDynamicRange(settings), // Dynamic range in dB
 		"-o", outputPath, // Output PNG file
 	}
 
@@ -702,7 +721,7 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 	}
 
 	// Add style-specific arguments
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := settings.Realtime.Dashboard.Spectrogram.Style
 	if styleArgs := getStyleArgs(style); styleArgs != nil {
 		args = append(args, styleArgs...)
 	}
@@ -751,8 +770,8 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, pcmData []byte, outp
 
 // generateWithFFmpeg generates a spectrogram using only FFmpeg (no Sox).
 // This is a fallback when Sox is not available or fails.
-func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPath string, width int, raw bool) error {
-	ffmpegBinary := g.settings.Realtime.Audio.FfmpegPath
+func (g *Generator) generateWithFFmpeg(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool) error {
+	ffmpegBinary := settings.Realtime.Audio.FfmpegPath
 	// Validate FFmpeg path (defense-in-depth against ingress path contamination, see #2195)
 	if err := ffmpeg.ValidateFFmpegPath(ffmpegBinary); err != nil {
 		return errors.Newf("invalid FFmpeg path: %s", err).
@@ -768,7 +787,7 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 	// Apply style-aware color mode so FFmpeg fallback matches the Sox primary style.
 	// Without this, the FFmpeg fallback always produces the default colorful style,
 	// causing intermittent style mismatches when Sox fails under resource pressure.
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := settings.Realtime.Dashboard.Spectrogram.Style
 	colorMode := getFFmpegColorMode(style)
 
 	var filterStr string
@@ -826,13 +845,13 @@ func (g *Generator) generateWithFFmpeg(ctx context.Context, audioPath, outputPat
 
 // getSoxArgs builds Sox arguments for file input.
 // Used when Sox can directly read the audio file.
-func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, inputType SoxInputType, preValidatedDuration float64) []string {
+func (g *Generator) getSoxArgs(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, inputType SoxInputType, preValidatedDuration float64) []string {
 	args := make([]string, 0, 16) // Preallocate capacity for input path + spectrogram args
 	if inputType == SoxInputFile {
 		args = append(args, audioPath)
 	}
 
-	args = append(args, g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, preValidatedDuration)...)
+	args = append(args, g.getSoxSpectrogramArgs(ctx, settings, audioPath, outputPath, width, raw, preValidatedDuration)...)
 	return args
 }
 
@@ -844,7 +863,7 @@ func (g *Generator) getSoxArgs(ctx context.Context, audioPath, outputPath string
 //
 // preValidatedDuration, when > 0, is used directly (e.g., from FFprobe validation),
 // skipping the sox --info duration query entirely.
-func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) []string {
+func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Settings, audioPath, outputPath string, width int, raw bool, preValidatedDuration float64) []string {
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
@@ -860,7 +879,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	}
 	if duration <= 0 {
 		// Fallback: Use configured capture length if both sox and ffprobe fail
-		captureLength := g.settings.Realtime.Audio.Export.Length
+		captureLength := settings.Realtime.Audio.Export.Length
 		duration = float64(captureLength)
 		g.log().Warn("Duration query failed, using configured fallback duration",
 			logger.Float64("fallback_duration_seconds", duration),
@@ -871,7 +890,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	captureLengthStr := strconv.Itoa(int(duration + durationRoundingOffset))
 
 	// Add duration and remaining common parameters
-	args = append(args, "-d", captureLengthStr, "-z", g.getDynamicRange(), "-o", outputPath)
+	args = append(args, "-d", captureLengthStr, "-z", g.getDynamicRange(settings), "-o", outputPath)
 
 	// Add raw flag if requested (no axes/legends)
 	if raw {
@@ -879,7 +898,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, audioPath, output
 	}
 
 	// Add style-specific arguments
-	style := g.settings.Realtime.Dashboard.Spectrogram.Style
+	style := settings.Realtime.Dashboard.Spectrogram.Style
 	if styleArgs := getStyleArgs(style); styleArgs != nil {
 		args = append(args, styleArgs...)
 	}
@@ -1129,7 +1148,7 @@ func getAudioDurationViaSox(ctx context.Context, audioPath string) (float64, err
 // This method is exported to allow tests in other packages to verify the
 // FFmpeg version optimization logic.
 func (g *Generator) GetSoxSpectrogramArgsForTest(ctx context.Context, audioPath, outputPath string, width int, raw bool) []string {
-	return g.getSoxSpectrogramArgs(ctx, audioPath, outputPath, width, raw, 0)
+	return g.getSoxSpectrogramArgs(ctx, g.currentSettings(), audioPath, outputPath, width, raw, 0)
 }
 
 // CreateFreshFFmpegContext creates a new context for FFmpeg fallback with full timeout.

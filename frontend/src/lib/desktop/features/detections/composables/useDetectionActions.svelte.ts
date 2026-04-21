@@ -17,6 +17,7 @@ import { fetchWithCSRF } from '$lib/utils/api';
 import { t } from '$lib/i18n';
 import { loggers } from '$lib/utils/logger';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { setDetectionVerification } from '$lib/utils/reviewDetection';
 
 const logger = loggers.ui;
 
@@ -131,6 +132,20 @@ export function useDetectionActions(options: DetectionActionOptions) {
     showConfirmModal = true;
   }
 
+  async function handleMarkCorrect(detection: Detection) {
+    if (await setDetectionVerification(detection.id, 'correct')) {
+      detection.verified = 'correct';
+      options.onRefresh?.();
+    }
+  }
+
+  async function handleMarkFalsePositive(detection: Detection) {
+    if (await setDetectionVerification(detection.id, 'false_positive')) {
+      detection.verified = 'false_positive';
+      options.onRefresh?.();
+    }
+  }
+
   function closeModal() {
     showConfirmModal = false;
     selectedDetection = null;
@@ -155,6 +170,8 @@ export function useDetectionActions(options: DetectionActionOptions) {
       return confirmModalConfig;
     },
     handleReview,
+    handleMarkCorrect,
+    handleMarkFalsePositive,
     handleToggleSpecies,
     handleToggleLock,
     handleDelete,

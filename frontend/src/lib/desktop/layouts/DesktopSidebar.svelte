@@ -296,7 +296,12 @@ Performance Optimizations:
   }
 
   async function handleLogout() {
-    await authStore.logout();
+    try {
+      await authStore.logout();
+    } catch {
+      // authStore.logout() already logs before rethrowing; swallow here
+      // to prevent an unhandled rejection from the non-awaited onclick.
+    }
   }
 
   function handleLogin() {

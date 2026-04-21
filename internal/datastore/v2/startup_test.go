@@ -111,6 +111,72 @@ func TestCheckMigrationState_BothDBsExist_SQLite(t *testing.T) {
 	assert.False(t, state.FreshInstall, "should NOT be fresh install when both exist")
 }
 
+// TestCheckMigrationState_StaleEmptySidecar_V2Consolidated is a regression
+// test for the production failure where an empty birdnet-2025_v2.db sidecar
+// (created by an external deploy script, not by BirdNET-Go) caused startup
+// to misroute into legacy mode on a consolidated v2 database, triggering
+// "Cannot add a NOT NULL column with default value NULL" from AutoMigrate.
+//
+// With the fix, an empty/corrupt sidecar next to a healthy v2 database must
+// fall through to the configured-path check, return v2-only mode, and remove
+// the stale sidecar so subsequent startups take the clean path.
+func TestCheckMigrationState_StaleEmptySidecar_V2Consolidated(t *testing.T) {
+	tmpDir := t.TempDir()
+	configuredPath := filepath.Join(tmpDir, "birdnet-2025.db")
+	v2SidecarPath := filepath.Join(tmpDir, "birdnet-2025_v2.db")
+
+	createConsolidatedV2DBAt(t, configuredPath)
+
+	// Simulate the production fault: a 0-byte sidecar created externally
+	f, err := os.Create(v2SidecarPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	startupState := CheckMigrationStateBeforeStartup(settings)
+
+	assert.False(t, startupState.FreshInstall, "should NOT be fresh install")
+	assert.True(t, startupState.V2Available, "v2 should be available")
+	assert.False(t, startupState.LegacyRequired, "legacy must not be required")
+	assert.Equal(t, entities.MigrationStatusCompleted, startupState.MigrationStatus)
+	require.NoError(t, startupState.Error)
+
+	// Stale sidecar must be cleaned up so next startup does not re-enter
+	// this branch; regression guard for the deploy-script failure mode.
+	_, err = os.Stat(v2SidecarPath)
+	assert.True(t, os.IsNotExist(err), "stale sidecar should have been removed")
+}
+
+// TestCheckMigrationState_EmptySidecar_NoConfigured covers the edge case
+// where a stray empty sidecar exists but the configured path is missing.
+// The fallback must not trigger (there is no v2 schema to fall back to)
+// and startup must surface the corruption error.
+func TestCheckMigrationState_EmptySidecar_NoConfigured(t *testing.T) {
+	tmpDir := t.TempDir()
+	v2SidecarPath := filepath.Join(tmpDir, "birdnet_v2.db")
+
+	f, err := os.Create(v2SidecarPath) //nolint:gosec // Test file path is safe
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(tmpDir, "birdnet.db")
+
+	startupState := CheckMigrationStateBeforeStartup(settings)
+
+	assert.False(t, startupState.FreshInstall)
+	require.Error(t, startupState.Error, "should surface error when no fallback is available")
+
+	// Sidecar must remain: the function only removes it when a valid
+	// consolidated v2 database exists at the configured path.
+	_, err = os.Stat(v2SidecarPath)
+	require.NoError(t, err, "sidecar should be preserved when no v2 fallback exists")
+}
+
 func TestCheckMigrationState_DeepNestedPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	// Custom path with multiple nested directories that don't exist
@@ -230,6 +296,21 @@ func createLegacySQLite(t *testing.T, path string, recordCount int) {
 	for i := range recordCount {
 		require.NoError(t, db.Exec("INSERT INTO notes (id, source_node) VALUES (?, 'test')", i+1).Error)
 	}
+}
+
+// createConsolidatedV2DBAt creates a fully initialized v2 database at the
+// exact path given (not the derived migration sidecar path), with migration
+// state set to COMPLETED. Used by regression tests that need a "consolidated
+// v2 DB at the configured path" fixture.
+func createConsolidatedV2DBAt(t *testing.T, path string) {
+	t.Helper()
+	mgr, err := NewSQLiteManager(Config{DirectPath: path})
+	require.NoError(t, err)
+	require.NoError(t, mgr.Initialize())
+	require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+		Where("id = 1").
+		Update("state", entities.MigrationStatusCompleted).Error)
+	require.NoError(t, mgr.Close())
 }
 
 // createCompletedV2MigrationDB creates a v2 migration database with COMPLETED state

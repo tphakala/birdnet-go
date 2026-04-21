@@ -475,6 +475,56 @@ Cogwheel dropdown menu for the header bar. Contains theme toggle, edit dashboard
 
 ---
 
+### ActionMenu
+
+Context action menu rendered as a `MoreVertical` (⋮) trigger with a popover list. Used by detection list rows and dashboard cards. Merged variant component - `variant="default"` for in-row light styling, `variant="overlay"` for dark semi-transparent styling on spectrogram backgrounds.
+
+**Props:**
+
+```ts
+interface Props {
+  detection: Detection;
+  isExcluded?: boolean;
+  variant?: 'default' | 'overlay';
+  onMarkCorrect?: () => void;
+  onMarkFalsePositive?: () => void;
+  onReview?: () => void;
+  onToggleSpecies?: () => void;
+  onToggleLock?: () => void;
+  onDelete?: () => void;
+  onDownload?: () => void;
+  className?: string;
+  onMenuOpen?: () => void;
+  onMenuClose?: () => void;
+}
+```
+
+**Features:**
+
+- Quick-review shortcuts (Correct / Incorrect) at the top, hidden when the detection is locked
+- Review, Ignore/Show species, Lock/Unlock, Delete actions (existing)
+- Optional Download item when `onDownload` is provided
+- Viewport-aware positioning (flips above the trigger when there is not enough space below)
+- `variant="overlay"` swaps to a dark palette suitable for spectrogram overlays
+- Auth-gated: write actions hidden when the user cannot edit
+
+**Example:**
+
+```svelte
+<ActionMenu
+  {detection}
+  variant="overlay"
+  onMarkCorrect={() => actions.handleMarkCorrect(detection)}
+  onMarkFalsePositive={() => actions.handleMarkFalsePositive(detection)}
+  onReview={() => actions.handleReview(detection)}
+  onToggleLock={() => actions.handleToggleLock(detection)}
+  onDelete={() => actions.handleDelete(detection)}
+  onDownload={handleDownload}
+/>
+```
+
+---
+
 ### Image Utils
 
 **File**: `image-utils.ts`

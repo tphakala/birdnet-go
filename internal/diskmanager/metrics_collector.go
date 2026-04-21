@@ -66,8 +66,7 @@ func CollectProductionMetrics(baseDir string, allowedExts []string, db Interface
 	// Time the operation
 	startTime := time.Now()
 
-	// Run GetAudioFiles with debug enabled
-	files, err := GetAudioFiles(baseDir, allowedExts, db, true)
+	files, err := GetAudioFiles(baseDir, allowedExts, db)
 
 	processingTime := time.Since(startTime)
 	metrics.ProcessingTime = processingTime

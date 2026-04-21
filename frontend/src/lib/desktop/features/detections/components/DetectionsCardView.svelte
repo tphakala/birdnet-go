@@ -43,6 +43,8 @@
     <DetectionCard
       {detection}
       isExcluded={excludedSpecies.has(detection.commonName)}
+      onMarkCorrect={() => actions.handleMarkCorrect(detection)}
+      onMarkFalsePositive={() => actions.handleMarkFalsePositive(detection)}
       onReview={() => actions.handleReview(detection)}
       onToggleSpecies={() => actions.handleToggleSpecies(detection)}
       onToggleLock={() => actions.handleToggleLock(detection)}

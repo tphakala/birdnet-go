@@ -657,6 +657,8 @@
       },
       "actions": {
         "menuLabel": "Actions pour {species}",
+        "markCorrect": "Correct",
+        "markFalsePositive": "Incorrect",
         "review": "Examiner la détection",
         "showSpecies": "Afficher l'espèce",
         "ignoreSpecies": "Ignorer l'espèce",

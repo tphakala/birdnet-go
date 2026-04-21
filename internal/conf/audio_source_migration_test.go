@@ -11,7 +11,7 @@ func TestMigrateAudioSourceConfig_BasicMigration(t *testing.T) {
 	t.Parallel()
 
 	settings := &Settings{}
-	settings.Realtime.Audio.Source = "sysdefault"
+	settings.Realtime.Audio.Source = testAudioDeviceSysdefault
 	settings.Realtime.Audio.QuietHours = QuietHoursConfig{
 		Enabled:   true,
 		Mode:      "fixed",
@@ -26,7 +26,7 @@ func TestMigrateAudioSourceConfig_BasicMigration(t *testing.T) {
 
 	src := settings.Realtime.Audio.Sources[0]
 	assert.Equal(t, "Sound Card 1", src.Name)
-	assert.Equal(t, "sysdefault", src.Device)
+	assert.Equal(t, testAudioDeviceSysdefault, src.Device)
 	assert.InDelta(t, 0.0, src.Gain, 0.001)
 	assert.Empty(t, src.Model)
 	assert.Nil(t, src.Equalizer)
@@ -45,7 +45,7 @@ func TestMigrateAudioSourceConfig_SkipIfAlreadyMigrated(t *testing.T) {
 		Name:   "My Mic",
 		Device: "hw:0,0",
 	}}
-	settings.Realtime.Audio.Source = "sysdefault" // Leftover legacy, should be ignored
+	settings.Realtime.Audio.Source = testAudioDeviceSysdefault // Leftover legacy, should be ignored
 
 	migrated := settings.MigrateAudioSourceConfig()
 

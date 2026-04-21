@@ -596,6 +596,15 @@ func (c *Controller) getDetectionsByQueryType(params *detectionQueryParams) ([]d
 		params.Date != "" || params.StartDate != "" || params.EndDate != "" ||
 		(params.SortBy != "" && params.SortBy != "date_desc")
 
+	// Resolve locale common names to scientific names before routing so every
+	// query type benefits without per-case duplication.
+	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
+		params.Species = resolved
+	}
+	if resolved, hit := c.resolveSpeciesToScientific(params.Search); hit {
+		params.Search = resolved
+	}
+
 	switch params.QueryType {
 	case "hourly":
 		return c.getHourlyDetections(params.Date, params.Hour, params.Duration, params.NumResults, params.Offset)

@@ -40,6 +40,7 @@
   import { toastActions } from '$lib/stores/toast';
   import { fetchWithCSRF } from '$lib/utils/api';
   import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
+  import { setDetectionVerification } from '$lib/utils/reviewDetection';
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
@@ -186,6 +187,20 @@
     showConfirmModal = true;
   }
 
+  async function handleMarkCorrect() {
+    if (await setDetectionVerification(detection.id, 'correct')) {
+      detection.verified = 'correct';
+      onRefresh?.();
+    }
+  }
+
+  async function handleMarkFalsePositive() {
+    if (await setDetectionVerification(detection.id, 'false_positive')) {
+      detection.verified = 'false_positive';
+      onRefresh?.();
+    }
+  }
+
   function handleDelete() {
     confirmModalConfig = {
       title: t('dashboard.recentDetections.modals.deleteDetection', {
@@ -227,7 +242,7 @@
   }
 
   // Track previous URL to avoid unnecessary resets
-  let previousThumbnailUrl = $state<string | null>(null);
+  let previousThumbnailUrl: string | null = null;
 
   // Handle thumbnail loading state when detection changes
   $effect(() => {
@@ -404,6 +419,8 @@
   <ActionMenu
     {detection}
     {isExcluded}
+    onMarkCorrect={handleMarkCorrect}
+    onMarkFalsePositive={handleMarkFalsePositive}
     onReview={handleReview}
     onToggleSpecies={handleToggleSpecies}
     onToggleLock={handleToggleLock}

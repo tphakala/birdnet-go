@@ -239,3 +239,18 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 	assert.NotContains(t, string(content), "should not appear", "Debug messages should be filtered at info level")
 	assert.Contains(t, string(content), "should appear")
 }
+
+// TestDiskmanagerModuleDefaultLogLevelIsInfo verifies that the diskmanager module
+// defaults to "info" log level, not "debug". The diskmanager runs frequently and
+// logs one DEBUG line per candidate clip per cycle, so a "debug" default causes
+// log files to balloon to 100+ MB/day with no user-visible control.
+func TestDiskmanagerModuleDefaultLogLevelIsInfo(t *testing.T) {
+	// Not parallel: reads/writes global viper defaults set by setDefaultConfig.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	setDefaultConfig()
+
+	level := viper.GetString("logging.modules.diskmanager.level")
+	assert.Equal(t, "info", level,
+		"diskmanager module must default to info level; debug default floods the log file with per-clip entries")
+}

@@ -58,6 +58,7 @@
   import { getLocale } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
   import { getBitrateConfig, formatBitrate, parseNumericBitrate } from '$lib/utils/audioValidation';
+  import { chooseBitrateForFormat, isExportFormat, type ExportFormat } from './audioExportFormat';
   import {
     Volume2,
     Radio,
@@ -437,9 +438,13 @@
     });
   }
 
-  function updateExportFormat(type: 'wav' | 'mp3' | 'flac' | 'aac' | 'opus') {
+  function updateExportFormat(type: ExportFormat) {
+    const nextBitrate = chooseBitrateForFormat(type, settings.audio.export.bitrate ?? '');
     settingsActions.updateSection('realtime', {
-      audio: { ...$audioSettings!, export: { ...settings.audio.export, type } },
+      audio: {
+        ...$audioSettings!,
+        export: { ...settings.audio.export, type, bitrate: nextBitrate },
+      },
     });
   }
 
@@ -1251,8 +1256,16 @@
               helpText={t('settings.audio.fileSettings.typeHelp')}
               options={exportFormatOptions}
               disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
-              onChange={value =>
-                updateExportFormat(value as 'wav' | 'mp3' | 'flac' | 'aac' | 'opus')}
+              onChange={value => {
+                const candidate = Array.isArray(value) ? value[0] : value;
+                if (isExportFormat(candidate)) {
+                  updateExportFormat(candidate);
+                } else {
+                  logger.warn('Ignoring unknown audio export format candidate', {
+                    candidate,
+                  });
+                }
+              }}
               groupBy={false}
               menuSize="sm"
             />

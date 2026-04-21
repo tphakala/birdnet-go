@@ -657,6 +657,8 @@
       },
       "actions": {
         "menuLabel": "Toiminnot: {species}",
+        "markCorrect": "Oikein",
+        "markFalsePositive": "Virhe",
         "review": "Tarkista havainto",
         "showSpecies": "Näytä laji",
         "ignoreSpecies": "Ohita laji",

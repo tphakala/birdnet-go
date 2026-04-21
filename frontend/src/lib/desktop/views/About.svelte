@@ -22,7 +22,8 @@
 -->
 <script lang="ts">
   import Card from '$lib/desktop/components/ui/Card.svelte';
-  import { Star, Github, Globe, Info, Clock, FileText, CircleCheck, User } from '@lucide/svelte';
+  import { Star, Globe, Info, Clock, FileText, CircleCheck, User } from '@lucide/svelte';
+  import GithubIcon from '$lib/desktop/components/ui/GithubIcon.svelte';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
@@ -104,7 +105,7 @@
         rel="noopener noreferrer"
         aria-label={t('about.visitGithubAriaLabel')}
       >
-        <Github class="size-5" />
+        <GithubIcon class="size-5" />
         {t('about.viewOnGithub')}
       </a>
     </div>
@@ -147,7 +148,7 @@
         rel="noopener noreferrer"
         aria-label={t('about.visitBirdnetAnalyzerAriaLabel')}
       >
-        <Github class="size-5" />
+        <GithubIcon class="size-5" />
         {t('about.visitBirdnetAnalyzer')}
       </a>
     </div>
@@ -269,7 +270,7 @@
         rel="noopener noreferrer"
         aria-label="Visit BirdNET-Pi GitHub repository"
       >
-        <Github class="size-5" />
+        <GithubIcon class="size-5" />
         {t('about.visitBirdnetPi')}
       </a>
     </div>
@@ -284,7 +285,7 @@
         rel="noopener noreferrer"
         aria-label="Visit Patrick Levin's GitHub profile"
       >
-        <Github class="size-5" />
+        <GithubIcon class="size-5" />
         {t('about.patrickLevinGithub')}
       </a>
     </div>
@@ -355,7 +356,7 @@
         rel="noopener noreferrer"
         aria-label={t('about.visitAvicommonsGithub')}
       >
-        <Github class="size-5" />
+        <GithubIcon class="size-5" />
         {t('common.labels.github')}
       </a>
     </div>

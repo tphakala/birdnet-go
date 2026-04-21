@@ -312,6 +312,22 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 
 	migrationLogger.Debug("Starting database migration")
 
+	// Drop stale unique indexes the GORM entities no longer declare. Must
+	// run before AutoMigrate/validateAndFixSchema because MySQL will otherwise
+	// fail AutoMigrate with Error 1062 on restart when a pre-multi-model
+	// UNIQUE(species_name) index lingers alongside the composite
+	// idx_dt_species_model. Non-fatal on failure: log and continue so a
+	// reconciler bug can't brick startup.
+	mappings := legacyEntities()
+	entityModels := make([]any, 0, len(mappings))
+	for _, m := range mappings {
+		entityModels = append(entityModels, m.model)
+	}
+	if err := reconcileLegacyUniqueIndexes(db, dbType, dbName, entityModels); err != nil {
+		migrationLogger.Warn("Failed to reconcile legacy unique indexes, continuing",
+			logger.Error(err))
+	}
+
 	// Validate and fix schema if needed
 	if err := validateAndFixSchema(db, dbType, dbName, debug, migrationLogger); err != nil {
 		return err
@@ -418,12 +434,18 @@ func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log lo
 	return nil
 }
 
-// migrateTables performs the actual table migrations
-func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
-	tableMappings := []struct {
-		model any
-		name  string
-	}{
+// legacyEntityMapping holds a GORM model pointer paired with its physical table name.
+// Centralising this list lets both migrateTables and the stale-index reconciler
+// iterate the same entities in the same order.
+type legacyEntityMapping struct {
+	model any
+	name  string
+}
+
+// legacyEntities returns the ordered list of legacy-schema entities that
+// performAutoMigration manages. Callers must not mutate the returned slice.
+func legacyEntities() []legacyEntityMapping {
+	return []legacyEntityMapping{
 		{&Note{}, "notes"},
 		{&Results{}, "results"},
 		{&NoteReview{}, "note_reviews"},
@@ -436,6 +458,11 @@ func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
 		{&ThresholdEvent{}, "threshold_events"},            // BG-59: Threshold change history
 		{&NotificationHistory{}, "notification_histories"}, // BG-17: Notification suppression persistence
 	}
+}
+
+// migrateTables performs the actual table migrations
+func migrateTables(db *gorm.DB, dbType string, log logger.Logger) (int, error) {
+	tableMappings := legacyEntities()
 
 	GetLogger().Debug("Starting table migrations",
 		logger.Int("table_count", len(tableMappings)))
@@ -627,6 +654,12 @@ const (
 	// mysqlErrDupKeyName is MySQL error 1061 (ER_DUP_KEYNAME):
 	// "Duplicate key name '%s'"
 	mysqlErrDupKeyName uint16 = 1061
+
+	// mysqlErrCantDropFieldOrKey is MySQL error 1091 (ER_CANT_DROP_FIELD_OR_KEY):
+	// "Can't DROP '%s'; check that column/key exists". Returned when a DROP
+	// INDEX targets an index that no longer exists (e.g., a concurrent process
+	// already dropped it).
+	mysqlErrCantDropFieldOrKey uint16 = 1091
 
 	// mysqlErrIllegalHA is MySQL error 1031 (ER_ILLEGAL_HA):
 	// "Table storage engine for '%s' doesn't have this option"

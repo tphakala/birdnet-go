@@ -114,18 +114,9 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 
 	// If v2 migration database doesn't exist, check if configured path is a v2 DB
 	if !v2MigrationExists {
-		if configuredExists {
-			// Check if the configured database is a fresh v2 database
-			if isV2Database := CheckSQLiteHasV2Schema(configuredPath); isV2Database {
-				// This is a fresh v2 install (restart after initial fresh install)
-				return StartupState{
-					MigrationStatus: entities.MigrationStatusCompleted,
-					V2Available:     true,
-					LegacyRequired:  false,
-					FreshInstall:    false,
-					Error:           nil,
-				}
-			}
+		if configuredExists && CheckSQLiteHasV2Schema(configuredPath) {
+			// Fresh v2 install (restart after initial fresh install)
+			return completedV2StartupState()
 		}
 		// Configured path exists but is not v2 = legacy mode
 		return StartupState{
@@ -144,6 +135,9 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	})
 	if err != nil {
 		reportStartupError("sqlite", "openV2Database", err, v2MigrationPath)
+		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			return fallback
+		}
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -156,6 +150,9 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	sqlDB, err := db.DB()
 	if err != nil {
 		reportStartupError("sqlite", "getUnderlyingDB", err, v2MigrationPath)
+		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			return fallback
+		}
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     false,
@@ -168,6 +165,12 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	// Read migration state — try both table names (plural is current, singular is pre-PR #2165)
 	migrationTable := resolveSQLiteTableName(db, "migration_states", "migration_state")
 	if migrationTable == "" {
+		// Close the sidecar handle before the fallback may delete the file.
+		// sql.DB.Close is idempotent, so the deferred close remains safe.
+		_ = sqlDB.Close()
+		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			return fallback
+		}
 		reportStartupError("sqlite", "readMigrationState", fmt.Errorf("migration state table not found"), v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -178,6 +181,10 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	}
 	var state entities.MigrationState
 	if err := db.Table(migrationTable).First(&state).Error; err != nil {
+		_ = sqlDB.Close()
+		if fallback, ok := fallbackConsolidatedV2State(configuredPath, v2MigrationPath); ok {
+			return fallback
+		}
 		reportStartupError("sqlite", "readMigrationState", err, v2MigrationPath)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -196,6 +203,49 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 		LegacyRequired:  legacyRequired,
 		Error:           nil,
 	}
+}
+
+// completedV2StartupState returns the canonical StartupState for a v2-only
+// install with a fully consolidated (completed) migration. Used by both the
+// fresh-v2-restart branch and the stale-sidecar fallback so the two paths
+// cannot drift apart.
+func completedV2StartupState() StartupState {
+	return StartupState{
+		MigrationStatus: entities.MigrationStatusCompleted,
+		V2Available:     true,
+		LegacyRequired:  false,
+	}
+}
+
+// removeStaleV2Sidecar deletes a v2 migration sidecar (plus WAL/SHM) that is
+// known to be stale because the configured path already holds a consolidated
+// v2 database. Best-effort: ignores os errors so startup can proceed.
+func removeStaleV2Sidecar(v2MigrationPath, configuredPath, operation string) {
+	logger.Global().Module("datastore").Info(
+		"removing stale v2 migration sidecar next to consolidated v2 database",
+		logger.String("migration_path", v2MigrationPath),
+		logger.String("configured_path", configuredPath),
+		logger.String("operation", operation),
+	)
+	_ = os.Remove(v2MigrationPath)
+	cleanupWALFiles(v2MigrationPath)
+}
+
+// fallbackConsolidatedV2State recovers from a stale or corrupt _v2.db sidecar
+// sitting next to a configured path that is already a fully consolidated v2
+// database (created by a deploy script, failed migration, or accidental
+// touch). It removes the sidecar and returns the v2-only StartupState so the
+// caller does not misroute into legacy-migration mode.
+//
+// Returns (state, true) when the configured path is a valid completed v2
+// database; otherwise (zero, false) signalling the caller should fall
+// through to its original legacy-mode result.
+func fallbackConsolidatedV2State(configuredPath, v2MigrationPath string) (StartupState, bool) {
+	if !CheckSQLiteHasV2Schema(configuredPath) {
+		return StartupState{}, false
+	}
+	removeStaleV2Sidecar(v2MigrationPath, configuredPath, "fallback_consolidated_v2_state")
+	return completedV2StartupState(), true
 }
 
 // checkMySQLMigrationState checks migration state for MySQL deployments.
@@ -817,7 +867,15 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 
 	// Check if v2 migration database has COMPLETED status
 	if !CheckSQLiteHasV2Schema(v2MigrationPath) {
-		// V2 exists but migration not complete, no consolidation
+		// Sidecar exists but is empty, corrupt, or has an incomplete migration.
+		// When the configured path is already a consolidated v2 database the
+		// sidecar is stale (deploy script, crashed init, accidental touch) and
+		// must be removed so the subsequent startup-state check does not
+		// misroute into legacy-migration mode.
+		if CheckSQLiteHasV2Schema(configuredPath) {
+			removeStaleV2Sidecar(v2MigrationPath, configuredPath, "consolidate_at_startup")
+		}
+		// V2 sidecar is not a completed migration DB; nothing to consolidate
 		return false, nil
 	}
 
