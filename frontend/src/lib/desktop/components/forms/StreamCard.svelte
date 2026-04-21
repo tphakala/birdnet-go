@@ -230,7 +230,7 @@
       case 'error':
         return t('settings.audio.streams.status.error');
       case 'disabled':
-        return 'Disabled';
+        return t('settings.alerts.disabled');
       case 'idle':
         return t('settings.audio.streams.status.idle');
       case 'suppressed':
@@ -433,7 +433,7 @@
         <Checkbox
           checked={editEnabled}
           onchange={checked => (editEnabled = checked)}
-          label="Enabled"
+          label={t('settings.alerts.enabled')}
           disabled={disabled}
           size="sm"
         />
@@ -525,7 +525,7 @@
             <Checkbox
               checked={stream.enabled}
               onchange={updateEnabled}
-              label="Enabled"
+              label={t('settings.alerts.enabled')}
               disabled={disabled}
               size="sm"
             />
