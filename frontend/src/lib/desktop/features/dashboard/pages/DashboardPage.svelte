@@ -319,7 +319,10 @@ Performance Optimizations:
 
   // Fetch functions
   async function fetchDailySummary() {
-    if (!connectionState.isOnline) return;
+    if (!connectionState.isOnline) {
+      isLoadingSummary = false;
+      return;
+    }
 
     isLoadingSummary = true;
     summaryError = null;
@@ -406,7 +409,10 @@ Performance Optimizations:
   }
 
   async function fetchRecentDetections(applyAnimations = false) {
-    if (!connectionState.isOnline) return;
+    if (!connectionState.isOnline) {
+      isLoadingDetections = false;
+      return;
+    }
 
     isLoadingDetections = true;
     detectionsError = null;
@@ -1267,6 +1273,17 @@ Performance Optimizations:
     if (selectedDate && configLoaded) {
       triggerAdjacentPreload(selectedDate);
     }
+  });
+
+  // Refetch data when backend connectivity is restored
+  let wasOnline = $state(connectionState.isOnline);
+  $effect(() => {
+    const online = connectionState.isOnline;
+    if (online && !wasOnline) {
+      fetchDailySummary();
+      fetchRecentDetections();
+    }
+    wasOnline = online;
   });
 
   // Update freeze state management
