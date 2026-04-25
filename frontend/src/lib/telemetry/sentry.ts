@@ -7,6 +7,7 @@
  * - Privacy-first beforeSend filtering
  */
 import * as Sentry from '@sentry/browser';
+import { isBackendOnline } from '$lib/stores/connectionState.svelte';
 
 /** Configuration passed from appState after config fetch. */
 export interface SentryConfig {
@@ -32,6 +33,19 @@ function isExpectedApiError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const status = (err as Record<string, unknown>).status;
   return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN || status === HTTP_CONFLICT;
+}
+
+/**
+ * Check whether an error is a browser-level network TypeError.
+ * Chrome/Firefox: "Failed to fetch", Safari: "Load failed",
+ * older Firefox: "NetworkError when attempting to fetch resource".
+ */
+function isNetworkTypeError(err: unknown): boolean {
+  if (!(err instanceof TypeError)) return false;
+  const msg = err.message;
+  return (
+    msg.includes('Failed to fetch') || msg.includes('Load failed') || msg.includes('NetworkError')
+  );
 }
 
 /**
@@ -63,6 +77,9 @@ export function initSentry(config: SentryConfig): void {
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip expected-flow errors — auth (401/403) and conflict (409, e.g. v2 database not available)
   if (isExpectedApiError(error)) return;
+
+  // Skip network errors when the backend is already known to be offline
+  if (error.isNetworkError && !isBackendOnline()) return;
 
   const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
 
@@ -100,6 +117,9 @@ export function captureError(
 ): void {
   // Skip expected-flow errors — 401/403/409 are not bugs
   if (isExpectedApiError(error)) return;
+
+  // Skip network TypeErrors when the backend is already known to be offline
+  if (!isBackendOnline() && isNetworkTypeError(error)) return;
 
   Sentry.withScope(scope => {
     scope.setLevel('error');
@@ -167,6 +187,9 @@ function scrubUrl(raw: string): string {
 function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
   // Drop expected-flow errors — 401/403/409 can arrive via unhandled rejections or logger.error().
   if (isExpectedApiError(hint.originalException)) return null;
+
+  // Drop network TypeErrors when backend is known-offline (safety net for unhandled rejections)
+  if (!isBackendOnline() && isNetworkTypeError(hint.originalException)) return null;
 
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;

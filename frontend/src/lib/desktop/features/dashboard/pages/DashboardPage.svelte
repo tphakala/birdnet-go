@@ -64,6 +64,7 @@ Performance Optimizations:
   import { api } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { connectionState } from '$lib/stores/connectionState.svelte';
   import { appState } from '$lib/stores/appState.svelte';
   import { birdnetSettings, dashboardLayout, settingsStore } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
@@ -318,6 +319,8 @@ Performance Optimizations:
 
   // Fetch functions
   async function fetchDailySummary() {
+    if (!connectionState.isOnline) return;
+
     isLoadingSummary = true;
     summaryError = null;
 
@@ -403,6 +406,8 @@ Performance Optimizations:
   }
 
   async function fetchRecentDetections(applyAnimations = false) {
+    if (!connectionState.isOnline) return;
+
     isLoadingDetections = true;
     detectionsError = null;
 
