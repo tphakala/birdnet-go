@@ -1276,7 +1276,7 @@ Performance Optimizations:
   });
 
   // Refetch data when backend connectivity is restored
-  let wasOnline = $state(connectionState.isOnline);
+  let wasOnline = connectionState.isOnline;
   $effect(() => {
     const online = connectionState.isOnline;
     if (online && !wasOnline) {
