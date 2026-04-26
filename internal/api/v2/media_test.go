@@ -18,6 +18,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -1645,4 +1646,339 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			assert.Equal(t, filepath.Join("clips", "2025", "01", tt.expectedFilename), fullPath)
 		})
 	}
+}
+
+// TestAudioRangeWithGzipMiddleware_EndToEnd exercises the exact regression chain
+// from #2709 (gzip middleware added) to #2846 (HTTP 416 on audio playback).
+// It creates a full Echo router with the production gzip middleware AND SecureFS,
+// then sends requests carrying both Accept-Encoding: gzip and Range headers.
+// The gzip skipper must detect either the media route or the Range header and
+// leave the response uncompressed so http.ServeContent can handle byte ranges.
+func TestAudioRangeWithGzipMiddleware_EndToEnd(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "media")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2846")
+
+	// Constants for the test WAV file dimensions
+	const (
+		wavDataSize   = 8820 // 0.1s at 44100Hz, 16-bit mono
+		wavHeaderSize = 44   // standard RIFF/WAV header
+		wavTotalSize  = wavDataSize + wavHeaderSize
+	)
+
+	// Arrange: set up environment with gzip middleware on the Echo instance.
+	// Echo middleware added via e.Use() applies to all routes at request time,
+	// so routes registered by setupMediaTestEnvironment are already covered.
+	e, _, tempDir := setupMediaTestEnvironment(t)
+	e.Use(middleware.NewGzip())
+
+	audioFilename := "gzip-range-test.wav"
+	audioFilePath := filepath.Join(tempDir, audioFilename)
+	err := createTestAudioFile(t, audioFilePath)
+	require.NoError(t, err)
+
+	audioURL := "/api/v2/media/audio/" + audioFilename
+
+	t.Run("range request with gzip accept-encoding returns 206 without compression", func(t *testing.T) {
+		// Act: send a request with both Range and Accept-Encoding: gzip
+		req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+		req.Header.Set("Range", "bytes=0-99")
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		// Assert
+		assert.Equal(t, http.StatusPartialContent, rec.Code,
+			"Range request must return 206 Partial Content")
+		assert.Empty(t, rec.Header().Get("Content-Encoding"),
+			"Response must NOT be gzipped when Range is present")
+		assert.Contains(t, rec.Header().Get("Content-Range"), "bytes 0-99/",
+			"Content-Range header must reflect the requested byte range")
+		assert.Equal(t, "100", rec.Header().Get("Content-Length"),
+			"Content-Length must equal the number of bytes in the range")
+	})
+
+	t.Run("full request with gzip accept-encoding returns 200 without compression", func(t *testing.T) {
+		// Media routes are excluded from gzip even without Range headers.
+		req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		// Assert
+		assert.Equal(t, http.StatusOK, rec.Code)
+		assert.Empty(t, rec.Header().Get("Content-Encoding"),
+			"Media route must never be gzipped")
+		assert.Equal(t, fmt.Sprintf("%d", wavTotalSize), rec.Header().Get("Content-Length"),
+			"Content-Length must equal the full file size")
+	})
+
+	t.Run("suffix range with gzip accept-encoding returns 206", func(t *testing.T) {
+		// Suffix range: last 200 bytes
+		const suffixLen = 200
+		req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+		req.Header.Set("Range", fmt.Sprintf("bytes=-%d", suffixLen))
+		req.Header.Set("Accept-Encoding", "gzip")
+		rec := httptest.NewRecorder()
+		e.ServeHTTP(rec, req)
+
+		// Assert
+		assert.Equal(t, http.StatusPartialContent, rec.Code)
+		assert.Empty(t, rec.Header().Get("Content-Encoding"),
+			"Response must not be gzipped for suffix range")
+		expectedStart := wavTotalSize - suffixLen
+		expectedRange := fmt.Sprintf("bytes %d-%d/%d", expectedStart, wavTotalSize-1, wavTotalSize)
+		assert.Equal(t, expectedRange, rec.Header().Get("Content-Range"),
+			"Content-Range must cover the last %d bytes", suffixLen)
+	})
+}
+
+// TestAudioRangeConsistencyAcrossSequentialRequests simulates Chrome's aggressive
+// range request pattern. Chrome records the Content-Length from an initial response
+// and then uses it to build subsequent Range headers. When a file's state changes
+// between requests (e.g., it is replaced with a smaller file), Chrome's cached
+// content-length becomes stale and the follow-up range request asks for bytes
+// beyond the actual file size, resulting in HTTP 416.
+func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "media")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2846")
+
+	// Constants for file sizes
+	const (
+		largeDataSize = 50000
+		largeFileSize = largeDataSize + 44 // WAV header is 44 bytes
+		smallDataSize = 10000
+		smallFileSize = smallDataSize + 44
+	)
+
+	// Arrange
+	e, _, tempDir := setupMediaTestEnvironment(t)
+	filename := "sequential-range-test.wav"
+	filePath := filepath.Join(tempDir, filename)
+	audioURL := "/api/v2/media/audio/" + filename
+
+	// Step 1: Create a large WAV file and make an initial request without Range
+	createLargeWAVFile(t, filePath, largeDataSize)
+
+	initialReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+	initialRec := httptest.NewRecorder()
+	e.ServeHTTP(initialRec, initialReq)
+
+	require.Equal(t, http.StatusOK, initialRec.Code,
+		"Initial request must succeed with 200 OK")
+	recordedContentLength := initialRec.Header().Get("Content-Length")
+	assert.Equal(t, fmt.Sprintf("%d", largeFileSize), recordedContentLength,
+		"Content-Length must match the large file size")
+
+	// Step 2: Send a follow-up range request using the recorded Content-Length
+	// (simulating Chrome's behavior of requesting bytes=0-{contentLength-1})
+	rangeEnd := largeFileSize - 1
+	chromeRangeHeader := fmt.Sprintf("bytes=0-%d", rangeEnd)
+
+	followUpReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+	followUpReq.Header.Set("Range", chromeRangeHeader)
+	followUpRec := httptest.NewRecorder()
+	e.ServeHTTP(followUpRec, followUpReq)
+
+	assert.Equal(t, http.StatusPartialContent, followUpRec.Code,
+		"Follow-up range request covering the full file must return 206")
+	expectedRange := fmt.Sprintf("bytes 0-%d/%d", rangeEnd, largeFileSize)
+	assert.Equal(t, expectedRange, followUpRec.Header().Get("Content-Range"),
+		"Content-Range must span the entire file")
+
+	// Step 3: Replace the file with a smaller one (simulates a file being
+	// re-exported at a different length, or a different clip replacing it)
+	err := os.Remove(filePath)
+	require.NoError(t, err, "Must be able to remove the original file")
+	createLargeWAVFile(t, filePath, smallDataSize)
+
+	// Step 4: Send a range request using the OLD (larger) content-length.
+	// The range now extends beyond the new file, so the server must reject
+	// it with 416 Range Not Satisfiable.
+	staleRangeHeader := fmt.Sprintf("bytes=%d-%d", smallFileSize, rangeEnd)
+	staleReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+	staleReq.Header.Set("Range", staleRangeHeader)
+	staleRec := httptest.NewRecorder()
+	e.ServeHTTP(staleRec, staleReq)
+
+	assert.Equal(t, http.StatusRequestedRangeNotSatisfiable, staleRec.Code,
+		"Range request beyond file size must return 416")
+	assert.Contains(t, staleRec.Header().Get("Content-Range"),
+		fmt.Sprintf("bytes */%d", smallFileSize),
+		"416 response must include Content-Range with the current file size")
+}
+
+// concurrentRangeResult holds the outcome of a single concurrent range request.
+type concurrentRangeResult struct {
+	statusCode int
+	err        error
+}
+
+// TestAudioConcurrentRangeRequests verifies that the audio endpoint handles
+// simultaneous range requests to the same file without panics, data corruption,
+// or races. Each response must be one of 200 (full content), 206 (partial), or
+// 416 (range not satisfiable). Results are collected via a channel so all
+// assertions run in the main goroutine (required by testify).
+func TestAudioConcurrentRangeRequests(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "media")
+	t.Attr("type", "concurrency")
+	t.Attr("issue", "2846")
+
+	const (
+		concurrentWorkers = 20
+		fileDataSize      = 100000
+		fileTotalSize     = fileDataSize + 44 // WAV header
+	)
+
+	// Accepted HTTP status codes for a valid range request response
+	acceptableStatuses := []int{
+		http.StatusOK,
+		http.StatusPartialContent,
+		http.StatusRequestedRangeNotSatisfiable,
+	}
+
+	// Arrange
+	e, _, tempDir := setupMediaTestEnvironment(t)
+	filename := "concurrent-range-test.wav"
+	filePath := filepath.Join(tempDir, filename)
+	createLargeWAVFile(t, filePath, fileDataSize)
+
+	audioURL := "/api/v2/media/audio/" + filename
+
+	// Diverse range headers that exercise different code paths
+	rangeHeaders := []string{
+		"",              // full content (no range)
+		"bytes=0-99",    // first 100 bytes
+		"bytes=100-199", // middle chunk
+		"bytes=-100",    // last 100 bytes
+		"bytes=0-",      // from start to end
+		fmt.Sprintf("bytes=0-%d", fileTotalSize-1),  // entire file as range
+		fmt.Sprintf("bytes=%d-", fileTotalSize-100), // near the end
+		"bytes=0-0",     // single byte
+		"bytes=999999-", // out of bounds (expect 416)
+		"bytes=invalid", // malformed (expect 416)
+	}
+
+	// Act: launch concurrent workers
+	results := make(chan concurrentRangeResult, concurrentWorkers)
+	var wg sync.WaitGroup
+
+	for i := range concurrentWorkers {
+		rangeHeader := rangeHeaders[i%len(rangeHeaders)]
+		wg.Go(func() {
+			req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
+			if rangeHeader != "" {
+				req.Header.Set("Range", rangeHeader)
+			}
+			rec := httptest.NewRecorder()
+			e.ServeHTTP(rec, req)
+			results <- concurrentRangeResult{
+				statusCode: rec.Code,
+				err:        nil,
+			}
+		})
+	}
+
+	// Wait for all workers then close the results channel
+	wg.Wait()
+	close(results)
+
+	// Assert: check each result in the main goroutine
+	resultCount := 0
+	for res := range results {
+		resultCount++
+		require.NoError(t, res.err, "Concurrent request must not return an error")
+		assert.Contains(t, acceptableStatuses, res.statusCode,
+			"Response status %d is not in the accepted set %v", res.statusCode, acceptableStatuses)
+	}
+	assert.Equal(t, concurrentWorkers, resultCount,
+		"Must receive a result from every concurrent worker")
+}
+
+// TestAudioETagInvalidatesStaleCache validates the fix for #2846. The root cause
+// is browser cache poisoning: before the gzip fix (#2709), Chrome cached audio
+// with compressed Content-Length. After the fix, http.ServeContent returns 304
+// for If-Modified-Since matches, ignoring Range headers entirely. Chrome then
+// uses its stale cache with a wrong Content-Length, causing 416 on subsequent
+// range requests. The fix adds an ETag incorporating file size so that stale
+// cached entries (with a different size from the gzipped era) are invalidated.
+func TestAudioETagInvalidatesStaleCache(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "media")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2846")
+
+	e, controller, tempDir := setupMediaTestEnvironment(t)
+
+	const filename = "etag-cache-test.wav"
+	const dataSize = 2048
+	filePath := filepath.Join(tempDir, filename)
+	createLargeWAVFile(t, filePath, dataSize)
+
+	totalSize := int64(dataSize + 44) // WAV header is 44 bytes
+
+	// Step 1: Initial request, capture ETag and Last-Modified
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetParamNames("filename")
+	c.SetParamValues(filename)
+
+	err := controller.ServeAudioClip(c)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	etag := rec.Header().Get("ETag")
+	lastModified := rec.Header().Get("Last-Modified")
+	require.NotEmpty(t, etag, "Response must include an ETag header")
+	require.NotEmpty(t, lastModified, "Response must include a Last-Modified header")
+	t.Logf("Initial: ETag=%s Last-Modified=%s Content-Length=%d", etag, lastModified, totalSize)
+
+	// Step 2: Conditional request with matching If-None-Match returns 304
+	req2 := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
+	req2.Header.Set("If-None-Match", etag)
+	rec2 := httptest.NewRecorder()
+	c2 := e.NewContext(req2, rec2)
+	c2.SetParamNames("filename")
+	c2.SetParamValues(filename)
+
+	err = controller.ServeAudioClip(c2)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNotModified, rec2.Code, "Matching ETag should return 304")
+
+	// Step 3: Conditional request with a STALE ETag (simulating a cached gzipped
+	// response that had a different file size) should return 200 with fresh content.
+	staleETag := `"cafebabe-deadbeef"`
+	req3 := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
+	req3.Header.Set("If-None-Match", staleETag)
+	rec3 := httptest.NewRecorder()
+	c3 := e.NewContext(req3, rec3)
+	c3.SetParamNames("filename")
+	c3.SetParamValues(filename)
+
+	err = controller.ServeAudioClip(c3)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, rec3.Code, "Stale ETag should get 200, not 304")
+	assert.Equal(t, totalSize, int64(rec3.Body.Len()), "Fresh response should contain full file")
+
+	// Step 4: Conditional request with If-None-Match + Range (Chrome's actual
+	// pattern). With matching ETag, this should return 304 (use cache). With
+	// stale ETag, this should return 206 (fresh partial content).
+	req4 := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+filename, http.NoBody)
+	req4.Header.Set("If-None-Match", staleETag)
+	req4.Header.Set("Range", "bytes=0-99")
+	rec4 := httptest.NewRecorder()
+	c4 := e.NewContext(req4, rec4)
+	c4.SetParamNames("filename")
+	c4.SetParamValues(filename)
+
+	err = controller.ServeAudioClip(c4)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusPartialContent, rec4.Code,
+		"Stale ETag + Range should return 206 (fresh partial content), not 304")
+	assert.Equal(t, 100, rec4.Body.Len(), "Partial content should be 100 bytes")
 }
