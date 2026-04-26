@@ -135,7 +135,7 @@ func TestSyncAudioSourceNames(t *testing.T) {
 			"should be false when device also changed (handled by reconfiguration)")
 	})
 
-	t.Run("length mismatch", func(t *testing.T) {
+	t.Run("rename with new source added", func(t *testing.T) {
 		t.Parallel()
 		old := &conf.Settings{}
 		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
@@ -143,11 +143,27 @@ func TestSyncAudioSourceNames(t *testing.T) {
 		}
 		cur := &conf.Settings{}
 		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "A", Device: "hw:0,0"},
+			{Name: "A-renamed", Device: "hw:0,0"},
 			{Name: "B", Device: "hw:1,0"},
 		}
-		assert.False(t, syncAudioSourceNames(old, cur, nil),
-			"should be false on length mismatch (handled by device change detection)")
+		assert.True(t, syncAudioSourceNames(old, cur, nil),
+			"should detect rename even when a new source was added")
+	})
+
+	t.Run("reordered sources with rename", func(t *testing.T) {
+		t.Parallel()
+		old := &conf.Settings{}
+		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+			{Name: "Mic A", Device: "hw:0,0"},
+			{Name: "Mic B", Device: "hw:1,0"},
+		}
+		cur := &conf.Settings{}
+		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+			{Name: "Mic B", Device: "hw:1,0"},
+			{Name: "Garden Mic", Device: "hw:0,0"},
+		}
+		assert.True(t, syncAudioSourceNames(old, cur, nil),
+			"should detect rename even when sources are reordered")
 	})
 
 	t.Run("both empty", func(t *testing.T) {
@@ -202,7 +218,7 @@ func TestSyncStreamNames(t *testing.T) {
 			"should be false when URL also changed (handled by reconfiguration)")
 	})
 
-	t.Run("length mismatch", func(t *testing.T) {
+	t.Run("rename with new stream added", func(t *testing.T) {
 		t.Parallel()
 		old := &conf.Settings{}
 		old.Realtime.RTSP.Streams = []conf.StreamConfig{
@@ -210,11 +226,27 @@ func TestSyncStreamNames(t *testing.T) {
 		}
 		cur := &conf.Settings{}
 		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "A", URL: "rtsp://a/stream"},
+			{Name: "A-renamed", URL: "rtsp://a/stream"},
 			{Name: "B", URL: "rtsp://b/stream"},
 		}
-		assert.False(t, syncStreamNames(old, cur, nil),
-			"should be false on length mismatch (handled by stream reconfiguration)")
+		assert.True(t, syncStreamNames(old, cur, nil),
+			"should detect rename even when a new stream was added")
+	})
+
+	t.Run("reordered streams with rename", func(t *testing.T) {
+		t.Parallel()
+		old := &conf.Settings{}
+		old.Realtime.RTSP.Streams = []conf.StreamConfig{
+			{Name: "Stream A", URL: "rtsp://a/stream"},
+			{Name: "Stream B", URL: "rtsp://b/stream"},
+		}
+		cur := &conf.Settings{}
+		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
+			{Name: "Stream B", URL: "rtsp://b/stream"},
+			{Name: "Garden Cam", URL: "rtsp://a/stream"},
+		}
+		assert.True(t, syncStreamNames(old, cur, nil),
+			"should detect rename even when streams are reordered")
 	})
 
 	t.Run("both empty", func(t *testing.T) {

@@ -39,20 +39,24 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 
 // syncAudioSourceNames detects audio sources that were renamed while keeping
 // the same device, and updates their DisplayName in the registry. Returns true
-// if any name was changed. Skips length mismatches (handled by device change
-// detection) and entries where the device also changed (handled by full
-// reconfiguration).
+// if any name was changed. Uses a map keyed by Device so renames are detected
+// even if the source list was reordered.
 func syncAudioSourceNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
-	oldSources := oldSettings.Realtime.Audio.Sources
-	newSources := currentSettings.Realtime.Audio.Sources
-
-	if len(oldSources) != len(newSources) {
-		return false
+	sources := oldSettings.Realtime.Audio.Sources
+	oldNames := make(map[string]string, len(sources))
+	for i := range sources {
+		if sources[i].Device != "" {
+			oldNames[sources[i].Device] = sources[i].Name
+		}
 	}
+
 	changed := false
-	for i := range oldSources {
-		if oldSources[i].Device == newSources[i].Device &&
-			oldSources[i].Name != newSources[i].Name {
+	newSources := currentSettings.Realtime.Audio.Sources
+	for i := range newSources {
+		if newSources[i].Device == "" {
+			continue
+		}
+		if oldName, ok := oldNames[newSources[i].Device]; ok && oldName != newSources[i].Name {
 			changed = true
 			if registry != nil {
 				if src, ok := registry.GetByConnection(newSources[i].Device); ok {
@@ -66,18 +70,24 @@ func syncAudioSourceNames(oldSettings, currentSettings *conf.Settings, registry 
 
 // syncStreamNames detects streams that were renamed while keeping the same URL,
 // and updates their DisplayName in the registry. Returns true if any name was
-// changed. Skips length mismatches and entries where the URL also changed.
+// changed. Uses a map keyed by URL so renames are detected even if the stream
+// list was reordered.
 func syncStreamNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
-	oldStreams := oldSettings.Realtime.RTSP.Streams
-	newStreams := currentSettings.Realtime.RTSP.Streams
-
-	if len(oldStreams) != len(newStreams) {
-		return false
+	streams := oldSettings.Realtime.RTSP.Streams
+	oldNames := make(map[string]string, len(streams))
+	for i := range streams {
+		if streams[i].URL != "" {
+			oldNames[streams[i].URL] = streams[i].Name
+		}
 	}
+
 	changed := false
-	for i := range oldStreams {
-		if oldStreams[i].URL == newStreams[i].URL &&
-			oldStreams[i].Name != newStreams[i].Name {
+	newStreams := currentSettings.Realtime.RTSP.Streams
+	for i := range newStreams {
+		if newStreams[i].URL == "" {
+			continue
+		}
+		if oldName, ok := oldNames[newStreams[i].URL]; ok && oldName != newStreams[i].Name {
 			changed = true
 			if registry != nil {
 				if src, ok := registry.GetByConnection(newStreams[i].URL); ok {
