@@ -4,8 +4,8 @@ This guide explains how to train a custom BirdNET classifier for detecting speci
 
 ## Prerequisites
 
-- BirdNET Analyzer 1.5.1 GUI
-- Audio editing software (Audacity, Izotope RX11, or similar)
+- [BirdNET Analyzer](https://github.com/birdnet-team/BirdNET-Analyzer) GUI (screenshots in this guide are from v1.5.1; [v2.4.0](https://github.com/birdnet-team/BirdNET-Analyzer/releases/tag/v2.4.0) has also been verified to work correctly, though some intermediate versions had serious bugs in the training code that produced broken models)
+- Audio editing software ([Audacity](https://www.audacityteam.org/), [iZotope RX](https://www.izotope.com/en/shop/rx.html), or similar)
 - Audio samples containing target sounds (positive matches)
 - Audio samples without target sounds (negative matches)
 
@@ -98,7 +98,7 @@ In the spectrogram view, different sounds appear as distinct patterns:
 
 For this example, we'll process 15-second audio clips containing dog barks:
 
-1. **Load your audio file** into your audio editor (Audacity or Izotope RX11)
+1. **Load your audio file** into your audio editor (Audacity or iZotope RX)
 2. **Switch to spectrogram view** to better visualize the sound patterns
 3. **Identify the target sounds** (dog barks in this example)
 
@@ -128,7 +128,7 @@ The negative matches are all portions of the audio that do NOT contain your targ
 
 ## Step 2: Configure BirdNET Analyzer
 
-Launch BirdNET Analyzer 1.5.1 GUI and navigate to the **Train** tab:
+Launch the BirdNET Analyzer GUI and navigate to the **Train** tab:
 
 ![BirdNET Analyzer Train tab](https://raw.githubusercontent.com/tphakala/birdnet-go/main/doc/wiki/images/2025-08-30_19-08-07_birdnet_analyzer_gui_train.PNG)
 
@@ -193,7 +193,7 @@ After training completes, you'll have a custom classifier file that can be used 
 2. **Quality negative samples**: Ensure negative samples represent the typical environment where detection will occur
 3. **Balanced dataset**: Try to have roughly equal amounts of positive and negative training data
 4. **Iterative refinement**: Test your classifier and retrain with adjusted parameters or additional data as needed
-5. **Audio quality**: Use high-quality recordings when possible (at least 16kHz sample rate)
+5. **Audio quality**: Use high-quality recordings when possible (48kHz sample rate is ideal since BirdNET resamples all audio to 48kHz internally)
 6. **Background folder importance**: Always include a well-populated Background folder with diverse ambient sounds
 
 ## Troubleshooting
