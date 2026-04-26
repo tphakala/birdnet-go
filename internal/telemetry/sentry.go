@@ -326,10 +326,9 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 
 	// Remove extra fields except allowed ones (extras are stored as a context entry)
 	if extras, ok := event.Contexts["extras"]; ok {
-		if removePrivacyExtraFields(extras) > 0 || len(extras) == 0 {
-			if len(extras) == 0 {
-				delete(event.Contexts, "extras")
-			}
+		removePrivacyExtraFields(extras)
+		if len(extras) == 0 {
+			delete(event.Contexts, "extras")
 		}
 	}
 
