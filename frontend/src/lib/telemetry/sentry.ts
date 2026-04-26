@@ -7,7 +7,6 @@
  * - Privacy-first beforeSend filtering
  */
 import * as Sentry from '@sentry/browser';
-import { isBackendOnline } from '$lib/stores/connectionState.svelte';
 
 /** Configuration passed from appState after config fetch. */
 export interface SentryConfig {
@@ -25,6 +24,9 @@ const HTTP_CONFLICT = 409;
 const HTTP_BAD_GATEWAY = 502;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const HTTP_GATEWAY_TIMEOUT = 504;
+
+/** Minimum HTTP status considered a server-side error (5xx). */
+const HTTP_SERVER_ERROR_MIN = 500;
 
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
@@ -63,6 +65,12 @@ const ASSET_LOADING_ERROR_PATTERNS = [
   'dynamically imported module',
 ] as const;
 
+/** Messages with zero diagnostic value (minified/anonymous callbacks, empty strings). */
+const GENERIC_MESSAGES = new Set(['', '<anonymous>', 'callback']);
+
+/** Lowercase substrings for browser-internal noise that is never an app bug. */
+const NOISE_MESSAGE_PATTERNS = ['resizeobserver loop'] as const;
+
 /** Check whether an error is a chunk/asset loading failure from lazy routes. */
 function isAssetLoadingError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
@@ -81,6 +89,20 @@ function isNetworkTypeError(err: unknown): boolean {
   return (
     msg.includes('Failed to fetch') || msg.includes('Load failed') || msg.includes('NetworkError')
   );
+}
+
+/** Check whether a normalized message matches known noise patterns. */
+function isNoiseMessage(raw: string): boolean {
+  const msg = raw.trim().toLowerCase();
+  return GENERIC_MESSAGES.has(msg) || NOISE_MESSAGE_PATTERNS.some(p => msg.includes(p));
+}
+
+/** Check whether an error has no actionable diagnostic information. */
+function hasNoDiagnosticValue(hint: Sentry.EventHint): boolean {
+  const err = hint.originalException;
+  if (typeof err === 'string') return isNoiseMessage(err);
+  if (err instanceof Error) return isNoiseMessage(err.message);
+  return false;
 }
 
 /**
@@ -116,10 +138,10 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
   // Skip gateway errors — 502/503/504 are proxy/infrastructure issues, not app bugs
   if (isGatewayError(error)) return;
 
-  // Skip network errors when the backend is already known to be offline
-  if (error.isNetworkError && !isBackendOnline()) return;
+  // Skip network errors - connectivity issues are infrastructure noise, not app bugs
+  if (error.isNetworkError) return;
 
-  const severity = error.isNetworkError || error.status >= 500 ? 'error' : 'warning';
+  const severity = error.status >= HTTP_SERVER_ERROR_MIN ? 'error' : 'warning';
 
   Sentry.withScope(scope => {
     scope.setLevel(severity);
@@ -137,10 +159,10 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
     if (error.status) {
       scope.setTag('http.status_code', String(error.status));
     }
-    if (error.isNetworkError) {
-      scope.setTag('error.network', 'true');
-    }
 
+    if (error.status > 0) {
+      scope.setFingerprint(['ApiError', String(error.status)]);
+    }
     Sentry.captureException(error);
   });
 }
@@ -156,8 +178,8 @@ export function captureError(
   // Skip expected-flow errors — 401/403/409 are not bugs
   if (isExpectedApiError(error)) return;
 
-  // Skip network TypeErrors when the backend is already known to be offline
-  if (!isBackendOnline() && isNetworkTypeError(error)) return;
+  // Skip network TypeErrors - connectivity issues are infrastructure noise, not app bugs
+  if (isNetworkTypeError(error)) return;
 
   Sentry.withScope(scope => {
     scope.setLevel('error');
@@ -229,11 +251,14 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
   // Drop gateway errors — 502/503/504 from reverse proxies during backend restarts
   if (isGatewayError(hint.originalException)) return null;
 
-  // Drop network TypeErrors when backend is known-offline (safety net for unhandled rejections)
-  if (!isBackendOnline() && isNetworkTypeError(hint.originalException)) return null;
+  // Drop network TypeErrors (connectivity issues are infrastructure noise, not app bugs)
+  if (isNetworkTypeError(hint.originalException)) return null;
 
   // Drop chunk/asset loading failures from lazy-loaded routes (stale manifests, transient network)
   if (isAssetLoadingError(hint.originalException)) return null;
+
+  // Drop events with no diagnostic value (empty/generic messages, browser noise)
+  if (hasNoDiagnosticValue(hint)) return null;
 
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;
@@ -265,6 +290,21 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
         delete breadcrumb.data.response_body;
         delete breadcrumb.data.body;
       }
+    }
+  }
+
+  // Fingerprint API errors by type+status to merge locale variants into one Sentry issue.
+  // The 'isNetworkError' property discriminates ApiErrorLike from other error types.
+  const origErr = hint.originalException;
+  if (
+    origErr &&
+    typeof origErr === 'object' &&
+    'isNetworkError' in origErr &&
+    'status' in origErr
+  ) {
+    const status = (origErr as Record<string, unknown>).status;
+    if (typeof status === 'number' && status > 0) {
+      event.fingerprint = ['ApiError', String(status)];
     }
   }
 

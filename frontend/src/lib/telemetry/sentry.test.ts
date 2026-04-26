@@ -10,6 +10,7 @@ vi.mock('@sentry/browser', () => ({
       setLevel: vi.fn(),
       setTag: vi.fn(),
       setContext: vi.fn(),
+      setFingerprint: vi.fn(),
     };
     callback(mockScope);
   }),
@@ -158,6 +159,78 @@ describe('beforeSend privacy filtering', () => {
     expect(result.breadcrumbs?.[0]?.data?.response_body).toBeUndefined();
     expect(result.breadcrumbs?.[0]?.data?.body).toBeUndefined();
   });
+
+  it('drops network TypeErrors unconditionally', () => {
+    const error = new TypeError('Failed to fetch');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops Safari Load failed TypeErrors', () => {
+    const error = new TypeError('Load failed');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops events with empty error message', () => {
+    const error = new Error('');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops events with <anonymous> error message', () => {
+    const error = new Error('<anonymous>');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops events with callback error message', () => {
+    const error = new Error('callback');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops string exceptions with generic messages', () => {
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: 'callback' } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('drops ResizeObserver loop errors', () => {
+    const error = new Error('ResizeObserver loop completed with undelivered notifications');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).toBeNull();
+  });
+
+  it('sets fingerprint for API errors with status code', () => {
+    const error = Object.assign(new Error('Serverfehler'), { status: 500, isNetworkError: false });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).not.toBeNull();
+    expect((result as Sentry.ErrorEvent).fingerprint).toEqual(['ApiError', '500']);
+  });
+
+  it('does not set fingerprint for non-API errors with status property', () => {
+    const error = Object.assign(new Error('Custom error'), { status: 418 });
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).not.toBeNull();
+    expect((result as Sentry.ErrorEvent).fingerprint).toBeUndefined();
+  });
+
+  it('does not set fingerprint for errors without status', () => {
+    const error = new Error('some error');
+    const event = { type: undefined } as Sentry.ErrorEvent;
+    const result = beforeSend?.(event, { originalException: error } as Sentry.EventHint);
+    expect(result).not.toBeNull();
+    expect((result as Sentry.ErrorEvent).fingerprint).toBeUndefined();
+  });
 });
 
 describe('captureApiError', () => {
@@ -198,12 +271,31 @@ describe('captureApiError', () => {
     expect(Sentry.withScope).toHaveBeenCalledOnce();
   });
 
-  it('captures network errors with error severity', () => {
+  it('skips network errors', () => {
     const error = new Error('Network Error') as Error & { status: number; isNetworkError: boolean };
     error.status = 0;
     error.isNetworkError = true;
     captureApiError(error);
-    expect(Sentry.withScope).toHaveBeenCalledOnce();
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('sets fingerprint based on status code', () => {
+    const error = new Error('Server Error') as Error & { status: number; isNetworkError: boolean };
+    error.status = 500;
+    error.isNetworkError = false;
+
+    const mockScope = {
+      setLevel: vi.fn(),
+      setTag: vi.fn(),
+      setContext: vi.fn(),
+      setFingerprint: vi.fn(),
+    };
+    vi.mocked(Sentry.withScope).mockImplementation(((callback: (scope: unknown) => void) => {
+      callback(mockScope);
+    }) as typeof Sentry.withScope);
+
+    captureApiError(error);
+    expect(mockScope.setFingerprint).toHaveBeenCalledWith(['ApiError', '500']);
   });
 });
 
@@ -227,6 +319,12 @@ describe('captureError', () => {
 
   it('skips errors with status 409', () => {
     const error = Object.assign(new Error('Conflict'), { status: 409 });
+    captureError(error, { category: 'api' });
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('skips network TypeErrors unconditionally', () => {
+    const error = new TypeError('Failed to fetch');
     captureError(error, { category: 'api' });
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
