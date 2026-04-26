@@ -21,6 +21,11 @@ const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
 const HTTP_CONFLICT = 409;
 
+/** HTTP status codes for gateway/proxy errors (infrastructure, not app bugs). */
+const HTTP_BAD_GATEWAY = 502;
+const HTTP_SERVICE_UNAVAILABLE = 503;
+const HTTP_GATEWAY_TIMEOUT = 504;
+
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
   message: string;
@@ -33,6 +38,36 @@ function isExpectedApiError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const status = (err as Record<string, unknown>).status;
   return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN || status === HTTP_CONFLICT;
+}
+
+/** Check whether an error is a gateway/proxy error (502/503/504). */
+function isGatewayError(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false;
+  const status = (err as Record<string, unknown>).status;
+  return (
+    status === HTTP_BAD_GATEWAY ||
+    status === HTTP_SERVICE_UNAVAILABLE ||
+    status === HTTP_GATEWAY_TIMEOUT
+  );
+}
+
+/**
+ * Lowercase substrings identifying lazy-route asset/chunk load failures:
+ * Safari: "Importing a module script failed."
+ * Vite: "Unable to preload CSS for ..."
+ * Chrome/Firefox: "Failed to fetch / error loading dynamically imported module"
+ */
+const ASSET_LOADING_ERROR_PATTERNS = [
+  'importing a module script failed',
+  'unable to preload css',
+  'dynamically imported module',
+] as const;
+
+/** Check whether an error is a chunk/asset loading failure from lazy routes. */
+function isAssetLoadingError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message.toLowerCase();
+  return ASSET_LOADING_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
 }
 
 /**
@@ -77,6 +112,9 @@ export function initSentry(config: SentryConfig): void {
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
   // Skip expected-flow errors — auth (401/403) and conflict (409, e.g. v2 database not available)
   if (isExpectedApiError(error)) return;
+
+  // Skip gateway errors — 502/503/504 are proxy/infrastructure issues, not app bugs
+  if (isGatewayError(error)) return;
 
   // Skip network errors when the backend is already known to be offline
   if (error.isNetworkError && !isBackendOnline()) return;
@@ -188,8 +226,14 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
   // Drop expected-flow errors — 401/403/409 can arrive via unhandled rejections or logger.error().
   if (isExpectedApiError(hint.originalException)) return null;
 
+  // Drop gateway errors — 502/503/504 from reverse proxies during backend restarts
+  if (isGatewayError(hint.originalException)) return null;
+
   // Drop network TypeErrors when backend is known-offline (safety net for unhandled rejections)
   if (!isBackendOnline() && isNetworkTypeError(hint.originalException)) return null;
+
+  // Drop chunk/asset loading failures from lazy-loaded routes (stale manifests, transient network)
+  if (isAssetLoadingError(hint.originalException)) return null;
 
   // 1. Strip user data (Sentry auto-collects IP)
   delete event.user;
