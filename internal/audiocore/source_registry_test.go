@@ -270,6 +270,88 @@ func TestSourceRegistry_RegisterDefaultGain(t *testing.T) {
 	assert.InDelta(t, 0.0, src.Gain, 1e-9, "Gain should default to 0 when not specified")
 }
 
+// TestSourceRegistry_UpdateDisplayName verifies that UpdateDisplayName changes
+// the display name, fires SourceReconfigured, and returns true.
+func TestSourceRegistry_UpdateDisplayName(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	var mu sync.Mutex
+	var received []SourceEvent
+
+	r.AddListener(func(e SourceEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, e)
+	})
+
+	src, err := r.Register(&SourceConfig{
+		DisplayName:      "Old Name",
+		ConnectionString: "hw:0,0",
+		Type:             SourceTypeAudioCard,
+	})
+	require.NoError(t, err)
+
+	updated := r.UpdateDisplayName(src.ID, "New Name")
+	assert.True(t, updated, "should return true when name changes")
+
+	got, ok := r.Get(src.ID)
+	require.True(t, ok)
+	assert.Equal(t, "New Name", got.DisplayName)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Events: SourceAdded + SourceReconfigured
+	require.Len(t, received, 2)
+	assert.Equal(t, SourceReconfigured, received[1].Type)
+	assert.Equal(t, src.ID, received[1].SourceID)
+	assert.Equal(t, "New Name", received[1].Source.DisplayName)
+}
+
+// TestSourceRegistry_UpdateDisplayName_NoOp verifies that UpdateDisplayName
+// returns false and fires no event when the name is unchanged.
+func TestSourceRegistry_UpdateDisplayName_NoOp(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	var mu sync.Mutex
+	var received []SourceEvent
+
+	r.AddListener(func(e SourceEvent) {
+		mu.Lock()
+		defer mu.Unlock()
+		received = append(received, e)
+	})
+
+	src, err := r.Register(&SourceConfig{
+		DisplayName:      "Same Name",
+		ConnectionString: "hw:1,0",
+		Type:             SourceTypeAudioCard,
+	})
+	require.NoError(t, err)
+
+	updated := r.UpdateDisplayName(src.ID, "Same Name")
+	assert.False(t, updated, "should return false when name is unchanged")
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	// Only SourceAdded, no SourceReconfigured
+	assert.Len(t, received, 1)
+	assert.Equal(t, SourceAdded, received[0].Type)
+}
+
+// TestSourceRegistry_UpdateDisplayName_NotFound verifies that UpdateDisplayName
+// returns false for an unknown source ID.
+func TestSourceRegistry_UpdateDisplayName_NotFound(t *testing.T) {
+	t.Parallel()
+	r := newTestRegistry(t)
+
+	updated := r.UpdateDisplayName("nonexistent-id", "Any Name")
+	assert.False(t, updated)
+}
+
 // TestSourceRegistry_TypeDetection verifies that source types are detected from connection strings.
 func TestSourceRegistry_TypeDetection(t *testing.T) {
 	t.Parallel()
