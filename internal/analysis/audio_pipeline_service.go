@@ -809,6 +809,11 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				registry.UpdateGain(src.ID, scm.config.Gain)
 				gainChangedIDs = append(gainChangedIDs, src.ID)
 			}
+
+			// Sync display name if the config name changed (e.g., stream renamed in UI).
+			if src.DisplayName != scm.config.DisplayName {
+				registry.UpdateDisplayName(src.ID, scm.config.DisplayName)
+			}
 		} else {
 			// New source — add it.
 			log.Info("adding new stream from config",
