@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.45.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.46.0/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -144,12 +144,12 @@ Source: BSD-3-Clause
 
 ### github.com/googleapis/enterprise-certificate-proxy/client
 
-License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.14/LICENSE
+License: https://github.com/googleapis/enterprise-certificate-proxy/blob/v0.3.15/LICENSE
 Source: Apache-2.0
 
 ### github.com/googleapis/gax-go/v2
 
-License: https://github.com/googleapis/gax-go/blob/v2.21.0/v2/LICENSE
+License: https://github.com/googleapis/gax-go/blob/v2.22.0/v2/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gorilla/mux
@@ -219,7 +219,7 @@ Source: MIT
 
 ### github.com/labstack/gommon
 
-License: https://github.com/labstack/gommon/blob/v0.4.2/LICENSE
+License: https://github.com/labstack/gommon/blob/v0.5.0/LICENSE
 Source: MIT
 
 ### github.com/markbates/going/defaults
@@ -245,11 +245,6 @@ Source: MIT
 ### github.com/mattn/go-sqlite3
 
 License: https://github.com/mattn/go-sqlite3/blob/v1.14.42/LICENSE
-Source: MIT
-
-### github.com/mitchellh/mapstructure
-
-License: https://github.com/mitchellh/mapstructure/blob/v1.5.0/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -314,13 +309,13 @@ Source: Apache-2.0
 
 ### github.com/ringsaturn/tzf
 
-License: https://github.com/ringsaturn/tzf/blob/v1.0.4/LICENSE
+License: https://github.com/ringsaturn/tzf/blob/v1.1.0/LICENSE
 Source: MIT
 
-### github.com/ringsaturn/tzf-rel-lite
+### github.com/ringsaturn/tzf-dist
 
-License: Unknown
-Source: Unknown
+License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-a-alpha5/LICENSE
+Source: MIT
 
 ### github.com/sagikazarmark/locafero
 
@@ -387,11 +382,6 @@ Source: MIT
 License: https://github.com/tidwall/geoindex/blob/v1.7.0/LICENSE
 Source: MIT
 
-### github.com/tidwall/geojson/geometry
-
-License: https://github.com/tidwall/geojson/blob/v1.4.6/LICENSE
-Source: MIT
-
 ### github.com/tidwall/rtree
 
 License: https://github.com/tidwall/rtree/blob/v1.10.0/LICENSE
@@ -452,11 +442,6 @@ Source: MIT
 License: https://github.com/tphakala/simd/blob/v1.0.22/LICENSE
 Source: MIT
 
-### github.com/twpayne/go-polyline
-
-License: https://github.com/twpayne/go-polyline/blob/v1.1.1/LICENSE
-Source: BSD-2-Clause
-
 ### github.com/valyala/bytebufferpool
 
 License: https://github.com/valyala/bytebufferpool/blob/v1.0.0/LICENSE
@@ -469,7 +454,7 @@ Source: MIT
 
 ### go.mongodb.org/mongo-driver/v2
 
-License: https://github.com/mongodb/mongo-go-driver/blob/v2.5.0/LICENSE
+License: https://github.com/mongodb/mongo-go-driver/blob/v2.5.1/LICENSE
 Source: Apache-2.0
 
 ### go.opentelemetry.io/auto/sdk
@@ -559,12 +544,12 @@ Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.275.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.276.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/afd174a4e478/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/e10c466a9529/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
