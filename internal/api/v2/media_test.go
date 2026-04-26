@@ -1667,12 +1667,11 @@ func TestAudioRangeWithGzipMiddleware_EndToEnd(t *testing.T) {
 		wavTotalSize  = wavDataSize + wavHeaderSize
 	)
 
-	// Arrange: set up environment with gzip middleware on the Echo instance
-	e, controller, tempDir := setupMediaTestEnvironment(t)
+	// Arrange: set up environment with gzip middleware on the Echo instance.
+	// Echo middleware added via e.Use() applies to all routes at request time,
+	// so routes registered by setupMediaTestEnvironment are already covered.
+	e, _, tempDir := setupMediaTestEnvironment(t)
 	e.Use(middleware.NewGzip())
-
-	// Re-register media routes so they sit behind the gzip middleware
-	controller.initMediaRoutes()
 
 	audioFilename := "gzip-range-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
