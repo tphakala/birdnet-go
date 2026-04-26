@@ -469,9 +469,15 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
-		// Resolve per-source EQ filter chain.
-		srcCfg := audioSettings.FindSourceByID(sid)
-		eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
+		// Resolve per-source/per-stream EQ filter chain using the registry's
+		// DisplayName, which matches the config Name for both audio sources and streams.
+		src, _ := p.engine.Registry().Get(sid)
+		sourceName := sid
+		if src != nil {
+			sourceName = src.DisplayName
+		}
+		override := settings.ResolveEQOverride(sourceName)
+		eqChain := equalizer.BuildFilterChainWithOverride(override, audioSettings.Equalizer, sourceName, conf.SampleRate)
 
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
 		if slErr != nil {
@@ -655,10 +661,15 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		// Look up per-source gain from the registry.
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
-		// Resolve per-source EQ config for building per-route filter chains.
-		// Each route needs its own FilterChain because biquad filters have
-		// mutable state (in1/in2/out1/out2) — sharing would cause a data race.
-		srcCfg := audioSettings.FindSourceByID(sid)
+		// Resolve per-source/per-stream EQ config for building per-route filter
+		// chains. Each route needs its own FilterChain because biquad filters
+		// have mutable state (in1/in2/out1/out2); sharing would cause a data race.
+		src, _ := p.engine.Registry().Get(sid)
+		sourceName := sid
+		if src != nil {
+			sourceName = src.DisplayName
+		}
+		eqOverride := currentSettings.ResolveEQOverride(sourceName)
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -724,14 +735,14 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				logger.String("source_id", sid), logger.Error(bcErr), logger.String("operation", operation))
 			continue
 		}
-		bcChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
+		bcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, conf.SampleRate)
 		if routeErr := p.engine.Router().AddRoute(sid, bc, conf.SampleRate, gainDB, bcChain); routeErr != nil {
 			log.Warn("failed to add buffer route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))
 		}
 
 		alc, alcOutCh := NewAudioLevelConsumer("audio_level_"+sid, conf.SampleRate, conf.BitDepth, 1)
-		alcChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
+		alcChain := equalizer.BuildFilterChainWithOverride(eqOverride, audioSettings.Equalizer, sourceName, conf.SampleRate)
 		if routeErr := p.engine.Router().AddRoute(sid, alc, conf.SampleRate, gainDB, alcChain); routeErr != nil {
 			log.Warn("failed to add audio level route",
 				logger.String("source_id", sid), logger.Error(routeErr), logger.String("operation", operation))

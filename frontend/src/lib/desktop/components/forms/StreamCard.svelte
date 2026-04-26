@@ -37,10 +37,29 @@
   import Checkbox from './Checkbox.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
-  import type { StreamConfig, StreamType, QuietHoursConfig } from '$lib/stores/settings';
+  import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
+  import type {
+    StreamConfig,
+    StreamType,
+    EqualizerFilterType,
+    QuietHoursConfig,
+  } from '$lib/stores/settings';
   import { defaultQuietHoursConfig } from '$lib/stores/settings';
   import type { StreamHealthResponse } from './StreamManager.svelte';
   import StreamTimeline from './StreamTimeline.svelte';
+
+  interface LocalEqualizerSettings {
+    enabled: boolean;
+    filters: Array<{
+      id?: string;
+      type: EqualizerFilterType;
+      frequency: number;
+      q?: number;
+      width?: number;
+      gain?: number;
+      passes?: number;
+    }>;
+  }
 
   // Stream health status type
   export type StreamStatus =
@@ -137,8 +156,10 @@
   let editTransport = $state<'tcp' | 'udp'>('tcp');
   let editStreamType = $state<StreamType>('rtsp');
   let editEnabled = $state(true);
+  let editEqualizer = $state<LocalEqualizerSettings>({ enabled: false, filters: [] });
   let editQuietHours = $state<QuietHoursConfig>({ ...defaultQuietHoursConfig });
   let showDeleteConfirm = $state(false);
+  let showEqualizer = $state(false);
 
   // Stream type options (all supported types)
   const streamTypeOptions = [
@@ -272,7 +293,11 @@
     editTransport = stream.transport ?? 'tcp';
     editStreamType = stream.type;
     editEnabled = stream.enabled;
+    editEqualizer = stream.equalizer
+      ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
+      : { enabled: false, filters: [] };
     editQuietHours = { ...defaultQuietHoursConfig, ...stream.quietHours };
+    showEqualizer = false;
     isEditing = true;
   }
 
@@ -283,6 +308,17 @@
 
   function saveEdit() {
     if (editName.trim() && editUrl.trim()) {
+      const transformedEqualizer =
+        editEqualizer.enabled || editEqualizer.filters.length > 0
+          ? {
+              enabled: editEqualizer.enabled,
+              filters: editEqualizer.filters.map(f => ({
+                ...f,
+                id: f.id || crypto.randomUUID(),
+              })),
+            }
+          : undefined;
+
       const success = onUpdate({
         name: editName.trim(),
         url: editUrl.trim(),
@@ -290,12 +326,17 @@
         type: editStreamType,
         // Use selected transport for RTSP/RTMP, omit for others
         ...(showTransportInEdit ? { transport: editTransport } : {}),
+        equalizer: transformedEqualizer,
         quietHours: editQuietHours,
       } as StreamConfig);
       if (success) {
         isEditing = false;
       }
     }
+  }
+
+  function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
+    editEqualizer = updated;
   }
 
   function confirmDelete() {
@@ -438,6 +479,38 @@
           size="sm"
         />
 
+        <!-- Equalizer (expandable) -->
+        <div>
+          <button
+            type="button"
+            class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)] hover:text-[var(--color-primary)] transition-colors"
+            onclick={() => (showEqualizer = !showEqualizer)}
+            aria-expanded={showEqualizer}
+            aria-controls="stream-eq-{index}"
+          >
+            <ChevronDown
+              class={cn('size-4 transition-transform duration-200', showEqualizer && 'rotate-180')}
+            />
+            {t('settings.audio.audioFilters.title')}
+            {#if editEqualizer.enabled}
+              <span
+                class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+              >
+                {t('common.enabled')}
+              </span>
+            {/if}
+          </button>
+          {#if showEqualizer}
+            <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
+              <AudioEqualizerSettings
+                equalizerSettings={editEqualizer}
+                {disabled}
+                onUpdate={handleEqualizerUpdate}
+              />
+            </div>
+          {/if}
+        </div>
+
         <!-- Quiet Hours -->
         <QuietHoursEditor
           config={editQuietHours}
@@ -495,6 +568,13 @@
               size="sm"
               pulse={status === 'connecting'}
             />
+            {#if stream.equalizer?.enabled}
+              <span
+                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-primary)]/15 text-[var(--color-primary)]"
+              >
+                {t('settings.audio.audioFilters.title')}
+              </span>
+            {/if}
             {#if stream.quietHours?.enabled}
               <span
                 class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"

@@ -136,6 +136,11 @@ func cloneStreamConfigs(in []StreamConfig) []StreamConfig {
 	for i := range in {
 		s := in[i]
 		s.Models = slices.Clone(s.Models)
+		if s.Equalizer != nil {
+			eq := *s.Equalizer
+			eq.Filters = slices.Clone(eq.Filters)
+			s.Equalizer = &eq
+		}
 		out[i] = s
 	}
 	return out

@@ -546,13 +546,14 @@ const DefaultTransport = "tcp"
 
 // StreamConfig represents a single audio stream source
 type StreamConfig struct {
-	Name       string           `yaml:"name" json:"name" mapstructure:"name"`                           // Required: descriptive name like "Front Yard"
-	URL        string           `yaml:"url" json:"url" mapstructure:"url"`                              // Required: stream URL
-	Enabled    bool             `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                  // true when the configured stream should be active
-	Type       string           `yaml:"type" json:"type" mapstructure:"type"`                           // Stream type: rtsp, http, hls, rtmp, udp
-	Transport  string           `yaml:"transport" json:"transport" mapstructure:"transport"`            // Transport: tcp or udp (for RTSP/RTMP)
-	QuietHours QuietHoursConfig `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`         // Quiet hours configuration
-	Models     []string         `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"` // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
+	Name       string             `yaml:"name" json:"name" mapstructure:"name"`                                    // Required: descriptive name like "Front Yard"
+	URL        string             `yaml:"url" json:"url" mapstructure:"url"`                                       // Required: stream URL
+	Enabled    bool               `yaml:"enabled" json:"enabled" mapstructure:"enabled"`                           // true when the configured stream should be active
+	Type       string             `yaml:"type" json:"type" mapstructure:"type"`                                    // Stream type: rtsp, http, hls, rtmp, udp
+	Transport  string             `yaml:"transport" json:"transport" mapstructure:"transport"`                     // Transport: tcp or udp (for RTSP/RTMP)
+	Equalizer  *EqualizerSettings `yaml:"equalizer,omitempty" json:"equalizer,omitempty" mapstructure:"equalizer"` // Per-stream EQ (nil = use global)
+	QuietHours QuietHoursConfig   `yaml:"quietHours" json:"quietHours" mapstructure:"quietHours"`                  // Quiet hours configuration
+	Models     []string           `yaml:"models,omitempty" json:"models,omitempty" mapstructure:"models"`          // Model IDs for this stream (e.g., ["birdnet", "perch_v2"])
 }
 
 // IsEnabled returns the effective enabled state for a stream.
@@ -600,6 +601,17 @@ func (r *RTSPSettings) EnabledStreams() iter.Seq2[int, *StreamConfig] {
 			}
 		}
 	}
+}
+
+// FindStreamByName returns a pointer to the StreamConfig matching the given
+// name. Returns nil if no match is found.
+func (r *RTSPSettings) FindStreamByName(name string) *StreamConfig {
+	for i := range r.Streams {
+		if r.Streams[i].Name == name {
+			return &r.Streams[i]
+		}
+	}
+	return nil
 }
 
 // CRITICAL: Legacy fields (URLs, Transport) MUST include json tags to accept
@@ -1532,6 +1544,23 @@ type Settings struct {
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
 	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
+}
+
+// ResolveEQOverride returns the per-source or per-stream EQ override for the
+// given source display name. Returns nil when no override exists (use global).
+// Audio sources are checked first, then RTSP streams.
+func (s *Settings) ResolveEQOverride(displayName string) *EqualizerSettings {
+	for i := range s.Realtime.Audio.Sources {
+		if s.Realtime.Audio.Sources[i].Name == displayName {
+			return s.Realtime.Audio.Sources[i].Equalizer
+		}
+	}
+	for i := range s.Realtime.RTSP.Streams {
+		if s.Realtime.RTSP.Streams[i].Name == displayName {
+			return s.Realtime.RTSP.Streams[i].Equalizer
+		}
+	}
+	return nil
 }
 
 // AlertSettings configures the alerting rules engine.

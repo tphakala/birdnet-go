@@ -111,7 +111,10 @@ func TestEQFilterRoundTrip_PUT(t *testing.T) {
 
 // putTestSettingsWithSourceEQ marshals a full Settings struct to JSON, then
 // patches the sources array to include per-source equalizer config.
-func putTestSettingsWithSourceEQ(t *testing.T, settings *conf.Settings, sourceEQ map[string]any) []byte {
+// patchSettingsEQ patches the equalizer field at the given JSON path within a
+// full settings payload. The path is a sequence of keys (and "[0]" for the first
+// array element) leading to the target object whose "equalizer" field is set.
+func patchSettingsEQ(t *testing.T, settings *conf.Settings, eqOverride map[string]any, path ...string) []byte {
 	t.Helper()
 
 	fullJSON, err := json.Marshal(settings)
@@ -120,20 +123,32 @@ func putTestSettingsWithSourceEQ(t *testing.T, settings *conf.Settings, sourceEQ
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(fullJSON, &payload))
 
-	realtime, ok := payload["realtime"].(map[string]any)
-	require.True(t, ok, "payload must contain realtime section")
-	audio, ok := realtime["audio"].(map[string]any)
-	require.True(t, ok, "realtime must contain audio section")
-	sources, ok := audio["sources"].([]any)
-	require.True(t, ok, "audio must contain sources section")
-	require.NotEmpty(t, sources, "sources must be non-empty")
-	src, ok := sources[0].(map[string]any)
-	require.True(t, ok, "sources[0] must be an object")
-	src["equalizer"] = sourceEQ
+	var current any = payload
+	for _, key := range path {
+		switch key {
+		case "[0]":
+			arr, ok := current.([]any)
+			require.True(t, ok, "expected array at path segment [0]")
+			require.NotEmpty(t, arr, "array must be non-empty")
+			current = arr[0]
+		default:
+			m, ok := current.(map[string]any)
+			require.True(t, ok, "expected object at path segment %q", key)
+			current = m[key]
+		}
+	}
+	target, ok := current.(map[string]any)
+	require.True(t, ok, "final path target must be an object")
+	target["equalizer"] = eqOverride
 
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
 	return body
+}
+
+func putTestSettingsWithSourceEQ(t *testing.T, settings *conf.Settings, sourceEQ map[string]any) []byte {
+	t.Helper()
+	return patchSettingsEQ(t, settings, sourceEQ, "realtime", "audio", "sources", "[0]")
 }
 
 // TestEQFilterRoundTrip_PUT_PerSource verifies that per-source equalizer
@@ -271,6 +286,72 @@ func TestEQFilterRoundTrip_PATCH(t *testing.T) {
 // TestEQFilterRoundTrip_PUT_WithFrontendIDField verifies that the extra
 // "id" field the frontend sends (not present in the Go struct) does not
 // break deserialization of equalizer filters.
+func putTestSettingsWithStreamEQ(t *testing.T, settings *conf.Settings, streamEQ map[string]any) []byte {
+	t.Helper()
+	return patchSettingsEQ(t, settings, streamEQ, "realtime", "rtsp", "streams", "[0]")
+}
+
+// TestEQFilterRoundTrip_PUT_PerStream verifies that per-stream equalizer
+// filters survive the PUT path when attached to a StreamConfig.
+func TestEQFilterRoundTrip_PUT_PerStream(t *testing.T) {
+	t.Parallel()
+
+	initial := getTestSettings(t)
+	initial.Realtime.RTSP.Streams = []conf.StreamConfig{{
+		Name:    "Test Stream",
+		URL:     "rtsp://192.168.1.100/stream",
+		Enabled: true,
+		Type:    "rtsp",
+	}}
+
+	e := echo.New()
+	controller := &Controller{
+		Echo:                e,
+		Settings:            initial,
+		controlChan:         make(chan string, testControlChanBuffer),
+		DisableSaveSettings: true,
+	}
+
+	streamEQ := map[string]any{
+		"enabled": true,
+		"filters": []map[string]any{
+			{
+				"type":      "HighPass",
+				"frequency": 400,
+				"q":         0.707,
+				"gain":      0,
+				"width":     0,
+				"passes":    2,
+			},
+		},
+	}
+
+	body := putTestSettingsWithStreamEQ(t, initial, streamEQ)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(body))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	err := controller.UpdateSettings(ctx)
+	require.NoError(t, err)
+	t.Logf("PUT response (status %d): %s", rec.Code, rec.Body.String())
+	assert.Equal(t, http.StatusOK, rec.Code, "PUT should succeed")
+
+	// Verify per-stream EQ survived the round-trip
+	require.Len(t, controller.Settings.Realtime.RTSP.Streams, 1)
+	stEQ := controller.Settings.Realtime.RTSP.Streams[0].Equalizer
+	require.NotNil(t, stEQ, "Per-stream equalizer should not be nil")
+	assert.True(t, stEQ.Enabled, "Per-stream equalizer should be enabled")
+	require.Len(t, stEQ.Filters, 1, "Per-stream should have 1 filter")
+	assert.Equal(t, "HighPass", stEQ.Filters[0].Type)
+	assert.InDelta(t, float64(400), stEQ.Filters[0].Frequency, 0.01)
+	assert.Equal(t, 2, stEQ.Filters[0].Passes)
+
+	// Global EQ should remain unchanged
+	assert.False(t, controller.Settings.Realtime.Audio.Equalizer.Enabled)
+}
+
 func TestEQFilterRoundTrip_PUT_WithFrontendIDField(t *testing.T) {
 	t.Parallel()
 

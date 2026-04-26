@@ -1548,9 +1548,13 @@ func (c *Controller) setupAudioCallback(sourceID string) (audioChan chan []byte,
 	// Resolve EQ filter chain for this source so HLS listeners
 	// hear the same filtered audio as the analysis pipeline.
 	settings := conf.Setting()
-	audioSettings := &settings.Realtime.Audio
-	srcCfg := audioSettings.FindSourceByID(sourceID)
-	eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, sampleRate)
+	src, _ := c.engine.Registry().Get(sourceID)
+	sourceName := sourceID
+	if src != nil {
+		sourceName = src.DisplayName
+	}
+	override := settings.ResolveEQOverride(sourceName)
+	eqChain := equalizer.BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
 
 	// Add route on the AudioRouter
 	if routeErr := c.engine.Router().AddRoute(sourceID, consumer, sampleRate, gainDB, eqChain); routeErr != nil {

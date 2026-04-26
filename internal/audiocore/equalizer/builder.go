@@ -92,6 +92,27 @@ func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.
 	return BuildFilterChain(eqSettings, sampleRate)
 }
 
+// BuildFilterChainWithOverride builds a FilterChain from the given EQ override
+// settings, or from globalEQ if override is nil. This is the preferred entry
+// point for callers that have already resolved the per-source/per-stream override
+// via Settings.ResolveEQOverride.
+func BuildFilterChainWithOverride(override *conf.EqualizerSettings, globalEQ conf.EqualizerSettings, sourceName string, sampleRate int) *FilterChain {
+	eqSettings := globalEQ
+	if override != nil {
+		eqSettings = *override
+		eqLog.Debug("using per-source EQ override",
+			logger.String("source", sourceName),
+			logger.Bool("enabled", eqSettings.Enabled),
+			logger.Int("filter_count", len(eqSettings.Filters)))
+	} else {
+		eqLog.Debug("using global EQ for source",
+			logger.String("source", sourceName),
+			logger.Bool("enabled", globalEQ.Enabled),
+			logger.Int("filter_count", len(globalEQ.Filters)))
+	}
+	return BuildFilterChain(eqSettings, sampleRate)
+}
+
 // buildFilter creates a single Filter from a config entry.
 // Returns (nil, nil) for unknown filter types.
 func buildFilter(f *conf.EqualizerFilter, sampleRate float64, passes int) (*Filter, error) {
