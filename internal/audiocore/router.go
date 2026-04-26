@@ -273,8 +273,22 @@ func (r *AudioRouter) UpdateFilterChain(sourceID string, build FilterChainBuilde
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	for _, rt := range r.routes[sourceID] {
-		rt.filterChain.Store(build(rt.Consumer.SampleRate()))
+	routes := r.routes[sourceID]
+	for _, rt := range routes {
+		chain := build(rt.Consumer.SampleRate())
+		rt.filterChain.Store(chain)
+		filterCount := 0
+		if chain != nil {
+			filterCount = chain.Length()
+		}
+		r.log.Debug("EQ filter chain updated",
+			logger.String("source_id", sourceID),
+			logger.String("consumer_id", rt.Consumer.ID()),
+			logger.Int("active_filters", filterCount))
+	}
+	if len(routes) == 0 {
+		r.log.Debug("EQ filter chain update: no routes found for source",
+			logger.String("source_id", sourceID))
 	}
 }
 

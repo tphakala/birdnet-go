@@ -10,11 +10,19 @@ import (
 // Returns nil when the equalizer is disabled or has no filters configured.
 // Unknown filter types are logged and skipped without aborting the chain.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterChain {
+	log := logger.Global().Module("audio").Module("equalizer")
+
 	if !settings.Enabled || len(settings.Filters) == 0 {
+		log.Debug("EQ disabled or no filters configured",
+			logger.Bool("enabled", settings.Enabled),
+			logger.Int("filter_count", len(settings.Filters)))
 		return nil
 	}
 
-	log := logger.Global().Module("audio").Module("equalizer")
+	log.Debug("building EQ filter chain",
+		logger.Int("filter_count", len(settings.Filters)),
+		logger.Int("sample_rate", sampleRate))
+
 	chain := NewFilterChain()
 	sr := float64(sampleRate)
 
@@ -44,11 +52,18 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 				logger.Error(addErr))
 			continue
 		}
+		log.Debug("added EQ filter",
+			logger.String("type", f.Type),
+			logger.Float64("frequency", f.Frequency),
+			logger.Int("passes", passes))
 	}
 
 	if chain.Length() == 0 {
+		log.Debug("EQ filter chain empty after building, all filters failed")
 		return nil
 	}
+	log.Debug("EQ filter chain built",
+		logger.Int("active_filters", chain.Length()))
 	return chain
 }
 
@@ -57,9 +72,23 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 // Returns nil when EQ is disabled or has no filters. Falls back to global
 // settings if sourceCfg is nil or has no per-source override.
 func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.EqualizerSettings, sampleRate int) *FilterChain {
+	log := logger.Global().Module("audio").Module("equalizer")
 	eqSettings := globalEQ
 	if sourceCfg != nil && sourceCfg.Equalizer != nil {
 		eqSettings = *sourceCfg.Equalizer
+		log.Debug("using per-source EQ override",
+			logger.String("source", sourceCfg.Name),
+			logger.Bool("enabled", eqSettings.Enabled),
+			logger.Int("filter_count", len(eqSettings.Filters)))
+	} else {
+		sourceName := "unknown"
+		if sourceCfg != nil {
+			sourceName = sourceCfg.Name
+		}
+		log.Debug("using global EQ for source",
+			logger.String("source", sourceName),
+			logger.Bool("enabled", globalEQ.Enabled),
+			logger.Int("filter_count", len(globalEQ.Filters)))
 	}
 	return BuildFilterChain(eqSettings, sampleRate)
 }
