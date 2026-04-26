@@ -239,6 +239,33 @@ func (r *SourceRegistry) UpdateState(sourceID string, state SourceState) error {
 	return nil
 }
 
+// UpdateDisplayName changes the display name of a source and fires
+// SourceReconfigured. Returns false if the source does not exist or
+// the name is unchanged.
+func (r *SourceRegistry) UpdateDisplayName(sourceID, newName string) bool {
+	r.mu.Lock()
+
+	src, ok := r.sources[sourceID]
+	if !ok || src.DisplayName == newName {
+		r.mu.Unlock()
+		return false
+	}
+
+	oldName := src.DisplayName
+	src.DisplayName = newName
+	snapshot := r.copySource(src)
+
+	r.mu.Unlock()
+
+	r.log.Info("display name updated",
+		logger.String("id", sourceID),
+		logger.String("old_name", oldName),
+		logger.String("new_name", newName))
+
+	r.notify(SourceEvent{Type: SourceReconfigured, SourceID: sourceID, Source: snapshot})
+	return true
+}
+
 // UpdateGain updates the Gain field of the source with the given ID.
 // Returns false if the source does not exist.
 func (r *SourceRegistry) UpdateGain(sourceID string, gain float64) bool {

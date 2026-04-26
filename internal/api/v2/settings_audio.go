@@ -4,10 +4,18 @@ package api
 import (
 	"reflect"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// sourceNameUpdater is the subset of SourceRegistry used by the name-sync
+// helpers. Accepting an interface keeps them testable without a full registry.
+type sourceNameUpdater interface {
+	GetByConnection(connStr string) (*audiocore.AudioSource, bool)
+	UpdateDisplayName(sourceID, newName string) bool
+}
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
 // Only compares device-affecting fields (Device, Gain, Model), not display-only
@@ -27,6 +35,68 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 		}
 	}
 	return false
+}
+
+// syncAudioSourceNames detects audio sources that were renamed while keeping
+// the same device, and updates their DisplayName in the registry. Returns true
+// if any name was changed. Uses a map keyed by Device so renames are detected
+// even if the source list was reordered.
+func syncAudioSourceNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
+	sources := oldSettings.Realtime.Audio.Sources
+	oldNames := make(map[string]string, len(sources))
+	for i := range sources {
+		if sources[i].Device != "" {
+			oldNames[sources[i].Device] = sources[i].Name
+		}
+	}
+
+	changed := false
+	newSources := currentSettings.Realtime.Audio.Sources
+	for i := range newSources {
+		if newSources[i].Device == "" {
+			continue
+		}
+		if oldName, ok := oldNames[newSources[i].Device]; ok && oldName != newSources[i].Name {
+			changed = true
+			if registry != nil {
+				if src, ok := registry.GetByConnection(newSources[i].Device); ok {
+					registry.UpdateDisplayName(src.ID, newSources[i].Name)
+				}
+			}
+		}
+	}
+	return changed
+}
+
+// syncStreamNames detects streams that were renamed while keeping the same URL,
+// and updates their DisplayName in the registry. Returns true if any name was
+// changed. Uses a map keyed by URL so renames are detected even if the stream
+// list was reordered.
+func syncStreamNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
+	streams := oldSettings.Realtime.RTSP.Streams
+	oldNames := make(map[string]string, len(streams))
+	for i := range streams {
+		if streams[i].URL != "" {
+			oldNames[streams[i].URL] = streams[i].Name
+		}
+	}
+
+	changed := false
+	newStreams := currentSettings.Realtime.RTSP.Streams
+	for i := range newStreams {
+		if newStreams[i].URL == "" {
+			continue
+		}
+		if oldName, ok := oldNames[newStreams[i].URL]; ok && oldName != newStreams[i].Name {
+			changed = true
+			if registry != nil {
+				if src, ok := registry.GetByConnection(newStreams[i].URL); ok {
+					registry.UpdateDisplayName(src.ID, newStreams[i].Name)
+				}
+			}
+		}
+	}
+	return changed
 }
 
 // soundLevelSettingsChanged checks if sound level monitoring settings have changed
@@ -184,16 +254,29 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
+	// Detect source/stream name changes and sync DisplayName in the registry.
+	// Each function detects renames and updates the registry in a single pass.
+	var registry sourceNameUpdater
+	if c.engine != nil {
+		registry = c.engine.Registry()
+	}
+	srcNameChanged := syncAudioSourceNames(oldSettings, currentSettings, registry)
+	strmNameChanged := syncStreamNames(oldSettings, currentSettings, registry)
+
 	// Check audio equalizer settings (global, per-source, or per-stream) - hot-swap filter chains.
+	// Also rebuild when names change, since ResolveEQOverride matches by name.
 	globalEQChanged := equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer)
 	perSourceEQChanged := perSourceEqualizerChanged(oldSettings, currentSettings)
 	perStreamEQChanged := perStreamEqualizerChanged(oldSettings, currentSettings)
-	if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
+	nameChanged := srcNameChanged || strmNameChanged
+	if globalEQChanged || perSourceEQChanged || perStreamEQChanged || nameChanged {
 		c.Debug("Audio equalizer settings changed, updating filter chains")
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}
-		_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+		if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
+			_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+		}
 	}
 
 	return reconfigActions, nil
