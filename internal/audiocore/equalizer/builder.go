@@ -6,15 +6,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+var eqLog = logger.Global().Module("audio").Module("equalizer")
+
 // BuildFilterChain creates a FilterChain from the given equalizer settings.
 // Returns nil when the equalizer is disabled or has no filters configured.
 // Unknown filter types are logged and skipped without aborting the chain.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterChain {
 	if !settings.Enabled || len(settings.Filters) == 0 {
+		eqLog.Debug("EQ disabled or no filters configured",
+			logger.Bool("enabled", settings.Enabled),
+			logger.Int("filter_count", len(settings.Filters)))
 		return nil
 	}
 
-	log := logger.Global().Module("audio").Module("equalizer")
+	eqLog.Debug("building EQ filter chain",
+		logger.Int("filter_count", len(settings.Filters)),
+		logger.Int("sample_rate", sampleRate))
+
 	chain := NewFilterChain()
 	sr := float64(sampleRate)
 
@@ -27,28 +35,35 @@ func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *FilterCh
 
 		filter, err := buildFilter(f, sr, passes)
 		if err != nil {
-			log.Warn("skipping EQ filter",
+			eqLog.Warn("skipping EQ filter",
 				logger.String("type", f.Type),
 				logger.Float64("frequency", f.Frequency),
 				logger.Error(err))
 			continue
 		}
 		if filter == nil {
-			log.Warn("unknown EQ filter type, skipping",
+			eqLog.Warn("unknown EQ filter type, skipping",
 				logger.String("type", f.Type))
 			continue
 		}
 		if addErr := chain.AddFilter(filter); addErr != nil {
-			log.Warn("failed to add EQ filter to chain",
+			eqLog.Warn("failed to add EQ filter to chain",
 				logger.String("type", f.Type),
 				logger.Error(addErr))
 			continue
 		}
+		eqLog.Debug("added EQ filter",
+			logger.String("type", f.Type),
+			logger.Float64("frequency", f.Frequency),
+			logger.Int("passes", passes))
 	}
 
 	if chain.Length() == 0 {
+		eqLog.Debug("EQ filter chain empty after building, all filters failed")
 		return nil
 	}
+	eqLog.Debug("EQ filter chain built",
+		logger.Int("active_filters", chain.Length()))
 	return chain
 }
 
@@ -60,6 +75,19 @@ func BuildFilterChainForSource(sourceCfg *conf.AudioSourceConfig, globalEQ conf.
 	eqSettings := globalEQ
 	if sourceCfg != nil && sourceCfg.Equalizer != nil {
 		eqSettings = *sourceCfg.Equalizer
+		eqLog.Debug("using per-source EQ override",
+			logger.String("source", sourceCfg.Name),
+			logger.Bool("enabled", eqSettings.Enabled),
+			logger.Int("filter_count", len(eqSettings.Filters)))
+	} else {
+		sourceName := "unknown"
+		if sourceCfg != nil {
+			sourceName = sourceCfg.Name
+		}
+		eqLog.Debug("using global EQ for source",
+			logger.String("source", sourceName),
+			logger.Bool("enabled", globalEQ.Enabled),
+			logger.Int("filter_count", len(globalEQ.Filters)))
 	}
 	return BuildFilterChain(eqSettings, sampleRate)
 }
