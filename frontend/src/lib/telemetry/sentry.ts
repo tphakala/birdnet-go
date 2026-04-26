@@ -51,15 +51,23 @@ function isGatewayError(err: unknown): boolean {
   );
 }
 
+/**
+ * Lowercase substrings identifying lazy-route asset/chunk load failures:
+ * Safari: "Importing a module script failed."
+ * Vite: "Unable to preload CSS for ..."
+ * Chrome/Firefox: "Failed to fetch / error loading dynamically imported module"
+ */
+const ASSET_LOADING_ERROR_PATTERNS = [
+  'importing a module script failed',
+  'unable to preload css',
+  'dynamically imported module',
+] as const;
+
 /** Check whether an error is a chunk/asset loading failure from lazy routes. */
 function isAssetLoadingError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const msg = err.message.toLowerCase();
-  return (
-    msg.includes('importing a module script failed') ||
-    msg.includes('unable to preload css') ||
-    msg.includes('dynamically imported module')
-  );
+  return ASSET_LOADING_ERROR_PATTERNS.some(pattern => msg.includes(pattern));
 }
 
 /**
