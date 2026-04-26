@@ -5,8 +5,27 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
+
+type fakeRegistry struct {
+	byConn  map[string]*audiocore.AudioSource
+	updates map[string]string
+}
+
+func (f *fakeRegistry) GetByConnection(c string) (*audiocore.AudioSource, bool) {
+	s, ok := f.byConn[c]
+	return s, ok
+}
+
+func (f *fakeRegistry) UpdateDisplayName(id, name string) bool {
+	if f.updates == nil {
+		f.updates = map[string]string{}
+	}
+	f.updates[id] = name
+	return true
+}
 
 func TestGetAudioBlockedFields(t *testing.T) {
 	t.Parallel()
@@ -282,4 +301,50 @@ func TestResolveEQOverrideMatchesByName(t *testing.T) {
 		"EQ override should resolve for the new stream name")
 	assert.Nil(t, settings.ResolveEQOverride("Old Stream Name"),
 		"EQ override should not resolve for the old stream name")
+}
+
+func TestSyncAudioSourceNames_UpdatesRegistry(t *testing.T) {
+	t.Parallel()
+
+	reg := &fakeRegistry{byConn: map[string]*audiocore.AudioSource{
+		"hw:0,0": {ID: "src-1"},
+	}}
+
+	old := &conf.Settings{}
+	old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Front Yard", Device: "hw:0,0"},
+		{Name: "Side Mic", Device: "hw:1,0"},
+	}
+	cur := &conf.Settings{}
+	cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "Garden Mic", Device: "hw:0,0"},
+		{Name: "Side Renamed", Device: "hw:1,0"},
+	}
+
+	assert.True(t, syncAudioSourceNames(old, cur, reg))
+	assert.Equal(t, map[string]string{"src-1": "Garden Mic"}, reg.updates,
+		"should update only sources found in the registry")
+}
+
+func TestSyncStreamNames_UpdatesRegistry(t *testing.T) {
+	t.Parallel()
+
+	reg := &fakeRegistry{byConn: map[string]*audiocore.AudioSource{
+		"rtsp://a/stream": {ID: "strm-1"},
+	}}
+
+	old := &conf.Settings{}
+	old.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Cam A", URL: "rtsp://a/stream"},
+		{Name: "Cam B", URL: "rtsp://b/stream"},
+	}
+	cur := &conf.Settings{}
+	cur.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Garden Cam", URL: "rtsp://a/stream"},
+		{Name: "Cam B Renamed", URL: "rtsp://b/stream"},
+	}
+
+	assert.True(t, syncStreamNames(old, cur, reg))
+	assert.Equal(t, map[string]string{"strm-1": "Garden Cam"}, reg.updates,
+		"should update only streams found in the registry")
 }
