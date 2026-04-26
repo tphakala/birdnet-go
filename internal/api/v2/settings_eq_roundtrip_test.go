@@ -105,6 +105,7 @@ func TestEQFilterRoundTrip_PUT(t *testing.T) {
 	assert.Equal(t, 1, eq.Filters[0].Passes)
 	assert.Equal(t, "LowPass", eq.Filters[1].Type)
 	assert.InDelta(t, float64(14000), eq.Filters[1].Frequency, 0.01)
+	assert.InDelta(t, 0.707, eq.Filters[1].Q, 0.001)
 	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
@@ -119,15 +120,16 @@ func putTestSettingsWithSourceEQ(t *testing.T, settings *conf.Settings, sourceEQ
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(fullJSON, &payload))
 
-	if realtime, ok := payload["realtime"].(map[string]any); ok {
-		if audio, ok := realtime["audio"].(map[string]any); ok {
-			if sources, ok := audio["sources"].([]any); ok && len(sources) > 0 {
-				if src, ok := sources[0].(map[string]any); ok {
-					src["equalizer"] = sourceEQ
-				}
-			}
-		}
-	}
+	realtime, ok := payload["realtime"].(map[string]any)
+	require.True(t, ok, "payload must contain realtime section")
+	audio, ok := realtime["audio"].(map[string]any)
+	require.True(t, ok, "realtime must contain audio section")
+	sources, ok := audio["sources"].([]any)
+	require.True(t, ok, "audio must contain sources section")
+	require.NotEmpty(t, sources, "sources must be non-empty")
+	src, ok := sources[0].(map[string]any)
+	require.True(t, ok, "sources[0] must be an object")
+	src["equalizer"] = sourceEQ
 
 	body, err := json.Marshal(payload)
 	require.NoError(t, err)
