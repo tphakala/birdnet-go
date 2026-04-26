@@ -29,6 +29,43 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 	return false
 }
 
+// audioSourceNameChanged checks if any audio source was renamed while keeping
+// the same device. Returns false on length mismatch (handled by device change
+// detection) or when the device also changed (handled by full reconfiguration).
+func audioSourceNameChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldSources := oldSettings.Realtime.Audio.Sources
+	newSources := currentSettings.Realtime.Audio.Sources
+
+	if len(oldSources) != len(newSources) {
+		return false
+	}
+	for i := range oldSources {
+		if oldSources[i].Device == newSources[i].Device &&
+			oldSources[i].Name != newSources[i].Name {
+			return true
+		}
+	}
+	return false
+}
+
+// streamNameChanged checks if any stream was renamed while keeping the same URL.
+// Returns false on length mismatch or when the URL also changed.
+func streamNameChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldStreams := oldSettings.Realtime.RTSP.Streams
+	newStreams := currentSettings.Realtime.RTSP.Streams
+
+	if len(oldStreams) != len(newStreams) {
+		return false
+	}
+	for i := range oldStreams {
+		if oldStreams[i].URL == newStreams[i].URL &&
+			oldStreams[i].Name != newStreams[i].Name {
+			return true
+		}
+	}
+	return false
+}
+
 // soundLevelSettingsChanged checks if sound level monitoring settings have changed
 func soundLevelSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	// Check for changes in enabled state
