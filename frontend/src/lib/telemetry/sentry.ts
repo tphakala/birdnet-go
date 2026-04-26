@@ -25,6 +25,9 @@ const HTTP_BAD_GATEWAY = 502;
 const HTTP_SERVICE_UNAVAILABLE = 503;
 const HTTP_GATEWAY_TIMEOUT = 504;
 
+/** Minimum HTTP status considered a server-side error (5xx). */
+const HTTP_SERVER_ERROR_MIN = 500;
+
 /** API error shape matching ApiError from api.ts. */
 interface ApiErrorLike {
   message: string;
@@ -138,7 +141,7 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
   // Skip network errors - connectivity issues are infrastructure noise, not app bugs
   if (error.isNetworkError) return;
 
-  const severity = error.status >= 500 ? 'error' : 'warning';
+  const severity = error.status >= HTTP_SERVER_ERROR_MIN ? 'error' : 'warning';
 
   Sentry.withScope(scope => {
     scope.setLevel(severity);
@@ -157,7 +160,9 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
       scope.setTag('http.status_code', String(error.status));
     }
 
-    scope.setFingerprint(['ApiError', String(error.status)]);
+    if (error.status > 0) {
+      scope.setFingerprint(['ApiError', String(error.status)]);
+    }
     Sentry.captureException(error);
   });
 }
