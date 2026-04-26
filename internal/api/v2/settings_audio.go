@@ -264,7 +264,7 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}
-		if !nameChanged {
+		if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
 			_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
 		}
 	}

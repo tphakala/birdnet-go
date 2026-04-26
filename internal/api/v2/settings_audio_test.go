@@ -225,7 +225,7 @@ func TestSyncStreamNames(t *testing.T) {
 	})
 }
 
-func TestEQResolutionAfterSourceRename(t *testing.T) {
+func TestResolveEQOverrideMatchesByName(t *testing.T) {
 	t.Parallel()
 
 	eq := &conf.EqualizerSettings{
