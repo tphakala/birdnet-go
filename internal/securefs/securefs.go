@@ -633,6 +633,19 @@ func (sfs *SecureFS) serveInternal(c echo.Context, opener func() (*os.File, stri
 		c.Response().Header().Set(echo.HeaderContentType, getContentType(effectivePath))
 	}
 
+	// Set an ETag based on file size and modification time so that
+	// http.ServeContent can use strong validation for conditional requests.
+	// This is critical for audio files: the gzip compression fix (#2709)
+	// changed response sizes without changing file modification times,
+	// leaving browsers with stale cached Content-Length values that cause
+	// HTTP 416 Range Not Satisfiable on follow-up range requests (#2846).
+	// Including the file size in the ETag forces cache invalidation when
+	// the served size differs from the previously cached (gzipped) size.
+	if c.Response().Header().Get("ETag") == "" {
+		etag := fmt.Sprintf(`"%x-%x"`, stat.ModTime().UnixNano(), stat.Size())
+		c.Response().Header().Set("ETag", etag)
+	}
+
 	http.ServeContent(c.Response(), c.Request(), filepath.Base(effectivePath), stat.ModTime(), f)
 	return nil
 }
