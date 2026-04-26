@@ -317,15 +317,20 @@ func applyPrivacyFilters(event *sentry.Event) *sentry.Event {
 	event.User = sentry.User{}
 	event.ServerName = ""
 
-	// Remove sensitive contexts
+	// Remove sensitive contexts and extra fields
 	if event.Contexts != nil {
 		delete(event.Contexts, "device")
 		delete(event.Contexts, "os")
 		delete(event.Contexts, "runtime")
-	}
 
-	// Remove extra fields except allowed ones
-	removePrivacyExtraFields(event.Extra)
+		// Remove extra fields except allowed ones (extras are stored as a context entry)
+		if extras, ok := event.Contexts["extras"]; ok {
+			removePrivacyExtraFields(extras)
+			if len(extras) == 0 {
+				delete(event.Contexts, "extras")
+			}
+		}
+	}
 
 	// Remove sensitive tags
 	if event.Tags != nil {
@@ -400,15 +405,19 @@ func applyPrivacyFiltersWithLogging(event *sentry.Event) *sentry.Event {
 	event.User = sentry.User{}
 	event.ServerName = ""
 
-	// Handle contexts with tracking
+	// Handle contexts and extra fields with tracking
 	if event.Contexts != nil {
 		contextsRemoved := removePrivacyContexts(event.Contexts)
 		filtersApplied = append(filtersApplied, contextsRemoved...)
-	}
 
-	// Handle extra fields with tracking
-	if extraRemoved := removePrivacyExtraFields(event.Extra); extraRemoved > 0 {
-		filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
+		if extras, ok := event.Contexts["extras"]; ok {
+			if extraRemoved := removePrivacyExtraFields(extras); extraRemoved > 0 {
+				filtersApplied = append(filtersApplied, fmt.Sprintf("remove_%d_extra_fields", extraRemoved))
+			}
+			if len(extras) == 0 {
+				delete(event.Contexts, "extras")
+			}
+		}
 	}
 
 	// Handle tags with tracking
@@ -434,7 +443,7 @@ func logEventBeforeFiltering(event *sentry.Event) {
 		logger.Bool("has_user_data", !event.User.IsEmpty()),
 		logger.Bool("has_server_name", event.ServerName != ""),
 		logger.Int("contexts_count", len(event.Contexts)),
-		logger.Int("extra_count", len(event.Extra)),
+		logger.Int("extra_count", len(event.Contexts["extras"])),
 		logger.Int("tags_count", len(event.Tags)))
 }
 
@@ -445,7 +454,7 @@ func logEventAfterFiltering(event *sentry.Event, filtersApplied []string) {
 		logger.Any("event_id", event.EventID),
 		logger.Any("filters_applied", filtersApplied),
 		logger.Int("remaining_contexts", len(event.Contexts)),
-		logger.Int("remaining_extra", len(event.Extra)),
+		logger.Int("remaining_extra", len(event.Contexts["extras"])),
 		logger.Int("remaining_tags", len(event.Tags)))
 }
 

@@ -195,7 +195,7 @@ func TestEventSummaries(t *testing.T) {
 			Message:   e.message,
 			Level:     e.level,
 			Tags:      e.tags,
-			Extra:     e.extra,
+			Contexts:  map[string]sentry.Context{"extras": e.extra},
 			Timestamp: time.Now(),
 		}
 		transport.SendEvent(event)

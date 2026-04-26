@@ -186,7 +186,7 @@ func (t *MockTransport) GetEventSummaries() []EventSummary {
 			Message:     event.Message,
 			Level:       string(event.Level),
 			Tags:        event.Tags,
-			Extra:       event.Extra,
+			Extra:       event.Contexts["extras"],
 			Fingerprint: event.Fingerprint,
 			Timestamp:   event.Timestamp,
 		}
