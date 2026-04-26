@@ -260,8 +260,12 @@ func TestEQFilterRoundTrip_PATCH(t *testing.T) {
 	require.Len(t, eq.Filters, 2, "Should have 2 filters")
 	assert.Equal(t, "HighPass", eq.Filters[0].Type)
 	assert.InDelta(t, float64(200), eq.Filters[0].Frequency, 0.01)
+	assert.InDelta(t, 0.707, eq.Filters[0].Q, 0.001)
+	assert.Equal(t, 1, eq.Filters[0].Passes)
 	assert.Equal(t, "LowPass", eq.Filters[1].Type)
 	assert.InDelta(t, float64(14000), eq.Filters[1].Frequency, 0.01)
+	assert.InDelta(t, 0.707, eq.Filters[1].Q, 0.001)
+	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
 // TestEQFilterRoundTrip_PUT_WithFrontendIDField verifies that the extra
