@@ -221,16 +221,41 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
+	// Detect source/stream name changes and sync DisplayName in the registry.
+	srcNameChanged := audioSourceNameChanged(oldSettings, currentSettings)
+	strmNameChanged := streamNameChanged(oldSettings, currentSettings)
+
+	if srcNameChanged && c.engine != nil {
+		registry := c.engine.Registry()
+		oldSources := oldSettings.Realtime.Audio.Sources
+		newSources := currentSettings.Realtime.Audio.Sources
+		for i := range oldSources {
+			if i >= len(newSources) {
+				break
+			}
+			if oldSources[i].Device == newSources[i].Device &&
+				oldSources[i].Name != newSources[i].Name {
+				if src, ok := registry.GetByConnection(newSources[i].Device); ok {
+					registry.UpdateDisplayName(src.ID, newSources[i].Name)
+				}
+			}
+		}
+	}
+
 	// Check audio equalizer settings (global, per-source, or per-stream) - hot-swap filter chains.
+	// Also rebuild when names change, since ResolveEQOverride matches by name.
 	globalEQChanged := equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer)
 	perSourceEQChanged := perSourceEqualizerChanged(oldSettings, currentSettings)
 	perStreamEQChanged := perStreamEqualizerChanged(oldSettings, currentSettings)
-	if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
+	nameChanged := srcNameChanged || strmNameChanged
+	if globalEQChanged || perSourceEQChanged || perStreamEQChanged || nameChanged {
 		c.Debug("Audio equalizer settings changed, updating filter chains")
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}
-		_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+		if !nameChanged {
+			_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+		}
 	}
 
 	return reconfigActions, nil
