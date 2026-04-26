@@ -225,18 +225,37 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	srcNameChanged := audioSourceNameChanged(oldSettings, currentSettings)
 	strmNameChanged := streamNameChanged(oldSettings, currentSettings)
 
-	if srcNameChanged && c.engine != nil {
+	if c.engine != nil {
 		registry := c.engine.Registry()
-		oldSources := oldSettings.Realtime.Audio.Sources
-		newSources := currentSettings.Realtime.Audio.Sources
-		for i := range oldSources {
-			if i >= len(newSources) {
-				break
+
+		if srcNameChanged {
+			oldSources := oldSettings.Realtime.Audio.Sources
+			newSources := currentSettings.Realtime.Audio.Sources
+			for i := range oldSources {
+				if i >= len(newSources) {
+					break
+				}
+				if oldSources[i].Device == newSources[i].Device &&
+					oldSources[i].Name != newSources[i].Name {
+					if src, ok := registry.GetByConnection(newSources[i].Device); ok {
+						registry.UpdateDisplayName(src.ID, newSources[i].Name)
+					}
+				}
 			}
-			if oldSources[i].Device == newSources[i].Device &&
-				oldSources[i].Name != newSources[i].Name {
-				if src, ok := registry.GetByConnection(newSources[i].Device); ok {
-					registry.UpdateDisplayName(src.ID, newSources[i].Name)
+		}
+
+		if strmNameChanged {
+			oldStreams := oldSettings.Realtime.RTSP.Streams
+			newStreams := currentSettings.Realtime.RTSP.Streams
+			for i := range oldStreams {
+				if i >= len(newStreams) {
+					break
+				}
+				if oldStreams[i].URL == newStreams[i].URL &&
+					oldStreams[i].Name != newStreams[i].Name {
+					if src, ok := registry.GetByConnection(newStreams[i].URL); ok {
+						registry.UpdateDisplayName(src.ID, newStreams[i].Name)
+					}
 				}
 			}
 		}
