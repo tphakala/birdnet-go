@@ -163,3 +163,55 @@ func TestBuildFilterChain_Peaking(t *testing.T) {
 	require.NotNil(t, chain)
 	assert.Equal(t, 1, chain.Length())
 }
+
+func TestBuildFilterChainWithOverride_UsesOverride(t *testing.T) {
+	t.Parallel()
+	override := &conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+		},
+	}
+	globalEQ := conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+		},
+	}
+	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", 48000)
+	require.NotNil(t, chain)
+	assert.Equal(t, 1, chain.Length(), "should use 1-filter override, not 2-filter global")
+}
+
+func TestBuildFilterChainWithOverride_FallsBackToGlobal(t *testing.T) {
+	t.Parallel()
+	globalEQ := conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+			{Type: "HighPass", Frequency: 100, Q: 0.707, Passes: 1},
+		},
+	}
+	chain := equalizer.BuildFilterChainWithOverride(nil, globalEQ, "test-source", 48000)
+	require.NotNil(t, chain)
+	assert.Equal(t, 2, chain.Length(), "should use 2-filter global when override is nil")
+}
+
+func TestBuildFilterChainWithOverride_DisabledOverride(t *testing.T) {
+	t.Parallel()
+	override := &conf.EqualizerSettings{
+		Enabled: false,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 300, Q: 0.707, Passes: 1},
+		},
+	}
+	globalEQ := conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "LowPass", Frequency: 15000, Q: 0.707, Passes: 1},
+		},
+	}
+	chain := equalizer.BuildFilterChainWithOverride(override, globalEQ, "test-source", 48000)
+	assert.Nil(t, chain, "disabled override should return nil chain regardless of global")
+}

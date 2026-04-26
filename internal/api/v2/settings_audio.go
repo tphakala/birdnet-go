@@ -51,21 +51,21 @@ func equalizerSettingsChanged(oldSettings, newSettings conf.EqualizerSettings) b
 }
 
 // handleEqualizerChange rebuilds EQ filter chains and hot-swaps them on all
-// affected routes. Sources with per-source EQ are updated only when their own
-// settings changed; sources using the global default are updated when the
-// global EQ changed.
+// registered sources (both sound cards and streams). Each source's effective EQ
+// is resolved via Settings.ResolveEQOverride using the registry DisplayName.
 func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error {
 	if c.engine == nil {
 		return nil
 	}
 
 	router := c.engine.Router()
-	audioSettings := &currentSettings.Realtime.Audio
+	globalEQ := currentSettings.Realtime.Audio.Equalizer
 
 	for _, src := range c.engine.Registry().List() {
-		srcCfg := audioSettings.FindSourceByID(src.ID)
+		displayName := src.DisplayName
+		override := currentSettings.ResolveEQOverride(displayName)
 		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
-			return equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, sampleRate)
+			return equalizer.BuildFilterChainWithOverride(override, globalEQ, displayName, sampleRate)
 		})
 	}
 
@@ -82,6 +82,21 @@ func perSourceEqualizerChanged(oldSettings, currentSettings *conf.Settings) bool
 	}
 	for i := range oldSources {
 		if !reflect.DeepEqual(oldSources[i].Equalizer, newSources[i].Equalizer) {
+			return true
+		}
+	}
+	return false
+}
+
+// perStreamEqualizerChanged checks if any per-stream equalizer settings have changed.
+func perStreamEqualizerChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldStreams := oldSettings.Realtime.RTSP.Streams
+	newStreams := currentSettings.Realtime.RTSP.Streams
+	if len(oldStreams) != len(newStreams) {
+		return true
+	}
+	for i := range oldStreams {
+		if !reflect.DeepEqual(oldStreams[i].Equalizer, newStreams[i].Equalizer) {
 			return true
 		}
 	}
@@ -169,10 +184,11 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			notification.MsgSettingsExtendedCaptureRestart, nil)
 	}
 
-	// Check audio equalizer settings (global or per-source) — hot-swap filter chains.
+	// Check audio equalizer settings (global, per-source, or per-stream) - hot-swap filter chains.
 	globalEQChanged := equalizerSettingsChanged(oldSettings.Realtime.Audio.Equalizer, currentSettings.Realtime.Audio.Equalizer)
 	perSourceEQChanged := perSourceEqualizerChanged(oldSettings, currentSettings)
-	if globalEQChanged || perSourceEQChanged {
+	perStreamEQChanged := perStreamEqualizerChanged(oldSettings, currentSettings)
+	if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
 		c.Debug("Audio equalizer settings changed, updating filter chains")
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
