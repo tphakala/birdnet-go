@@ -92,7 +92,7 @@ func TestPerStreamEqualizerChanged(t *testing.T) {
 }
 
 //nolint:dupl // parallel test for audio sources mirrors stream test by design
-func TestAudioSourceNameChanged(t *testing.T) {
+func TestSyncAudioSourceNames(t *testing.T) {
 	t.Parallel()
 
 	t.Run("same names", func(t *testing.T) {
@@ -105,7 +105,7 @@ func TestAudioSourceNameChanged(t *testing.T) {
 		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
 			{Name: "Front Yard", Device: "hw:0,0"},
 		}
-		assert.False(t, audioSourceNameChanged(old, cur))
+		assert.False(t, syncAudioSourceNames(old, cur, nil))
 	})
 
 	t.Run("name changed same device", func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestAudioSourceNameChanged(t *testing.T) {
 		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
 			{Name: "Garden Mic", Device: "hw:0,0"},
 		}
-		assert.True(t, audioSourceNameChanged(old, cur))
+		assert.True(t, syncAudioSourceNames(old, cur, nil))
 	})
 
 	t.Run("name and device both changed", func(t *testing.T) {
@@ -131,7 +131,7 @@ func TestAudioSourceNameChanged(t *testing.T) {
 		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
 			{Name: "Garden Mic", Device: "hw:1,0"},
 		}
-		assert.False(t, audioSourceNameChanged(old, cur),
+		assert.False(t, syncAudioSourceNames(old, cur, nil),
 			"should be false when device also changed (handled by reconfiguration)")
 	})
 
@@ -146,7 +146,7 @@ func TestAudioSourceNameChanged(t *testing.T) {
 			{Name: "A", Device: "hw:0,0"},
 			{Name: "B", Device: "hw:1,0"},
 		}
-		assert.False(t, audioSourceNameChanged(old, cur),
+		assert.False(t, syncAudioSourceNames(old, cur, nil),
 			"should be false on length mismatch (handled by device change detection)")
 	})
 
@@ -154,12 +154,12 @@ func TestAudioSourceNameChanged(t *testing.T) {
 		t.Parallel()
 		old := &conf.Settings{}
 		cur := &conf.Settings{}
-		assert.False(t, audioSourceNameChanged(old, cur))
+		assert.False(t, syncAudioSourceNames(old, cur, nil))
 	})
 }
 
 //nolint:dupl // parallel test for streams mirrors audio source test by design
-func TestStreamNameChanged(t *testing.T) {
+func TestSyncStreamNames(t *testing.T) {
 	t.Parallel()
 
 	t.Run("same names", func(t *testing.T) {
@@ -172,7 +172,7 @@ func TestStreamNameChanged(t *testing.T) {
 		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{Name: "Backyard Cam", URL: "rtsp://192.168.1.10/stream"},
 		}
-		assert.False(t, streamNameChanged(old, cur))
+		assert.False(t, syncStreamNames(old, cur, nil))
 	})
 
 	t.Run("name changed same URL", func(t *testing.T) {
@@ -185,7 +185,7 @@ func TestStreamNameChanged(t *testing.T) {
 		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{Name: "Garden Cam", URL: "rtsp://192.168.1.10/stream"},
 		}
-		assert.True(t, streamNameChanged(old, cur))
+		assert.True(t, syncStreamNames(old, cur, nil))
 	})
 
 	t.Run("name and URL both changed", func(t *testing.T) {
@@ -198,7 +198,7 @@ func TestStreamNameChanged(t *testing.T) {
 		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
 			{Name: "Garden Cam", URL: "rtsp://192.168.1.20/stream"},
 		}
-		assert.False(t, streamNameChanged(old, cur),
+		assert.False(t, syncStreamNames(old, cur, nil),
 			"should be false when URL also changed (handled by reconfiguration)")
 	})
 
@@ -213,7 +213,7 @@ func TestStreamNameChanged(t *testing.T) {
 			{Name: "A", URL: "rtsp://a/stream"},
 			{Name: "B", URL: "rtsp://b/stream"},
 		}
-		assert.False(t, streamNameChanged(old, cur),
+		assert.False(t, syncStreamNames(old, cur, nil),
 			"should be false on length mismatch (handled by stream reconfiguration)")
 	})
 
@@ -221,7 +221,7 @@ func TestStreamNameChanged(t *testing.T) {
 		t.Parallel()
 		old := &conf.Settings{}
 		cur := &conf.Settings{}
-		assert.False(t, streamNameChanged(old, cur))
+		assert.False(t, syncStreamNames(old, cur, nil))
 	})
 }
 

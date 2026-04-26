@@ -4,10 +4,18 @@ package api
 import (
 	"reflect"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
+
+// sourceNameUpdater is the subset of SourceRegistry used by the name-sync
+// helpers. Accepting an interface keeps them testable without a full registry.
+type sourceNameUpdater interface {
+	GetByConnection(connStr string) (*audiocore.AudioSource, bool)
+	UpdateDisplayName(sourceID, newName string) bool
+}
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
 // Only compares device-affecting fields (Device, Gain, Model), not display-only
@@ -29,41 +37,56 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 	return false
 }
 
-// audioSourceNameChanged checks if any audio source was renamed while keeping
-// the same device. Returns false on length mismatch (handled by device change
-// detection) or when the device also changed (handled by full reconfiguration).
-func audioSourceNameChanged(oldSettings, currentSettings *conf.Settings) bool {
+// syncAudioSourceNames detects audio sources that were renamed while keeping
+// the same device, and updates their DisplayName in the registry. Returns true
+// if any name was changed. Skips length mismatches (handled by device change
+// detection) and entries where the device also changed (handled by full
+// reconfiguration).
+func syncAudioSourceNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
 	oldSources := oldSettings.Realtime.Audio.Sources
 	newSources := currentSettings.Realtime.Audio.Sources
 
 	if len(oldSources) != len(newSources) {
 		return false
 	}
+	changed := false
 	for i := range oldSources {
 		if oldSources[i].Device == newSources[i].Device &&
 			oldSources[i].Name != newSources[i].Name {
-			return true
+			changed = true
+			if registry != nil {
+				if src, ok := registry.GetByConnection(newSources[i].Device); ok {
+					registry.UpdateDisplayName(src.ID, newSources[i].Name)
+				}
+			}
 		}
 	}
-	return false
+	return changed
 }
 
-// streamNameChanged checks if any stream was renamed while keeping the same URL.
-// Returns false on length mismatch or when the URL also changed.
-func streamNameChanged(oldSettings, currentSettings *conf.Settings) bool {
+// syncStreamNames detects streams that were renamed while keeping the same URL,
+// and updates their DisplayName in the registry. Returns true if any name was
+// changed. Skips length mismatches and entries where the URL also changed.
+func syncStreamNames(oldSettings, currentSettings *conf.Settings, registry sourceNameUpdater) bool {
 	oldStreams := oldSettings.Realtime.RTSP.Streams
 	newStreams := currentSettings.Realtime.RTSP.Streams
 
 	if len(oldStreams) != len(newStreams) {
 		return false
 	}
+	changed := false
 	for i := range oldStreams {
 		if oldStreams[i].URL == newStreams[i].URL &&
 			oldStreams[i].Name != newStreams[i].Name {
-			return true
+			changed = true
+			if registry != nil {
+				if src, ok := registry.GetByConnection(newStreams[i].URL); ok {
+					registry.UpdateDisplayName(src.ID, newStreams[i].Name)
+				}
+			}
 		}
 	}
-	return false
+	return changed
 }
 
 // soundLevelSettingsChanged checks if sound level monitoring settings have changed
@@ -222,44 +245,13 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	}
 
 	// Detect source/stream name changes and sync DisplayName in the registry.
-	srcNameChanged := audioSourceNameChanged(oldSettings, currentSettings)
-	strmNameChanged := streamNameChanged(oldSettings, currentSettings)
-
+	// Each function detects renames and updates the registry in a single pass.
+	var registry sourceNameUpdater
 	if c.engine != nil {
-		registry := c.engine.Registry()
-
-		if srcNameChanged {
-			oldSources := oldSettings.Realtime.Audio.Sources
-			newSources := currentSettings.Realtime.Audio.Sources
-			for i := range oldSources {
-				if i >= len(newSources) {
-					break
-				}
-				if oldSources[i].Device == newSources[i].Device &&
-					oldSources[i].Name != newSources[i].Name {
-					if src, ok := registry.GetByConnection(newSources[i].Device); ok {
-						registry.UpdateDisplayName(src.ID, newSources[i].Name)
-					}
-				}
-			}
-		}
-
-		if strmNameChanged {
-			oldStreams := oldSettings.Realtime.RTSP.Streams
-			newStreams := currentSettings.Realtime.RTSP.Streams
-			for i := range oldStreams {
-				if i >= len(newStreams) {
-					break
-				}
-				if oldStreams[i].URL == newStreams[i].URL &&
-					oldStreams[i].Name != newStreams[i].Name {
-					if src, ok := registry.GetByConnection(newStreams[i].URL); ok {
-						registry.UpdateDisplayName(src.ID, newStreams[i].Name)
-					}
-				}
-			}
-		}
+		registry = c.engine.Registry()
 	}
+	srcNameChanged := syncAudioSourceNames(oldSettings, currentSettings, registry)
+	strmNameChanged := syncStreamNames(oldSettings, currentSettings, registry)
 
 	// Check audio equalizer settings (global, per-source, or per-stream) - hot-swap filter chains.
 	// Also rebuild when names change, since ResolveEQOverride matches by name.
