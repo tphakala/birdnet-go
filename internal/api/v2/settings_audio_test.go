@@ -224,3 +224,30 @@ func TestStreamNameChanged(t *testing.T) {
 		assert.False(t, streamNameChanged(old, cur))
 	})
 }
+
+func TestEQResolutionAfterSourceRename(t *testing.T) {
+	t.Parallel()
+
+	eq := &conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{{Type: "HighPass", Frequency: 300, Q: 0.7}},
+	}
+
+	settings := &conf.Settings{}
+	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
+		{Name: "New Name", Device: "hw:0,0", Equalizer: eq},
+	}
+	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
+		{Name: "Renamed Stream", URL: "rtsp://cam/stream", Equalizer: eq},
+	}
+
+	assert.Equal(t, eq, settings.ResolveEQOverride("New Name"),
+		"EQ override should resolve for the new source name")
+	assert.Nil(t, settings.ResolveEQOverride("Old Name"),
+		"EQ override should not resolve for the old source name")
+
+	assert.Equal(t, eq, settings.ResolveEQOverride("Renamed Stream"),
+		"EQ override should resolve for the new stream name")
+	assert.Nil(t, settings.ResolveEQOverride("Old Stream Name"),
+		"EQ override should not resolve for the old stream name")
+}
