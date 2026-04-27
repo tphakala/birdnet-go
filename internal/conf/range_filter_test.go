@@ -67,8 +67,9 @@ func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
 // TestShouldUpdateRangeFilterToday_PublishesNewSnapshot verifies that the
 // function publishes a new snapshot with LastUpdated set to today.
 func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {
+	originalUpdatedAt := time.Now().Add(-25 * time.Hour)
 	original := &Settings{}
-	original.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour)
+	original.BirdNET.RangeFilter.LastUpdated = originalUpdatedAt
 	original.BirdNET.RangeFilter.Species = []string{"Original Species"}
 	setupGlobalSettings(t, original)
 
@@ -80,7 +81,7 @@ func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {
 		"Published snapshot should have LastUpdated >= today")
 	assert.Equal(t, []string{"Original Species"}, published.BirdNET.RangeFilter.Species,
 		"Species list should be preserved in the published snapshot")
-	assert.Equal(t, time.Now().Add(-25*time.Hour).Truncate(time.Second),
+	assert.Equal(t, originalUpdatedAt.Truncate(time.Second),
 		original.BirdNET.RangeFilter.LastUpdated.Truncate(time.Second),
 		"Original snapshot must not be mutated")
 }

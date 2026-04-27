@@ -16,6 +16,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -188,16 +189,18 @@ func (c *Controller) GetRangeFilterSpeciesCount(ctx echo.Context) error {
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	// Get current included species
-	includedSpecies := c.Settings.GetIncludedSpecies()
+	// Use the latest published snapshot so the daily range filter update
+	// (which publishes via clone-mutate-publish) is visible immediately.
+	settings := conf.CurrentOrFallback(c.Settings)
+	includedSpecies := settings.GetIncludedSpecies()
 
 	response := RangeFilterSpeciesCount{
 		Count:       len(includedSpecies),
-		LastUpdated: c.Settings.BirdNET.RangeFilter.LastUpdated,
-		Threshold:   c.Settings.BirdNET.RangeFilter.Threshold,
+		LastUpdated: settings.BirdNET.RangeFilter.LastUpdated,
+		Threshold:   settings.BirdNET.RangeFilter.Threshold,
 		Location: Location{
-			Latitude:  c.Settings.BirdNET.Latitude,
-			Longitude: c.Settings.BirdNET.Longitude,
+			Latitude:  settings.BirdNET.Latitude,
+			Longitude: settings.BirdNET.Longitude,
 		},
 	}
 
@@ -218,8 +221,10 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	c.settingsMutex.RLock()
 	defer c.settingsMutex.RUnlock()
 
-	// Get current included species
-	includedSpecies := c.Settings.GetIncludedSpecies()
+	// Use the latest published snapshot so the daily range filter update
+	// (which publishes via clone-mutate-publish) is visible immediately.
+	settings := conf.CurrentOrFallback(c.Settings)
+	includedSpecies := settings.GetIncludedSpecies()
 
 	// Convert to response format with parsed names
 	// Pre-allocate slice with capacity for all included species
@@ -300,11 +305,11 @@ func (c *Controller) GetRangeFilterSpeciesList(ctx echo.Context) error {
 	response := RangeFilterSpeciesList{
 		Species:     speciesList,
 		Count:       len(speciesList),
-		LastUpdated: c.Settings.BirdNET.RangeFilter.LastUpdated,
-		Threshold:   c.Settings.BirdNET.RangeFilter.Threshold,
+		LastUpdated: settings.BirdNET.RangeFilter.LastUpdated,
+		Threshold:   settings.BirdNET.RangeFilter.Threshold,
 		Location: Location{
-			Latitude:  c.Settings.BirdNET.Latitude,
-			Longitude: c.Settings.BirdNET.Longitude,
+			Latitude:  settings.BirdNET.Latitude,
+			Longitude: settings.BirdNET.Longitude,
 		},
 		Genera:   genera,
 		Families: families,
