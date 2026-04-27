@@ -264,6 +264,15 @@ func (a *DatabaseAction) recordNotificationSent(notificationTime time.Time) {
 // This helper method orchestrates notification suppression, event creation, and publishing.
 func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
 	if !isNewSpecies || !events.IsInitialized() {
+		if events.IsInitialized() && !isNewSpecies {
+			GetLogger().Debug("Skipping detection event publish: not a new species",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Float64("confidence", a.Result.Confidence),
+				logger.String("operation", "skip_detection_event"))
+		}
 		return
 	}
 
