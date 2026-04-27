@@ -133,6 +133,13 @@ func (s *StreamConfig) Validate() error {
 		return err
 	}
 
+	// Validate per-stream EQ if set
+	if s.Equalizer != nil {
+		if err := validateEQFilters(s.Equalizer.Filters, fmt.Sprintf("stream '%s'", s.Name)); err != nil {
+			return err
+		}
+	}
+
 	// Validate quiet hours if enabled
 	if err := ValidateQuietHours(&s.QuietHours, fmt.Sprintf("stream '%s'", s.Name)); err != nil {
 		return err

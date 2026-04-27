@@ -49,7 +49,7 @@ func TestMaliciousInputData(t *testing.T) {
 					"path": "../../../etc/passwd",
 				},
 			},
-			description: "Should accept path but file operations should validate",
+			description: "Should reject path traversal at validation time",
 		},
 		{
 			name:    "Command injection attempt",
@@ -139,17 +139,24 @@ func TestMaliciousInputData(t *testing.T) {
 			ctx.SetParamNames("section")
 			ctx.SetParamValues(tt.section)
 
-			// The update should succeed (we accept the data)
+			// The update should either succeed or reject malicious input
 			err = controller.UpdateSectionSettings(ctx)
 			if err != nil {
-				// Some malicious inputs might be rejected, which is also fine
+				// Some malicious inputs might be rejected via error return, which is fine
 				if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusBadRequest {
-					t.Logf("Input rejected as expected: %v", err)
+					t.Logf("Input rejected via error: %v", err)
 					return
 				}
 			}
 
-			// If accepted, verify the response is valid
+			// Validation may also reject via response code (HandleError writes 400
+			// to recorder without returning an error). Both 200 and 400 are acceptable
+			// outcomes for malicious input: 200 means the data was safely accepted,
+			// 400 means it was correctly rejected at validation time.
+			if rec.Code == http.StatusBadRequest {
+				t.Logf("Input rejected at validation: status %d", rec.Code)
+				return
+			}
 			assert.Equal(t, http.StatusOK, rec.Code)
 			t.Logf("%s: %s", tt.name, tt.description)
 		})

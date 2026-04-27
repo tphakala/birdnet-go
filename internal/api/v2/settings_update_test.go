@@ -419,7 +419,7 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 	settings := controller.Settings
 	assert.Equal(t, "mp3", settings.Realtime.Audio.Export.Type)     // Changed
 	assert.True(t, settings.Realtime.Audio.Export.Enabled)          // Preserved
-	assert.Equal(t, "/clips", settings.Realtime.Audio.Export.Path)  // Preserved
+	assert.Equal(t, "clips", settings.Realtime.Audio.Export.Path)   // Preserved
 	assert.Equal(t, "192k", settings.Realtime.Audio.Export.Bitrate) // Preserved
 }
 
