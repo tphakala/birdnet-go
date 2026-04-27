@@ -124,6 +124,7 @@ func TestClearFfmpegMetadata(t *testing.T) {
 
 // Integration check: validateAudioSettings clears metadata when FFmpeg is absent.
 func TestValidateAudioSettings_ClearsFFmpegMetadataOnFailure(t *testing.T) {
+	t.Parallel()
 	if _, err := exec.LookPath(GetFfmpegBinaryName()); err == nil {
 		t.Skip("ffmpeg found on PATH; integration test requires ffmpeg to be absent")
 	}

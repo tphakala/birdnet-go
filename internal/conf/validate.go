@@ -131,6 +131,12 @@ func firstValidationError(result ValidationResult, validationType string) error 
 	if result.Valid {
 		return nil
 	}
+	if len(result.Errors) == 0 {
+		return errors.Newf("validation failed with no error details").
+			Category(errors.CategoryValidation).
+			Context("validation_type", validationType).
+			Build()
+	}
 	return errors.Newf("%s", result.Errors[0]).
 		Category(errors.CategoryValidation).
 		Context("validation_type", validationType).
