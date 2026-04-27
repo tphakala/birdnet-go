@@ -1,0 +1,553 @@
+// conf/validate_audio.go
+
+package conf
+
+import (
+	"fmt"
+	"os/exec"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+)
+
+// Audio gain limits in dB
+const (
+	MinAudioGain = -40.0 // Minimum allowed audio gain in dB
+	MaxAudioGain = 40.0  // Maximum allowed audio gain in dB
+)
+
+// Playback gain limits in dB (UI preference, distinct from export gain)
+const (
+	MinPlaybackGain     = 0.0  // Minimum default playback gain
+	MaxPlaybackGain     = 24.0 // Maximum default playback gain (matches AudioSettingsButton GAIN_MAX_DB)
+	DefaultPlaybackGain = 0.0  // Safe default if invalid value provided
+)
+
+// Audio export type constants
+const (
+	AudioExportTypeWAV  = "wav"  // Lossless PCM audio
+	AudioExportTypeFLAC = "flac" // Lossless compressed audio
+	AudioExportTypeMP3  = "mp3"  // Lossy compressed audio
+	AudioExportTypeAAC  = "aac"  // Lossy compressed audio
+	AudioExportTypeOPUS = "opus" // Lossy compressed audio
+)
+
+// Stream validation constants
+const (
+	MaxStreamNameLength      = 64
+	MaxAudioSourceNameLength = 100
+)
+
+// Quiet hours validation constants
+const (
+	MaxQuietHoursOffset = 180  // Maximum offset in minutes from sun event
+	MinQuietHoursOffset = -180 // Minimum offset in minutes from sun event
+)
+
+// Quiet hours mode constants
+const (
+	QuietHoursModeFixed = "fixed" // Fixed clock-based quiet hours
+	QuietHoursModeSolar = "solar" // Solar event-based quiet hours
+)
+
+// Solar event constants
+const (
+	SolarEventSunrise = "sunrise" // Sunrise solar event
+	SolarEventSunset  = "sunset"  // Sunset solar event
+)
+
+// ValidQuietHoursModes contains valid quiet hours mode values
+var ValidQuietHoursModes = map[string]bool{
+	QuietHoursModeFixed: true,
+	QuietHoursModeSolar: true,
+}
+
+// ValidSolarEvents contains valid solar event names
+var ValidSolarEvents = map[string]bool{
+	SolarEventSunrise: true,
+	SolarEventSunset:  true,
+}
+
+// ValidStreamTypes contains all supported stream types
+var ValidStreamTypes = map[string]bool{
+	StreamTypeRTSP: true,
+	StreamTypeHTTP: true,
+	StreamTypeHLS:  true,
+	StreamTypeRTMP: true,
+	StreamTypeUDP:  true,
+}
+
+// Validate validates a single stream configuration
+func (s *StreamConfig) Validate() error {
+	// Name is required
+	name := strings.TrimSpace(s.Name)
+	if name == "" {
+		return fmt.Errorf("stream name is required")
+	}
+
+	// Name length limit (check trimmed name for consistency)
+	if len(name) > MaxStreamNameLength {
+		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", name, MaxStreamNameLength)
+	}
+
+	// URL is required
+	if strings.TrimSpace(s.URL) == "" {
+		return fmt.Errorf("stream URL is required for '%s'", s.Name)
+	}
+
+	// Validate stream type
+	if !ValidStreamTypes[s.Type] {
+		return fmt.Errorf("invalid stream type '%s' for '%s': must be one of rtsp, http, hls, rtmp, udp", s.Type, s.Name)
+	}
+
+	// Validate transport (only tcp/udp allowed, empty defaults to tcp)
+	if s.Transport != "" && s.Transport != "tcp" && s.Transport != "udp" {
+		return fmt.Errorf("invalid transport '%s' for '%s': must be tcp or udp", s.Transport, s.Name)
+	}
+
+	// Validate URL scheme matches type
+	if err := s.validateURLScheme(); err != nil {
+		return err
+	}
+
+	// Validate quiet hours if enabled
+	if err := ValidateQuietHours(&s.QuietHours, fmt.Sprintf("stream '%s'", s.Name)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateQuietHours validates a quiet hours configuration
+func ValidateQuietHours(qh *QuietHoursConfig, context string) error {
+	if qh == nil || !qh.Enabled {
+		return nil
+	}
+
+	// Validate mode
+	if !ValidQuietHoursModes[qh.Mode] {
+		return fmt.Errorf("%s: quiet hours mode must be 'fixed' or 'solar', got '%s'", context, qh.Mode)
+	}
+
+	switch qh.Mode {
+	case QuietHoursModeFixed:
+		// Validate start time format
+		if _, err := time.Parse("15:04", qh.StartTime); err != nil {
+			return fmt.Errorf("%s: quiet hours start time must be in HH:MM format, got '%s'", context, qh.StartTime)
+		}
+		// Validate end time format
+		if _, err := time.Parse("15:04", qh.EndTime); err != nil {
+			return fmt.Errorf("%s: quiet hours end time must be in HH:MM format, got '%s'", context, qh.EndTime)
+		}
+
+	case QuietHoursModeSolar:
+		// Validate start event
+		if !ValidSolarEvents[qh.StartEvent] {
+			return fmt.Errorf("%s: quiet hours start event must be 'sunrise' or 'sunset', got '%s'", context, qh.StartEvent)
+		}
+		// Validate end event
+		if !ValidSolarEvents[qh.EndEvent] {
+			return fmt.Errorf("%s: quiet hours end event must be 'sunrise' or 'sunset', got '%s'", context, qh.EndEvent)
+		}
+		// Validate offsets
+		if qh.StartOffset < MinQuietHoursOffset || qh.StartOffset > MaxQuietHoursOffset {
+			return fmt.Errorf("%s: quiet hours start offset must be between %d and %d minutes, got %d", context, MinQuietHoursOffset, MaxQuietHoursOffset, qh.StartOffset)
+		}
+		if qh.EndOffset < MinQuietHoursOffset || qh.EndOffset > MaxQuietHoursOffset {
+			return fmt.Errorf("%s: quiet hours end offset must be between %d and %d minutes, got %d", context, MinQuietHoursOffset, MaxQuietHoursOffset, qh.EndOffset)
+		}
+	}
+
+	return nil
+}
+
+// validateURLScheme checks URL scheme matches declared stream type
+func (s *StreamConfig) validateURLScheme() error {
+	urlLower := strings.ToLower(s.URL)
+
+	switch s.Type {
+	case StreamTypeRTSP:
+		if !strings.HasPrefix(urlLower, "rtsp://") && !strings.HasPrefix(urlLower, "rtsps://") {
+			return fmt.Errorf("stream '%s': RTSP type requires rtsp:// or rtsps:// URL", s.Name)
+		}
+	case StreamTypeHTTP:
+		if !strings.HasPrefix(urlLower, "http://") && !strings.HasPrefix(urlLower, "https://") {
+			return fmt.Errorf("stream '%s': HTTP type requires http:// or https:// URL", s.Name)
+		}
+	case StreamTypeHLS:
+		if !strings.HasPrefix(urlLower, "http://") && !strings.HasPrefix(urlLower, "https://") {
+			return fmt.Errorf("stream '%s': HLS type requires http:// or https:// URL", s.Name)
+		}
+	case StreamTypeRTMP:
+		if !strings.HasPrefix(urlLower, "rtmp://") && !strings.HasPrefix(urlLower, "rtmps://") {
+			return fmt.Errorf("stream '%s': RTMP type requires rtmp:// or rtmps:// URL", s.Name)
+		}
+	case StreamTypeUDP:
+		if !strings.HasPrefix(urlLower, "udp://") && !strings.HasPrefix(urlLower, "rtp://") {
+			return fmt.Errorf("stream '%s': UDP type requires udp:// or rtp:// URL", s.Name)
+		}
+	}
+
+	return nil
+}
+
+// ApplyStreamDefaults sets default transport for RTSP/RTMP streams that have an empty
+// transport field. This handles the case where users write the new streams: YAML format
+// directly without specifying per-stream transport — the global RTSPSettings.Transport
+// (defaulting to "tcp") is propagated to each applicable stream.
+func (r *RTSPSettings) ApplyStreamDefaults() {
+	globalTransport := r.Transport
+	if globalTransport == "" {
+		globalTransport = DefaultTransport
+	}
+	for _, stream := range r.AllStreams() {
+		if stream.Transport == "" && (stream.Type == StreamTypeRTSP || stream.Type == StreamTypeRTMP) {
+			stream.Transport = globalTransport
+		}
+	}
+}
+
+// ValidateStreams validates the streams collection for uniqueness and individual validity
+func (r *RTSPSettings) ValidateStreams() error {
+	names := make(map[string]bool)
+	urls := make(map[string]bool)
+
+	for i, stream := range r.AllStreams() {
+		// Validate individual stream
+		if err := stream.Validate(); err != nil {
+			return fmt.Errorf("stream %d: %w", i+1, err)
+		}
+
+		// Check for duplicate names (case-insensitive)
+		nameLower := strings.ToLower(strings.TrimSpace(stream.Name))
+		if names[nameLower] {
+			return fmt.Errorf("duplicate stream name: '%s'", stream.Name)
+		}
+		names[nameLower] = true
+
+		// Check for duplicate URLs (trimmed for consistency)
+		urlTrimmed := strings.TrimSpace(stream.URL)
+		if urls[urlTrimmed] {
+			return fmt.Errorf("stream '%s' has a duplicate URL: '%s'", stream.Name, stream.URL)
+		}
+		urls[urlTrimmed] = true
+	}
+
+	return nil
+}
+
+// Validate validates a single audio source configuration.
+// It normalizes whitespace on Name, Device, and Model in-place.
+func (a *AudioSourceConfig) Validate() error {
+	// Normalize fields in-place so downstream code sees trimmed values.
+	a.Name = strings.TrimSpace(a.Name)
+	a.Device = strings.TrimSpace(a.Device)
+	a.Model = strings.TrimSpace(a.Model)
+
+	// Name is required
+	if a.Name == "" {
+		return fmt.Errorf("audio source name is required")
+	}
+	if len(a.Name) > MaxAudioSourceNameLength {
+		return fmt.Errorf("audio source name '%s' exceeds maximum length of %d characters", a.Name, MaxAudioSourceNameLength)
+	}
+
+	// Device is required
+	if a.Device == "" {
+		return fmt.Errorf("audio source device is required for '%s'", a.Name)
+	}
+
+	// Reject device strings that look like GPS coordinates. Users have
+	// pasted values like ":45.5,-120.5" into the device field (probably
+	// intended for the location/coordinates setting) which bypasses
+	// argument parsing in ALSA/pipewire/pulse and causes the audio
+	// engine to fail forever on every startup. Catch it up front with
+	// a clear error pointing at the right setting.
+	if gpsCoordPattern.MatchString(a.Device) {
+		return fmt.Errorf("audio source '%s': device %q looks like GPS coordinates; set latitude/longitude under birdnet.latitude and birdnet.longitude instead and pick a real audio device", a.Name, a.Device)
+	}
+
+	// Validate gain range
+	if a.Gain < MinAudioGain || a.Gain > MaxAudioGain {
+		return fmt.Errorf("audio source '%s': gain %.1f dB out of range [%.0f, +%.0f]", a.Name, a.Gain, MinAudioGain, MaxAudioGain)
+	}
+
+	// Validate model identifier
+	if !ValidAudioModels[a.Model] {
+		return fmt.Errorf("audio source '%s': unknown model '%s'", a.Name, a.Model)
+	}
+
+	// Validate per-source EQ if set
+	if a.Equalizer != nil {
+		for i, f := range a.Equalizer.Filters {
+			if f.Frequency <= 0 {
+				return fmt.Errorf("audio source '%s': equalizer filter %d has invalid frequency %.1f", a.Name, i+1, f.Frequency)
+			}
+		}
+	}
+
+	// Validate quiet hours
+	if err := ValidateQuietHours(&a.QuietHours, fmt.Sprintf("audio source '%s'", a.Name)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// ValidateSources validates all audio source configurations, including
+// duplicate name and device detection.
+func (a *AudioSettings) ValidateSources() error {
+	names := make(map[string]bool)
+	devices := make(map[string]bool)
+
+	for i := range a.Sources {
+		src := &a.Sources[i]
+		if err := src.Validate(); err != nil {
+			return fmt.Errorf("audio source %d: %w", i+1, err)
+		}
+
+		// Check for duplicate names (case-insensitive)
+		nameLower := strings.ToLower(strings.TrimSpace(src.Name))
+		if names[nameLower] {
+			return fmt.Errorf("duplicate audio source name: '%s'", src.Name)
+		}
+		names[nameLower] = true
+
+		// Check for duplicate devices (trimmed for consistency)
+		deviceTrimmed := strings.TrimSpace(src.Device)
+		if devices[deviceTrimmed] {
+			return fmt.Errorf("audio source '%s' has a duplicate device: '%s'", src.Name, src.Device)
+		}
+		devices[deviceTrimmed] = true
+	}
+
+	return nil
+}
+
+// validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
+func validateAudioSettings(settings *AudioSettings) error {
+	// Validate and determine the effective FFmpeg path
+	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
+	if ffmpegErr != nil {
+		GetLogger().Warn("FFmpeg validation failed", logger.Error(ffmpegErr), logger.String("impact", "Audio export/conversion requiring FFmpeg might be disabled or use defaults"))
+		// Log validation warning for telemetry
+		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
+		settings.FfmpegPath = "" // Ensure path is empty if validation failed
+	} else {
+		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
+
+		// Detect FFmpeg version for runtime decisions (e.g., FFmpeg 5.x bug workarounds)
+		version, major, minor := GetFfmpegVersion()
+		settings.FfmpegVersion = version
+		settings.FfmpegMajor = major
+		settings.FfmpegMinor = minor
+
+		if major > 0 {
+			GetLogger().Debug("Detected FFmpeg version", logger.String("version", version), logger.Int("major", major), logger.Int("minor", minor))
+		} else {
+			GetLogger().Warn("Could not detect FFmpeg version", logger.String("version_string", version))
+		}
+	}
+
+	// Validate and determine the effective SoX path
+	// We only need to know if it's available and its formats, so LookPath is sufficient here.
+	soxPath, soxLookPathErr := exec.LookPath(GetSoxBinaryName())
+	if soxLookPathErr != nil {
+		settings.SoxPath = ""
+		settings.SoxAudioTypes = nil
+		GetLogger().Warn("SoX not found in system PATH", logger.String("impact", "Audio source processing requiring SoX might be disabled"))
+	} else {
+		settings.SoxPath = soxPath
+		// Get supported formats if SoX is found
+		_, formats := IsSoxAvailable() // We already know it's available from LookPath
+		settings.SoxAudioTypes = formats
+	}
+
+	// Validate audio sources
+	if err := settings.ValidateSources(); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-sources").
+			Build()
+	}
+
+	// Validate global quiet hours (legacy fallback)
+	if err := ValidateQuietHours(&settings.QuietHours, "sound card"); err != nil {
+		return errors.New(err).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-quiet-hours").
+			Build()
+	}
+
+	// Validate audio export settings.
+	//
+	// Normalize first, validate second. Type must be normalized even when
+	// Export.Enabled is false, because the Enabled flag can be flipped back on
+	// without triggering validation of the already-persisted Type value.
+	// An empty Type previously produced extension-less clip_name rows in the
+	// DB, causing audio download and spectrogram generation to 404
+	// (GitHub #2810, #2814).
+	if strings.TrimSpace(settings.Export.Type) == "" {
+		GetLogger().Warn("audio export type is empty, normalizing to wav",
+			logger.String("previous_type", settings.Export.Type),
+			logger.String("action", "normalize_to_wav"))
+		settings.Export.Type = AudioExportTypeWAV
+	}
+
+	// Reject unknown Type before any fallback runs. Doing this first means a
+	// garbage value cannot be silently rewritten to WAV by the ffmpeg-missing
+	// fallback below, which would hide the misconfiguration.
+	switch settings.Export.Type {
+	case AudioExportTypeWAV, AudioExportTypeFLAC,
+		AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		// known format
+	default:
+		return errors.Newf("unsupported audio export type: %s", settings.Export.Type).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-type").
+			Context("export_type", settings.Export.Type).
+			Build()
+	}
+
+	if settings.FfmpegPath == "" && settings.Export.Type != AudioExportTypeWAV {
+		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
+			logger.String("previous_type", settings.Export.Type))
+		settings.Export.Type = AudioExportTypeWAV
+	}
+
+	// Bitrate only matters for lossy formats and only when export is enabled.
+	switch settings.Export.Type {
+	case AudioExportTypeAAC, AudioExportTypeOPUS, AudioExportTypeMP3:
+		if settings.Export.Enabled {
+			if err := validateExportBitrate(settings.Export.Type, settings.Export.Bitrate); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Remaining checks (length, pre-capture, gain, normalization) only make
+	// sense when export is actually enabled.
+	if settings.Export.Enabled {
+		// Validate capture length (10-60 seconds)
+		if settings.Export.Length < 10 || settings.Export.Length > 60 {
+			return errors.Newf("audio capture length must be between 10 and 60 seconds, got %d", settings.Export.Length).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-capture-length").
+				Context("capture_length", settings.Export.Length).
+				Build()
+		}
+
+		// Validate pre-capture (max 1/2 of capture length)
+		maxPreCapture := settings.Export.Length / 2
+		if settings.Export.PreCapture < 0 || settings.Export.PreCapture > maxPreCapture {
+			return errors.Newf("audio pre-capture must be between 0 and %d seconds (1/2 of capture length), got %d", maxPreCapture, settings.Export.PreCapture).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-precapture").
+				Context("precapture", settings.Export.PreCapture).
+				Context("max_precapture", maxPreCapture).
+				Context("capture_length", settings.Export.Length).
+				Build()
+		}
+
+		// Validate gain setting (reasonable range for audio processing)
+		if settings.Export.Gain < MinAudioGain || settings.Export.Gain > MaxAudioGain {
+			return errors.Newf("audio gain must be between %.0f and +%.0f dB, got %.1f", MinAudioGain, MaxAudioGain, settings.Export.Gain).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-gain").
+				Context("gain", settings.Export.Gain).
+				Context("min_gain", MinAudioGain).
+				Context("max_gain", MaxAudioGain).
+				Build()
+		}
+
+		// Validate normalization settings if enabled
+		if settings.Export.Normalization.Enabled {
+			if err := validateNormalizationSettings(&settings.Export.Normalization, settings.Export.Gain); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+// Bitrate constraints for lossy audio export formats (mp3, aac, opus).
+// The suffix and kbps bounds are consumed by validateExportBitrate and
+// documented in the frontend's getBitrateConfig (audioValidation.ts).
+const (
+	audioExportBitrateSuffix  = "k"
+	minAudioExportBitrateKbps = 32
+	maxAudioExportBitrateKbps = 320
+)
+
+// validateExportBitrate validates the bitrate setting for lossy audio export
+// formats. The value must use the "k" suffix and fall within the supported
+// kbps range.
+func validateExportBitrate(exportType, bitrate string) error {
+	if !strings.HasSuffix(bitrate, audioExportBitrateSuffix) {
+		return errors.Newf("invalid bitrate format for %s: %s. Must end with %q (e.g., '64k')", exportType, bitrate, audioExportBitrateSuffix).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-format").
+			Context("export_type", exportType).
+			Context("bitrate", bitrate).
+			Build()
+	}
+	bitrateValue, err := strconv.Atoi(strings.TrimSuffix(bitrate, audioExportBitrateSuffix))
+	if err != nil {
+		return errors.Newf("invalid bitrate value for %s: %s", exportType, bitrate).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-value").
+			Context("export_type", exportType).
+			Context("bitrate", bitrate).
+			Build()
+	}
+	if bitrateValue < minAudioExportBitrateKbps || bitrateValue > maxAudioExportBitrateKbps {
+		return errors.Newf("bitrate for %s must be between %dk and %dk, got %dk",
+			exportType, minAudioExportBitrateKbps, maxAudioExportBitrateKbps, bitrateValue).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-bitrate-range").
+			Context("export_type", exportType).
+			Context("bitrate_value", bitrateValue).
+			Build()
+	}
+	return nil
+}
+
+// validateNormalizationSettings validates the EBU R128 normalization parameters
+// (target LUFS, loudness range, and true peak) and warns if gain is also configured.
+func validateNormalizationSettings(norm *NormalizationSettings, gain float64) error {
+	if norm.TargetLUFS < MinTargetLUFS || norm.TargetLUFS > MaxTargetLUFS {
+		return errors.Newf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, norm.TargetLUFS).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-target").
+			Context("target_lufs", norm.TargetLUFS).
+			Context("min_target_lufs", MinTargetLUFS).
+			Context("max_target_lufs", MaxTargetLUFS).
+			Build()
+	}
+	if norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange {
+		return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, norm.LoudnessRange).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-range").
+			Context("loudness_range", norm.LoudnessRange).
+			Context("min_loudness_range", MinLoudnessRange).
+			Context("max_loudness_range", MaxLoudnessRange).
+			Build()
+	}
+	if norm.TruePeak < MinTruePeak || norm.TruePeak > MaxTruePeak {
+		return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, norm.TruePeak).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-normalization-peak").
+			Context("true_peak", norm.TruePeak).
+			Context("min_true_peak", MinTruePeak).
+			Context("max_true_peak", MaxTruePeak).
+			Build()
+	}
+	if gain != 0 {
+		GetLogger().Warn("Both gain and normalization are configured", logger.String("action", "Normalization will take precedence, gain setting will be ignored"))
+	}
+	return nil
+}
