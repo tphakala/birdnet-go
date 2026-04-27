@@ -80,7 +80,7 @@ func TestRecalculateDynamicThresholds_ReadsGlobalSettings(t *testing.T) {
 	p.RecalculateDynamicThresholds()
 
 	assert.InDelta(t, 0.30, p.DynamicThresholds[key].CurrentValue, 0.01,
-		"expected 75%% of new base 0.40 = 0.30")
+		"expected 75% of new base 0.40 = 0.30")
 }
 
 func TestCalculateMinDetections_ReadsGlobalSettings(t *testing.T) {
