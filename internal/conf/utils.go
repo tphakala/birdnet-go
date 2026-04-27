@@ -87,7 +87,7 @@ func GetDefaultConfigPaths() ([]string, error) {
 func FindConfigFile() (string, error) {
 	// Check explicit config path first (set by --config CLI flag).
 	if ConfigPath != "" {
-		if _, err := os.Stat(ConfigPath); err == nil {
+		if info, err := os.Stat(ConfigPath); err == nil && !info.IsDir() {
 			return ConfigPath, nil
 		}
 		return "", errors.Newf("config file not found at explicit path: %s", ConfigPath).
@@ -99,7 +99,7 @@ func FindConfigFile() (string, error) {
 
 	// Check the path viper resolved during Load() as a secondary source.
 	if viperPath := viper.ConfigFileUsed(); viperPath != "" {
-		if _, err := os.Stat(viperPath); err == nil {
+		if info, err := os.Stat(viperPath); err == nil && !info.IsDir() {
 			return viperPath, nil
 		}
 	}
