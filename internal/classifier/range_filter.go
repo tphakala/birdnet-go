@@ -76,7 +76,7 @@ func BuildRangeFilter(o *Orchestrator) error {
 		}
 	}
 
-	conf.Setting().UpdateIncludedSpecies(includedSpecies)
+	conf.UpdateIncludedSpecies(includedSpecies)
 
 	return nil
 }

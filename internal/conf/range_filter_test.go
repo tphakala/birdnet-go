@@ -6,39 +6,43 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+// setupGlobalSettings publishes a test settings snapshot and returns a
+// cleanup function that restores the previous snapshot.
+func setupGlobalSettings(t *testing.T, s *Settings) {
+	t.Helper()
+	prev := GetSettings()
+	StoreSettings(s)
+	t.Cleanup(func() { StoreSettings(prev) })
+}
 
 // TestShouldUpdateRangeFilterToday_SingleThread verifies basic functionality
 func TestShouldUpdateRangeFilterToday_SingleThread(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
-	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
+	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour)
+	setupGlobalSettings(t, settings)
 
-	// First call should return true
-	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
-
-	// Second call should return false (already updated today)
-	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Second call should return false (already updated today)")
+	assert.True(t, ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
+	assert.False(t, ShouldUpdateRangeFilterToday(), "Second call should return false (already updated today)")
 }
 
-// TestShouldUpdateRangeFilterToday_ConcurrentAccess tests for race conditions
-// This is the critical test that would fail with the old implementation
+// TestShouldUpdateRangeFilterToday_ConcurrentAccess tests for race conditions.
+// Only one goroutine should get true per day (GitHub issue #1357).
 func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
-	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
+	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour)
+	setupGlobalSettings(t, settings)
 
 	const numGoroutines = 100
 	var wg sync.WaitGroup
 	trueCount := 0
 	var mu sync.Mutex
 
-	// Launch multiple goroutines that all check if update is needed
 	for range numGoroutines {
 		wg.Go(func() {
-			if settings.ShouldUpdateRangeFilterToday() {
+			if ShouldUpdateRangeFilterToday() {
 				mu.Lock()
 				trueCount++
 				mu.Unlock()
@@ -47,25 +51,41 @@ func TestShouldUpdateRangeFilterToday_ConcurrentAccess(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	// CRITICAL: Only ONE goroutine should have received true
-	// This prevents the bug in issue #1357 where multiple goroutines
-	// would all create UpdateRangeFilterAction, causing race conditions
 	assert.Equal(t, 1, trueCount, "Expected exactly 1 goroutine to receive true")
 }
 
 // TestShouldUpdateRangeFilterToday_AlreadyUpdated verifies that when
-// LastUpdated is already today, no updates are triggered
+// LastUpdated is already today, no updates are triggered.
 func TestShouldUpdateRangeFilterToday_AlreadyUpdated(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
-	settings.BirdNET.RangeFilter.LastUpdated = time.Now() // Already updated today
+	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	setupGlobalSettings(t, settings)
 
-	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Should return false when already updated today")
+	assert.False(t, ShouldUpdateRangeFilterToday(), "Should return false when already updated today")
 }
 
-// TestGetLastRangeFilterUpdate verifies thread-safe reading of LastUpdated
+// TestShouldUpdateRangeFilterToday_PublishesNewSnapshot verifies that the
+// function publishes a new snapshot with LastUpdated set to today.
+func TestShouldUpdateRangeFilterToday_PublishesNewSnapshot(t *testing.T) {
+	original := &Settings{}
+	original.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour)
+	original.BirdNET.RangeFilter.Species = []string{"Original Species"}
+	setupGlobalSettings(t, original)
+
+	require.True(t, ShouldUpdateRangeFilterToday())
+
+	published := GetSettings()
+	require.NotSame(t, original, published, "Must publish a new snapshot, not mutate original")
+	assert.False(t, published.BirdNET.RangeFilter.LastUpdated.Before(time.Now().Truncate(24*time.Hour)),
+		"Published snapshot should have LastUpdated >= today")
+	assert.Equal(t, []string{"Original Species"}, published.BirdNET.RangeFilter.Species,
+		"Species list should be preserved in the published snapshot")
+	assert.Equal(t, time.Now().Add(-25*time.Hour).Truncate(time.Second),
+		original.BirdNET.RangeFilter.LastUpdated.Truncate(time.Second),
+		"Original snapshot must not be mutated")
+}
+
+// TestGetLastRangeFilterUpdate verifies reading of LastUpdated from a snapshot.
 func TestGetLastRangeFilterUpdate(t *testing.T) {
 	t.Parallel()
 
@@ -73,85 +93,75 @@ func TestGetLastRangeFilterUpdate(t *testing.T) {
 	expectedTime := time.Now().Add(-1 * time.Hour)
 	settings.BirdNET.RangeFilter.LastUpdated = expectedTime
 
-	// Read from multiple goroutines concurrently
-	const numReaders = 50
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	var errors []string
-
-	for range numReaders {
-		wg.Go(func() {
-			got := settings.GetLastRangeFilterUpdate()
-			if !got.Equal(expectedTime) {
-				mu.Lock()
-				errors = append(errors, "Expected time mismatch")
-				mu.Unlock()
-			}
-		})
-	}
-
-	wg.Wait()
-
-	assert.Empty(t, errors, "Concurrent reads failed: found %d errors", len(errors))
+	got := settings.GetLastRangeFilterUpdate()
+	assert.True(t, got.Equal(expectedTime), "Expected time to match")
 }
 
-// TestUpdateIncludedSpecies_ThreadSafety verifies concurrent updates are safe
+// TestUpdateIncludedSpecies_ThreadSafety verifies concurrent updates are safe.
 func TestUpdateIncludedSpecies_ThreadSafety(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
+	setupGlobalSettings(t, settings)
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 
-	// Concurrently update species lists
-	for i := range numGoroutines {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
-			species := []string{"Species A", "Species B"}
-			settings.UpdateIncludedSpecies(species)
-		}(i)
+	for range numGoroutines {
+		wg.Go(func() {
+			UpdateIncludedSpecies([]string{"Species A", "Species B"})
+		})
 	}
 
 	wg.Wait()
 
-	// Verify the final state is valid
-	species := settings.GetIncludedSpecies()
+	species := GetSettings().GetIncludedSpecies()
 	assert.Len(t, species, 2, "Expected 2 species")
 }
 
-// TestIsSpeciesIncluded_ThreadSafety verifies concurrent reads during updates
-func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
-	t.Parallel()
+// TestUpdateIncludedSpecies_PublishesNewSnapshot verifies clone-mutate-publish.
+func TestUpdateIncludedSpecies_PublishesNewSnapshot(t *testing.T) {
+	original := &Settings{}
+	original.BirdNET.RangeFilter.Species = []string{"Old Species"}
+	setupGlobalSettings(t, original)
 
+	UpdateIncludedSpecies([]string{"New Species A", "New Species B"})
+
+	published := GetSettings()
+	require.NotSame(t, original, published, "Must publish a new snapshot")
+	assert.Equal(t, []string{"New Species A", "New Species B"}, published.BirdNET.RangeFilter.Species)
+	assert.False(t, published.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be set")
+
+	assert.Equal(t, []string{"Old Species"}, original.BirdNET.RangeFilter.Species,
+		"Original snapshot must not be mutated")
+}
+
+// TestIsSpeciesIncluded_ThreadSafety verifies concurrent reads during updates.
+func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 	settings := &Settings{}
-	settings.UpdateIncludedSpecies([]string{
+	settings.BirdNET.RangeFilter.Species = []string{
 		"Turdus merula_Eurasian Blackbird",
 		"Parus major_Great Tit",
-	})
+	}
+	setupGlobalSettings(t, settings)
 
 	const numReaders = 100
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	var errors []string
+	var errs []string
 
-	// Start readers
 	for range numReaders {
 		wg.Go(func() {
-			// These should consistently return true
-			if !settings.IsSpeciesIncluded("Turdus merula") {
+			snapshot := GetSettings()
+			if !snapshot.IsSpeciesIncluded("Turdus merula") {
 				mu.Lock()
-				errors = append(errors, "Expected species to be included")
+				errs = append(errs, "Expected species to be included")
 				mu.Unlock()
 			}
 		})
 	}
 
-	// While reading, also update the list (keeping the original species)
 	wg.Go(func() {
-		time.Sleep(1 * time.Millisecond) // Let some readers start
-		settings.UpdateIncludedSpecies([]string{
+		time.Sleep(1 * time.Millisecond)
+		UpdateIncludedSpecies([]string{
 			"Turdus merula_Eurasian Blackbird",
 			"Parus major_Great Tit",
 			"Corvus cornix_Hooded Crow",
@@ -159,102 +169,101 @@ func TestIsSpeciesIncluded_ThreadSafety(t *testing.T) {
 	})
 
 	wg.Wait()
-
-	assert.Empty(t, errors, "Concurrent reads failed: found %d errors", len(errors))
+	assert.Empty(t, errs, "Concurrent reads failed: found %d errors", len(errs))
 }
 
 // TestResetRangeFilterUpdateFlag verifies that ResetRangeFilterUpdateFlag
-// correctly resets the LastUpdated timestamp to allow retries
+// correctly resets the LastUpdated timestamp to allow retries.
 func TestResetRangeFilterUpdateFlag(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	setupGlobalSettings(t, settings)
 
-	// Verify it's set
 	assert.False(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should not be zero initially")
 
-	// Reset the flag
-	settings.ResetRangeFilterUpdateFlag()
+	ResetRangeFilterUpdateFlag()
 
-	// Verify it's been reset to zero time
-	assert.True(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be zero after reset")
-
-	// Verify that after reset, ShouldUpdateRangeFilterToday returns true
-	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "ShouldUpdateRangeFilterToday should return true after reset")
+	published := GetSettings()
+	assert.True(t, published.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be zero after reset")
+	assert.True(t, ShouldUpdateRangeFilterToday(), "ShouldUpdateRangeFilterToday should return true after reset")
 }
 
-// TestResetRangeFilterUpdateFlag_ThreadSafety verifies concurrent resets are safe
-func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
-	t.Parallel()
+// TestResetRangeFilterUpdateFlag_PublishesNewSnapshot verifies immutability.
+func TestResetRangeFilterUpdateFlag_PublishesNewSnapshot(t *testing.T) {
+	original := &Settings{}
+	original.BirdNET.RangeFilter.LastUpdated = time.Now()
+	original.BirdNET.RangeFilter.Species = []string{"Preserved Species"}
+	setupGlobalSettings(t, original)
 
+	ResetRangeFilterUpdateFlag()
+
+	published := GetSettings()
+	require.NotSame(t, original, published, "Must publish a new snapshot")
+	assert.True(t, published.BirdNET.RangeFilter.LastUpdated.IsZero())
+	assert.Equal(t, []string{"Preserved Species"}, published.BirdNET.RangeFilter.Species,
+		"Species list should be preserved")
+	assert.False(t, original.BirdNET.RangeFilter.LastUpdated.IsZero(),
+		"Original snapshot must not be mutated")
+}
+
+// TestResetRangeFilterUpdateFlag_ThreadSafety verifies concurrent resets.
+func TestResetRangeFilterUpdateFlag_ThreadSafety(t *testing.T) {
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	setupGlobalSettings(t, settings)
 
 	const numGoroutines = 50
 	var wg sync.WaitGroup
 
-	// Concurrently reset the flag
 	for range numGoroutines {
 		wg.Go(func() {
-			settings.ResetRangeFilterUpdateFlag()
+			ResetRangeFilterUpdateFlag()
 		})
 	}
 
 	wg.Wait()
 
-	// Verify the final state is zero time
-	assert.True(t, settings.BirdNET.RangeFilter.LastUpdated.IsZero(), "LastUpdated should be zero after concurrent resets")
+	published := GetSettings()
+	assert.True(t, published.BirdNET.RangeFilter.LastUpdated.IsZero(),
+		"LastUpdated should be zero after concurrent resets")
 }
 
 // TestErrorRecoveryScenario simulates the full error recovery flow:
 // 1. Update is scheduled (ShouldUpdateRangeFilterToday returns true)
 // 2. Update fails (simulated by ResetRangeFilterUpdateFlag)
-// 3. Next detection should be able to retry (ShouldUpdateRangeFilterToday returns true again)
+// 3. Next detection retries (ShouldUpdateRangeFilterToday returns true again)
 func TestErrorRecoveryScenario(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
-	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour) // Yesterday
+	settings.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-25 * time.Hour)
+	setupGlobalSettings(t, settings)
 
-	// First detection: should trigger update
-	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
+	assert.True(t, ShouldUpdateRangeFilterToday(), "First call should return true when LastUpdated is yesterday")
 
-	// Simulate update failure by resetting the flag
-	// (In production, this is called in UpdateRangeFilterAction.Execute on error)
-	settings.ResetRangeFilterUpdateFlag()
+	ResetRangeFilterUpdateFlag()
 
-	// Next detection: should be able to retry
-	assert.True(t, settings.ShouldUpdateRangeFilterToday(), "Should return true after failed update (reset flag)")
+	assert.True(t, ShouldUpdateRangeFilterToday(), "Should return true after failed update (reset flag)")
 
-	// Simulate successful update by calling UpdateIncludedSpecies
-	settings.UpdateIncludedSpecies([]string{"Test Species"})
+	UpdateIncludedSpecies([]string{"Test Species"})
 
-	// Next detection: should NOT trigger update (already succeeded)
-	assert.False(t, settings.ShouldUpdateRangeFilterToday(), "Should return false after successful update")
+	assert.False(t, ShouldUpdateRangeFilterToday(), "Should return false after successful update")
 }
 
-// TestErrorRecoveryScenario_Concurrent simulates concurrent error recovery
-// This ensures that even with concurrent resets and checks, only one goroutine
-// will trigger the retry
+// TestErrorRecoveryScenario_Concurrent simulates concurrent error recovery.
 func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
-	settings.BirdNET.RangeFilter.LastUpdated = time.Now() // Set to today
+	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	setupGlobalSettings(t, settings)
 
-	// Simulate a failed update by resetting the flag
-	settings.ResetRangeFilterUpdateFlag()
+	ResetRangeFilterUpdateFlag()
 
 	const numGoroutines = 100
 	var wg sync.WaitGroup
 	trueCount := 0
 	var mu sync.Mutex
 
-	// Launch multiple goroutines that all check if retry is needed
 	for range numGoroutines {
 		wg.Go(func() {
-			if settings.ShouldUpdateRangeFilterToday() {
+			if ShouldUpdateRangeFilterToday() {
 				mu.Lock()
 				trueCount++
 				mu.Unlock()
@@ -263,47 +272,38 @@ func TestErrorRecoveryScenario_Concurrent(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	// CRITICAL: Only ONE goroutine should have received true
-	// This ensures that even after a reset, we don't get duplicate retries
 	assert.Equal(t, 1, trueCount, "Expected exactly 1 goroutine to receive true after reset")
 }
 
-// TestResetAndCheckInterleaved tests interleaved reset and check operations
-// to ensure they work correctly together under concurrent access
+// TestResetAndCheckInterleaved tests interleaved reset and check operations.
 func TestResetAndCheckInterleaved(t *testing.T) {
-	t.Parallel()
-
 	settings := &Settings{}
 	settings.BirdNET.RangeFilter.LastUpdated = time.Now()
+	setupGlobalSettings(t, settings)
 
 	const numIterations = 10
 	var wg sync.WaitGroup
 
-	// Goroutine 1: Repeatedly resets
 	wg.Go(func() {
 		for range numIterations {
-			settings.ResetRangeFilterUpdateFlag()
+			ResetRangeFilterUpdateFlag()
 			time.Sleep(1 * time.Millisecond)
 		}
 	})
 
-	// Goroutine 2: Repeatedly checks
 	wg.Go(func() {
 		for range numIterations {
-			settings.ShouldUpdateRangeFilterToday()
+			ShouldUpdateRangeFilterToday()
 			time.Sleep(1 * time.Millisecond)
 		}
 	})
 
-	// Goroutine 3: Repeatedly reads
 	wg.Go(func() {
 		for range numIterations {
-			settings.GetLastRangeFilterUpdate()
+			GetSettings().GetLastRangeFilterUpdate()
 			time.Sleep(1 * time.Millisecond)
 		}
 	})
 
 	wg.Wait()
-	// If we reach here without deadlock or panic, the test passes
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/alerting"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -367,7 +368,7 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 	if err != nil {
 		// Reset the update flag to allow retry on next detection
 		// This prevents the issue where a failed update would block retries until tomorrow
-		a.Settings.ResetRangeFilterUpdateFlag()
+		conf.ResetRangeFilterUpdateFlag()
 
 		GetLogger().Error("Failed to get probable species for range filter",
 			logger.Error(err),
@@ -383,7 +384,7 @@ func (a *UpdateRangeFilterAction) Execute(_ context.Context, data any) error {
 	}
 
 	// Update the species list (this also updates LastUpdated timestamp atomically)
-	a.Settings.UpdateIncludedSpecies(includedSpecies)
+	conf.UpdateIncludedSpecies(includedSpecies)
 
 	if a.Settings.Debug {
 		GetLogger().Info("Range filter updated successfully",
