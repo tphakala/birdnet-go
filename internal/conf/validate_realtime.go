@@ -10,13 +10,27 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+// Maximum realtime interval in seconds (24 hours)
+const MaxRealtimeInterval = 86400
+
 // validateRealtimeSettings validates the Realtime-specific settings
 func validateRealtimeSettings(settings *RealtimeSettings) error {
-	// Check if interval is non-negative
-	if settings.Interval < 0 {
-		return errors.Newf("realtime interval must be non-negative").
+	// Check if interval is positive (zero means no detections would ever be logged)
+	if settings.Interval <= 0 {
+		return errors.Newf("realtime interval must be positive, got %d", settings.Interval).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "realtime-interval").
+			Context("interval", settings.Interval).
+			Build()
+	}
+
+	// Reject absurdly large intervals
+	if settings.Interval > MaxRealtimeInterval {
+		return errors.Newf("realtime interval must not exceed %d seconds (24h), got %d", MaxRealtimeInterval, settings.Interval).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "realtime-interval").
+			Context("interval", settings.Interval).
+			Context("max_interval", MaxRealtimeInterval).
 			Build()
 	}
 
@@ -48,6 +62,11 @@ func validateRealtimeSettings(settings *RealtimeSettings) error {
 
 	// Validate telemetry settings
 	if err := validateTelemetrySettings(&settings.Telemetry); err != nil {
+		return err
+	}
+
+	// Validate dynamic threshold settings
+	if err := validateDynamicThresholdSettings(&settings.DynamicThreshold); err != nil {
 		return err
 	}
 
@@ -91,11 +110,20 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 
 	// Validate MaxAge when age-based policy is active
 	if settings.Policy == RetentionPolicyAge {
-		if _, err := ParseRetentionPeriod(settings.MaxAge); err != nil {
+		hours, err := ParseRetentionPeriod(settings.MaxAge)
+		if err != nil {
 			return errors.Newf("retention maxAge %q is invalid: %v", settings.MaxAge, err).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "retention-max-age").
 				Context("max_age", settings.MaxAge).
+				Build()
+		}
+		if hours <= 0 {
+			return errors.Newf("retention maxAge must be positive, got %q (%d hours)", settings.MaxAge, hours).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "retention-max-age").
+				Context("max_age", settings.MaxAge).
+				Context("parsed_hours", hours).
 				Build()
 		}
 	}
@@ -109,6 +137,15 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 				Context("max_usage", settings.MaxUsage).
 				Build()
 		}
+	}
+
+	// Validate MinClips is non-negative regardless of policy
+	if settings.MinClips < 0 {
+		return errors.Newf("retention minClips must be non-negative, got %d", settings.MinClips).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "retention-min-clips").
+			Context("min_clips", settings.MinClips).
+			Build()
 	}
 
 	return nil
@@ -232,8 +269,22 @@ func validateDashboardSettings(settings *Dashboard) error {
 	return nil
 }
 
+// validWeatherProviders contains all recognized weather provider values.
+var validWeatherProviders = []string{"none", "yrno", "openweather", "wunderground"}
+
 // validateWeatherSettings validates weather-specific settings
 func validateWeatherSettings(settings *WeatherSettings) error {
+	// When a provider is set (not empty and not "none"), validate it
+	if settings.Provider != "" && settings.Provider != "none" {
+		if !slices.Contains(validWeatherProviders, settings.Provider) {
+			return errors.Newf("weather provider must be one of %v, got %q", validWeatherProviders, settings.Provider).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "weather-provider").
+				Context("provider", settings.Provider).
+				Build()
+		}
+	}
+
 	// Validate poll interval (minimum 15 minutes)
 	if settings.PollInterval < 15 {
 		return errors.Newf("weather poll interval must be at least 15 minutes, got %d", settings.PollInterval).
@@ -251,6 +302,51 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 				Context("validation_type", "wunderground-settings").
 				Build()
 		}
+	}
+
+	return nil
+}
+
+// validateDynamicThresholdSettings validates dynamic threshold cross-field constraints.
+func validateDynamicThresholdSettings(settings *DynamicThresholdSettings) error {
+	if !settings.Enabled {
+		return nil
+	}
+
+	// Trigger and Min must be valid confidence values in [0, 1]
+	if settings.Trigger < 0 || settings.Trigger > 1 {
+		return errors.Newf("dynamic threshold trigger must be between 0 and 1, got %f", settings.Trigger).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dynamic-threshold-trigger").
+			Context("trigger", settings.Trigger).
+			Build()
+	}
+
+	if settings.Min < 0 || settings.Min > 1 {
+		return errors.Newf("dynamic threshold min must be between 0 and 1, got %f", settings.Min).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dynamic-threshold-min").
+			Context("min", settings.Min).
+			Build()
+	}
+
+	// Min must be less than or equal to Trigger
+	if settings.Min > settings.Trigger {
+		return errors.Newf("dynamic threshold min (%f) must not exceed trigger (%f)", settings.Min, settings.Trigger).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dynamic-threshold-cross-field").
+			Context("min", settings.Min).
+			Context("trigger", settings.Trigger).
+			Build()
+	}
+
+	// ValidHours must be strictly positive when enabled
+	if settings.ValidHours <= 0 {
+		return errors.Newf("dynamic threshold validHours must be positive when enabled, got %d", settings.ValidHours).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dynamic-threshold-valid-hours").
+			Context("valid_hours", settings.ValidHours).
+			Build()
 	}
 
 	return nil

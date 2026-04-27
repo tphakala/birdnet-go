@@ -29,7 +29,7 @@ func GetTestSettings() *Settings {
 	settings.Realtime.Dashboard.Thumbnails.Summary = false
 	settings.Realtime.Dashboard.Thumbnails.Recent = true
 	settings.Realtime.Dashboard.Thumbnails.ImageProvider = "avicommons"
-	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = "none"
+	settings.Realtime.Dashboard.Thumbnails.FallbackPolicy = RetentionPolicyNone
 
 	// Other realtime settings
 	settings.Realtime.Interval = 15
