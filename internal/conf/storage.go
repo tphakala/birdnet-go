@@ -367,9 +367,8 @@ func StoreSettings(s *Settings) {
 }
 
 // Setting returns the current settings instance, initializing it if necessary.
-// Panics if settings cannot be loaded from disk. This is intentional: the
-// application cannot operate without valid settings, and panic (unlike
-// os.Exit) is recoverable in tests via recover().
+// Returns nil when settings cannot be loaded so the caller can decide how to
+// surface the error (the startup path in main.go logs and returns exit code 1).
 func Setting() *Settings {
 	// Fast path: settings already published.
 	if s := settingsInstance.Load(); s != nil {
@@ -383,8 +382,13 @@ func Setting() *Settings {
 		return s
 	}
 	if _, err := Load(); err != nil {
+		enhancedErr := errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "load-settings-init").
+			Build()
+		GetLogger().Error("Cannot load settings", logger.Error(enhancedErr))
 		loadMu.Unlock()
-		panic(fmt.Errorf("fatal: cannot load settings: %w", err))
+		return nil
 	}
 	loadMu.Unlock()
 	return settingsInstance.Load()
