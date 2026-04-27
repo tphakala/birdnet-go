@@ -94,6 +94,16 @@ func validateSoundLevelSettings(settings *SoundLevelSettings) error {
 // This catches invalid values early instead of failing silently at runtime when the
 // disk manager first attempts cleanup.
 func validateRetentionSettings(settings *RetentionSettings) error {
+	// Validate MinClips regardless of policy: a negative value is never valid
+	// and could persist if retention is later enabled without re-validation.
+	if settings.MinClips < 0 {
+		return errors.Newf("retention minClips must be non-negative, got %d", settings.MinClips).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "retention-min-clips").
+			Context("min_clips", settings.MinClips).
+			Build()
+	}
+
 	// Empty policy means retention is disabled — treat as "none"
 	if settings.Policy == "" {
 		return nil
@@ -137,15 +147,6 @@ func validateRetentionSettings(settings *RetentionSettings) error {
 				Context("max_usage", settings.MaxUsage).
 				Build()
 		}
-	}
-
-	// Validate MinClips is non-negative regardless of policy
-	if settings.MinClips < 0 {
-		return errors.Newf("retention minClips must be non-negative, got %d", settings.MinClips).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "retention-min-clips").
-			Context("min_clips", settings.MinClips).
-			Build()
 	}
 
 	return nil

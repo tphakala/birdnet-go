@@ -112,7 +112,7 @@ func TestValidateExportPath(t *testing.T) {
 		{"hidden traversal rejected", "foo/../../../etc/passwd", true, "path traversal"},
 		{"double dot in middle rejected", "data/../secret", true, "path traversal"},
 		{"absolute path rejected", "/var/data/clips", true, "must be relative"},
-		{"windows absolute rejected", "C:\\data\\clips", false, ""},
+		{"windows-style path treated as relative on unix", "C:\\data\\clips", false, ""},
 		{"dot-only rejected", "..", true, "path traversal"},
 	}
 
