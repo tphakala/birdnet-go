@@ -21,7 +21,6 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
-	"testing/synctest"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -260,43 +259,37 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify reads during writes return consistent data",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
-				// Use synctest.Test for deterministic read/write concurrency (Go 1.25)
-				// This ensures predictable execution order without timing dependencies
-				synctest.Test(t, func(t *testing.T) {
-					t.Helper()
-					var wg sync.WaitGroup
+				// Cannot use synctest.Test here: handleSettingsChanges spawns a
+				// background goroutine with time.Sleep that outlives the test
+				// function, causing synctest's deadlock detector to fire.
+				var wg sync.WaitGroup
 
-					// Start a write using WaitGroup.Go() (Go 1.25)
-					wg.Go(func() {
-						update := map[string]any{
-							"summaryLimit": 999,
-						}
-						_ = makeSettingsUpdate(t, controller, "dashboard", update)
-					})
-
-					// Perform multiple reads concurrently with the write
-					for range 10 {
-						wg.Go(func() {
-							req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-							rec := httptest.NewRecorder()
-							ctx := controller.Echo.NewContext(req, rec)
-							ctx.SetParamNames("section")
-							ctx.SetParamValues("dashboard")
-
-							err := controller.GetSectionSettings(ctx)
-							require.NoError(t, err)
-							assert.Equal(t, http.StatusOK, rec.Code)
-
-							// Parse response to verify it's valid JSON
-							var response map[string]any
-							err = json.Unmarshal(rec.Body.Bytes(), &response)
-							require.NoError(t, err)
-						})
+				wg.Go(func() {
+					update := map[string]any{
+						"summaryLimit": 999,
 					}
-
-					wg.Wait()
-					synctest.Wait() // Ensure all bubble goroutines complete
+					_ = makeSettingsUpdate(t, controller, "dashboard", update)
 				})
+
+				for range 10 {
+					wg.Go(func() {
+						req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
+						rec := httptest.NewRecorder()
+						ctx := controller.Echo.NewContext(req, rec)
+						ctx.SetParamNames("section")
+						ctx.SetParamValues("dashboard")
+
+						err := controller.GetSectionSettings(ctx)
+						require.NoError(t, err)
+						assert.Equal(t, http.StatusOK, rec.Code)
+
+						var response map[string]any
+						err = json.Unmarshal(rec.Body.Bytes(), &response)
+						require.NoError(t, err)
+					})
+				}
+
+				wg.Wait()
 			},
 		},
 		{
@@ -304,33 +297,27 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify nested field updates don't corrupt parent objects",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
-				// Use synctest.Test for deterministic nested field updates (Go 1.25)
-				synctest.Test(t, func(t *testing.T) {
-					t.Helper()
-					var wg sync.WaitGroup
+				var wg sync.WaitGroup
 
-					// Update different nested fields concurrently using WaitGroup.Go() (Go 1.25)
-					wg.Go(func() {
-						update := map[string]any{
-							"thumbnails": map[string]any{
-								"summary": true,
-							},
-						}
-						_ = makeSettingsUpdate(t, controller, "dashboard", update)
-					})
-
-					wg.Go(func() {
-						update := map[string]any{
-							"thumbnails": map[string]any{
-								"recent": false,
-							},
-						}
-						_ = makeSettingsUpdate(t, controller, "dashboard", update)
-					})
-
-					wg.Wait()
-					synctest.Wait() // Ensure all bubble goroutines complete
+				wg.Go(func() {
+					update := map[string]any{
+						"thumbnails": map[string]any{
+							"summary": true,
+						},
+					}
+					_ = makeSettingsUpdate(t, controller, "dashboard", update)
 				})
+
+				wg.Go(func() {
+					update := map[string]any{
+						"thumbnails": map[string]any{
+							"recent": false,
+						},
+					}
+					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+				})
+
+				wg.Wait()
 
 				// Verify both fields were updated
 				settings := controller.Settings
