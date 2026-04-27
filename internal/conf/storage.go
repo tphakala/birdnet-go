@@ -264,7 +264,10 @@ func createDefaultConfig() error {
 			Build()
 	}
 	configPath := filepath.Join(configPaths[0], "config.yaml")
-	defaultConfig := getDefaultConfig()
+	defaultConfig, err := getDefaultConfig()
+	if err != nil {
+		return err
+	}
 
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
@@ -316,13 +319,15 @@ func createDefaultConfig() error {
 }
 
 // getDefaultConfig reads the default configuration from the embedded config.yaml file.
-func getDefaultConfig() string {
+func getDefaultConfig() (string, error) {
 	data, err := fs.ReadFile(configFiles, "config.yaml")
 	if err != nil {
-		GetLogger().Error("Error reading config file", logger.Error(err))
-		os.Exit(1)
+		return "", errors.New(err).
+			Category(errors.CategoryConfiguration).
+			Context("operation", "read-embedded-config").
+			Build()
 	}
-	return string(data)
+	return string(data), nil
 }
 
 // GetSettings returns the current settings snapshot. Safe for concurrent use;
@@ -361,7 +366,9 @@ func StoreSettings(s *Settings) {
 	settingsInstance.Store(s)
 }
 
-// Setting returns the current settings instance, initializing it if necessary
+// Setting returns the current settings instance, initializing it if necessary.
+// Returns nil when settings cannot be loaded so the caller can decide how to
+// surface the error (the startup path in main.go logs and returns exit code 1).
 func Setting() *Settings {
 	// Fast path: settings already published.
 	if s := settingsInstance.Load(); s != nil {
@@ -375,15 +382,13 @@ func Setting() *Settings {
 		return s
 	}
 	if _, err := Load(); err != nil {
-		// Fatal error loading settings - application cannot continue.
-		// Release the lock explicitly because os.Exit does not run defers.
 		enhancedErr := errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "load-settings-init").
 			Build()
-		GetLogger().Error("Error loading settings", logger.Error(enhancedErr))
+		GetLogger().Error("Cannot load settings", logger.Error(enhancedErr))
 		loadMu.Unlock()
-		os.Exit(1)
+		return nil
 	}
 	loadMu.Unlock()
 	return settingsInstance.Load()

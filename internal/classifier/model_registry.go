@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
@@ -62,7 +63,7 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "2.4",
 		Description:      "Global model with 6523 species",
 		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
-		ConfigAliases:    []string{"birdnet"},
+		ConfigAliases:    []string{conf.ModelIDBirdNET},
 		SupportedLocales: []string{"af", "ar", "bg", "ca", "cs", "da", "de", "el", "en-uk", "en-us", "es",
 			"et", "fi", "fr", "he", "hr", "hu", "id", "is", "it", "ja", "ko", "lt", "lv", "ml", "nl",
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
@@ -91,7 +92,7 @@ var ModelRegistry = map[string]ModelInfo{
 		DetectionVersion: "V2",
 		Description:      "Perch v2 model with ~14,795 species (scientific names only)",
 		Spec:             ModelSpec{SampleRate: 32000, ClipLength: 5 * time.Second},
-		ConfigAliases:    []string{"perch_v2"},
+		ConfigAliases:    []string{conf.ModelIDPerchV2},
 		NumSpecies:       14795,
 	},
 }

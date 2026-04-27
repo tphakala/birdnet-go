@@ -305,7 +305,7 @@ func (s *Settings) MigrateSourceModels() bool {
 			src.Models = []string{src.Model}
 			src.Model = ""
 		} else {
-			src.Models = []string{"birdnet"}
+			src.Models = []string{ModelIDBirdNET}
 		}
 		migrated = true
 	}
@@ -314,7 +314,7 @@ func (s *Settings) MigrateSourceModels() bool {
 		if len(stream.Models) > 0 {
 			continue
 		}
-		stream.Models = []string{"birdnet"}
+		stream.Models = []string{ModelIDBirdNET}
 		migrated = true
 	}
 
@@ -380,12 +380,12 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool) []string {
 		}
 	}
 
-	if enabledSet["perch_v2"] && !s.Perch.Enabled {
-		issues = append(issues, "error: perch_v2 in models.enabled but perch.enabled is false")
+	if enabledSet[ModelIDPerchV2] && !s.Perch.Enabled {
+		issues = append(issues, "error: "+ModelIDPerchV2+" in models.enabled but perch.enabled is false")
 	}
 
-	if s.Perch.Enabled && !enabledSet["perch_v2"] {
-		issues = append(issues, "warning: perch.enabled is true but 'perch_v2' is not in models.enabled")
+	if s.Perch.Enabled && !enabledSet[ModelIDPerchV2] {
+		issues = append(issues, "warning: perch.enabled is true but '"+ModelIDPerchV2+"' is not in models.enabled")
 	}
 
 	if s.Perch.Enabled {
@@ -424,7 +424,7 @@ func (s *Settings) applyModelValidation() error {
 	// Default known IDs - matches classifier.KnownConfigIDs() at compile time.
 	// This fallback is used during config loading before the classifier package
 	// is available. The orchestrator re-validates with the authoritative list.
-	knownIDs := map[string]bool{"birdnet": true, "perch_v2": true}
+	knownIDs := map[string]bool{ModelIDBirdNET: true, ModelIDPerchV2: true, ModelIDBat: true}
 	modelIssues := s.ValidateModelConfig(knownIDs)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
