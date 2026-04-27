@@ -109,7 +109,14 @@ func (c *Controller) buildAnalysisSuspendedSourcesPayload() (map[string]bool, ma
 	raw := make(map[string]sourceAnalysisState)
 	stateSnapshot := audiocore.GetAnalysisSuspendedSnapshot()
 	for _, src := range registry.List() {
-		conn, _ := src.GetConnectionString()
+		// Registry.List returns safe copies that may not include connection strings.
+		// Resolve the canonical source from the registry by ID to get the real connection.
+		fullSource, ok := registry.Get(src.ID)
+		if !ok || fullSource == nil {
+			continue
+		}
+
+		conn, _ := fullSource.GetConnectionString()
 		if conn == "" {
 			continue
 		}

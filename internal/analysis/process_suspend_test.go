@@ -25,7 +25,7 @@ func TestProcessData_SkipsInferenceWhenSuspended(t *testing.T) {
 		MinSuspendFrames: 1,
 		MinResumeFrames:  1,
 	})
-	tracker.UpdateAudioLevel(sourceID, 0)
+	tracker.UpdateAudioLevel(sourceID, 0, 0)
 	assert.True(t, tracker.IsSuspended(sourceID))
 
 	before := len(classifier.ResultsQueue)

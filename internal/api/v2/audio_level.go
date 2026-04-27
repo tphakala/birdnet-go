@@ -462,6 +462,7 @@ func (c *Controller) updateAudioLevel(
 		levels[audioData.Source] = audioData
 	} else {
 		audioData.Level = 0
+		audioData.Peak = 0
 		levels[audioData.Source] = audioData
 	}
 }
@@ -557,6 +558,7 @@ func (c *Controller) checkSourceActivity(
 	for source, data := range levels {
 		if c.isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime) && data.Level != 0 {
 			data.Level = 0
+			data.Peak = 0
 			levels[source] = data
 			updated = true
 		}

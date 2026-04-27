@@ -54,6 +54,8 @@ func TestAudioLevelConsumer_WritePublishesLevel(t *testing.T) {
 		assert.Equal(t, "src-1", level.Source)
 		assert.Equal(t, "Source One", level.Name)
 		assert.Positive(t, level.Level)
+		assert.Positive(t, level.Peak)
+		assert.GreaterOrEqual(t, level.Peak, level.Level)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for audio level data on channel")
 	}
@@ -81,6 +83,7 @@ func TestAudioLevelConsumer_WriteSilencePublishesZero(t *testing.T) {
 	select {
 	case level := <-ch:
 		assert.Equal(t, 0, level.Level)
+		assert.Equal(t, 0, level.Peak)
 		assert.False(t, level.Clipping)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for audio level data on channel")

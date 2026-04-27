@@ -242,6 +242,7 @@ func (c *BufferConsumer) Close() error {
 // AudioLevelData holds audio level data computed from PCM frames.
 type AudioLevelData struct {
 	Level    int    `json:"level"`    // 0-100
+	Peak     int    `json:"peak"`     // 0-100 peak level
 	Clipping bool   `json:"clipping"` // true if clipping is detected
 	Source   string `json:"source"`   // Source identifier
 	Name     string `json:"name"`     // Human-readable name of the source
@@ -273,7 +274,7 @@ const (
 // internal/audiocore/capture.go.
 func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 	if len(samples) == 0 {
-		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
+		return AudioLevelData{Level: 0, Peak: 0, Clipping: false, Source: source, Name: name}
 	}
 
 	// Truncate to an even number of bytes for 16-bit samples.
@@ -288,10 +289,11 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 
 	sampleCount := len(samples) / 2
 	if sampleCount == 0 {
-		return AudioLevelData{Level: 0, Clipping: false, Source: source, Name: name}
+		return AudioLevelData{Level: 0, Peak: 0, Clipping: false, Source: source, Name: name}
 	}
 
 	var sum float64
+	maxAbs := 0.0
 	isClipping := false
 
 	for i := 0; i < len(samples); i += 2 {
@@ -301,34 +303,46 @@ func calculateAudioLevel(samples []byte, source, name string) AudioLevelData {
 		sample := int16(binary.LittleEndian.Uint16(samples[i : i+2])) //nolint:gosec // G115: intentional uint16→int16 bit reinterpretation for PCM audio
 		sampleAbs := math.Abs(float64(sample))
 		sum += sampleAbs * sampleAbs
+		if sampleAbs > maxAbs {
+			maxAbs = sampleAbs
+		}
 
 		if sample == pcm16ClipPositive || sample == pcm16ClipNegative {
 			isClipping = true
 		}
 	}
 
-	// RMS → dB → scaled 0-100.
+	// RMS and peak use the same dB-based scaling to keep threshold semantics consistent.
 	rms := math.Sqrt(sum / float64(sampleCount))
-	db := 20 * math.Log10(rms/pcm16Max)
-	scaledLevel := (db - audioLevelDBFloor) * (100.0 / audioLevelDBRange)
-
-	if isClipping {
-		scaledLevel = math.Max(scaledLevel, audioLevelClippingMin)
-	}
-
-	// Clamp to [0, 100].
-	if scaledLevel < 0 {
-		scaledLevel = 0
-	} else if scaledLevel > 100 {
-		scaledLevel = 100
-	}
+	scaledLevel := scaleAmplitudeToLevel(rms, isClipping)
+	scaledPeak := scaleAmplitudeToLevel(maxAbs, isClipping)
 
 	return AudioLevelData{
 		Level:    int(scaledLevel),
+		Peak:     int(scaledPeak),
 		Clipping: isClipping,
 		Source:   source,
 		Name:     name,
 	}
+}
+
+func scaleAmplitudeToLevel(amplitude float64, isClipping bool) float64 {
+	if amplitude <= 0 {
+		return 0
+	}
+
+	db := 20 * math.Log10(amplitude/pcm16Max)
+	scaledLevel := (db - audioLevelDBFloor) * (100.0 / audioLevelDBRange)
+	if isClipping {
+		scaledLevel = math.Max(scaledLevel, audioLevelClippingMin)
+	}
+	if scaledLevel < 0 {
+		return 0
+	}
+	if scaledLevel > 100 {
+		return 100
+	}
+	return scaledLevel
 }
 
 // Compile-time interface check.

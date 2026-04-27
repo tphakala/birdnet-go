@@ -1,12 +1,15 @@
 package analysis
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/app"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
@@ -117,4 +120,61 @@ func TestResolveModelTargets_KnownButNotLoaded(t *testing.T) {
 	targets := resolveModelTargets([]string{"birdnet", "perch_v2"}, loaded)
 	require.Len(t, targets, 1, "only birdnet should resolve, perch_v2 is not loaded")
 	assert.Equal(t, "BirdNET_V2.4", targets[0].ID)
+}
+
+func TestFindAudioSourceConfigByRuntimeID_ResolvesByConnection(t *testing.T) {
+	t.Parallel()
+
+	audioEngine := engine.New(context.Background(), &engine.Config{}, nil)
+	t.Cleanup(func() {
+		audioEngine.Stop()
+	})
+
+	registered, err := audioEngine.Registry().Register(&audiocore.SourceConfig{
+		Type:             audiocore.SourceTypeAudioCard,
+		ConnectionString: "sysdefault",
+		DisplayName:      "Mic A",
+	})
+	require.NoError(t, err)
+
+	svc := NewAudioPipelineService(&conf.Settings{}, nil, nil, nil, audioEngine)
+	audioSettings := &conf.AudioSettings{
+		Sources: []conf.AudioSourceConfig{
+			{
+				Name:   "Mic A",
+				Device: "sysdefault",
+				LowNoiseAutoSuspend: conf.LowNoiseAutoSuspendSettings{
+					Enabled:          true,
+					SuspendThreshold: 50,
+					ResumeThreshold:  70,
+					MinSuspendFrames: 5,
+					MinResumeFrames:  5,
+				},
+			},
+		},
+	}
+
+	got := svc.findAudioSourceConfigByRuntimeID(audioSettings, registered.ID)
+	require.NotNil(t, got)
+	assert.Equal(t, "sysdefault", got.Device)
+	assert.True(t, got.LowNoiseAutoSuspend.Enabled)
+}
+
+func TestInitializeVolumeSuspendTracking_DisabledConfigRemovesTrackerState(t *testing.T) {
+	t.Parallel()
+
+	tracker := GetVolumeSuspendTracker()
+	sourceID := "source-disabled"
+	tracker.InitializeSource(sourceID, conf.LowNoiseAutoSuspendSettings{
+		Enabled:          true,
+		SuspendThreshold: 10,
+		ResumeThreshold:  20,
+		MinSuspendFrames: 3,
+		MinResumeFrames:  2,
+	})
+
+	svc := NewAudioPipelineService(&conf.Settings{}, nil, nil, nil, nil)
+	svc.initializeVolumeSuspendTracking([]string{sourceID}, "test")
+
+	assert.False(t, tracker.HasSource(sourceID))
 }

@@ -70,9 +70,10 @@ func (t *VolumeSuspendTracker) RemoveSource(sourceID string) {
 	delete(t.states, sourceID)
 }
 
-// UpdateAudioLevel updates suspend/resume state for a source based on audio level.
+// UpdateAudioLevel updates suspend/resume state for a source based on audio levels.
+// Suspend decisions use RMS level; resume decisions use peak level for sensitivity.
 // This is the write path and is intended to be called from the audio pipeline layer.
-func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int) {
+func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int, peakLevel int) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -84,15 +85,27 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int)
 	log := GetLogger()
 	now := time.Now()
 
-	// Update counters based on current audio level
-	if audioLevel <= state.suspendThreshold {
-		state.lowVolumeCount++
-		state.highVolumeCount = 0
-	} else if audioLevel >= state.resumeThreshold {
-		state.highVolumeCount++
-		state.lowVolumeCount = 0
+	// Update counters using asymmetric sensitivity:
+	// - suspend on sustained low RMS
+	// - resume on peak crossings for faster wake-up.
+	if state.isSuspended {
+		if peakLevel >= state.resumeThreshold {
+			state.highVolumeCount++
+			state.lowVolumeCount = 0
+		} else {
+			state.highVolumeCount = 0
+		}
 	} else {
-		// In the hysteresis zone - maintain current state without changing counters
+		if audioLevel <= state.suspendThreshold {
+			state.lowVolumeCount++
+			state.highVolumeCount = 0
+		} else if audioLevel >= state.resumeThreshold {
+			// Clearly active RMS should also reset low counter.
+			state.highVolumeCount++
+			state.lowVolumeCount = 0
+		} else {
+			// In hysteresis while active: maintain current state.
+		}
 	}
 
 	if !state.isSuspended && state.lowVolumeCount >= state.minSuspendFrames {
@@ -117,6 +130,7 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int)
 		log.Info("analysis resumed due to high audio level",
 			logger.String("source", sourceID),
 			logger.Int("audio_level", audioLevel),
+			logger.Int("peak_level", peakLevel),
 			logger.Int("resume_threshold", state.resumeThreshold),
 			logger.Duration("suspended_duration", suspendDuration))
 	}
@@ -143,6 +157,15 @@ func (t *VolumeSuspendTracker) IsSuspended(sourceID string) bool {
 		return false
 	}
 	return state.isSuspended
+}
+
+// HasSource returns true if tracking state exists for the source.
+func (t *VolumeSuspendTracker) HasSource(sourceID string) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	_, exists := t.states[sourceID]
+	return exists
 }
 
 // GetState returns a copy of the current state for a source (for metrics/debugging).

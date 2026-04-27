@@ -12,10 +12,14 @@ Props:
 - className?: string - Additional CSS classes (default: '')
 -->
 <script lang="ts">
+  import { onMount, onDestroy } from 'svelte';
   import { Check, X } from '@lucide/svelte';
   import { fade } from 'svelte/transition';
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
+  import { quietHoursStore } from '$lib/stores/quietHours.svelte';
+  import { audioSettings } from '$lib/stores/settings';
+  import AnalysisSuspendBadge from '$lib/desktop/components/ui/AnalysisSuspendBadge.svelte';
   import type { PendingDetection } from '$lib/types/pending.types';
 
   interface Props {
@@ -122,8 +126,39 @@ Props:
     return elapsedTexts[key] ?? '';
   }
 
+  let enabledLowNoiseSourceIDs = $derived.by(() => {
+    const status = quietHoursStore.status;
+    const sources = $audioSettings?.sources ?? [];
+    const enabledIDs = new Set<string>();
+
+    for (const source of sources) {
+      if (!source.lowNoiseAutoSuspend?.enabled) continue;
+      const sourceID = status?.analysisSourceIDs?.[source.device];
+      if (sourceID) {
+        enabledIDs.add(sourceID);
+      }
+    }
+
+    return enabledIDs;
+  });
+
+  function getAnalysisSuspendedForSource(sourceID: string): boolean | null {
+    if (!enabledLowNoiseSourceIDs.has(sourceID)) return null;
+    const status = quietHoursStore.status;
+    if (!status?.analysisSuspendedSources) return null;
+    return status.analysisSuspendedSources[sourceID] === true;
+  }
+
   // Show source column only when multiple sources are present
   let hasMultipleSources = $derived(new Set(displayDetections.map(d => d.source)).size > 1);
+
+  onMount(() => {
+    quietHoursStore.startPolling();
+  });
+
+  onDestroy(() => {
+    quietHoursStore.stopPolling();
+  });
 
   // Clean up pending timers on component destroy
   $effect(() => {
@@ -188,6 +223,13 @@ Props:
               {elapsedText}
               {#if hasMultipleSources}
                 · {detection.source}
+              {/if}
+              {#if getAnalysisSuspendedForSource(detection.sourceID) !== null}
+                <span class="inline-flex items-center ml-1">
+                  <AnalysisSuspendBadge
+                    suspended={getAnalysisSuspendedForSource(detection.sourceID) === true}
+                  />
+                </span>
               {/if}
             </span>
           </div>

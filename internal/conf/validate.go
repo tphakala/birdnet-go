@@ -1246,7 +1246,7 @@ func validateLowNoiseAutoSuspendSettings(settings *LowNoiseAutoSuspendSettings, 
 			Build()
 	}
 
-	// Validate minimum suspend frames (must be positive)
+	// Validate minimum suspend frames (must be non-negative; 0 means use defaults)
 	if settings.MinSuspendFrames < 0 {
 		return errors.Newf("low-noise minimum suspend frames must be non-negative, got %d for source %s", settings.MinSuspendFrames, sourceName).
 			Category(errors.CategoryValidation).
@@ -1256,7 +1256,7 @@ func validateLowNoiseAutoSuspendSettings(settings *LowNoiseAutoSuspendSettings, 
 			Build()
 	}
 
-	// Validate minimum resume frames (must be positive)
+	// Validate minimum resume frames (must be non-negative; 0 means use defaults)
 	if settings.MinResumeFrames < 0 {
 		return errors.Newf("low-noise minimum resume frames must be non-negative, got %d for source %s", settings.MinResumeFrames, sourceName).
 			Category(errors.CategoryValidation).

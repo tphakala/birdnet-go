@@ -61,6 +61,7 @@ This folder contains **shared components** used across the application. Feature-
 - `DateRangePicker.svelte` - Date range selection
 - `FormField.svelte` - Form field wrapper with validation
 - `InlineSlider.svelte` - Inline slider input for compact layouts
+- `LowNoiseAutoSuspendEditor.svelte` - Editor for per-source low-noise auto-suspend settings
 - `NumberField.svelte` - Number input field
 - `PasswordField.svelte` - Password input with show/hide
 - `RTSPUrlInput.svelte` - RTSP URL input with validation
@@ -99,6 +100,7 @@ This folder contains **shared components** used across the application. Feature-
 
 - `ActionMenu.svelte` - Dropdown action menu
 - `AudioLevelIndicator.svelte` - Audio level visualization
+- `AnalysisSuspendBadge.svelte` - Badge showing low-noise analysis suspend/active state
 - `Badge.svelte` - Status/count badges
 - `Card.svelte` - Generic card container
 - `CollapsibleCard.svelte` - Collapsible card container

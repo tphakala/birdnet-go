@@ -441,7 +441,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		gainDB, _ := p.engine.Registry().GetGain(sid)
 
 		// Resolve per-source EQ filter chain.
-		srcCfg := audioSettings.FindSourceByID(sid)
+		srcCfg := p.findAudioSourceConfigByRuntimeID(audioSettings, sid)
 		eqChain := equalizer.BuildFilterChainForSource(srcCfg, audioSettings.Equalizer, conf.SampleRate)
 
 		slProc, slErr := soundlevel.NewProcessor(sid, sid, conf.SampleRate, slInterval)
@@ -521,7 +521,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 		// Resolve per-source EQ config for building per-route filter chains.
 		// Each route needs its own FilterChain because biquad filters have
 		// mutable state (in1/in2/out1/out2) — sharing would cause a data race.
-		srcCfg := audioSettings.FindSourceByID(sid)
+		srcCfg := p.findAudioSourceConfigByRuntimeID(audioSettings, sid)
 
 		// Resolve per-source model targets. Fall back to primary if the
 		// source has no configured models or none could be resolved.
@@ -608,7 +608,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 					if !ok {
 						return
 					}
-					tracker.UpdateAudioLevel(sid, lvl.Level)
+					tracker.UpdateAudioLevel(sid, lvl.Level, lvl.Peak)
 					audiocore.SetAnalysisSuspended(sid, tracker.IsSuspended(sid))
 					select {
 					case audioLevelChan <- audiocore.AudioLevelData(lvl):
@@ -622,15 +622,15 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 	}
 }
 
-// initializeVolumeSuspendTracking initializes volume-based suspend tracking
-// for sources that have low-noise auto-suspend enabled in their configuration.
+// initializeVolumeSuspendTracking synchronizes volume-based suspend tracking
+// for active sources based on current low-noise auto-suspend settings.
 func (p *AudioPipelineService) initializeVolumeSuspendTracking(sourceIDs []string, operation string) {
 	log := GetLogger()
 	settings := conf.Setting()
 	tracker := GetVolumeSuspendTracker()
 
 	for _, sid := range sourceIDs {
-		srcCfg := settings.Realtime.Audio.FindSourceByID(sid)
+		srcCfg := p.findAudioSourceConfigByRuntimeID(&settings.Realtime.Audio, sid)
 		if srcCfg != nil && srcCfg.LowNoiseAutoSuspend.Enabled {
 			tracker.InitializeSource(sid, srcCfg.LowNoiseAutoSuspend)
 			audiocore.SetAnalysisSuspended(sid, false)
@@ -639,8 +639,38 @@ func (p *AudioPipelineService) initializeVolumeSuspendTracking(sourceIDs []strin
 				logger.Int("suspend_threshold", srcCfg.LowNoiseAutoSuspend.SuspendThreshold),
 				logger.Int("resume_threshold", srcCfg.LowNoiseAutoSuspend.ResumeThreshold),
 				logger.String("operation", operation))
+			continue
+		}
+
+		// Ensure disabled or missing source configs do not leave stale tracking state.
+		if tracker.HasSource(sid) {
+			tracker.RemoveSource(sid)
+			audiocore.RemoveAnalysisState(sid)
+			log.Info("disabled volume suspend tracking for source",
+				logger.String("source_id", sid),
+				logger.String("operation", operation))
 		}
 	}
+}
+
+// findAudioSourceConfigByRuntimeID resolves runtime source IDs back to audio source
+// config entries by using the engine registry connection string (device ID).
+func (p *AudioPipelineService) findAudioSourceConfigByRuntimeID(audioSettings *conf.AudioSettings, sourceID string) *conf.AudioSourceConfig {
+	if audioSettings == nil || p.engine == nil || p.engine.Registry() == nil {
+		return nil
+	}
+
+	src, ok := p.engine.Registry().Get(sourceID)
+	if !ok || src == nil {
+		return audioSettings.FindSourceByID(sourceID)
+	}
+
+	conn, connErr := src.GetConnectionString()
+	if connErr != nil || conn == "" {
+		return audioSettings.FindSourceByID(sourceID)
+	}
+
+	return audioSettings.FindSourceByID(conn)
 }
 
 // reconfigureChangedSources diffs the currently running sources against the
@@ -751,6 +781,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// receives the full desired state and removes stale monitors correctly.
 	allActiveIDs := slices.Collect(maps.Values(alreadyRunning))
 	allActiveIDs = append(allActiveIDs, newSourceIDs...)
+	p.initializeVolumeSuspendTracking(allActiveIDs, "reconfigure_diff")
 	if len(allActiveIDs) > 0 {
 		monitorMap := p.buildMonitorConfigs(sourceModelMap, allActiveIDs)
 		if monErr := p.bufferMgr.UpdateMonitors(monitorMap); monErr != nil {

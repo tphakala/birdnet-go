@@ -147,6 +147,14 @@ export interface LowNoiseAutoSuspendSettings {
   minResumeFrames: number;
 }
 
+export const defaultLowNoiseAutoSuspendSettings: LowNoiseAutoSuspendSettings = {
+  enabled: false,
+  suspendThreshold: 15,
+  resumeThreshold: 25,
+  minSuspendFrames: 3,
+  minResumeFrames: 2,
+};
+
 export interface AudioSettings {
   sources: AudioSourceConfig[];
   source: string; // legacy single source, kept for backward compat

@@ -23,16 +23,18 @@
   import { cn } from '$lib/utils/cn';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
-  import NumberField from './NumberField.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
+  import LowNoiseAutoSuspendEditor from './LowNoiseAutoSuspendEditor.svelte';
   import AudioEqualizerSettings from '$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte';
+  import AnalysisSuspendBadge from '$lib/desktop/components/ui/AnalysisSuspendBadge.svelte';
+  import { hasValidLowNoiseAutoSuspendThresholds } from '$lib/utils/lowNoiseAutoSuspend';
   import type {
     AudioSourceConfig,
     EqualizerFilterType,
     QuietHoursConfig,
     LowNoiseAutoSuspendSettings,
   } from '$lib/stores/settings';
-  import { defaultQuietHoursConfig } from '$lib/stores/settings';
+  import { defaultLowNoiseAutoSuspendSettings, defaultQuietHoursConfig } from '$lib/stores/settings';
 
   // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
   // where filter.id is optional (assigned on save)
@@ -93,16 +95,11 @@
   let showDeleteConfirm = $state(false);
   let showEqualizer = $state(false);
   let editLowNoiseAutoSuspend = $state<LowNoiseAutoSuspendSettings>({
-    enabled: false,
-    suspendThreshold: 15,
-    resumeThreshold: 25,
-    minSuspendFrames: 3,
-    minResumeFrames: 2,
+    ...defaultLowNoiseAutoSuspendSettings,
   });
 
   const lowNoiseValidationError = $derived.by(() => {
-    if (!editLowNoiseAutoSuspend.enabled) return '';
-    if (editLowNoiseAutoSuspend.resumeThreshold <= editLowNoiseAutoSuspend.suspendThreshold) {
+    if (!hasValidLowNoiseAutoSuspendThresholds(editLowNoiseAutoSuspend)) {
       return t('settings.audio.lowNoiseAutoSuspend.validation.resumeGreaterThanSuspend');
     }
     return '';
@@ -142,11 +139,8 @@
       : { enabled: false, filters: [] };
     editQuietHours = source.quietHours ? { ...source.quietHours } : { ...defaultQuietHoursConfig };
     editLowNoiseAutoSuspend = {
-      enabled: source.lowNoiseAutoSuspend?.enabled ?? false,
-      suspendThreshold: source.lowNoiseAutoSuspend?.suspendThreshold ?? 15,
-      resumeThreshold: source.lowNoiseAutoSuspend?.resumeThreshold ?? 25,
-      minSuspendFrames: source.lowNoiseAutoSuspend?.minSuspendFrames ?? 3,
-      minResumeFrames: source.lowNoiseAutoSuspend?.minResumeFrames ?? 2,
+      ...defaultLowNoiseAutoSuspendSettings,
+      ...source.lowNoiseAutoSuspend,
     };
     showEqualizer = false;
     isEditing = true;
@@ -361,62 +355,11 @@
           idPrefix="soundcard-qh-{index}"
         />
 
-        <div class="space-y-4 rounded-lg border border-[var(--border-200)] p-4">
-          <label class="flex items-center gap-2 text-sm font-medium text-[var(--color-base-content)]">
-            <input
-              type="checkbox"
-              checked={editLowNoiseAutoSuspend.enabled}
-              onchange={event => {
-                const target = event.currentTarget as HTMLInputElement;
-                editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, enabled: target.checked };
-              }}
-            />
-            {t('settings.audio.lowNoiseAutoSuspend.enable')}
-          </label>
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <NumberField
-              label={t('settings.audio.lowNoiseAutoSuspend.suspendThreshold')}
-              value={editLowNoiseAutoSuspend.suspendThreshold}
-              onUpdate={value =>
-                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, suspendThreshold: value })}
-              min={0}
-              max={100}
-              step={1}
-              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
-            />
-            <NumberField
-              label={t('settings.audio.lowNoiseAutoSuspend.resumeThreshold')}
-              value={editLowNoiseAutoSuspend.resumeThreshold}
-              onUpdate={value =>
-                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, resumeThreshold: value })}
-              min={0}
-              max={100}
-              step={1}
-              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
-            />
-            <NumberField
-              label={t('settings.audio.lowNoiseAutoSuspend.minSuspendFrames')}
-              value={editLowNoiseAutoSuspend.minSuspendFrames}
-              onUpdate={value =>
-                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, minSuspendFrames: value })}
-              min={0}
-              step={1}
-              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
-            />
-            <NumberField
-              label={t('settings.audio.lowNoiseAutoSuspend.minResumeFrames')}
-              value={editLowNoiseAutoSuspend.minResumeFrames}
-              onUpdate={value =>
-                (editLowNoiseAutoSuspend = { ...editLowNoiseAutoSuspend, minResumeFrames: value })}
-              min={0}
-              step={1}
-              disabled={!editLowNoiseAutoSuspend.enabled || disabled}
-            />
-          </div>
-          {#if lowNoiseValidationError}
-            <p class="text-xs text-[var(--color-error)]">{lowNoiseValidationError}</p>
-          {/if}
-        </div>
+        <LowNoiseAutoSuspendEditor
+          config={editLowNoiseAutoSuspend}
+          onChange={config => (editLowNoiseAutoSuspend = config)}
+          {disabled}
+        />
 
         <!-- Action Buttons -->
         <div class="flex justify-end gap-2 pt-2 border-t border-[var(--border-200)]">
@@ -465,13 +408,7 @@
               </span>
             {/if}
             {#if source.lowNoiseAutoSuspend?.enabled}
-              <span
-                class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-[var(--color-base-300)] text-[var(--color-base-content)] opacity-70"
-              >
-                {analysisSuspended
-                  ? t('settings.audio.lowNoiseAutoSuspend.status.suspended')
-                  : t('settings.audio.lowNoiseAutoSuspend.status.active')}
-              </span>
+              <AnalysisSuspendBadge suspended={analysisSuspended} />
             {/if}
           </div>
 

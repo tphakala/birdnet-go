@@ -8,6 +8,9 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
+  import { quietHoursStore } from '$lib/stores/quietHours.svelte';
+  import { audioSettings } from '$lib/stores/settings';
+  import AnalysisSuspendBadge from './AnalysisSuspendBadge.svelte';
   import Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, ERROR_HANDLING } from './hls-config';
@@ -132,6 +135,29 @@
   function getSourceDisplayName(source: string): string {
     // eslint-disable-next-line security/detect-object-injection
     return levels[source]?.name || source;
+  }
+
+  const enabledLowNoiseSourceIDs = $derived.by(() => {
+    const status = quietHoursStore.status;
+    const sources = $audioSettings?.sources ?? [];
+    const enabledIDs = new Set<string>();
+
+    for (const source of sources) {
+      if (!source.lowNoiseAutoSuspend?.enabled) continue;
+      const sourceID = status?.analysisSourceIDs?.[source.device];
+      if (sourceID) {
+        enabledIDs.add(sourceID);
+      }
+    }
+
+    return enabledIDs;
+  });
+
+  function getAnalysisSuspendedForSource(sourceID: string): boolean | null {
+    if (!enabledLowNoiseSourceIDs.has(sourceID)) return null;
+    const status = quietHoursStore.status;
+    if (!status?.analysisSuspendedSources) return null;
+    return status.analysisSuspendedSources[sourceID] === true;
   }
 
   // Setup EventSource for audio levels using ReconnectingEventSource
@@ -592,6 +618,13 @@
       };
     }
   });
+
+  $effect(() => {
+    quietHoursStore.startPolling();
+    return () => {
+      quietHoursStore.stopPolling();
+    };
+  });
 </script>
 
 <div class={cn('relative w-10 h-10', className)} role="status">
@@ -717,6 +750,9 @@
                       >
                         {getSourceDisplayName(source)}
                       </span>
+                      {#if getAnalysisSuspendedForSource(source) !== null}
+                        <AnalysisSuspendBadge suspended={getAnalysisSuspendedForSource(source) === true} />
+                      {/if}
                       {#if selectedSource === source}
                         <Check class="size-4 text-[var(--color-primary)] shrink-0" />
                       {/if}
