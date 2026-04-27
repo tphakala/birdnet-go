@@ -18,8 +18,9 @@ func dogBarkFilterTimeLimit() time.Duration {
 
 // CheckDogBarkFilter checks if the species should be filtered based on the last dog bark timestamp.
 func (p *Processor) CheckDogBarkFilter(species string, lastDogBark time.Time) bool {
+	settings := p.currentSettings()
 	species = strings.ToLower(species)
-	if slices.Contains(p.Settings.Realtime.DogBarkFilter.Species, species) {
+	if slices.Contains(settings.Realtime.DogBarkFilter.Species, species) {
 		return time.Since(lastDogBark) <= dogBarkFilterTimeLimit()
 	}
 	return false

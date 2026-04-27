@@ -43,7 +43,9 @@ func (p *Processor) RebuildExtendedCaptureFilter() {
 // initExtendedCapture resolves the extended capture species filter at startup.
 // Called from Processor.New(). Safe to re-call on settings refresh.
 func (p *Processor) initExtendedCapture() {
-	if !p.Settings.Realtime.ExtendedCapture.Enabled {
+	settings := p.currentSettings()
+
+	if !settings.Realtime.ExtendedCapture.Enabled {
 		p.extendedCaptureMu.Lock()
 		p.extendedCaptureAll = false
 		p.extendedCaptureSpecies = nil
@@ -61,7 +63,7 @@ func (p *Processor) initExtendedCapture() {
 	taxonomyDB := p.getTaxonomyDB()
 
 	isAll, resolved := resolveSpeciesFilter(
-		p.Settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, "extended_capture",
+		settings.Realtime.ExtendedCapture.Species, labels, taxonomyDB, "extended_capture",
 	)
 
 	p.extendedCaptureMu.Lock()
@@ -71,19 +73,21 @@ func (p *Processor) initExtendedCapture() {
 
 	if isAll {
 		GetLogger().Info("Extended capture enabled for all species",
-			logger.Int("max_duration_seconds", p.Settings.Realtime.ExtendedCapture.MaxDuration),
+			logger.Int("max_duration_seconds", settings.Realtime.ExtendedCapture.MaxDuration),
 			logger.String("operation", "extended_capture_init"))
 	} else {
 		GetLogger().Info("Extended capture enabled for filtered species",
 			logger.Int("species_count", len(resolved)),
-			logger.Int("max_duration_seconds", p.Settings.Realtime.ExtendedCapture.MaxDuration),
+			logger.Int("max_duration_seconds", settings.Realtime.ExtendedCapture.MaxDuration),
 			logger.String("operation", "extended_capture_init"))
 	}
 }
 
 // isExtendedCaptureSpecies checks if a species qualifies for extended capture.
 func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
-	if !p.Settings.Realtime.ExtendedCapture.Enabled {
+	settings := p.currentSettings()
+
+	if !settings.Realtime.ExtendedCapture.Enabled {
 		return false
 	}
 
@@ -180,10 +184,11 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 //
 // For extended captures the clip name is regenerated to reflect the actual duration.
 func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
+	settings := p.currentSettings()
 	item.Detection.Result.BeginTime = item.FirstDetected
 
-	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
 	normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 
 	if item.ExtendedCapture {
@@ -192,9 +197,10 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
 
 		// Regenerate clip name with actual duration (unknown at createDetection time)
-		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+		preCapture := settings.Realtime.Audio.Export.PreCapture
 		durationSeconds := int(item.Detection.Result.EndTime.Sub(item.Detection.Result.BeginTime).Seconds()) + preCapture
 		item.Detection.Result.ClipName = p.generateClipNameWithDuration(
+			settings,
 			item.Detection.Result.Species.ScientificName,
 			float32(item.Confidence),
 			durationSeconds,
@@ -215,8 +221,9 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 // This is called from processDetections after the pending detection is created/updated.
 // Must be called while pendingMutex is held.
 func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDetectionWindow time.Duration) {
+	settings := p.currentSettings()
 	item := p.pendingDetections[mapKey]
-	maxDuration := time.Duration(p.Settings.Realtime.ExtendedCapture.MaxDuration) * time.Second
+	maxDuration := time.Duration(settings.Realtime.ExtendedCapture.MaxDuration) * time.Second
 
 	if !item.ExtendedCapture {
 		// First time: set extended capture flag and absolute deadline

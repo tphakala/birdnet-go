@@ -37,7 +37,7 @@ func TestBuildClipPath_EmptyTypeFallsBackToWav(t *testing.T) {
 	p := newProcessorWithExportType(t, "")
 	ts := time.Date(2026, 3, 14, 9, 37, 1, 0, time.UTC)
 
-	got := p.buildClipPath("Strix aluco", 0.94, 15, ts)
+	got := p.buildClipPath(p.Settings, "Strix aluco", 0.94, 15, ts)
 
 	assert.True(t, strings.HasSuffix(got, ".wav"),
 		"empty Type should fall back to .wav, got %q", got)
@@ -57,7 +57,7 @@ func TestBuildClipPath_NeverEndsInDot(t *testing.T) {
 	for _, in := range inputs {
 		t.Run("type="+in, func(t *testing.T) {
 			p := newProcessorWithExportType(t, in)
-			got := p.buildClipPath("Strix aluco", 0.94, 15, ts)
+			got := p.buildClipPath(p.Settings, "Strix aluco", 0.94, 15, ts)
 			assert.False(t, strings.HasSuffix(got, "."),
 				"path must never end in bare dot (type=%q, got %q)", in, got)
 			ext := strings.TrimPrefix(strings.TrimSpace(path.Ext(got)), ".")
@@ -77,7 +77,7 @@ func TestBuildClipPath_FallbackWarnsOnlyOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	for range 10 {
 		wg.Go(func() {
-			_ = p.buildClipPath("Strix aluco", 0.94, 15, ts)
+			_ = p.buildClipPath(p.Settings, "Strix aluco", 0.94, 15, ts)
 		})
 	}
 	wg.Wait()
