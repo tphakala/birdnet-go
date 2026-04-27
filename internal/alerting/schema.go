@@ -16,9 +16,10 @@ type ObjectTypeSchema struct {
 
 // EventSchema describes an event trigger and its available properties.
 type EventSchema struct {
-	Name       string           `json:"name"`
-	Label      string           `json:"label"`
-	Properties []PropertySchema `json:"properties"`
+	Name        string           `json:"name"`
+	Label       string           `json:"label"`
+	Description string           `json:"description,omitempty"`
+	Properties  []PropertySchema `json:"properties"`
 }
 
 // MetricSchema describes a metric trigger and its available properties.
@@ -67,8 +68,8 @@ func GetSchema() Schema {
 				Name:  ObjectTypeDetection,
 				Label: "Detection",
 				Events: []EventSchema{
-					{Name: EventDetectionNewSpecies, Label: "New Species Detected", Properties: detectionProperties()},
-					{Name: EventDetectionOccurred, Label: "Detection Occurred", Properties: detectionProperties()},
+					{Name: EventDetectionNewSpecies, Label: "New Species Detected", Description: "Fires when a species is seen for the first time within the tracking window", Properties: detectionProperties()},
+					{Name: EventDetectionOccurred, Label: "Detection Occurred", Description: "Fires for every detection, including new species", Properties: detectionProperties()},
 				},
 			},
 			{

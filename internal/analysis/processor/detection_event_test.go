@@ -6,9 +6,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/events"
 )
@@ -27,6 +29,7 @@ const (
 	testDaysWithinWindow      = 5
 	testDaysOutsideWindow     = 15
 	testConsumerName          = "test-detection-consumer"
+	testSuppressionHours      = 168
 )
 
 // TestDetectionEventCreation tests the creation of detection events
@@ -145,4 +148,130 @@ func (c *testDetectionConsumer) GetReceivedEvents() []events.DetectionEvent {
 	eventsCopy := make([]events.DetectionEvent, len(c.receivedEvents))
 	copy(eventsCopy, c.receivedEvents)
 	return eventsCopy
+}
+
+func setupEventBusWithConsumer(t *testing.T) *testDetectionConsumer {
+	t.Helper()
+	events.ResetForTesting()
+	t.Cleanup(events.ResetForTesting)
+	eb, err := events.Initialize(&events.Config{BufferSize: 100, Workers: 1, Enabled: true})
+	require.NoError(t, err)
+	c := &testDetectionConsumer{}
+	require.NoError(t, eb.RegisterConsumer(c))
+	return c
+}
+
+// TestPublishDetectionEvent_OrdinaryDetection verifies that non-new-species
+// detections reach the event bus with isNewSpecies=false.
+func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:      &conf.Settings{Debug: true},
+		Result:        det.Result,
+		CorrelationID: "test-ordinary-det",
+	}
+
+	action.publishDetectionEvent(false, 30)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		received := consumer.GetReceivedEvents()
+		assert.Len(collect, received, 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()
+	assert.Equal(t, det.Result.Species.CommonName, received[0].GetSpeciesName())
+	assert.Equal(t, det.Result.Species.ScientificName, received[0].GetScientificName())
+	assert.False(t, received[0].IsNewSpecies())
+}
+
+// TestPublishDetectionEvent_NewSpecies verifies that new-species detections
+// still go through suppression and reach the event bus with isNewSpecies=true.
+func TestPublishDetectionEvent_NewSpecies(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:      &conf.Settings{Debug: true},
+		Result:        det.Result,
+		CorrelationID: "test-new-species-det",
+	}
+
+	action.publishDetectionEvent(true, 0)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		received := consumer.GetReceivedEvents()
+		assert.Len(collect, received, 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()
+	assert.Equal(t, det.Result.Species.CommonName, received[0].GetSpeciesName())
+	assert.True(t, received[0].IsNewSpecies())
+}
+
+// TestPublishDetectionEvent_SuppressedNewSpecies verifies that a suppressed
+// new species detection still reaches the event bus as an ordinary detection
+// (isNewSpecies=false) so detection.occurred alert rules still fire.
+func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	det := testDetection()
+	// Record a notification first so next call is suppressed
+	tracker.RecordNotificationSent(det.Result.Species.ScientificName, det.Result.BeginTime)
+
+	action := &DatabaseAction{
+		Settings:          &conf.Settings{Debug: true},
+		Result:            det.Result,
+		CorrelationID:     "test-suppressed",
+		NewSpeciesTracker: tracker,
+	}
+
+	action.publishDetectionEvent(true, 0)
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		received := consumer.GetReceivedEvents()
+		assert.Len(collect, received, 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()
+	assert.Equal(t, det.Result.Species.CommonName, received[0].GetSpeciesName())
+	assert.False(t, received[0].IsNewSpecies(), "suppressed new species should publish as ordinary detection")
+}
+
+// TestPublishDetectionEvent_NoEventBus verifies graceful handling when the
+// event bus is not initialized.
+func TestPublishDetectionEvent_NoEventBus(t *testing.T) {
+	events.ResetForTesting()
+	t.Cleanup(events.ResetForTesting)
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:      &conf.Settings{Debug: true},
+		Result:        det.Result,
+		CorrelationID: "test-no-bus",
+	}
+
+	// Should not panic when event bus is not initialized
+	assert.NotPanics(t, func() {
+		action.publishDetectionEvent(false, 10)
+		action.publishDetectionEvent(true, 0)
+	})
 }

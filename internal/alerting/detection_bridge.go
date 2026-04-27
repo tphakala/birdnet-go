@@ -1,6 +1,8 @@
 package alerting
 
 import (
+	"maps"
+
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -34,15 +36,11 @@ func (b *DetectionAlertBridge) SupportsBatching() bool {
 }
 
 // ProcessDetectionEvent publishes detection events to the alert event bus.
+// Every detection emits detection.occurred; new species additionally emit
+// detection.new_species so rules on either event work as users expect.
 func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent) error {
-	eventName := EventDetectionOccurred
-	if event.IsNewSpecies() {
-		eventName = EventDetectionNewSpecies
-	}
-
 	b.log.Debug("Detection event received at alert bridge",
 		logger.String("component", "alerting.detection_bridge"),
-		logger.String("event_name", eventName),
 		logger.String("species", event.GetSpeciesName()),
 		logger.String("scientific_name", event.GetScientificName()),
 		logger.Float64("confidence", event.GetConfidence()),
@@ -50,29 +48,37 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		logger.String("operation", "bridge_detection_event"))
 
 	properties := map[string]any{
-		PropertySpeciesName:    event.GetSpeciesName(),
-		PropertyScientificName: event.GetScientificName(),
-		PropertyConfidence:     event.GetConfidence(),
-		PropertyLocation:       event.GetLocation(),
-		// Additional fields for notification metadata enrichment.
-		// These are not used for condition evaluation but are passed through
-		// to the notification adapter so webhook templates can reference them.
+		PropertySpeciesName:        event.GetSpeciesName(),
+		PropertyScientificName:     event.GetScientificName(),
+		PropertyConfidence:         event.GetConfidence(),
+		PropertyLocation:           event.GetLocation(),
 		PropertyEventTimestamp:     event.GetTimestamp(),
 		PropertyDaysSinceFirstSeen: event.GetDaysSinceFirstSeen(),
 		PropertyIsNewSpecies:       event.IsNewSpecies(),
 	}
 
-	// Pass through raw event metadata (note_id, latitude, longitude, image_url, begin_time)
-	// so the notification adapter can build full template data.
 	if meta := event.GetMetadata(); len(meta) > 0 {
-		properties[PropertyEventMetadata] = meta
+		properties[PropertyEventMetadata] = maps.Clone(meta)
+	}
+
+	var newSpeciesProps map[string]any
+	if event.IsNewSpecies() {
+		newSpeciesProps = maps.Clone(properties)
 	}
 
 	TryPublish(&AlertEvent{
 		ObjectType: ObjectTypeDetection,
-		EventName:  eventName,
+		EventName:  EventDetectionOccurred,
 		Properties: properties,
 	})
+
+	if newSpeciesProps != nil {
+		TryPublish(&AlertEvent{
+			ObjectType: ObjectTypeDetection,
+			EventName:  EventDetectionNewSpecies,
+			Properties: newSpeciesProps,
+		})
+	}
 
 	return nil
 }
