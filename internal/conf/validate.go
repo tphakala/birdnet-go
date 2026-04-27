@@ -29,6 +29,15 @@ var validRetentionPolicies = []string{
 	RetentionPolicyUsage,
 }
 
+// htmlTagPattern matches HTML tags for sanitization.
+var htmlTagPattern = regexp.MustCompile(`<[^>]*>`)
+
+// sanitizeStringField strips HTML tags from a string field as defense in depth.
+// Returns the sanitized string.
+func sanitizeStringField(s string) string {
+	return htmlTagPattern.ReplaceAllString(s, "")
+}
+
 // Precompiled regular expressions for validation
 var (
 	// birdweatherIDPattern validates Birdweather ID format (24 alphanumeric characters)
@@ -152,6 +161,15 @@ func firstValidationError(result ValidationResult, validationType string) error 
 // ValidateSettings validates the entire Settings struct
 func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
+
+	// Sanitize Main.Name: strip HTML tags as defense in depth
+	settings.Main.Name = sanitizeStringField(settings.Main.Name)
+
+	// Default empty BirdNET locale to "en" so downstream label loading
+	// always has a valid locale to work with.
+	if settings.BirdNET.Locale == "" {
+		settings.BirdNET.Locale = "en"
+	}
 
 	// Validate BirdNET settings
 	if err := validateBirdNETSettings(&settings.BirdNET); err != nil {

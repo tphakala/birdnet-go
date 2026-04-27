@@ -217,7 +217,7 @@ func TestAudioSourceConfig_Validate_PerSourceEQ(t *testing.T) {
 		Equalizer: &EqualizerSettings{
 			Enabled: true,
 			Filters: []EqualizerFilter{
-				{Type: "HighPass", Frequency: 100},
+				{Type: "HighPass", Frequency: 100, Q: 0.707},
 			},
 		},
 	}

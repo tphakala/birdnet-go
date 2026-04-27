@@ -4,7 +4,9 @@ package conf
 
 import (
 	"fmt"
+	"math"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -43,6 +45,12 @@ const (
 	MaxLoudnessRange = 20.0  // Maximum loudness range in LU
 	MinTruePeak      = -10.0 // Minimum true peak in dBTP
 	MaxTruePeak      = 0.0   // Maximum true peak in dBTP
+)
+
+// Equalizer filter validation limits
+const (
+	MaxEQFrequency = 24000.0 // Maximum EQ frequency in Hz (Nyquist for 48 kHz)
+	MaxEQQ         = 100.0   // Maximum Q factor for EQ filters
 )
 
 // Stream validation constants
@@ -124,6 +132,13 @@ func (s *StreamConfig) Validate() error {
 	// Validate URL scheme matches type
 	if err := s.validateURLScheme(); err != nil {
 		return err
+	}
+
+	// Validate per-stream EQ if set
+	if s.Equalizer != nil {
+		if err := validateEQFilters(s.Equalizer.Filters, fmt.Sprintf("stream '%s'", s.Name)); err != nil {
+			return err
+		}
 	}
 
 	// Validate quiet hours if enabled
@@ -294,10 +309,8 @@ func (a *AudioSourceConfig) Validate() error {
 
 	// Validate per-source EQ if set
 	if a.Equalizer != nil {
-		for i, f := range a.Equalizer.Filters {
-			if f.Frequency <= 0 {
-				return fmt.Errorf("audio source '%s': equalizer filter %d has invalid frequency %.1f", a.Name, i+1, f.Frequency)
-			}
+		if err := validateEQFilters(a.Equalizer.Filters, fmt.Sprintf("audio source '%s'", a.Name)); err != nil {
+			return err
 		}
 	}
 
@@ -453,6 +466,23 @@ func validateAudioSettings(settings *AudioSettings) error {
 		}
 	}
 
+	// Validate export path when export is enabled
+	if settings.Export.Enabled {
+		if err := validateExportPath(settings.Export.Path); err != nil {
+			return err
+		}
+	}
+
+	// Validate global EQ filters
+	if settings.Equalizer.Enabled && len(settings.Equalizer.Filters) > 0 {
+		if err := validateEQFilters(settings.Equalizer.Filters, "global equalizer"); err != nil {
+			return errors.New(err).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-global-eq").
+				Build()
+		}
+	}
+
 	// Remaining checks (length, pre-capture, gain, normalization) only make
 	// sense when export is actually enabled.
 	if settings.Export.Enabled {
@@ -573,6 +603,83 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 	}
 	if gain != 0 {
 		GetLogger().Warn("Both gain and normalization are configured", logger.String("action", "Normalization will take precedence, gain setting will be ignored"))
+	}
+	return nil
+}
+
+// validateExportPath rejects export paths that contain path traversal sequences
+// or are absolute. Empty paths are allowed (the export directory defaults at
+// runtime).
+func validateExportPath(path string) error {
+	if path == "" {
+		return nil
+	}
+
+	// Reject null bytes: the OS rejects them at runtime but validation
+	// should catch them early with a clear error message.
+	if strings.ContainsRune(path, '\x00') {
+		return errors.Newf("audio export path must not contain null bytes: %q", path).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-path").
+			Context("path", path).
+			Build()
+	}
+
+	// Reject literal ".." before cleaning, since filepath.IsLocal cleans
+	// internally and would accept "foo/../bar" as "bar" (valid local).
+	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal cleans "../x" to "x" (valid!); explicit ".." check is required for untrusted input per internal/CLAUDE.md
+	if strings.Contains(path, "..") {
+		return errors.Newf("audio export path must not contain path traversal (..): %q", path).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-path").
+			Context("path", path).
+			Build()
+	}
+
+	// Reject absolute paths (export should be relative to the data directory)
+	if filepath.IsAbs(path) {
+		return errors.Newf("audio export path must be relative, got absolute path: %q", path).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-path").
+			Context("path", path).
+			Build()
+	}
+
+	// Final defense: filepath.IsLocal rejects empty, absolute, and
+	// reserved names (Windows NUL, COM1, etc.).
+	cleanPath := filepath.Clean(path)
+	if !filepath.IsLocal(cleanPath) {
+		return errors.Newf("audio export path is not a safe local path: %q", path).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-path").
+			Context("path", path).
+			Build()
+	}
+
+	return nil
+}
+
+// validateEQFilters validates a slice of equalizer filters. The context string
+// is used for error messages (e.g. "global equalizer" or "audio source 'Mic'").
+func validateEQFilters(filters []EqualizerFilter, context string) error {
+	for i, f := range filters {
+		// NaN comparisons always return false, so NaN would bypass range checks.
+		// YAML supports .nan literals; reject them explicitly.
+		if math.IsNaN(f.Frequency) || math.IsNaN(f.Q) {
+			return fmt.Errorf("%s: filter %d has NaN value for frequency or Q (must be a valid number)", context, i+1)
+		}
+		if f.Frequency <= 0 {
+			return fmt.Errorf("%s: filter %d has invalid frequency %.1f (must be positive)", context, i+1, f.Frequency)
+		}
+		if f.Frequency > MaxEQFrequency {
+			return fmt.Errorf("%s: filter %d frequency %.1f exceeds maximum %.0f Hz", context, i+1, f.Frequency, MaxEQFrequency)
+		}
+		if f.Q <= 0 {
+			return fmt.Errorf("%s: filter %d has invalid Q factor %.4f (must be positive)", context, i+1, f.Q)
+		}
+		if f.Q > MaxEQQ {
+			return fmt.Errorf("%s: filter %d Q factor %.1f exceeds maximum %.0f", context, i+1, f.Q, MaxEQQ)
+		}
 	}
 	return nil
 }
