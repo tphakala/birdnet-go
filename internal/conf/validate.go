@@ -91,12 +91,58 @@ type ValidationResult struct {
 	Normalized any      // Normalized/transformed config (type matches input)
 }
 
+// numeric covers all Go numeric types for range validation.
+type numeric interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
+		~float32 | ~float64
+}
+
+// checkRange appends an error to result if value is outside [lo, hi].
+func checkRange[T numeric](result *ValidationResult, value, lo, hi T, msg string) {
+	if value < lo || value > hi {
+		result.Valid = false
+		result.Errors = append(result.Errors, msg)
+	}
+}
+
+// extractNormalized extracts and type-asserts the Normalized field from a
+// ValidationResult. Returns an error if the field is nil or the wrong type.
+func extractNormalized[T any](result ValidationResult, funcName string) (*T, error) {
+	if result.Normalized == nil {
+		return nil, errors.Newf("internal error: %s returned nil Normalized", funcName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "type-assertion").
+			Build()
+	}
+	normalized, ok := result.Normalized.(*T)
+	if !ok {
+		return nil, errors.Newf("internal error: %s returned unexpected type %T", funcName, result.Normalized).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "type-assertion").
+			Build()
+	}
+	return normalized, nil
+}
+
+// firstValidationError wraps the first error from a ValidationResult into an
+// EnhancedError with the given validation type. Returns nil when valid.
+func firstValidationError(result ValidationResult, validationType string) error {
+	if result.Valid {
+		return nil
+	}
+	return errors.Newf("%s", result.Errors[0]).
+		Category(errors.CategoryValidation).
+		Context("validation_type", validationType).
+		Build()
+}
+
 // ValidateSettings validates the entire Settings struct
 func ValidateSettings(settings *Settings) error {
 	ve := ValidationError{}
 
 	// Validate BirdNET settings
-	if err := validateBirdNETSettings(&settings.BirdNET, settings); err != nil {
+	if err := validateBirdNETSettings(&settings.BirdNET); err != nil {
 		ve.Errors = append(ve.Errors, err.Error())
 	}
 

@@ -21,56 +21,30 @@ import (
 //
 // The private validateBirdNETSettings() calls this and handles side effects.
 func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
+	if cfg == nil {
+		return ValidationResult{Valid: false, Errors: []string{"BirdNET config is nil"}}
+	}
 	result := ValidationResult{Valid: true, Warnings: []string{}}
 	normalized := *cfg
 
-	// Sensitivity range check
-	if cfg.Sensitivity < 0 || cfg.Sensitivity > 1.5 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "BirdNET sensitivity must be between 0 and 1.5")
-	}
+	checkRange(&result, cfg.Sensitivity, 0, 1.5, "BirdNET sensitivity must be between 0 and 1.5")
+	checkRange(&result, cfg.Threshold, 0, 1, "BirdNET threshold must be between 0 and 1")
+	checkRange(&result, cfg.Overlap, 0, 2.99, "BirdNET overlap value must be between 0 and 2.99 seconds")
+	checkRange(&result, cfg.Longitude, -180, 180, "BirdNET longitude must be between -180 and 180")
+	checkRange(&result, cfg.Latitude, -90, 90, "BirdNET latitude must be between -90 and 90")
 
-	// Threshold range check
-	if cfg.Threshold < 0 || cfg.Threshold > 1 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "BirdNET threshold must be between 0 and 1")
-	}
-
-	// Overlap range check
-	if cfg.Overlap < 0 || cfg.Overlap > 2.99 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "BirdNET overlap value must be between 0 and 2.99 seconds")
-	}
-
-	// Longitude range check
-	if cfg.Longitude < -180 || cfg.Longitude > 180 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "BirdNET longitude must be between -180 and 180")
-	}
-
-	// Latitude range check
-	if cfg.Latitude < -90 || cfg.Latitude > 90 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "BirdNET latitude must be between -90 and 90")
-	}
-
-	// Threads check
 	if cfg.Threads < 0 {
 		result.Valid = false
 		result.Errors = append(result.Errors, "BirdNET threads must be at least 0")
 	}
 
-	// RangeFilter model check - empty string, "latest", or "legacy" are valid
+	// Empty string, "latest", or "legacy" are valid
 	if cfg.RangeFilter.Model != "" && cfg.RangeFilter.Model != "latest" && cfg.RangeFilter.Model != "legacy" {
 		result.Valid = false
 		result.Errors = append(result.Errors, "RangeFilter model must be either empty (v2 default), 'latest', or 'legacy'")
 	}
 
-	// RangeFilter threshold check
-	if cfg.RangeFilter.Threshold < 0 || cfg.RangeFilter.Threshold > 1 {
-		result.Valid = false
-		result.Errors = append(result.Errors, "RangeFilter threshold must be between 0 and 1")
-	}
+	checkRange(&result, cfg.RangeFilter.Threshold, 0, 1, "RangeFilter threshold must be between 0 and 1")
 
 	// Locale validation and normalization (pure transformation)
 	if cfg.Locale != "" {
@@ -91,6 +65,9 @@ func ValidateBirdNETSettings(cfg *BirdNETConfig) ValidationResult {
 // ValidateBirdweatherSettings performs Birdweather validation without side effects.
 // Returns validation result with normalized settings.
 func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult {
+	if settings == nil {
+		return ValidationResult{Valid: false, Errors: []string{"Birdweather settings is nil"}}
+	}
 	result := ValidationResult{Valid: true, Warnings: []string{}}
 	normalized := *settings
 
@@ -110,13 +87,8 @@ func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult
 			result.Warnings = append(result.Warnings, "Birdweather will be disabled due to invalid ID format")
 		}
 
-		// Check threshold range
-		if settings.Threshold < 0 || settings.Threshold > 1 {
-			result.Valid = false
-			result.Errors = append(result.Errors, "birdweather threshold must be between 0 and 1")
-		}
+		checkRange(&result, settings.Threshold, 0, 1, "birdweather threshold must be between 0 and 1")
 
-		// Check location accuracy
 		if settings.LocationAccuracy < 0 {
 			result.Valid = false
 			result.Errors = append(result.Errors, "birdweather location accuracy must be non-negative")
@@ -130,6 +102,9 @@ func ValidateBirdweatherSettings(settings *BirdweatherSettings) ValidationResult
 // ValidateWebhookProvider performs webhook provider validation without side effects.
 // Returns validation result with errors.
 func ValidateWebhookProvider(p *PushProviderConfig) ValidationResult {
+	if p == nil {
+		return ValidationResult{Valid: false, Errors: []string{"webhook provider config is nil"}}
+	}
 	result := ValidationResult{Valid: true}
 
 	if !p.Enabled {
@@ -198,15 +173,23 @@ func ValidateWebhookProvider(p *PushProviderConfig) ValidationResult {
 	return result
 }
 
-// ValidateMQTTSettings performs MQTT validation without side effects.
+// ValidateMQTTSettings performs MQTT validation.
+// Trims Broker and Topic in-place before checking.
 // Returns validation result with errors.
 func ValidateMQTTSettings(settings *MQTTSettings) ValidationResult {
+	if settings == nil {
+		return ValidationResult{Valid: false, Errors: []string{"MQTT settings is nil"}}
+	}
 	result := ValidationResult{Valid: true}
 
 	if !settings.Enabled {
 		result.Normalized = settings
 		return result
 	}
+
+	// Normalize fields in-place so downstream code sees trimmed values.
+	settings.Broker = strings.TrimSpace(settings.Broker)
+	settings.Topic = strings.TrimSpace(settings.Topic)
 
 	// Check if broker is provided when enabled
 	if settings.Broker == "" {
@@ -247,6 +230,9 @@ func ValidateMQTTSettings(settings *MQTTSettings) ValidationResult {
 // ValidateWebServerSettings performs WebServer validation without side effects.
 // Returns validation result with errors.
 func ValidateWebServerSettings(settings *WebServerSettings) ValidationResult {
+	if settings == nil {
+		return ValidationResult{Valid: false, Errors: []string{"WebServer settings is nil"}}
+	}
 	result := ValidationResult{Valid: true}
 
 	if settings.Enabled {
@@ -335,6 +321,9 @@ func validateBasePath(basePath string) error {
 // ValidateTelemetrySettings validates the telemetry endpoint configuration.
 // Returns validation result with errors if enabled and listen address is malformed.
 func ValidateTelemetrySettings(settings *TelemetrySettings) ValidationResult {
+	if settings == nil {
+		return ValidationResult{Valid: false, Errors: []string{"telemetry settings is nil"}}
+	}
 	result := ValidationResult{Valid: true}
 
 	if !settings.Enabled {
@@ -372,20 +361,14 @@ func ValidateTelemetrySettings(settings *TelemetrySettings) ValidationResult {
 // validateBirdNETSettings validates the BirdNET-specific settings.
 // This function uses ValidateBirdNETSettings internally and handles side effects
 // (logging, mutation) to maintain backward compatibility.
-func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings) error {
-	// Call the pure validation function
+func validateBirdNETSettings(birdnetSettings *BirdNETConfig) error {
 	result := ValidateBirdNETSettings(birdnetSettings)
 
-	// Apply normalized configuration (side effect: mutation)
-	if normalized, ok := result.Normalized.(*BirdNETConfig); ok && normalized != nil {
-		*birdnetSettings = *normalized
-	} else if !ok {
-		// Type assertion failed - this indicates a bug in ValidateBirdNETSettings
-		return errors.Newf("internal error: ValidateBirdNETSettings returned unexpected type %T", result.Normalized).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "birdnet-type-assertion").
-			Build()
+	normalized, err := extractNormalized[BirdNETConfig](result, "ValidateBirdNETSettings")
+	if err != nil {
+		return err
 	}
+	*birdnetSettings = *normalized
 
 	// Handle warnings (side effects: logging)
 	// Locale fallback warnings are debug-level since the fallback works correctly
@@ -409,72 +392,33 @@ func validateBirdNETSettings(birdnetSettings *BirdNETConfig, settings *Settings)
 // This function uses ValidateWebServerSettings internally and handles error formatting
 // to maintain backward compatibility.
 func validateWebServerSettings(settings *WebServerSettings) error {
-	// Call the pure validation function
-	result := ValidateWebServerSettings(settings)
-
-	// Return errors if validation failed
-	if !result.Valid {
-		// Format first error with enhanced error for backward compatibility
-		firstError := result.Errors[0]
-		return errors.Newf("%s", firstError).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "webserver-settings").
-			Build()
-	}
-
-	return nil
+	return firstValidationError(ValidateWebServerSettings(settings), "webserver-settings")
 }
 
 // validateMQTTSettings validates the MQTT-specific settings.
 // This function uses ValidateMQTTSettings internally and handles error formatting
 // to maintain backward compatibility.
 func validateMQTTSettings(settings *MQTTSettings) error {
-	// Call the pure validation function
-	result := ValidateMQTTSettings(settings)
-
-	// Return errors if validation failed
-	if !result.Valid {
-		// Format first error with enhanced error for backward compatibility
-		firstError := result.Errors[0]
-		return errors.Newf("%s", firstError).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "mqtt-settings").
-			Build()
-	}
-
-	return nil
+	return firstValidationError(ValidateMQTTSettings(settings), "mqtt-settings")
 }
 
 // validateTelemetrySettings validates the telemetry-specific settings.
 // This function uses ValidateTelemetrySettings internally and handles error formatting.
 func validateTelemetrySettings(settings *TelemetrySettings) error {
-	result := ValidateTelemetrySettings(settings)
-	if !result.Valid {
-		return errors.Newf("%s", result.Errors[0]).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "telemetry-listen-address").
-			Build()
-	}
-	return nil
+	return firstValidationError(ValidateTelemetrySettings(settings), "telemetry-listen-address")
 }
 
 // validateBirdweatherSettings validates the Birdweather-specific settings.
 // This function uses ValidateBirdweatherSettings internally and handles side effects
 // (logging, mutation) to maintain backward compatibility.
 func validateBirdweatherSettings(settings *BirdweatherSettings) error {
-	// Call the pure validation function
 	result := ValidateBirdweatherSettings(settings)
 
-	// Apply normalized configuration (side effect: mutation)
-	if normalized, ok := result.Normalized.(*BirdweatherSettings); ok && normalized != nil {
-		*settings = *normalized
-	} else if !ok {
-		// Type assertion failed - this indicates a bug in ValidateBirdweatherSettings
-		return errors.Newf("internal error: ValidateBirdweatherSettings returned unexpected type %T", result.Normalized).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "birdweather-type-assertion").
-			Build()
+	normalized, err := extractNormalized[BirdweatherSettings](result, "ValidateBirdweatherSettings")
+	if err != nil {
+		return err
 	}
+	*settings = *normalized
 
 	// Handle warnings (side effect: logging)
 	for _, warning := range result.Warnings {
@@ -555,9 +499,7 @@ func validateWebhookProvider(p *PushProviderConfig) error {
 
 	// Return early if basic validation failed
 	if !result.Valid {
-		// Format first error with enhanced error for backward compatibility
-		firstError := result.Errors[0]
-		return errors.Newf("%s", firstError).
+		return errors.Newf("%s", result.Errors[0]).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "notification-push-webhook").
 			Context("provider_name", p.Name).

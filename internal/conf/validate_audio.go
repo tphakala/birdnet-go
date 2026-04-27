@@ -92,19 +92,22 @@ var ValidStreamTypes = map[string]bool{
 
 // Validate validates a single stream configuration
 func (s *StreamConfig) Validate() error {
+	// Normalize fields in-place so downstream code sees trimmed values.
+	s.Name = strings.TrimSpace(s.Name)
+	s.URL = strings.TrimSpace(s.URL)
+
 	// Name is required
-	name := strings.TrimSpace(s.Name)
-	if name == "" {
+	if s.Name == "" {
 		return fmt.Errorf("stream name is required")
 	}
 
-	// Name length limit (check trimmed name for consistency)
-	if len(name) > MaxStreamNameLength {
-		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", name, MaxStreamNameLength)
+	// Name length limit
+	if len(s.Name) > MaxStreamNameLength {
+		return fmt.Errorf("stream name '%s' exceeds maximum length of %d characters", s.Name, MaxStreamNameLength)
 	}
 
 	// URL is required
-	if strings.TrimSpace(s.URL) == "" {
+	if s.URL == "" {
 		return fmt.Errorf("stream URL is required for '%s'", s.Name)
 	}
 
@@ -232,18 +235,17 @@ func (r *RTSPSettings) ValidateStreams() error {
 		}
 
 		// Check for duplicate names (case-insensitive)
-		nameLower := strings.ToLower(strings.TrimSpace(stream.Name))
+		nameLower := strings.ToLower(stream.Name)
 		if names[nameLower] {
 			return fmt.Errorf("duplicate stream name: '%s'", stream.Name)
 		}
 		names[nameLower] = true
 
-		// Check for duplicate URLs (trimmed for consistency)
-		urlTrimmed := strings.TrimSpace(stream.URL)
-		if urls[urlTrimmed] {
+		// Check for duplicate URLs
+		if urls[stream.URL] {
 			return fmt.Errorf("stream '%s' has a duplicate URL: '%s'", stream.Name, stream.URL)
 		}
-		urls[urlTrimmed] = true
+		urls[stream.URL] = true
 	}
 
 	return nil
@@ -320,21 +322,38 @@ func (a *AudioSettings) ValidateSources() error {
 		}
 
 		// Check for duplicate names (case-insensitive)
-		nameLower := strings.ToLower(strings.TrimSpace(src.Name))
+		nameLower := strings.ToLower(src.Name)
 		if names[nameLower] {
 			return fmt.Errorf("duplicate audio source name: '%s'", src.Name)
 		}
 		names[nameLower] = true
 
-		// Check for duplicate devices (trimmed for consistency)
-		deviceTrimmed := strings.TrimSpace(src.Device)
-		if devices[deviceTrimmed] {
+		// Check for duplicate devices
+		if devices[src.Device] {
 			return fmt.Errorf("audio source '%s' has a duplicate device: '%s'", src.Name, src.Device)
 		}
-		devices[deviceTrimmed] = true
+		devices[src.Device] = true
 	}
 
 	return nil
+}
+
+// clearFfmpegMetadata resets all FFmpeg-related fields when path validation fails.
+func (s *AudioSettings) clearFfmpegMetadata() {
+	s.FfmpegPath = ""
+	s.FfmpegVersion = ""
+	s.FfmpegMajor = 0
+	s.FfmpegMinor = 0
+}
+
+// applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and
+// export is enabled. Does nothing when export is disabled.
+func (s *AudioSettings) applyFfmpegFormatFallback() {
+	if s.Export.Enabled && s.FfmpegPath == "" && s.Export.Type != AudioExportTypeWAV {
+		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
+			logger.String("previous_type", s.Export.Type))
+		s.Export.Type = AudioExportTypeWAV
+	}
 }
 
 // validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
@@ -345,7 +364,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		GetLogger().Warn("FFmpeg validation failed", logger.Error(ffmpegErr), logger.String("impact", "Audio export/conversion requiring FFmpeg might be disabled or use defaults"))
 		// Log validation warning for telemetry
 		logValidationWarning(ffmpegErr, "audio-tool-ffmpeg", "ffmpeg-not-available")
-		settings.FfmpegPath = "" // Ensure path is empty if validation failed
+		settings.clearFfmpegMetadata()
 	} else {
 		settings.FfmpegPath = validatedFfmpegPath // Store the validated path (explicit or from PATH)
 
@@ -422,11 +441,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 			Build()
 	}
 
-	if settings.FfmpegPath == "" && settings.Export.Type != AudioExportTypeWAV {
-		GetLogger().Warn("FFmpeg not available, forcing WAV format for audio export",
-			logger.String("previous_type", settings.Export.Type))
-		settings.Export.Type = AudioExportTypeWAV
-	}
+	settings.applyFfmpegFormatFallback()
 
 	// Bitrate only matters for lossy formats and only when export is enabled.
 	switch settings.Export.Type {
