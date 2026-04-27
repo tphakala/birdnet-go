@@ -1,6 +1,8 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -217,4 +219,62 @@ func TestGetFfmpegVersion(t *testing.T) {
 	assert.NotEqual(t, 0, major, "failed to detect major version, got: version=%s, major=%d, minor=%d", version, major, minor)
 
 	t.Logf("Detected FFmpeg version: %s (major: %d, minor: %d)", version, major, minor)
+}
+
+func TestFindConfigFile_ExplicitConfigPath(t *testing.T) {
+	// Save and restore the global ConfigPath after the test.
+	origConfigPath := ConfigPath
+	t.Cleanup(func() {
+		ConfigPath = origConfigPath
+	})
+
+	// Create a temporary config file.
+	tmpDir := t.TempDir()
+	customPath := filepath.Join(tmpDir, "custom-config.yaml")
+	require.NoError(t, os.WriteFile(customPath, []byte("# test config"), 0o600))
+
+	// Set ConfigPath to the custom path.
+	ConfigPath = customPath
+
+	got, err := FindConfigFile()
+	require.NoError(t, err)
+	assert.Equal(t, customPath, got, "FindConfigFile should return the explicit --config path")
+}
+
+func TestFindConfigFile_ExplicitConfigPathMissing(t *testing.T) {
+	// Save and restore the global ConfigPath after the test.
+	origConfigPath := ConfigPath
+	t.Cleanup(func() {
+		ConfigPath = origConfigPath
+	})
+
+	// Point ConfigPath at a file that does not exist.
+	ConfigPath = "/nonexistent/path/config.yaml"
+
+	_, err := FindConfigFile()
+	require.Error(t, err)
+	require.ErrorContains(t, err, "config file not found at explicit path")
+	require.ErrorContains(t, err, ConfigPath)
+}
+
+func TestFindConfigFile_EmptyConfigPathFallsThrough(t *testing.T) {
+	// Save and restore the global ConfigPath after the test.
+	origConfigPath := ConfigPath
+	t.Cleanup(func() {
+		ConfigPath = origConfigPath
+	})
+
+	// Ensure ConfigPath is empty so FindConfigFile falls through to defaults.
+	ConfigPath = ""
+
+	// We cannot predict whether a default config file exists on the test
+	// machine, so just verify the function does not error with
+	// "explicit path" and either succeeds or returns a generic not-found.
+	result, err := FindConfigFile()
+	if err != nil {
+		assert.NotContains(t, err.Error(), "explicit path",
+			"with empty ConfigPath, error should not mention explicit path")
+	} else {
+		assert.NotEmpty(t, result, "returned path should not be empty on success")
+	}
 }

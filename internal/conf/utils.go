@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -80,8 +81,30 @@ func GetDefaultConfigPaths() ([]string, error) {
 	return configPaths, nil
 }
 
-// findConfigFile locates the configuration file.
+// FindConfigFile locates the configuration file.
+// It checks the explicit --config CLI flag path first, then falls back
+// to viper.ConfigFileUsed(), and finally searches the default paths.
 func FindConfigFile() (string, error) {
+	// Check explicit config path first (set by --config CLI flag).
+	if ConfigPath != "" {
+		if info, err := os.Stat(ConfigPath); err == nil && !info.IsDir() {
+			return ConfigPath, nil
+		}
+		return "", errors.Newf("config file not found at explicit path: %s", ConfigPath).
+			Category(errors.CategoryFileIO).
+			Context("operation", "find-config-file").
+			Context("config_path", ConfigPath).
+			Build()
+	}
+
+	// Check the path viper resolved during Load() as a secondary source.
+	if viperPath := viper.ConfigFileUsed(); viperPath != "" {
+		if info, err := os.Stat(viperPath); err == nil && !info.IsDir() {
+			return viperPath, nil
+		}
+	}
+
+	// Fall through to default path search.
 	configPaths, err := GetDefaultConfigPaths()
 	if err != nil {
 		return "", errors.New(err).
