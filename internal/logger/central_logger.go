@@ -321,25 +321,15 @@ func (cl *CentralLogger) Module(name string) Logger {
 }
 
 // getModuleLevelLocked returns the log level for a module, walking up the
-// hierarchy. For "analysis.processor", it checks "analysis.processor" first,
-// then "analysis", then falls back to DefaultLevel. This also checks
-// ModuleOutputs so that YAML config like modules.analysis.level=debug
-// applies to sub-modules like analysis.processor.
+// hierarchy from most-specific to least-specific. For "analysis.processor",
+// it checks "analysis.processor" first, then "analysis", then falls back to
+// DefaultLevel. At each level, both moduleLevels and ModuleOutputs are checked
+// so that an exact child match in either source wins over a parent match.
 func (cl *CentralLogger) getModuleLevelLocked(module string) slog.Level {
-	// Check module_levels map (exact match, then parent prefixes)
 	for name := module; name != ""; {
 		if level, ok := cl.moduleLevels[name]; ok {
 			return level
 		}
-		if idx := strings.LastIndex(name, "."); idx >= 0 {
-			name = name[:idx]
-		} else {
-			break
-		}
-	}
-
-	// Check ModuleOutputs level (exact match, then parent prefixes)
-	for name := module; name != ""; {
 		if modOut, ok := cl.config.ModuleOutputs[name]; ok && modOut.Level != "" {
 			return parseLogLevel(modOut.Level)
 		}
@@ -349,7 +339,6 @@ func (cl *CentralLogger) getModuleLevelLocked(module string) slog.Level {
 			break
 		}
 	}
-
 	return parseLogLevel(cl.config.DefaultLevel)
 }
 
