@@ -2,6 +2,11 @@
 package conf
 
 const (
+	// Model IDs identify the inference backends available for detection.
+	ModelIDBirdNET = "birdnet"
+	ModelIDPerchV2 = "perch_v2"
+	ModelIDBat     = "bat"
+
 	SampleRate    = 48000 // Sample rate of the audio fed to BirdNET Analyzer
 	BitDepth      = 16    // Bit depth of the audio fed to BirdNET Analyzer
 	NumChannels   = 1     // Number of channels of the audio fed to BirdNET Analyzer
