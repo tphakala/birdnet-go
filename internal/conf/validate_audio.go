@@ -35,6 +35,16 @@ const (
 	AudioExportTypeOPUS = "opus" // Lossy compressed audio
 )
 
+// EBU R128 normalization limits
+const (
+	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
+	MaxTargetLUFS    = -10.0 // Maximum target loudness in LUFS
+	MinLoudnessRange = 0.0   // Minimum loudness range in LU
+	MaxLoudnessRange = 20.0  // Maximum loudness range in LU
+	MinTruePeak      = -10.0 // Minimum true peak in dBTP
+	MaxTruePeak      = 0.0   // Maximum true peak in dBTP
+)
+
 // Stream validation constants
 const (
 	MaxStreamNameLength      = 64

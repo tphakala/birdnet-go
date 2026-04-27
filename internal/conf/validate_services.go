@@ -15,16 +15,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/templatefuncs"
 )
 
-// EBU R128 normalization limits
-const (
-	MinTargetLUFS    = -40.0 // Minimum target loudness in LUFS
-	MaxTargetLUFS    = -10.0 // Maximum target loudness in LUFS
-	MinLoudnessRange = 0.0   // Minimum loudness range in LU
-	MaxLoudnessRange = 20.0  // Maximum loudness range in LU
-	MinTruePeak      = -10.0 // Minimum true peak in dBTP
-	MaxTruePeak      = 0.0   // Maximum true peak in dBTP
-)
-
 // ValidateBirdNETSettings performs BirdNET validation without side effects.
 // Returns normalized settings and any errors/warnings.
 // This pure function enables testing without log output or settings mutation.
