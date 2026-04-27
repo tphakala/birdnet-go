@@ -149,8 +149,8 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		a.DetectionCtx.NoteID.Store(uint64(a.Result.ID))
 	}
 
-	// After successful save, publish detection event for new species
-	a.publishNewSpeciesDetectionEvent(isNewSpecies, daysSinceFirstSeen)
+	// After successful save, publish detection event to the event bus.
+	a.publishDetectionEvent(isNewSpecies, daysSinceFirstSeen)
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
@@ -260,24 +260,11 @@ func (a *DatabaseAction) recordNotificationSent(notificationTime time.Time) {
 	}
 }
 
-// publishNewSpeciesDetectionEvent publishes a detection event for new species.
-// This helper method orchestrates notification suppression, event creation, and publishing.
-func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
-	if !isNewSpecies || !events.IsInitialized() {
-		if events.IsInitialized() && !isNewSpecies {
-			GetLogger().Debug("Skipping detection event publish: not a new species",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("scientific_name", a.Result.Species.ScientificName),
-				logger.Float64("confidence", a.Result.Confidence),
-				logger.String("operation", "skip_detection_event"))
-		}
-		return
-	}
-
-	suppress, notificationTime := a.shouldSuppressNewSpeciesNotification()
-	if suppress {
+// publishDetectionEvent publishes a detection event to the event bus.
+// All detections are published so that alert rules on detection.occurred can fire.
+// New species detections additionally go through suppression and notification recording.
+func (a *DatabaseAction) publishDetectionEvent(isNewSpecies bool, daysSinceFirstSeen int) {
+	if !events.IsInitialized() {
 		return
 	}
 
@@ -286,16 +273,29 @@ func (a *DatabaseAction) publishNewSpeciesDetectionEvent(isNewSpecies bool, days
 		return
 	}
 
-	detectionEvent := a.createDetectionEvent(isNewSpecies, daysSinceFirstSeen)
+	if isNewSpecies {
+		suppress, notificationTime := a.shouldSuppressNewSpeciesNotification()
+		if !suppress {
+			detectionEvent := a.createDetectionEvent(true, daysSinceFirstSeen)
+			if detectionEvent != nil {
+				a.populateEventMetadata(detectionEvent)
+				if published := eventBus.TryPublishDetection(detectionEvent); published {
+					a.recordNotificationSent(notificationTime)
+				}
+			}
+			return
+		}
+		// Suppressed new species still gets published as an ordinary detection
+		// so that detection.occurred alert rules fire for every detection.
+	}
+
+	detectionEvent := a.createDetectionEvent(false, daysSinceFirstSeen)
 	if detectionEvent == nil {
 		return
 	}
 
 	a.populateEventMetadata(detectionEvent)
-
-	if published := eventBus.TryPublishDetection(detectionEvent); published {
-		a.recordNotificationSent(notificationTime)
-	}
+	eventBus.TryPublishDetection(detectionEvent)
 }
 
 // Execute saves the audio clip to a file

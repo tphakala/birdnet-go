@@ -62,6 +62,7 @@ export interface PropertySchema {
 export interface EventSchema {
   name: string;
   label: string;
+  description?: string;
   properties: PropertySchema[];
 }
 

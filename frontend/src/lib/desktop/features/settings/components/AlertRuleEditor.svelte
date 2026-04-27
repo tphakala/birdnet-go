@@ -142,6 +142,7 @@
     selectedObjectType?.events?.map(e => ({
       value: e.name,
       label: schemaEventLabel(e.name, e.label),
+      description: e.description ?? '',
     })) ?? []
   );
 
@@ -616,6 +617,9 @@
             >
               <div class="flex-1 min-w-0">
                 <div class="text-sm font-medium text-[var(--color-base-content)]">{item.label}</div>
+                {#if 'description' in item && item.description}
+                  <div class="text-xs text-[var(--color-base-content)]/50">{item.description}</div>
+                {/if}
                 <div class="text-[11px] font-mono text-[var(--color-base-content)]/40">
                   {item.value}
                 </div>
