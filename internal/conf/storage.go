@@ -5,7 +5,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -429,18 +428,10 @@ func SaveSettings() error {
 	}
 
 	// Deep-clone the published snapshot before mutating it in
-	// prepareSettingsForSave. A shallow copy would leave slice and map
-	// backing arrays shared with concurrent readers that hold current;
-	// any transformation that mutates one of those nested fields would
-	// race against them.
+	// prepareSettingsForSave. The snapshot is immutable (range filter
+	// writers use clone-mutate-publish), so CloneSettings captures a
+	// consistent point-in-time copy without additional locking.
 	settingsCopy := *CloneSettings(current)
-
-	// Refresh the species list under its dedicated lock so the runtime
-	// list (shared across Species.Include/Exclude updates) is captured
-	// atomically rather than via the clone that predates the save.
-	speciesListMutex.RLock()
-	settingsCopy.BirdNET.RangeFilter.Species = slices.Clone(current.BirdNET.RangeFilter.Species)
-	speciesListMutex.RUnlock()
 
 	// Apply data transformations (seasonal tracking, etc.) on the clone.
 	settingsCopy = prepareSettingsForSave(&settingsCopy, current.BirdNET.Latitude)

@@ -1893,7 +1893,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// Use atomic check-and-set to prevent race conditions (see GitHub issue #1357)
 	// This ensures only ONE goroutine will trigger the daily range filter update,
 	// preventing concurrent updates that could cause species list inconsistencies
-	if settings.ShouldUpdateRangeFilterToday() {
+	if conf.ShouldUpdateRangeFilterToday() {
 		GetLogger().Info("Scheduling daily range filter update",
 			logger.Time("last_updated", settings.GetLastRangeFilterUpdate()),
 			logger.String("operation", "update_range_filter"))

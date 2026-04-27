@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -8,35 +9,40 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-var (
-	speciesListMutex sync.RWMutex
-)
+// speciesListMutex serializes clone-mutate-publish operations on range filter
+// fields (Species, LastUpdated) so that concurrent writers do not lose each
+// other's updates. Readers no longer need this mutex because published
+// snapshots are immutable.
+var speciesListMutex sync.Mutex
 
-// UpdateIncludedSpecies updates the included species list in the RangeFilter
-func (s *Settings) UpdateIncludedSpecies(species []string) {
+// UpdateIncludedSpecies clones the current settings, replaces the species
+// list and LastUpdated timestamp, and publishes a new immutable snapshot.
+func UpdateIncludedSpecies(species []string) {
 	speciesListMutex.Lock()
 	defer speciesListMutex.Unlock()
-	s.BirdNET.RangeFilter.Species = make([]string, len(species))
-	copy(s.BirdNET.RangeFilter.Species, species)
-	s.BirdNET.RangeFilter.LastUpdated = time.Now()
+
+	current := GetSettings()
+	if current == nil {
+		return
+	}
+
+	updated := CloneSettings(current)
+	updated.BirdNET.RangeFilter.Species = make([]string, len(species))
+	copy(updated.BirdNET.RangeFilter.Species, species)
+	updated.BirdNET.RangeFilter.LastUpdated = time.Now()
+	StoreSettings(updated)
 }
 
-// GetIncludedSpecies returns the current included species list from the RangeFilter
+// GetIncludedSpecies returns a copy of the included species list from this
+// snapshot. The snapshot is immutable, so no mutex is needed.
 func (s *Settings) GetIncludedSpecies() []string {
-	speciesListMutex.RLock()
-	defer speciesListMutex.RUnlock()
-	speciesCopy := make([]string, len(s.BirdNET.RangeFilter.Species))
-	copy(speciesCopy, s.BirdNET.RangeFilter.Species)
-	return speciesCopy
+	return slices.Clone(s.BirdNET.RangeFilter.Species)
 }
 
-// IsSpeciesIncluded checks if a given scientific name matches the scientific name part of any included species
+// IsSpeciesIncluded checks if a given scientific name matches the scientific
+// name part of any included species in this snapshot.
 func (s *Settings) IsSpeciesIncluded(result string) bool {
-	speciesListMutex.RLock()
-	defer speciesListMutex.RUnlock()
-
 	for _, fullSpeciesString := range s.BirdNET.RangeFilter.Species {
-		// Check if the full species string starts with our search term
 		if strings.HasPrefix(fullSpeciesString, result) {
 			return true
 		}
@@ -44,56 +50,59 @@ func (s *Settings) IsSpeciesIncluded(result string) bool {
 	return false
 }
 
-// ShouldUpdateRangeFilterToday atomically checks if the range filter should be updated today.
-// This function ensures that only ONE goroutine will trigger the update on any given day,
-// preventing race conditions where multiple concurrent detections could trigger multiple
-// range filter rebuilds simultaneously.
+// ShouldUpdateRangeFilterToday atomically checks whether the range filter
+// should be updated today and, if so, publishes a new snapshot with
+// LastUpdated set to today. Only the first caller on a given day gets true;
+// subsequent callers see the updated snapshot and return false.
 //
-// Returns true only for the FIRST caller on a given day (midnight to midnight).
-// Subsequent callers on the same day will return false.
-//
-// This solves GitHub issue #1357 where species appeared in detections that weren't in the
-// range filter due to concurrent range filter updates creating inconsistent states.
-func (s *Settings) ShouldUpdateRangeFilterToday() bool {
+// This solves GitHub issue #1357 where species appeared in detections that
+// weren't in the range filter due to concurrent range filter updates.
+func ShouldUpdateRangeFilterToday() bool {
 	speciesListMutex.Lock()
 	defer speciesListMutex.Unlock()
 
-	today := time.Now().Truncate(24 * time.Hour)
-
-	// Check if we need to update (last update was before today)
-	if s.BirdNET.RangeFilter.LastUpdated.Before(today) {
-		// Atomically mark as updated to prevent other goroutines from also updating
-		s.BirdNET.RangeFilter.LastUpdated = today
-
-		// Log the update decision for debugging
-		if s.Debug {
-			GetLogger().Debug("Scheduled range filter update",
-				logger.String("date", today.Format(time.DateOnly)),
-				logger.String("last_updated", s.BirdNET.RangeFilter.LastUpdated.Format(time.DateTime)))
-		}
-
-		return true
+	current := GetSettings()
+	if current == nil {
+		return false
 	}
 
-	return false
+	today := time.Now().Truncate(24 * time.Hour)
+	if !current.BirdNET.RangeFilter.LastUpdated.Before(today) {
+		return false
+	}
+
+	updated := CloneSettings(current)
+	updated.BirdNET.RangeFilter.LastUpdated = today
+	StoreSettings(updated)
+
+	if current.Debug {
+		GetLogger().Debug("Scheduled range filter update",
+			logger.String("date", today.Format(time.DateOnly)),
+			logger.String("last_updated", current.BirdNET.RangeFilter.LastUpdated.Format(time.DateTime)))
+	}
+
+	return true
 }
 
-// GetLastRangeFilterUpdate returns the last time the range filter was updated.
-// This is thread-safe and uses the same mutex as other range filter operations.
+// GetLastRangeFilterUpdate returns the last time the range filter was updated
+// from this snapshot. The snapshot is immutable, so no mutex is needed.
 func (s *Settings) GetLastRangeFilterUpdate() time.Time {
-	speciesListMutex.RLock()
-	defer speciesListMutex.RUnlock()
 	return s.BirdNET.RangeFilter.LastUpdated
 }
 
-// ResetRangeFilterUpdateFlag resets the LastUpdated timestamp to allow retry of failed updates.
-// This should be called when range filter update fails (e.g., network error, API failure)
-// to allow the update to be retried on the next detection instead of waiting until tomorrow.
-//
-// This is thread-safe and uses the same mutex as other range filter operations.
-func (s *Settings) ResetRangeFilterUpdateFlag() {
+// ResetRangeFilterUpdateFlag clones the current settings, zeros the
+// LastUpdated timestamp to allow retry of failed updates, and publishes
+// a new immutable snapshot.
+func ResetRangeFilterUpdateFlag() {
 	speciesListMutex.Lock()
 	defer speciesListMutex.Unlock()
-	// Set to zero time to indicate update is needed
-	s.BirdNET.RangeFilter.LastUpdated = time.Time{}
+
+	current := GetSettings()
+	if current == nil {
+		return
+	}
+
+	updated := CloneSettings(current)
+	updated.BirdNET.RangeFilter.LastUpdated = time.Time{}
+	StoreSettings(updated)
 }

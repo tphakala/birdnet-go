@@ -57,12 +57,12 @@ func setupRangeTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, 
 	controller.Settings.BirdNET.RangeFilter.Threshold = 0.01
 	controller.Settings.BirdNET.RangeFilter.LastUpdated = time.Now()
 
-	// Mock the included species list using the proper API
-	controller.Settings.UpdateIncludedSpecies([]string{
+	// Set the included species list directly for test setup
+	controller.Settings.BirdNET.RangeFilter.Species = []string{
 		"Turdus merula_Eurasian Blackbird",
 		"Parus major_Great Tit",
 		"Corvus cornix_Hooded Crow",
-	})
+	}
 
 	return e, mockDS, controller
 }
