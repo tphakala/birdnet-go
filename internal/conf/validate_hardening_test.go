@@ -1,7 +1,9 @@
 package conf
 
 import (
+	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,7 +89,7 @@ func TestValidateSettings_MainNameSanitized(t *testing.T) {
 	settings.Main.Name = "<script>alert('xss')</script>My Station"
 
 	// ValidateSettings should sanitize the name in place
-	_ = ValidateSettings(settings)
+	require.NoError(t, ValidateSettings(settings))
 
 	assert.Equal(t, "alert('xss')My Station", settings.Main.Name)
 	assert.NotContains(t, settings.Main.Name, "<script>")
@@ -112,6 +114,7 @@ func TestValidateExportPath(t *testing.T) {
 		{"hidden traversal rejected", "foo/../../../etc/passwd", true, "path traversal"},
 		{"double dot in middle rejected", "data/../secret", true, "path traversal"},
 		{"absolute path rejected", "/var/data/clips", true, "must be relative"},
+		{"null byte rejected", "clips\x00/etc/passwd", true, "null bytes"},
 		{"windows-style path treated as relative on unix", "C:\\data\\clips", false, ""},
 		{"dot-only rejected", "..", true, "path traversal"},
 	}
@@ -226,6 +229,18 @@ func TestValidateEQFilters(t *testing.T) {
 			},
 			wantErr: true,
 			errMsg:  "filter 2",
+		},
+		{
+			name:    "NaN frequency rejected",
+			filters: []EqualizerFilter{{Frequency: math.NaN(), Q: 1.0}},
+			wantErr: true,
+			errMsg:  "NaN",
+		},
+		{
+			name:    "NaN Q rejected",
+			filters: []EqualizerFilter{{Frequency: 1000, Q: math.NaN()}},
+			wantErr: true,
+			errMsg:  "NaN",
 		},
 	}
 
@@ -342,6 +357,18 @@ func TestValidateDynamicThresholdSettings(t *testing.T) {
 			settings: DynamicThresholdSettings{Enabled: true, Trigger: 1.0, Min: 1.0, ValidHours: 1},
 			wantErr:  false,
 		},
+		{
+			name:     "NaN trigger rejected",
+			settings: DynamicThresholdSettings{Enabled: true, Trigger: math.NaN(), Min: 0.5, ValidHours: 24},
+			wantErr:  true,
+			errType:  "dynamic-threshold-nan",
+		},
+		{
+			name:     "NaN min rejected",
+			settings: DynamicThresholdSettings{Enabled: true, Trigger: 0.8, Min: math.NaN(), ValidHours: 24},
+			wantErr:  true,
+			errType:  "dynamic-threshold-nan",
+		},
 	}
 
 	for _, tt := range tests {
@@ -366,7 +393,7 @@ func TestValidateSettings_EmptyBirdNETLocaleDefaulted(t *testing.T) {
 	settings := createMinimalValidSettings()
 	settings.BirdNET.Locale = ""
 
-	_ = ValidateSettings(settings)
+	require.NoError(t, ValidateSettings(settings))
 
 	// The default "en" is normalized by validateBirdNETSettings to "en-uk"
 	assert.NotEmpty(t, settings.BirdNET.Locale,
@@ -526,6 +553,9 @@ func createMinimalValidSettings() *Settings {
 	s.WebServer.Port = "8080"
 	s.WebServer.LiveStream.BitRate = 128
 	s.WebServer.LiveStream.SegmentLength = 5
+
+	// Security
+	s.Security.SessionDuration = 24 * time.Hour
 
 	// Realtime
 	s.Realtime.Interval = 15

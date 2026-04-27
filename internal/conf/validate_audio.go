@@ -4,6 +4,7 @@ package conf
 
 import (
 	"fmt"
+	"math"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -614,6 +615,16 @@ func validateExportPath(path string) error {
 		return nil
 	}
 
+	// Reject null bytes: the OS rejects them at runtime but validation
+	// should catch them early with a clear error message.
+	if strings.ContainsRune(path, '\x00') {
+		return errors.Newf("audio export path must not contain null bytes: %q", path).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "audio-export-path").
+			Context("path", path).
+			Build()
+	}
+
 	// Reject literal ".." before cleaning, since filepath.IsLocal cleans
 	// internally and would accept "foo/../bar" as "bar" (valid local).
 	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal cleans "../x" to "x" (valid!); explicit ".." check is required for untrusted input per internal/CLAUDE.md
@@ -652,6 +663,11 @@ func validateExportPath(path string) error {
 // is used for error messages (e.g. "global equalizer" or "audio source 'Mic'").
 func validateEQFilters(filters []EqualizerFilter, context string) error {
 	for i, f := range filters {
+		// NaN comparisons always return false, so NaN would bypass range checks.
+		// YAML supports .nan literals; reject them explicitly.
+		if math.IsNaN(f.Frequency) || math.IsNaN(f.Q) {
+			return fmt.Errorf("%s: filter %d has NaN value for frequency or Q (must be a valid number)", context, i+1)
+		}
 		if f.Frequency <= 0 {
 			return fmt.Errorf("%s: filter %d has invalid frequency %.1f (must be positive)", context, i+1, f.Frequency)
 		}
