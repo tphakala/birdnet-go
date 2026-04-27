@@ -207,9 +207,10 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 // This can be called from the API to force republishing of discovery messages.
 func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 	log := GetLogger()
+	settings := p.currentSettings()
 
 	// Guard against nil settings during startup/teardown
-	if p.Settings == nil {
+	if settings == nil {
 		return errors.Newf("settings not initialized").
 			Component("analysis.processor").
 			Category(errors.CategoryConfiguration).
@@ -218,14 +219,14 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 	}
 
 	// Check if MQTT is enabled and Home Assistant discovery is enabled
-	if !p.Settings.Realtime.MQTT.Enabled {
+	if !settings.Realtime.MQTT.Enabled {
 		return errors.Newf("MQTT is not enabled").
 			Component("analysis.processor").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "trigger_ha_discovery").
 			Build()
 	}
-	if !p.Settings.Realtime.MQTT.HomeAssistant.Enabled {
+	if !settings.Realtime.MQTT.HomeAssistant.Enabled {
 		return errors.Newf("home assistant discovery is not enabled").
 			Component("analysis.processor").
 			Category(errors.CategoryConfiguration).
@@ -249,7 +250,7 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 	publishCtx, cancel := context.WithTimeout(ctx, discoveryPublishTimeout)
 	defer cancel()
 
-	if err := p.publishHomeAssistantDiscovery(publishCtx, client, p.Settings); err != nil {
+	if err := p.publishHomeAssistantDiscovery(publishCtx, client, settings); err != nil {
 		log.Error("Failed to publish Home Assistant discovery", logger.Error(err))
 		return errors.New(err).
 			Component("analysis.processor").

@@ -244,8 +244,11 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	// Get retry configuration for the action
 	jqRetryConfig := getJobQueueRetryConfig(task.Action)
 
+	// Read fresh settings for hot-reload support
+	settings := p.currentSettings()
+
 	// State transition logging - task received
-	if p.Settings.Debug {
+	if settings.Debug {
 		log.Debug("Task received for enqueueing",
 			logger.String("task_description", sanitizedDesc),
 			logger.String("species", speciesName),
@@ -325,7 +328,7 @@ func (p *Processor) EnqueueTaskCtx(ctx context.Context, task *Task) error {
 	}
 
 	// State transition logging - task successfully enqueued
-	if p.Settings.Debug {
+	if settings.Debug {
 		log.Debug("Task enqueued successfully",
 			logger.String("task_description", sanitizedDesc),
 			logger.String("job_id", job.ID),

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -27,6 +28,7 @@ const (
 // loadDynamicThresholdsFromDB loads persisted dynamic thresholds from the database
 // This is called during processor initialization to restore learned thresholds across restarts
 func (p *Processor) loadDynamicThresholdsFromDB() error {
+	settings := p.currentSettings()
 	GetLogger().Info("Loading dynamic thresholds from database",
 		logger.String("operation", "load_dynamic_thresholds"))
 
@@ -63,7 +65,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		// Skip expired thresholds
 		if now.After(dbThreshold.ExpiresAt) {
 			expiredCount++
-			if p.Settings.Realtime.DynamicThreshold.Debug {
+			if settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Skipping expired threshold",
 					logger.String("species", dbThreshold.SpeciesName),
 					logger.String("model", dbThreshold.ModelName),
@@ -87,7 +89,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		}
 		loadedCount++
 
-		if p.Settings.Realtime.DynamicThreshold.Debug {
+		if settings.Realtime.DynamicThreshold.Debug {
 			GetLogger().Debug("Loaded dynamic threshold",
 				logger.String("species", dbThreshold.SpeciesName),
 				logger.String("model", dbThreshold.ModelName),
@@ -109,7 +111,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 
 // convertThresholdsForPersistence converts in-memory thresholds to database format.
 // Returns the database thresholds and a list of expired species to clean up.
-func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.DynamicThreshold, expiredSpecies []string) {
+func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (dbThresholds []datastore.DynamicThreshold, expiredSpecies []string) {
 	p.thresholdsMutex.RLock()
 	defer p.thresholdsMutex.RUnlock()
 
@@ -124,7 +126,7 @@ func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.
 	for compositeKey, threshold := range p.DynamicThresholds {
 		if now.After(threshold.Timer) {
 			expiredSpecies = append(expiredSpecies, compositeKey)
-			if p.Settings.Realtime.DynamicThreshold.Debug {
+			if settings.Realtime.DynamicThreshold.Debug {
 				GetLogger().Debug("Found expired threshold during persistence",
 					logger.String("key", compositeKey),
 					logger.Time("expires_at", threshold.Timer),
@@ -136,7 +138,7 @@ func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.
 		// Extract model name and species name from composite key
 		modelName, speciesName := splitDynamicThresholdKey(compositeKey)
 
-		baseThreshold := p.getBaseConfidenceThreshold(speciesName, "")
+		baseThreshold := p.getBaseConfidenceThreshold(settings, speciesName, "")
 		dbThresholds = append(dbThresholds, datastore.DynamicThreshold{
 			SpeciesName:    speciesName,
 			ModelName:      modelName,
@@ -217,7 +219,8 @@ func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThre
 // persistDynamicThresholds saves all current dynamic thresholds to the database
 // This is called periodically by the persistence goroutine
 func (p *Processor) persistDynamicThresholds() error {
-	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence()
+	settings := p.currentSettings()
+	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence(settings)
 
 	p.cleanupExpiredThresholds(expiredSpecies)
 
@@ -238,7 +241,7 @@ func (p *Processor) persistDynamicThresholds() error {
 	// Draining pending resets re-deletes those species from the database.
 	p.drainPendingResets()
 
-	if p.Settings.Realtime.DynamicThreshold.Debug {
+	if settings.Realtime.DynamicThreshold.Debug {
 		GetLogger().Debug("Persisted dynamic thresholds to database",
 			logger.Int("count", len(dbThresholds)),
 			logger.String("operation", "persist_dynamic_thresholds"))

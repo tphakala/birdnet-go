@@ -168,6 +168,13 @@ type Processor struct {
 	invalidCommandPaths sync.Map
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// detection thresholds, filters, and export config take effect on the next
+// processing cycle without restarting the service.
+func (p *Processor) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(p.Settings)
+}
+
 type Detections struct {
 	CorrelationID string                       // Unique detection identifier for log correlation
 	pcmData3s     []byte                       // 3s PCM data containing the detection
@@ -605,18 +612,22 @@ func (p *Processor) processDetections(item classifier.Results) {
 		logger.Int64("elapsed_time_ms", item.ElapsedTime.Milliseconds()),
 		logger.String("operation", "process_detections_entry"))
 
+	// Capture a settings snapshot once so every decision in this cycle
+	// uses a consistent, hot-reloadable view of the configuration.
+	settings := p.currentSettings()
+
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
 	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
-	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
 	// Ensure detectionWindow is non-negative to prevent early flushes
 	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
-	detectionResults := p.processResults(item)
+	detectionResults := p.processResults(settings, item)
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
@@ -691,7 +702,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
-	minDet := p.calculateMinDetections()
+	minDet := calculateMinDetectionsFromSettings(settings)
 	snapshot := p.SnapshotVisiblePending(minDet)
 	p.broadcastPendingSnapshot(snapshot)
 }
@@ -699,12 +710,12 @@ func (p *Processor) processDetections(item classifier.Results) {
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) processResults(item classifier.Results) []Detections {
+func (p *Processor) processResults(settings *conf.Settings, item classifier.Results) []Detections {
 	// Pre-allocate slice with capacity for all results
 	detections := make([]Detections, 0, len(item.Results))
 
 	// Collect processing time metric
-	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
 		p.Metrics.BirdNET.SetProcessTime(float64(item.ElapsedTime.Milliseconds()))
 	}
 
@@ -714,10 +725,10 @@ func (p *Processor) processResults(item classifier.Results) []Detections {
 	// Process each result in item.Results
 	for _, result := range item.Results {
 		// Parse and validate species information
-		scientificName, commonName, speciesCode, speciesLowercase := p.parseAndValidateSpecies(result, item)
+		scientificName, commonName, speciesCode, speciesLowercase := p.parseAndValidateSpecies(settings, result, item)
 		// Skip if either scientific or common name is missing (partial/invalid parsing)
 		if scientificName == "" || commonName == "" {
-			if p.Settings.Debug {
+			if settings.Debug {
 				GetLogger().Debug("Skipping partially parsed species",
 					logger.String("scientific_name", scientificName),
 					logger.String("common_name", commonName),
@@ -732,20 +743,20 @@ func (p *Processor) processResults(item classifier.Results) []Detections {
 
 		// Handle dog and human detection, this sets LastDogDetection and LastHumanDetection which is
 		// later used to discard detection if privacy filter or dog bark filters are enabled in settings.
-		p.handleDogDetection(item, speciesLowercase, result)
-		p.handleHumanDetection(item, speciesLowercase, result)
+		p.handleDogDetection(settings, item, speciesLowercase, result)
+		p.handleHumanDetection(settings, item, speciesLowercase, result)
 
 		// Determine confidence threshold and check filters
-		baseThreshold := p.getBaseConfidenceThreshold(commonName, scientificName)
+		baseThreshold := p.getBaseConfidenceThreshold(settings, commonName, scientificName)
 
 		// Check if detection should be filtered
-		shouldSkip, _ := p.shouldFilterDetection(result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
+		shouldSkip, _ := p.shouldFilterDetection(settings, result, commonName, scientificName, speciesLowercase, baseThreshold, item.Source.ID, item.ModelID)
 		if shouldSkip {
 			continue
 		}
 
 		// Create the detection
-		det := p.createDetection(item, result, scientificName, commonName, speciesCode)
+		det := p.createDetection(settings, item, result, scientificName, commonName, speciesCode)
 		detections = append(detections, det)
 	}
 
@@ -755,14 +766,14 @@ func (p *Processor) processResults(item classifier.Results) []Detections {
 // parseAndValidateSpecies parses species information and validates it
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) parseAndValidateSpecies(result datastore.Results, item classifier.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
+func (p *Processor) parseAndValidateSpecies(settings *conf.Settings, result datastore.Results, item classifier.Results) (scientificName, commonName, speciesCode, speciesLowercase string) {
 	// Use BirdNET's EnrichResultWithTaxonomy to get species information
 	scientificName, commonName, speciesCode = p.Bn.EnrichResultWithTaxonomy(result.Species)
 
 	// Skip processing if scientific name is missing. Common name may be empty
 	// for models like Perch v2 that return scientific-name-only labels.
 	if scientificName == "" {
-		if p.Settings.Debug {
+		if settings.Debug {
 			GetLogger().Debug("Skipping species with invalid format",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
@@ -777,7 +788,7 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item class
 	}
 
 	// Log placeholder taxonomy codes if using custom model
-	if p.Settings.BirdNET.ModelPath != "" && p.Settings.Debug && speciesCode != "" {
+	if settings.BirdNET.ModelPath != "" && settings.Debug && speciesCode != "" {
 		if len(speciesCode) == 8 && (speciesCode[:2] == "XX" || (speciesCode[0] >= 'A' && speciesCode[0] <= 'Z' && speciesCode[1] >= 'A' && speciesCode[1] <= 'Z')) {
 			GetLogger().Debug("using placeholder taxonomy code",
 				logger.String("taxonomy_code", speciesCode),
@@ -797,7 +808,7 @@ func (p *Processor) parseAndValidateSpecies(result datastore.Results, item class
 }
 
 // shouldFilterDetection checks if a detection should be filtered out
-func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
+func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datastore.Results, commonName, scientificName, speciesLowercase string, baseThreshold float32, source, modelID string) (shouldFilter bool, confidenceThreshold float32) {
 	// Check human detection privacy filter
 	if strings.Contains(strings.ToLower(commonName), speciesHuman) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
@@ -808,8 +819,8 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	// species when building the included list, but that only works when the range filter
 	// model is active and location is configured. This check ensures excluded species are
 	// always filtered regardless of range filter state.
-	if isSpeciesExcluded(commonName, scientificName, p.Settings.Realtime.Species.Exclude) {
-		if p.Settings.Debug {
+	if isSpeciesExcluded(commonName, scientificName, settings.Realtime.Species.Exclude) {
+		if settings.Debug {
 			GetLogger().Debug("Detection filtered: species is on exclude list",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
@@ -819,11 +830,11 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	}
 
 	// Determine confidence threshold
-	if p.Settings.Realtime.DynamicThreshold.Enabled {
+	if settings.Realtime.DynamicThreshold.Enabled {
 		// Check if this species has a custom user-configured threshold (> 0)
 		// Species may be in Config only for custom actions/interval without threshold set
 		// Use lookupSpeciesConfig to support both common name and scientific name lookups
-		config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName)
+		config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName)
 		isCustomThreshold := exists && config.Threshold > 0
 		confidenceThreshold = p.getAdjustedConfidenceThreshold(modelID, speciesLowercase, baseThreshold, isCustomThreshold)
 	} else {
@@ -832,7 +843,7 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 
 	// Check confidence threshold
 	if result.Confidence <= confidenceThreshold {
-		if p.Settings.Debug {
+		if settings.Debug {
 			GetLogger().Debug("Detection filtered out due to low confidence",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
@@ -845,8 +856,8 @@ func (p *Processor) shouldFilterDetection(result datastore.Results, commonName, 
 	}
 
 	// Check species inclusion filter
-	if !p.Settings.IsSpeciesIncluded(result.Species) {
-		if p.Settings.Debug {
+	if !settings.IsSpeciesIncluded(result.Species) {
+		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
 				logger.Float32("confidence", result.Confidence),
@@ -873,13 +884,13 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 // createDetection creates a detection object with all necessary information
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) createDetection(item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
+func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode string) Detections {
 	// Create file name for audio clip
-	clipName := p.generateClipName(scientificName, result.Confidence)
+	clipName := p.generateClipName(settings, scientificName, result.Confidence)
 
 	// Get capture length and pre-capture length for detection end time calculation
-	captureLength := time.Duration(p.Settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(p.Settings.Realtime.Audio.Export.PreCapture) * time.Second
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
 
 	// Set begin and end time for note
 	beginTime := item.StartTime
@@ -893,7 +904,7 @@ func (p *Processor) createDetection(item classifier.Results, result datastore.Re
 	detectionTime := time.Now().Add(-detection.DetectionTimeOffset)
 
 	// Create the detection.Result
-	detectionResult := p.createDetectionResult(
+	detectionResult := p.createDetectionResult(settings,
 		detectionTime,
 		beginTime, endTime,
 		scientificName, commonName, speciesCode,
@@ -927,7 +938,7 @@ func (p *Processor) createDetection(item classifier.Results, result datastore.Re
 // createDetectionResult creates a detection.Result from the given parameters.
 // detectionTime should be pre-computed by the caller to ensure timestamp consistency
 // with other detection artifacts (e.g., Note) created from the same analysis.
-func (p *Processor) createDetectionResult(
+func (p *Processor) createDetectionResult(settings *conf.Settings,
 	detectionTime time.Time,
 	beginTime, endTime time.Time,
 	scientificName, commonName, speciesCode string,
@@ -941,7 +952,7 @@ func (p *Processor) createDetectionResult(
 
 	return detection.Result{
 		Timestamp:   detectionTime,
-		SourceNode:  p.Settings.Main.Name,
+		SourceNode:  settings.Main.Name,
 		AudioSource: audioSource,
 		BeginTime:   beginTime,
 		EndTime:     endTime,
@@ -951,10 +962,10 @@ func (p *Processor) createDetectionResult(
 			Code:           speciesCode,
 		},
 		Confidence:     math.Round(confidence*100) / 100,
-		Latitude:       p.Settings.BirdNET.Latitude,
-		Longitude:      p.Settings.BirdNET.Longitude,
-		Threshold:      p.Settings.BirdNET.Threshold,
-		Sensitivity:    p.Settings.BirdNET.Sensitivity,
+		Latitude:       settings.BirdNET.Latitude,
+		Longitude:      settings.BirdNET.Longitude,
+		Threshold:      settings.BirdNET.Threshold,
+		Sensitivity:    settings.BirdNET.Sensitivity,
 		ClipName:       clipName,
 		ProcessingTime: elapsedTime,
 		Occurrence:     math.Max(0.0, math.Min(1.0, occurrence)),
@@ -1056,12 +1067,12 @@ func (p *Processor) syncSpeciesTrackerIfNeeded() {
 // handleDogDetection handles the detection of dog barks and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleDogDetection(item classifier.Results, speciesLowercase string, result datastore.Results) {
-	if p.Settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
-		result.Confidence > p.Settings.Realtime.DogBarkFilter.Confidence {
+func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.Results, speciesLowercase string, result datastore.Results) {
+	if settings.Realtime.DogBarkFilter.Enabled && strings.Contains(speciesLowercase, speciesDog) &&
+		result.Confidence > settings.Realtime.DogBarkFilter.Confidence {
 		GetLogger().Info("dog detection filtered",
 			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(p.Settings.Realtime.DogBarkFilter.Confidence)),
+			logger.Float32("threshold", float32(settings.Realtime.DogBarkFilter.Confidence)),
 			logger.String("source", item.Source.DisplayName),
 			logger.String("operation", "dog_bark_filter"))
 		p.detectionMutex.Lock()
@@ -1073,13 +1084,13 @@ func (p *Processor) handleDogDetection(item classifier.Results, speciesLowercase
 // handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
-func (p *Processor) handleHumanDetection(item classifier.Results, speciesLowercase string, result datastore.Results) {
+func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, speciesLowercase string, result datastore.Results) {
 	// only check this if privacy filter is enabled
-	if p.Settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
-		result.Confidence > p.Settings.Realtime.PrivacyFilter.Confidence {
+	if settings.Realtime.PrivacyFilter.Enabled && strings.Contains(speciesLowercase, "human ") &&
+		result.Confidence > settings.Realtime.PrivacyFilter.Confidence {
 		GetLogger().Info("human detection filtered",
 			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(p.Settings.Realtime.PrivacyFilter.Confidence)),
+			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
 			logger.String("source", item.Source.DisplayName),
 			logger.String("operation", "privacy_filter"))
 		// put human detection timestamp into LastHumanDetection map. This is used to discard
@@ -1092,10 +1103,10 @@ func (p *Processor) handleHumanDetection(item classifier.Results, speciesLowerca
 
 // getBaseConfidenceThreshold retrieves the confidence threshold for a species, using custom or global thresholds.
 // It supports lookup by both common name and scientific name for consistency with include/exclude matching.
-func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string) float32 {
+func (p *Processor) getBaseConfidenceThreshold(settings *conf.Settings, commonName, scientificName string) float32 {
 	// Check if species has a custom threshold using both common and scientific name lookup
-	if config, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, commonName, scientificName); exists {
-		if p.Settings.Debug {
+	if config, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, commonName, scientificName); exists {
+		if settings.Debug {
 			GetLogger().Debug("using custom confidence threshold",
 				logger.String("commonName", commonName),
 				logger.String("scientificName", scientificName),
@@ -1106,19 +1117,19 @@ func (p *Processor) getBaseConfidenceThreshold(commonName, scientificName string
 	}
 
 	// Fall back to global threshold
-	return float32(p.Settings.BirdNET.Threshold)
+	return float32(settings.BirdNET.Threshold)
 }
 
 // generateClipName generates a clip name for the given scientific name and confidence.
-func (p *Processor) generateClipName(scientificName string, confidence float32) string {
-	return p.buildClipPath(scientificName, confidence, 0, time.Now())
+func (p *Processor) generateClipName(settings *conf.Settings, scientificName string, confidence float32) string {
+	return p.buildClipPath(settings, scientificName, confidence, 0, time.Now())
 }
 
 // generateClipNameWithDuration creates a clip filename with duration suffix.
 // Format: year/month/scientific_name_CONFp_TIMESTAMP_DURs.ext
 // detectionTime should be the original detection timestamp (not flush time).
-func (p *Processor) generateClipNameWithDuration(scientificName string, confidence float32, durationSeconds int, detectionTime time.Time) string {
-	return p.buildClipPath(scientificName, confidence, durationSeconds, detectionTime)
+func (p *Processor) generateClipNameWithDuration(settings *conf.Settings, scientificName string, confidence float32, durationSeconds int, detectionTime time.Time) string {
+	return p.buildClipPath(settings, scientificName, confidence, durationSeconds, detectionTime)
 }
 
 // buildClipPathFallbackOnce guards the one-shot WARN log emitted when
@@ -1136,14 +1147,14 @@ var (
 
 // buildClipPath constructs a clip file path with optional duration suffix.
 // When durationSeconds is 0, the duration suffix is omitted.
-func (p *Processor) buildClipPath(scientificName string, confidence float32, durationSeconds int, t time.Time) string {
+func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string, confidence float32, durationSeconds int, t time.Time) string {
 	formattedName := strings.ToLower(strings.ReplaceAll(scientificName, " ", "_"))
 	formattedConfidence := fmt.Sprintf("%.0fp", confidence*100)
 	timestamp := t.Format("20060102T150405Z")
 	year := t.Format("2006")
 	month := t.Format("01")
 
-	rawExportType := p.Settings.Realtime.Audio.Export.Type
+	rawExportType := settings.Realtime.Audio.Export.Type
 	// GetFileExtension is a passthrough for unknown formats, so a whitespace-
 	// only Type would otherwise leak into the filename as a ". " suffix.
 	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
@@ -1169,6 +1180,8 @@ func (p *Processor) buildClipPath(scientificName string, confidence float32, dur
 
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections int) (shouldDiscard bool, reason string) {
+	settings := p.currentSettings()
+
 	// Check minimum detection count
 	if item.Count < minDetections {
 		// Add structured logging for minimum count filtering
@@ -1182,7 +1195,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	}
 
 	// Check privacy filter
-	if p.Settings.Realtime.PrivacyFilter.Enabled {
+	if settings.Realtime.PrivacyFilter.Enabled {
 		p.detectionMutex.RLock()
 		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
 		p.detectionMutex.RUnlock()
@@ -1199,8 +1212,8 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	}
 
 	// Check dog bark filter
-	if p.Settings.Realtime.DogBarkFilter.Enabled {
-		if p.Settings.Realtime.DogBarkFilter.Debug {
+	if settings.Realtime.DogBarkFilter.Enabled {
+		if settings.Realtime.DogBarkFilter.Debug {
 			p.detectionMutex.RLock()
 			GetLogger().Debug("last dog detection status",
 				logger.Any("last_detections", p.LastDogDetection),
@@ -1224,8 +1237,8 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 	}
 
 	// Check daylight filter
-	if p.Settings.Realtime.DaylightFilter.Enabled {
-		if p.Settings.Realtime.DaylightFilter.Debug {
+	if settings.Realtime.DaylightFilter.Enabled {
+		if settings.Realtime.DaylightFilter.Debug {
 			GetLogger().Debug("Daylight filter check",
 				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.String("scientific_name", item.Detection.Result.Species.ScientificName),
@@ -1251,6 +1264,8 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, minDetections
 
 // processApprovedDetection handles an approved detection by sending it to the worker queue
 func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
+	settings := p.currentSettings()
+
 	// Use item.Confidence directly - it's the correct confidence for THIS species,
 	// not Results[0].Confidence which could be a different (higher confidence) species
 	confidence := float32(item.Confidence)
@@ -1293,7 +1308,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 	}
 
 	// Update BirdNET metrics detection counter if enabled
-	if p.Settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
+	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil && p.Metrics.BirdNET != nil {
 		p.Metrics.BirdNET.IncrementDetectionCounter(item.Detection.Result.Species.CommonName)
 	}
 }
@@ -1398,7 +1413,7 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 // calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings
 // with the processor's settings.
 func (p *Processor) calculateMinDetections() int {
-	return calculateMinDetectionsFromSettings(p.Settings)
+	return calculateMinDetectionsFromSettings(p.currentSettings())
 }
 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
@@ -1549,9 +1564,11 @@ func (p *Processor) pendingDetectionsFlusher() {
 
 // getActionsForItem determines the actions to be taken for a given detection.
 func (p *Processor) getActionsForItem(det *Detections) []Action {
+	settings := p.currentSettings()
+
 	// Check if species has custom configuration using both common and scientific name lookup
-	if speciesConfig, exists := lookupSpeciesConfig(p.Settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
-		if p.Settings.Debug {
+	if speciesConfig, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
+		if settings.Debug {
 			GetLogger().Debug("species config exists for custom actions",
 				logger.String("commonName", det.Result.Species.CommonName),
 				logger.String("scientificName", det.Result.Species.ScientificName),
@@ -1695,6 +1712,8 @@ func parseCommandParams(params []string, det *Detections) map[string]any {
 
 // getDefaultActions returns the default actions to be taken for a given detection.
 func (p *Processor) getDefaultActions(det *Detections) []Action {
+	settings := p.currentSettings()
+
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
@@ -1706,9 +1725,9 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	detectionCtx := &DetectionContext{}
 
 	// Append various default actions based on the application settings
-	if p.Settings.Realtime.Log.Enabled {
+	if settings.Realtime.Log.Enabled {
 		actions = append(actions, &LogAction{
-			Settings:      p.Settings,
+			Settings:      settings,
 			EventTracker:  p.GetEventTracker(),
 			Result:        det.Result,
 			CorrelationID: det.CorrelationID,
@@ -1716,13 +1735,13 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	}
 
 	// Create DatabaseAction if database is enabled
-	if p.Settings.Output.SQLite.Enabled || p.Settings.Output.MySQL.Enabled {
+	if settings.Output.SQLite.Enabled || settings.Output.MySQL.Enabled {
 		p.speciesTrackerMu.RLock()
 		tracker := p.NewSpeciesTracker
 		p.speciesTrackerMu.RUnlock()
 
 		databaseAction = &DatabaseAction{
-			Settings:          p.Settings,
+			Settings:          settings,
 			EventTracker:      p.GetEventTracker(),
 			NewSpeciesTracker: tracker,
 			processor:         p,            // Add processor reference for source name resolution
@@ -1747,7 +1766,7 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 		}
 
 		sseAction = &SSEAction{
-			Settings:       p.Settings,
+			Settings:       settings,
 			Result:         det.Result, // Domain model (single source of truth)
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
@@ -1762,20 +1781,20 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// NOTE: We intentionally do NOT check IsConnected() here. The connection state
 	// at action-creation time is stale by the time the action executes from the job queue
 	// (TOCTOU Layer 1, GitHub #2397). The publish path handles disconnected state gracefully.
-	if p.Settings.Realtime.MQTT.Enabled {
+	if settings.Realtime.MQTT.Enabled {
 		mqttClient := p.GetMQTTClient()
 		if mqttClient != nil {
 			// Create MQTT retry config from settings
 			mqttRetryConfig := jobqueue.RetryConfig{
-				Enabled:      p.Settings.Realtime.MQTT.RetrySettings.Enabled,
-				MaxRetries:   p.Settings.Realtime.MQTT.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
+				Enabled:      settings.Realtime.MQTT.RetrySettings.Enabled,
+				MaxRetries:   settings.Realtime.MQTT.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(settings.Realtime.MQTT.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(settings.Realtime.MQTT.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   settings.Realtime.MQTT.RetrySettings.BackoffMultiplier,
 			}
 
 			mqttAction = &MqttAction{
-				Settings:       p.Settings,
+				Settings:       settings,
 				MqttClient:     mqttClient,
 				EventTracker:   p.GetEventTracker(),
 				DetectionCtx:   detectionCtx, // Share context from DatabaseAction
@@ -1840,26 +1859,26 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
 	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
 	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
-	if p.Settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
+	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
 		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx))
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
 	// NOTE: BirdWeather runs independently (doesn't need detection ID from database)
-	if p.Settings.Realtime.Birdweather.Enabled {
+	if settings.Realtime.Birdweather.Enabled {
 		bwClient := p.GetBwClient() // Use getter for thread safety
 		if bwClient != nil {
 			// Create BirdWeather retry config from settings
 			bwRetryConfig := jobqueue.RetryConfig{
-				Enabled:      p.Settings.Realtime.Birdweather.RetrySettings.Enabled,
-				MaxRetries:   p.Settings.Realtime.Birdweather.RetrySettings.MaxRetries,
-				InitialDelay: time.Duration(p.Settings.Realtime.Birdweather.RetrySettings.InitialDelay) * time.Second,
-				MaxDelay:     time.Duration(p.Settings.Realtime.Birdweather.RetrySettings.MaxDelay) * time.Second,
-				Multiplier:   p.Settings.Realtime.Birdweather.RetrySettings.BackoffMultiplier,
+				Enabled:      settings.Realtime.Birdweather.RetrySettings.Enabled,
+				MaxRetries:   settings.Realtime.Birdweather.RetrySettings.MaxRetries,
+				InitialDelay: time.Duration(settings.Realtime.Birdweather.RetrySettings.InitialDelay) * time.Second,
+				MaxDelay:     time.Duration(settings.Realtime.Birdweather.RetrySettings.MaxDelay) * time.Second,
+				Multiplier:   settings.Realtime.Birdweather.RetrySettings.BackoffMultiplier,
 			}
 
 			actions = append(actions, &BirdWeatherAction{
-				Settings:      p.Settings,
+				Settings:      settings,
 				EventTracker:  p.GetEventTracker(),
 				BwClient:      bwClient,
 				Result:        det.Result, // Domain model (single source of truth)
@@ -1874,14 +1893,14 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 	// Use atomic check-and-set to prevent race conditions (see GitHub issue #1357)
 	// This ensures only ONE goroutine will trigger the daily range filter update,
 	// preventing concurrent updates that could cause species list inconsistencies
-	if p.Settings.ShouldUpdateRangeFilterToday() {
+	if settings.ShouldUpdateRangeFilterToday() {
 		GetLogger().Info("Scheduling daily range filter update",
-			logger.Time("last_updated", p.Settings.GetLastRangeFilterUpdate()),
+			logger.Time("last_updated", settings.GetLastRangeFilterUpdate()),
 			logger.String("operation", "update_range_filter"))
 		// Add UpdateRangeFilterAction if it hasn't been executed today
 		actions = append(actions, &UpdateRangeFilterAction{
 			Bn:       p.Bn,
-			Settings: p.Settings,
+			Settings: settings,
 		})
 	}
 
@@ -1894,9 +1913,11 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 // when executed by the job queue. This decouples the slow FFmpeg encoding
 // from the fast Database -> SSE -> MQTT pipeline.
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
-	captureLength := p.Settings.Realtime.Audio.Export.Length
+	settings := p.currentSettings()
+
+	captureLength := settings.Realtime.Audio.Export.Length
 	if !det.Result.EndTime.IsZero() && !det.Result.BeginTime.IsZero() {
-		preCapture := p.Settings.Realtime.Audio.Export.PreCapture
+		preCapture := settings.Realtime.Audio.Export.PreCapture
 		derivedLength := int(det.Result.EndTime.Sub(det.Result.BeginTime).Seconds()) + preCapture
 		if derivedLength > captureLength {
 			captureLength = derivedLength
@@ -1904,15 +1925,15 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 				logger.String("detection_id", det.CorrelationID),
 				logger.String("species", det.Result.Species.CommonName),
 				logger.Int("duration_seconds", captureLength),
-				logger.Int("configured_length", p.Settings.Realtime.Audio.Export.Length),
+				logger.Int("configured_length", settings.Realtime.Audio.Export.Length),
 				logger.String("operation", "extended_capture_audio_export"))
 		}
 	}
 
 	// Cap at capture buffer size to prevent reading beyond buffer bounds.
 	bufferCap := conf.DefaultCaptureBufferSeconds
-	if p.Settings.Realtime.ExtendedCapture.Enabled && p.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
-		bufferCap = p.Settings.Realtime.ExtendedCapture.CaptureBufferSeconds
+	if settings.Realtime.ExtendedCapture.Enabled && settings.Realtime.ExtendedCapture.CaptureBufferSeconds > 0 {
+		bufferCap = settings.Realtime.ExtendedCapture.CaptureBufferSeconds
 	}
 	if captureLength > bufferCap {
 		GetLogger().Warn("Capping capture length at buffer size",
@@ -1934,7 +1955,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	captureEndTime := det.Result.BeginTime.Add(time.Duration(captureLength) * time.Second)
 	if p.BufferMgr != nil && captureEndTime.After(time.Now()) {
 		return &SaveAudioAction{
-			Settings:      p.Settings,
+			Settings:      settings,
 			ClipName:      det.Result.ClipName,
 			bufferMgr:     p.BufferMgr,
 			sourceID:      det.Result.AudioSource.ID,
@@ -1963,7 +1984,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 			logger.String("operation", "capture_buffer_read_for_export"))
 		// Return an action with nil pcmData; Execute() will be a no-op
 		return &SaveAudioAction{
-			Settings:      p.Settings,
+			Settings:      settings,
 			ClipName:      det.Result.ClipName,
 			NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:   p.preRenderer,
@@ -1973,7 +1994,7 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	}
 
 	return &SaveAudioAction{
-		Settings:      p.Settings,
+		Settings:      settings,
 		ClipName:      det.Result.ClipName,
 		pcmData:       pcmData,
 		NoteID:        det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
@@ -2196,7 +2217,7 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	}
 
 	// Flush dynamic thresholds using the provided context deadline
-	if p.Settings.Realtime.DynamicThreshold.Enabled {
+	if p.currentSettings().Realtime.DynamicThreshold.Enabled {
 		done := make(chan error, 1)
 		go func() {
 			done <- p.FlushDynamicThresholds()

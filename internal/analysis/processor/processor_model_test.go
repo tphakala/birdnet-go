@@ -47,7 +47,7 @@ func TestCreateDetectionResult_ModelInfo(t *testing.T) {
 			t.Parallel()
 			p := &Processor{Settings: &conf.Settings{}}
 
-			result := p.createDetectionResult(
+			result := p.createDetectionResult(p.Settings,
 				time.Now(),
 				time.Now(), time.Now().Add(3*time.Second),
 				"Parus major", "Great Tit", "gretit1",

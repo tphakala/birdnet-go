@@ -47,7 +47,7 @@ func TestGenerateClipNameWithDuration(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			clipName := p.generateClipNameWithDuration(tt.scientificName, tt.confidence, tt.durationSecs, time.Now())
+			clipName := p.generateClipNameWithDuration(p.Settings, tt.scientificName, tt.confidence, tt.durationSecs, time.Now())
 			for _, want := range tt.wantContains {
 				assert.Contains(t, clipName, want)
 			}

@@ -20,7 +20,9 @@ func (p *Processor) SetSunCalc(sc *suncalc.SunCalc) {
 // initDaylightFilter resolves the daylight filter species list at startup.
 // Follows the same pattern as initExtendedCapture(). Safe to re-call on settings refresh.
 func (p *Processor) initDaylightFilter() {
-	if !p.Settings.Realtime.DaylightFilter.Enabled {
+	settings := p.currentSettings()
+
+	if !settings.Realtime.DaylightFilter.Enabled {
 		p.daylightFilterMu.Lock()
 		p.daylightFilterAll = false
 		p.daylightFilterSpecies = nil
@@ -29,7 +31,7 @@ func (p *Processor) initDaylightFilter() {
 	}
 
 	// Skip if location has not been explicitly configured by the user
-	if !p.Settings.BirdNET.LocationConfigured {
+	if !settings.BirdNET.LocationConfigured {
 		GetLogger().Warn("Daylight filter enabled but location not configured, filter will not be active",
 			logger.String("operation", "daylight_filter_init"))
 		p.daylightFilterMu.Lock()
@@ -49,7 +51,7 @@ func (p *Processor) initDaylightFilter() {
 	taxonomyDB := p.getTaxonomyDB()
 
 	isAll, resolved := resolveSpeciesFilter(
-		p.Settings.Realtime.DaylightFilter.Species, labels, taxonomyDB, "daylight_filter",
+		settings.Realtime.DaylightFilter.Species, labels, taxonomyDB, "daylight_filter",
 	)
 
 	// For an exclusionary filter, empty species list means "filter nothing",
@@ -71,13 +73,15 @@ func (p *Processor) initDaylightFilter() {
 
 	GetLogger().Info("Daylight filter enabled for filtered species",
 		logger.Int("species_count", len(resolved)),
-		logger.Int("offset_hours", p.Settings.Realtime.DaylightFilter.Offset),
+		logger.Int("offset_hours", settings.Realtime.DaylightFilter.Offset),
 		logger.String("operation", "daylight_filter_init"))
 }
 
 // isDaylightFilterSpecies checks if a species is in the daylight filter set.
 func (p *Processor) isDaylightFilterSpecies(scientificName string) bool {
-	if !p.Settings.Realtime.DaylightFilter.Enabled {
+	settings := p.currentSettings()
+
+	if !settings.Realtime.DaylightFilter.Enabled {
 		return false
 	}
 
@@ -108,7 +112,8 @@ func (p *Processor) isDaylight(t time.Time) (bool, error) {
 		return false, err
 	}
 
-	offset := time.Duration(p.Settings.Realtime.DaylightFilter.Offset) * time.Hour
+	settings := p.currentSettings()
+	offset := time.Duration(settings.Realtime.DaylightFilter.Offset) * time.Hour
 	daylightStart := sunTimes.CivilDawn.Add(offset)
 	daylightEnd := sunTimes.CivilDusk.Add(-offset)
 
@@ -125,7 +130,9 @@ func (p *Processor) isDaylight(t time.Time) (bool, error) {
 // A detection is discarded when the species is in the filter set AND the
 // detection time falls within the daylight window. Fails open on suncalc errors.
 func (p *Processor) checkDaylightFilter(scientificName string, detectionTime time.Time) bool {
-	if !p.Settings.Realtime.DaylightFilter.Enabled {
+	settings := p.currentSettings()
+
+	if !settings.Realtime.DaylightFilter.Enabled {
 		return false
 	}
 
