@@ -3,6 +3,7 @@
 package conf
 
 import (
+	"math"
 	"slices"
 	"strings"
 
@@ -312,6 +313,14 @@ func validateWeatherSettings(settings *WeatherSettings) error {
 func validateDynamicThresholdSettings(settings *DynamicThresholdSettings) error {
 	if !settings.Enabled {
 		return nil
+	}
+
+	// NaN comparisons always return false, so NaN would bypass range checks.
+	if math.IsNaN(settings.Trigger) || math.IsNaN(settings.Min) {
+		return errors.Newf("dynamic threshold trigger and min must be valid numbers, not NaN").
+			Category(errors.CategoryValidation).
+			Context("validation_type", "dynamic-threshold-nan").
+			Build()
 	}
 
 	// Trigger and Min must be valid confidence values in [0, 1]
