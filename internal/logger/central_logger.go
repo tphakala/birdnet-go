@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -319,10 +320,24 @@ func (cl *CentralLogger) Module(name string) Logger {
 	}
 }
 
-// getModuleLevelLocked returns the log level for a module (must hold read lock)
+// getModuleLevelLocked returns the log level for a module, walking up the
+// hierarchy from most-specific to least-specific. For "analysis.processor",
+// it checks "analysis.processor" first, then "analysis", then falls back to
+// DefaultLevel. At each level, both moduleLevels and ModuleOutputs are checked
+// so that an exact child match in either source wins over a parent match.
 func (cl *CentralLogger) getModuleLevelLocked(module string) slog.Level {
-	if level, ok := cl.moduleLevels[module]; ok {
-		return level
+	for name := module; name != ""; {
+		if level, ok := cl.moduleLevels[name]; ok {
+			return level
+		}
+		if modOut, ok := cl.config.ModuleOutputs[name]; ok && modOut.Level != "" {
+			return parseLogLevel(modOut.Level)
+		}
+		if idx := strings.LastIndex(name, "."); idx >= 0 {
+			name = name[:idx]
+		} else {
+			break
+		}
 	}
 	return parseLogLevel(cl.config.DefaultLevel)
 }

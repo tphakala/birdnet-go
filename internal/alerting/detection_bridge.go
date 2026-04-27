@@ -40,6 +40,15 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		eventName = EventDetectionNewSpecies
 	}
 
+	b.log.Debug("Detection event received at alert bridge",
+		logger.String("component", "alerting.detection_bridge"),
+		logger.String("event_name", eventName),
+		logger.String("species", event.GetSpeciesName()),
+		logger.String("scientific_name", event.GetScientificName()),
+		logger.Float64("confidence", event.GetConfidence()),
+		logger.Bool("is_new_species", event.IsNewSpecies()),
+		logger.String("operation", "bridge_detection_event"))
+
 	properties := map[string]any{
 		PropertySpeciesName:    event.GetSpeciesName(),
 		PropertyScientificName: event.GetScientificName(),
