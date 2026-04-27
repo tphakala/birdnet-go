@@ -232,7 +232,8 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	copy(rules, e.rules)
 	e.rulesMu.RUnlock()
 
-	if isDetectionEvent(event.EventName) {
+	isDetection := isDetectionEvent(event.EventName)
+	if isDetection {
 		e.log.Debug("Alert engine received detection event",
 			logger.String("component", "alerting.engine"),
 			logger.String("event_name", event.EventName),
@@ -278,7 +279,7 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 		}
 
 		if e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
-			if isDetectionEvent(event.EventName) {
+			if isDetection {
 				e.log.Debug("Detection rule fired",
 					logger.String("component", "alerting.engine"),
 					logger.String("event_name", event.EventName),
@@ -287,7 +288,7 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 					logger.String("operation", "fire_detection_rule"))
 			}
 			e.fireRule(rule, event)
-		} else if isDetectionEvent(event.EventName) {
+		} else if isDetection {
 			e.log.Debug("Detection rule suppressed by cooldown",
 				logger.String("component", "alerting.engine"),
 				logger.String("event_name", event.EventName),
