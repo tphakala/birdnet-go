@@ -43,6 +43,7 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings := &conf.Settings{}
 
 	// Initialize with valid defaults
+	settings.Realtime.Interval = 15                // Must be positive after hardening
 	settings.Realtime.Dashboard.SummaryLimit = 100 // Valid range: 10-1000
 	settings.Realtime.Dashboard.Thumbnails.Summary = true
 	settings.Realtime.Dashboard.Thumbnails.Recent = true
@@ -63,6 +64,7 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	settings.BirdNET.Longitude = testNewYorkLongitude
 	settings.BirdNET.Sensitivity = 1.0
 	settings.BirdNET.Threshold = 0.8
+	settings.BirdNET.Locale = "en"
 	settings.BirdNET.RangeFilter.Model = "latest"
 	settings.BirdNET.RangeFilter.Threshold = 0.03
 
@@ -73,7 +75,7 @@ func getTestSettings(t *testing.T) *conf.Settings {
 	}}
 	settings.Realtime.Audio.Export.Enabled = true
 	settings.Realtime.Audio.Export.Type = "wav"
-	settings.Realtime.Audio.Export.Path = "/clips"
+	settings.Realtime.Audio.Export.Path = "clips"
 	settings.Realtime.Audio.Export.Bitrate = "192k"
 	settings.Realtime.Audio.Export.Length = 15
 
