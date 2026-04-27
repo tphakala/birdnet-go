@@ -8,6 +8,7 @@
   import { navigation } from '$lib/stores/navigation.svelte';
   import { settingsStore } from '$lib/stores/settings';
   import { getFriendlyAudioSourceName } from '$lib/utils/audioSourceLabel';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface Props {
     detection: Detection;
@@ -38,7 +39,7 @@
   );
 
   function handlePlay() {
-    const audioUrl = `/api/v2/audio/${detection.id}`;
+    const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
     if (onPlayMobileAudio) {
       onPlayMobileAudio({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
     }

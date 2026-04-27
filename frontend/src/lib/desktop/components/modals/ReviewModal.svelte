@@ -7,6 +7,7 @@
   import SpeciesThumbnail from './SpeciesThumbnail.svelte';
   import type { Detection } from '$lib/types/detection.types';
   import { fetchWithCSRF } from '$lib/utils/api';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { XCircle, TriangleAlert, ChevronRight } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { safeArrayAccess } from '$lib/utils/security';
@@ -203,7 +204,7 @@
           <!-- Audio and Spectrogram -->
           <div class="relative bg-[var(--color-base-200)] rounded-lg p-4">
             <AudioPlayer
-              audioUrl="/api/v2/audio/{detection.id}"
+              audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
               detectionId={detection.id.toString()}
               showSpectrogram={true}
               spectrogramSize="lg"

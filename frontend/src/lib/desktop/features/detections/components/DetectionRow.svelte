@@ -44,6 +44,7 @@
   import { useImageDelayedLoading } from '$lib/utils/delayedLoading.svelte.js';
   import { loggers } from '$lib/utils/logger';
   import { navigation } from '$lib/stores/navigation.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = loggers.ui;
 
@@ -225,10 +226,11 @@
     showConfirmModal = true;
   }
 
-  // Placeholder function for thumbnail URL
+  // Placeholder function for thumbnail URL. buildAppUrl prepends the
+  // configured base path so the image resolves through reverse proxies.
   function getThumbnailUrl(scientificName: string): string {
     // TODO: Replace with actual thumbnail API endpoint
-    return `/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`;
+    return buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(scientificName)}`);
   }
 
   // Thumbnail loading handlers
@@ -264,7 +266,7 @@
 
   // Cleanup is handled automatically by useImageDelayedLoading
   function playMobileAudio() {
-    const audioUrl = `/api/v2/audio/${detection.id}`;
+    const audioUrl = buildAppUrl(`/api/v2/audio/${detection.id}`);
     onPlayMobileAudio?.({ audioUrl, speciesName: detection.commonName, detectionId: detection.id });
   }
 </script>
@@ -408,7 +410,7 @@
 <!-- Recording/Spectrogram -->
 <td class="hidden md:table-cell">
   <SpectrogramPlayer
-    audioUrl={`/api/v2/audio/${detection.id}`}
+    audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
     detectionId={detection.id.toString()}
     spectrogramSize="md"
   />

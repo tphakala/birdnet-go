@@ -439,7 +439,9 @@
         <!-- Species thumbnail with credit overlay -->
         <div class="hero-thumbnail">
           <img
-            src="/api/v2/media/species-image?name={encodeURIComponent(det.scientificName)}"
+            src={buildAppUrl(
+              `/api/v2/media/species-image?name=${encodeURIComponent(det.scientificName)}`
+            )}
             alt={det.commonName}
             class="w-full h-full object-contain"
             onerror={handleBirdImageError}

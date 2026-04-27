@@ -19,6 +19,7 @@
   import { Play, Pause, Loader2 } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { t } from '$lib/i18n';
   import {
     applyPlaybackRate,
@@ -88,7 +89,7 @@
   let audioNodes = $state<AudioNodeChain | null>(null);
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
 
-  const audioUrl = $derived(`/api/v2/audio/${encodeURIComponent(detectionId)}`);
+  const audioUrl = $derived(buildAppUrl(`/api/v2/audio/${encodeURIComponent(detectionId)}`));
 
   // Update audio nodes when gain/filter props change
   // Read values unconditionally to ensure they're tracked as dependencies

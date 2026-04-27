@@ -28,6 +28,7 @@
   import { dropdown } from '$lib/utils/transitions';
   import { hasReviewPermission, isAuthenticated } from '$lib/utils/auth';
   import { loggers } from '$lib/utils/logger';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   // SPINNER CONTROL: Set to false to disable loading spinners (reduces flickering)
   // Change back to true to re-enable spinners for testing
@@ -187,7 +188,7 @@
 
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
-    selectedAudioUrl = `/api/v2/audio/${result.id}`;
+    selectedAudioUrl = buildAppUrl(`/api/v2/audio/${result.id}`);
     selectedSpeciesName = result.commonName || '';
     selectedDetectionId = result.id;
     showMobilePlayer = true;
@@ -811,14 +812,14 @@
                         <!-- decoding="async": Decode image off-main-thread to prevent UI blocking -->
                         <!-- fetchpriority="low": Lower network priority for species thumbnails -->
                         <img
-                          src="/api/v2/media/species-image?name={encodeURIComponent(
-                            result.scientificName
-                          )}"
+                          src={buildAppUrl(
+                            `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
+                          )}
                           alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                           class="w-full h-full object-cover"
                           onerror={e => {
                             const target = e.currentTarget as HTMLImageElement;
-                            target.src = '/ui/assets/bird-placeholder.svg';
+                            target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
                             target.classList.add('p-2');
                           }}
                           loading="lazy"
@@ -1023,14 +1024,14 @@
                               title={t('search.detailsPanel.clickToCollapse')}
                             >
                               <img
-                                src="/api/v2/media/species-image?name={encodeURIComponent(
-                                  result.scientificName
-                                )}"
+                                src={buildAppUrl(
+                                  `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
+                                )}
                                 alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                                 class="w-full h-full object-cover"
                                 onerror={e => {
                                   const target = e.currentTarget as HTMLImageElement;
-                                  target.src = '/ui/assets/bird-placeholder.svg';
+                                  target.src = buildAppUrl('/ui/assets/bird-placeholder.svg');
                                   target.classList.add('p-2');
                                 }}
                                 loading="lazy"
@@ -1046,7 +1047,7 @@
                               {t('search.detailsPanel.audioPlayer')}
                             </h3>
                             <AudioPlayer
-                              audioUrl="/api/v2/audio/{result.id}"
+                              audioUrl={buildAppUrl(`/api/v2/audio/${result.id}`)}
                               detectionId={result.id}
                               width={400}
                               height={200}
@@ -1089,9 +1090,9 @@
                       class="w-12 h-9 rounded-md overflow-hidden bg-[var(--color-base-200)] shrink-0"
                     >
                       <img
-                        src="/api/v2/media/species-image?name={encodeURIComponent(
-                          result.scientificName
-                        )}"
+                        src={buildAppUrl(
+                          `/api/v2/media/species-image?name=${encodeURIComponent(result.scientificName)}`
+                        )}
                         alt={result.commonName || t('search.detailsPanel.unknownSpecies')}
                         class="w-full h-full object-cover"
                         onerror={handleBirdImageError}

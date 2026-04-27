@@ -15,6 +15,7 @@
   import { Check } from '@lucide/svelte';
   import { cn } from '$lib/utils/cn';
   import { t } from '$lib/i18n';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface Props {
     detection: Detection;
@@ -39,9 +40,10 @@
   const isVerified = $derived(detection.verified === 'correct');
   const isFalsePositive = $derived(detection.verified === 'false_positive');
 
-  // Thumbnail URL
+  // Thumbnail URL — buildAppUrl prepends the configured base path so the
+  // image resolves correctly behind reverse proxies (e.g. /birdnet/...).
   const thumbnailUrl = $derived(
-    `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+    buildAppUrl(`/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`)
   );
 </script>
 

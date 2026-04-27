@@ -16,6 +16,7 @@
 import { acquireSlot, releaseSlot, type SlotHandle } from '$lib/utils/imageLoadQueue';
 import { getCsrfToken } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
+import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.ui;
 
@@ -137,15 +138,21 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   }
 
   function buildStatusUrl(detectionId: number): string {
-    return `/api/v2/spectrogram/${detectionId}/status?size=${config.size}&raw=${String(config.raw)}`;
+    return buildAppUrl(
+      `/api/v2/spectrogram/${detectionId}/status?size=${config.size}&raw=${String(config.raw)}`
+    );
   }
 
   function buildGenerateUrl(detectionId: number): string {
-    return `/api/v2/spectrogram/${detectionId}/generate?size=${config.size}&raw=${String(config.raw)}`;
+    return buildAppUrl(
+      `/api/v2/spectrogram/${detectionId}/generate?size=${config.size}&raw=${String(config.raw)}`
+    );
   }
 
   function buildImageUrl(detectionId: number): string {
-    let url = `/api/v2/spectrogram/${detectionId}?size=${config.size}&raw=${String(config.raw)}`;
+    let url = buildAppUrl(
+      `/api/v2/spectrogram/${detectionId}?size=${config.size}&raw=${String(config.raw)}`
+    );
     if (imageRetryCount > 0) {
       url += `&t=${String(Date.now())}`;
     }

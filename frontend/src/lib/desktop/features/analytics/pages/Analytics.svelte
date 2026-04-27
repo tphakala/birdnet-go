@@ -12,6 +12,7 @@
   import ChartCard from '../components/ui/ChartCard.svelte';
   import StatCard from '../components/ui/StatCard.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   const logger = getLogger('app');
 
@@ -1381,9 +1382,9 @@
                       <div class="w-8 h-8 rounded-full bg-[var(--color-base-200)] overflow-hidden">
                         <!-- PERFORMANCE OPTIMIZATION: Enhanced image loading for species thumbnails -->
                         <img
-                          src="/api/v2/media/species-image?name={encodeURIComponent(
-                            detection.scientificName
-                          )}"
+                          src={buildAppUrl(
+                            `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+                          )}
                           alt={detection.commonName || 'Unknown species'}
                           class="w-full h-full object-cover"
                           onerror={handleBirdImageError}
@@ -1440,9 +1441,9 @@
                   class="w-10 h-10 rounded-full bg-[var(--color-base-200)] overflow-hidden shrink-0"
                 >
                   <img
-                    src="/api/v2/media/species-image?name={encodeURIComponent(
-                      detection.scientificName
-                    )}"
+                    src={buildAppUrl(
+                      `/api/v2/media/species-image?name=${encodeURIComponent(detection.scientificName)}`
+                    )}
                     alt={detection.commonName || 'Unknown species'}
                     class="w-full h-full object-cover"
                     onerror={handleBirdImageError}

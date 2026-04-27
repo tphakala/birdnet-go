@@ -17,6 +17,7 @@ Props:
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
   import type { PendingDetection } from '$lib/types/pending.types';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
 
   interface Props {
     detections: PendingDetection[];
@@ -167,7 +168,7 @@ Props:
           <!-- Thumbnail -->
           {#if detection.thumbnail}
             <img
-              src={detection.thumbnail}
+              src={buildAppUrl(detection.thumbnail)}
               alt={detection.species}
               class="h-8 aspect-[4/3] rounded-md object-cover"
             />

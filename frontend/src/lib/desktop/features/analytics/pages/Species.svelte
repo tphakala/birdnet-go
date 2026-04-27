@@ -144,7 +144,15 @@
         throw new Error(`Server responded with ${response.status}`);
       }
 
-      speciesData = await response.json();
+      const rawSpecies: SpeciesData[] = await response.json();
+      // Backend returns relative URLs (e.g. /api/v2/media/image/...). Run them
+      // through buildAppUrl so they include the configured base path (e.g.
+      // /birdnet, HA Ingress token) before they end up in <img src=...>.
+      speciesData = rawSpecies.map(species =>
+        species.thumbnail_url
+          ? { ...species, thumbnail_url: buildAppUrl(species.thumbnail_url) }
+          : species
+      );
       applyFilters();
 
       // Load thumbnails asynchronously after main data is displayed
@@ -292,10 +300,13 @@
         if (response.ok) {
           const thumbnails = await response.json();
 
-          // Update species data with fetched thumbnails
+          // Update species data with fetched thumbnails. Backend URLs are
+          // relative; buildAppUrl prepends the configured base path so the
+          // image request resolves correctly behind a reverse proxy.
           speciesData = speciesData.map(species => {
-            if (thumbnails[species.scientific_name]) {
-              return { ...species, thumbnail_url: thumbnails[species.scientific_name] };
+            const url = thumbnails[species.scientific_name];
+            if (url) {
+              return { ...species, thumbnail_url: buildAppUrl(url) };
             }
             return species;
           });
