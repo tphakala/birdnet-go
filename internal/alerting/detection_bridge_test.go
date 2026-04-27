@@ -73,7 +73,7 @@ func TestBridge_OrdinaryDetection_EmitsOccurredOnly(t *testing.T) {
 	assert.Equal(t, EventDetectionOccurred, result[0].EventName)
 	assert.Equal(t, "Test Bird", result[0].Properties[PropertySpeciesName])
 	assert.InDelta(t, 0.9, result[0].Properties[PropertyConfidence], 0.001)
-	assert.Equal(t, false, result[0].Properties[PropertyIsNewSpecies])
+	assert.False(t, result[0].Properties[PropertyIsNewSpecies].(bool))
 }
 
 func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
@@ -96,7 +96,7 @@ func TestBridge_NewSpecies_EmitsBothEvents(t *testing.T) {
 		assert.Equal(t, "Test Bird", r.Properties[PropertySpeciesName])
 		assert.Equal(t, "Testus birdus", r.Properties[PropertyScientificName])
 		assert.InDelta(t, 0.9, r.Properties[PropertyConfidence], 0.001)
-		assert.Equal(t, true, r.Properties[PropertyIsNewSpecies])
+		assert.True(t, r.Properties[PropertyIsNewSpecies].(bool))
 	}
 }
 

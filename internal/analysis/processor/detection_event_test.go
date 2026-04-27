@@ -149,21 +149,21 @@ func (c *testDetectionConsumer) GetReceivedEvents() []events.DetectionEvent {
 	return eventsCopy
 }
 
+func setupEventBusWithConsumer(t *testing.T) *testDetectionConsumer {
+	t.Helper()
+	events.ResetForTesting()
+	t.Cleanup(events.ResetForTesting)
+	eb, err := events.Initialize(&events.Config{BufferSize: 100, Workers: 1, Enabled: true})
+	require.NoError(t, err)
+	c := &testDetectionConsumer{}
+	require.NoError(t, eb.RegisterConsumer(c))
+	return c
+}
+
 // TestPublishDetectionEvent_OrdinaryDetection verifies that non-new-species
 // detections reach the event bus with isNewSpecies=false.
 func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
-	events.ResetForTesting()
-	t.Cleanup(events.ResetForTesting)
-
-	eb, err := events.Initialize(&events.Config{
-		BufferSize: 100,
-		Workers:    1,
-		Enabled:    true,
-	})
-	require.NoError(t, err)
-
-	consumer := &testDetectionConsumer{}
-	require.NoError(t, eb.RegisterConsumer(consumer))
+	consumer := setupEventBusWithConsumer(t)
 
 	det := testDetection()
 	action := &DatabaseAction{
@@ -174,7 +174,6 @@ func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
 
 	action.publishDetectionEvent(false, 30)
 
-	// Give the event bus worker time to deliver
 	require.EventuallyWithT(t, func(collect *assert.CollectT) {
 		received := consumer.GetReceivedEvents()
 		assert.Len(collect, received, 1)
@@ -189,18 +188,7 @@ func TestPublishDetectionEvent_OrdinaryDetection(t *testing.T) {
 // TestPublishDetectionEvent_NewSpecies verifies that new-species detections
 // still go through suppression and reach the event bus with isNewSpecies=true.
 func TestPublishDetectionEvent_NewSpecies(t *testing.T) {
-	events.ResetForTesting()
-	t.Cleanup(events.ResetForTesting)
-
-	eb, err := events.Initialize(&events.Config{
-		BufferSize: 100,
-		Workers:    1,
-		Enabled:    true,
-	})
-	require.NoError(t, err)
-
-	consumer := &testDetectionConsumer{}
-	require.NoError(t, eb.RegisterConsumer(consumer))
+	consumer := setupEventBusWithConsumer(t)
 
 	det := testDetection()
 	action := &DatabaseAction{
@@ -225,18 +213,7 @@ func TestPublishDetectionEvent_NewSpecies(t *testing.T) {
 // new species detection still reaches the event bus as an ordinary detection
 // (isNewSpecies=false) so detection.occurred alert rules still fire.
 func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
-	events.ResetForTesting()
-	t.Cleanup(events.ResetForTesting)
-
-	eb, err := events.Initialize(&events.Config{
-		BufferSize: 100,
-		Workers:    1,
-		Enabled:    true,
-	})
-	require.NoError(t, err)
-
-	consumer := &testDetectionConsumer{}
-	require.NoError(t, eb.RegisterConsumer(consumer))
+	consumer := setupEventBusWithConsumer(t)
 
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.EXPECT().

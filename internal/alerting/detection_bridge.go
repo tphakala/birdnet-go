@@ -1,6 +1,8 @@
 package alerting
 
 import (
+	"maps"
+
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -59,17 +61,18 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 		properties[PropertyEventMetadata] = meta
 	}
 
+	var newSpeciesProps map[string]any
+	if event.IsNewSpecies() {
+		newSpeciesProps = maps.Clone(properties)
+	}
+
 	TryPublish(&AlertEvent{
 		ObjectType: ObjectTypeDetection,
 		EventName:  EventDetectionOccurred,
 		Properties: properties,
 	})
 
-	if event.IsNewSpecies() {
-		newSpeciesProps := make(map[string]any, len(properties))
-		for k, v := range properties {
-			newSpeciesProps[k] = v
-		}
+	if newSpeciesProps != nil {
 		TryPublish(&AlertEvent{
 			ObjectType: ObjectTypeDetection,
 			EventName:  EventDetectionNewSpecies,
