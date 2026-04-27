@@ -493,8 +493,10 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		// before expensive CSV generation and I/O.
 		c.settingsMutex.RLock()
 
-		// Use current range filter settings
-		includedSpecies := c.Settings.GetIncludedSpecies()
+		// Use the latest published snapshot for consistency with other
+		// range filter GET endpoints.
+		settings := conf.CurrentOrFallback(c.Settings)
+		includedSpecies := settings.GetIncludedSpecies()
 
 		// Convert to species list format
 		speciesList = make([]RangeFilterSpecies, 0, len(includedSpecies))
@@ -512,10 +514,10 @@ func (c *Controller) GetRangeFilterSpeciesCSV(ctx echo.Context) error {
 		}
 
 		location = Location{
-			Latitude:  c.Settings.BirdNET.Latitude,
-			Longitude: c.Settings.BirdNET.Longitude,
+			Latitude:  settings.BirdNET.Latitude,
+			Longitude: settings.BirdNET.Longitude,
 		}
-		threshold = c.Settings.BirdNET.RangeFilter.Threshold
+		threshold = settings.BirdNET.RangeFilter.Threshold
 
 		c.settingsMutex.RUnlock()
 	}
@@ -697,11 +699,11 @@ func (c *Controller) RebuildRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to rebuild range filter", http.StatusInternalServerError)
 	}
 
-	// Get the updated count under read lock for consistency with other endpoints.
-	c.settingsMutex.RLock()
-	includedSpecies := c.Settings.GetIncludedSpecies()
-	lastUpdated := c.Settings.BirdNET.RangeFilter.LastUpdated
-	c.settingsMutex.RUnlock()
+	// Read from the latest published snapshot so the just-published rebuild
+	// result is reflected immediately.
+	settings := conf.CurrentOrFallback(c.Settings)
+	includedSpecies := settings.GetIncludedSpecies()
+	lastUpdated := settings.BirdNET.RangeFilter.LastUpdated
 
 	response := map[string]any{
 		"success":     true,
