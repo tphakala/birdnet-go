@@ -229,11 +229,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// until StoreSettings publishes the new one.
 	updated := conf.CloneSettings(current)
 
-	// Only publish to the global atomic pointer when this controller is the
-	// one that owns it (production path). In tests that inject a controller-
-	// local *conf.Settings without touching the global, skip the publish so
-	// we don't leak state into other tests.
-	publishGlobal := current == conf.GetSettings()
+	// Publish to the global atomic pointer only when this controller owns
+	// it (production). Determined once at construction, so out-of-band
+	// StoreSettings calls (range filter, etc.) cannot desynchronize it.
+	publishGlobal := c.isGlobalOwner
 
 	// Parse the request body
 	var updatedSettings conf.Settings
@@ -323,7 +322,15 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
-	c.logAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully", logger.Int("skipped_fields_count", len(skippedFields)))
+	if publishGlobal && !c.DisableSaveSettings {
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully",
+			logger.Int("skipped_fields_count", len(skippedFields)))
+	} else {
+		c.logAPIRequest(ctx, logger.LogLevelDebug, "Settings updated (save to disk skipped)",
+			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
+	}
+
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":       "Settings updated successfully",
 		"skippedFields": skippedFields,
@@ -548,8 +555,18 @@ func handlePrimitiveField(
 	return nil
 }
 
-// getSettingsOrFallback returns controller settings or falls back to global settings.
+// getSettingsOrFallback returns the current settings snapshot for write handlers.
+// When this controller owns the global singleton (production), it reads from
+// conf.GetSettings() so that out-of-band publishers (range filter rebuild,
+// ShouldUpdateRangeFilterToday, etc.) are not silently overwritten by a stale
+// c.Settings pointer. For test controllers that inject a standalone *Settings,
+// the cached c.Settings is returned as-is.
 func (c *Controller) getSettingsOrFallback() *conf.Settings {
+	if c.isGlobalOwner {
+		if s := conf.GetSettings(); s != nil {
+			return s
+		}
+	}
 	if c.Settings != nil {
 		return c.Settings
 	}
@@ -595,9 +612,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// until StoreSettings publishes the new one.
 	updated := conf.CloneSettings(current)
 
-	// Only publish globally when the controller owns the global snapshot
-	// (production path); skip when tests inject a standalone c.Settings.
-	publishGlobal := current == conf.GetSettings()
+	// Publish globally when the controller owns the global singleton.
+	// Determined once at construction, immune to pointer desync from
+	// out-of-band StoreSettings calls (range filter rebuild, etc.).
+	publishGlobal := c.isGlobalOwner
 
 	requestBody, err := parseAndValidateJSON(ctx)
 	if err != nil {
