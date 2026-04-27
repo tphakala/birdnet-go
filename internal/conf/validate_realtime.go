@@ -11,13 +11,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// Maximum realtime interval in seconds (24 hours)
-const MaxRealtimeInterval = 86400
+// Realtime interval constants
+const (
+	DefaultRealtimeInterval = 15    // Default detection interval in seconds
+	MaxRealtimeInterval     = 86400 // Maximum interval (24 hours)
+)
 
 // validateRealtimeSettings validates the Realtime-specific settings
 func validateRealtimeSettings(settings *RealtimeSettings) error {
-	// Check if interval is positive (zero means no detections would ever be logged)
-	if settings.Interval <= 0 {
+	// Zero means "use default" for backward compatibility with existing configs
+	// that may have interval: 0 (similar to SpeciesConfig.Interval pattern).
+	if settings.Interval == 0 {
+		GetLogger().Warn("Realtime interval is 0, defaulting to standard interval",
+			logger.Int("default_interval", DefaultRealtimeInterval))
+		settings.Interval = DefaultRealtimeInterval
+	}
+
+	// Negative intervals are always invalid
+	if settings.Interval < 0 {
 		return errors.Newf("realtime interval must be positive, got %d", settings.Interval).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "realtime-interval").

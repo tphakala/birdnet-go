@@ -22,7 +22,7 @@ func TestValidateRealtimeSettings_IntervalMustBePositive(t *testing.T) {
 		wantErr  bool
 		errType  string
 	}{
-		{"zero interval rejected", 0, true, "realtime-interval"},
+		{"zero interval defaulted", 0, false, ""},
 		{"negative interval rejected", -5, true, "realtime-interval"},
 		{"positive interval accepted", 15, false, ""},
 		{"boundary: 1 second accepted", 1, false, ""},
