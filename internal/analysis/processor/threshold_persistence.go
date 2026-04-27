@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -110,9 +111,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 
 // convertThresholdsForPersistence converts in-memory thresholds to database format.
 // Returns the database thresholds and a list of expired species to clean up.
-func (p *Processor) convertThresholdsForPersistence() (dbThresholds []datastore.DynamicThreshold, expiredSpecies []string) {
-	settings := p.currentSettings()
-
+func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (dbThresholds []datastore.DynamicThreshold, expiredSpecies []string) {
 	p.thresholdsMutex.RLock()
 	defer p.thresholdsMutex.RUnlock()
 
@@ -221,7 +220,7 @@ func (p *Processor) saveThresholdsWithRetry(dbThresholds []datastore.DynamicThre
 // This is called periodically by the persistence goroutine
 func (p *Processor) persistDynamicThresholds() error {
 	settings := p.currentSettings()
-	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence()
+	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence(settings)
 
 	p.cleanupExpiredThresholds(expiredSpecies)
 

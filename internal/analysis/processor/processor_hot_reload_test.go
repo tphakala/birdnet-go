@@ -9,6 +9,9 @@ import (
 )
 
 func TestCurrentSettings_FallsBackToInjected(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
 	injected := &conf.Settings{
 		BirdNET: conf.BirdNETConfig{Threshold: 0.42},
 	}
@@ -81,6 +84,9 @@ func TestRecalculateDynamicThresholds_ReadsGlobalSettings(t *testing.T) {
 }
 
 func TestCalculateMinDetections_ReadsGlobalSettings(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
 	// Start with FP filter level 3 (strict)
 	initial := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
