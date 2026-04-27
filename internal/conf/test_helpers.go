@@ -1,14 +1,10 @@
 package conf
 
 // SetTestSettings allows tests to inject their own settings instance.
-// This must be called before any call to Setting() to be effective.
-// This is intended for testing purposes only.
+// Subsequent GetSettings()/Setting() calls observe the new snapshot
+// atomically. Passing nil clears the snapshot, causing the next
+// Setting() call to re-Load() from disk. Intended for testing only.
 func SetTestSettings(settings *Settings) {
-	// Publish atomically; readers on the hot path see the new snapshot
-	// immediately via GetSettings. Setting() will re-Load() from disk on
-	// the next call if settings is nil, so cleanup paths that restore a
-	// previously-nil snapshot do not leave downstream consumers with a
-	// nil dereference.
 	settingsInstance.Store(settings)
 }
 

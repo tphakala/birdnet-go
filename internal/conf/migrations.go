@@ -448,23 +448,16 @@ func (s *Settings) applyModelValidation() error {
 // backward compatibility so that existing users don't lose location-dependent
 // features after upgrading. New installations start with LocationConfigured=false
 // until the user explicitly sets coordinates (even 0,0).
-func (s *Settings) MigrateLocationConfigured() {
+// Returns true when the flag was flipped (caller is responsible for persistence).
+func (s *Settings) MigrateLocationConfigured() bool {
 	if s.BirdNET.LocationConfigured {
-		return
+		return false
 	}
 
 	if s.BirdNET.Latitude == 0 && s.BirdNET.Longitude == 0 {
-		return
+		return false
 	}
 
 	s.BirdNET.LocationConfigured = true
-
-	configFile := viper.ConfigFileUsed()
-	if configFile != "" {
-		if err := SaveYAMLConfig(configFile, s); err != nil {
-			GetLogger().Warn("Failed to save migrated LocationConfigured flag", logger.Error(err))
-		} else {
-			GetLogger().Info("Migrated LocationConfigured flag based on existing coordinates")
-		}
-	}
+	return true
 }

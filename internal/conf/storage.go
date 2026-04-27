@@ -70,40 +70,17 @@ func Load() (*Settings, error) {
 
 	// Migrate legacy AutoTLS boolean to new TLSMode field
 	if settings.MigrateTLSConfig() {
-		configFile := viper.ConfigFileUsed()
-		if configFile != "" {
-			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				GetLogger().Warn("Failed to save migrated TLS config", logger.Error(err))
-			} else {
-				GetLogger().Info("Saved migrated TLS configuration", logger.String("path", configFile))
-			}
-		}
+		persistMigration(settings, "TLS")
 	}
 
 	// Migrate legacy OAuth configuration to new array format
-	// This must happen before validation and saving
 	if settings.MigrateOAuthConfig() {
-		// Save the migrated config back to file
-		configFile := viper.ConfigFileUsed()
-		if configFile != "" {
-			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				GetLogger().Warn("Failed to save migrated OAuth config", logger.Error(err))
-			} else {
-				GetLogger().Info("Saved migrated OAuth configuration", logger.String("path", configFile))
-			}
-		}
+		persistMigration(settings, "OAuth")
 	}
 
 	// Migrate legacy RTSP URLs to new streams format
 	if settings.MigrateRTSPConfig() {
-		configFile := viper.ConfigFileUsed()
-		if configFile != "" {
-			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				GetLogger().Warn("Failed to save migrated RTSP config", logger.Error(err))
-			} else {
-				GetLogger().Info("Saved migrated RTSP configuration", logger.String("path", configFile))
-			}
-		}
+		persistMigration(settings, "RTSP")
 	}
 
 	// Migrate legacy single audio source to new multi-source format
@@ -127,21 +104,16 @@ func Load() (*Settings, error) {
 
 	// Migrate dashboard layout for existing installations
 	if settings.MigrateDashboardLayout() {
-		configFile := viper.ConfigFileUsed()
-		if configFile != "" {
-			if err := SaveYAMLConfig(configFile, settings); err != nil {
-				GetLogger().Warn("Failed to save migrated dashboard layout config", logger.Error(err))
-			} else {
-				GetLogger().Info("Saved migrated dashboard layout configuration", logger.String("path", configFile))
-			}
-		}
+		persistMigration(settings, "dashboard layout")
 	}
 
 	// Apply default transport to RTSP/RTMP streams that don't specify one
 	settings.Realtime.RTSP.ApplyStreamDefaults()
 
 	// Migrate LocationConfigured for backward compatibility with existing configs.
-	settings.MigrateLocationConfigured()
+	if settings.MigrateLocationConfigured() {
+		persistMigration(settings, "LocationConfigured flag")
+	}
 
 	// Auto-generate SessionSecret if not set (for backward compatibility)
 	if err := ensureSessionSecret(settings); err != nil {
