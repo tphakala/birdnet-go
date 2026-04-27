@@ -58,7 +58,7 @@ func (b *DetectionAlertBridge) ProcessDetectionEvent(event events.DetectionEvent
 	}
 
 	if meta := event.GetMetadata(); len(meta) > 0 {
-		properties[PropertyEventMetadata] = meta
+		properties[PropertyEventMetadata] = maps.Clone(meta)
 	}
 
 	var newSpeciesProps map[string]any

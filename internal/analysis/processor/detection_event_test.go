@@ -29,6 +29,7 @@ const (
 	testDaysWithinWindow      = 5
 	testDaysOutsideWindow     = 15
 	testConsumerName          = "test-detection-consumer"
+	testSuppressionHours      = 168
 )
 
 // TestDetectionEventCreation tests the creation of detection events
@@ -227,9 +228,9 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 
 	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
 		Enabled:                      true,
-		NewSpeciesWindowDays:         14,
-		SyncIntervalMinutes:          60,
-		NotificationSuppressionHours: 168,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
 	})
 
 	det := testDetection()
