@@ -664,6 +664,15 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			c.Settings = current
 			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
 		}
+		c.logAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
+			logger.String("section", section))
+	}
+
+	if !publishGlobal || c.DisableSaveSettings {
+		c.logAPIRequest(ctx, logger.LogLevelDebug, "Section settings updated (save to disk skipped)",
+			logger.String("section", section),
+			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 
 	telemetry.UpdateTelemetryEnabled()
@@ -929,6 +938,14 @@ func getSettingsSectionValue(settings *conf.Settings, section string) (any, erro
 		return &settings.Sentry, nil
 	case "notification":
 		return &settings.Notification, nil
+	case "logging":
+		return &settings.Logging, nil
+	case "alerting":
+		return &settings.Alerting, nil
+	case "backup":
+		return &settings.Backup, nil
+	case "output":
+		return &settings.Output, nil
 	default:
 		return nil, fmt.Errorf("unknown settings section: %s", section)
 	}
@@ -993,6 +1010,7 @@ func getSectionValidators() map[string]sectionValidator {
 		SettingsSectionSpecies:   validateSpeciesSection,
 		SettingsSectionRealtime:  validateRealtimeSection,
 		"notification":           validateNotificationSection,
+		"alerting":               validateAlertingSection,
 	}
 }
 
@@ -1448,6 +1466,20 @@ func validateNotificationSection(data json.RawMessage) error {
 		if _, err := template.New("message").Funcs(notification.TemplateFuncs).Parse(notificationConfig.Templates.NewSpecies.Message); err != nil {
 			return fmt.Errorf("invalid template syntax in new species message: %w", err)
 		}
+	}
+
+	return nil
+}
+
+// validateAlertingSection validates alerting settings
+func validateAlertingSection(data json.RawMessage) error {
+	var alertSettings conf.AlertSettings
+	if err := json.Unmarshal(data, &alertSettings); err != nil {
+		return err
+	}
+
+	if alertSettings.HistoryRetentionDays < 0 {
+		return fmt.Errorf("historyRetentionDays must be non-negative, got %d", alertSettings.HistoryRetentionDays)
 	}
 
 	return nil
