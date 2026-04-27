@@ -122,6 +122,12 @@ func extractNormalized[T any](result ValidationResult, funcName string) (*T, err
 			Context("validation_type", "type-assertion").
 			Build()
 	}
+	if normalized == nil {
+		return nil, errors.Newf("internal error: %s returned typed nil Normalized", funcName).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "type-assertion").
+			Build()
+	}
 	return normalized, nil
 }
 
