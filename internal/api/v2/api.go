@@ -63,6 +63,7 @@ type Controller struct {
 	// This is primarily used in testing but can be used in production for read-only mode.
 	// Thread-safe: should be set before controller initialization.
 	DisableSaveSettings  bool         // disables disk persistence of settings
+	isGlobalOwner        bool         // true when this controller owns the global settings singleton
 	settingsMutex        sync.RWMutex // Mutex for settings operations
 	detectionCache       *cache.Cache // Cache for detection queries
 	startTime            *time.Time
@@ -352,6 +353,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		DS:                   ds,
 		Repo:                 repo, // Bridge to new domain model (nil if datastore disabled)
 		Settings:             settings,
+		isGlobalOwner:        settings == conf.GetSettings(),
 		BirdImageCache:       birdImageCache,
 		SunCalc:              sunCalc,
 		controlChan:          controlChan,
