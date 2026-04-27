@@ -384,7 +384,7 @@ func Setting() *Settings {
 	}
 	if _, err := Load(); err != nil {
 		loadMu.Unlock()
-		panic("fatal: cannot load settings: " + err.Error())
+		panic(fmt.Errorf("fatal: cannot load settings: %w", err))
 	}
 	loadMu.Unlock()
 	return settingsInstance.Load()
