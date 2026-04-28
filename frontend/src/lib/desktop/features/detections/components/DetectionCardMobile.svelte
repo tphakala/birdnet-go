@@ -26,7 +26,7 @@
   // Legacy dispatcher removed
 
   let spectrogramError = $state(false);
-  let spectrogramUrl = $derived(`/api/v2/spectrogram/${detection.id}?size=md`);
+  let spectrogramUrl = $derived(buildAppUrl(`/api/v2/spectrogram/${detection.id}?size=md`));
 
   // Resolve the audio source label, falling back to settings when the server
   // payload lacks a displayName or carries a stale (renamed) source id.
