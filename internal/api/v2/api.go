@@ -259,11 +259,27 @@ func (c *Controller) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 }
 
 // New creates a new API controller, returning an error if initialization fails.
+// The controller owns the global settings singleton: it reads from the current
+// atomic snapshot on each request and publishes updates back via StoreSettings.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string,
 	metrics *observability.Metrics, opts ...Option) (*Controller, error) {
-	return NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, true, opts...)
+	// Refresh from the global atomic pointer so the controller starts with
+	// the latest snapshot, not a pointer captured before out-of-band updates
+	// (range filter rebuild, ShouldUpdateRangeFilterToday, etc.).
+	if global := conf.GetSettings(); global != nil {
+		settings = global
+	}
+	c, err := NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, true, opts...)
+	if err != nil {
+		return nil, err
+	}
+	// Force true: the pointer identity check in NewWithOptions can fail when
+	// an out-of-band StoreSettings call (range filter rebuild at startup)
+	// replaces the global pointer before this constructor runs.
+	c.isGlobalOwner = true
+	return c, nil
 }
 
 // resolveAndValidateMediaPath resolves a potentially relative media path and ensures it exists as a directory.
