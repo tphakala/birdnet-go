@@ -265,6 +265,12 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string,
 	metrics *observability.Metrics, opts ...Option) (*Controller, error) {
+	// Refresh from the global atomic pointer so the controller starts with
+	// the latest snapshot, not a pointer captured before out-of-band updates
+	// (range filter rebuild, ShouldUpdateRangeFilterToday, etc.).
+	if global := conf.GetSettings(); global != nil {
+		settings = global
+	}
 	c, err := NewWithOptions(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, true, opts...)
 	if err != nil {
 		return nil, err
