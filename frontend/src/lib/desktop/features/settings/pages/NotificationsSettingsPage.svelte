@@ -2459,6 +2459,7 @@
             <button
               class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.test')}
+              aria-label={t('settings.alerts.actionLabels.test')}
               disabled={testingId === rule.id}
               onclick={() => handleTestRule(rule)}
             >
@@ -2467,6 +2468,7 @@
             <button
               class="inline-flex items-center justify-center size-7 rounded-md text-[var(--color-base-content)]/70 hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('settings.alerts.actionLabels.edit')}
+              aria-label={t('settings.alerts.actionLabels.edit')}
               disabled={editorOpen}
               onclick={() => openEditor(rule)}
             >
