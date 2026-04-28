@@ -159,11 +159,13 @@ func buildAnalysisSuspendedPayload(raw map[string]sourceAnalysisState, guest boo
 	keys := slices.Sorted(maps.Keys(raw))
 	for i, sourceID := range keys {
 		state := raw[sourceID]
-		out[state.SourceID] = state.Suspended
 		if guest {
-			lookup[fmt.Sprintf("source-%d", i+1)] = state.SourceID
+			opaqueKey := fmt.Sprintf("source-%d", i+1)
+			out[opaqueKey] = state.Suspended
+			lookup[opaqueKey] = state.SourceID
 			continue
 		}
+		out[state.SourceID] = state.Suspended
 		key := state.Connection
 		if key == "" {
 			key = fmt.Sprintf("source-%d", i+1)

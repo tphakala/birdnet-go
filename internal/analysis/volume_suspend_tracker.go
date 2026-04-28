@@ -118,6 +118,7 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int,
 		// Transition to suspended
 		state.isSuspended = true
 		state.lastStateChange = now
+		state.lastLogTime = now
 		state.lowVolumeCount = 0
 		state.highVolumeCount = 0
 
