@@ -98,6 +98,54 @@ ast-grep --pattern "export let $PROP" --rewrite "let { $PROP } = \$props()" --la
 4. Format markdown with prettier
 5. Document all exports
 
+## QA Testing Framework
+
+The BirdNET-Go QA system lives in `~/src/birdnet-go-qa/`. Always use it instead of ad-hoc test scripts.
+
+### Key Paths
+
+| Path | Purpose |
+|------|---------|
+| `~/src/birdnet-go-qa/e2e/tests/` | Playwright E2E test specs |
+| `~/src/birdnet-go-qa/configs/` | Test runtime configs (mounted into containers) |
+| `~/src/birdnet-go-qa/Taskfile.yml` | Task runner for build/deploy/test workflows |
+| `~/src/birdnet-go-qa/Dockerfile.test` | Test container image definition |
+
+### Running E2E Tests
+
+```bash
+# Build test image with latest binary
+cp ~/src/birdnet-go/bin/birdnet-go ~/src/birdnet-go-qa/birdnet-go
+cd ~/src/birdnet-go-qa && podman build -t birdnet-go:test -f Dockerfile.test .
+
+# Deploy test container (dashboard config, port 8085, auth enabled)
+podman run -d --name birdnet-go-test --network host \
+  -v ~/src/birdnet-go-qa/configs/test-runtime-dashboard:/config \
+  birdnet-go:test
+
+# Run specific test suites
+cd ~/src/birdnet-go-qa/e2e
+npm run test:settings      # Settings CRUD round-trip (15 tests)
+npm run test:fuzz          # Settings fuzzer
+npm run test:integrity     # Config integrity
+npm run test:alerts        # Alert rules
+npm run test:eq-gain       # Audio EQ
+```
+
+### Config Management Tests
+
+For config hot-reload QA, these are the relevant test files:
+- `settings-roundtrip.spec.js` - PATCH/PUT persistence, CSRF, validation
+- `settings-fuzzer.spec.js` - Fuzzing settings with random/boundary values
+- `config-integrity.spec.js` - Config structure validation
+- `hot-reload-comprehensive.sh` - Shell-based hot-reload tests
+- `hot-reload-deep.sh` - Deep hot-reload edge cases
+- `audio-eq-save.spec.js` - Audio equalizer save round-trip
+
+### Forgejo QA Wiki
+
+Full documentation in the birdnet-go-qa Forgejo wiki: `http://localhost:3000/tphakala/birdnet-go-qa/wiki/`
+
 ## PR Review Workflow
 
 After pushing updates to a PR, request automated reviews:
