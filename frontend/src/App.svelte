@@ -430,9 +430,12 @@
 
     // Load settings at app startup so they are available on any page the user navigates to
     // first (e.g. System → Terminal) without requiring a visit to the Settings page.
-    settingsActions.loadSettings().catch(err => {
-      logger.error('Failed to load settings on app init', err);
-    });
+    // Skip when authentication is required but not yet provided to avoid 401 console errors.
+    if (!securityEnabled || accessAllowed) {
+      settingsActions.loadSettings().catch(err => {
+        logger.error('Failed to load settings on app init', err);
+      });
+    }
 
     // Initial routing is handled by the reactive $effect below when appInitialized becomes true
   });
@@ -459,20 +462,21 @@
     if (!appInitialized || loadingComponent || wizardChecked) return;
     wizardChecked = true;
 
-    // Fresh install always shows onboarding, regardless of localStorage
+    // Check localStorage dismissal before any wizard flow. This covers the case
+    // where the server-side dismiss failed (e.g. 401 when not authenticated) but
+    // the client-side fallback persisted the dismissal.
+    try {
+      const dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
+      if (dismissedVersion === appState.version) return;
+    } catch {
+      // localStorage unavailable (private browsing, etc.)
+    }
+
     if (appState.freshInstall) {
       wizardState.launch('onboarding', {
         currentVersion: appState.version,
       });
       return;
-    }
-
-    // For updates, check localStorage fallback before triggering what's-new
-    try {
-      const dismissedVersion = localStorage.getItem(WIZARD_DISMISSED_VERSION_KEY);
-      if (dismissedVersion === appState.version) return;
-    } catch {
-      // localStorage unavailable (private browsing, etc.) — proceed with wizard check
     }
 
     if (appState.newVersion) {

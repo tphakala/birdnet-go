@@ -2039,6 +2039,7 @@
                             onclick={() => openEditProviderForm(index)}
                             class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.editButton')}
+                            aria-label={t('settings.notifications.push.providers.editButton')}
                             disabled={showProviderForm}
                           >
                             <Pencil class="size-3.5" />
@@ -2047,6 +2048,7 @@
                             onclick={() => deleteProvider(index)}
                             class="inline-flex items-center justify-center w-6 h-6 rounded bg-transparent hover:bg-black/5 dark:hover:bg-white/10 text-[var(--color-error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             title={t('settings.notifications.push.providers.deleteButton')}
+                            aria-label={t('settings.notifications.push.providers.deleteButton')}
                             disabled={showProviderForm}
                           >
                             <Trash2 class="size-3.5" />

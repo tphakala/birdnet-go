@@ -52,8 +52,11 @@
     // Initialize auth state (CSRF is now handled by appState in App.svelte)
     authStore.init(securityEnabled, accessAllowed);
 
-    // Fetch restart status to show banner if restart is pending
-    fetchRestartStatus();
+    // Fetch restart status to show banner if restart is pending.
+    // Skip when authentication is required but not yet provided to avoid 401 console errors.
+    if (!securityEnabled || accessAllowed) {
+      fetchRestartStatus();
+    }
 
     // SSE notifications are auto-initialized when imported
 
