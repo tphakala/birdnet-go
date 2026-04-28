@@ -856,7 +856,7 @@
         <button
           onclick={handleStartClick}
           disabled={!selectedSourceId || sources.length === 0}
-          class="flex h-full w-full flex-col items-center justify-center gap-3 bg-black text-[var(--color-base-content)]/60 transition-colors hover:text-[var(--color-base-content)]/80 disabled:cursor-not-allowed disabled:opacity-50"
+          class="flex h-full w-full flex-col items-center justify-center gap-3 bg-black text-white/75 transition-colors hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
           {#if sources.length === 0 && !sourceDiscoveryDone}
             <Loader2 class="size-8 animate-spin" />
