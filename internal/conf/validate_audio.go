@@ -297,8 +297,8 @@ func (a *AudioSourceConfig) Validate() error {
 		return fmt.Errorf("audio source '%s': device %q looks like GPS coordinates; set latitude/longitude under birdnet.latitude and birdnet.longitude instead and pick a real audio device", a.Name, a.Device)
 	}
 
-	// Validate gain range
-	if a.Gain < MinAudioGain || a.Gain > MaxAudioGain {
+	// Validate gain range (NaN/Inf bypass < and > comparisons)
+	if math.IsNaN(a.Gain) || math.IsInf(a.Gain, 0) || a.Gain < MinAudioGain || a.Gain > MaxAudioGain {
 		return fmt.Errorf("audio source '%s': gain %.1f dB out of range [%.0f, +%.0f]", a.Name, a.Gain, MinAudioGain, MaxAudioGain)
 	}
 
@@ -508,7 +508,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		}
 
 		// Validate gain setting (reasonable range for audio processing)
-		if settings.Export.Gain < MinAudioGain || settings.Export.Gain > MaxAudioGain {
+		if math.IsNaN(settings.Export.Gain) || math.IsInf(settings.Export.Gain, 0) || settings.Export.Gain < MinAudioGain || settings.Export.Gain > MaxAudioGain {
 			return errors.Newf("audio gain must be between %.0f and +%.0f dB, got %.1f", MinAudioGain, MaxAudioGain, settings.Export.Gain).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "audio-export-gain").
@@ -574,7 +574,7 @@ func validateExportBitrate(exportType, bitrate string) error {
 // validateNormalizationSettings validates the EBU R128 normalization parameters
 // (target LUFS, loudness range, and true peak) and warns if gain is also configured.
 func validateNormalizationSettings(norm *NormalizationSettings, gain float64) error {
-	if norm.TargetLUFS < MinTargetLUFS || norm.TargetLUFS > MaxTargetLUFS {
+	if math.IsNaN(norm.TargetLUFS) || math.IsInf(norm.TargetLUFS, 0) || norm.TargetLUFS < MinTargetLUFS || norm.TargetLUFS > MaxTargetLUFS {
 		return errors.Newf("normalization target LUFS must be between %.0f and %.0f, got %.1f", MinTargetLUFS, MaxTargetLUFS, norm.TargetLUFS).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-normalization-target").
@@ -583,7 +583,7 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 			Context("max_target_lufs", MaxTargetLUFS).
 			Build()
 	}
-	if norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange {
+	if math.IsNaN(norm.LoudnessRange) || math.IsInf(norm.LoudnessRange, 0) || norm.LoudnessRange < MinLoudnessRange || norm.LoudnessRange > MaxLoudnessRange {
 		return errors.Newf("normalization loudness range must be between %.0f and %.0f LU, got %.1f", MinLoudnessRange, MaxLoudnessRange, norm.LoudnessRange).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-normalization-range").
@@ -592,7 +592,7 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 			Context("max_loudness_range", MaxLoudnessRange).
 			Build()
 	}
-	if norm.TruePeak < MinTruePeak || norm.TruePeak > MaxTruePeak {
+	if math.IsNaN(norm.TruePeak) || math.IsInf(norm.TruePeak, 0) || norm.TruePeak < MinTruePeak || norm.TruePeak > MaxTruePeak {
 		return errors.Newf("normalization true peak must be between %.0f and %.0f dBTP, got %.1f", MinTruePeak, MaxTruePeak, norm.TruePeak).
 			Category(errors.CategoryValidation).
 			Context("validation_type", "audio-normalization-peak").

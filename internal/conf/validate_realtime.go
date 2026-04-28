@@ -216,12 +216,12 @@ func validateDashboardSettings(settings *Dashboard) error {
 	}
 
 	// Validate default audio gain (playback UI preference)
-	if settings.DefaultAudioGain < MinPlaybackGain || settings.DefaultAudioGain > MaxPlaybackGain {
+	if math.IsNaN(settings.DefaultAudioGain) || math.IsInf(settings.DefaultAudioGain, 0) || settings.DefaultAudioGain < MinPlaybackGain || settings.DefaultAudioGain > MaxPlaybackGain {
 		GetLogger().Warn("Dashboard DefaultAudioGain out of range, clamping to safe value",
 			logger.Float64("invalid_value", settings.DefaultAudioGain),
 			logger.Float64("min", MinPlaybackGain),
 			logger.Float64("max", MaxPlaybackGain))
-		if settings.DefaultAudioGain < MinPlaybackGain {
+		if math.IsNaN(settings.DefaultAudioGain) || math.IsInf(settings.DefaultAudioGain, 0) || settings.DefaultAudioGain < MinPlaybackGain {
 			settings.DefaultAudioGain = MinPlaybackGain
 		} else {
 			settings.DefaultAudioGain = MaxPlaybackGain
@@ -518,7 +518,7 @@ func validateSpeciesConfigSettings(settings *SpeciesSettings) error {
 		}
 
 		// Check if threshold is within valid range
-		if config.Threshold < 0 || config.Threshold > 1 {
+		if math.IsNaN(config.Threshold) || math.IsInf(config.Threshold, 0) || config.Threshold < 0 || config.Threshold > 1 {
 			return errors.Newf("species config for '%s': threshold must be between 0 and 1, got %f", speciesName, config.Threshold).
 				Category(errors.CategoryValidation).
 				Context("validation_type", "species-config-threshold").

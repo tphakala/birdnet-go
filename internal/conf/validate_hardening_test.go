@@ -573,3 +573,132 @@ func createMinimalValidSettings() *Settings {
 
 	return s
 }
+
+// -----------------------------------------------------------------------
+// Issue #511: NaN/Infinity bypass float range validation
+// -----------------------------------------------------------------------
+
+func TestValidateBirdNETSettings_NaNInfinityRejected(t *testing.T) {
+	t.Parallel()
+
+	base := func() *BirdNETConfig {
+		return &BirdNETConfig{
+			Sensitivity: 0.5,
+			Threshold:   0.8,
+			Overlap:     1.5,
+			Longitude:   24.0,
+			Latitude:    61.0,
+			Locale:      "en",
+			RangeFilter: RangeFilterSettings{Threshold: 0.05},
+		}
+	}
+
+	tests := []struct {
+		name   string
+		mutate func(c *BirdNETConfig)
+	}{
+		{"NaN sensitivity", func(c *BirdNETConfig) { c.Sensitivity = math.NaN() }},
+		{"Inf sensitivity", func(c *BirdNETConfig) { c.Sensitivity = math.Inf(1) }},
+		{"-Inf sensitivity", func(c *BirdNETConfig) { c.Sensitivity = math.Inf(-1) }},
+		{"NaN threshold", func(c *BirdNETConfig) { c.Threshold = math.NaN() }},
+		{"Inf threshold", func(c *BirdNETConfig) { c.Threshold = math.Inf(1) }},
+		{"NaN overlap", func(c *BirdNETConfig) { c.Overlap = math.NaN() }},
+		{"NaN longitude", func(c *BirdNETConfig) { c.Longitude = math.NaN() }},
+		{"Inf longitude", func(c *BirdNETConfig) { c.Longitude = math.Inf(1) }},
+		{"NaN latitude", func(c *BirdNETConfig) { c.Latitude = math.NaN() }},
+		{"Inf latitude", func(c *BirdNETConfig) { c.Latitude = math.Inf(-1) }},
+		{"NaN rangeFilter threshold", func(c *BirdNETConfig) { c.RangeFilter.Threshold = float32(math.NaN()) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := base()
+			tt.mutate(cfg)
+
+			result := ValidateBirdNETSettings(cfg)
+			assert.False(t, result.Valid, "expected validation to fail for %s", tt.name)
+			assert.NotEmpty(t, result.Errors, "expected at least one error for %s", tt.name)
+		})
+	}
+}
+
+func TestValidateBirdweatherSettings_NaNThresholdRejected(t *testing.T) {
+	t.Parallel()
+	settings := &BirdweatherSettings{
+		Enabled:   true,
+		ID:        "abcdef0123456789abcdef01",
+		Threshold: math.NaN(),
+	}
+
+	result := ValidateBirdweatherSettings(settings)
+	assert.False(t, result.Valid)
+	assert.NotEmpty(t, result.Errors)
+}
+
+func TestValidateAudioSourceConfig_NaNGainRejected(t *testing.T) {
+	t.Parallel()
+	src := AudioSourceConfig{
+		Name:   "test",
+		Device: testAudioDeviceSysdefault,
+		Model:  "birdnet",
+		Gain:   math.NaN(),
+	}
+
+	err := src.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "gain")
+}
+
+func TestValidateNormalizationSettings_NaNInfinityRejected(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(n *NormalizationSettings)
+	}{
+		{"NaN targetLUFS", func(n *NormalizationSettings) { n.TargetLUFS = math.NaN() }},
+		{"Inf targetLUFS", func(n *NormalizationSettings) { n.TargetLUFS = math.Inf(1) }},
+		{"NaN loudnessRange", func(n *NormalizationSettings) { n.LoudnessRange = math.NaN() }},
+		{"Inf loudnessRange", func(n *NormalizationSettings) { n.LoudnessRange = math.Inf(-1) }},
+		{"NaN truePeak", func(n *NormalizationSettings) { n.TruePeak = math.NaN() }},
+		{"Inf truePeak", func(n *NormalizationSettings) { n.TruePeak = math.Inf(1) }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			norm := &NormalizationSettings{
+				Enabled:       true,
+				TargetLUFS:    -23,
+				LoudnessRange: 7,
+				TruePeak:      -1,
+			}
+			tt.mutate(norm)
+
+			err := validateNormalizationSettings(norm, 0)
+			require.Error(t, err, "expected validation to fail for %s", tt.name)
+		})
+	}
+}
+
+func TestValidateSpeciesConfig_NaNThresholdRejected(t *testing.T) {
+	t.Parallel()
+	settings := &RealtimeSettings{
+		Interval: 15,
+		Audio: AudioSettings{
+			Sources: []AudioSourceConfig{
+				{Name: "test", Device: testAudioDeviceSysdefault, Model: "birdnet"},
+			},
+			Export: ExportSettings{Type: AudioExportTypeWAV},
+		},
+		Species: SpeciesSettings{
+			Config: map[string]SpeciesConfig{
+				"turdus merula": {Threshold: math.NaN()},
+			},
+		},
+	}
+
+	err := validateRealtimeSettings(settings)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "threshold")
+}

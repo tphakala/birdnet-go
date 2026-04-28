@@ -4,6 +4,7 @@ package conf
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -108,7 +109,14 @@ type numeric interface {
 }
 
 // checkRange appends an error to result if value is outside [lo, hi].
+// For float types, NaN and Inf are rejected because NaN comparisons
+// silently return false, letting invalid values bypass range checks.
 func checkRange[T numeric](result *ValidationResult, value, lo, hi T, msg string) {
+	if f := float64(value); math.IsNaN(f) || math.IsInf(f, 0) {
+		result.Valid = false
+		result.Errors = append(result.Errors, msg)
+		return
+	}
 	if value < lo || value > hi {
 		result.Valid = false
 		result.Errors = append(result.Errors, msg)
