@@ -23,6 +23,7 @@
     type SpectrogramDynamicRange,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import SettingsTabs from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import type { TabDefinition } from '$lib/desktop/features/settings/components/SettingsTabs.svelte';
   import SettingsSection from '$lib/desktop/features/settings/components/SettingsSection.svelte';
@@ -590,7 +591,7 @@
                   onclick={() => updateSpectrogramSetting('style', style.value)}
                 >
                   <img
-                    src={`/ui/assets/images/spectrogram-preview-${style.value}.png`}
+                    src={buildAppUrl(`/ui/assets/images/spectrogram-preview-${style.value}.png`)}
                     alt={style.label}
                     class="w-full aspect-[4/3] object-cover rounded"
                   />

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { resetBasePath, setBasePath } from './urlHelpers';
 
 // Default: acquireSlot resolves immediately with true
 const mockAcquireSlot = vi.fn(() => ({
@@ -58,10 +59,12 @@ describe('spectrogramLoader', () => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     mockFetch.mockReset();
+    resetBasePath();
   });
 
   afterEach(() => {
     vi.useRealTimers();
+    resetBasePath();
   });
 
   describe('initial state', () => {
@@ -106,6 +109,22 @@ describe('spectrogramLoader', () => {
       expect(loader.state).toBe('loaded');
       expect(loader.showSpinner).toBe(false);
       expect(mockReleaseSlot).toHaveBeenCalled();
+      loader.destroy();
+    });
+
+    it('uses the configured app base path for status and image URLs', async () => {
+      setBasePath('/proxy');
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+
+      const loader = createSpectrogramLoader({ size: 'md', raw: true });
+      loader.start(42);
+      await flushAll();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/proxy/api/v2/spectrogram/42/status?size=md&raw=true',
+        expect.objectContaining({ signal: expect.any(AbortSignal) })
+      );
+      expect(loader.spectrogramUrl).toBe('/proxy/api/v2/spectrogram/42?size=md&raw=true');
       loader.destroy();
     });
   });

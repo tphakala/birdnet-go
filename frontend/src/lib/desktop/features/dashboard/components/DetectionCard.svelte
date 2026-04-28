@@ -25,6 +25,7 @@
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import AudioSettingsButton from './AudioSettingsButton.svelte';
   import { cn } from '$lib/utils/cn';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
@@ -128,7 +129,7 @@
   function handleDownload() {
     // Create a temporary anchor element to trigger download
     const link = document.createElement('a');
-    link.href = `/api/v2/audio/${detection.id}`;
+    link.href = buildAppUrl(`/api/v2/audio/${detection.id}`);
     // Use species name and date/time for filename
     // Sanitize commonName to prevent path traversal (remove characters that aren't alphanumeric, space, dot, underscore, or hyphen)
     const safeCommonName = (detection.commonName || DEFAULT_DOWNLOAD_NAME).replace(
