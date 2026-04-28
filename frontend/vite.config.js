@@ -110,6 +110,7 @@ export default defineConfig({
     alias: {
       $lib: '/src/lib',
     },
+    dedupe: ['date-fns'],
   },
   server: {
     proxy: {
