@@ -8,6 +8,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
+const (
+	defaultMinSuspendFrames        = 3
+	defaultMinResumeFrames         = 2
+	suspendedStateLogInterval      = 5 * time.Minute
+)
+
 // VolumeSuspendState tracks the suspension state for a single audio source.
 type VolumeSuspendState struct {
 	isSuspended      bool
@@ -42,12 +48,12 @@ func (t *VolumeSuspendTracker) InitializeSource(sourceID string, cfg conf.LowNoi
 	// Set defaults if not configured
 	minSuspendFrames := cfg.MinSuspendFrames
 	if minSuspendFrames <= 0 {
-		minSuspendFrames = 3
+		minSuspendFrames = defaultMinSuspendFrames
 	}
 
 	minResumeFrames := cfg.MinResumeFrames
 	if minResumeFrames <= 0 {
-		minResumeFrames = 2
+		minResumeFrames = defaultMinResumeFrames
 	}
 
 	t.states[sourceID] = &VolumeSuspendState{
@@ -89,9 +95,11 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int,
 	// - suspend on sustained low RMS
 	// - resume on peak crossings for faster wake-up.
 	if state.isSuspended {
+		// While suspended, low-volume streak tracking is irrelevant and must
+		// stay cleared so only contiguous low frames in active state can suspend.
+		state.lowVolumeCount = 0
 		if peakLevel >= state.resumeThreshold {
 			state.highVolumeCount++
-			state.lowVolumeCount = 0
 		} else {
 			state.highVolumeCount = 0
 		}
@@ -99,12 +107,10 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int,
 		if audioLevel <= state.suspendThreshold {
 			state.lowVolumeCount++
 			state.highVolumeCount = 0
-		} else if audioLevel >= state.resumeThreshold {
-			// Clearly active RMS should also reset low counter.
-			state.highVolumeCount++
-			state.lowVolumeCount = 0
 		} else {
-			// In hysteresis while active: maintain current state.
+			// Any frame above suspend threshold breaks low-volume continuity.
+			state.lowVolumeCount = 0
+			state.highVolumeCount = 0
 		}
 	}
 
@@ -136,7 +142,7 @@ func (t *VolumeSuspendTracker) UpdateAudioLevel(sourceID string, audioLevel int,
 	}
 
 	// Periodic logging when suspended (every 5 minutes)
-	if state.isSuspended && now.Sub(state.lastLogTime) >= 5*time.Minute {
+	if state.isSuspended && now.Sub(state.lastLogTime) >= suspendedStateLogInterval {
 		state.lastLogTime = now
 		suspendDuration := now.Sub(state.lastStateChange)
 		log.Debug("analysis still suspended",
@@ -184,4 +190,31 @@ func (t *VolumeSuspendTracker) GetState(sourceID string) (isSuspended bool, susp
 	}
 
 	return state.isSuspended, duration
+}
+
+// HasMatchingConfig returns true when an existing source's effective tracker
+// configuration equals the provided settings.
+func (t *VolumeSuspendTracker) HasMatchingConfig(sourceID string, cfg conf.LowNoiseAutoSuspendSettings) bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+
+	state, exists := t.states[sourceID]
+	if !exists {
+		return false
+	}
+
+	minSuspendFrames := cfg.MinSuspendFrames
+	if minSuspendFrames <= 0 {
+		minSuspendFrames = defaultMinSuspendFrames
+	}
+
+	minResumeFrames := cfg.MinResumeFrames
+	if minResumeFrames <= 0 {
+		minResumeFrames = defaultMinResumeFrames
+	}
+
+	return state.suspendThreshold == cfg.SuspendThreshold &&
+		state.resumeThreshold == cfg.ResumeThreshold &&
+		state.minSuspendFrames == minSuspendFrames &&
+		state.minResumeFrames == minResumeFrames
 }

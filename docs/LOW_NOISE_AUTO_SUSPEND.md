@@ -98,13 +98,13 @@ lownoiseautosuspend:
 
 When enabled, the system logs suspension and resume events:
 
-```
+```text
 INFO  analysis suspended due to low audio level source=Front_Yard audio_level=12 suspend_threshold=15
 INFO  analysis resumed due to high audio level source=Front_Yard audio_level=28 resume_threshold=25 suspended_duration=5m30s
 ```
 
 Debug logging provides additional details:
-```
+```text
 DEBUG volume suspend state changed source=Front_Yard suspended=true audio_level=12
 DEBUG analysis still suspended source=Front_Yard audio_level=8 suspended_duration=10m15s
 ```

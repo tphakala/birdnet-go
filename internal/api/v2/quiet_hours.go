@@ -73,7 +73,7 @@ func (c *Controller) GetQuietHoursStatus(ctx echo.Context) error {
 		response.SuppressedStreams = buildSuppressedStreamsPayload(
 			scheduler.GetSuppressedStreams(), guest)
 	}
-	response.AnalysisSuspendedSources, response.AnalysisSourceIDs = c.buildAnalysisSuspendedSourcesPayload()
+	response.AnalysisSuspendedSources, response.AnalysisSourceIDs = c.buildAnalysisSuspendedSourcesPayload(guest)
 
 	// Determine if any source is currently suppressed
 	if response.SoundCardSuppressed {
@@ -96,7 +96,7 @@ type sourceAnalysisState struct {
 	Suspended  bool
 }
 
-func (c *Controller) buildAnalysisSuspendedSourcesPayload() (map[string]bool, map[string]string) {
+func (c *Controller) buildAnalysisSuspendedSourcesPayload(guest bool) (map[string]bool, map[string]string) {
 	if c.engine == nil {
 		return map[string]bool{}, map[string]string{}
 	}
@@ -127,7 +127,7 @@ func (c *Controller) buildAnalysisSuspendedSourcesPayload() (map[string]bool, ma
 		}
 	}
 
-	return buildAnalysisSuspendedPayload(raw)
+	return buildAnalysisSuspendedPayload(raw, guest)
 }
 
 // buildSuppressedStreamsPayload returns a map representing per-stream
@@ -153,13 +153,17 @@ func buildSuppressedStreamsPayload(raw map[string]bool, guest bool) map[string]b
 	return out
 }
 
-func buildAnalysisSuspendedPayload(raw map[string]sourceAnalysisState) (map[string]bool, map[string]string) {
+func buildAnalysisSuspendedPayload(raw map[string]sourceAnalysisState, guest bool) (map[string]bool, map[string]string) {
 	out := make(map[string]bool, len(raw))
 	lookup := make(map[string]string, len(raw))
 	keys := slices.Sorted(maps.Keys(raw))
 	for i, sourceID := range keys {
 		state := raw[sourceID]
 		out[state.SourceID] = state.Suspended
+		if guest {
+			lookup[fmt.Sprintf("source-%d", i+1)] = state.SourceID
+			continue
+		}
 		key := state.Connection
 		if key == "" {
 			key = fmt.Sprintf("source-%d", i+1)

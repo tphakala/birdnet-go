@@ -28,6 +28,7 @@ import (
 // streamPlaceholderPattern matches the opaque placeholder keys that the
 // guest path emits. Centralized here so the shape is asserted once.
 var streamPlaceholderPattern = regexp.MustCompile(`^stream-[1-9]\d*$`)
+var sourcePlaceholderPattern = regexp.MustCompile(`^source-[1-9]\d*$`)
 
 // TestBuildSuppressedStreamsPayload_GuestPlaceholderShape asserts every
 // guest-facing key matches stream-N and the count equals the input count.
@@ -191,9 +192,13 @@ func TestBuildAnalysisSuspendedPayload_UsesStableSourceIDs(t *testing.T) {
 		},
 	}
 
-	out, lookup := buildAnalysisSuspendedPayload(raw)
+	out, lookup := buildAnalysisSuspendedPayload(raw, false)
 	require.Len(t, out, 2)
 	require.Len(t, lookup, 2)
+	require.Contains(t, out, "audio_card_1")
+	require.Contains(t, out, "rtsp_1")
+	require.Contains(t, lookup, "sysdefault")
+	require.Contains(t, lookup, privacy.SanitizeStreamUrl("rtsp://user:pass@cam1.lan:8554/stream"))
 	assert.Equal(t, true, out["audio_card_1"])
 	assert.Equal(t, false, out["rtsp_1"])
 	assert.Equal(t, "audio_card_1", lookup["sysdefault"])
@@ -216,11 +221,51 @@ func TestBuildAnalysisSuspendedPayload_MultipleAudioSourcesNoCollision(t *testin
 		},
 	}
 
-	out, lookup := buildAnalysisSuspendedPayload(raw)
+	out, lookup := buildAnalysisSuspendedPayload(raw, false)
 	require.Len(t, out, 2)
 	require.Len(t, lookup, 2)
+	require.Contains(t, out, "audio_card_1")
+	require.Contains(t, out, "audio_card_2")
+	require.Contains(t, lookup, "sysdefault")
+	require.Contains(t, lookup, "hw:1,0")
 	assert.Equal(t, true, out["audio_card_1"])
 	assert.Equal(t, false, out["audio_card_2"])
 	assert.Equal(t, "audio_card_1", lookup["sysdefault"])
 	assert.Equal(t, "audio_card_2", lookup["hw:1,0"])
+}
+
+func TestBuildAnalysisSuspendedPayload_GuestUsesOpaqueKeys(t *testing.T) {
+	t.Parallel()
+
+	raw := map[string]sourceAnalysisState{
+		"rtsp_2": {
+			SourceID:   "rtsp_2",
+			Connection: "rtsp://user:pass@cam2.lan:8554/stream",
+			Suspended:  true,
+		},
+		"rtsp_1": {
+			SourceID:   "rtsp_1",
+			Connection: "rtsp://user:pass@cam1.lan:8554/stream",
+			Suspended:  false,
+		},
+	}
+
+	out, lookup := buildAnalysisSuspendedPayload(raw, true)
+	require.Len(t, out, 2)
+	require.Len(t, lookup, 2)
+	require.Contains(t, out, "rtsp_1")
+	require.Contains(t, out, "rtsp_2")
+	require.Contains(t, lookup, "source-1")
+	require.Contains(t, lookup, "source-2")
+	assert.Equal(t, false, out["rtsp_1"])
+	assert.Equal(t, true, out["rtsp_2"])
+	assert.Equal(t, "rtsp_1", lookup["source-1"])
+	assert.Equal(t, "rtsp_2", lookup["source-2"])
+
+	for key := range lookup {
+		assert.Regexp(t, sourcePlaceholderPattern, key)
+		assert.NotContains(t, key, "://")
+		assert.NotContains(t, key, ".lan")
+		assert.NotContains(t, key, ":")
+	}
 }

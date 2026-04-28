@@ -632,6 +632,12 @@ func (p *AudioPipelineService) initializeVolumeSuspendTracking(sourceIDs []strin
 	for _, sid := range sourceIDs {
 		srcCfg := p.findAudioSourceConfigByRuntimeID(&settings.Realtime.Audio, sid)
 		if srcCfg != nil && srcCfg.LowNoiseAutoSuspend.Enabled {
+			if tracker.HasMatchingConfig(sid, srcCfg.LowNoiseAutoSuspend) {
+				log.Debug("volume suspend tracking unchanged; keeping current state",
+					logger.String("source_id", sid),
+					logger.String("operation", operation))
+				continue
+			}
 			tracker.InitializeSource(sid, srcCfg.LowNoiseAutoSuspend)
 			audiocore.SetAnalysisSuspended(sid, false)
 			log.Info("initialized volume suspend tracking for source",

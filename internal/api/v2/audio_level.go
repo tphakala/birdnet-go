@@ -556,7 +556,7 @@ func (c *Controller) checkSourceActivity(
 	updated := false
 
 	for source, data := range levels {
-		if c.isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime) && data.Level != 0 {
+		if c.isSourceInactive(source, now, lastUpdateTime, lastNonZeroTime) && (data.Level != 0 || data.Peak != 0) {
 			data.Level = 0
 			data.Peak = 0
 			levels[source] = data

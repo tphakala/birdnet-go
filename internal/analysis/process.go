@@ -276,9 +276,6 @@ func ProcessData(ctx context.Context, bn *classifier.Orchestrator, data []byte, 
 		}
 	}
 
-	// Get the current settings
-	settings = conf.Setting()
-
 	// Calculate the effective buffer duration
 	bufferDuration := 3 * time.Second // base duration
 	overlapDuration := time.Duration(settings.BirdNET.Overlap * float64(time.Second))
