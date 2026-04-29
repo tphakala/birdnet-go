@@ -445,33 +445,22 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 		})
 	}
 
-	// Create temporary settings for the test using fresh settings
-	currentCfg := c.currentSettings()
-	testSettings := &conf.Settings{
-		BirdNET: conf.BirdNETConfig{
-			Latitude:  currentCfg.BirdNET.Latitude,
-			Longitude: currentCfg.BirdNET.Longitude,
-		},
-		Realtime: conf.RealtimeSettings{
-			Audio: currentCfg.Realtime.Audio, // Required for FFmpeg path (FLAC encoding)
-			Birdweather: conf.BirdweatherSettings{
-				Enabled:          request.Enabled,
-				ID:               request.ID,
-				Threshold:        request.Threshold,
-				LocationAccuracy: request.LocationAccuracy,
-				Debug:            request.Debug,
-			},
-		},
+	// Clone current settings and override only BirdWeather fields from the request
+	testSettings := conf.CloneSettings(c.currentSettings())
+	testSettings.Realtime.Birdweather = conf.BirdweatherSettings{
+		Enabled:          request.Enabled,
+		ID:               request.ID,
+		Threshold:        request.Threshold,
+		LocationAccuracy: request.LocationAccuracy,
+		Debug:            request.Debug,
 	}
-	// Copy main settings
-	testSettings.Main = currentCfg.Main
 
 	// Create test BirdWeather client with the test configuration
 	client, err := birdweather.New(testSettings)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
-			"message": formatClientError("Failed to create BirdWeather client", err, currentCfg),
+			"message": formatClientError("Failed to create BirdWeather client", err, testSettings),
 			"state":   "failed",
 		})
 	}
@@ -545,22 +534,14 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().WriteHeader(http.StatusOK)
 
-	// Create test settings from request using fresh settings
-	weatherCfg := c.currentSettings()
-	testSettings := &conf.Settings{
-		BirdNET: conf.BirdNETConfig{
-			Latitude:  weatherCfg.BirdNET.Latitude,
-			Longitude: weatherCfg.BirdNET.Longitude,
-		},
-		Realtime: conf.RealtimeSettings{
-			Weather: conf.WeatherSettings{
-				Provider:     request.Provider,
-				Debug:        request.Debug,
-				PollInterval: request.PollInterval,
-				OpenWeather:  request.OpenWeather,
-				Wunderground: request.Wunderground,
-			},
-		},
+	// Clone current settings and override only Weather fields from the request
+	testSettings := conf.CloneSettings(c.currentSettings())
+	testSettings.Realtime.Weather = conf.WeatherSettings{
+		Provider:     request.Provider,
+		Debug:        request.Debug,
+		PollInterval: request.PollInterval,
+		OpenWeather:  request.OpenWeather,
+		Wunderground: request.Wunderground,
 	}
 
 	// Create test context with timeout

@@ -570,8 +570,8 @@ func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]floa
 	}
 	bn.speciesCacheMu.RUnlock()
 
-	// MISS PATH: fetch outside of any lock to avoid blocking readers
-	speciesScores, err := bn.GetProbableSpecies(targetDate, 0.0)
+	// MISS PATH: use the same settings snapshot as the cache key
+	speciesScores, err := bn.GetProbableSpeciesWithSettings(targetDate, 0.0, settings)
 	if err != nil {
 		return nil, err
 	}
