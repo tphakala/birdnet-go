@@ -159,14 +159,14 @@ func TestDetermineWizardState(t *testing.T) {
 			wantFresh: true,
 		},
 		{
-			name:         "upgrade from unknown — no last_seen_version, has detections",
+			name:         "existing install auto-seeds — no last_seen_version, has detections",
 			version:      "v0.9.0",
 			metadataRepo: newMockAppMetadataRepo(),
 			v2Manager: func(t *testing.T) *fakeV2Manager {
 				t.Helper()
 				return newFakeV2ManagerWithDetections(t, 5)
 			},
-			wantNew: true,
+			wantPrevVersion: "v0.9.0",
 		},
 		{
 			name:    "upgrade with known previous version",
