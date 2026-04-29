@@ -105,7 +105,7 @@ func newSettingsAuthTestEnv(t *testing.T) *echo.Echo {
 	mockMetrics, err := observability.NewMetrics()
 	require.NoError(t, err, "Failed to create test metrics")
 
-	oauth2Server := security.NewOAuth2ServerForTesting(settings)
+	oauth2Server := security.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 	authMw := auth.NewMiddleware(authService)
 

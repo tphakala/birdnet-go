@@ -192,7 +192,7 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 
 	require.NotNil(t, server)
 	assert.Equal(t, settings, server.Settings)
@@ -211,7 +211,7 @@ func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -243,7 +243,7 @@ func TestIsUserAuthenticatedNoToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -318,7 +318,7 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -353,7 +353,7 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -380,7 +380,7 @@ func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T)
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -725,7 +725,7 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(tt.settings)
+			server := NewOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsAuthenticationEnabled(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -848,7 +848,7 @@ func TestIsRequestFromAllowedSubnet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(tt.settings)
+			server := NewOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsRequestFromAllowedSubnet(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
