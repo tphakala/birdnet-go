@@ -608,15 +608,13 @@ func validateNormalizationSettings(norm *NormalizationSettings, gain float64) er
 }
 
 // validateExportPath rejects export paths that contain path traversal sequences
-// or are absolute. Empty paths are allowed (the export directory defaults at
-// runtime).
+// or null bytes. Both relative and absolute paths are accepted: Docker
+// containers and install.sh legitimately use absolute paths like /data/clips/.
 func validateExportPath(path string) error {
 	if path == "" {
 		return nil
 	}
 
-	// Reject null bytes: the OS rejects them at runtime but validation
-	// should catch them early with a clear error message.
 	if strings.ContainsRune(path, '\x00') {
 		return errors.Newf("audio export path must not contain null bytes: %q", path).
 			Category(errors.CategoryValidation).
@@ -625,8 +623,6 @@ func validateExportPath(path string) error {
 			Build()
 	}
 
-	// Reject literal ".." before cleaning, since filepath.IsLocal cleans
-	// internally and would accept "foo/../bar" as "bar" (valid local).
 	//nolint:gocritic // ruleguard suggests IsLocal alone, but IsLocal cleans "../x" to "x" (valid!); explicit ".." check is required for untrusted input per internal/CLAUDE.md
 	if strings.Contains(path, "..") {
 		return errors.Newf("audio export path must not contain path traversal (..): %q", path).
@@ -636,24 +632,17 @@ func validateExportPath(path string) error {
 			Build()
 	}
 
-	// Reject absolute paths (export should be relative to the data directory)
-	if filepath.IsAbs(path) {
-		return errors.Newf("audio export path must be relative, got absolute path: %q", path).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "audio-export-path").
-			Context("path", path).
-			Build()
-	}
-
-	// Final defense: filepath.IsLocal rejects empty, absolute, and
-	// reserved names (Windows NUL, COM1, etc.).
-	cleanPath := filepath.Clean(path)
-	if !filepath.IsLocal(cleanPath) {
-		return errors.Newf("audio export path is not a safe local path: %q", path).
-			Category(errors.CategoryValidation).
-			Context("validation_type", "audio-export-path").
-			Context("path", path).
-			Build()
+	// For relative paths, also check filepath.IsLocal which rejects
+	// reserved names on Windows (NUL, COM1, etc.).
+	if !filepath.IsAbs(path) {
+		cleanPath := filepath.Clean(path)
+		if !filepath.IsLocal(cleanPath) {
+			return errors.Newf("audio export path is not a safe local path: %q", path).
+				Category(errors.CategoryValidation).
+				Context("validation_type", "audio-export-path").
+				Context("path", path).
+				Build()
+		}
 	}
 
 	return nil
