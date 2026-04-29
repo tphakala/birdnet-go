@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
@@ -307,98 +308,41 @@ func TestRebuildRangeFilterWithoutProcessor(t *testing.T) {
 	assert.Contains(t, response.Message, "BirdNET service not available")
 }
 
-// TestSwapRangeFilterSettingsBlocksSettingsReads verifies that swapRangeFilterSettings
-// holds settingsMutex so concurrent settings reads cannot see temporarily swapped values.
-// This is a regression test for #1940 where the frontend could receive wrong coordinates.
-func TestSwapRangeFilterSettingsBlocksSettingsReads(t *testing.T) {
-	_, _, controller := setupRangeTestEnvironment(t)
-
-	// Original coordinates (Helsinki)
-	originalLat := 60.1699
-	originalLon := 24.9384
-
-	// Test coordinates (New York) - deliberately different
-	testLat := 40.7128
-	testLon := -74.0060
-
-	controller.Settings.BirdNET.Latitude = originalLat
-	controller.Settings.BirdNET.Longitude = originalLon
-
-	const iterations = 100
-	var wg sync.WaitGroup
-
-	// Channel to collect any incorrect readings
-	badReadings := make(chan Location, iterations)
-
-	for range iterations {
-		wg.Add(2)
-
-		// Goroutine 1: swap settings temporarily (simulates range filter test)
-		go func() {
-			defer wg.Done()
-			rangeFilterMutex.Lock()
-			restore := controller.swapRangeFilterSettings(testLat, testLon, 0.05)
-			// Simulate model inference time
-			time.Sleep(time.Microsecond)
-			restore()
-			rangeFilterMutex.Unlock()
-		}()
-
-		// Goroutine 2: read settings (simulates GetAllSettings)
-		go func() {
-			defer wg.Done()
-			controller.settingsMutex.RLock()
-			lat := controller.Settings.BirdNET.Latitude
-			lon := controller.Settings.BirdNET.Longitude
-			controller.settingsMutex.RUnlock()
-
-			// The read should see either the original or the test values atomically,
-			// but never a partial/mixed state. Both consistent states are acceptable.
-			isOriginal := lat == originalLat && lon == originalLon
-			isTest := lat == testLat && lon == testLon
-			if !isOriginal && !isTest {
-				badReadings <- Location{Latitude: lat, Longitude: lon}
-			}
-		}()
-	}
-
-	wg.Wait()
-	close(badReadings)
-
-	for bad := range badReadings {
-		t.Errorf("Read inconsistent coordinates: lat=%f, lon=%f", bad.Latitude, bad.Longitude)
-	}
-}
-
-// TestSwapRangeFilterSettingsRestoresValues verifies that the restore function
-// correctly restores original settings values after a swap.
-func TestSwapRangeFilterSettingsRestoresValues(t *testing.T) {
+// TestBuildTestSettingsDoesNotMutateGlobal verifies that buildTestSettings
+// creates an isolated snapshot: the controller's cached settings and the
+// global published snapshot remain unchanged.
+func TestBuildTestSettingsDoesNotMutateGlobal(t *testing.T) {
 	_, _, controller := setupRangeTestEnvironment(t)
 
 	originalLat := controller.Settings.BirdNET.Latitude
 	originalLon := controller.Settings.BirdNET.Longitude
 	originalThreshold := controller.Settings.BirdNET.RangeFilter.Threshold
 
-	// Swap to different values
-	restore := controller.swapRangeFilterSettings(40.7128, -74.0060, 0.05)
+	testSettings := controller.buildTestSettings(40.7128, -74.0060, 0.05)
 
-	// Verify swapped values
-	assert.InDelta(t, 40.7128, controller.Settings.BirdNET.Latitude, 0.0001)
-	assert.InDelta(t, -74.0060, controller.Settings.BirdNET.Longitude, 0.0001)
-	assert.InDelta(t, float32(0.05), controller.Settings.BirdNET.RangeFilter.Threshold, 0.001)
+	// Test snapshot has the overridden values
+	assert.InDelta(t, 40.7128, testSettings.BirdNET.Latitude, 0.0001)
+	assert.InDelta(t, -74.0060, testSettings.BirdNET.Longitude, 0.0001)
+	assert.InDelta(t, float32(0.05), testSettings.BirdNET.RangeFilter.Threshold, 0.001)
+	assert.True(t, testSettings.BirdNET.LocationConfigured)
 
-	// Restore
-	restore()
-
-	// Verify original values restored
+	// Controller's settings are unchanged
 	assert.InDelta(t, originalLat, controller.Settings.BirdNET.Latitude, 0.0001)
 	assert.InDelta(t, originalLon, controller.Settings.BirdNET.Longitude, 0.0001)
 	assert.InDelta(t, originalThreshold, controller.Settings.BirdNET.RangeFilter.Threshold, 0.001)
+
+	// Published snapshot (what handlers read via CurrentOrFallback) is also unchanged
+	published := conf.CurrentOrFallback(controller.Settings)
+	assert.InDelta(t, originalLat, published.BirdNET.Latitude, 0.0001)
+	assert.InDelta(t, originalLon, published.BirdNET.Longitude, 0.0001)
+	assert.InDelta(t, originalThreshold, published.BirdNET.RangeFilter.Threshold, 0.001)
 }
 
-// TestGetRangeFilterSpeciesCountDuringSwap verifies that the species count endpoint
-// returns correct coordinates even when a range filter test is swapping settings.
-func TestGetRangeFilterSpeciesCountDuringSwap(t *testing.T) {
+// TestBuildTestSettingsConcurrentWithCountEndpoint verifies that the count
+// endpoint always returns the real coordinates even while buildTestSettings
+// is called concurrently. Because buildTestSettings never modifies global
+// state, this is trivially safe (regression test for #1940).
+func TestBuildTestSettingsConcurrentWithCountEndpoint(t *testing.T) {
 	e, _, controller := setupRangeTestEnvironment(t)
 
 	originalLat := controller.Settings.BirdNET.Latitude
@@ -410,17 +354,11 @@ func TestGetRangeFilterSpeciesCountDuringSwap(t *testing.T) {
 	for range iterations {
 		wg.Add(2)
 
-		// Goroutine 1: swap settings
 		go func() {
 			defer wg.Done()
-			rangeFilterMutex.Lock()
-			restore := controller.swapRangeFilterSettings(-33.8688, 151.2093, 0.05)
-			time.Sleep(time.Microsecond)
-			restore()
-			rangeFilterMutex.Unlock()
+			_ = controller.buildTestSettings(-33.8688, 151.2093, 0.05)
 		}()
 
-		// Goroutine 2: call the count endpoint
 		go func() {
 			defer wg.Done()
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/range/species/count", http.NoBody)
@@ -440,13 +378,8 @@ func TestGetRangeFilterSpeciesCountDuringSwap(t *testing.T) {
 				return
 			}
 
-			// With the fix, reads are blocked during swap, so the endpoint
-			// should return either original or test values, never a mix.
-			isOriginal := response.Location.Latitude == originalLat && response.Location.Longitude == originalLon
-			isTest := response.Location.Latitude == -33.8688 && response.Location.Longitude == 151.2093
-			assert.True(t, isOriginal || isTest,
-				"Got unexpected coordinates: lat=%f, lon=%f",
-				response.Location.Latitude, response.Location.Longitude)
+			assert.InDelta(t, originalLat, response.Location.Latitude, 0.0001)
+			assert.InDelta(t, originalLon, response.Location.Longitude, 0.0001)
 		}()
 	}
 

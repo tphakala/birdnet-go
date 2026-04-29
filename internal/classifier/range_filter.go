@@ -82,15 +82,26 @@ func BuildRangeFilter(o *Orchestrator) error {
 }
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
-// It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
-//
 // Settings are read from the latest published snapshot (via conf.CurrentOrFallback)
 // so that UI changes to coordinates, threshold, or LocationConfigured take
 // effect immediately without restarting the service.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
-	bn.Debug("Applying range filter")
+	return bn.getProbableSpecies(date, week, conf.CurrentOrFallback(bn.Settings))
+}
 
-	settings := conf.CurrentOrFallback(bn.Settings)
+// GetProbableSpeciesWithSettings filters species using the supplied settings
+// snapshot instead of reading from the global atomic pointer. This allows the
+// test endpoint to evaluate arbitrary coordinates and thresholds without
+// publishing temporary values into the global settings, eliminating the race
+// where a concurrent BuildRangeFilter could pick up test data.
+func (bn *BirdNET) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
+	return bn.getProbableSpecies(date, week, settings)
+}
+
+// getProbableSpecies is the shared implementation for both the global-settings
+// and explicit-settings entry points.
+func (bn *BirdNET) getProbableSpecies(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
+	bn.Debug("Applying range filter")
 
 	// Skip filtering if range filter backend is not initialized.
 	// Read under lock to avoid data race with Delete().

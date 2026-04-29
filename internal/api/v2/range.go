@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -26,9 +25,6 @@ const (
 	weeksPerMonth = 4 // Simplified ML model uses 4 weeks per month (48 weeks/year)
 	daysPerWeek   = 7 // Days in a week for week calculation
 )
-
-// rangeFilterMutex protects against concurrent modifications to global settings during testing
-var rangeFilterMutex sync.Mutex
 
 // validateRangeFilterRequest validates the range filter test request parameters.
 // Returns user-facing error messages with capitalized first letter for API responses.
@@ -75,36 +71,20 @@ func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 	return instance, nil
 }
 
-// swapRangeFilterSettings temporarily publishes a settings snapshot with the
-// given test coordinates and threshold, then returns a restore function that
-// republishes the original snapshot. Because GetProbableSpecies reads from the
-// latest published snapshot (via conf.CurrentOrFallback), modifying a single
-// controller-cached pointer is not sufficient; the global snapshot must be
-// swapped so the BirdNET instance sees the test values.
-//
-// It acquires settingsMutex (write lock) to prevent concurrent API settings
-// reads from seeing the temporary test values (see #1940).
-// The caller MUST call the returned restore function to release the lock.
-func (c *Controller) swapRangeFilterSettings(lat, lon float64, threshold float32) func() {
-	c.settingsMutex.Lock()
+// buildTestSettings creates a settings snapshot with the given test coordinates
+// and threshold for range filter testing. The snapshot is a clone of the
+// current settings with only the test values overridden, so it can be passed
+// directly to GetProbableSpeciesWithSettings without modifying global state.
+func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
+	c.settingsMutex.RLock()
+	testSnapshot := conf.CloneSettings(conf.CurrentOrFallback(c.Settings))
+	c.settingsMutex.RUnlock()
 
-	original := conf.CurrentOrFallback(c.Settings)
-	savedController := c.Settings
-
-	testSnapshot := conf.CloneSettings(original)
 	testSnapshot.BirdNET.Latitude = lat
 	testSnapshot.BirdNET.Longitude = lon
 	testSnapshot.BirdNET.RangeFilter.Threshold = threshold
 	testSnapshot.BirdNET.LocationConfigured = true
-
-	conf.StoreSettings(testSnapshot)
-	c.Settings = testSnapshot
-
-	return func() {
-		conf.StoreSettings(original)
-		c.Settings = savedController
-		c.settingsMutex.Unlock()
-	}
+	return testSnapshot
 }
 
 // Location represents geographic coordinates
@@ -361,13 +341,9 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "BirdNET service not available", http.StatusInternalServerError)
 	}
 
-	// Use mutex to protect against concurrent modifications to global settings
-	rangeFilterMutex.Lock()
-	defer rangeFilterMutex.Unlock()
-
-	// Temporarily swap settings for testing
-	restore := c.swapRangeFilterSettings(req.Latitude, req.Longitude, req.Threshold)
-	defer restore()
+	// Build a local settings snapshot with test values; no global state is
+	// modified, so concurrent BuildRangeFilter calls are unaffected.
+	testSettings := c.buildTestSettings(req.Latitude, req.Longitude, req.Threshold)
 
 	// Calculate week if not provided
 	week := req.Week
@@ -376,7 +352,7 @@ func (c *Controller) TestRangeFilter(ctx echo.Context) error {
 	}
 
 	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpecies(testDate, week)
+	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to get probable species", http.StatusInternalServerError)
 	}
@@ -559,20 +535,14 @@ func (c *Controller) getTestSpeciesList(req RangeFilterTestRequest) ([]RangeFilt
 		return nil, Location{}, 0, err
 	}
 
-	// Use mutex to protect against concurrent modifications to global settings
-	rangeFilterMutex.Lock()
-	defer rangeFilterMutex.Unlock()
-
-	// Temporarily set test values and restore after testing
-	restore := c.swapRangeFilterSettings(req.Latitude, req.Longitude, req.Threshold)
-	defer restore()
+	testSettings := c.buildTestSettings(req.Latitude, req.Longitude, req.Threshold)
 
 	// Use current date and calculate week
 	testDate := time.Now()
 	week := calculateWeek(testDate)
 
 	// Get probable species for the test parameters
-	speciesScores, err := birdnetInstance.GetProbableSpecies(testDate, week)
+	speciesScores, err := birdnetInstance.GetProbableSpeciesWithSettings(testDate, week, testSettings)
 	if err != nil {
 		return nil, Location{}, 0, err
 	}
