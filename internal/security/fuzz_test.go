@@ -444,16 +444,18 @@ func FuzzIsRequestFromAllowedSubnet(f *testing.F) {
 	}
 
 	f.Fuzz(func(t *testing.T, ipStr, subnets string, enabled bool) {
-		server := &OAuth2Server{
-			Settings: &conf.Settings{
-				Security: conf.Security{
-					AllowSubnetBypass: conf.AllowSubnetBypass{
-						Enabled: enabled,
-						Subnet:  subnets,
-					},
+		settings := &conf.Settings{
+			Security: conf.Security{
+				AllowSubnetBypass: conf.AllowSubnetBypass{
+					Enabled: enabled,
+					Subnet:  subnets,
 				},
 			},
 		}
+		conf.SetTestSettings(settings)
+		t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+		server := &OAuth2Server{Settings: settings}
 
 		// Should never panic
 		result := server.IsRequestFromAllowedSubnet(ipStr)
