@@ -21,7 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-const placeholderImageURL = "/assets/images/bird-placeholder.svg"
+const placeholderImageURL = "/ui/assets/bird-placeholder.svg"
 const maxSpeciesBatch = 10
 
 // Analytics constants (file-local)
