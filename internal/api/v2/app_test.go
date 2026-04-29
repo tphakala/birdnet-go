@@ -123,7 +123,7 @@ func setupAppConfigTestWithAuth(t *testing.T, securityConfig *conf.Security) (*e
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create OAuth2Server for auth
-	oauth2Server := security.NewOAuth2ServerForTesting(settings)
+	oauth2Server := security.NewOAuth2ServerForTesting(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 	authMw := auth.NewMiddleware(authService)
 

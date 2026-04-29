@@ -150,19 +150,14 @@ type OAuth2Server struct {
 	throttledMessages map[string]time.Time
 }
 
+// currentSettings returns the latest settings snapshot so security
+// configuration changes take effect without recreating the OAuth2Server.
+func (s *OAuth2Server) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(s.Settings)
+}
+
 // For testing purposes
 var testConfigPath string
-
-// NewOAuth2ServerForTesting creates an OAuth2Server with the provided settings for testing.
-// This bypasses conf.GetSettings() and allows custom settings to be injected.
-func NewOAuth2ServerForTesting(settings *conf.Settings) *OAuth2Server {
-	return &OAuth2Server{
-		Settings:          settings,
-		authCodes:         make(map[string]AuthCode),
-		accessTokens:      make(map[string]AccessToken),
-		throttledMessages: make(map[string]time.Time),
-	}
-}
 
 // Pre-defined errors for token validation
 var (
@@ -565,16 +560,17 @@ func SetTestConfigPath(path string) {
 func (s *OAuth2Server) UpdateProviders() {
 	GetLogger().Info("Updating Goth providers based on potentially changed settings")
 	cancelOIDCRetry()
-	InitializeGoth(s.Settings)
+	InitializeGoth(s.currentSettings())
 }
 
 // IsUserAuthenticated checks if the user is authenticated
 func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
+	settings := s.currentSettings()
 	clientIP := parseIPWithZone(c.RealIP())
 	secLog := GetLogger().With(logger.String("client_ip", c.RealIP()))
 	secLog.Debug("Checking user authentication status")
 
-	if s.Settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(clientIP) {
+	if settings.Security.AllowSubnetBypass.Enabled && IsInLocalSubnet(clientIP) {
 		secLog.Info("User authenticated: request from local subnet (subnet bypass enabled)")
 		return true
 	}
@@ -641,7 +637,7 @@ func (s *OAuth2Server) checkSocialAuthDirect(r *http.Request, userId string, log
 
 	// Look up the config provider for this goth provider name
 	configProvider := gothToConfigProvider(activeProvider)
-	provider := s.Settings.GetOAuthProvider(configProvider)
+	provider := s.currentSettings().GetOAuthProvider(configProvider)
 	if provider == nil || !provider.Enabled {
 		log.Debug("Active auth provider not enabled or not found in config", logger.String("provider", activeProvider))
 		return false
@@ -657,8 +653,9 @@ func (s *OAuth2Server) checkSocialAuthDirect(r *http.Request, userId string, log
 // checkSocialAuthFallback iterates over all configured providers to find a valid session.
 // This handles sessions created before the auth_provider key was introduced.
 func (s *OAuth2Server) checkSocialAuthFallback(r *http.Request, userId string, log SecurityLogger) bool {
+	settings := s.currentSettings()
 	for configProvider, gothProvider := range ConfigToGothProvider {
-		provider := s.Settings.GetOAuthProvider(configProvider)
+		provider := settings.GetOAuthProvider(configProvider)
 		if provider == nil || !provider.Enabled {
 			continue
 		}
@@ -746,7 +743,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	expiresAt := time.Now().Add(s.Settings.Security.BasicAuth.AuthCodeExp)
+	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AuthCodeExp)
 	s.authCodes[authCode] = AuthCode{
 		Code:      authCode,
 		ExpiresAt: expiresAt,
@@ -800,7 +797,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 		return "", err
 	}
 	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
-	expiresAt := time.Now().Add(s.Settings.Security.BasicAuth.AccessTokenExp)
+	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AccessTokenExp)
 
 	s.accessTokens[accessToken] = AccessToken{
 		Token:     accessToken,
@@ -843,6 +840,7 @@ func (s *OAuth2Server) ValidateAccessToken(token string) error {
 
 // IsAuthenticationEnabled checks if any authentication method is enabled
 func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
+	settings := s.currentSettings()
 	authLog := GetLogger().With(logger.String("ip", ip))
 	authLog.Debug("Checking if authentication is enabled for IP")
 	if s.IsRequestFromAllowedSubnet(ip) {
@@ -851,10 +849,10 @@ func (s *OAuth2Server) IsAuthenticationEnabled(ip string) bool {
 	}
 
 	// Check if basic auth is enabled
-	basicEnabled := s.Settings.Security.BasicAuth.Enabled
+	basicEnabled := settings.Security.BasicAuth.Enabled
 
 	// Check if any OAuth provider is enabled using the new array
-	enabledOAuthProviders := s.Settings.GetEnabledOAuthProviders()
+	enabledOAuthProviders := settings.GetEnabledOAuthProviders()
 	oauthEnabled := len(enabledOAuthProviders) > 0
 
 	if basicEnabled || oauthEnabled {
@@ -874,7 +872,8 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 	authLog.Debug("Checking if IP is in allowed subnet")
 
 	// Check if subnet bypass is enabled first
-	if !s.Settings.Security.AllowSubnetBypass.Enabled {
+	settings := s.currentSettings()
+	if !settings.Security.AllowSubnetBypass.Enabled {
 		authLog.Debug("Allowed subnet check: subnet bypass is disabled in settings")
 		return false
 	}
@@ -897,7 +896,7 @@ func (s *OAuth2Server) IsRequestFromAllowedSubnet(ipStr string) bool {
 	}
 
 	// The allowedSubnets string is expected to be a comma-separated list of CIDR ranges.
-	allowedSubnetsStr := s.Settings.Security.AllowSubnetBypass.Subnet
+	allowedSubnetsStr := settings.Security.AllowSubnetBypass.Subnet
 	if allowedSubnetsStr == "" {
 		authLog.Debug("Allowed subnet check: no allowed subnets configured (subnet string is empty)")
 		return false

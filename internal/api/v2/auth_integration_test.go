@@ -77,7 +77,7 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 	mockMetrics, _ := observability.NewMetrics()
 
 	// Create OAuth2Server with test settings
-	oauth2Server := createTestOAuth2Server(settings)
+	oauth2Server := createTestOAuth2Server(t, settings)
 
 	// Create auth service and middleware for testing
 	authService := auth.NewSecurityAdapter(oauth2Server)
@@ -101,10 +101,9 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Controller, *conf.Sett
 }
 
 // createTestOAuth2Server creates an OAuth2Server with the provided settings for testing.
-func createTestOAuth2Server(settings *conf.Settings) *security.OAuth2Server {
-	// Create OAuth2Server manually for testing (bypasses conf.GetSettings())
-	// Must call NewOAuth2ServerForTesting to properly initialize internal maps
-	return security.NewOAuth2ServerForTesting(settings)
+func createTestOAuth2Server(tb testing.TB, settings *conf.Settings) *security.OAuth2Server {
+	tb.Helper()
+	return security.NewOAuth2ServerForTesting(tb, settings)
 }
 
 // TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end.
@@ -233,7 +232,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 	sunCalc := suncalc.NewSunCalc(60.1699, 24.9384)
 	controlChan := make(chan string, 10)
 	mockMetrics, _ := observability.NewMetrics()
-	oauth2Server := createTestOAuth2Server(settings)
+	oauth2Server := createTestOAuth2Server(t, settings)
 
 	// Create auth service and middleware for testing
 	authService := auth.NewSecurityAdapter(oauth2Server)
@@ -486,7 +485,7 @@ func TestV2AuthService_Interface(t *testing.T) {
 			},
 		}
 
-		oauth2Server := createTestOAuth2Server(settings)
+		oauth2Server := createTestOAuth2Server(t, settings)
 		adapter := auth.NewSecurityAdapter(oauth2Server)
 
 		// Verify adapter implements Service interface

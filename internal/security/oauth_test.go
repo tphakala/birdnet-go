@@ -113,8 +113,9 @@ func TestIsUserAuthenticatedTableDriven(t *testing.T) {
 }
 
 func TestOAuth2Server(t *testing.T) {
-	// Set the settings instance
+	// Ensure global settings are initialized for NewOAuth2Server()
 	conf.Setting()
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
 
 	tests := []struct {
 		name string
@@ -124,7 +125,7 @@ func TestOAuth2Server(t *testing.T) {
 			name: "generate and validate auth code",
 			test: func(t *testing.T, s *OAuth2Server) {
 				t.Helper()
-				// Initialize settings
+				// Override settings and publish as global so currentSettings() returns them
 				s.Settings = &conf.Settings{
 					Security: conf.Security{
 						BasicAuth: conf.BasicAuth{
@@ -136,6 +137,7 @@ func TestOAuth2Server(t *testing.T) {
 						},
 					},
 				}
+				conf.SetTestSettings(s.Settings)
 
 				// Generate and immediately use the auth code
 				code, err := s.GenerateAuthCode()
@@ -159,6 +161,7 @@ func TestOAuth2Server(t *testing.T) {
 					Enabled: true,
 					Subnet:  "192.168.1.0/24",
 				}
+				conf.SetTestSettings(s.Settings)
 
 				assert.True(t, s.IsRequestFromAllowedSubnet("192.168.1.100"), "expected IP to be allowed")
 				assert.False(t, s.IsRequestFromAllowedSubnet("10.0.0.1"), "expected IP to be denied")
@@ -189,7 +192,7 @@ func TestNewOAuth2ServerForTesting(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 
 	require.NotNil(t, server)
 	assert.Equal(t, settings, server.Settings)
@@ -208,7 +211,7 @@ func TestIsUserAuthenticatedExpiredToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -240,7 +243,7 @@ func TestIsUserAuthenticatedNoToken(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -315,7 +318,7 @@ func TestIsUserAuthenticatedSubnetBypassDisabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -350,7 +353,7 @@ func TestIsUserAuthenticatedSubnetBypassEnabled(t *testing.T) {
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -377,7 +380,7 @@ func TestIsUserAuthenticatedTokenAuthWorksWhenSubnetBypassDisabled(t *testing.T)
 		},
 	}
 
-	server := NewOAuth2ServerForTesting(settings)
+	server := NewOAuth2ServerForTesting(t, settings)
 	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
 
 	e := echo.New()
@@ -520,14 +523,18 @@ func TestValidateAccessToken(t *testing.T) {
 
 // TestGenerateAuthCode tests the GenerateAuthCode method
 func TestGenerateAuthCode(t *testing.T) {
-	server := &OAuth2Server{
-		Settings: &conf.Settings{
-			Security: conf.Security{
-				BasicAuth: conf.BasicAuth{
-					AuthCodeExp: 10 * time.Minute,
-				},
+	settings := &conf.Settings{
+		Security: conf.Security{
+			BasicAuth: conf.BasicAuth{
+				AuthCodeExp: 10 * time.Minute,
 			},
 		},
+	}
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	server := &OAuth2Server{
+		Settings:     settings,
 		authCodes:    make(map[string]AuthCode),
 		accessTokens: make(map[string]AccessToken),
 	}
@@ -718,7 +725,7 @@ func TestIsAuthenticationEnabled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(tt.settings)
+			server := NewOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsAuthenticationEnabled(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -841,7 +848,7 @@ func TestIsRequestFromAllowedSubnet(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := NewOAuth2ServerForTesting(tt.settings)
+			server := NewOAuth2ServerForTesting(t, tt.settings)
 			result := server.IsRequestFromAllowedSubnet(tt.ip)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1235,13 +1242,15 @@ func TestCheckSocialAuthDirect(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
-			server := &OAuth2Server{
-				Settings: &conf.Settings{
-					Security: conf.Security{
-						OAuthProviders: tt.providers,
-					},
+			settings := &conf.Settings{
+				Security: conf.Security{
+					OAuthProviders: tt.providers,
 				},
 			}
+			conf.SetTestSettings(settings)
+			t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+			server := &OAuth2Server{Settings: settings}
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req = tt.setupSession(t, req)
@@ -1288,13 +1297,15 @@ func TestCheckSocialAuthFallback(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
-			server := &OAuth2Server{
-				Settings: &conf.Settings{
-					Security: conf.Security{
-						OAuthProviders: tt.providers,
-					},
+			settings := &conf.Settings{
+				Security: conf.Security{
+					OAuthProviders: tt.providers,
 				},
 			}
+			conf.SetTestSettings(settings)
+			t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+			server := &OAuth2Server{Settings: settings}
 
 			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 			req = tt.setupSession(t, req)
@@ -1311,15 +1322,17 @@ func TestCheckSocialAuthFallback(t *testing.T) {
 func TestCheckSocialAuthSessionsWithAuthProviderKey(t *testing.T) {
 	gothic.Store = sessions.NewCookieStore([]byte("test-secret-32-bytes-minimum-len"))
 
-	server := &OAuth2Server{
-		Settings: &conf.Settings{
-			Security: conf.Security{
-				OAuthProviders: []conf.OAuthProviderConfig{
-					{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
-				},
+	settings := &conf.Settings{
+		Security: conf.Security{
+			OAuthProviders: []conf.OAuthProviderConfig{
+				{Provider: ConfigGoogle, Enabled: true, UserID: "user@example.com"},
 			},
 		},
 	}
+	conf.SetTestSettings(settings)
+	t.Cleanup(func() { conf.SetTestSettings(nil) })
+
+	server := &OAuth2Server{Settings: settings}
 
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	req = storeMultipleInSession(t, req,
