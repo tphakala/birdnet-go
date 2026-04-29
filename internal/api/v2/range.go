@@ -77,10 +77,9 @@ func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 // directly to GetProbableSpeciesWithSettings without modifying global state.
 func (c *Controller) buildTestSettings(lat, lon float64, threshold float32) *conf.Settings {
 	c.settingsMutex.RLock()
-	current := conf.CurrentOrFallback(c.Settings)
+	testSnapshot := conf.CloneSettings(conf.CurrentOrFallback(c.Settings))
 	c.settingsMutex.RUnlock()
 
-	testSnapshot := conf.CloneSettings(current)
 	testSnapshot.BirdNET.Latitude = lat
 	testSnapshot.BirdNET.Longitude = lon
 	testSnapshot.BirdNET.RangeFilter.Threshold = threshold

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
@@ -329,6 +330,12 @@ func TestBuildTestSettingsDoesNotMutateGlobal(t *testing.T) {
 	assert.InDelta(t, originalLat, controller.Settings.BirdNET.Latitude, 0.0001)
 	assert.InDelta(t, originalLon, controller.Settings.BirdNET.Longitude, 0.0001)
 	assert.InDelta(t, originalThreshold, controller.Settings.BirdNET.RangeFilter.Threshold, 0.001)
+
+	// Published snapshot (what handlers read via CurrentOrFallback) is also unchanged
+	published := conf.CurrentOrFallback(controller.Settings)
+	assert.InDelta(t, originalLat, published.BirdNET.Latitude, 0.0001)
+	assert.InDelta(t, originalLon, published.BirdNET.Longitude, 0.0001)
+	assert.InDelta(t, originalThreshold, published.BirdNET.RangeFilter.Threshold, 0.001)
 }
 
 // TestBuildTestSettingsConcurrentWithCountEndpoint verifies that the count
