@@ -219,12 +219,12 @@ describe('wizardState — state machine', () => {
   });
 
   describe('skip()', () => {
-    it('resets state to completed', async () => {
+    it('resets state to completed', () => {
       const steps = createTestSteps(3);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('onboarding');
 
-      await wizardState.skip();
+      wizardState.skip();
 
       expect(wizardState.status).toBe('completed');
       expect(wizardState.isActive).toBe(false);
@@ -238,19 +238,19 @@ describe('wizardState — state machine', () => {
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('whats-new', { currentVersion: 'v2.0' });
 
-      await wizardState.skip();
+      wizardState.skip();
 
       expect(api.post).toHaveBeenCalledWith('/api/v2/app/wizard/dismiss');
     });
   });
 
   describe('complete()', () => {
-    it('resets state to completed', async () => {
+    it('resets state to completed', () => {
       const steps = createTestSteps(3);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('onboarding');
 
-      await wizardState.complete();
+      wizardState.complete();
 
       expect(wizardState.status).toBe('completed');
       expect(wizardState.isActive).toBe(false);
@@ -264,17 +264,17 @@ describe('wizardState — state machine', () => {
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('onboarding', { currentVersion: 'v3.0' });
 
-      await wizardState.complete();
+      wizardState.complete();
 
       expect(api.post).toHaveBeenCalledWith('/api/v2/app/wizard/dismiss');
     });
 
-    it('sets localStorage dismissed version', async () => {
+    it('sets localStorage dismissed version', () => {
       const steps = createTestSteps(1);
       vi.mocked(getStepsForFlow).mockReturnValue(steps);
       wizardState.launch('whats-new', { currentVersion: 'v2.5' });
 
-      await wizardState.complete();
+      wizardState.complete();
 
       expect(localStorage.getItem('birdnet-wizard-dismissed-version')).toBe('v2.5');
     });
