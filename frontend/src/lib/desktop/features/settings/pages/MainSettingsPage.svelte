@@ -1024,12 +1024,13 @@
   }
 
   $effect(() => {
-    // Track coordinate changes as dependencies
+    // Track coordinate and threshold changes as dependencies
     const _lat = settings.birdnet.latitude;
     const _lng = settings.birdnet.longitude;
+    const _threshold = settings.birdnet.rangeFilter.threshold;
     const configured = settings.birdnet.locationConfigured;
 
-    if (configured && _lat != null && _lng != null) {
+    if (configured && _lat != null && _lng != null && _threshold != null) {
       debouncedTestRangeFilter();
     }
   });
