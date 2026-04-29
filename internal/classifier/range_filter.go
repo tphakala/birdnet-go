@@ -108,8 +108,16 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 		return zeroScoresForAllLabels(settings.BirdNET.Labels, settings.Realtime.Species.Exclude), nil
 	}
 
+	threshold := settings.BirdNET.RangeFilter.Threshold
+	if threshold < 0 || threshold > 1 {
+		GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
+			logger.Float64("invalid_value", float64(threshold)),
+			logger.Float64("default_value", 0.01))
+		threshold = 0.01
+	}
+
 	// Apply prediction filter based on the context
-	filters, err := bn.predictFilter(date, week, settings)
+	filters, err := bn.predictFilter(date, week, settings, threshold)
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryValidation).
@@ -119,24 +127,13 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 			Build()
 	}
 
-	threshold := settings.BirdNET.RangeFilter.Threshold
-	if threshold < 0 || threshold > 1 {
-		GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
-			logger.Float64("invalid_value", float64(threshold)),
-			logger.Float64("default_value", 0.01))
-		threshold = 0.01
-	}
-
-	// Collect species scores above a certain threshold
+	// Collect species scores, applying exclude list
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
-		if filter.Score >= threshold {
-			// Check if species is in exclude list before adding
-			if !isSpeciesExcluded(filter.Label, settings.Realtime.Species.Exclude) {
-				speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
-			} else {
-				bn.Debug("Excluding species from range filter: %s", filter.Label)
-			}
+		if !isSpeciesExcluded(filter.Label, settings.Realtime.Species.Exclude) {
+			speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
+		} else {
+			bn.Debug("Excluding species from range filter: %s", filter.Label)
 		}
 	}
 
@@ -213,9 +210,10 @@ func matchesSpecies(label, speciesName string) bool {
 }
 
 // predictFilter applies the range filter model to predict species based on location and date.
-// The caller supplies the settings snapshot so that the same snapshot is used
-// consistently across the entire GetProbableSpecies call.
-func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Settings) ([]Filter, error) {
+// The caller supplies the settings snapshot and a pre-validated threshold so
+// that the same values are used consistently across the entire
+// GetProbableSpecies call.
+func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Settings, threshold float32) ([]Filter, error) {
 	start := time.Now()
 
 	// If week is not set, use current date to get week
@@ -253,7 +251,7 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Se
 	// Filter and label the results, but only for indices that exist in labels
 	var results []Filter
 	for i, score := range scores {
-		if score >= settings.BirdNET.RangeFilter.Threshold && i < len(settings.BirdNET.Labels) {
+		if score >= threshold && i < len(settings.BirdNET.Labels) {
 			results = append(results, Filter{Score: score, Label: settings.BirdNET.Labels[i]})
 		}
 	}
