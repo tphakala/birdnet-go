@@ -223,7 +223,7 @@ func (c *Controller) addMemoryThresholds(thresholdMap map[string]*DynamicThresho
 		return
 	}
 	memoryData := c.Processor.GetDynamicThresholdData()
-	baseThreshold := c.Settings.BirdNET.Threshold
+	baseThreshold := c.currentSettings().BirdNET.Threshold
 
 	for _, dt := range memoryData {
 		key := strings.ToLower(dt.ModelName) + ":" + strings.ToLower(dt.SpeciesName)
@@ -274,13 +274,14 @@ func (c *Controller) GetDynamicThresholdStats(ctx echo.Context) error {
 		})
 	}
 
+	settings := c.currentSettings()
 	return ctx.JSON(http.StatusOK, ThresholdStatsResponse{
 		TotalCount:        totalCount,
 		ActiveCount:       activeCount,
 		AtMinimumCount:    atMinimumCount,
 		LevelDistribution: distribution,
-		ValidHours:        c.Settings.Realtime.DynamicThreshold.ValidHours,
-		MinThreshold:      c.Settings.Realtime.DynamicThreshold.Min,
+		ValidHours:        settings.Realtime.DynamicThreshold.ValidHours,
+		MinThreshold:      settings.Realtime.DynamicThreshold.Min,
 	})
 }
 

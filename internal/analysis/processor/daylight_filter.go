@@ -41,10 +41,10 @@ func (p *Processor) initDaylightFilter() {
 		return
 	}
 
-	// Get BirdNET labels for common name resolution
+	// Get BirdNET labels from fresh settings for common name resolution
 	var labels []string
-	if p.Bn != nil && p.Bn.Settings != nil {
-		labels = p.Bn.Settings.BirdNET.Labels
+	if settings != nil {
+		labels = settings.BirdNET.Labels
 	}
 
 	// Get cached taxonomy database for genus/family/order resolution

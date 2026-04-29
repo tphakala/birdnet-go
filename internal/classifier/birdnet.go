@@ -59,6 +59,12 @@ type BirdNET struct {
 	speciesCache   map[string]*speciesCacheEntry
 }
 
+// currentSettings returns the latest settings snapshot so UI changes to
+// sensitivity, location, and labels take effect without restarting the service.
+func (bn *BirdNET) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(bn.Settings)
+}
+
 // NewBirdNET initializes a new BirdNET instance with given settings.
 // If modelInfo is non-nil it is used directly (orchestrator path); otherwise
 // the function walks a 4-tier resolution chain: config version > filename > default.
@@ -544,13 +550,14 @@ func (bn *BirdNET) clearSpeciesCache() {
 
 // getCachedSpeciesScores returns species occurrence scores with caching to avoid repeated calls within same day
 func (bn *BirdNET) getCachedSpeciesScores(targetDate time.Time) (map[string]float64, error) {
+	settings := bn.currentSettings()
 	// Build composite cache key: date + rounded lat/lon + model
 	day := targetDate.Format(time.DateOnly)
 	cacheKey := fmt.Sprintf("%s|%.4f,%.4f|%s",
 		day,
-		bn.Settings.BirdNET.Latitude,
-		bn.Settings.BirdNET.Longitude,
-		bn.Settings.BirdNET.RangeFilter.Model,
+		settings.BirdNET.Latitude,
+		settings.BirdNET.Longitude,
+		settings.BirdNET.RangeFilter.Model,
 	)
 
 	// FAST PATH: read under RLock and return a defensive copy
@@ -1052,7 +1059,7 @@ func (bn *BirdNET) GetSpeciesOccurrenceAtTime(species string, detectionTime time
 	}
 
 	// If location not configured, range filter is not active, return 0
-	if !bn.Settings.BirdNET.LocationConfigured {
+	if !bn.currentSettings().BirdNET.LocationConfigured {
 		return 0.0
 	}
 
@@ -1124,13 +1131,13 @@ func (bn *BirdNET) ModelVersion() string {
 // NumSpecies returns the number of species this model can classify.
 // Implements ModelInstance.
 func (bn *BirdNET) NumSpecies() int {
-	return len(bn.Settings.BirdNET.Labels)
+	return len(bn.currentSettings().BirdNET.Labels)
 }
 
 // Labels returns the full list of species labels for this model.
 // Implements ModelInstance.
 func (bn *BirdNET) Labels() []string {
-	return bn.Settings.BirdNET.Labels
+	return bn.currentSettings().BirdNET.Labels
 }
 
 // Close releases resources held by the BirdNET model.
