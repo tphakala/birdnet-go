@@ -303,8 +303,8 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 		cm.notifySuccess("Range filter rebuilt successfully")
 	}
 
-	// Rebuild name maps with new locale labels
-	labels := cm.bn.Settings.BirdNET.Labels
+	// Rebuild name maps with new locale labels (use fresh settings, not stale pointer)
+	labels := conf.CurrentOrFallback(cm.bn.Settings).BirdNET.Labels
 	if cm.proc != nil && cm.proc.Ds != nil {
 		cm.proc.Ds.UpdateNameMaps(labels)
 		GetLogger().Info("Datastore name maps updated with new labels")

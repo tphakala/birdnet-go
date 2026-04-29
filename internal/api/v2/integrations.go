@@ -254,15 +254,16 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 		logger.String("path", path),
 		logger.String("ip", ip))
 
-	// Get MQTT configuration from settings
-	mqttConfig := c.Settings.Realtime.MQTT
+	// Get MQTT configuration from fresh settings
+	settings := c.currentSettings()
+	mqttConfig := settings.Realtime.MQTT
 
 	// Prepare status response
 	status := MQTTStatus{
 		Connected: false, // Default to not connected
 		Broker:    mqttConfig.Broker,
 		Topic:     mqttConfig.Topic,
-		ClientID:  c.Settings.Main.Name, // Use the application name as client ID
+		ClientID:  settings.Main.Name, // Use the application name as client ID
 	}
 
 	// If MQTT is not enabled, return status as-is
@@ -277,7 +278,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	c.logDebugIfEnabled("Checking MQTT connection status",
 		logger.String("path", path),
 		logger.String("ip", ip))
-	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context())
+	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context(), settings)
 	status.Connected = connected
 	if checkErr != "" {
 		status.LastError = checkErr
@@ -296,14 +297,14 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // checkMQTTConnectionStatus attempts to connect to the MQTT broker using a temporary client
 // to determine the current connection status.
 // Returns true if connected, false otherwise, along with any error message encountered.
-func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
+func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
 	// Use the injected metrics instance
 	if c.metrics == nil {
 		c.logErrorIfEnabled("Metrics instance not available for MQTT status check")
 		return false, "error:metrics:not_initialized"
 	}
 
-	tempClient, err := mqtt.NewClient(c.Settings, c.metrics)
+	tempClient, err := mqtt.NewClient(settings, c.metrics)
 	if err != nil {
 		c.logErrorIfEnabled("Failed to create temporary MQTT client for status check",
 			logger.Error(err))
@@ -320,20 +321,20 @@ func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (conne
 	if err != nil {
 		c.logWarnIfEnabled("Temporary MQTT client connection failed during status check",
 			logger.Error(err),
-			logger.String("broker", c.Settings.Realtime.MQTT.Broker))
+			logger.String("broker", settings.Realtime.MQTT.Broker))
 		return false, fmt.Sprintf("error:connection:mqtt_broker:%s", err.Error())
 	}
 
 	// Check if genuinely connected
 	if !tempClient.IsConnected() {
 		c.logWarnIfEnabled("Temporary MQTT client connected but IsConnected() returned false",
-			logger.String("broker", c.Settings.Realtime.MQTT.Broker))
+			logger.String("broker", settings.Realtime.MQTT.Broker))
 		// Consider this a failure for status purposes, though connection might be flapping
 		return false, "error:connection:mqtt_connection_unstable"
 	}
 
 	c.logDebugIfEnabled("Temporary MQTT client connected successfully for status check",
-		logger.String("broker", c.Settings.Realtime.MQTT.Broker))
+		logger.String("broker", settings.Realtime.MQTT.Broker))
 	return true, "" // Connected successfully
 }
 
@@ -345,8 +346,8 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 		logger.String("path", path),
 		logger.String("ip", ip))
 
-	// Get BirdWeather configuration from settings
-	bwConfig := c.Settings.Realtime.Birdweather
+	// Get BirdWeather configuration from fresh settings
+	bwConfig := c.currentSettings().Realtime.Birdweather
 
 	// Prepare status response
 	status := BirdWeatherStatus{
@@ -371,8 +372,9 @@ func (c *Controller) GetBirdWeatherStatus(ctx echo.Context) error {
 
 // TestMQTTConnection handles POST /api/v2/integrations/mqtt/test
 func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
-	// Get MQTT configuration from settings
-	mqttConfig := c.Settings.Realtime.MQTT
+	// Get MQTT configuration from fresh settings
+	settings := c.currentSettings()
+	mqttConfig := settings.Realtime.MQTT
 
 	if !mqttConfig.Enabled {
 		return ctx.JSON(http.StatusOK, MQTTTestResult{
@@ -398,11 +400,11 @@ func (c *Controller) TestMQTTConnection(ctx echo.Context) error {
 	}
 
 	// Create test MQTT client with the current configuration
-	client, err := mqtt.NewClient(c.Settings, c.metrics)
+	client, err := mqtt.NewClient(settings, c.metrics)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, MQTTTestResult{
 			Success: false,
-			Message: formatClientError("Failed to create MQTT client", err, c.Settings),
+			Message: formatClientError("Failed to create MQTT client", err, settings),
 		})
 	}
 
@@ -443,14 +445,15 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 		})
 	}
 
-	// Create temporary settings for the test
+	// Create temporary settings for the test using fresh settings
+	currentCfg := c.currentSettings()
 	testSettings := &conf.Settings{
 		BirdNET: conf.BirdNETConfig{
-			Latitude:  c.Settings.BirdNET.Latitude,
-			Longitude: c.Settings.BirdNET.Longitude,
+			Latitude:  currentCfg.BirdNET.Latitude,
+			Longitude: currentCfg.BirdNET.Longitude,
 		},
 		Realtime: conf.RealtimeSettings{
-			Audio: c.Settings.Realtime.Audio, // Required for FFmpeg path (FLAC encoding)
+			Audio: currentCfg.Realtime.Audio, // Required for FFmpeg path (FLAC encoding)
 			Birdweather: conf.BirdweatherSettings{
 				Enabled:          request.Enabled,
 				ID:               request.ID,
@@ -461,14 +464,14 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 		},
 	}
 	// Copy main settings
-	testSettings.Main = c.Settings.Main
+	testSettings.Main = currentCfg.Main
 
 	// Create test BirdWeather client with the test configuration
 	client, err := birdweather.New(testSettings)
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
-			"message": formatClientError("Failed to create BirdWeather client", err, c.Settings),
+			"message": formatClientError("Failed to create BirdWeather client", err, currentCfg),
 			"state":   "failed",
 		})
 	}
@@ -542,11 +545,12 @@ func (c *Controller) TestWeatherConnection(ctx echo.Context) error {
 	ctx.Response().Header().Set("Connection", "keep-alive")
 	ctx.Response().WriteHeader(http.StatusOK)
 
-	// Create test settings from request
+	// Create test settings from request using fresh settings
+	weatherCfg := c.currentSettings()
 	testSettings := &conf.Settings{
 		BirdNET: conf.BirdNETConfig{
-			Latitude:  c.Settings.BirdNET.Latitude,
-			Longitude: c.Settings.BirdNET.Longitude,
+			Latitude:  weatherCfg.BirdNET.Latitude,
+			Longitude: weatherCfg.BirdNET.Longitude,
 		},
 		Realtime: conf.RealtimeSettings{
 			Weather: conf.WeatherSettings{

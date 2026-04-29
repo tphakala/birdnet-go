@@ -26,6 +26,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	span, _ := StartSpan(ctx, "birdnet.predict", "Species prediction")
 	defer span.Finish()
 
+	settings := bn.currentSettings()
 	start := time.Now()
 	span.SetTag("model", bn.ModelInfo.ID)
 	span.SetData("sample_count", len(sample))
@@ -37,7 +38,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	if len(sample) == 0 || len(sample[0]) == 0 {
 		err := errors.Newf("empty audio sample").
 			Category(errors.CategoryValidation).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "empty_sample")
@@ -52,7 +53,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	if bn.classifier == nil {
 		err := errors.Newf("classifier backend is not initialized").
 			Category(errors.CategoryModelInit).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Build()
 		span.SetTag("error", "true")
 		span.SetData("error_type", "classifier_nil")
@@ -65,7 +66,7 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryAudio).
-			ModelContext(bn.Settings.BirdNET.ModelPath, bn.ModelInfo.ID).
+			ModelContext(settings.BirdNET.ModelPath, bn.ModelInfo.ID).
 			Context("sample_length", len(sample[0])).
 			Timing("prediction-invoke", time.Since(start)).
 			Build()
@@ -92,14 +93,14 @@ func (bn *BirdNET) Predict(ctx context.Context, sample [][]float32) ([]datastore
 	globalInferenceCounters.RecordInvoke(invokeDuration.Microseconds())
 
 	// Use optimized sigmoid function with buffer reuse
-	confidence := applySigmoidToPredictionsReuse(predictions, bn.Settings.BirdNET.Sensitivity, bn.confidenceBuffer)
+	confidence := applySigmoidToPredictionsReuse(predictions, settings.BirdNET.Sensitivity, bn.confidenceBuffer)
 
 	// Use the pre-allocated buffer to reduce memory allocations
-	results, err := pairLabelsAndConfidenceReuse(bn.Settings.BirdNET.Labels, confidence, bn.resultsBuffer)
+	results, err := pairLabelsAndConfidenceReuse(settings.BirdNET.Labels, confidence, bn.resultsBuffer)
 	if err != nil {
 		err = errors.New(err).
 			Category(errors.CategoryValidation).
-			Context("label_count", len(bn.Settings.BirdNET.Labels)).
+			Context("label_count", len(settings.BirdNET.Labels)).
 			Context("confidence_count", len(confidence)).
 			Timing("prediction-total", time.Since(start)).
 			Build()

@@ -132,6 +132,12 @@ type ShutdownRequester interface {
 	RequestShutdown()
 }
 
+// currentSettings returns the latest settings snapshot so UI changes
+// take effect in API responses without restarting the service.
+func (c *Controller) currentSettings() *conf.Settings {
+	return conf.CurrentOrFallback(c.Settings)
+}
+
 // Option is a functional option for configuring the Controller.
 type Option func(*Controller)
 
