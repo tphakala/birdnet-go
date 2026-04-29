@@ -83,8 +83,14 @@ func BuildRangeFilter(o *Orchestrator) error {
 
 // GetProbableSpecies filters and sorts bird species based on their scores.
 // It also updates the scores for species that have custom actions defined in the speciesConfigCSV.
+//
+// Settings are read from the latest published snapshot (via conf.CurrentOrFallback)
+// so that UI changes to coordinates, threshold, or LocationConfigured take
+// effect immediately without restarting the service.
 func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesScore, error) {
 	bn.Debug("Applying range filter")
+
+	settings := conf.CurrentOrFallback(bn.Settings)
 
 	// Skip filtering if range filter backend is not initialized.
 	// Read under lock to avoid data race with Delete().
@@ -93,41 +99,40 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	bn.mu.Unlock()
 	if !hasRangeFilter {
 		bn.Debug("Range filter model not loaded, returning zero scores for all labels")
-		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels, bn.Settings.Realtime.Species.Exclude), nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, settings.Realtime.Species.Exclude), nil
 	}
 
 	// Skip filtering if location is not configured
-	if !bn.Settings.BirdNET.LocationConfigured {
+	if !settings.BirdNET.LocationConfigured {
 		bn.Debug("Location not configured, not using location based prediction filter")
-		return zeroScoresForAllLabels(bn.Settings.BirdNET.Labels, bn.Settings.Realtime.Species.Exclude), nil
+		return zeroScoresForAllLabels(settings.BirdNET.Labels, settings.Realtime.Species.Exclude), nil
 	}
 
 	// Apply prediction filter based on the context
-	filters, err := bn.predictFilter(date, week)
+	filters, err := bn.predictFilter(date, week, settings)
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryValidation).
 			Context("date", date.Format(time.DateOnly)).
 			Context("week", week).
-			Context("model", bn.Settings.BirdNET.RangeFilter.Model).
+			Context("model", settings.BirdNET.RangeFilter.Model).
 			Build()
 	}
 
-	// check bn.Settings.BirdNET.LocationFilterThreshold for valid value
-	if bn.Settings.BirdNET.RangeFilter.Threshold < 0 ||
-		bn.Settings.BirdNET.RangeFilter.Threshold > 1 {
+	threshold := settings.BirdNET.RangeFilter.Threshold
+	if threshold < 0 || threshold > 1 {
 		GetLogger().Warn("Invalid LocationFilterThreshold value, using default",
-			logger.Float64("invalid_value", float64(bn.Settings.BirdNET.RangeFilter.Threshold)),
+			logger.Float64("invalid_value", float64(threshold)),
 			logger.Float64("default_value", 0.01))
-		bn.Settings.BirdNET.RangeFilter.Threshold = 0.01
+		threshold = 0.01
 	}
 
 	// Collect species scores above a certain threshold
 	var speciesScores []SpeciesScore
 	for _, filter := range filters {
-		if filter.Score >= bn.Settings.BirdNET.RangeFilter.Threshold {
+		if filter.Score >= threshold {
 			// Check if species is in exclude list before adding
-			if !isSpeciesExcluded(filter.Label, bn.Settings.Realtime.Species.Exclude) {
+			if !isSpeciesExcluded(filter.Label, settings.Realtime.Species.Exclude) {
 				speciesScores = append(speciesScores, SpeciesScore{Score: float64(filter.Score), Label: filter.Label})
 			} else {
 				bn.Debug("Excluding species from range filter: %s", filter.Label)
@@ -139,15 +144,16 @@ func (bn *BirdNET) GetProbableSpecies(date time.Time, week float32) ([]SpeciesSc
 	processedSpecies := make(map[string]bool)
 
 	// Process explicitly included species
-	for _, includedSpecies := range bn.Settings.Realtime.Species.Include {
+	labels := settings.BirdNET.Labels
+	for _, includedSpecies := range settings.Realtime.Species.Include {
 		bn.Debug("Processing included species: %s", includedSpecies)
-		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies)
+		addSpeciesWithMaxScore(bn, &speciesScores, includedSpecies, processedSpecies, labels)
 	}
 
 	// Process species with configured actions
-	for species := range bn.Settings.Realtime.Species.Config {
+	for species := range settings.Realtime.Species.Config {
 		bn.Debug("Processing species with actions: %s", species)
-		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies)
+		addSpeciesWithMaxScore(bn, &speciesScores, species, processedSpecies, labels)
 	}
 
 	// Sort species scores in descending order
@@ -170,14 +176,14 @@ func zeroScoresForAllLabels(labels, excludeList []string) []SpeciesScore {
 }
 
 // addSpeciesWithMaxScore adds all matching species to the scores list with maximum score
-func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesName string, processedSpecies map[string]bool) {
+func addSpeciesWithMaxScore(bn *BirdNET, speciesScores *[]SpeciesScore, speciesName string, processedSpecies map[string]bool, labels []string) {
 	// Skip if already processed
 	if processedSpecies[speciesName] {
 		return
 	}
 
 	matchFound := false
-	for _, label := range bn.Settings.BirdNET.Labels {
+	for _, label := range labels {
 		if matchesSpecies(label, speciesName) {
 			bn.Debug("Adding species with max score: %s (matched with: %s)", label, speciesName)
 			*speciesScores = append(*speciesScores, SpeciesScore{Score: 1.0, Label: label})
@@ -207,7 +213,9 @@ func matchesSpecies(label, speciesName string) bool {
 }
 
 // predictFilter applies the range filter model to predict species based on location and date.
-func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error) {
+// The caller supplies the settings snapshot so that the same snapshot is used
+// consistently across the entire GetProbableSpecies call.
+func (bn *BirdNET) predictFilter(date time.Time, week float32, settings *conf.Settings) ([]Filter, error) {
 	start := time.Now()
 
 	// If week is not set, use current date to get week
@@ -225,8 +233,8 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 		return nil, fmt.Errorf("range filter was closed during prediction")
 	}
 	scores, err := bn.rangeFilter.Predict(
-		float32(bn.Settings.BirdNET.Latitude),
-		float32(bn.Settings.BirdNET.Longitude),
+		float32(settings.BirdNET.Latitude),
+		float32(settings.BirdNET.Longitude),
 		week,
 	)
 	bn.mu.Unlock()
@@ -235,18 +243,18 @@ func (bn *BirdNET) predictFilter(date time.Time, week float32) ([]Filter, error)
 		return nil, errors.New(err).
 			Category(errors.CategoryModelInit).
 			Context("model_type", "range_filter").
-			Context("latitude", bn.Settings.BirdNET.Latitude).
-			Context("longitude", bn.Settings.BirdNET.Longitude).
+			Context("latitude", settings.BirdNET.Latitude).
+			Context("longitude", settings.BirdNET.Longitude).
 			Context("week", week).
 			Timing("range-filter-invoke", time.Since(start)).
 			Build()
 	}
 
-	// Filter and label the results, but only for indices that exist in bn.Labels
+	// Filter and label the results, but only for indices that exist in labels
 	var results []Filter
 	for i, score := range scores {
-		if score >= bn.Settings.BirdNET.RangeFilter.Threshold && i < len(bn.Settings.BirdNET.Labels) {
-			results = append(results, Filter{Score: score, Label: bn.Settings.BirdNET.Labels[i]})
+		if score >= settings.BirdNET.RangeFilter.Threshold && i < len(settings.BirdNET.Labels) {
+			results = append(results, Filter{Score: score, Label: settings.BirdNET.Labels[i]})
 		}
 	}
 

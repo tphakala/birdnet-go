@@ -75,26 +75,34 @@ func (c *Controller) getBirdNETInstance() (*classifier.Orchestrator, error) {
 	return instance, nil
 }
 
-// swapRangeFilterSettings temporarily sets range filter settings and returns a restore function.
-// It acquires settingsMutex (write lock) to prevent concurrent settings reads from seeing
-// the temporary test values. This fixes a race condition where GetAllSettings could return
-// temporarily swapped coordinates during a range filter test (see #1940).
+// swapRangeFilterSettings temporarily publishes a settings snapshot with the
+// given test coordinates and threshold, then returns a restore function that
+// republishes the original snapshot. Because GetProbableSpecies reads from the
+// latest published snapshot (via conf.CurrentOrFallback), modifying a single
+// controller-cached pointer is not sufficient; the global snapshot must be
+// swapped so the BirdNET instance sees the test values.
+//
+// It acquires settingsMutex (write lock) to prevent concurrent API settings
+// reads from seeing the temporary test values (see #1940).
 // The caller MUST call the returned restore function to release the lock.
 func (c *Controller) swapRangeFilterSettings(lat, lon float64, threshold float32) func() {
 	c.settingsMutex.Lock()
 
-	originalLat := c.Settings.BirdNET.Latitude
-	originalLon := c.Settings.BirdNET.Longitude
-	originalThreshold := c.Settings.BirdNET.RangeFilter.Threshold
+	original := conf.CurrentOrFallback(c.Settings)
+	savedController := c.Settings
 
-	c.Settings.BirdNET.Latitude = lat
-	c.Settings.BirdNET.Longitude = lon
-	c.Settings.BirdNET.RangeFilter.Threshold = threshold
+	testSnapshot := conf.CloneSettings(original)
+	testSnapshot.BirdNET.Latitude = lat
+	testSnapshot.BirdNET.Longitude = lon
+	testSnapshot.BirdNET.RangeFilter.Threshold = threshold
+	testSnapshot.BirdNET.LocationConfigured = true
+
+	conf.StoreSettings(testSnapshot)
+	c.Settings = testSnapshot
 
 	return func() {
-		c.Settings.BirdNET.Latitude = originalLat
-		c.Settings.BirdNET.Longitude = originalLon
-		c.Settings.BirdNET.RangeFilter.Threshold = originalThreshold
+		conf.StoreSettings(original)
+		c.Settings = savedController
 		c.settingsMutex.Unlock()
 	}
 }
