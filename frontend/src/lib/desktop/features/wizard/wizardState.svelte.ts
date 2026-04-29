@@ -34,7 +34,9 @@ async function dismiss(): Promise<void> {
   try {
     await api.post(WIZARD_DISMISS_ENDPOINT);
   } catch {
-    // Swallow error — localStorage fallback prevents re-display
+    setTimeout(() => {
+      api.post(WIZARD_DISMISS_ENDPOINT).catch(() => {});
+    }, 2000);
   }
 }
 
@@ -106,13 +108,13 @@ function setStepValid(valid: boolean): void {
   isStepValid = valid;
 }
 
-async function skip(): Promise<void> {
-  await dismiss();
+function skip(): void {
+  void dismiss();
   resetState();
 }
 
-async function complete(): Promise<void> {
-  await dismiss();
+function complete(): void {
+  void dismiss();
   resetState();
 }
 

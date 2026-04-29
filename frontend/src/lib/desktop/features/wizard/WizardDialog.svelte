@@ -72,7 +72,7 @@
   isOpen={wizardState.isActive}
   size="2xl"
   className="w-full"
-  showCloseButton={false}
+  showCloseButton={true}
   closeOnBackdrop={false}
   onClose={() => wizardState.skip()}
 >

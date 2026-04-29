@@ -92,13 +92,11 @@ func (c *Controller) initAppRoutes() {
 	// that was previously injected server-side into the HTML template.
 	c.Group.GET(AppConfigEndpoint, c.GetAppConfig)
 
-	// Wizard dismiss endpoint - conditionally protected.
-	// When security is enabled, require authentication; otherwise allow public access.
-	if c.authMiddleware != nil {
-		c.Group.POST(WizardDismissEndpoint, c.DismissWizard, c.authMiddleware)
-	} else {
-		c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
-	}
+	// Wizard dismiss endpoint - always public.
+	// Only writes last_seen_version to app_metadata (no data exposure, no privilege
+	// escalation). Must be accessible pre-auth so the onboarding wizard can be
+	// dismissed before login.
+	c.Group.POST(WizardDismissEndpoint, c.DismissWizard)
 }
 
 // GetAppConfig handles GET /api/v2/app/config
@@ -215,13 +213,17 @@ func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, ne
 		return false, false, ""
 	}
 
-	// If last_seen_version has never been set, check for fresh install
+	// If last_seen_version has never been set, distinguish fresh from existing install
 	if lastSeenVersion == "" {
-		if c.hasZeroDetections(ctx) {
-			return true, false, ""
+		if c.isExistingInstall(ctx) {
+			// Auto-seed: existing install predates wizard tracking.
+			// Intentional write inside GET handler (idempotent upsert, fires once per install).
+			if err := c.appMetadataRepo.Set(ctx, appMetadataKeyLastSeenVersion, c.Settings.Version); err != nil {
+				c.logWarnIfEnabled("Failed to auto-seed last_seen_version", logger.Error(err))
+			}
+			return false, false, c.Settings.Version
 		}
-		// Existing install that predates wizard tracking — treat as upgrade from unknown version
-		return false, true, ""
+		return true, false, ""
 	}
 
 	// If versions differ, this is an upgrade
@@ -255,6 +257,47 @@ func (c *Controller) hasZeroDetections(ctx context.Context) bool {
 		return false
 	}
 	return exists == 0
+}
+
+// isExistingInstall returns true if multiple signals indicate this is a configured
+// installation rather than a genuinely fresh one. Checks are ordered cheapest-first.
+func (c *Controller) isExistingInstall(ctx context.Context) bool {
+	if c.Settings.BirdNET.Latitude != 0 || c.Settings.BirdNET.Longitude != 0 {
+		return true
+	}
+	if len(c.Settings.Realtime.Audio.Sources) > 0 {
+		return true
+	}
+	if c.Settings.Security.BasicAuth.Enabled || len(c.Settings.GetEnabledOAuthProviders()) > 0 {
+		return true
+	}
+	if !c.hasZeroDetections(ctx) {
+		return true
+	}
+	if c.hasNotes(ctx) {
+		return true
+	}
+	return false
+}
+
+// hasNotes returns true if the notes table contains at least one row.
+func (c *Controller) hasNotes(ctx context.Context) bool {
+	if c.V2Manager == nil {
+		return false
+	}
+
+	tableName := "notes"
+	if tp, ok := c.V2Manager.(interface{ TablePrefix() string }); ok && tp.TablePrefix() != "" {
+		tableName = tp.TablePrefix() + tableName
+	}
+
+	var exists int
+	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).
+		Select("1").Limit(1).Scan(&exists).Error
+	if err != nil {
+		return false
+	}
+	return exists != 0
 }
 
 // isDevBuild returns true for development/unversioned builds where wizard should be suppressed.
