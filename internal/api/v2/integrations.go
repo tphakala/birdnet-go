@@ -278,7 +278,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 	c.logDebugIfEnabled("Checking MQTT connection status",
 		logger.String("path", path),
 		logger.String("ip", ip))
-	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context())
+	connected, checkErr := c.checkMQTTConnectionStatus(ctx.Request().Context(), settings)
 	status.Connected = connected
 	if checkErr != "" {
 		status.LastError = checkErr
@@ -297,8 +297,7 @@ func (c *Controller) GetMQTTStatus(ctx echo.Context) error {
 // checkMQTTConnectionStatus attempts to connect to the MQTT broker using a temporary client
 // to determine the current connection status.
 // Returns true if connected, false otherwise, along with any error message encountered.
-func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context) (connected bool, lastError string) {
-	settings := c.currentSettings()
+func (c *Controller) checkMQTTConnectionStatus(parentCtx context.Context, settings *conf.Settings) (connected bool, lastError string) {
 	// Use the injected metrics instance
 	if c.metrics == nil {
 		c.logErrorIfEnabled("Metrics instance not available for MQTT status check")
@@ -472,7 +471,7 @@ func (c *Controller) TestBirdWeatherConnection(ctx echo.Context) error {
 	if err != nil {
 		return ctx.JSON(http.StatusInternalServerError, map[string]any{
 			"success": false,
-			"message": formatClientError("Failed to create BirdWeather client", err, c.Settings),
+			"message": formatClientError("Failed to create BirdWeather client", err, currentCfg),
 			"state":   "failed",
 		})
 	}
