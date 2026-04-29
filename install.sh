@@ -2731,9 +2731,11 @@ configure_rtsp_stream_silent() {
         exit 1
     fi
 
-    # Update config file with RTSP URL
+    # Replace the default sound card device with the RTSP URL in the sources list
+    sed -i "s|device: sysdefault|device: ${url}|" "$CONFIG_FILE"
+
+    # Also try the commented RTSP example line if present
     sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${url}|" "$CONFIG_FILE"
-    sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
 
     AUDIO_ENV="--device /dev/snd"
     log_message "INFO" "Silent RTSP configuration completed"
