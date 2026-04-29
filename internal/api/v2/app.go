@@ -296,6 +296,7 @@ func (c *Controller) hasNotes(ctx context.Context) bool {
 	err := c.V2Manager.DB().WithContext(ctx).Table(tableName).
 		Select("1").Limit(1).Scan(&exists).Error
 	if err != nil {
+		c.logWarnIfEnabled("Failed to check notes for wizard state", logger.Error(err))
 		return false
 	}
 	return exists != 0
