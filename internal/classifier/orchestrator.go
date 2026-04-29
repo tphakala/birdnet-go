@@ -146,6 +146,13 @@ func (o *Orchestrator) GetProbableSpecies(date time.Time, week float32) ([]Speci
 	return o.primary.GetProbableSpecies(date, week)
 }
 
+// GetProbableSpeciesWithSettings filters species using the supplied settings
+// snapshot, allowing callers to test arbitrary coordinates and thresholds
+// without modifying global state.
+func (o *Orchestrator) GetProbableSpeciesWithSettings(date time.Time, week float32, settings *conf.Settings) ([]SpeciesScore, error) {
+	return o.primary.GetProbableSpeciesWithSettings(date, week, settings)
+}
+
 // GetSpeciesOccurrence returns the occurrence probability for a species at the current time.
 func (o *Orchestrator) GetSpeciesOccurrence(species string) float64 {
 	return o.primary.GetSpeciesOccurrence(species)
