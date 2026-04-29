@@ -22,6 +22,9 @@ EOF
 BIRDNET_GO_VERSION="nightly"
 BIRDNET_GO_IMAGE=""
 
+# Silent mode for non-interactive installation (set via --silent flag)
+SILENT_MODE="false"
+
 # Flag to track if Docker image was changed during update/rollback
 IMAGE_CHANGED="false"
 
@@ -1710,6 +1713,22 @@ EOF
 
 # Function to configure telemetry
 configure_telemetry() {
+    # Silent mode: use env var, default to false
+    if [ "$SILENT_MODE" = "true" ]; then
+        if [ "$BIRDNET_TELEMETRY" = "true" ]; then
+            TELEMETRY_ENABLED=true
+            if [ -f "$CONFIG_FILE" ]; then
+                sed -i 's/enabled: false  # true to enable Sentry error tracking/enabled: true  # true to enable Sentry error tracking/' "$CONFIG_FILE"
+            fi
+            print_message "🔇 Silent mode: telemetry enabled" "$YELLOW"
+        else
+            TELEMETRY_ENABLED=false
+            print_message "🔇 Silent mode: telemetry disabled" "$YELLOW"
+        fi
+        save_telemetry_config
+        return
+    fi
+
     print_message "\n📊 Telemetry Configuration" "$GREEN"
     print_message "BirdNET-Go can send anonymous usage data to help improve the software." "$YELLOW"
     print_message "This includes:" "$YELLOW"
@@ -2464,9 +2483,26 @@ test_rtsp_url() {
 # Function to configure audio input
 configure_audio_input() {
     log_message "INFO" "Starting audio capture configuration"
+
+    # Silent mode: use RTSP URL from env var or skip configuration
+    if [ "$SILENT_MODE" = "true" ]; then
+        if [ -n "$BIRDNET_RTSP_URL" ]; then
+            log_message "INFO" "Silent mode: configuring RTSP stream from BIRDNET_RTSP_URL=$BIRDNET_RTSP_URL"
+            print_message "🔇 Silent mode: using RTSP stream $BIRDNET_RTSP_URL" "$YELLOW"
+            AUDIO_ENV=""
+            configure_rtsp_stream_silent "$BIRDNET_RTSP_URL"
+        else
+            log_message "INFO" "Silent mode: no BIRDNET_RTSP_URL set, skipping audio configuration"
+            print_message "🔇 Silent mode: no audio source configured (set BIRDNET_RTSP_URL to configure)" "$YELLOW"
+            AUDIO_ENV="--device /dev/snd"
+        fi
+        log_message "INFO" "Audio capture configuration completed (silent)"
+        return
+    fi
+
     while true; do
         print_message "\n🎤 Audio Capture Configuration" "$GREEN"
-        print_message "1) Use sound card" 
+        print_message "1) Use sound card"
         print_message "2) Use RTSP stream"
         print_message "3) Configure later in BirdNET-Go web interface"
         print_message "❓ Select audio input method (1/2/3): " "$YELLOW" "nonewline"
@@ -2684,6 +2720,25 @@ configure_sound_card() {
 }
 
 # Function to configure RTSP stream
+# Silent RTSP configuration using provided URL (no prompts)
+configure_rtsp_stream_silent() {
+    local url="$1"
+    log_message "INFO" "Silent RTSP configuration with URL (host extracted for log)"
+
+    if [[ ! $url =~ ^rtsp:// ]]; then
+        log_message "ERROR" "Invalid RTSP URL format in silent mode: does not start with rtsp://"
+        print_message "❌ Invalid BIRDNET_RTSP_URL format (must start with rtsp://)" "$RED"
+        exit 1
+    fi
+
+    # Update config file with RTSP URL
+    sed -i "s|# - rtsp://user:password@example.com/stream1|      - ${url}|" "$CONFIG_FILE"
+    sed -i '/source: "sysdefault"/s/^/#/' "$CONFIG_FILE"
+
+    AUDIO_ENV="--device /dev/snd"
+    log_message "INFO" "Silent RTSP configuration completed"
+}
+
 configure_rtsp_stream() {
     log_message "INFO" "Starting RTSP stream configuration"
     while true; do
@@ -2742,6 +2797,14 @@ configure_rtsp_stream() {
 
 # Function to configure audio export format
 configure_audio_format() {
+    # Silent mode: use default AAC
+    if [ "$SILENT_MODE" = "true" ]; then
+        local format="${BIRDNET_AUDIO_FORMAT:-aac}"
+        sed -i "s/type: wav/type: $format/" "$CONFIG_FILE"
+        print_message "🔇 Silent mode: audio format set to $format" "$YELLOW"
+        return
+    fi
+
     print_message "\n🔊 Audio Export Configuration" "$GREEN"
     print_message "Select audio format for captured sounds:"
     print_message "1) WAV (Uncompressed, largest files)" 
@@ -2778,6 +2841,14 @@ configure_audio_format() {
 
 # Function to configure locale
 configure_locale() {
+    # Silent mode: use env var or default to en-uk
+    if [ "$SILENT_MODE" = "true" ]; then
+        local locale="${BIRDNET_LOCALE:-en-uk}"
+        sed -i "s/locale: [a-zA-Z0-9_-]*/locale: ${locale}/" "$CONFIG_FILE"
+        print_message "🔇 Silent mode: locale set to $locale" "$YELLOW"
+        return
+    fi
+
     print_message "\n🌐 Locale Configuration for bird species names" "$GREEN"
     print_message "Available languages:" "$YELLOW"
     
@@ -2883,9 +2954,22 @@ get_ip_location() {
 
 # Function to configure timezone
 configure_timezone() {
+    # Silent mode: use system timezone
+    if [ "$SILENT_MODE" = "true" ]; then
+        if [ -f /etc/timezone ]; then
+            CONFIGURED_TZ=$(cat /etc/timezone 2>/dev/null | tr -d '\n')
+        elif command -v timedatectl &>/dev/null; then
+            CONFIGURED_TZ=$(timedatectl show --property=Timezone --value 2>/dev/null)
+        else
+            CONFIGURED_TZ="UTC"
+        fi
+        print_message "🔇 Silent mode: timezone set to $CONFIGURED_TZ" "$YELLOW"
+        return
+    fi
+
     print_message "\n🕐 Timezone Configuration" "$GREEN"
     print_message "BirdNET-Go needs to know your timezone for accurate timestamps and scheduling" "$YELLOW"
-    
+
     # Get current system timezone
     local system_tz=""
     local detected_tz=""
@@ -3105,8 +3189,22 @@ configure_timezone() {
 # Function to configure location
 configure_location() {
     log_message "INFO" "Starting location configuration"
+
+    # Silent mode: use env vars or defaults
+    if [ "$SILENT_MODE" = "true" ]; then
+        local lat="${BIRDNET_LATITUDE:-0.000}"
+        local lon="${BIRDNET_LONGITUDE:-0.000}"
+        sed -i "s/latitude: 00.000/latitude: $lat/" "$CONFIG_FILE"
+        sed -i "s/longitude: 00.000/longitude: $lon/" "$CONFIG_FILE"
+        # Also handle configs where location was previously set
+        sed -i -E "s/^(\\s*latitude:\\s*)[0-9.-]+/\\1$lat/" "$CONFIG_FILE"
+        sed -i -E "s/^(\\s*longitude:\\s*)[0-9.-]+/\\1$lon/" "$CONFIG_FILE"
+        print_message "🔇 Silent mode: location set to $lat, $lon" "$YELLOW"
+        return
+    fi
+
     print_message "\n🌍 Location Configuration, this is used to limit bird species present in your region" "$GREEN"
-    
+
     # Try to get location from NordVPN/OpenStreetMap
     local ip_location
     if ip_location=$(get_ip_location); then
@@ -3262,6 +3360,21 @@ configure_location() {
 # Function to configure basic authentication
 configure_auth() {
     log_message "INFO" "Starting authentication configuration"
+
+    # Silent mode: use BIRDNET_PASSWORD env var if set
+    if [ "$SILENT_MODE" = "true" ]; then
+        if [ -n "$BIRDNET_PASSWORD" ]; then
+            local password_hash
+            password_hash=$(echo -n "$BIRDNET_PASSWORD" | htpasswd -niB "" | cut -d: -f2)
+            sed -i "s|enabled: false    # true to enable basic auth|enabled: true    # true to enable basic auth|" "$CONFIG_FILE"
+            sed -i "s|password: \"\"|password: \"$password_hash\"|" "$CONFIG_FILE"
+            print_message "🔇 Silent mode: password protection enabled" "$YELLOW"
+        else
+            print_message "🔇 Silent mode: no password set (BIRDNET_PASSWORD not provided)" "$YELLOW"
+        fi
+        return
+    fi
+
     print_message "\n🔒 Security Configuration" "$GREEN"
     print_message "Do you want to enable password protection for the settings interface?" "$YELLOW"
     print_message "This is highly recommended if BirdNET-Go will be accessible from the internet." "$YELLOW"
@@ -3428,12 +3541,12 @@ get_port_process_info() {
 
 # Function to configure web interface port
 configure_web_port() {
-    # Set default port
-    WEB_PORT=8080
-    
+    # Use env var if set, otherwise default
+    WEB_PORT="${BIRDNET_WEB_PORT:-8080}"
+
     # Update config file with port
     sed -i -E "s/^(\\s*port:\\s*)[0-9]+/\\1$WEB_PORT/" "$CONFIG_FILE"
-    
+
     # Port validation already done in prerequisites section
 }
 
@@ -3696,6 +3809,12 @@ install_cockpit_with_backports() {
 
 # Function to configure Cockpit installation
 configure_cockpit() {
+    # Silent mode: skip cockpit installation
+    if [ "$SILENT_MODE" = "true" ]; then
+        log_message "INFO" "Silent mode: skipping Cockpit configuration"
+        return
+    fi
+
     log_message "INFO" "Starting Cockpit configuration check"
     
     # Debug: Log detection results for troubleshooting
@@ -4659,13 +4778,25 @@ show_usage() {
     echo "  -v, --version VERSION    Specify container image version (tag or hash)"
     echo "                          Default: nightly"
     echo "                          Examples: latest, v1.2.3, nightly, sha256:abc123..."
+    echo "  --silent                Non-interactive install using environment variables"
     echo "  -h, --help              Show this help message"
+    echo ""
+    echo "SILENT MODE ENVIRONMENT VARIABLES:"
+    echo "  BIRDNET_RTSP_URL        RTSP stream URL (if set, uses RTSP audio input)"
+    echo "  BIRDNET_LATITUDE        Latitude for location (-90 to 90)"
+    echo "  BIRDNET_LONGITUDE       Longitude for location (-180 to 180)"
+    echo "  BIRDNET_LOCALE          BirdNET locale (default: en)"
+    echo "  BIRDNET_PASSWORD        Web interface password (default: no auth)"
+    echo "  BIRDNET_TELEMETRY       Enable telemetry: true/false (default: false)"
+    echo "  BIRDNET_WEB_PORT        Web interface port (default: 8080)"
     echo ""
     echo "EXAMPLES:"
     echo "  $0                      # Install using nightly version (default)"
     echo "  $0 -v latest           # Install using latest stable version"
     echo "  $0 -v v1.2.3           # Install specific version tag"
     echo "  $0 --version nightly   # Explicitly use nightly version"
+    echo "  BIRDNET_RTSP_URL=rtsp://cam:8554/live BIRDNET_LATITUDE=60.17 \\"
+    echo "    BIRDNET_LONGITUDE=24.94 $0 --silent  # Silent RTSP install"
     echo ""
 }
 
@@ -4683,6 +4814,10 @@ parse_arguments() {
                     show_usage
                     exit 1
                 fi
+                ;;
+            --silent)
+                SILENT_MODE="true"
+                shift
                 ;;
             -h|--help)
                 show_usage
@@ -5250,8 +5385,21 @@ handle_menu_selection() {
     fi
 }
 
-# Menu loop for existing installations
-if [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; then
+# Silent mode skips the menu and forces fresh install
+if [ "$SILENT_MODE" = "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
+    print_message "🔇 Silent mode: performing update on existing installation" "$YELLOW"
+    if [ "$INSTALLATION_TYPE" = "full" ] || [ "$INSTALLATION_TYPE" = "docker" ]; then
+        check_network
+        if handle_container_update; then
+            exit 0
+        fi
+        print_message "⚠️ Update failed, proceeding with fresh installation" "$YELLOW"
+    fi
+    FRESH_INSTALL="true"
+fi
+
+# Menu loop for existing installations (skipped in silent mode)
+if [ "$SILENT_MODE" != "true" ] && { [ "$INSTALLATION_TYPE" != "none" ] || [ "$PRESERVED_DATA" = true ]; }; then
     while true; do
         # Display menu based on installation type
         print_message ""  # Add spacing
