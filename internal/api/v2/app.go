@@ -194,8 +194,9 @@ func (c *Controller) GetAppConfig(ctx echo.Context) error {
 //
 // Rules:
 //   - Dev builds (empty version or "Development Build"): both flags forced to false.
-//   - If last_seen_version is missing and the database has zero detections: freshInstall = true.
-//   - If last_seen_version differs from the current version (and not fresh install): newVersion = true.
+//   - If last_seen_version is missing and isExistingInstall returns true: auto-seed and skip wizard.
+//   - If last_seen_version is missing and no install signals: freshInstall = true.
+//   - If last_seen_version differs from the current version: newVersion = true.
 func (c *Controller) determineWizardState(ctx context.Context) (freshInstall, newVersion bool, previousVersion string) {
 	// Skip wizard triggers for dev builds
 	if isDevBuild(c.Settings.Version) {

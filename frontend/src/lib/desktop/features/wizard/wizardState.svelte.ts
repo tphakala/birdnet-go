@@ -64,7 +64,9 @@ async function dismissOnly(version?: string): Promise<void> {
   try {
     await api.post(WIZARD_DISMISS_ENDPOINT);
   } catch {
-    // Swallow — localStorage fallback covers this
+    setTimeout(() => {
+      api.post(WIZARD_DISMISS_ENDPOINT).catch(() => {});
+    }, 2000);
   }
 }
 
