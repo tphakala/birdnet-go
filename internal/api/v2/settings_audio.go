@@ -269,8 +269,21 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	perSourceEQChanged := perSourceEqualizerChanged(oldSettings, currentSettings)
 	perStreamEQChanged := perStreamEqualizerChanged(oldSettings, currentSettings)
 	nameChanged := srcNameChanged || strmNameChanged
+
+	// Log per-source EQ state for diagnostics (issue #2849)
+	for i := range currentSettings.Realtime.Audio.Sources {
+		src := &currentSettings.Realtime.Audio.Sources[i]
+		if src.Equalizer != nil {
+			c.Debug("Source %d (%s): per-source EQ enabled=%v, filters=%d",
+				i, src.Name, src.Equalizer.Enabled, len(src.Equalizer.Filters))
+		} else {
+			c.Debug("Source %d (%s): per-source EQ is nil (using global)", i, src.Name)
+		}
+	}
+
 	if globalEQChanged || perSourceEQChanged || perStreamEQChanged || nameChanged {
-		c.Debug("Audio equalizer settings changed, updating filter chains")
+		c.Debug("Audio equalizer settings changed (global=%v, perSource=%v, perStream=%v, nameChanged=%v)",
+			globalEQChanged, perSourceEQChanged, perStreamEQChanged, nameChanged)
 		if err := c.handleEqualizerChange(currentSettings); err != nil {
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}

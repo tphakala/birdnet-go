@@ -21,6 +21,7 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import { loggers } from '$lib/utils/logger';
   import SelectDropdown from './SelectDropdown.svelte';
   import InlineSlider from './InlineSlider.svelte';
   import QuietHoursEditor from './QuietHoursEditor.svelte';
@@ -46,6 +47,8 @@
       passes?: number;
     }>;
   }
+
+  const logger = loggers.audio;
 
   // Default model ID — BirdNET v2.4 is the built-in default
   const DEFAULT_MODEL_ID = 'birdnet';
@@ -156,6 +159,16 @@
       quietHours: editQuietHours,
     };
 
+    logger.debug('SoundCardCard saveEdit', {
+      component: 'SoundCardCard',
+      action: 'saveEdit',
+      sourceName: trimmedName,
+      eqEnabled: editEqualizer.enabled,
+      eqFilterCount: editEqualizer.filters.length,
+      transformedEqPresent: transformedEqualizer !== undefined,
+      transformedFilterCount: transformedEqualizer?.filters?.length ?? 0,
+    });
+
     const success = onUpdate(updated);
     if (success) {
       isEditing = false;
@@ -186,6 +199,12 @@
   }
 
   function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
+    logger.debug('SoundCardCard EQ updated', {
+      component: 'SoundCardCard',
+      action: 'handleEqualizerUpdate',
+      enabled: updated.enabled,
+      filterCount: updated.filters.length,
+    });
     editEqualizer = updated;
   }
 </script>

@@ -415,6 +415,15 @@
 
   // Update handlers
   function updateAudioSources(sources: AudioSourceConfig[]) {
+    for (const src of sources) {
+      logger.debug('updateAudioSources', {
+        component: 'AudioSettingsPage',
+        sourceName: src.name,
+        eqPresent: src.equalizer !== undefined,
+        eqEnabled: src.equalizer?.enabled,
+        eqFilterCount: src.equalizer?.filters?.length ?? 0,
+      });
+    }
     settingsActions.updateSection('realtime', {
       audio: { ...$audioSettings!, sources },
     });
