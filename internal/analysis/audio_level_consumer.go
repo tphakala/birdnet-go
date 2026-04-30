@@ -58,9 +58,10 @@ func (c *AudioLevelConsumer) BitDepth() int { return c.depth }
 func (c *AudioLevelConsumer) Channels() int { return c.channels }
 
 // Write computes the RMS audio level from the frame's PCM data and publishes
-// the result on the output channel. If the channel is full the value is
-// dropped silently. Returns audiocore.ErrConsumerClosed after Close has been
-// called.
+// the result on the output channel. If the channel is full the measurement is
+// dropped to avoid blocking; drops are counted via outDrops with periodic
+// warnings and a Sentry event at 1000 drops. Returns
+// audiocore.ErrConsumerClosed after Close has been called.
 func (c *AudioLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
 	if c.closed.Load() {
 		return audiocore.ErrConsumerClosed

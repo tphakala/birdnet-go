@@ -22,6 +22,10 @@ type routeStats struct {
 	writeNs      atomic.Int64
 	totalNs      atomic.Int64
 	maxTotalNs   atomic.Int64
+
+	// Lifetime accumulators: never reset, used by Sentry event context.
+	lifetimeTotalNs atomic.Int64
+	lifetimeMaxNs   atomic.Int64
 }
 
 // record adds one frame's timing to the accumulators.
@@ -30,13 +34,23 @@ func (s *routeStats) record(resample, processing, write, total time.Duration) {
 	s.processingNs.Add(int64(processing))
 	s.writeNs.Add(int64(write))
 	s.totalNs.Add(int64(total))
+	s.lifetimeTotalNs.Add(int64(total))
+	ns := int64(total)
 	for {
 		cur := s.maxTotalNs.Load()
-		ns := int64(total)
 		if ns <= cur {
 			break
 		}
 		if s.maxTotalNs.CompareAndSwap(cur, ns) {
+			break
+		}
+	}
+	for {
+		cur := s.lifetimeMaxNs.Load()
+		if ns <= cur {
+			break
+		}
+		if s.lifetimeMaxNs.CompareAndSwap(cur, ns) {
 			break
 		}
 	}

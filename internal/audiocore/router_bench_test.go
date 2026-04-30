@@ -3,6 +3,7 @@ package audiocore
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
@@ -52,19 +53,19 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 			b.ResetTimer()
 
 			var wg sync.WaitGroup
-			perGoroutine := b.N / routeCount
+			var counter atomic.Int64
+			target := int64(b.N)
 			for _, route := range routes {
 				wg.Add(1)
 				go func(rt *Route) {
 					defer wg.Done()
-					for range perGoroutine {
+					for counter.Add(1) <= target {
 						frame := AudioFrame{
 							SourceID: "bench", SourceName: "bench",
 							Data: frameData, SampleRate: 48000,
 							BitDepth: 16, Channels: 1,
 						}
 						r.handleRouteFrame(frame, rt)
-						// Drain the mock consumer's buffered channel.
 						select {
 						case <-rt.Consumer.(*mockConsumer).frames:
 						default:

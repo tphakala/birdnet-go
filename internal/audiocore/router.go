@@ -360,8 +360,8 @@ func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugePara
 				maxFrameUs := int64(0)
 				totalFrames := rt.stats.frames.Load()
 				if totalFrames > 0 {
-					avgFrameUs = rt.stats.totalNs.Load() / totalFrames / 1000
-					maxFrameUs = rt.stats.maxTotalNs.Load() / 1000
+					avgFrameUs = rt.stats.lifetimeTotalNs.Load() / totalFrames / 1000
+					maxFrameUs = rt.stats.lifetimeMaxNs.Load() / 1000
 				}
 				_ = errors.Newf("consumer dropped %d frames, likely cannot keep up", drops).
 					Component("audiocore.router").
