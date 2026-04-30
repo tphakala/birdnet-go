@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,8 +70,12 @@ type Route struct {
 	// drops counts frames that could not be enqueued because inbox was full.
 	drops atomic.Int64
 
-	// errors counts Write failures reported by the consumer.
+	// errors counts all processing failures (resampler + Write) for this route.
 	errors atomic.Int64
+
+	// writeErrors counts only Consumer.Write failures, used for the
+	// sustained-write-errors Sentry threshold separately from resampler errors.
+	writeErrors atomic.Int64
 
 	// truncations counts odd-length PCM16 frames observed on this route.
 	// Kept separate from errors so RouteInfo.Errors retains its "real error"
@@ -85,6 +90,20 @@ type Route struct {
 	// must wait on this channel after closing done before touching the
 	// resampler or consumer to avoid a data race.
 	stopped chan struct{}
+
+	// Pool caches: set lazily on first frame to avoid per-frame mutex
+	// acquisition in BytePoolFor/Float64PoolFor. The cached pool is used
+	// when the current frame size matches; on mismatch the fallback path
+	// calls the mutex-guarded lookup.
+	resamplePool    atomic.Pointer[buffer.BytePool]
+	resamplePoolLen atomic.Int64
+	float64Pool     atomic.Pointer[buffer.Float64Pool]
+	float64PoolLen  atomic.Int64
+	byteOutPool     atomic.Pointer[buffer.BytePool]
+	byteOutPoolLen  atomic.Int64
+
+	// stats tracks per-frame timing for diagnostics. Zero-value is ready to use.
+	stats routeStats
 }
 
 // RouteInfo is the read-only snapshot returned by Routes().
@@ -336,15 +355,33 @@ func (r *AudioRouter) Dispatch(frame AudioFrame) { //nolint:gocritic // hugePara
 				r.log.Warn("frames dropped for consumer",
 					logger.String("source_id", frame.SourceID),
 					logger.String("consumer_id", rt.Consumer.ID()),
-					logger.Int64("total_drops", drops))
+					logger.Int64("total_drops", drops),
+					logger.Int("inbox_len", len(rt.inbox)),
+					logger.Int("inbox_cap", cap(rt.inbox)))
 			}
 			if drops == dropSentryThreshold {
+				avgFrameUs := int64(0)
+				maxFrameUs := int64(0)
+				totalFrames := rt.stats.frames.Load()
+				if totalFrames > 0 {
+					avgFrameUs = rt.stats.lifetimeTotalNs.Load() / totalFrames / 1000
+					maxFrameUs = rt.stats.lifetimeMaxNs.Load() / 1000
+				}
 				_ = errors.Newf("consumer dropped %d frames, likely cannot keep up", drops).
 					Component("audiocore.router").
 					Category(errors.CategoryAudio).
 					Context("operation", "sustained_frame_drops").
 					Context("source_id", frame.SourceID).
+					Context("source_type", sourceType(frame.SourceID)).
 					Context("consumer_id", rt.Consumer.ID()).
+					Context("consumer_type", consumerType(rt.Consumer.ID())).
+					Context("sample_rate", rt.Consumer.SampleRate()).
+					Context("source_sample_rate", rt.sourceSampleRate).
+					Context("inbox_len", len(rt.inbox)).
+					Context("inbox_cap", cap(rt.inbox)).
+					Context("avg_frame_us", avgFrameUs).
+					Context("max_frame_us", maxFrameUs).
+					Context("total_frames_processed", totalFrames).
 					Build()
 			}
 		}
@@ -555,6 +592,9 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	// consumer.Write panics (drainRoute's recover catches the panic).
 	defer frame.Ref.Release()
 
+	frameStart := time.Now()
+	var resampleDur, processingDur time.Duration
+
 	var resamplePool *buffer.BytePool // nil when not pooled
 
 	// procResult holds the processing output and pool handles. Zero value is
@@ -563,6 +603,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 
 	// Apply per-route resampling when rates differ.
 	if route.resampler != nil {
+		resampleStart := time.Now()
 		resampled, err := route.resampler.ResampleInto(frame.Data)
 		if err != nil {
 			errCount := route.errors.Add(1)
@@ -578,9 +619,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		// Copy resampled bytes into an owned buffer (Resampler reuses its
 		// internal slice). When a buffer.Manager is wired, the copy lands
 		// in a pooled slice keyed by length; otherwise fall back to make().
-		if r.bufMgr != nil {
-			resamplePool = r.bufMgr.BytePoolFor(len(resampled))
-		}
+		resamplePool = r.cachedBytePool(&route.resamplePool, &route.resamplePoolLen, len(resampled))
 		var out []byte
 		if resamplePool != nil {
 			out = resamplePool.Get()
@@ -597,11 +636,13 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 			Channels:   frame.Channels,
 			Timestamp:  frame.Timestamp,
 		}
+		resampleDur = time.Since(resampleStart)
 	}
 	// Apply per-route EQ filtering and/or gain adjustment.
 	// Both require 16-bit PCM; skip for other formats.
 	chain := route.filterChain.Load()
 	if frame.BitDepth == 16 && (chain != nil || route.gainLinear != 1.0) {
+		procStart := time.Now()
 		result, err := r.applyProcessing(frame, route, chain)
 		if err != nil {
 			// applyProcessing already released its own pool buffers on error.
@@ -621,11 +662,14 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 		}
 		frame = result.Frame
 		procResult = result
+		processingDur = time.Since(procStart)
 	}
 	// See AudioConsumer.Write for the buffer ownership contract the
 	// consumer must honour so the pool recycling below is safe.
+	writeStart := time.Now()
 	if err := route.Consumer.Write(frame); err != nil {
 		errCount := route.errors.Add(1)
+		writeErrCount := route.writeErrors.Add(1)
 		if errCount%errorLogInterval == 1 {
 			r.log.Warn("consumer write error",
 				logger.String("source_id", route.SourceID),
@@ -633,7 +677,21 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 				logger.Int64("total_errors", errCount),
 				logger.Error(err))
 		}
+		if writeErrCount == dropSentryThreshold {
+			_ = errors.Newf("consumer has %d write errors", writeErrCount).
+				Component("audiocore.router").
+				Category(errors.CategoryAudio).
+				Context("operation", "sustained_write_errors").
+				Context("source_id", route.SourceID).
+				Context("source_type", sourceType(route.SourceID)).
+				Context("consumer_id", route.Consumer.ID()).
+				Context("consumer_type", consumerType(route.Consumer.ID())).
+				Context("latest_error", err.Error()).
+				Build()
+		}
 	}
+	writeDur := time.Since(writeStart)
+
 	// Release processing buffers (output byte slice and float64 scratch).
 	// Safe to call unconditionally: no-op when procResult is zero value.
 	// All in-tree consumers copy synchronously, so recycling is safe here.
@@ -644,6 +702,9 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	if resamplePool != nil {
 		resamplePool.Put(frame.Data)
 	}
+
+	route.stats.record(resampleDur, processingDur, writeDur, time.Since(frameStart))
+	route.stats.checkAndLog(r.log, route.SourceID, route.Consumer.ID())
 }
 
 // processingResult carries an EQ / gain processed frame plus the pooled
@@ -698,10 +759,7 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 	}
 	sampleCount := evenLen / 2
 
-	var floatPool *buffer.Float64Pool
-	if r.bufMgr != nil {
-		floatPool = r.bufMgr.Float64PoolFor(sampleCount)
-	}
+	floatPool := r.cachedFloat64Pool(&route.float64Pool, &route.float64PoolLen, sampleCount)
 	var floatBuf []float64
 	if floatPool != nil {
 		floatBuf = floatPool.Get()
@@ -740,9 +798,7 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 	}
 
 	outLen := sampleCount * 2
-	if r.bufMgr != nil {
-		outPool = r.bufMgr.BytePoolFor(outLen)
-	}
+	outPool = r.cachedBytePool(&route.byteOutPool, &route.byteOutPoolLen, outLen)
 	if outPool != nil {
 		out = outPool.Get()
 	} else {
@@ -779,4 +835,66 @@ func (r *AudioRouter) applyProcessing(frame AudioFrame, route *Route, chain *equ
 		FloatBuf:  floatBuf,
 		OutPool:   outPool,
 	}, nil
+}
+
+// cachedBytePool returns a BytePool for the given size, using the cached
+// pointer if the size matches. On miss, falls back to bufMgr.BytePoolFor()
+// and caches the result. Returns nil when bufMgr is nil.
+func (r *AudioRouter) cachedBytePool(cached *atomic.Pointer[buffer.BytePool], cachedLen *atomic.Int64, size int) *buffer.BytePool {
+	if r.bufMgr == nil || size <= 0 {
+		return nil
+	}
+	if p := cached.Load(); p != nil && cachedLen.Load() == int64(size) {
+		return p
+	}
+	p := r.bufMgr.BytePoolFor(size)
+	if p != nil {
+		cached.Store(p)
+		cachedLen.Store(int64(size))
+	}
+	return p
+}
+
+// cachedFloat64Pool returns a Float64Pool for the given sample count, using
+// the cached pointer if the count matches. On miss, falls back to
+// bufMgr.Float64PoolFor() and caches the result. Returns nil when bufMgr
+// is nil.
+func (r *AudioRouter) cachedFloat64Pool(cached *atomic.Pointer[buffer.Float64Pool], cachedLen *atomic.Int64, size int) *buffer.Float64Pool {
+	if r.bufMgr == nil || size <= 0 {
+		return nil
+	}
+	if p := cached.Load(); p != nil && cachedLen.Load() == int64(size) {
+		return p
+	}
+	p := r.bufMgr.Float64PoolFor(size)
+	if p != nil {
+		cached.Store(p)
+		cachedLen.Store(int64(size))
+	}
+	return p
+}
+
+// consumerType extracts the consumer type prefix from an ID like
+// "soundlevel_rtsp_fefc1d2d" -> "soundlevel" or "buffer_audio_card_..." -> "buffer".
+// Returns the full ID if no underscore prefix is found.
+func consumerType(consumerID string) string {
+	if idx := strings.Index(consumerID, "_"); idx > 0 {
+		return consumerID[:idx]
+	}
+	return consumerID
+}
+
+// sourceType extracts the source type prefix from an ID like
+// "rtsp_fefc1d2d" -> "rtsp" or "audio_card_22a9b331" -> "audio_card".
+// Handles the two-word "audio_card" prefix.
+func sourceType(sourceID string) string {
+	for _, prefix := range []string{"audio_card", "rtsp"} {
+		if strings.HasPrefix(sourceID, prefix) {
+			return prefix
+		}
+	}
+	if idx := strings.Index(sourceID, "_"); idx > 0 {
+		return sourceID[:idx]
+	}
+	return sourceID
 }

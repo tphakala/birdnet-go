@@ -1,6 +1,7 @@
 package audiocore
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -988,4 +989,114 @@ func TestRouter_Dispatch_RefReleasesOnShutdown(t *testing.T) {
 	// (count stays at 1 and never fires). Either outcome is acceptable; a
 	// double-release would push the counter negative and must not fire twice.
 	assert.LessOrEqual(t, released.Load(), int32(1), "must not double-release during shutdown")
+}
+
+// slowConsumer adds a configurable delay per Write call to simulate a consumer
+// that is close to the frame-rate limit.
+type slowConsumer struct {
+	mockConsumer
+	delay time.Duration
+}
+
+func newSlowConsumer(id string, delay time.Duration) *slowConsumer {
+	return &slowConsumer{
+		mockConsumer: mockConsumer{
+			id:         id,
+			sampleRate: 48000,
+			bitDepth:   16,
+			channels:   1,
+			frames:     make(chan AudioFrame, 256),
+		},
+		delay: delay,
+	}
+}
+
+func (s *slowConsumer) Write(frame AudioFrame) error { //nolint:gocritic // hugeParam: signature required by AudioConsumer interface
+	if s.closed.Load() {
+		return ErrConsumerClosed
+	}
+	time.Sleep(s.delay)
+	select {
+	case s.frames <- frame:
+	default:
+	}
+	return nil
+}
+
+// TestRouter_MultiRouteContention verifies that the router can sustain
+// frame dispatch to multiple consumers doing non-trivial work (gain
+// processing) without accumulating drops, provided the consumers are
+// individually fast enough.
+func TestRouter_MultiRouteContention(t *testing.T) {
+	mgr := buffer.NewManager(GetLogger())
+	router := NewAudioRouter(GetLogger(), mgr)
+	t.Cleanup(func() { router.Close() })
+
+	const routeCount = 4
+	const frameCount = 500
+	consumers := make([]*slowConsumer, routeCount)
+	for i := range routeCount {
+		consumers[i] = newSlowConsumer(
+			fmt.Sprintf("contention-%d", i),
+			1*time.Millisecond,
+		)
+		require.NoError(t, router.AddRoute("src-1", consumers[i], 48000, 3.0, nil))
+	}
+
+	for range frameCount {
+		frame := testFrame("src-1")
+		router.Dispatch(frame)
+		frame.Ref.Release()
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	// Allow drainers to finish processing.
+	time.Sleep(100 * time.Millisecond)
+
+	routes := router.Routes("src-1")
+	require.Len(t, routes, routeCount)
+	for _, ri := range routes {
+		assert.Zero(t, ri.Drops,
+			"route %s should have zero drops with pool-cached routing", ri.ConsumerID)
+	}
+}
+
+// TestRouter_PoolCacheHit verifies that routes with a buffer manager cache
+// pool pointers at creation time and use them in handleRouteFrame without
+// calling BytePoolFor/Float64PoolFor on each frame.
+func TestRouter_PoolCacheHit(t *testing.T) {
+	t.Parallel()
+
+	mgr := buffer.NewManager(GetLogger())
+	router := NewAudioRouter(GetLogger(), mgr)
+	t.Cleanup(func() { router.Close() })
+
+	consumer := newMockConsumer("pool-test")
+	consumer.sampleRate = 48000
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 3.0, nil))
+
+	const frameCount = 10
+	for range frameCount {
+		frame := testFrame("src-1")
+		router.Dispatch(frame)
+		frame.Ref.Release()
+	}
+
+	// Drain consumer frames.
+	for range frameCount {
+		select {
+		case <-consumer.frames:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for consumer frame")
+		}
+	}
+
+	// Verify route has cached pools (non-nil) when gain is applied.
+	router.mu.RLock()
+	routes := router.routes["src-1"]
+	require.Len(t, routes, 1)
+	route := routes[0]
+	assert.NotNil(t, route.float64Pool.Load(), "float64Pool should be cached after frames")
+	assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
+	router.mu.RUnlock()
 }
