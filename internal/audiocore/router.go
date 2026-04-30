@@ -70,8 +70,12 @@ type Route struct {
 	// drops counts frames that could not be enqueued because inbox was full.
 	drops atomic.Int64
 
-	// errors counts Write failures reported by the consumer.
+	// errors counts all processing failures (resampler + Write) for this route.
 	errors atomic.Int64
+
+	// writeErrors counts only Consumer.Write failures, used for the
+	// sustained-write-errors Sentry threshold separately from resampler errors.
+	writeErrors atomic.Int64
 
 	// truncations counts odd-length PCM16 frames observed on this route.
 	// Kept separate from errors so RouteInfo.Errors retains its "real error"
@@ -665,6 +669,7 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 	writeStart := time.Now()
 	if err := route.Consumer.Write(frame); err != nil {
 		errCount := route.errors.Add(1)
+		writeErrCount := route.writeErrors.Add(1)
 		if errCount%errorLogInterval == 1 {
 			r.log.Warn("consumer write error",
 				logger.String("source_id", route.SourceID),
@@ -672,8 +677,8 @@ func (r *AudioRouter) handleRouteFrame(frame AudioFrame, route *Route) { //nolin
 				logger.Int64("total_errors", errCount),
 				logger.Error(err))
 		}
-		if errCount == dropSentryThreshold {
-			_ = errors.Newf("consumer has %d write errors", errCount).
+		if writeErrCount == dropSentryThreshold {
+			_ = errors.Newf("consumer has %d write errors", writeErrCount).
 				Component("audiocore.router").
 				Category(errors.CategoryAudio).
 				Context("operation", "sustained_write_errors").
