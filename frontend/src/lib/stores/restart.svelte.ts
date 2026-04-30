@@ -114,14 +114,21 @@ async function requestRestart(endpoint: string, logMessage: string): Promise<boo
     startRecoveryPolling();
     return true;
   } catch (error) {
-    // Network errors (server shut down before responding) mean restart may have succeeded.
-    // HTTP errors (403, 500) mean the request was rejected.
     if (error instanceof ApiError) {
-      restartInProgress.value = false;
+      if (!error.isNetworkError) {
+        // HTTP error (403, 500): request was rejected, abort restart
+        restartInProgress.value = false;
+        logger.error(logMessage, error);
+      } else {
+        // Network error: server shut down before responding, restart likely succeeded
+        startRecoveryPolling();
+        logger.info('Server connection lost after restart request, starting recovery polling');
+      }
     } else {
-      startRecoveryPolling();
+      // Unexpected client/runtime error: abort restart
+      restartInProgress.value = false;
+      logger.error(logMessage, error);
     }
-    logger.error(logMessage, error);
     return false;
   }
 }
