@@ -29,6 +29,7 @@ type SoundLevelConsumer struct {
 	closed    atomic.Bool
 	closeOnce sync.Once
 	sampleBuf []float64 // reusable buffer for PCM-to-float64 conversion (Write is sequential per consumer)
+	outDrops  atomic.Int64
 }
 
 // NewSoundLevelConsumer creates a SoundLevelConsumer that wraps the given
@@ -131,10 +132,24 @@ func (c *SoundLevelConsumer) Write(frame audiocore.AudioFrame) error { //nolint:
 	}
 
 	if data != nil {
-		// Non-blocking send: drop if channel is full.
 		select {
 		case c.outCh <- *data:
 		default:
+			drops := c.outDrops.Add(1)
+			if drops%100 == 1 {
+				GetLogger().Warn("sound level output channel full, dropping measurement",
+					logger.String("consumer_id", c.id),
+					logger.Int64("total_out_drops", drops))
+			}
+			if drops == 1000 {
+				_ = errors.Newf("sound level consumer dropped %d output measurements", drops).
+					Component("analysis.sound_level_consumer").
+					Category(errors.CategoryAudio).
+					Context("operation", "sustained_output_drops").
+					Context("consumer_id", c.id).
+					Context("sample_rate", c.rate).
+					Build()
+			}
 		}
 	}
 
