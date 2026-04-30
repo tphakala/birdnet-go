@@ -267,13 +267,7 @@
   }
 
   function handleNewEqualizerUpdate(updated: LocalEqualizerSettings) {
-    newEqualizer = {
-      enabled: updated.enabled,
-      filters: updated.filters.map(filter => ({
-        ...filter,
-        id: filter.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
-      })),
-    };
+    newEqualizer = { ...updated };
   }
 </script>
 
