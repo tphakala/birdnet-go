@@ -94,6 +94,7 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 
 	var threshold entities.DynamicThreshold
 	err = r.db.WithContext(ctx).Table(r.thresholdTable()).
+		Preload("Label.Model").
 		Preload("Label").
 		Where("label_id IN ?", labelIDs).
 		First(&threshold).Error
@@ -111,6 +112,7 @@ func (r *dynamicThresholdRepository) GetDynamicThreshold(ctx context.Context, sp
 func (r *dynamicThresholdRepository) GetAllDynamicThresholds(ctx context.Context, limit ...int) ([]entities.DynamicThreshold, error) {
 	var thresholds []entities.DynamicThreshold
 	query := r.db.WithContext(ctx).Table(r.thresholdTable()).
+		Preload("Label.Model").
 		Preload("Label").
 		Order("label_id ASC")
 	if len(limit) > 0 && limit[0] > 0 {

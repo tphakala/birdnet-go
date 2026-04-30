@@ -2572,6 +2572,14 @@ func thresholdScientificName(t *entities.DynamicThreshold) string {
 	return ""
 }
 
+// thresholdModelName constructs the classifier-style model ID from a threshold's label.
+func thresholdModelName(t *entities.DynamicThreshold) string {
+	if t.Label != nil && t.Label.Model != nil && t.Label.Model.Name != "" {
+		return t.Label.Model.Name + "_V" + t.Label.Model.Version
+	}
+	return detection.DefaultModelName + "_V" + detection.DefaultModelVersion
+}
+
 // resolveCommonName maps a scientific name to its common name using the
 // pre-built name maps. Falls back to the scientific name if no mapping exists.
 // Handles legacy concatenated "ScientificName_CommonName" format by extracting
@@ -2653,8 +2661,9 @@ func (ds *Datastore) GetDynamicThreshold(speciesName, _ string) (*datastore.Dyna
 	scientificName := thresholdScientificName(t)
 	return &datastore.DynamicThreshold{
 		ID:             t.ID,
-		SpeciesName:    ds.resolveCommonName(scientificName),
+		SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 		ScientificName: scientificName,
+		ModelName:      thresholdModelName(t),
 		Level:          t.Level,
 		CurrentValue:   t.CurrentValue,
 		BaseThreshold:  t.BaseThreshold,
@@ -2684,8 +2693,9 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 		scientificName := thresholdScientificName(t)
 		result = append(result, datastore.DynamicThreshold{
 			ID:             t.ID,
-			SpeciesName:    ds.resolveCommonName(scientificName),
+			SpeciesName:    strings.ToLower(ds.resolveCommonName(scientificName)),
 			ScientificName: scientificName,
+			ModelName:      thresholdModelName(t),
 			Level:          t.Level,
 			CurrentValue:   t.CurrentValue,
 			BaseThreshold:  t.BaseThreshold,
