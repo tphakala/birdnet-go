@@ -223,7 +223,7 @@ func TestV2OnlyDatastore_DynamicThreshold(t *testing.T) {
 	// Get threshold by scientific name
 	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
 	require.NoError(t, err)
-	assert.Equal(t, "Passer domesticus", retrieved.SpeciesName)
+	assert.Equal(t, "passer domesticus", retrieved.SpeciesName)
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
 	assert.Equal(t, 1, retrieved.Level)
 	assert.InDelta(t, 0.7, retrieved.CurrentValue, 0.001)
@@ -275,15 +275,62 @@ func TestV2OnlyDatastore_DynamicThreshold_CommonNameDisplay(t *testing.T) {
 	// GetDynamicThreshold should return common name in SpeciesName
 	retrieved, err := ds.GetDynamicThreshold("Parus major", "")
 	require.NoError(t, err)
-	assert.Equal(t, "Great Tit", retrieved.SpeciesName, "SpeciesName should be common name")
+	assert.Equal(t, "great tit", retrieved.SpeciesName, "SpeciesName should be common name")
 	assert.Equal(t, "Parus major", retrieved.ScientificName, "ScientificName should stay scientific")
 
 	// GetAllDynamicThresholds should also return common name
 	all, err := ds.GetAllDynamicThresholds()
 	require.NoError(t, err)
 	require.Len(t, all, 1)
-	assert.Equal(t, "Great Tit", all[0].SpeciesName, "SpeciesName should be common name in list")
+	assert.Equal(t, "great tit", all[0].SpeciesName, "SpeciesName should be common name in list")
 	assert.Equal(t, "Parus major", all[0].ScientificName, "ScientificName should stay scientific in list")
+}
+
+// TestV2OnlyDatastore_DynamicThreshold_ModelName verifies that
+// GetAllDynamicThresholds and GetDynamicThreshold return ModelName
+// constructed from the Label's AIModel (e.g., "BirdNET_V2.4").
+// Regression test for GitHub issue #2902.
+func TestV2OnlyDatastore_DynamicThreshold_ModelName(t *testing.T) {
+	labels := []string{
+		"Parus major_Great Tit",
+	}
+	ds, cleanup := setupTestDatastoreWithLabels(t, labels)
+	defer cleanup()
+
+	threshold := &datastore.DynamicThreshold{
+		SpeciesName:    "Parus major",
+		ScientificName: "Parus major",
+		ModelName:      "BirdNET_V2.4",
+		Level:          2,
+		CurrentValue:   0.5,
+		BaseThreshold:  0.8,
+		HighConfCount:  3,
+		ValidHours:     12,
+		ExpiresAt:      time.Now().Add(12 * time.Hour),
+		LastTriggered:  time.Now(),
+		FirstCreated:   time.Now(),
+		UpdatedAt:      time.Now(),
+		TriggerCount:   5,
+	}
+	err := ds.SaveDynamicThreshold(threshold)
+	require.NoError(t, err)
+
+	// GetAllDynamicThresholds must return non-empty ModelName
+	all, err := ds.GetAllDynamicThresholds()
+	require.NoError(t, err)
+	require.Len(t, all, 1)
+	assert.Equal(t, "BirdNET_V2.4", all[0].ModelName,
+		"ModelName must be constructed from Label's Model (Name_VVersion)")
+	assert.Equal(t, "great tit", all[0].SpeciesName,
+		"SpeciesName must be lowercase to match processor convention")
+
+	// GetDynamicThreshold (single lookup) must also return ModelName
+	single, err := ds.GetDynamicThreshold("Parus major", "")
+	require.NoError(t, err)
+	assert.Equal(t, "BirdNET_V2.4", single.ModelName,
+		"Single lookup must also return ModelName")
+	assert.Equal(t, "great tit", single.SpeciesName,
+		"Single lookup SpeciesName must be lowercase")
 }
 
 // TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName verifies that
@@ -356,7 +403,7 @@ func TestV2OnlyDatastore_DynamicThreshold_GetByCommonName(t *testing.T) {
 	// Retrieve using lowercase common name
 	retrieved, err := ds.GetDynamicThreshold("great tit", "")
 	require.NoError(t, err)
-	assert.Equal(t, "Great Tit", retrieved.SpeciesName)
+	assert.Equal(t, "great tit", retrieved.SpeciesName)
 	assert.Equal(t, "Parus major", retrieved.ScientificName)
 }
 
@@ -386,7 +433,7 @@ func TestV2OnlyDatastore_DynamicThreshold_FallbackWithoutMapping(t *testing.T) {
 	// Without label mapping, should fall back to scientific name
 	retrieved, err := ds.GetDynamicThreshold("Passer domesticus", "")
 	require.NoError(t, err)
-	assert.Equal(t, "Passer domesticus", retrieved.SpeciesName, "should fallback to scientific name")
+	assert.Equal(t, "passer domesticus", retrieved.SpeciesName, "should fallback to scientific name")
 	assert.Equal(t, "Passer domesticus", retrieved.ScientificName)
 }
 
