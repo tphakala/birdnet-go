@@ -142,7 +142,7 @@
             enabled: editEqualizer.enabled,
             filters: editEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || crypto.randomUUID(),
+              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
             })),
           }
         : undefined;

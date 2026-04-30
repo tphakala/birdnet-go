@@ -207,7 +207,7 @@
             enabled: newEqualizer.enabled,
             filters: newEqualizer.filters.map(f => ({
               ...f,
-              id: f.id || crypto.randomUUID(),
+              id: f.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
             })),
           }
         : undefined;
@@ -271,7 +271,7 @@
       enabled: updated.enabled,
       filters: updated.filters.map(filter => ({
         ...filter,
-        id: filter.id || crypto.randomUUID(),
+        id: filter.id || (crypto?.randomUUID?.() ?? Math.random().toString(36).substr(2, 9)),
       })),
     };
   }
