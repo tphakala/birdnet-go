@@ -199,12 +199,6 @@
   }
 
   function handleEqualizerUpdate(updated: LocalEqualizerSettings) {
-    logger.debug('SoundCardCard EQ updated', {
-      component: 'SoundCardCard',
-      action: 'handleEqualizerUpdate',
-      enabled: updated.enabled,
-      filterCount: updated.filters.length,
-    });
     editEqualizer = updated;
   }
 </script>
