@@ -352,6 +352,40 @@ func TestSourceRegistry_UpdateDisplayName_NotFound(t *testing.T) {
 	assert.False(t, updated)
 }
 
+// TestGenerateSourceID_Deterministic verifies that the same inputs always produce the same ID.
+func TestGenerateSourceID_Deterministic(t *testing.T) {
+	t.Parallel()
+
+	id1 := generateSourceID(SourceTypeRTSP, "rtsp://192.168.1.10/stream")
+	id2 := generateSourceID(SourceTypeRTSP, "rtsp://192.168.1.10/stream")
+	assert.Equal(t, id1, id2, "same connection string must produce the same ID")
+}
+
+// TestGenerateSourceID_DifferentInputs verifies that different connection strings produce different IDs.
+func TestGenerateSourceID_DifferentInputs(t *testing.T) {
+	t.Parallel()
+
+	id1 := generateSourceID(SourceTypeRTSP, "rtsp://192.168.1.10/stream1")
+	id2 := generateSourceID(SourceTypeRTSP, "rtsp://192.168.1.10/stream2")
+	assert.NotEqual(t, id1, id2, "different connection strings must produce different IDs")
+}
+
+// TestGenerateSourceID_Format verifies the ID format is {type}_{8 hex chars}.
+func TestGenerateSourceID_Format(t *testing.T) {
+	t.Parallel()
+
+	id := generateSourceID(SourceTypeRTSP, "rtsp://192.168.1.10/stream")
+	assert.Regexp(t, `^rtsp_[0-9a-f]{8}$`, id, "ID must match format {type}_{8 hex chars}")
+}
+
+// TestGenerateSourceID_IncludesType verifies that the ID prefix matches the source type.
+func TestGenerateSourceID_IncludesType(t *testing.T) {
+	t.Parallel()
+
+	id := generateSourceID(SourceTypeAudioCard, "hw:1,0")
+	assert.Regexp(t, `^audio_card_[0-9a-f]{8}$`, id, "ID must include the source type prefix")
+}
+
 // TestSourceRegistry_TypeDetection verifies that source types are detected from connection strings.
 func TestSourceRegistry_TypeDetection(t *testing.T) {
 	t.Parallel()
