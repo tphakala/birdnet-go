@@ -82,7 +82,7 @@ export default defineConfig({
       name: 'inject-supported-locales',
       transformIndexHtml(html) {
         const locales = discoverSupportedLocales()
-        const formatted = locales.map(l => `'${l}'`).join(', ')
+        const formatted = locales.map(l => JSON.stringify(l)).join(', ')
         return html.replace(LOCALES_PLACEHOLDER, formatted)
       },
     },
