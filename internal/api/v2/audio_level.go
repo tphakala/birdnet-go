@@ -185,6 +185,9 @@ func (c *Controller) initAudioLevelRoutes() {
 	// The per-IP connection limit (audioLevelMaxConnectionsPerIP) still applies
 	// Authentication is checked within the handler to control data anonymization
 	c.Group.GET("/streams/audio-level", c.StreamAudioLevel)
+
+	// Stream sources listing - public, returns active stream sources
+	c.Group.GET("/streams/sources", c.ListStreamSources)
 }
 
 // StreamAudioLevel handles SSE connections for real-time audio level streaming
