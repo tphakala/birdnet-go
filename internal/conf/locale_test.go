@@ -56,7 +56,7 @@ func TestDiscoverUILocales(t *testing.T) {
 			name: "falls back to defaults when messages dir missing",
 			fs:   fstest.MapFS{},
 			expected: []string{
-				"de", "en", "es", "fi", "fr", "it", "nl", "pl", "pt", "sk",
+				"da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nl", "pl", "pt", "sk", "sv",
 			},
 		},
 		{
@@ -100,11 +100,28 @@ func TestSetValidUILocales(t *testing.T) {
 }
 
 func TestValidUILocalesDefault(t *testing.T) {
-	// Verify the default includes all current frontend locales
+	// Verify the default exactly matches all current frontend locales.
+	// Keep in sync with frontend/static/messages/*.json.
 	locales := ValidUILocales()
-	assert.Contains(t, locales, "en")
-	assert.Contains(t, locales, "sk")
-	assert.Contains(t, locales, "it")
-	assert.Contains(t, locales, "nl")
-	assert.Contains(t, locales, "pl")
+	expected := []string{"da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nl", "pl", "pt", "sk", "sv"}
+	assert.ElementsMatch(t, expected, locales, "defaultUILocales must exactly match frontend/static/messages")
+}
+
+func TestUILocalesDiscovered(t *testing.T) {
+	original := ValidUILocales()
+	originalDiscovered := UILocalesDiscovered()
+	t.Cleanup(func() {
+		SetValidUILocales(original)
+		validUILocalesMu.Lock()
+		uiLocalesDiscovered = originalDiscovered
+		validUILocalesMu.Unlock()
+	})
+
+	validUILocalesMu.Lock()
+	uiLocalesDiscovered = false
+	validUILocalesMu.Unlock()
+	assert.False(t, UILocalesDiscovered(), "should be false before SetValidUILocales")
+
+	SetValidUILocales([]string{"en", "hu"})
+	assert.True(t, UILocalesDiscovered(), "should be true after SetValidUILocales")
 }

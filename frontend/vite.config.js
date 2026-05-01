@@ -6,48 +6,58 @@ import { copyFileSync, mkdirSync, readdirSync, readFileSync, existsSync } from '
 import { join } from 'node:path'
 import { createHash } from 'node:crypto'
 
-// Single source of truth for the translation files directory. Both the i18n
-// cache version helper and the copy-messages plugin reference this path so
-// they cannot drift apart.
+// Single source of truth for the translation files directory.
 const MESSAGES_SOURCE_DIR = './static/messages'
 
+// Placeholder token replaced by the inject-supported-locales plugin.
+const LOCALES_PLACEHOLDER = '__SUPPORTED_LOCALES_PLACEHOLDER__'
+
 /**
- * Compute a stable i18n cache version from the content of
- * `static/messages/*.json`. This replaces `Date.now()` so two builds from
- * identical sources produce identical bundle content hashes (reproducible
+ * Return sorted *.json filenames from static/messages/, or [] if missing.
+ * Shared by the cache-version, locale-discovery, and copy-messages helpers.
+ */
+function getMessageFiles() {
+  if (!existsSync(MESSAGES_SOURCE_DIR)) return []
+  return readdirSync(MESSAGES_SOURCE_DIR, { withFileTypes: true })
+    .filter(dirent => dirent.isFile() && dirent.name.endsWith('.json'))
+    .map(dirent => dirent.name)
+    .sort()
+}
+
+/**
+ * Compute a stable i18n cache version from the content of the message files.
+ * Two builds from identical sources produce identical hashes (reproducible
  * builds) and the i18n localStorage cache only evicts when translations
- * actually change.
- *
- * Returns 'dev' if the messages directory is missing or empty so dev/test
- * runs still get a well-defined value.
+ * actually change. Returns 'dev' when no message files exist.
  */
 function computeI18nCacheVersion() {
-  const sourceDir = MESSAGES_SOURCE_DIR
-  if (!existsSync(sourceDir)) return 'dev'
-  const files = readdirSync(sourceDir)
-    .filter(f => f.endsWith('.json'))
-    .sort()
+  const files = getMessageFiles()
   if (files.length === 0) return 'dev'
   const hash = createHash('sha256')
-  // NUL-byte delimiter prevents collisions between (filename, content) pairs:
-  // without it, `a.json` containing `bc` and `ab.json` containing `c` both
-  // hash the byte stream `abc` and produce the same digest.
+  // NUL-byte delimiter prevents collisions between (filename, content) pairs.
   const delimiter = Buffer.from([0])
   for (const file of files) {
     hash.update(file)
     hash.update(delimiter)
     try {
-      hash.update(readFileSync(join(sourceDir, file)))
+      hash.update(readFileSync(join(MESSAGES_SOURCE_DIR, file)))
     } catch (/** @type {any} */ err) {
-      // Surface the failing file name then re-throw so the build fails loudly
-      // rather than silently producing a 'dev' cache version that masks the
-      // problem.
       console.error(`[i18n-cache-version] Failed to read ${file}:`, err.message)
       throw err
     }
     hash.update(delimiter)
   }
   return hash.digest('hex').slice(0, 8)
+}
+
+/**
+ * Derive supported UI locale codes from the message files.
+ * Used by the inject-supported-locales plugin so index.html stays in sync
+ * with the actual message files automatically.
+ */
+function discoverSupportedLocales() {
+  const locales = getMessageFiles().map(f => f.replace('.json', ''))
+  return locales.length > 0 ? locales : ['en']
 }
 
 // https://vite.dev/config/
@@ -66,42 +76,47 @@ export default defineConfig({
       },
     }),
     svelteTesting(),
+    // Derive SUPPORTED_LOCALES in index.html from the actual message files.
+    // Adding a new locale only requires the .json file + config.ts entry;
+    // index.html stays in sync automatically via this plugin.
+    {
+      name: 'inject-supported-locales',
+      transformIndexHtml(html) {
+        if (!html.includes(LOCALES_PLACEHOLDER)) {
+          throw new Error('[inject-supported-locales] Missing ' + LOCALES_PLACEHOLDER + ' in index.html')
+        }
+        const locales = discoverSupportedLocales()
+        const formatted = locales.map(l => JSON.stringify(l)).join(', ')
+        return html.replace(LOCALES_PLACEHOLDER, formatted)
+      },
+    },
     // Copy message files to dist during build
     {
       name: 'copy-messages',
       closeBundle() {
         try {
-          // Create messages directory in dist
           const messagesDir = './dist/messages';
           mkdirSync(messagesDir, { recursive: true });
 
-          // Copy all message files
-          const sourceDir = MESSAGES_SOURCE_DIR;
-          
-          // Check if source directory exists
-          if (!existsSync(sourceDir)) {
-            console.warn('[copy-messages] Source directory not found:', sourceDir);
+          const files = getMessageFiles();
+          if (files.length === 0) {
+            console.warn('[copy-messages] No message files found in', MESSAGES_SOURCE_DIR);
             return;
           }
-          
-          const files = readdirSync(sourceDir);
+
           let copiedCount = 0;
-          
-          files.forEach(file => {
-            if (file.endsWith('.json')) {
-              try {
-                copyFileSync(join(sourceDir, file), join(messagesDir, file));
-                copiedCount++;
-              } catch (/** @type {any} */ err) {
-                console.error(`[copy-messages] Failed to copy ${file}:`, err.message);
-              }
+          for (const file of files) {
+            try {
+              copyFileSync(join(MESSAGES_SOURCE_DIR, file), join(messagesDir, file));
+              copiedCount++;
+            } catch (/** @type {any} */ err) {
+              console.error(`[copy-messages] Failed to copy ${file}:`, err.message);
             }
-          });
-          
+          }
+
           console.log(`[copy-messages] Copied ${copiedCount} message files to dist/messages`);
         } catch (/** @type {any} */ err) {
           console.error('[copy-messages] Error during message file copying:', err.message);
-          // Don't fail the build, just log the error
         }
       }
     }

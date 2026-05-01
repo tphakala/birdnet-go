@@ -9,9 +9,8 @@ import { test, expect, type Page } from '@playwright/test';
  * - Restores the correct locale after page reload
  * - Displays translated text for every supported locale
  *
- * This test suite covers all 10 supported locales and specifically
- * catches the bug where certain locales (e.g., Slovak) revert to
- * English after reload due to backend validation resetting the value.
+ * This test suite covers all 14 supported locales and catches the bug
+ * where certain locales revert to English after reload.
  */
 
 // All supported locales with their display names and a known translated string.
@@ -22,17 +21,20 @@ const LOCALE_DATA: {
   name: string;
   settingsTranslation: string;
 }[] = [
+  { code: 'da', name: 'Dansk', settingsTranslation: 'Indstillinger' },
   { code: 'en', name: 'English', settingsTranslation: 'Settings' },
   { code: 'de', name: 'Deutsch', settingsTranslation: 'Einstellungen' },
   { code: 'es', name: 'Espanol', settingsTranslation: 'Configuración' },
   { code: 'fi', name: 'Suomi', settingsTranslation: 'Asetukset' },
   { code: 'fr', name: 'Francais', settingsTranslation: 'Paramètres' },
-  { code: 'it', name: 'Italiano', settingsTranslation: 'Impostazioni' },
   { code: 'hu', name: 'Magyar', settingsTranslation: 'Beállítások' },
+  { code: 'it', name: 'Italiano', settingsTranslation: 'Impostazioni' },
+  { code: 'lv', name: 'Latviešu', settingsTranslation: 'Iestatījumi' },
   { code: 'nl', name: 'Nederlands', settingsTranslation: 'Instellingen' },
   { code: 'pl', name: 'Polski', settingsTranslation: 'Ustawienia' },
   { code: 'pt', name: 'Portugues', settingsTranslation: 'Configurações' },
   { code: 'sk', name: 'Slovenčina', settingsTranslation: 'Nastavenia' },
+  { code: 'sv', name: 'Svenska', settingsTranslation: 'Inställningar' },
 ];
 
 /** Clear the locale from localStorage to start with a clean state. */

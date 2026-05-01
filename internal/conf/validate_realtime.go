@@ -205,11 +205,14 @@ func validateDashboardSettings(settings *Dashboard) error {
 		}
 	}
 
-	// Validate UI locale if provided
-	if settings.Locale != "" {
+	// Validate UI locale if provided. Only enforce when DiscoverUILocales has
+	// populated the valid list (i.e., after server startup). During the initial
+	// config load the embedded FS is not yet available, so resetting here would
+	// destroy preferences for newly added locales that are not in the hardcoded
+	// defaultUILocales fallback.
+	if settings.Locale != "" && UILocalesDiscovered() {
 		isValid := slices.Contains(ValidUILocales(), settings.Locale)
 		if !isValid {
-			// Log warning but don't fail - fallback to default
 			GetLogger().Warn("Invalid UI locale, will use default", logger.String("invalid_locale", settings.Locale), logger.String("fallback", "en"))
 			settings.Locale = "en"
 		}
