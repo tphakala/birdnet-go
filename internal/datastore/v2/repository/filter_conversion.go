@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"golang.org/x/text/unicode/norm"
 )
 
 // =============================================================================
@@ -261,8 +262,9 @@ var sentinelNoMatchIDs = []uint{0}
 
 // FilterLookupDeps contains dependencies for filter entity lookups.
 type FilterLookupDeps struct {
-	LabelRepo  LabelRepository
-	SourceRepo AudioSourceRepository
+	LabelRepo   LabelRepository
+	SourceRepo  AudioSourceRepository
+	SciToCommon map[string]string
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
@@ -402,7 +404,8 @@ func singleTimeOfDayToHours(timeOfDay string) []int {
 }
 
 // ResolveSpeciesToLabelIDsWithCommonName converts a species search string to label IDs.
-// This does a LIKE search on scientific names. The species parameter can be a partial match.
+// Searches both scientific names (via LabelRepo.Search LIKE) and common names
+// (via deps.SciToCommon) for partial matches.
 // Returns nil if species is empty (no filtering).
 // Returns sentinel []uint{0} if species is non-empty but no labels are found.
 func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLookupDeps, species string) ([]uint, error) {
@@ -413,28 +416,45 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 		return nil, nil
 	}
 
-	// LabelRepo.Search does a LIKE match on scientific_name only. Common-name
-	// search is handled at the API handler layer by pre-resolving common names
-	// to scientific names before this helper is called; see
-	// (*Controller).resolveSpeciesToScientific in internal/api/v2/search.go.
-	// The limit of 100 is intentional for Simple Search: a broader term returning
-	// 100+ species indicates the user should refine the query.
-	// TODO: support partial common-name search once a persistent common_name column exists.
-	labels, err := deps.LabelRepo.Search(ctx, species, 100)
+	normalized := norm.NFC.String(species)
+
+	labels, err := deps.LabelRepo.Search(ctx, normalized, 100)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(labels) == 0 {
-		// Species specified but not found - use sentinel to ensure zero results
+	labelIDSet := make(map[uint]struct{}, len(labels))
+	for _, label := range labels {
+		labelIDSet[label.ID] = struct{}{}
+	}
+
+	// Also search common names for partial matches.
+	if len(deps.SciToCommon) > 0 {
+		needle := strings.ToLower(normalized)
+		matchedScientific := make([]string, 0, 16)
+		for sci, common := range deps.SciToCommon {
+			if strings.Contains(strings.ToLower(norm.NFC.String(common)), needle) {
+				matchedScientific = append(matchedScientific, sci)
+			}
+		}
+		if len(matchedScientific) > 0 {
+			commonLabels, err := deps.LabelRepo.GetByScientificNames(ctx, matchedScientific)
+			if err != nil {
+				return nil, err
+			}
+			for _, labelsForSci := range commonLabels {
+				for _, label := range labelsForSci {
+					labelIDSet[label.ID] = struct{}{}
+				}
+			}
+		}
+	}
+
+	if len(labelIDSet) == 0 {
 		return sentinelNoMatchIDs, nil
 	}
 
-	labelIDs := make([]uint, len(labels))
-	for i, label := range labels {
-		labelIDs[i] = label.ID
-	}
-	return labelIDs, nil
+	return slices.Collect(maps.Keys(labelIDSet)), nil
 }
 
 // ResolveDeviceToSourceIDs converts a device name to audio source IDs.
@@ -583,7 +603,7 @@ func ConvertSearchFilters(
 
 	// Entity lookups (require deps)
 	if deps != nil {
-		// Convert species string to label IDs (LIKE search)
+		// Convert species string to label IDs (LIKE search on scientific + common names)
 		sf.LabelIDs, err = ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, filters.Species)
 		if err != nil {
 			return nil, err

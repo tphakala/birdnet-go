@@ -1051,6 +1051,93 @@ func TestResolveSpeciesToLabelIDsWithCommonName(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []uint{0}, result)
 	})
+
+	t.Run("partial common name match returns label IDs", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Turdus pilaris": {ID: 10, ScientificName: "Turdus pilaris"},
+						"Turdus merula":  {ID: 11, ScientificName: "Turdus merula"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Turdus pilaris": "räkättirastas",
+				"Turdus merula":  "mustarastas",
+				"Parus major":    "talitiainen",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "rastas")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{10, 11}, result)
+	})
+
+	t.Run("partial common name match is case-insensitive", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Parus major": {ID: 20, ScientificName: "Parus major"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Parus major": "Talitiainen",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "tiainen")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{20}, result)
+	})
+
+	t.Run("combines scientific and common name matches", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Turdus migratorius": {ID: 30, ScientificName: "Turdus migratorius"},
+					},
+				},
+				searchResults: []*entities.Label{
+					{ID: 5, ScientificName: "Erithacus rubecula"},
+				},
+			},
+			SciToCommon: map[string]string{
+				"Turdus migratorius": "american robin",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "robin")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{5, 30}, result)
+	})
+
+	t.Run("NFC normalization matches decomposed input", func(t *testing.T) {
+		// "ö" as combining sequence (NFD): o + U+0308
+		nfdQuery := "lehtopöllö"
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Strix aluco": {ID: 40, ScientificName: "Strix aluco"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Strix aluco": "Lehtopöllö",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, nfdQuery)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{40}, result)
+	})
 }
 
 // =============================================================================
