@@ -228,11 +228,12 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 | GET    | `/soundlevels/stream` | `StreamSoundLevels` | ❌⚡ | Real-time audio level stream |
 | GET    | `/sse/status`         | `GetSSEStatus`      | ❌   | SSE connection status        |
 
-### Audio Level SSE (`audio_level.go`)
+### Audio Level SSE (`audio_level.go`) and Stream Sources (`audio_sources.go`)
 
-| Method | Route                  | Handler            | Auth | Description               |
-| ------ | ---------------------- | ------------------ | ---- | ------------------------- |
-| GET    | `/streams/audio-level` | `StreamAudioLevel` | ❌   | Real-time audio level SSE |
+| Method | Route                  | Handler              | Auth | Description                              |
+| ------ | ---------------------- | -------------------- | ---- | ---------------------------------------- |
+| GET    | `/streams/audio-level` | `StreamAudioLevel`   | ❌   | Real-time audio level SSE                |
+| GET    | `/streams/sources`     | `ListStreamSources`  | ❌   | Active stream sources (RTSP, HTTP, etc.) |
 
 **Features:**
 
@@ -257,6 +258,23 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
   }
 }
 ```
+
+**Stream Sources Response (`/streams/sources` and `/system/audio/sources`):**
+
+```json
+{
+  "sources": [
+    {
+      "id": "rtsp_ce4e5692",
+      "name": "RPI",
+      "type": "rtsp",
+      "state": "running"
+    }
+  ]
+}
+```
+
+Returns an empty `sources` array when no sources are configured. The `type` field is one of: `rtsp`, `http`, `hls`, `rtmp`, `udp`, `audio_card`, `file`. The `state` field is one of: `inactive`, `starting`, `running`, `error`, `stopped`. The `/streams/sources` endpoint returns only stream types (excludes `audio_card` and `file`).
 
 ### HLS Streaming (`audio_hls.go`)
 
@@ -387,6 +405,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/devices`          | `GetAudioDevices`         | ✅   | Available audio devices              |
 | GET    | `/system/audio/active`           | `GetActiveAudioDevice`    | ✅   | Active audio device                  |
 | GET    | `/system/audio/equalizer/config` | `GetEqualizerConfig`      | ✅   | Audio equalizer filter configuration |
+| GET    | `/system/audio/sources`          | `ListAudioSources`        | ✅   | Active audio sources (all types)     |
 | GET    | `/system/network-interfaces`     | `GetNetworkInterfaces`    | ✅   | IPv4 network interfaces for binding  |
 
 ### Events (`events.go`, `events_aggregation.go`)
