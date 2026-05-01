@@ -18,8 +18,9 @@ const LOCALES_PLACEHOLDER = '__SUPPORTED_LOCALES_PLACEHOLDER__'
  */
 function getMessageFiles() {
   if (!existsSync(MESSAGES_SOURCE_DIR)) return []
-  return readdirSync(MESSAGES_SOURCE_DIR)
-    .filter(f => f.endsWith('.json'))
+  return readdirSync(MESSAGES_SOURCE_DIR, { withFileTypes: true })
+    .filter(dirent => dirent.isFile() && dirent.name.endsWith('.json'))
+    .map(dirent => dirent.name)
     .sort()
 }
 
@@ -81,6 +82,9 @@ export default defineConfig({
     {
       name: 'inject-supported-locales',
       transformIndexHtml(html) {
+        if (!html.includes(LOCALES_PLACEHOLDER)) {
+          throw new Error('[inject-supported-locales] Missing ' + LOCALES_PLACEHOLDER + ' in index.html')
+        }
         const locales = discoverSupportedLocales()
         const formatted = locales.map(l => JSON.stringify(l)).join(', ')
         return html.replace(LOCALES_PLACEHOLDER, formatted)
