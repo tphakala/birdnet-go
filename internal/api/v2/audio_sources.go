@@ -47,8 +47,10 @@ func isStreamSourceType(t audiocore.SourceType) bool {
 }
 
 // listSources is the shared implementation for source listing endpoints.
-// When filter is nil, all sources are included.
-func (c *Controller) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool) error {
+// When filter is nil, all sources are included. When anonymize is true,
+// source names are replaced with anonymized values for unauthenticated
+// clients, matching the behavior of the audio-level SSE stream.
+func (c *Controller) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool, anonymize bool) error {
 	c.logInfoIfEnabled("Listing "+label,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
@@ -66,12 +68,17 @@ func (c *Controller) listSources(ctx echo.Context, label string, filter func(aud
 	}
 
 	sources := registry.List()
+	isAuthenticated := !anonymize || c.isClientAuthenticated(ctx)
 	resp.Sources = make([]AudioSourceInfo, 0, len(sources))
 	for _, src := range sources {
 		if filter != nil && !filter(src.Type) {
 			continue
 		}
-		resp.Sources = append(resp.Sources, toAudioSourceInfo(src))
+		info := toAudioSourceInfo(src)
+		if !isAuthenticated {
+			info.Name = c.getAnonymizedSourceName(src)
+		}
+		resp.Sources = append(resp.Sources, info)
 	}
 
 	c.logInfoIfEnabled(label+" listed",
@@ -86,11 +93,12 @@ func (c *Controller) listSources(ctx echo.Context, label string, filter func(aud
 // ListAudioSources handles GET /api/v2/system/audio/sources.
 // Returns all active audio sources from the engine registry (sound cards + streams).
 func (c *Controller) ListAudioSources(ctx echo.Context) error {
-	return c.listSources(ctx, "audio sources", nil)
+	return c.listSources(ctx, "audio sources", nil, false)
 }
 
 // ListStreamSources handles GET /api/v2/streams/sources.
 // Returns only stream-type audio sources (RTSP, HTTP, HLS, RTMP, UDP).
+// Source names are anonymized for unauthenticated clients.
 func (c *Controller) ListStreamSources(ctx echo.Context) error {
-	return c.listSources(ctx, "stream sources", isStreamSourceType)
+	return c.listSources(ctx, "stream sources", isStreamSourceType, true)
 }
