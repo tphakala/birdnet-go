@@ -63,23 +63,11 @@
         }
       })();
 
-      // Detect and set initial locale before content loads
+      // Detect and set initial locale before content loads.
+      // SUPPORTED_LOCALES is injected at build time by the inject-supported-locales
+      // Vite plugin from static/messages/*.json. Do NOT hardcode locale codes here.
       (function () {
-        const SUPPORTED_LOCALES = [
-          'da',
-          'en',
-          'de',
-          'es',
-          'fi',
-          'fr',
-          'it',
-          'lv',
-          'nl',
-          'pl',
-          'pt',
-          'sk',
-          'sv',
-        ];
+        const SUPPORTED_LOCALES = [__SUPPORTED_LOCALES_PLACEHOLDER__];
         const DEFAULT_LOCALE = 'en';
 
         function detectBrowserLocale() {

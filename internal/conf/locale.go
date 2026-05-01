@@ -129,15 +129,22 @@ var LocaleCodes = map[string]string{
 	"vi-vn": "Vietnamese", // Vietnamese (Vietnam)
 }
 
-// defaultUILocales is the fallback list of valid UI locales, matching the frontend message files.
-// This is used when DiscoverUILocales has not been called or fails.
-var defaultUILocales = []string{"de", "en", "es", "fi", "fr", "it", "nl", "pl", "pt", "sk"}
+// defaultUILocales is the fallback list of valid UI locales.
+// Keep in sync with frontend/static/messages/*.json and frontend/src/lib/i18n/config.ts.
+// This is ONLY used when DiscoverUILocales fails to read the embedded frontend FS.
+var defaultUILocales = []string{"da", "de", "en", "es", "fi", "fr", "hu", "it", "lv", "nl", "pl", "pt", "sk", "sv"}
 
 // validUILocales holds the currently active set of valid UI locale codes.
 // It is initialized to defaultUILocales and can be overridden by SetValidUILocales.
 var validUILocales = defaultUILocales
 
-// validUILocalesMu protects concurrent access to validUILocales.
+// uiLocalesDiscovered tracks whether SetValidUILocales has been called with
+// dynamically discovered locales. Before discovery, locale validation is
+// skipped to avoid resetting valid-but-unlisted locales to "en" during
+// config load (which runs before the embedded frontend FS is available).
+var uiLocalesDiscovered bool
+
+// validUILocalesMu protects concurrent access to validUILocales and uiLocalesDiscovered.
 var validUILocalesMu sync.RWMutex
 
 // ValidUILocales returns the current list of valid UI locale codes.
@@ -147,12 +154,22 @@ func ValidUILocales() []string {
 	return slices.Clone(validUILocales)
 }
 
-// SetValidUILocales overrides the valid UI locale list.
-// This should be called during server initialization after the embedded frontend FS is available.
+// UILocalesDiscovered reports whether SetValidUILocales has been called.
+// Validation code uses this to decide whether to enforce locale checks.
+func UILocalesDiscovered() bool {
+	validUILocalesMu.RLock()
+	defer validUILocalesMu.RUnlock()
+	return uiLocalesDiscovered
+}
+
+// SetValidUILocales overrides the valid UI locale list and marks discovery
+// as complete. This should be called during server initialization after
+// the embedded frontend FS is available.
 func SetValidUILocales(locales []string) {
 	validUILocalesMu.Lock()
 	defer validUILocalesMu.Unlock()
 	validUILocales = slices.Clone(locales)
+	uiLocalesDiscovered = true
 }
 
 // DiscoverUILocales reads the messages/ directory from the given filesystem
