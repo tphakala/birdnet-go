@@ -44,6 +44,12 @@ WORKDIR /home/dev-user/src/BirdNET-Go
 # Copy all source files first to have Git information available
 COPY --chown=dev-user . ./
 
+# Pre-build frontend in the shared buildenv stage so it runs once.
+# Without this, multi-platform builds run npm install concurrently
+# per platform, exhausting memory on CI runners and corrupting packages.
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN task frontend-build
+
 # Enter Build stage
 FROM --platform=$BUILDPLATFORM buildenv AS build
 ARG BUILD_VERSION
@@ -51,9 +57,6 @@ ENV BUILD_VERSION=${BUILD_VERSION:-unknown}
 
 ARG TARGETPLATFORM
 ARG ONNXRUNTIME_VERSION
-
-# Skip puppeteer download during build (not needed for production)
-ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 # Download ONNX Runtime for the target platform
 RUN ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
