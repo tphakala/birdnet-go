@@ -407,6 +407,7 @@ func (c *Controller) initSystemRoutes() {
 	audioGroup.GET("/devices", c.GetAudioDevices)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+	audioGroup.GET("/sources", c.ListAudioSources)
 
 	// Events routes (detection lifecycle + operational logs)
 	c.registerEventsRoutes(protectedGroup)
