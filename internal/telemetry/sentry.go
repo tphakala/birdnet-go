@@ -272,6 +272,10 @@ func initializeSentrySDK(settings *conf.Settings) error {
 
 		// BeforeSend allows us to filter sensitive data
 		BeforeSend: createBeforeSendHook(settings),
+
+		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
+		// Scheduler.sendItem() only adds the event envelope item, skipping Attachments.
+		DisableTelemetryBuffer: true,
 	})
 
 	if err != nil {
@@ -1064,6 +1068,10 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 		Environment:      "production",
 		ServerName:       "", // No server identification
 		Release:          fmt.Sprintf("birdnet-go@%s", version),
+
+		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
+		DisableTelemetryBuffer: true,
+
 		// Only allow support dump events
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Only allow events tagged as support dumps
