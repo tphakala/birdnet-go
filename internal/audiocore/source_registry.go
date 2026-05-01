@@ -2,6 +2,8 @@
 package audiocore
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"slices"
@@ -9,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -117,7 +118,7 @@ func (r *SourceRegistry) Register(cfg *SourceConfig) (*AudioSource, error) {
 	// Determine ID.
 	id := cfg.ID
 	if id == "" {
-		id = generateSourceID(cfg.Type)
+		id = generateSourceID(cfg.Type, connStr)
 	}
 
 	// Determine display name.
@@ -395,18 +396,12 @@ func detectSourceType(conn string) SourceType {
 	return SourceTypeUnknown
 }
 
-// generateSourceID returns a short unique ID prefixed with the source type.
-func generateSourceID(t SourceType) string {
-	u, err := uuid.NewRandom()
-	if err != nil {
-		// Extremely rare; fall back to nanosecond timestamp.
-		ts := fmt.Sprintf("%d", time.Now().UnixNano())
-		if len(ts) > 8 {
-			ts = ts[:8]
-		}
-		return fmt.Sprintf("%s_%s", t, ts)
-	}
-	return fmt.Sprintf("%s_%s", t, u.String()[:8])
+// generateSourceID returns a deterministic ID prefixed with the source type.
+// The ID is derived from SHA-256 of the connection string, making it stable
+// across restarts for the same source URL or device.
+func generateSourceID(t SourceType, connStr string) string {
+	hash := sha256.Sum256([]byte(connStr))
+	return fmt.Sprintf("%s_%s", t, hex.EncodeToString(hash[:4]))
 }
 
 // buildDisplayName creates a human-readable display name from the connection info.
