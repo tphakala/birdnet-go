@@ -416,7 +416,9 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 		return nil, nil
 	}
 
-	labels, err := deps.LabelRepo.Search(ctx, species, 100)
+	normalized := norm.NFC.String(species)
+
+	labels, err := deps.LabelRepo.Search(ctx, normalized, 100)
 	if err != nil {
 		return nil, err
 	}
@@ -428,10 +430,10 @@ func ResolveSpeciesToLabelIDsWithCommonName(ctx context.Context, deps *FilterLoo
 
 	// Also search common names for partial matches.
 	if len(deps.SciToCommon) > 0 {
-		needle := strings.ToLower(norm.NFC.String(species))
+		needle := strings.ToLower(normalized)
 		matchedScientific := make([]string, 0, 16)
 		for sci, common := range deps.SciToCommon {
-			if strings.Contains(strings.ToLower(common), needle) {
+			if strings.Contains(strings.ToLower(norm.NFC.String(common)), needle) {
 				matchedScientific = append(matchedScientific, sci)
 			}
 		}

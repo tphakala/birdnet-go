@@ -1100,21 +1100,43 @@ func TestResolveSpeciesToLabelIDsWithCommonName(t *testing.T) {
 			LabelRepo: &mockLabelRepositoryWithSearch{
 				mockLabelRepository: mockLabelRepository{
 					labels: map[string]*entities.Label{
-						"Parus major": {ID: 30, ScientificName: "Parus major"},
+						"Turdus migratorius": {ID: 30, ScientificName: "Turdus migratorius"},
 					},
 				},
 				searchResults: []*entities.Label{
-					{ID: 5, ScientificName: "Parus ater"},
+					{ID: 5, ScientificName: "Erithacus rubecula"},
 				},
 			},
 			SciToCommon: map[string]string{
-				"Parus major": "talitiainen",
+				"Turdus migratorius": "american robin",
 			},
 		}
 
-		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "Parus")
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "robin")
 		require.NoError(t, err)
-		assert.Contains(t, result, uint(5))
+		assert.ElementsMatch(t, []uint{5, 30}, result)
+	})
+
+	t.Run("NFC normalization matches decomposed input", func(t *testing.T) {
+		// "ö" as combining sequence (NFD): o + U+0308
+		nfdQuery := "lehtopöllö"
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Strix aluco": {ID: 40, ScientificName: "Strix aluco"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Strix aluco": "Lehtopöllö",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, nfdQuery)
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{40}, result)
 	})
 }
 
