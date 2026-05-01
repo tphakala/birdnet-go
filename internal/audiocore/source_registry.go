@@ -54,6 +54,7 @@ type SourceEventListener func(SourceEvent)
 const (
 	registryDeviceDefault            = "default"
 	registryDeviceDefaultDisplayName = "Default Audio Device"
+	registrySourceIDHashBytes        = 4 // SHA-256 truncation width: 4 bytes = 8 hex chars
 )
 
 // SourceRegistry manages audio sources with thread-safe CRUD and event notifications.
@@ -401,7 +402,7 @@ func detectSourceType(conn string) SourceType {
 // across restarts for the same source URL or device.
 func generateSourceID(t SourceType, connStr string) string {
 	hash := sha256.Sum256([]byte(connStr))
-	return fmt.Sprintf("%s_%s", t, hex.EncodeToString(hash[:4]))
+	return fmt.Sprintf("%s_%s", t, hex.EncodeToString(hash[:registrySourceIDHashBytes]))
 }
 
 // buildDisplayName creates a human-readable display name from the connection info.

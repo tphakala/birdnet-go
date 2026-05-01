@@ -473,11 +473,15 @@ func TestMQTTAPIContract_NoRedundantDuplicateFields(t *testing.T) {
 func TestMQTTAPIContract_SourceName_OmittedWhenEmpty(t *testing.T) {
 	t.Parallel()
 
+	src := testAudioSource()
+	src.DisplayName = ""
+
 	note := NoteWithBirdImage{
 		Note: datastore.Note{
 			CommonName:     "House Sparrow",
 			ScientificName: "Passer domesticus",
 			Confidence:     0.91,
+			Source:         src,
 		},
 		SourceID: "rtsp_4d50dd0d",
 	}
