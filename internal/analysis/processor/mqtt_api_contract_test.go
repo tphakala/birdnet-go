@@ -59,6 +59,7 @@ var mqttAPIContractFields = struct {
 	// Detection message root-level fields (explicit JSON tags)
 	DetectionID string // camelCase - database ID for URL construction (issue #1748)
 	SourceID    string // camelCase - added for Home Assistant discovery
+	SourceName  string // camelCase - display name for stable source mapping
 	Occurrence  string // lowercase with omitempty
 	BirdImage   string // PascalCase - DO NOT CHANGE (backward compatibility)
 
@@ -87,6 +88,7 @@ var mqttAPIContractFields = struct {
 	// Root-level fields with explicit tags
 	DetectionID: "detectionId", // camelCase - database ID for URL construction (issue #1748)
 	SourceID:    "sourceId",    // camelCase - new field for HA
+	SourceName:  "sourceName",  // camelCase - display name for stable source mapping
 	Occurrence:  "occurrence",  // lowercase with omitempty
 	BirdImage:   "BirdImage",   // PascalCase - FROZEN for backward compatibility
 
@@ -128,6 +130,7 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 		},
 		DetectionID: 12345, // Should match Note.ID for URL construction
 		SourceID:    "test-source-1",
+		SourceName:  testAudioSource().DisplayName, // "test-source"
 		BirdImage: imageprovider.BirdImage{
 			URL:            "https://example.com/bird.jpg",
 			ScientificName: "Turdus migratorius",
@@ -191,6 +194,13 @@ func TestMQTTAPIContract_NoteWithBirdImage_FieldNames(t *testing.T) {
 			"MQTT API CONTRACT: sourceId field must be present for HA filtering")
 		assert.Equal(t, "test-source-1", jsonMap[mqttAPIContractFields.SourceID],
 			"sourceId value mismatch")
+	})
+
+	t.Run("SourceName uses camelCase (display name for stable mapping)", func(t *testing.T) {
+		assert.Contains(t, jsonMap, mqttAPIContractFields.SourceName,
+			"MQTT API CONTRACT: sourceName field must be present for stable source mapping")
+		assert.Equal(t, "test-source", jsonMap[mqttAPIContractFields.SourceName],
+			"sourceName must match the audio source DisplayName")
 	})
 
 	t.Run("BirdImage field uses PascalCase for backward compatibility", func(t *testing.T) {
@@ -456,6 +466,31 @@ func TestMQTTAPIContract_NoRedundantDuplicateFields(t *testing.T) {
 		"Canonical field 'detectionId' must be present")
 	assert.Contains(t, jsonMap, "sourceId",
 		"Canonical field 'sourceId' must be present")
+}
+
+// TestMQTTAPIContract_SourceName_OmittedWhenEmpty verifies that sourceName is omitted
+// from the MQTT payload when DisplayName is empty, per the omitempty tag.
+func TestMQTTAPIContract_SourceName_OmittedWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	note := NoteWithBirdImage{
+		Note: datastore.Note{
+			CommonName:     "House Sparrow",
+			ScientificName: "Passer domesticus",
+			Confidence:     0.91,
+		},
+		SourceID: "rtsp_4d50dd0d",
+	}
+
+	jsonData, err := json.Marshal(note)
+	require.NoError(t, err)
+
+	var jsonMap map[string]any
+	err = json.Unmarshal(jsonData, &jsonMap)
+	require.NoError(t, err)
+
+	assert.NotContains(t, jsonMap, "sourceName",
+		"sourceName must be omitted when DisplayName is empty (omitempty)")
 }
 
 // TestMQTTAPIContract_NoUnexpectedCamelCaseConversions verifies that fields that

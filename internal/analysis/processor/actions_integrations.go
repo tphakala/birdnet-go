@@ -36,9 +36,10 @@ type NoteWithBirdImage struct {
 	ID     *struct{} `json:"ID,omitempty"`     // Suppressed: use detectionId instead
 	Source *struct{} `json:"Source,omitempty"` // Suppressed: use sourceId instead
 
-	DetectionID uint                    `json:"detectionId"` // Database ID for URL construction (e.g., /api/v2/audio/{id})
-	SourceID    string                  `json:"sourceId"`    // Audio source ID for HA filtering (added for HA discovery)
-	BirdImage   imageprovider.BirdImage `json:"BirdImage"`   // PascalCase for backward compatibility - DO NOT CHANGE
+	DetectionID uint                    `json:"detectionId"`          // Database ID for URL construction (e.g., /api/v2/audio/{id})
+	SourceID    string                  `json:"sourceId"`             // Audio source ID for HA filtering (added for HA discovery)
+	SourceName  string                  `json:"sourceName,omitempty"` // Display name for stable source mapping (#2799)
+	BirdImage   imageprovider.BirdImage `json:"BirdImage"`            // PascalCase for backward compatibility - DO NOT CHANGE
 }
 
 // Execute sends the note to the BirdWeather API
@@ -255,11 +256,12 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	// gracefully, or use the detection ID-based audio endpoint which has
 	// built-in wait-for-encoding support.
 
-	// Wrap note with bird image and include detection ID and SourceID
+	// Wrap note with bird image and include detection ID, SourceID, and SourceName
 	noteWithBirdImage := NoteWithBirdImage{
 		Note:        note,
 		DetectionID: detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
 		SourceID:    note.Source.ID,
+		SourceName:  note.Source.DisplayName,
 		BirdImage:   birdImage,
 	}
 
