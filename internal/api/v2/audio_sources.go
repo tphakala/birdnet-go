@@ -22,46 +22,19 @@ type AudioSourceListResponse struct {
 	Sources []AudioSourceInfo `json:"sources"`
 }
 
-// ListAudioSources handles GET /api/v2/system/audio/sources.
-// Returns all active audio sources from the engine registry (sound cards + streams).
-func (c *Controller) ListAudioSources(ctx echo.Context) error {
-	c.logInfoIfEnabled("Listing audio sources",
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("ip", ctx.RealIP()),
-	)
-
-	resp := AudioSourceListResponse{Sources: []AudioSourceInfo{}}
-
-	if c.engine == nil {
-		return ctx.JSON(http.StatusOK, resp)
+// toAudioSourceInfo converts an audiocore.AudioSource to the API response type.
+func toAudioSourceInfo(src *audiocore.AudioSource) AudioSourceInfo {
+	return AudioSourceInfo{
+		ID:    src.ID,
+		Name:  src.DisplayName,
+		Type:  string(src.Type),
+		State: src.State.String(),
 	}
-
-	registry := c.engine.Registry()
-	if registry == nil {
-		return ctx.JSON(http.StatusOK, resp)
-	}
-
-	for _, src := range registry.List() {
-		resp.Sources = append(resp.Sources, AudioSourceInfo{
-			ID:    src.ID,
-			Name:  src.DisplayName,
-			Type:  string(src.Type),
-			State: src.State.String(),
-		})
-	}
-
-	c.logInfoIfEnabled("Audio sources listed",
-		logger.Int("count", len(resp.Sources)),
-		logger.String("path", ctx.Request().URL.Path),
-		logger.String("ip", ctx.RealIP()),
-	)
-
-	return ctx.JSON(http.StatusOK, resp)
 }
 
 // isStreamSourceType returns true for source types that represent network streams.
-func isStreamSourceType(t string) bool {
-	switch audiocore.SourceType(t) {
+func isStreamSourceType(t audiocore.SourceType) bool {
+	switch t {
 	case audiocore.SourceTypeRTSP,
 		audiocore.SourceTypeHTTP,
 		audiocore.SourceTypeHLS,
@@ -73,10 +46,10 @@ func isStreamSourceType(t string) bool {
 	}
 }
 
-// ListStreamSources handles GET /api/v2/streams/sources.
-// Returns only stream-type audio sources (RTSP, HTTP, HLS, RTMP, UDP).
-func (c *Controller) ListStreamSources(ctx echo.Context) error {
-	c.logInfoIfEnabled("Listing stream sources",
+// listSources is the shared implementation for source listing endpoints.
+// When filter is nil, all sources are included.
+func (c *Controller) listSources(ctx echo.Context, label string, filter func(audiocore.SourceType) bool) error {
+	c.logInfoIfEnabled("Listing "+label,
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
@@ -92,23 +65,32 @@ func (c *Controller) ListStreamSources(ctx echo.Context) error {
 		return ctx.JSON(http.StatusOK, resp)
 	}
 
-	for _, src := range registry.List() {
-		if !isStreamSourceType(string(src.Type)) {
+	sources := registry.List()
+	resp.Sources = make([]AudioSourceInfo, 0, len(sources))
+	for _, src := range sources {
+		if filter != nil && !filter(src.Type) {
 			continue
 		}
-		resp.Sources = append(resp.Sources, AudioSourceInfo{
-			ID:    src.ID,
-			Name:  src.DisplayName,
-			Type:  string(src.Type),
-			State: src.State.String(),
-		})
+		resp.Sources = append(resp.Sources, toAudioSourceInfo(src))
 	}
 
-	c.logInfoIfEnabled("Stream sources listed",
+	c.logInfoIfEnabled(label+" listed",
 		logger.Int("count", len(resp.Sources)),
 		logger.String("path", ctx.Request().URL.Path),
 		logger.String("ip", ctx.RealIP()),
 	)
 
 	return ctx.JSON(http.StatusOK, resp)
+}
+
+// ListAudioSources handles GET /api/v2/system/audio/sources.
+// Returns all active audio sources from the engine registry (sound cards + streams).
+func (c *Controller) ListAudioSources(ctx echo.Context) error {
+	return c.listSources(ctx, "audio sources", nil)
+}
+
+// ListStreamSources handles GET /api/v2/streams/sources.
+// Returns only stream-type audio sources (RTSP, HTTP, HLS, RTMP, UDP).
+func (c *Controller) ListStreamSources(ctx echo.Context) error {
+	return c.listSources(ctx, "stream sources", isStreamSourceType)
 }
