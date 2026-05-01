@@ -1869,8 +1869,9 @@ func (ds *Datastore) SearchDetections(filters *datastore.SearchFilters) ([]datas
 
 	// Set up dependencies for entity lookups
 	deps := &repository.FilterLookupDeps{
-		LabelRepo:  ds.label,
-		SourceRepo: ds.source,
+		LabelRepo:   ds.label,
+		SourceRepo:  ds.source,
+		SciToCommon: ds.loadNameMaps().common,
 	}
 
 	// Convert API-level filters to repository filters

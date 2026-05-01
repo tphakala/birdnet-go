@@ -1051,6 +1051,71 @@ func TestResolveSpeciesToLabelIDsWithCommonName(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []uint{0}, result)
 	})
+
+	t.Run("partial common name match returns label IDs", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Turdus pilaris": {ID: 10, ScientificName: "Turdus pilaris"},
+						"Turdus merula":  {ID: 11, ScientificName: "Turdus merula"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Turdus pilaris": "räkättirastas",
+				"Turdus merula":  "mustarastas",
+				"Parus major":    "talitiainen",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "rastas")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{10, 11}, result)
+	})
+
+	t.Run("partial common name match is case-insensitive", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Parus major": {ID: 20, ScientificName: "Parus major"},
+					},
+				},
+				searchResults: []*entities.Label{},
+			},
+			SciToCommon: map[string]string{
+				"Parus major": "Talitiainen",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "tiainen")
+		require.NoError(t, err)
+		assert.ElementsMatch(t, []uint{20}, result)
+	})
+
+	t.Run("combines scientific and common name matches", func(t *testing.T) {
+		deps := &FilterLookupDeps{
+			LabelRepo: &mockLabelRepositoryWithSearch{
+				mockLabelRepository: mockLabelRepository{
+					labels: map[string]*entities.Label{
+						"Parus major": {ID: 30, ScientificName: "Parus major"},
+					},
+				},
+				searchResults: []*entities.Label{
+					{ID: 5, ScientificName: "Parus ater"},
+				},
+			},
+			SciToCommon: map[string]string{
+				"Parus major": "talitiainen",
+			},
+		}
+
+		result, err := ResolveSpeciesToLabelIDsWithCommonName(ctx, deps, "Parus")
+		require.NoError(t, err)
+		assert.Contains(t, result, uint(5))
+	})
 }
 
 // =============================================================================
