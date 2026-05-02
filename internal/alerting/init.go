@@ -52,8 +52,7 @@ func (a *notificationAdapter) CreateAndBroadcastTest(notifType notification.Type
 	if svc == nil {
 		return nil // notification service not yet initialized
 	}
-	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
-		WithMetadata(notification.MetadataKeyIsAlertRuleTest, true)
+	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message)
 	notif = enrichFromEventProps(notif, notifType, eventProps)
 	return svc.CreateWithMetadata(notif)
 }
@@ -67,7 +66,6 @@ func (a *notificationAdapter) CreateAndBroadcastTestWithKeys(
 		return nil // notification service not yet initialized
 	}
 	notif := notification.NewNotification(notifType, notification.PriorityHigh, title, message).
-		WithMetadata(notification.MetadataKeyIsAlertRuleTest, true).
 		WithTitleKey(titleKey, titleParams)
 	if messageKey != "" {
 		notif = notif.WithMessageKey(messageKey, messageParams)
