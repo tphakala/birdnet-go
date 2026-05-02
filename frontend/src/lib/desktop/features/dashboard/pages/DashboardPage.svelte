@@ -66,7 +66,12 @@ Performance Optimizations:
   import { navigation } from '$lib/stores/navigation.svelte';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { appState } from '$lib/stores/appState.svelte';
-  import { birdnetSettings, dashboardLayout, settingsStore } from '$lib/stores/settings';
+  import {
+    birdnetSettings,
+    dashboardLayout,
+    settingsDataLoaded,
+    settingsStore,
+  } from '$lib/stores/settings';
   import type { Dashboard, DashboardElement, DashboardLayout } from '$lib/stores/settings';
   import { dashboardEditMode } from '$lib/stores/dashboardEditMode';
   import { guestDashboardLayout, saveGuestLayout } from '$lib/stores/guestDashboardLayout';
@@ -169,22 +174,43 @@ Performance Optimizations:
     { id: 'live-spectrogram-0', type: 'live-spectrogram', enabled: true },
     { id: 'detections-grid-0', type: 'detections-grid', enabled: true },
   ];
-  // Check whether authenticated settings were actually loaded successfully.
-  // When settings failed to load (e.g. guest/unauthenticated), skip the
-  // settings-derived layout so we fall through to the public app config.
-  let settingsLoaded = $derived(!$settingsStore.isLoading && !$settingsStore.error);
+  // Only use the settings store layout when data was actually fetched from the
+  // server. The store initializes with default elements, so checking isLoading
+  // alone would incorrectly treat the defaults as "loaded" for guests (where
+  // loadSettings() is intentionally skipped to avoid 401 errors).
+  let settingsLoaded = $derived($settingsDataLoaded);
   // Guest detection: security is on but user has no access (not authenticated)
   let isGuest = $derived(appState.security.enabled && !appState.security.accessAllowed);
   // Priority: authenticated settings > guest localStorage > public app config > hardcoded defaults
-  let layoutElements = $derived(
-    (settingsLoaded ? $dashboardLayout?.elements : null) ??
-      (isGuest ? $guestDashboardLayout?.elements : null) ??
-      (appState.layout?.elements as DashboardElement[] | undefined) ??
-      defaultElements
+  // Source is computed alongside elements so the priority logic exists in one place.
+  let layoutResolution = $derived(
+    settingsLoaded && $dashboardLayout?.elements
+      ? { elements: $dashboardLayout.elements, source: 'settings-store' as const }
+      : isGuest && $guestDashboardLayout?.elements
+        ? { elements: $guestDashboardLayout.elements, source: 'guest-localstorage' as const }
+        : appState.layout?.elements
+          ? {
+              elements: appState.layout.elements as DashboardElement[],
+              source: 'app-config' as const,
+            }
+          : { elements: defaultElements, source: 'hardcoded-defaults' as const }
   );
+  let layoutElements = $derived(layoutResolution.elements);
 
   // Current layout as a DashboardLayout object for DashboardEditMode
   let currentLayout = $derived<DashboardLayout>({ elements: layoutElements });
+
+  let previousLayoutSource = '';
+  $effect(() => {
+    if (layoutResolution.source !== previousLayoutSource) {
+      logger.debug('Dashboard layout resolved', {
+        source: layoutResolution.source,
+        elementCount: layoutResolution.elements.length,
+        types: layoutResolution.elements.map(e => e.type),
+      });
+      previousLayoutSource = layoutResolution.source;
+    }
+  });
 
   function handleEditModeChange(editing: boolean) {
     dashboardEditMode.set(editing);

@@ -56,6 +56,7 @@ describe('Species Settings Store', () => {
       activeSection: 'main',
       error: null,
       restartRequired: false,
+      dataLoaded: false,
     });
   });
 
