@@ -50,6 +50,14 @@ func (r *audioSourceRepository) GetOrCreate(ctx context.Context, sourceURI, node
 		Where("source_uri = ? AND node_name = ?", sourceURI, nodeName).
 		First(&source).Error
 	if err == nil {
+		// Update display name if it changed (e.g., USB device swap on same ALSA path).
+		if displayName != nil && *displayName != "" &&
+			(source.DisplayName == nil || *source.DisplayName != *displayName) {
+			copied := *displayName
+			if err := r.Update(ctx, source.ID, map[string]any{"display_name": copied}); err == nil {
+				source.DisplayName = &copied
+			}
+		}
 		return &source, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
