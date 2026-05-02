@@ -7,13 +7,13 @@ on:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
-      - '.golangci.yml'
+      - '.golangci.yaml'
   pull_request:
     paths:
       - '**/*.go'
       - 'go.mod'
       - 'go.sum'
-      - '.golangci.yml'
+      - '.golangci.yaml'
 
 permissions:
   contents: read
@@ -49,7 +49,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-gotestfmt-v2
+          key: ${{ runner.os }}-go-tools-gotestfmt-v2-${{ hashFiles('go.mod') }}
 
       - name: Set up gotestfmt
         run: |
@@ -210,8 +210,8 @@ jobs:
           go test -tags=integration -short -race -timeout 180s -v ./internal/datastore/v2/migration/... 2>&1
         timeout-minutes: 5
 
-      - name: Run full integration tests (scheduled only)
-        if: github.event_name == 'schedule' || contains(github.event.pull_request.labels.*.name, 'run-full-integration')
+      - name: Run full integration tests (label-gated)
+        if: contains(github.event.pull_request.labels.*.name, 'run-full-integration')
         run: |
           # Run full integration tests including large dataset
           go test -tags=integration -race -timeout 600s -v ./internal/datastore/v2/migration/... 2>&1

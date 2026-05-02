@@ -82,7 +82,7 @@ jobs:
         run: |
           # GitHub Container Registry
           echo "GHCR_REPO=ghcr.io/${GITHUB_REPOSITORY,,}" >> ${GITHUB_ENV}
-          echo "ghcr-repo=ghcr.io/${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+          echo "ghcr-repo=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
 
           # Docker Hub (extract just the repo name)
           REPO_NAME=$(echo "${GITHUB_REPOSITORY}" | cut -d'/' -f2)
@@ -169,7 +169,6 @@ jobs:
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v7
-        continue-on-error: true
         id: build-push
         with:
           context: .
@@ -440,6 +439,7 @@ jobs:
             fi
           fi
 
+          echo "TEST_IMAGE=$TEST_IMAGE" >> $GITHUB_ENV
           echo "Testing Podman compatibility with image: $TEST_IMAGE"
 
           # Test basic Podman functionality
