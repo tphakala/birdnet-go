@@ -67,16 +67,14 @@ tasks:
     desc: Run golangci-lint with TensorFlow CGO flags
     cmds:
       - |
-        # Determine library path based on OS
-        if [ "{{.UNAME_S}}" = "Darwin" ]; then
-          if [ "{{.UNAME_M}}" = "arm64" ]; then
-            LIB_DIR="/opt/homebrew/lib"
-          else
-            LIB_DIR="/usr/local/lib"
-          fi
-        else
-          LIB_DIR="/usr/lib"
-        fi
+        # Determine library path based on OS and architecture
+        case "{{.UNAME_S}}_{{.UNAME_M}}" in
+          Darwin_arm64) LIB_DIR="/opt/homebrew/lib";;
+          Darwin_*) LIB_DIR="/usr/local/lib";;
+          Linux_aarch64|Linux_arm64) LIB_DIR="{{.SYSTEM_LIB_DIR_ARM64}}";;
+          Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR_AMD64}}";;
+          *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+        esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
         golangci-lint run --build-tags=noembed,skipfrontend {{.CLI_ARGS}}
