@@ -24,7 +24,7 @@ func setupInsightsTestDB(t *testing.T) *gorm.DB {
 	sqlDB, err := db.DB()
 	require.NoError(t, err)
 	sqlDB.SetMaxOpenConns(1)
-	t.Cleanup(func() { _ = sqlDB.Close() })
+	t.Cleanup(func() { require.NoError(t, sqlDB.Close(), "failed to close test database") })
 
 	err = db.AutoMigrate(
 		&entities.LabelType{},
