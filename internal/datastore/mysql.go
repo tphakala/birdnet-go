@@ -132,13 +132,8 @@ func (store *MySQLStore) Open() error {
 
 // Close MySQL database connections
 func (store *MySQLStore) Close() error {
-	// Ensure that the store's DB field is not nil to avoid a panic
 	if store.DB == nil {
-		return errors.Newf("database connection is not initialized").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "close").
-			Build()
+		return nil
 	}
 
 	// Stop monitoring before closing database
