@@ -220,10 +220,10 @@ The frontend can be developed in two modes:
 
 **Option A: Embedded Mode (Recommended for backend changes)**
 
-Use `air` or `task dev_server` - frontend is rebuilt and embedded in Go binary:
+Use `air` or `task dev_server` - Go binary is recompiled with the previously built frontend on each change:
 
 ```bash
-air realtime          # Hot reload for Go + frontend rebuild
+air realtime          # Hot reload for Go changes
 task dev_server       # Full development server
 ```
 

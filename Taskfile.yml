@@ -644,30 +644,30 @@ tasks:
         vars:
           TFLITE_LIB_DIR:
             sh: |
-              if [ "{{.UNAME_S}}" = "Darwin" ]; then
-                if [ "{{.UNAME_M}}" = "arm64" ]; then
-                  echo "/opt/homebrew/lib"
-                else
-                  echo "/usr/local/lib"
-                fi
-              else
-                echo "{{.SYSTEM_LIB_DIR_AMD64}}"
-              fi
+              case "{{.UNAME_S}}_{{.UNAME_M}}" in
+                Darwin_arm64) echo "/opt/homebrew/lib";;
+                Darwin_*) echo "/usr/local/lib";;
+                Linux_aarch64|Linux_arm64) echo "{{.SYSTEM_LIB_DIR_ARM64}}";;
+                Linux_*) echo "{{.SYSTEM_LIB_DIR_AMD64}}";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+              esac
           TFLITE_LIB_ARCH:
             sh: |
               case "{{.UNAME_S}}_{{.UNAME_M}}" in
                 Linux_x86_64) echo "linux_amd64.tar.gz";;
-                Linux_aarch64) echo "linux_arm64.tar.gz";;
+                Linux_aarch64|Linux_arm64) echo "linux_arm64.tar.gz";;
                 Darwin_x86_64) echo "darwin_amd64.tar.gz";;
                 Darwin_arm64) echo "darwin_arm64.tar.gz";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
               esac
           TARGET:
             sh: |
               case "{{.UNAME_S}}_{{.UNAME_M}}" in
                 Linux_x86_64) echo "linux_amd64";;
-                Linux_aarch64) echo "linux_arm64";;
+                Linux_aarch64|Linux_arm64) echo "linux_arm64";;
                 Darwin_x86_64) echo "darwin_amd64";;
                 Darwin_arm64) echo "darwin_arm64";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
               esac
 
   dev_server:
