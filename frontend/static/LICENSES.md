@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.46.0/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.46.1/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -119,7 +119,7 @@ Source: Apache-2.0
 
 ### github.com/go-sql-driver/mysql
 
-License: https://github.com/go-sql-driver/mysql/blob/v1.9.3/LICENSE
+License: https://github.com/go-sql-driver/mysql/blob/v1.10.0/LICENSE
 Source: MPL-2.0
 
 ### github.com/go-viper/mapstructure/v2
@@ -214,7 +214,7 @@ Source: BSD-3-Clause
 
 ### github.com/labstack/echo/v4
 
-License: https://github.com/labstack/echo/blob/v4.15.1/LICENSE
+License: https://github.com/labstack/echo/blob/v4.15.2/LICENSE
 Source: MIT
 
 ### github.com/labstack/gommon
@@ -239,12 +239,12 @@ Source: MIT
 
 ### github.com/mattn/go-isatty
 
-License: https://github.com/mattn/go-isatty/blob/v0.0.21/LICENSE
+License: https://github.com/mattn/go-isatty/blob/v0.0.22/LICENSE
 Source: MIT
 
 ### github.com/mattn/go-sqlite3
 
-License: https://github.com/mattn/go-sqlite3/blob/v1.14.42/LICENSE
+License: https://github.com/mattn/go-sqlite3/blob/v1.14.44/LICENSE
 Source: MIT
 
 ### github.com/munnerz/goautoneg
@@ -309,12 +309,12 @@ Source: Apache-2.0
 
 ### github.com/ringsaturn/tzf
 
-License: https://github.com/ringsaturn/tzf/blob/v1.1.0/LICENSE
+License: https://github.com/ringsaturn/tzf/blob/v1.1.1/LICENSE
 Source: MIT
 
 ### github.com/ringsaturn/tzf-dist
 
-License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-a-alpha5/LICENSE
+License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-b/LICENSE
 Source: MIT
 
 ### github.com/sagikazarmark/locafero
@@ -539,17 +539,17 @@ Source: BSD-3-Clause
 
 ### gonum.org/v1/gonum/dsp/fourier
 
-License: Unknown
+License: https://github.com/gonum/gonum/blob/v0.17.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/api
 
-License: https://github.com/googleapis/google-api-go-client/blob/v0.276.0/LICENSE
+License: https://github.com/googleapis/google-api-go-client/blob/v0.277.0/LICENSE
 Source: BSD-3-Clause
 
 ### google.golang.org/genproto/googleapis/rpc
 
-License: https://github.com/googleapis/go-genproto/blob/e10c466a9529/googleapis/rpc/LICENSE
+License: https://github.com/googleapis/go-genproto/blob/7cedc36a6bc4/googleapis/rpc/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/grpc
