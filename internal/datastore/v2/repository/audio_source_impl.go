@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -50,6 +51,17 @@ func (r *audioSourceRepository) GetOrCreate(ctx context.Context, sourceURI, node
 		Where("source_uri = ? AND node_name = ?", sourceURI, nodeName).
 		First(&source).Error
 	if err == nil {
+		// Update display name if it changed (e.g., USB device swap on same ALSA path).
+		if displayName != nil && *displayName != "" &&
+			(source.DisplayName == nil || *source.DisplayName != *displayName) {
+			copied := *displayName
+			if updateErr := r.Update(ctx, source.ID, map[string]any{"display_name": copied}); updateErr != nil {
+				slog.Warn("audio source display name update failed",
+					"source_id", source.ID, "name", copied, "error", updateErr)
+			} else {
+				source.DisplayName = &copied
+			}
+		}
 		return &source, nil
 	}
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
