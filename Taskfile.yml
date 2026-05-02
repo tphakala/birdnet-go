@@ -202,6 +202,9 @@ tasks:
             unzip \
             ca-certificates
 
+          # Audio tools for full test coverage (spectrogram, audio duration, clip export)
+          $SUDO apt-get install -y ffmpeg sox
+
           # Install Go if not present or version is too old
           # Version comes from go.mod via Taskfile var
           GO_VERSION="{{.GO_VERSION}}"
@@ -322,8 +325,8 @@ tasks:
           # Update homebrew
           brew update
 
-          # Install base tools
-          brew install git wget curl
+          # Install base tools and audio dependencies
+          brew install git wget curl ffmpeg sox
 
           # Install Go with version checking
           # Version comes from go.mod via Taskfile var
@@ -590,6 +593,19 @@ tasks:
           echo "   Install with: cd frontend && npx playwright install --with-deps chromium"
         fi
         cd ..
+
+        # Audio tools (optional but needed for full test coverage)
+        if command -v ffmpeg >/dev/null 2>&1; then
+          echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
+        else
+          echo "⚠️  FFmpeg: not found (audio export and clip tests will be skipped)"
+        fi
+
+        if command -v sox >/dev/null 2>&1; then
+          echo "✅ SoX: $(sox --version 2>&1 | head -n1)"
+        else
+          echo "⚠️  SoX: not found (spectrogram and audio duration tests will be skipped)"
+        fi
 
         echo ""
         echo "✅ All required tools are installed"

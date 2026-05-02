@@ -40,10 +40,11 @@ jobs:
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
 
-      - name: Install FFmpeg and test dependencies
+      - name: Install FFmpeg, SoX, and test dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg procps
+          # sox is required -- without it, audiocore/ffmpeg and spectrogram tests silently skip
+          sudo apt-get install -y ffmpeg sox procps
 
       - name: Cache Go tools
         uses: actions/cache@v5
