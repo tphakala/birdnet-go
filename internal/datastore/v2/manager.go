@@ -541,6 +541,10 @@ func (m *SQLiteManager) Path() string {
 func (m *SQLiteManager) Close() error {
 	m.StopPeriodicCheckpoint()
 
+	if m.db == nil {
+		return nil
+	}
+
 	sqlDB, err := m.db.DB()
 	if err != nil {
 		return fmt.Errorf("failed to get underlying database: %w", err)
