@@ -38,6 +38,9 @@ tasks:
   # Task for running tests
   test:
     desc: Run tests for the application
+    env:
+      CGO_ENABLED: "1"
+      CGO_CFLAGS: "-I{{.HOME}}/src/tensorflow"
     cmds:
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
       - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./... {{.TEST_FLAGS}}'
@@ -54,6 +57,9 @@ tasks:
   # Task for running tests with coverage report
   test-coverage:
     desc: Run tests with coverage report
+    env:
+      CGO_ENABLED: "1"
+      CGO_CFLAGS: "-I{{.HOME}}/src/tensorflow"
     cmds:
       - mkdir -p coverage
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
