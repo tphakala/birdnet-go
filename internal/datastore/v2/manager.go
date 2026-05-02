@@ -545,7 +545,11 @@ func (m *SQLiteManager) Close() error {
 	if err != nil {
 		return fmt.Errorf("failed to get underlying database: %w", err)
 	}
-	return sqlDB.Close()
+	if err := sqlDB.Close(); err != nil {
+		return err
+	}
+	m.db = nil
+	return nil
 }
 
 // CheckpointWAL forces a checkpoint of the Write-Ahead Log to ensure all changes

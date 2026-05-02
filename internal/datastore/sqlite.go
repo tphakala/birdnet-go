@@ -431,9 +431,10 @@ func (s *SQLiteStore) Close() error {
 			return err
 		}
 
-		// Log successful closure
 		GetLogger().Info("SQLite database closed successfully",
 			logger.String("path", s.Settings.Output.SQLite.Path))
+
+		s.DB = nil
 		return nil
 	}
 	return nil

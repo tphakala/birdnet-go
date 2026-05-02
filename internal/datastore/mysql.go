@@ -166,11 +166,11 @@ func (store *MySQLStore) Close() error {
 		return err
 	}
 
-	// Log successful closure
 	GetLogger().Info("MySQL database closed successfully",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("database", store.Settings.Output.MySQL.Database))
 
+	store.DB = nil
 	return nil
 }
 
