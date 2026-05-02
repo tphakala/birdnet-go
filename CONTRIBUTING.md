@@ -107,7 +107,7 @@ Before contributing:
 
 **Requirements:**
 
-- Go 1.25+
+- Go (version specified in `go.mod`)
 - Node.js 22.x+ (LTS)
 - Build tools (gcc, git, wget)
 - TensorFlow Lite C library (auto-downloaded)
@@ -148,7 +148,7 @@ task setup-dev
 
 The `setup-dev` task installs:
 
-- Go 1.25.3, Node.js LTS, build tools
+- Go (version from `go.mod`), Node.js LTS, build tools
 - golangci-lint, air, frontend dependencies
 - Playwright browsers, git hooks (Husky)
 
@@ -157,9 +157,7 @@ The `setup-dev` task installs:
 **Step 3: Start Developing**
 
 ```bash
-task              # Build project
-task dev_server   # Hot reload development
-air realtime      # Realtime mode with hot reload
+air realtime      # Hot reload dev server (or: task dev_server)
 ```
 
 ### Option 2: Dev Container (VS Code)
@@ -210,10 +208,11 @@ task dev_server       # Full development server
 
 **What Air does:**
 
-- Watches Go, Svelte, TypeScript, CSS files
-- Rebuilds frontend (Svelte + Tailwind)
-- Recompiles Go binary with embedded frontend
+- Watches `.go` files for changes
+- Recompiles Go binary with the previously built frontend
 - Restarts server automatically
+
+**Note:** Air does not build the frontend. Run `task frontend-build` first (already done by `task setup-dev`), or use `task frontend-watch` in a separate terminal for ongoing frontend changes.
 
 ### Frontend Development
 
