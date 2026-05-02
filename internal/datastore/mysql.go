@@ -152,8 +152,10 @@ func (store *MySQLStore) Close() error {
 		return err
 	}
 
-	// Close the generic database object, which closes the underlying SQL database connection
-	if err := sqlDB.Close(); err != nil {
+	err = sqlDB.Close()
+	store.DB = nil
+
+	if err != nil {
 		GetLogger().Error("Failed to close MySQL database",
 			logger.String("host", store.Settings.Output.MySQL.Host),
 			logger.String("database", store.Settings.Output.MySQL.Database),
@@ -164,8 +166,6 @@ func (store *MySQLStore) Close() error {
 	GetLogger().Info("MySQL database closed successfully",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("database", store.Settings.Output.MySQL.Database))
-
-	store.DB = nil
 	return nil
 }
 
