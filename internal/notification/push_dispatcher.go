@@ -284,15 +284,6 @@ func (d *pushDispatcher) runDispatchLoop(ctx context.Context, ch <-chan *Notific
 					logger.String("type", string(notif.Type)))
 				continue
 			}
-			// Alert rule test notifications should only appear in the
-			// notification bell, not be forwarded to external push providers.
-			if isAlertRuleTestNotification(notif) {
-				d.log.Debug("skipping alert rule test notification in dispatch loop",
-					logger.String("operation", "dispatch_loop"),
-					logger.String("notification_id", notif.ID),
-					logger.String("type", string(notif.Type)))
-				continue
-			}
 			d.log.Debug("notification received in dispatch loop, dispatching to providers",
 				logger.String("operation", "dispatch_loop"),
 				logger.String("notification_id", notif.ID),
