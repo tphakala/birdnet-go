@@ -22,8 +22,7 @@ import (
 type NotificationCreator interface {
 	CreateAndBroadcast(notifType notification.Type, title, message string, eventProps map[string]any) error
 	CreateAndBroadcastWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
-	// CreateAndBroadcastTest creates a bell notification marked as a test so
-	// that push providers (Telegram, Shoutrrr, etc.) skip it.
+	// CreateAndBroadcastTest creates a notification for a test rule fire.
 	CreateAndBroadcastTest(notifType notification.Type, title, message string, eventProps map[string]any) error
 	// CreateAndBroadcastTestWithKeys is the i18n-aware variant of CreateAndBroadcastTest.
 	CreateAndBroadcastTestWithKeys(notifType notification.Type, title, message, titleKey string, titleParams map[string]any, messageKey string, messageParams map[string]any, eventProps map[string]any) error
@@ -51,14 +50,12 @@ func (d *ActionDispatcher) Dispatch(rule *entities.AlertRule, event *AlertEvent)
 	d.dispatchInternal(rule, event, false)
 }
 
-// DispatchTest is like Dispatch but marks the resulting bell notification as a
-// test so that push providers (Telegram, Shoutrrr, etc.) will not forward it.
+// DispatchTest is like Dispatch but for test rule fires.
 func (d *ActionDispatcher) DispatchTest(rule *entities.AlertRule, event *AlertEvent) {
 	d.dispatchInternal(rule, event, true)
 }
 
-// dispatchInternal contains the shared dispatch logic. When isTest is true,
-// the notification is tagged so push providers skip it.
+// dispatchInternal contains the shared dispatch logic.
 func (d *ActionDispatcher) dispatchInternal(rule *entities.AlertRule, event *AlertEvent, isTest bool) {
 	if event == nil {
 		event = &AlertEvent{}
