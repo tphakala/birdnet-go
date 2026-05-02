@@ -149,6 +149,28 @@ func TestGetOrCreate_SkipsUpdateForNilDisplayName(t *testing.T) {
 	assert.Equal(t, testDisplayNameSnowball, *source.DisplayName, "nil name should not overwrite existing")
 }
 
+func TestGetOrCreate_SetsDisplayNameWhenInitiallyNil(t *testing.T) {
+	t.Parallel()
+	db := setupAudioSourceTestDB(t)
+	repo := NewAudioSourceRepository(db, nil, false, false)
+	ctx := t.Context()
+
+	source, err := repo.GetOrCreate(ctx, "hw:5,0", "node1", nil, entities.SourceTypeALSA)
+	require.NoError(t, err)
+	assert.Nil(t, source.DisplayName)
+
+	name := "New Mic"
+	source, err = repo.GetOrCreate(ctx, "hw:5,0", "node1", &name, entities.SourceTypeALSA)
+	require.NoError(t, err)
+	require.NotNil(t, source.DisplayName)
+	assert.Equal(t, "New Mic", *source.DisplayName)
+
+	fetched, err := repo.GetByID(ctx, source.ID)
+	require.NoError(t, err)
+	require.NotNil(t, fetched.DisplayName)
+	assert.Equal(t, "New Mic", *fetched.DisplayName)
+}
+
 func TestGetOrCreate_AutoDetectsSourceType(t *testing.T) {
 	t.Parallel()
 	db := setupAudioSourceTestDB(t)
