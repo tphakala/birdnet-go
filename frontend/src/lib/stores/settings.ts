@@ -793,6 +793,7 @@ export interface GlobalSettingsState {
   activeSection: string;
   error: string | null;
   restartRequired: boolean;
+  dataLoaded: boolean;
 }
 
 // API response types
@@ -1036,6 +1037,7 @@ const initialState: GlobalSettingsState = {
   activeSection: 'main',
   error: null,
   restartRequired: false,
+  dataLoaded: false,
 };
 
 export const settingsStore = writable<GlobalSettingsState>(initialState);
@@ -1054,6 +1056,8 @@ export const currentSection = derived(settingsStore, $store => $store.activeSect
 export const isLoading = derived(settingsStore, $store => $store.isLoading);
 
 export const isSaving = derived(settingsStore, $store => $store.isSaving);
+
+export const settingsDataLoaded = derived(settingsStore, $store => $store.dataLoaded);
 
 // Section-specific derived stores matching backend structure
 export const mainSettings = derived(settingsStore, $store => $store.formData.main);
@@ -1179,6 +1183,7 @@ export const settingsActions = {
         formData: coercedData,
         originalData: JSON.parse(JSON.stringify(coercedData)),
         isLoading: false,
+        dataLoaded: true,
       }));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');

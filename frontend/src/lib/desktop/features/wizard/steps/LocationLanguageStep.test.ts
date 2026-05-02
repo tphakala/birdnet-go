@@ -68,6 +68,7 @@ vi.mock('$lib/stores/settings', async () => {
     isSaving: false,
     error: null,
     restartRequired: false,
+    dataLoaded: false,
     activeSection: 'main',
     originalData: JSON.parse(JSON.stringify(initialFormData)) as SettingsFormData,
     formData: JSON.parse(JSON.stringify(initialFormData)) as SettingsFormData,
@@ -119,6 +120,7 @@ describe('LocationLanguageStep - UI locale persistence on unmount', () => {
       isSaving: false,
       error: null,
       restartRequired: false,
+      dataLoaded: false,
       activeSection: 'main',
       originalData: {
         birdnet: {
