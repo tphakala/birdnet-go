@@ -706,7 +706,21 @@ func TestValidateV2SchemaIntegrity_PassesCleanSchema(t *testing.T) {
 	err = mgr.Initialize()
 	require.NoError(t, err)
 
-	// Run validation on a clean schema — should pass with no error
+	// Run validation on a clean schema - should pass with no error
 	err = mgr.validateV2SchemaIntegrity()
 	require.NoError(t, err)
+}
+
+func TestSQLiteManager_Close_NilsOutDB(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+
+	require.NotNil(t, mgr.DB(), "DB should be non-nil before Close")
+
+	err = mgr.Close()
+	require.NoError(t, err)
+
+	assert.Nil(t, mgr.DB(), "DB should be nil after Close to prevent stale reference queries")
 }

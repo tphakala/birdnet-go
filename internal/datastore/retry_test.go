@@ -96,6 +96,17 @@ func TestRetryOnLock(t *testing.T) {
 			expectError:   false,
 		},
 		{
+			name: "retries on database is closed",
+			fn: func(calls *int) error {
+				if *calls < 3 {
+					return fmt.Errorf("sql: database is closed")
+				}
+				return nil
+			},
+			expectedCalls: 3,
+			expectError:   false,
+		},
+		{
 			name: "retries on SQLITE_BUSY",
 			fn: func(calls *int) error {
 				if *calls < 2 {
@@ -201,6 +212,8 @@ func TestIsTransientDBError(t *testing.T) {
 		{name: "resource busy", err: fmt.Errorf("resource busy"), expected: true},
 		{name: "deadlock detected", err: fmt.Errorf("deadlock detected"), expected: true},
 		{name: "lock wait timeout", err: fmt.Errorf("lock wait timeout exceeded"), expected: true},
+		{name: "database is closed", err: fmt.Errorf("sql: database is closed"), expected: true},
+		{name: "wrapped database is closed", err: fmt.Errorf("query failed: %w", fmt.Errorf("sql: database is closed")), expected: true},
 		{name: "unrelated error", err: fmt.Errorf("connection refused"), expected: false},
 		{name: "wrapped database locked", err: fmt.Errorf("tx failed: %w", fmt.Errorf("database is locked")), expected: true},
 		{name: "double wrapped SQLITE_BUSY", err: fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", fmt.Errorf("SQLITE_BUSY"))), expected: true},

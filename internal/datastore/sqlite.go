@@ -424,14 +424,16 @@ func (s *SQLiteStore) Close() error {
 				Build()
 		}
 
-		if err := sqlDB.Close(); err != nil {
+		err = sqlDB.Close()
+		s.DB = nil
+
+		if err != nil {
 			GetLogger().Error("Failed to close SQLite database",
 				logger.String("path", s.Settings.Output.SQLite.Path),
 				logger.Error(err))
 			return err
 		}
 
-		// Log successful closure
 		GetLogger().Info("SQLite database closed successfully",
 			logger.String("path", s.Settings.Output.SQLite.Path))
 		return nil

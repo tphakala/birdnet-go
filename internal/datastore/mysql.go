@@ -132,13 +132,8 @@ func (store *MySQLStore) Open() error {
 
 // Close MySQL database connections
 func (store *MySQLStore) Close() error {
-	// Ensure that the store's DB field is not nil to avoid a panic
 	if store.DB == nil {
-		return errors.Newf("database connection is not initialized").
-			Component("datastore").
-			Category(errors.CategoryValidation).
-			Context("operation", "close").
-			Build()
+		return nil
 	}
 
 	// Stop monitoring before closing database
@@ -157,8 +152,10 @@ func (store *MySQLStore) Close() error {
 		return err
 	}
 
-	// Close the generic database object, which closes the underlying SQL database connection
-	if err := sqlDB.Close(); err != nil {
+	err = sqlDB.Close()
+	store.DB = nil
+
+	if err != nil {
 		GetLogger().Error("Failed to close MySQL database",
 			logger.String("host", store.Settings.Output.MySQL.Host),
 			logger.String("database", store.Settings.Output.MySQL.Database),
@@ -166,11 +163,9 @@ func (store *MySQLStore) Close() error {
 		return err
 	}
 
-	// Log successful closure
 	GetLogger().Info("MySQL database closed successfully",
 		logger.String("host", store.Settings.Output.MySQL.Host),
 		logger.String("database", store.Settings.Output.MySQL.Database))
-
 	return nil
 }
 
