@@ -3,10 +3,6 @@ name: BirdNET-Go Nightly Build
 on:
   workflow_dispatch:
 
-env:
-  ACTIONS_RUNNER_DEBUG: true
-  ACTIONS_STEP_DEBUG: true
-
 permissions:
   contents: write
   packages: write
@@ -38,7 +34,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version-file: 'go.mod'
           check-latest: true
 
       - name: Install Linux system dependencies

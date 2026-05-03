@@ -21,6 +21,9 @@ vars:
     sh: uname -s
   UNAME_M:
     sh: uname -m
+  # Go version from go.mod (single source of truth)
+  GO_VERSION:
+    sh: awk '/^go /{print $2; found=1} END{if(!found) exit 1}' go.mod
   # Common build flags
   CGO_FLAGS: CGO_ENABLED=1 CGO_CFLAGS="-I$HOME/src/tensorflow"
   BUILD_FLAGS: -ldflags "-s -w -X 'main.buildDate={{.BUILD_DATE}}' -X 'main.version={{.VERSION}}'"
@@ -70,16 +73,14 @@ tasks:
     desc: Run golangci-lint with TensorFlow CGO flags
     cmds:
       - |
-        # Determine library path based on OS
-        if [ "{{.UNAME_S}}" = "Darwin" ]; then
-          if [ "{{.UNAME_M}}" = "arm64" ]; then
-            LIB_DIR="/opt/homebrew/lib"
-          else
-            LIB_DIR="/usr/local/lib"
-          fi
-        else
-          LIB_DIR="/usr/lib"
-        fi
+        # Determine library path based on OS and architecture
+        case "{{.UNAME_S}}_{{.UNAME_M}}" in
+          Darwin_arm64) LIB_DIR="/opt/homebrew/lib";;
+          Darwin_*) LIB_DIR="/usr/local/lib";;
+          Linux_aarch64|Linux_arm64) LIB_DIR="{{.SYSTEM_LIB_DIR_ARM64}}";;
+          Linux_*) LIB_DIR="{{.SYSTEM_LIB_DIR_AMD64}}";;
+          *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+        esac
         # Use noembed,skipfrontend tags to skip model and frontend embedding for faster linting
         {{.CGO_FLAGS}} CGO_LDFLAGS="-L${LIB_DIR} -ltensorflowlite_c" \
         golangci-lint run --build-tags=noembed,skipfrontend {{.CLI_ARGS}}
@@ -144,7 +145,7 @@ tasks:
         echo "    - macOS: Homebrew must be installed first"
         echo ""
         echo "This will install:"
-        echo "  • Go 1.25.3"
+        echo "  • Go {{.GO_VERSION}}"
         echo "  • Node.js LTS"
         echo "  • Build tools (gcc, git, wget, etc.)"
         echo "  • Go dev tools (golangci-lint, air)"
@@ -159,7 +160,9 @@ tasks:
       - task: detect-and-install-deps
       - task: install-go-tools
       - task: setup-frontend-dev
+      - task: frontend-build
       - task: check-tensorflow
+      - task: check-tflite-lib
       - task: verify-dev-setup
       - |
         echo ""
@@ -167,10 +170,8 @@ tasks:
         echo ""
         echo "⚠️  If Go was just installed, run: source ~/.profile"
         echo ""
-        echo "Next steps:"
-        echo "  1. Run 'task' to build the project"
-        echo "  2. Run 'task dev_server' for development with hot reload"
-        echo "  3. Run 'air realtime' for hot reload with realtime analysis"
+        echo "Start developing:"
+        echo "  air realtime       # Hot reload dev server (or: task dev_server)"
         echo ""
 
   detect-and-install-deps:
@@ -205,9 +206,13 @@ tasks:
             unzip \
             ca-certificates
 
+          # Audio tools for full test coverage (spectrogram, audio duration, clip export)
+          $SUDO apt-get install -y ffmpeg sox
+
           # Install Go if not present or version is too old
-          REQUIRED_GO_VERSION="1.25"
-          GO_VERSION="1.25.3"
+          # Version comes from go.mod via Taskfile var
+          GO_VERSION="{{.GO_VERSION}}"
+          REQUIRED_GO_MINOR=$(echo "$GO_VERSION" | cut -d. -f1,2)
           INSTALL_GO=false
 
           if ! command -v go >/dev/null 2>&1; then
@@ -218,13 +223,13 @@ tasks:
             CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
 
             case "$CURRENT_GO_MINOR" in
-              ${REQUIRED_GO_VERSION}*)
+              ${REQUIRED_GO_MINOR}*)
                 echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
                 ;;
               *)
-                echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+                echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_MINOR}.x required"
                 echo "   Current: ${CURRENT_GO_VERSION}"
-                echo "   Required: ${REQUIRED_GO_VERSION}.x"
+                echo "   Required: ${REQUIRED_GO_MINOR}.x"
                 echo ""
                 printf "   Upgrade to Go ${GO_VERSION}? (y/N) "
                 read REPLY
@@ -324,11 +329,13 @@ tasks:
           # Update homebrew
           brew update
 
-          # Install base tools
-          brew install git wget curl
+          # Install base tools and audio dependencies
+          brew install git wget curl ffmpeg sox
 
           # Install Go with version checking
-          REQUIRED_GO_VERSION="1.25"
+          # Version comes from go.mod via Taskfile var
+          GO_VERSION="{{.GO_VERSION}}"
+          REQUIRED_GO_MINOR=$(echo "$GO_VERSION" | cut -d. -f1,2)
           INSTALL_GO=false
 
           if ! command -v go >/dev/null 2>&1; then
@@ -339,15 +346,15 @@ tasks:
             CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
 
             case "$CURRENT_GO_MINOR" in
-              ${REQUIRED_GO_VERSION}*)
+              ${REQUIRED_GO_MINOR}*)
                 echo "✅ Go ${CURRENT_GO_VERSION} is already installed (meets requirement)"
                 ;;
               *)
-                echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_VERSION}.x required"
+                echo "⚠️  Go ${CURRENT_GO_VERSION} found, but Go ${REQUIRED_GO_MINOR}.x required"
                 echo "   Current: ${CURRENT_GO_VERSION}"
-                echo "   Required: ${REQUIRED_GO_VERSION}.x"
+                echo "   Required: ${REQUIRED_GO_MINOR}.x"
                 echo ""
-                printf "   Upgrade to Go ${REQUIRED_GO_VERSION}? (y/N) "
+                printf "   Upgrade to Go ${REQUIRED_GO_MINOR}? (y/N) "
                 read REPLY
                 case "$REPLY" in
                   [Yy]|[Yy][Ee][Ss]) INSTALL_GO=true ;;
@@ -358,19 +365,18 @@ tasks:
           fi
 
           if [ "$INSTALL_GO" = true ]; then
-            echo "📥 Installing Go ${REQUIRED_GO_VERSION}..."
+            echo "📥 Installing Go ${REQUIRED_GO_MINOR}..."
             # Try versioned formula first, fallback to latest
-            if brew install go@1.25 2>/dev/null; then
-              echo "✅ Go 1.25.x installed via go@1.25"
-              # Link the versioned formula
-              brew link go@1.25 || true
+            if brew install "go@${REQUIRED_GO_MINOR}" 2>/dev/null; then
+              echo "✅ Go ${REQUIRED_GO_MINOR}.x installed via go@${REQUIRED_GO_MINOR}"
+              brew link "go@${REQUIRED_GO_MINOR}" || true
             else
-              echo "⚠️  go@1.25 formula not available, installing latest Go"
+              echo "⚠️  go@${REQUIRED_GO_MINOR} formula not available, installing latest Go"
               brew install go
               INSTALLED_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
               echo "✅ Go ${INSTALLED_VERSION} installed"
               case "$INSTALLED_VERSION" in
-                ${REQUIRED_GO_VERSION}*) ;;
+                ${REQUIRED_GO_MINOR}*) ;;
                 *) echo "⚠️  Installed version may not match project requirements" ;;
               esac
             fi
@@ -494,18 +500,18 @@ tasks:
         echo "🔍 Verifying development environment..."
         echo ""
 
-        # Check Go with version validation
-        REQUIRED_GO_VERSION="1.25"
+        # Check Go with version validation (from go.mod)
+        REQUIRED_GO_MINOR=$(echo "{{.GO_VERSION}}" | cut -d. -f1,2)
         if command -v go >/dev/null 2>&1; then
           CURRENT_GO_VERSION=$(go version | awk '{print $3}' | sed 's/go//')
           CURRENT_GO_MINOR=$(echo "$CURRENT_GO_VERSION" | cut -d. -f1,2)
 
           case "$CURRENT_GO_MINOR" in
-            ${REQUIRED_GO_VERSION}*)
-              echo "✅ Go: ${CURRENT_GO_VERSION} (meets ${REQUIRED_GO_VERSION}.x requirement)"
+            ${REQUIRED_GO_MINOR}*)
+              echo "✅ Go: ${CURRENT_GO_VERSION} (meets ${REQUIRED_GO_MINOR}.x requirement)"
               ;;
             *)
-              echo "❌ Go: ${CURRENT_GO_VERSION} found, but ${REQUIRED_GO_VERSION}.x required"
+              echo "❌ Go: ${CURRENT_GO_VERSION} found, but ${REQUIRED_GO_MINOR}.x required"
               echo "   Current version does not match project requirements"
               echo "   Run 'task setup-dev' to install the correct version"
               exit 1
@@ -592,6 +598,19 @@ tasks:
         fi
         cd ..
 
+        # Audio tools (optional but needed for full test coverage)
+        if command -v ffmpeg >/dev/null 2>&1; then
+          echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
+        else
+          echo "⚠️  FFmpeg: not found (audio export and clip tests will be skipped)"
+        fi
+
+        if command -v sox >/dev/null 2>&1; then
+          echo "✅ SoX: $(sox --version 2>&1 | head -n1)"
+        else
+          echo "⚠️  SoX: not found (spectrogram and audio duration tests will be skipped)"
+        fi
+
         echo ""
         echo "✅ All required tools are installed"
 
@@ -612,15 +631,48 @@ tasks:
           echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."
           mkdir -vp $HOME/src
           echo "Cloning TensorFlow source..."
-          git clone --branch {{.TFLITE_VERSION}} --filter=blob:none --depth 1 https://github.com/tensorflow/tensorflow.git $HOME/src/tensorflow
+          git clone --branch {{.TFLITE_VERSION}} --filter=blob:none --no-checkout --depth 1 https://github.com/tensorflow/tensorflow.git $HOME/src/tensorflow
           echo "Setting up sparse checkout..."
-          git -C $HOME/src/tensorflow config core.sparseCheckout true
-          echo "**/*.h" >> $HOME/src/tensorflow/.git/info/sparse-checkout
+          git -C $HOME/src/tensorflow sparse-checkout set --no-cone '**/*.h'
           echo "Checking out TensorFlow source..."
           git -C $HOME/src/tensorflow checkout
         else
           echo "TensorFlow headers already exist at version {{.TFLITE_VERSION}}"
         fi
+
+  check-tflite-lib:
+    desc: Download TensorFlow Lite C library for the current platform
+    internal: true
+    cmds:
+      - task: download-tflite
+        vars:
+          TFLITE_LIB_DIR:
+            sh: |
+              case "{{.UNAME_S}}_{{.UNAME_M}}" in
+                Darwin_arm64) echo "/opt/homebrew/lib";;
+                Darwin_*) echo "/usr/local/lib";;
+                Linux_aarch64|Linux_arm64) echo "{{.SYSTEM_LIB_DIR_ARM64}}";;
+                Linux_*) echo "{{.SYSTEM_LIB_DIR_AMD64}}";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+              esac
+          TFLITE_LIB_ARCH:
+            sh: |
+              case "{{.UNAME_S}}_{{.UNAME_M}}" in
+                Linux_x86_64) echo "linux_amd64.tar.gz";;
+                Linux_aarch64|Linux_arm64) echo "linux_arm64.tar.gz";;
+                Darwin_x86_64) echo "darwin_amd64.tar.gz";;
+                Darwin_arm64) echo "darwin_arm64.tar.gz";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+              esac
+          TARGET:
+            sh: |
+              case "{{.UNAME_S}}_{{.UNAME_M}}" in
+                Linux_x86_64) echo "linux_amd64";;
+                Linux_aarch64|Linux_arm64) echo "linux_arm64";;
+                Darwin_x86_64) echo "darwin_amd64";;
+                Darwin_arm64) echo "darwin_arm64";;
+                *) echo "unsupported platform: {{.UNAME_S}}_{{.UNAME_M}}" >&2; exit 1;;
+              esac
 
   dev_server:
     cmds:

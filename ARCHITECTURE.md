@@ -115,7 +115,7 @@ BirdNET-Go is a self-contained application for real-time bird sound identificati
 
 ### Core Technologies
 
-**Go 1.25+**
+**Go (version specified in `go.mod`)**
 
 - Modern, statically-typed compiled language
 - Excellent concurrency primitives (goroutines, channels)

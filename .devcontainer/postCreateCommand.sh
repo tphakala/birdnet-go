@@ -22,11 +22,10 @@ if [ ! -f "$TENSORFLOW_DIR/tensorflow/lite/c/c_api.h" ]; then
     mkdir -p /home/dev-user/src
     
     # Clone with filter to minimize download size
-    git clone --branch $TFLITE_VERSION --filter=blob:none --depth 1 https://github.com/tensorflow/tensorflow.git $TENSORFLOW_DIR
+    git clone --branch $TFLITE_VERSION --filter=blob:none --no-checkout --depth 1 https://github.com/tensorflow/tensorflow.git $TENSORFLOW_DIR
     
     # Setup sparse checkout to only get header files
-    git -C $TENSORFLOW_DIR config core.sparseCheckout true
-    echo "**/*.h" >> $TENSORFLOW_DIR/.git/info/sparse-checkout
+    git -C $TENSORFLOW_DIR sparse-checkout set --no-cone '**/*.h'
     
     # Apply sparse checkout
     git -C $TENSORFLOW_DIR checkout

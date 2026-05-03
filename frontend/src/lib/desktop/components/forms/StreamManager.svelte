@@ -600,6 +600,7 @@
                 label={t('settings.audio.streams.nameLabel')}
                 placeholder={t('settings.audio.streams.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.streams.nameHelp')}
+                required
                 {disabled}
               />
               {#if nameError}
@@ -621,6 +622,7 @@
                 label={t('settings.audio.streams.urlLabel')}
                 placeholder="rtsp://user:password@192.168.1.100:554/stream"
                 helpText={urlError ? undefined : t('settings.audio.streams.urlHelp')}
+                required
                 oninput={handleUrlInput}
                 {disabled}
               />

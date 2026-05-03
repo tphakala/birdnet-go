@@ -258,6 +258,7 @@
           <label class="block py-1" for="soundcard-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.soundCards.nameLabel')}
+              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -265,6 +266,7 @@
             type="text"
             bind:value={editName}
             onkeydown={handleKeydown}
+            required
             class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             placeholder={t('settings.audio.soundCards.namePlaceholder')}
           />
@@ -275,6 +277,7 @@
           value={editDevice}
           label={t('settings.audio.soundCards.deviceLabel')}
           options={deviceOptions}
+          required
           onChange={value => (editDevice = value as string)}
           groupBy={false}
           menuSize="sm"
