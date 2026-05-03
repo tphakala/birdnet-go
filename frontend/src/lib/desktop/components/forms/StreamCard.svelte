@@ -415,7 +415,7 @@
           <label class="block py-1" for="stream-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.nameLabel')}
-              <span class="text-[var(--color-error)] ml-1">*</span>
+              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -423,6 +423,7 @@
             type="text"
             bind:value={editName}
             onkeydown={handleKeydown}
+            required
             class="w-full h-9 px-3 text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             placeholder={t('settings.audio.streams.namePlaceholder')}
           />
@@ -433,7 +434,7 @@
           <label class="block py-1" for="stream-url-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.urlLabel')}
-              <span class="text-[var(--color-error)] ml-1">*</span>
+              <span class="text-[var(--color-error)] ml-1" aria-hidden="true">*</span>
             </span>
           </label>
           <input
@@ -441,6 +442,7 @@
             type="text"
             bind:value={editUrl}
             onkeydown={handleKeydown}
+            required
             class="w-full h-9 px-3 font-mono text-sm rounded-lg border border-[var(--border-200)] bg-[var(--color-base-200)] text-[var(--color-base-content)] placeholder:text-[var(--color-base-content)]/40 focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-colors"
             placeholder="rtsp://user:password@host:port/path"
           />
