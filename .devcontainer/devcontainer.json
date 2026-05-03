@@ -170,8 +170,9 @@
 		}
 	},
 	"features": {
+		// Keep in sync with the go directive in go.mod
 		"ghcr.io/devcontainers/features/go:1": {
-			"version": "1.25.3"
+			"version": "1.26"
 		},
 		"ghcr.io/devcontainers/features/node:1": {
 			"version": "24",
