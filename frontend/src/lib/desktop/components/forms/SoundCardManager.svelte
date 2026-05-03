@@ -349,6 +349,7 @@
                 label={t('settings.audio.soundCards.nameLabel')}
                 placeholder={t('settings.audio.soundCards.namePlaceholder')}
                 helpText={nameError ? undefined : t('settings.audio.soundCards.nameHelp')}
+                required
                 {disabled}
               />
               {#if nameError}
@@ -369,6 +370,7 @@
                 label={t('settings.audio.soundCards.deviceLabel')}
                 placeholder={t('settings.audio.soundCards.devicePlaceholder')}
                 options={deviceOptions}
+                required
                 {disabled}
                 onChange={value => (newDevice = value as string)}
                 groupBy={false}

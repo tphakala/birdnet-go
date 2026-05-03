@@ -415,6 +415,7 @@
           <label class="block py-1" for="stream-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.nameLabel')}
+              <span class="text-[var(--color-error)] ml-1">*</span>
             </span>
           </label>
           <input
@@ -432,6 +433,7 @@
           <label class="block py-1" for="stream-url-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.streams.urlLabel')}
+              <span class="text-[var(--color-error)] ml-1">*</span>
             </span>
           </label>
           <input

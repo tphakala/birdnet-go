@@ -258,6 +258,7 @@
           <label class="block py-1" for="soundcard-name-{index}">
             <span class="text-xs font-medium text-[var(--color-base-content)]">
               {t('settings.audio.soundCards.nameLabel')}
+              <span class="text-[var(--color-error)] ml-1">*</span>
             </span>
           </label>
           <input
@@ -275,6 +276,7 @@
           value={editDevice}
           label={t('settings.audio.soundCards.deviceLabel')}
           options={deviceOptions}
+          required
           onChange={value => (editDevice = value as string)}
           groupBy={false}
           menuSize="sm"
