@@ -677,7 +677,20 @@ tasks:
     desc: Install frontend dependencies
     dir: frontend
     cmds:
-      - npm install
+      - |
+        max_retries=3
+        for attempt in $(seq 1 $max_retries); do
+          if npm install; then
+            exit 0
+          fi
+          echo "npm install failed (attempt $attempt/$max_retries)"
+          if [ "$attempt" -lt "$max_retries" ]; then
+            echo "Cleaning node_modules and retrying in 5s..."
+            rm -rf node_modules
+            sleep 5
+          fi
+        done
+        exit 1
     sources:
       - package.json
       - package-lock.json
