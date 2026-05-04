@@ -74,7 +74,7 @@ Source: MIT
 
 ### github.com/fsnotify/fsnotify
 
-License: https://github.com/fsnotify/fsnotify/blob/v1.9.0/LICENSE
+License: https://github.com/fsnotify/fsnotify/blob/v1.10.1/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/gen2brain/malgo
@@ -84,7 +84,7 @@ Source: Unlicense
 
 ### github.com/getsentry/sentry-go
 
-License: https://github.com/getsentry/sentry-go/blob/v0.46.1/LICENSE
+License: https://github.com/getsentry/sentry-go/blob/v0.46.2/LICENSE
 Source: MIT
 
 ### github.com/go-audio/audio
@@ -274,7 +274,7 @@ Source: MIT
 
 ### github.com/pelletier/go-toml/v2
 
-License: https://github.com/pelletier/go-toml/blob/v2.3.0/LICENSE
+License: https://github.com/pelletier/go-toml/blob/v2.3.1/LICENSE
 Source: MIT
 
 ### github.com/pkg/sftp
@@ -309,12 +309,12 @@ Source: Apache-2.0
 
 ### github.com/ringsaturn/tzf
 
-License: https://github.com/ringsaturn/tzf/blob/v1.1.1/LICENSE
+License: https://github.com/ringsaturn/tzf/blob/v1.2.0/LICENSE
 Source: MIT
 
 ### github.com/ringsaturn/tzf-dist
 
-License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-b/LICENSE
+License: https://github.com/ringsaturn/tzf-dist/blob/v0.0.2026-b-fix1/LICENSE
 Source: MIT
 
 ### github.com/sagikazarmark/locafero
@@ -429,7 +429,7 @@ Source: MIT
 
 ### github.com/tphakala/go-audio-resampler
 
-License: https://github.com/tphakala/go-audio-resampler/blob/v1.2.0/LICENSE
+License: https://github.com/tphakala/go-audio-resampler/blob/v1.3.0/LICENSE
 Source: LGPL-3.0
 
 ### github.com/tphakala/go-tflite
@@ -451,11 +451,6 @@ Source: MIT
 
 License: https://github.com/valyala/fasttemplate/blob/v1.2.2/LICENSE
 Source: MIT
-
-### go.mongodb.org/mongo-driver/v2
-
-License: https://github.com/mongodb/mongo-go-driver/blob/v2.5.1/LICENSE
-Source: Apache-2.0
 
 ### go.opentelemetry.io/auto/sdk
 
@@ -554,7 +549,7 @@ Source: Apache-2.0
 
 ### google.golang.org/grpc
 
-License: https://github.com/grpc/grpc-go/blob/v1.80.0/LICENSE
+License: https://github.com/grpc/grpc-go/blob/v1.81.0/LICENSE
 Source: Apache-2.0
 
 ### google.golang.org/protobuf
