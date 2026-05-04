@@ -40,7 +40,7 @@ tasks:
     desc: Run tests for the application
     cmds:
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
-      - go test -tags noembed,skipfrontend ./... {{.TEST_FLAGS}}
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./... {{.TEST_FLAGS}}'
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
 
@@ -57,7 +57,7 @@ tasks:
     cmds:
       - mkdir -p coverage
       # Use noembed,skipfrontend tags to skip model and frontend embedding for faster tests
-      - go test -tags noembed,skipfrontend ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}
+      - '{{.CGO_FLAGS}} go test -tags noembed,skipfrontend ./... -coverprofile=coverage/coverage.out {{.TEST_FLAGS}}'
       - go tool cover -html=coverage/coverage.out -o coverage/coverage.html
     vars:
       TEST_FLAGS: '{{default "" .CLI_ARGS}}'
