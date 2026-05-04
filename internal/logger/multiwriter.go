@@ -30,7 +30,10 @@ func (h *multiWriterHandler) Enabled(ctx context.Context, level slog.Level) bool
 	return false
 }
 
-// Handle sends the record to all handlers
+// Handle sends the record to all handlers whose level accepts it.
+// Each sub-handler's Enabled() is checked individually so that, for example,
+// a debug-level file handler does not cause debug messages to leak into an
+// info-level console handler.
 //
 //nolint:gocritic // slog.Handler interface requires record by value, not pointer
 func (h *multiWriterHandler) Handle(ctx context.Context, record slog.Record) error {
@@ -40,6 +43,9 @@ func (h *multiWriterHandler) Handle(ctx context.Context, record slog.Record) err
 	var errs []error
 	for _, handler := range h.handlers {
 		if handler == nil {
+			continue
+		}
+		if !handler.Enabled(ctx, record.Level) {
 			continue
 		}
 		if err := handler.Handle(ctx, record); err != nil {
