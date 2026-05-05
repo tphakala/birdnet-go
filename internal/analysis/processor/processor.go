@@ -112,6 +112,11 @@ type Processor struct {
 	registry   *audiocore.SourceRegistry
 	registryMu sync.RWMutex
 
+	// discoveryDebounce coalesces rapid SourceAdded events into a single
+	// HA discovery publish. Reset on each event, fires after discoveryDebounceDuration.
+	discoveryDebounce   *time.Timer
+	discoveryDebounceMu sync.Mutex
+
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
 	// no synchronization needed for concurrent reads.
@@ -2206,6 +2211,13 @@ func (p *Processor) Shutdown() error {
 // ShutdownWithContext gracefully stops all processor components, respecting
 // the provided context deadline for all internal waits.
 func (p *Processor) ShutdownWithContext(ctx context.Context) error {
+	// Stop discovery debounce timer to prevent late publishes during shutdown
+	p.discoveryDebounceMu.Lock()
+	if p.discoveryDebounce != nil {
+		p.discoveryDebounce.Stop()
+	}
+	p.discoveryDebounceMu.Unlock()
+
 	// Stop threshold persistence and cleanup goroutines first
 	if p.thresholdsCancel != nil {
 		p.thresholdsCancel()
