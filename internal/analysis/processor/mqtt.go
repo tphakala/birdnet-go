@@ -210,7 +210,9 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 		return nil
 	}
 
-	cleanupDefaultDiscovery(ctx, publisher)
+	p.defaultDiscoveryCleanup.Do(func() {
+		cleanupDefaultDiscovery(ctx, publisher)
+	})
 
 	return publisher.PublishDiscovery(ctx, sources, settings)
 }
@@ -328,11 +330,17 @@ func (p *Processor) SetRegistry(r *audiocore.SourceRegistry) {
 		return
 	}
 
+	// Attach the discovery listener at most once to prevent duplicate
+	// listeners accumulating across pipeline restarts or hot-reloads.
+	if !p.registryListenerAttached.CompareAndSwap(false, true) {
+		return
+	}
+
 	r.AddListener(func(event audiocore.SourceEvent) {
 		switch event.Type {
 		case audiocore.SourceAdded, audiocore.SourceReconfigured:
 			p.scheduleDiscoveryPublish()
-		default:
+		default: // SourceRemoved and SourceStateChanged don't affect discovery
 		}
 	})
 }

@@ -114,8 +114,10 @@ type Processor struct {
 
 	// discoveryDebounce coalesces rapid SourceAdded events into a single
 	// HA discovery publish. Reset on each event, fires after discoveryDebounceDuration.
-	discoveryDebounce   *time.Timer
-	discoveryDebounceMu sync.Mutex
+	discoveryDebounce        *time.Timer
+	discoveryDebounceMu      sync.Mutex
+	defaultDiscoveryCleanup  sync.Once // ensures stale "default" discovery cleanup runs at most once
+	registryListenerAttached atomic.Bool
 
 	// BufferMgr provides access to capture buffers for audio clip extraction.
 	// Set once during pipeline initialization (audio_pipeline_service.go) and never replaced;
