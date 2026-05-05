@@ -324,15 +324,13 @@ func (p *Processor) getAudioSourcesForDiscovery() []datastore.AudioSource {
 func (p *Processor) SetRegistry(r *audiocore.SourceRegistry) {
 	p.registryMu.Lock()
 	defer p.registryMu.Unlock()
+
+	if p.registry == r {
+		return
+	}
 	p.registry = r
 
 	if r == nil {
-		return
-	}
-
-	// Attach the discovery listener at most once to prevent duplicate
-	// listeners accumulating across pipeline restarts or hot-reloads.
-	if !p.registryListenerAttached.CompareAndSwap(false, true) {
 		return
 	}
 
