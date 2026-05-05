@@ -19,6 +19,9 @@ const (
 	mqttConnectionTimeout = 30 * time.Second
 	// discoveryPublishTimeout is the timeout for publishing discovery messages
 	discoveryPublishTimeout = 30 * time.Second
+	// discoveryDebounceDuration is the delay after the last source registration
+	// before HA discovery is republished. Coalesces rapid startup registrations.
+	discoveryDebounceDuration = 3 * time.Second
 )
 
 // ErrMQTTClientNotReady is returned by PublishMQTT whenever the MQTT client
@@ -187,6 +190,7 @@ func (p *Processor) registerHomeAssistantDiscovery(client mqtt.Client, settings 
 
 // publishHomeAssistantDiscovery publishes Home Assistant discovery messages.
 // This is the shared implementation used by both the OnConnect handler and manual trigger.
+// Skips publishing when no audio sources are registered yet (startup race).
 func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mqtt.Client, settings *conf.Settings) error {
 	haSettings := settings.Realtime.MQTT.HomeAssistant
 	discoveryConfig := mqtt.DiscoveryConfig{
@@ -200,7 +204,32 @@ func (p *Processor) publishHomeAssistantDiscovery(ctx context.Context, client mq
 	publisher := mqtt.NewDiscoveryPublisher(client, &discoveryConfig)
 	sources := p.getAudioSourcesForDiscovery()
 
+	if len(sources) == 0 {
+		GetLogger().Debug("skipping HA discovery publish, no audio sources registered yet",
+			logger.String("operation", "ha_discovery_skip"))
+		return nil
+	}
+
+	p.defaultDiscoveryCleanup.Do(func() {
+		cleanupDefaultDiscovery(ctx, publisher)
+	})
+
 	return publisher.PublishDiscovery(ctx, sources, settings)
+}
+
+// cleanupDefaultDiscovery removes stale HA discovery entries for the
+// hardcoded "default" source that older versions published before the
+// source registry was populated. These entries never matched real
+// detection payloads and left HA sensors stuck at "Unknown".
+func cleanupDefaultDiscovery(ctx context.Context, publisher *mqtt.Publisher) {
+	defaultSources := []datastore.AudioSource{
+		{ID: "default", DisplayName: "Default"},
+	}
+	if err := publisher.RemoveDiscovery(ctx, defaultSources); err != nil {
+		GetLogger().Debug("failed to clean up stale default discovery entries",
+			logger.Error(err),
+			logger.String("operation", "ha_discovery_cleanup_default"))
+	}
 }
 
 // TriggerHomeAssistantDiscovery manually triggers Home Assistant discovery messages.
@@ -263,22 +292,19 @@ func (p *Processor) TriggerHomeAssistantDiscovery(ctx context.Context) error {
 }
 
 // getAudioSourcesForDiscovery retrieves audio sources from the registry for HA discovery.
+// Returns nil when the registry is not yet injected or has no sources registered,
+// signaling that discovery should be deferred until sources are available.
 func (p *Processor) getAudioSourcesForDiscovery() []datastore.AudioSource {
 	p.registryMu.RLock()
 	registry := p.registry
 	p.registryMu.RUnlock()
 
 	if registry == nil {
-		// Fallback when registry is not yet injected
-		return []datastore.AudioSource{{
-			ID:          "default",
-			DisplayName: "Default",
-		}}
+		return nil
 	}
 
 	registrySources := registry.List()
 
-	// Convert audiocore.AudioSource to datastore.AudioSource
 	sources := make([]datastore.AudioSource, 0, len(registrySources))
 	for _, src := range registrySources {
 		sources = append(sources, datastore.AudioSource{
@@ -288,22 +314,79 @@ func (p *Processor) getAudioSourcesForDiscovery() []datastore.AudioSource {
 		})
 	}
 
-	// If no sources registered yet, create a default source
-	if len(sources) == 0 {
-		sources = append(sources, datastore.AudioSource{
-			ID:          "default",
-			DisplayName: "Default",
-		})
-	}
-
 	return sources
 }
 
-// SetRegistry sets the source registry for audio source lookups.
+// SetRegistry sets the source registry for audio source lookups and registers
+// a listener that triggers debounced HA discovery re-publish when sources are
+// added or reconfigured. This ensures discovery is published with correct source
+// IDs even when MQTT connects before sources are registered at startup.
 func (p *Processor) SetRegistry(r *audiocore.SourceRegistry) {
 	p.registryMu.Lock()
 	defer p.registryMu.Unlock()
+
+	if p.registry == r {
+		return
+	}
 	p.registry = r
+
+	if r == nil {
+		return
+	}
+
+	r.AddListener(func(event audiocore.SourceEvent) {
+		switch event.Type {
+		case audiocore.SourceAdded, audiocore.SourceReconfigured:
+			p.scheduleDiscoveryPublish()
+		default: // SourceRemoved and SourceStateChanged don't affect discovery
+		}
+	})
+}
+
+// scheduleDiscoveryPublish starts or resets a debounce timer that publishes
+// HA discovery after discoveryDebounceDuration of inactivity. Called by the
+// source registry listener when sources are added or reconfigured.
+func (p *Processor) scheduleDiscoveryPublish() {
+	p.discoveryDebounceMu.Lock()
+	defer p.discoveryDebounceMu.Unlock()
+
+	if p.discoveryDebounce != nil {
+		p.discoveryDebounce.Stop()
+	}
+	p.discoveryDebounce = time.AfterFunc(discoveryDebounceDuration, func() {
+		p.publishDiscoveryIfReady()
+	})
+}
+
+// publishDiscoveryIfReady publishes HA discovery if MQTT is enabled, connected,
+// and HA discovery is configured. Safe to call at any time; silently returns
+// when preconditions are not met.
+func (p *Processor) publishDiscoveryIfReady() {
+	settings := p.currentSettings()
+	if settings == nil {
+		return
+	}
+	if !settings.Realtime.MQTT.Enabled || !settings.Realtime.MQTT.HomeAssistant.Enabled {
+		return
+	}
+
+	client := p.GetMQTTClient()
+	if client == nil || !client.IsConnected() {
+		return
+	}
+
+	log := GetLogger()
+	log.Info("publishing HA discovery after source registration",
+		logger.String("operation", "ha_discovery_source_event"))
+
+	ctx, cancel := context.WithTimeout(context.Background(), discoveryPublishTimeout)
+	defer cancel()
+
+	if err := p.publishHomeAssistantDiscovery(ctx, client, settings); err != nil {
+		log.Error("failed to publish HA discovery after source registration",
+			logger.Error(err),
+			logger.String("operation", "ha_discovery_source_event"))
+	}
 }
 
 // Registry returns the source registry, or nil if not set.

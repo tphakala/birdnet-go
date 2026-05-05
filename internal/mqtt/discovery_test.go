@@ -764,3 +764,32 @@ func TestShortenDisplayName(t *testing.T) {
 		})
 	}
 }
+
+// TestRemoveDiscovery_CleansUpDefaultSource verifies that RemoveDiscovery publishes
+// empty retained payloads for all sensor types of the "default" source, cleaning up
+// stale discovery entries from before the source registry fix (GitHub #2948).
+func TestRemoveDiscovery_CleansUpDefaultSource(t *testing.T) {
+	t.Parallel()
+
+	mock := newMockPublisher()
+	config := &DiscoveryConfig{
+		DiscoveryPrefix: "homeassistant",
+		BaseTopic:       "birdnet",
+		DeviceName:      "BirdNET-Go",
+		NodeID:          "test",
+		Version:         "1.0.0",
+	}
+	publisher := NewDiscoveryPublisher(mock, config)
+
+	// Pre-populate a message to verify it gets removed
+	mock.publishedMessages["homeassistant/sensor/test/test_Default_species/config"] = `{"name":"test"}`
+
+	defaultSource := []datastore.AudioSource{{ID: "default", DisplayName: "Default"}}
+	require.NoError(t, publisher.RemoveDiscovery(t.Context(), defaultSource))
+
+	// Verify empty payloads were published to all sensor topics for "Default" sourceID
+	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_species/config"])
+	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_confidence/config"])
+	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_scientific_name/config"])
+	assert.Empty(t, mock.publishedMessages["homeassistant/sensor/test/test_Default_sound_level/config"])
+}
