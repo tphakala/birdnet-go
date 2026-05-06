@@ -26,7 +26,8 @@ BINARY_NAME := birdnet-go
 TFLITE_VERSION := v2.17.1
 
 # Common flags
-CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(HOME)/src/tensorflow"
+TENSORFLOW_HEADERS_DIR := $(CURDIR)/.cache/tensorflow
+CGO_FLAGS := CGO_ENABLED=1 CGO_CFLAGS="-I$(TENSORFLOW_HEADERS_DIR)"
 LDFLAGS = -ldflags "-s -w \
     -X 'main.buildDate=$(shell date -u +%Y-%m-%dT%H:%M:%SZ)' \
     -X 'main.version=$(shell git describe --tags --always)' \
@@ -85,7 +86,7 @@ endef
 define get_cgo_flags
 $(strip \
     CGO_ENABLED=1 \
-    CGO_CFLAGS="-I$(HOME)/src/tensorflow" \
+    CGO_CFLAGS="-I$(TENSORFLOW_HEADERS_DIR)" \
     $(if $(filter linux_arm64,$1), \
         $(if $(filter x86_64,$(UNAME_M)), \
             CC=aarch64-linux-gnu-gcc \
@@ -123,20 +124,20 @@ check-tools:
 
 # Check and clone TensorFlow if not exists
 check-tensorflow:
-	@if [ ! -f "$(HOME)/src/tensorflow/tensorflow/lite/c/c_api.h" ]; then \
+	@if [ ! -f "$(TENSORFLOW_HEADERS_DIR)/tensorflow/lite/c/c_api.h" ]; then \
 		echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."; \
-		mkdir -p $(HOME)/src; \
-		git clone --branch $(TFLITE_VERSION) --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(HOME)/src/tensorflow; \
-		git -C $(HOME)/src/tensorflow config core.sparseCheckout true; \
-		echo "**/*.h" >> $(HOME)/src/tensorflow/.git/info/sparse-checkout; \
-		git -C $(HOME)/src/tensorflow checkout; \
+		mkdir -p $(dir $(TENSORFLOW_HEADERS_DIR)); \
+		git clone --branch $(TFLITE_VERSION) --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(TENSORFLOW_HEADERS_DIR); \
+		git -C $(TENSORFLOW_HEADERS_DIR) config core.sparseCheckout true; \
+		echo "**/*.h" >> $(TENSORFLOW_HEADERS_DIR)/.git/info/sparse-checkout; \
+		git -C $(TENSORFLOW_HEADERS_DIR) checkout; \
 	else \
 		echo "Checking TensorFlow version..."; \
-		current_version=$$(git -C $(HOME)/src/tensorflow describe --tags); \
+		current_version=$$(git -C $(TENSORFLOW_HEADERS_DIR) describe --tags); \
 		if [ "$$current_version" != "$(TFLITE_VERSION)" ]; then \
 			echo "Switching TensorFlow source to version $(TFLITE_VERSION)..."; \
-			git -C $(HOME)/src/tensorflow fetch --depth 1 origin $(TFLITE_VERSION); \
-			git -C $(HOME)/src/tensorflow checkout $(TFLITE_VERSION); \
+			git -C $(TENSORFLOW_HEADERS_DIR) fetch --depth 1 origin $(TFLITE_VERSION); \
+			git -C $(TENSORFLOW_HEADERS_DIR) checkout $(TFLITE_VERSION); \
 		else \
 			echo "TensorFlow source tree is at version $(TFLITE_VERSION)"; \
 		fi; \

@@ -13,7 +13,7 @@ runs:
     - name: Cache TensorFlow headers
       uses: actions/cache@v5
       with:
-        path: ~/src/tensorflow
+        path: .cache/tensorflow
         key: ${{ runner.os }}-tensorflow-${{ inputs.tflite-version }}
 
     - name: Install Task
@@ -47,4 +47,4 @@ runs:
       shell: bash
       run: |
         echo "CGO_ENABLED=1" >> $GITHUB_ENV
-        echo "CGO_CFLAGS=-I $HOME/src/tensorflow" >> $GITHUB_ENV
+        echo "CGO_CFLAGS=-I ${{ github.workspace }}/.cache/tensorflow" >> $GITHUB_ENV
