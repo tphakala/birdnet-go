@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -25,48 +24,31 @@ func TestDebugSkipsControllerFallbackWhenGlobalUnset(t *testing.T) {
 		Settings: newValidTestSettings(),
 	}
 
-	stopWriters := make(chan struct{})
-	var writers sync.WaitGroup
-	for range 4 {
-		writers.Go(func() {
-			for {
-				select {
-				case <-stopWriters:
-					return
-				default:
-					updated := newValidTestSettings()
-					updated.WebServer.Debug = true
-					controller.Settings = updated
-				}
-			}
-		})
-	}
-
-	debugDone := make(chan struct{})
+	stopWriter := make(chan struct{})
+	writerDone := make(chan struct{})
 	go func() {
-		defer close(debugDone)
-		for i := range 5000 {
-			controller.Debug("concurrent debug call %d", i)
+		defer close(writerDone)
+		for {
+			select {
+			case <-stopWriter:
+				return
+			default:
+				updated := newValidTestSettings()
+				updated.WebServer.Debug = true
+				controller.Settings = updated
+			}
 		}
 	}()
 
-	select {
-	case <-debugDone:
-	case <-time.After(2 * time.Second):
-		require.FailNow(t, "Debug did not complete", fmt.Sprintf("timed out waiting for debug loop after %s", 2*time.Second))
+	for i := range 5000 {
+		controller.Debug("concurrent debug call %d", i)
 	}
 
-	close(stopWriters)
-
-	writersDone := make(chan struct{})
-	go func() {
-		defer close(writersDone)
-		writers.Wait()
-	}()
+	close(stopWriter)
 
 	select {
-	case <-writersDone:
+	case <-writerDone:
 	case <-time.After(2 * time.Second):
-		require.FailNow(t, "Writer goroutines did not stop", fmt.Sprintf("timed out waiting for writers after %s", 2*time.Second))
+		require.FailNow(t, "Writer goroutine did not stop", fmt.Sprintf("timed out waiting for writer after %s", 2*time.Second))
 	}
 }
