@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -542,6 +543,10 @@ func TestSlogLogger_FileLogging(t *testing.T) {
 
 	t.Run("reopen log file", func(t *testing.T) {
 		t.Helper()
+
+		if runtime.GOOS == "windows" {
+			t.Skip("SIGHUP-based log rotation is a Unix-only pattern; Windows does not allow renaming open files")
+		}
 
 		tmpFile := t.TempDir() + "/test.log"
 
