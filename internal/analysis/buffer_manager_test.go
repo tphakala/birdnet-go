@@ -140,10 +140,10 @@ func TestDetectionOffset_DerivedFromClipLength(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name       string
-		clipLength time.Duration
-		preCapture int
-		capLength  int
+		name          string
+		clipLength    time.Duration
+		preCapture    int
+		captureLength int
 	}{
 		{"BirdNET_v2.4_default", 3 * time.Second, 3, 20},
 		{"BirdNET_v2.4_no_precapture", 3 * time.Second, 0, 15},
@@ -181,7 +181,7 @@ func TestDetectionOffset_DerivedFromClipLength(t *testing.T) {
 				"bird at window end should appear at PreCapture+ClipLength in clip")
 
 			// Verify the clip doesn't overflow the capture length.
-			captureLength := time.Duration(tt.capLength) * time.Second
+			captureLength := time.Duration(tt.captureLength) * time.Second
 			assert.LessOrEqual(t, birdPositionLatest, captureLength,
 				"latest bird position must fit within capture length")
 		})
