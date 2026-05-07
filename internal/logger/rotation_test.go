@@ -251,8 +251,11 @@ func TestRotationManager_CheckAndRotate_SizeBasedRotation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, files, 1, "should have one rotated file")
 
-	// Original file should be empty or small (new file after rotation)
-	info, err := os.Stat(logPath)
+	// Active log file should be empty or small (new file after rotation).
+	// On Windows, the active file may be at .new (rename back to base path
+	// can fail when the file is open), so check the writer's actual path.
+	activePath := writer.FilePath()
+	info, err := os.Stat(activePath)
 	require.NoError(t, err)
 	assert.Less(t, info.Size(), int64(100), "new log file should be small")
 }
