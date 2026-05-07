@@ -1951,7 +1951,10 @@
             class="h-[350px] rounded-xl border border-[var(--border-200)] flex items-center justify-center bg-[var(--color-base-200)]"
           >
             <div class="text-center px-6">
-              <MapPin class="size-8 mx-auto mb-2 text-[var(--color-base-content)]/40" />
+              <MapPin
+                class="size-8 mx-auto mb-2 text-[var(--color-base-content)]/40"
+                aria-hidden="true"
+              />
               <p class="text-sm text-[var(--color-base-content)]/60">
                 {t('settings.main.errors.mapUnavailable')}
               </p>

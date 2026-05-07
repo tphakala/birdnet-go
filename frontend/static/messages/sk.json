@@ -1993,7 +1993,8 @@
         "rangeFilterCountFailed": "Nepodarilo sa načítať počet druhov",
         "mapLibraryLoadFailed": "Nepodarilo sa načítať knižnicu máp. Obnovte stránku.",
         "mapLoadFailed": "Nepodarilo sa načítať mapu. Skúste obnoviť stránku.",
-        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno."
+        "modalMapLoadFailed": "Nepodarilo sa načítať modálnu mapu. Zatvorte a znova otvorte okno.",
+        "mapUnavailable": "Mapa nie je k dispozícii: WebGL nie je v tomto prehliadači podporované. Svoju polohu môžete stále nastaviť pomocou polí súradníc vyššie."
       }
     },
     "support": {
