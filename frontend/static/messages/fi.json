@@ -1985,7 +1985,8 @@
         "rangeFilterCountFailed": "Lajimäärän lataus epäonnistui",
         "mapLibraryLoadFailed": "Karttakirjaston lataus epäonnistui. Päivitä sivu.",
         "mapLoadFailed": "Kartan lataus epäonnistui. Kokeile päivittää sivu.",
-        "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen."
+        "modalMapLoadFailed": "Ikkunan kartan lataus epäonnistui. Sulje ja avaa ikkuna uudelleen.",
+        "mapUnavailable": "Kartta ei ole käytettävissä: selain ei tue WebGL:ää. Voit silti asettaa sijaintisi yllä olevien koordinaattikenttien avulla."
       },
       "tabs": {
         "general": "Yleiset",

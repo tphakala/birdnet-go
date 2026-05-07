@@ -1985,7 +1985,8 @@
         "rangeFilterCountFailed": "Laden van soorten aantal mislukt",
         "mapLibraryLoadFailed": "Laden van kaartbibliotheek mislukt. Vernieuw de pagina.",
         "mapLoadFailed": "Laden van kaart mislukt. Probeer de pagina te vernieuwen.",
-        "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw."
+        "modalMapLoadFailed": "Laden van modale kaart mislukt. Sluit het venster en open het opnieuw.",
+        "mapUnavailable": "Kaart niet beschikbaar: WebGL wordt niet ondersteund in deze browser. U kunt uw locatie nog steeds instellen via de coördinaatinvoervelden hierboven."
       },
       "tabs": {
         "general": "Algemeen",

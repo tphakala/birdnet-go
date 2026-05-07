@@ -1981,6 +1981,7 @@
         "mapLibraryLoadFailed": "Error al cargar la biblioteca de mapas. Por favor, actualice la página.",
         "mapLoadFailed": "Error al cargar el mapa. Por favor, intente actualizar la página.",
         "modalMapLoadFailed": "Error al cargar el mapa del modal. Por favor, cierre y vuelva a abrir el modal.",
+        "mapUnavailable": "Mapa no disponible: WebGL no es compatible con este navegador. Aún puede configurar su ubicación usando los campos de coordenadas de arriba.",
         "localesLoadFailed": "No se pudieron cargar las opciones de idioma. Usando valores predeterminados.",
         "providersLoadFailed": "No se pudieron cargar los proveedores de imágenes. Usando valores predeterminados.",
         "rangeFilterTestFailed": "Error al probar la configuración del filtro de rango",

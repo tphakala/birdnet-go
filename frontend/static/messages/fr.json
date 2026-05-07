@@ -1985,7 +1985,8 @@
         "rangeFilterCountFailed": "Échec du chargement du nombre d'espèces",
         "mapLibraryLoadFailed": "Échec du chargement de la bibliothèque cartographique. Veuillez actualiser la page.",
         "mapLoadFailed": "Échec du chargement de la carte. Veuillez essayer d'actualiser la page.",
-        "modalMapLoadFailed": "Échec du chargement de la carte modale. Veuillez fermer et rouvrir la fenêtre."
+        "modalMapLoadFailed": "Échec du chargement de la carte modale. Veuillez fermer et rouvrir la fenêtre.",
+        "mapUnavailable": "Carte indisponible : WebGL n'est pas pris en charge par ce navigateur. Vous pouvez toujours définir votre emplacement à l'aide des champs de coordonnées ci-dessus."
       },
       "tabs": {
         "general": "Général",

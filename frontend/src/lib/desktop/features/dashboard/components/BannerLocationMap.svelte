@@ -111,17 +111,26 @@
     const z = untrack(() => zoom);
     const pin = untrack(() => showPin);
 
-    expandedMap = new mod.Map({
-      container,
-      style: createMapStyle(),
-      center: [lng, lat],
-      zoom: z,
-      interactive: true,
-      scrollZoom: true,
-    });
+    try {
+      expandedMap = new mod.Map({
+        container,
+        style: createMapStyle(),
+        center: [lng, lat],
+        zoom: z,
+        interactive: true,
+        scrollZoom: true,
+      });
 
-    if (pin) {
-      expandedMarker = new mod.Marker().setLngLat([lng, lat]).addTo(expandedMap);
+      if (pin) {
+        expandedMarker = new mod.Marker().setLngLat([lng, lat]).addTo(expandedMap);
+      }
+    } catch {
+      expandedMap?.remove();
+      expandedMap = undefined;
+      expandedMarker?.remove();
+      expandedMarker = undefined;
+      expanded = false;
+      return;
     }
 
     return () => {

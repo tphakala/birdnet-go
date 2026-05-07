@@ -1985,7 +1985,8 @@
         "rangeFilterCountFailed": "Fehler beim Laden der Artenanzahl",
         "mapLibraryLoadFailed": "Kartenbibliothek konnte nicht geladen werden. Bitte aktualisieren Sie die Seite.",
         "mapLoadFailed": "Karte konnte nicht geladen werden. Bitte versuchen Sie, die Seite zu aktualisieren.",
-        "modalMapLoadFailed": "Modalkarte konnte nicht geladen werden. Bitte schließen und öffnen Sie das Modal erneut."
+        "modalMapLoadFailed": "Modalkarte konnte nicht geladen werden. Bitte schließen und öffnen Sie das Modal erneut.",
+        "mapUnavailable": "Karte nicht verfügbar: WebGL wird in diesem Browser nicht unterstützt. Sie können Ihren Standort weiterhin über die Koordinatenfelder oben festlegen."
       },
       "tabs": {
         "general": "Allgemein",

@@ -2027,7 +2027,8 @@
         "rangeFilterCountFailed": "Failed to load species count",
         "mapLibraryLoadFailed": "Failed to load map library. Please refresh the page.",
         "mapLoadFailed": "Failed to load map. Please try refreshing the page.",
-        "modalMapLoadFailed": "Failed to load modal map. Please try closing and reopening the modal."
+        "modalMapLoadFailed": "Failed to load modal map. Please try closing and reopening the modal.",
+        "mapUnavailable": "Map unavailable: WebGL is not supported in this browser. You can still set your location using the coordinate fields above."
       }
     },
     "support": {
