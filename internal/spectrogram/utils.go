@@ -61,12 +61,7 @@ var validSizes = map[string]int{
 func SizeToPixels(size string) (int, error) {
 	width, ok := validSizes[size]
 	if !ok {
-		return 0, errors.Newf("invalid size (valid sizes: sm, md, lg, xl)").
-			Component("spectrogram").
-			Category(errors.CategoryValidation).
-			Context("operation", "size_to_pixels").
-			Context("size", size).
-			Build()
+		return 0, fmt.Errorf("invalid spectrogram size %q (valid sizes: sm, md, lg, xl)", size)
 	}
 	return width, nil
 }
@@ -79,12 +74,7 @@ func PixelsToSize(width int) (string, error) {
 			return size, nil
 		}
 	}
-	return "", errors.Newf("invalid width: no matching size").
-		Component("spectrogram").
-		Category(errors.CategoryValidation).
-		Context("operation", "pixels_to_size").
-		Context("width", width).
-		Build()
+	return "", fmt.Errorf("invalid spectrogram width %d: no matching size", width)
 }
 
 // GetValidSizes returns a sorted list of valid size strings.
