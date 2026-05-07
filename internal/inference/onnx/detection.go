@@ -6,11 +6,12 @@ import "fmt"
 
 // Known model sample counts and output counts for auto-detection.
 const (
-	sampleCountV24  = 144000 // BirdNET v2.4: 48kHz * 3s
-	sampleCountV30  = 160000 // BirdNET v3.0 / Perch v2: 32kHz * 5s
-	numOutputsV24   = 1      // BirdNET v2.4: logits only
-	numOutputsV30   = 2      // BirdNET v3.0: embeddings + logits
-	numOutputsPerch = 4      // Perch v2: embeddings + features + attention + logits
+	sampleCountV24   = 144000 // BirdNET v2.4: 48kHz * 3s
+	sampleCountV30   = 160000 // BirdNET v3.0 / Perch v2: 32kHz * 5s
+	numOutputsV24    = 1      // BirdNET v2.4: logits only
+	numOutputsV24Emb = 2      // BirdNET v2.4 with embeddings: logits + embeddings
+	numOutputsV30    = 2      // BirdNET v3.0: embeddings + logits
+	numOutputsPerch  = 4      // Perch v2: embeddings + features + attention + logits
 
 	embeddingSizeV30   = 1280 // BirdNET v3.0 embedding dimension
 	embeddingSizePerch = 1536 // Perch v2 embedding dimension
@@ -32,6 +33,8 @@ func detectModelTypeFromShapes(inputShapes [][]int64, numOutputs int) (ModelType
 	switch {
 	case sampleCount == sampleCountV24 && numOutputs == numOutputsV24:
 		return BirdNETv24, nil
+	case sampleCount == sampleCountV24 && numOutputs == numOutputsV24Emb:
+		return BirdNETv24, nil
 	case sampleCount == sampleCountV30 && numOutputs == numOutputsV30:
 		return BirdNETv30, nil
 	case sampleCount == sampleCountV30 && numOutputs == numOutputsPerch:
@@ -43,7 +46,8 @@ func detectModelTypeFromShapes(inputShapes [][]int64, numOutputs int) (ModelType
 	}
 }
 
-func buildModelConfig(mt ModelType, inputShape []int64, numOutputs int) ModelConfig {
+func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) ModelConfig {
+	numOutputs := len(outputShapes)
 	cfg := ModelConfig{
 		Type:           mt,
 		SampleRate:     mt.SampleRate(),
@@ -58,7 +62,10 @@ func buildModelConfig(mt ModelType, inputShape []int64, numOutputs int) ModelCon
 	switch mt {
 	case BirdNETv24:
 		cfg.LogitsIndex = 0
-		cfg.EmbeddingSize = 0
+		if numOutputs >= 2 {
+			cfg.EmbeddingIndex = 1
+			cfg.EmbeddingSize = lastDim(outputShapes[1])
+		}
 	case BirdNETv30:
 		cfg.LogitsIndex = 1
 		cfg.EmbeddingIndex = 0
@@ -70,4 +77,11 @@ func buildModelConfig(mt ModelType, inputShape []int64, numOutputs int) ModelCon
 	}
 
 	return cfg
+}
+
+func lastDim(shape []int64) int {
+	if len(shape) == 0 {
+		return 0
+	}
+	return int(shape[len(shape)-1])
 }

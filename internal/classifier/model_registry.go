@@ -95,6 +95,16 @@ var ModelRegistry = map[string]ModelInfo{
 		ConfigAliases:    []string{conf.ModelIDPerchV2},
 		NumSpecies:       14795,
 	},
+	"Bat": {
+		ID:               "Bat",
+		Name:             "Bat Classifier",
+		Backend:          BackendONNX,
+		DetectionName:    "BattyBirdNET",
+		DetectionVersion: "1.0",
+		Description:      "Bat species detection using BirdNET v2.4 embeddings",
+		Spec:             ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
+		ConfigAliases:    []string{conf.ModelIDBat},
+	},
 }
 
 // birdnetVersionToRegistryID maps user-facing BirdNET version strings to registry IDs.

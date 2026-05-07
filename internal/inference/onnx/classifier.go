@@ -97,7 +97,11 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 	}
 
 	// Build model config and load labels
-	modelCfg := buildModelConfig(mt, inputShapes[0], len(outputNames))
+	outputShapes := make([][]int64, len(outputInfos))
+	for i := range outputInfos {
+		outputShapes[i] = outputInfos[i].Dimensions
+	}
+	modelCfg := buildModelConfig(mt, inputShapes[0], outputShapes)
 
 	labels, err := resolveLabels(cfg)
 	if err != nil {
@@ -239,42 +243,61 @@ func (c *Classifier) Labels() []string {
 // PredictRaw runs inference and returns raw logits (pre-activation) for a single segment.
 // This is used by adapters that handle their own post-processing (e.g., sensitivity-adjusted sigmoid).
 func (c *Classifier) PredictRaw(audio []float32) ([]float32, error) {
+	logits, _, err := c.PredictRawWithEmbeddings(audio)
+	return logits, err
+}
+
+// PredictRawWithEmbeddings runs inference and returns both raw logits and embedding vector.
+// Returns nil embeddings if the model does not produce embeddings.
+func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddings []float32, err error) {
 	if len(audio) != c.config.SampleCount {
-		return nil, &InputSizeError{Expected: c.config.SampleCount, Got: len(audio)}
+		return nil, nil, &InputSizeError{Expected: c.config.SampleCount, Got: len(audio)}
 	}
 
 	inputShape := makeBatchInputShape(c.config.InputShape, 1)
 	inputTensor, err := ort.NewTensor(ort.NewShape(inputShape...), audio)
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create input tensor: %w", err)
+		return nil, nil, fmt.Errorf("birdnet: failed to create input tensor: %w", err)
 	}
 	defer func() { _ = inputTensor.Destroy() }()
 
 	outputs, err := c.createOutputTensors(1)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer destroyTensors(outputs)
 
 	err = c.session.Run([]ort.Value{inputTensor}, outputs)
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: inference failed: %w", err)
+		return nil, nil, fmt.Errorf("birdnet: inference failed: %w", err)
 	}
 
-	// Extract raw logits without applying activation function
 	logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
 	if !ok {
-		return nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
+		return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
 	}
 	allLogits := logitsTensor.GetData()
 	numClasses := len(c.labels)
 	if numClasses > len(allLogits) {
-		return nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", numClasses, len(allLogits))
+		return nil, nil, fmt.Errorf("birdnet: logits tensor too small: need %d, have %d", numClasses, len(allLogits))
+	}
+	logits = make([]float32, numClasses)
+	copy(logits, allLogits[:numClasses])
+
+	if c.config.EmbeddingIndex >= 0 {
+		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
+		if !ok {
+			return nil, nil, fmt.Errorf("birdnet: embedding tensor has unexpected type")
+		}
+		allEmb := embTensor.GetData()
+		if c.config.EmbeddingSize > len(allEmb) {
+			return nil, nil, fmt.Errorf("birdnet: embedding tensor too small: need %d, have %d", c.config.EmbeddingSize, len(allEmb))
+		}
+		embeddings = make([]float32, c.config.EmbeddingSize)
+		copy(embeddings, allEmb[:c.config.EmbeddingSize])
 	}
 
-	logits := make([]float32, numClasses)
-	copy(logits, allLogits[:numClasses])
-	return logits, nil
+	return logits, embeddings, nil
 }
 
 // Predict runs inference on a single audio segment.
@@ -416,7 +439,14 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 	batch := int64(batchSize)
 	switch c.config.Type {
 	case BirdNETv24:
-		return []int64{batch, int64(len(c.labels))}, nil
+		switch outputIdx {
+		case 0:
+			return []int64{batch, int64(len(c.labels))}, nil
+		case 1:
+			if c.config.EmbeddingSize > 0 {
+				return []int64{batch, int64(c.config.EmbeddingSize)}, nil
+			}
+		}
 	case BirdNETv30:
 		switch outputIdx {
 		case 0:
