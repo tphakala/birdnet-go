@@ -1167,6 +1167,7 @@
                     onclick={saveProvider}
                     class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
                     disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret || !isOidcValid || !hasExplicitBaseUrl}
+                    title={!hasExplicitBaseUrl ? t('settings.security.oauth.hostRequiredWarning') : undefined}
                   >
                     {t('settings.security.oauth.form.saveButton')}
                   </button>
