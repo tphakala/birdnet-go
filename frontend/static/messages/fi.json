@@ -3416,6 +3416,7 @@
       "baseUrlHelp": "Täydellinen ulkoinen URL käänteiselle välityspalvelimelle. Kun asetettu, tätä URL-osoitetta käytetään sellaisenaan ilmoituksiin ja OAuth-uudelleenohjauksiin, ohittaen isäntä- ja AutoTLS-asetukset.",
       "baseUrlValidation": "Anna kelvollinen URL, joka alkaa http:// tai https:// ja sisältää isäntänimen",
       "hostLabel": "Isäntäosoite",
+      "hostHelp": "Palvelimesi julkinen isäntänimi tai IP-osoite (esim. birdnet.example.com). Vaaditaan OAuth-kirjautumiseen ja TLS-varmenteisiin. Jos käytät käänteistä välityspalvelinta, käytä sen sijaan Base URL:ää.",
       "allowSubnetBypassLabel": "Salli aliverkon käyttää ohitustunnistautumista",
       "allowedSubnetsLabel": "Sallitut aliverkot",
       "allowedSubnetsHelp": "Sallitut verkkoalueet kirjautumisen ohittamiseen (CIDR-merkintä, pilkuilla eroteltu lista)",
@@ -3463,6 +3464,9 @@
           "deleteButton": "Poista tarjoaja",
           "deleteConfirm": "Haluatko varmasti poistaa {provider} OAuth-tarjoajan?"
         },
+        "hostRequiredWarning": "Isäntäosoitetta tai Base URL:ää ei ole määritetty",
+        "hostRequiredWarningDescription": "OAuth-kirjautuminen edellyttää, että isäntäosoite tai Base URL on määritetty Palvelinkonfiguraatio-välilehdellä. Ilman sitä OAuth-tarjoajat eivät voi luoda callback-URL-osoitteita ja kirjautuminen epäonnistuu.",
+        "redirectUriNotConfigured": "Ei määritetty - aseta isäntäosoite tai Base URL Palvelinkonfiguraatio-välilehdellä",
         "noProviders": "OAuth-tarjoajia ei ole määritetty",
         "noProvidersDescription": "Lisää tarjoaja ottaaksesi käyttöön kirjautumisen Google-, GitHub-, Microsoft-, LINE-, Kakao- tai OIDC-tunnistautumisella.",
         "enableProviderLabel": "Ota tämä tarjoaja käyttöön",

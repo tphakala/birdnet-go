@@ -3100,6 +3100,7 @@
       "baseUrlHelp": "Volledige externe URL voor reverse proxy configuraties. Wanneer ingesteld, wordt deze URL ongewijzigd gebruikt voor meldingen en OAuth omleidingen, waarbij Host en AutoTLS instellingen worden genegeerd.",
       "baseUrlValidation": "Voer een geldige URL in die begint met http:// of https:// en een hostnaam bevat",
       "hostLabel": "Host Adres",
+      "hostHelp": "De openbare hostnaam of het IP-adres van uw server (bijv. birdnet.example.com). Vereist voor OAuth-aanmelding en TLS-certificaten. Als u een reverse proxy gebruikt, gebruik dan in plaats daarvan de Base URL.",
       "allowSubnetBypassLabel": "Sta Toegang vanaf Subnet toe om Authenticatie te Omzeilen",
       "allowedSubnetsLabel": "Toegestane Subnets",
       "allowedSubnetsHelp": "Toegestane netwerk bereiken om de login te omzeilen (CIDR notatie, door komma's gescheiden lijst)",
@@ -3147,6 +3148,9 @@
           "deleteButton": "Provider verwijderen",
           "deleteConfirm": "Weet u zeker dat u de {provider} OAuth-provider wilt verwijderen?"
         },
+        "hostRequiredWarning": "Hostadres of Base URL is niet geconfigureerd",
+        "hostRequiredWarningDescription": "OAuth-aanmelding vereist dat een hostadres of Base URL is ingesteld op het tabblad Serverconfiguratie. Zonder dit kunnen OAuth-providers geen callback-URL's maken en mislukt de aanmelding.",
+        "redirectUriNotConfigured": "Niet geconfigureerd - stel het hostadres of de Base URL in op het tabblad Serverconfiguratie",
         "noProviders": "Geen OAuth-providers geconfigureerd",
         "noProvidersDescription": "Voeg een provider toe om inloggen met Google, GitHub, Microsoft, LINE, Kakao of een aangepaste OIDC-provider mogelijk te maken.",
         "enableProviderLabel": "Deze provider inschakelen",

@@ -3136,6 +3136,7 @@
       "baseUrlHelp": "Complete external URL for reverse proxy setups. When set, this URL is used as-is for notifications and OAuth redirects, ignoring Host and AutoTLS settings.",
       "baseUrlValidation": "Please enter a valid URL starting with http:// or https:// and including a hostname",
       "hostLabel": "Host Address",
+      "hostHelp": "Your server's public hostname or IP address (e.g. birdnet.example.com). Required for OAuth login and TLS certificates. If behind a reverse proxy, use Base URL instead.",
       "allowSubnetBypassLabel": "Allow Access from Subnet to Bypass Authentication",
       "allowedSubnetsLabel": "Allowed Subnets",
       "allowedSubnetsHelp": "Allowed network ranges to bypass the login (CIDR notation, comma-separated list)",
@@ -3183,6 +3184,9 @@
           "deleteButton": "Delete provider",
           "deleteConfirm": "Are you sure you want to delete the {provider} OAuth provider?"
         },
+        "hostRequiredWarning": "Host address or Base URL is not configured",
+        "hostRequiredWarningDescription": "OAuth login requires a Host Address or Base URL to be set in the Server Configuration tab. Without it, OAuth providers cannot construct callback URLs and login will fail.",
+        "redirectUriNotConfigured": "Not configured - set Host Address or Base URL in the Server Configuration tab",
         "noProviders": "No OAuth providers configured",
         "noProvidersDescription": "Add a provider to enable login with Google, GitHub, Microsoft, LINE, Kakao, or a custom OIDC provider.",
         "enableProviderLabel": "Enable this provider",
