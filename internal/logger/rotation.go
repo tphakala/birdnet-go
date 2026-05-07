@@ -200,14 +200,17 @@ func (rm *RotationManager) rotateLocked() {
 		renameOldOK = false
 	}
 
-	// Step 5: Try to move the new file to the base path.
-	// Always attempt the rename regardless of step 4 outcome; on Windows
-	// the old file lock may have been released between steps.
+	// Step 5: Move the new file to the base path (only if the old file was
+	// moved out of the way). On POSIX, rename overwrites the destination,
+	// so attempting this when the old file is still at basePath would cause
+	// data loss.
 	finalLogPath := newFilePath
-	if err := os.Rename(newFilePath, rm.basePath); err == nil {
-		finalLogPath = rm.basePath
-	} else if renameOldOK {
-		fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
+	if renameOldOK {
+		if err := os.Rename(newFilePath, rm.basePath); err == nil {
+			finalLogPath = rm.basePath
+		} else {
+			fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
+		}
 	}
 	rm.filePath = finalLogPath
 	rm.writer.SetFilePath(finalLogPath)

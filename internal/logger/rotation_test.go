@@ -653,20 +653,20 @@ func TestRotationManager_RepeatedFailedRotations(t *testing.T) {
 	require.NotNil(t, rm)
 
 	for i := range 10 {
-		data := strings.Repeat("x", testDataSmall)
-		_, err = writer.Write([]byte(data))
-		require.NoError(t, err)
-		require.NoError(t, writer.Flush())
+		// Inject rename failure BEFORE rotation: set filePath to .new and
+		// write enough data to the .new file to exceed MaxSize, so the
+		// next CheckAndRotate exercises the suffix-accumulation path.
+		rm.mu.Lock()
+		rm.filePath = logPath + ".new"
+		rm.mu.Unlock()
+		require.NoError(t, os.WriteFile(logPath+".new",
+			[]byte(strings.Repeat("x", testDataSmall)), 0o600))
 
 		rm.CheckAndRotate()
 		time.Sleep(50 * time.Millisecond)
 
-		// Inject rename failure: force filePath to .new (simulating Windows
-		// behavior where os.Rename fails due to file locking).
+		// Read filePath AFTER CheckAndRotate to verify it didn't accumulate
 		rm.mu.Lock()
-		rm.filePath = logPath + ".new"
-		// Ensure the .new file exists for the next rotation cycle
-		_ = os.WriteFile(rm.filePath, []byte("data"), 0o600)
 		currentPath := rm.filePath
 		rm.mu.Unlock()
 
