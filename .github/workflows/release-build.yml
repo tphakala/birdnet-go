@@ -49,6 +49,13 @@ jobs:
           packages: build-essential pkg-config gcc-aarch64-linux-gnu gcc-mingw-w64-x86-64
           version: 1.0
 
+      - name: Fix cross-compiler symlinks
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix 2>/dev/null || true
+          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix 2>/dev/null || true
+          sudo update-alternatives --set aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-gnu-gcc-13 2>/dev/null || true
+
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
