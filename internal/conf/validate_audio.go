@@ -358,6 +358,7 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 	s.FfmpegVersion = ""
 	s.FfmpegMajor = 0
 	s.FfmpegMinor = 0
+	s.FfprobePath = ""
 }
 
 // applyFfmpegFormatFallback forces WAV export when FFmpeg is unavailable and
@@ -398,7 +399,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 		// sibling binary in the same directory (e.g. ffmpeg.exe -> ffprobe.exe).
 		ffprobeDir := filepath.Dir(validatedFfmpegPath)
 		ffprobePath := filepath.Join(ffprobeDir, GetFfprobeBinaryName())
-		if _, statErr := os.Stat(ffprobePath); statErr == nil {
+		if info, statErr := os.Stat(ffprobePath); statErr == nil && !info.IsDir() {
 			settings.FfprobePath = ffprobePath
 			GetLogger().Debug("FFprobe path derived from FFmpeg", logger.String("ffprobe_path", ffprobePath))
 		} else {
