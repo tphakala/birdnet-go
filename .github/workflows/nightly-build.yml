@@ -47,9 +47,11 @@ jobs:
       - name: Fix cross-compiler symlinks
         if: matrix.os == 'ubuntu-24.04'
         run: |
-          sudo update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix 2>/dev/null || true
-          sudo update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++-posix 2>/dev/null || true
-          sudo update-alternatives --set aarch64-linux-gnu-gcc /usr/bin/aarch64-linux-gnu-gcc-13 2>/dev/null || true
+          # cache-apt-pkgs-action restores debs but skips post-install triggers,
+          # so create the symlinks that update-alternatives would normally manage
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-gcc-posix /usr/bin/x86_64-w64-mingw32-gcc
+          sudo ln -sf /usr/bin/x86_64-w64-mingw32-g++-posix /usr/bin/x86_64-w64-mingw32-g++
+          sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc-13 /usr/bin/aarch64-linux-gnu-gcc
 
       - name: Install Task
         uses: arduino/setup-task@v2
