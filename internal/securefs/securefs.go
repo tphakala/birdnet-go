@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -278,15 +279,26 @@ func (sfs *SecureFS) createDirComponent(path string, perm os.FileMode) error {
 	return nil
 }
 
-// MkdirAll creates a directory and all necessary parent directories with path validation
+// MkdirAll creates a directory and all necessary parent directories with path validation.
+//
+// On Windows, os.Root.Mkdir can hang indefinitely when called on directories
+// that already exist (observed on Windows 11 25H2 with Go 1.26). This is
+// suspected to be a Go runtime issue with NtCreateFile holding the directory
+// handle when FILE_CREATE disposition encounters an existing object. As a
+// workaround, Windows uses os.MkdirAll on the resolved absolute path instead
+// of os.Root.Mkdir, after validating the path stays within the base directory.
 func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
-	relPath, err := sfs.RelativePath(path)
+	relPath, err := sfs.resolveRelPath(path)
 	if err != nil {
 		return err
 	}
 
 	if relPath == "" || relPath == "." {
 		return nil
+	}
+
+	if runtime.GOOS == "windows" {
+		return sfs.mkdirAllWindows(relPath, perm)
 	}
 
 	components := strings.Split(relPath, string(filepath.Separator))
@@ -304,6 +316,58 @@ func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
 	}
 
 	return nil
+}
+
+// mkdirAllWindows bypasses os.Root.Mkdir and uses os.MkdirAll directly.
+// This trades os.Root's kernel-level sandboxing for reliability; the caller
+// (resolveRelPath) validates the path stays within baseDir, but symlink-based
+// escapes are theoretically possible since EvalSymlinks is intentionally skipped.
+func (sfs *SecureFS) mkdirAllWindows(relPath string, perm os.FileMode) error {
+	absPath := filepath.Join(sfs.baseDir, relPath)
+	current := sfs.baseDir
+	for component := range strings.SplitSeq(relPath, string(filepath.Separator)) {
+		if component == "" {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				break
+			}
+			return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "mkdirall_windows_stat").Build()
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_windows_junction").Build()
+		}
+	}
+	if err := os.MkdirAll(absPath, perm); err != nil {
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "mkdirall_windows").Build()
+	}
+	return nil
+}
+
+// resolveRelPath converts a path to a validated relative path for use with os.Root.
+// For absolute paths, it uses filepath.Rel directly (avoiding filepath.EvalSymlinks
+// which can hang on Windows when os.Root holds a handle to the base directory).
+// For relative paths, it delegates to ValidateRelativePath.
+func (sfs *SecureFS) resolveRelPath(path string) (string, error) {
+	cleanPath := filepath.Clean(path)
+	if filepath.IsAbs(cleanPath) {
+		relPath, err := filepath.Rel(sfs.baseDir, cleanPath)
+		if err != nil {
+			return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_rel").Build()
+		}
+		relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
+		if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
+			return "", errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_traversal").Build()
+		}
+		if !filepath.IsLocal(relPath) {
+			return "", errors.New(ErrInvalidPath).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_invalid_path").Build()
+		}
+		return relPath, nil
+	}
+	return sfs.ValidateRelativePath(path)
 }
 
 // removeAllRelative removes a path using already-validated relative path
