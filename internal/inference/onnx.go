@@ -118,17 +118,26 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 		return nil, fmt.Errorf("ONNX custom classifier requires labels or labels path")
 	}
 
+	var configErr error
 	if opts.Threads > 0 {
 		threads := opts.Threads
 		builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
-			_ = so.SetIntraOpNumThreads(threads)
-			_ = so.SetInterOpNumThreads(threads)
+			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+			}
+			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+			}
 		})
 	}
 
 	cc, err := builder.Build()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ONNX custom classifier: %w", err)
+	}
+	if configErr != nil {
+		_ = cc.Close()
+		return nil, fmt.Errorf("failed to configure ONNX custom classifier session: %w", configErr)
 	}
 
 	return &onnxCustomClassifier{

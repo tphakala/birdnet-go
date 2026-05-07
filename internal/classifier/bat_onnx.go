@@ -161,10 +161,24 @@ func (b *Bat) ModelName() string { return b.info.Name }
 func (b *Bat) ModelVersion() string { return "1.0" }
 
 // NumSpecies returns the number of bat species.
-func (b *Bat) NumSpecies() int { return b.batClassifier.NumClasses() }
+func (b *Bat) NumSpecies() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.batClassifier == nil {
+		return b.info.NumSpecies
+	}
+	return b.batClassifier.NumClasses()
+}
 
 // Labels returns the bat species labels.
-func (b *Bat) Labels() []string { return b.batClassifier.Labels() }
+func (b *Bat) Labels() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.batClassifier == nil {
+		return nil
+	}
+	return b.batClassifier.Labels()
+}
 
 // Close releases resources held by the bat model.
 func (b *Bat) Close() error {

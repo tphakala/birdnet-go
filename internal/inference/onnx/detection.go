@@ -63,8 +63,10 @@ func buildModelConfig(mt ModelType, inputShape []int64, outputShapes [][]int64) 
 	case BirdNETv24:
 		cfg.LogitsIndex = 0
 		if numOutputs >= 2 {
-			cfg.EmbeddingIndex = 1
-			cfg.EmbeddingSize = lastDim(outputShapes[1])
+			if embSize := lastDim(outputShapes[1]); embSize > 0 {
+				cfg.EmbeddingIndex = 1
+				cfg.EmbeddingSize = embSize
+			}
 		}
 	case BirdNETv30:
 		cfg.LogitsIndex = 1

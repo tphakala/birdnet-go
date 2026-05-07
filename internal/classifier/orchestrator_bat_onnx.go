@@ -10,6 +10,11 @@ import (
 // loadBat creates and registers a bat detection model instance from settings.
 func (o *Orchestrator) loadBat(threads int) error {
 	log := GetLogger()
+	if !o.Settings.Bat.Enabled {
+		log.Debug("Bat model disabled by configuration")
+		return nil
+	}
+
 	cfg := BatModelConfig{
 		EmbeddingModelPath:  o.Settings.Bat.EmbeddingModel,
 		EmbeddingLabels:     o.Settings.BirdNET.Labels,

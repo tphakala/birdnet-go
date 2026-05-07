@@ -211,6 +211,9 @@ func (c *CustomClassifier) PredictBatch(embeddings [][]float32) ([][]Prediction,
 	for i := range batchSize {
 		start := i * c.numClasses
 		end := start + c.numClasses
+		if end > len(allLogits) {
+			return nil, fmt.Errorf("birdnet: custom classifier output too small for batch index %d: need %d, have %d", i, end, len(allLogits))
+		}
 		scores := sigmoidSlice(allLogits[start:end])
 		results[i] = topK(scores, c.labels, c.topK, c.minConf)
 	}
