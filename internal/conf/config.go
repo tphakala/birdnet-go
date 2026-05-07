@@ -1177,6 +1177,15 @@ type PerchConfig struct {
 	Threshold float64 `yaml:"threshold" json:"threshold"`                     // confidence threshold for detections
 }
 
+// BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
+type BatConfig struct {
+	Enabled         bool    `yaml:"enabled" json:"enabled"`                                     // true to load bat detection at startup
+	EmbeddingModel  string  `yaml:"embeddingmodel,omitempty" json:"embeddingModel,omitempty"`   // path to BirdNET v2.4 embeddings ONNX model
+	ClassifierModel string  `yaml:"classifiermodel,omitempty" json:"classifierModel,omitempty"` // path to bat species classifier ONNX model
+	LabelPath       string  `yaml:"labelpath,omitempty" json:"labelPath,omitempty"`             // path to bat species labels file
+	Threshold       float64 `yaml:"threshold" json:"threshold"`                                 // confidence threshold for bat detections
+}
+
 // ModelsConfig holds global model enablement settings.
 type ModelsConfig struct {
 	Enabled []string `yaml:"enabled" json:"enabled"` // list of model IDs to load (e.g., "birdnet", "perch_v2")
@@ -1498,6 +1507,7 @@ type Settings struct {
 
 	BirdNET BirdNETConfig `yaml:"birdnet" json:"birdnet"` // BirdNET configuration
 	Perch   PerchConfig   `yaml:"perch" json:"perch"`     // Perch v2 model configuration
+	Bat     BatConfig     `yaml:"bat" json:"bat"`         // Bat detection configuration
 	Models  ModelsConfig  `yaml:"models" json:"models"`   // Global model enablement
 
 	TaxonomySynonyms map[string]string `yaml:"taxonomySynonyms" json:"taxonomySynonyms" mapstructure:"taxonomySynonyms"` // Optional scientific-name synonym overrides merged with built-ins

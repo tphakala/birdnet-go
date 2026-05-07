@@ -32,6 +32,15 @@ func (e *BatchInputSizeError) Error() string {
 	return fmt.Sprintf("birdnet: segment %d has %d audio samples, expected %d", e.Index, e.Got, e.Expected)
 }
 
+type EmbeddingDimMismatchError struct {
+	Expected int
+	Got      int
+}
+
+func (e *EmbeddingDimMismatchError) Error() string {
+	return fmt.Sprintf("birdnet: embedding dimension mismatch: classifier expects %d, got %d", e.Expected, e.Got)
+}
+
 type LabelCountError struct {
 	Expected int
 	Got      int

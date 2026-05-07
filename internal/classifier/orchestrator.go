@@ -374,6 +374,11 @@ func (o *Orchestrator) loadAdditionalModels(threadAlloc map[string]int) error {
 			if err := o.loadPerch(threads); err != nil {
 				return err
 			}
+		case "Bat":
+			//nolint:staticcheck // SA4023: loadBat always errors in non-onnx build, but returns nil in onnx build
+			if err := o.loadBat(threads); err != nil {
+				return err
+			}
 		default:
 			log.Warn("model registered but no loader implemented",
 				logger.String("registry_id", registryID))

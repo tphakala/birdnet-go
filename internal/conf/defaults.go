@@ -86,6 +86,13 @@ func setDefaultConfig() {
 	viper.SetDefault("perch.labelpath", "")
 	viper.SetDefault("perch.threshold", 0.5)
 
+	// Bat detection configuration (disabled by default)
+	viper.SetDefault("bat.enabled", false)
+	viper.SetDefault("bat.embeddingmodel", "")
+	viper.SetDefault("bat.classifiermodel", "")
+	viper.SetDefault("bat.labelpath", "")
+	viper.SetDefault("bat.threshold", 0.5)
+
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
 

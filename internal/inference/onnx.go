@@ -73,6 +73,11 @@ func (c *onnxClassifier) Predict(samples []float32) ([]float32, error) {
 	return c.classifier.PredictRaw(samples)
 }
 
+// PredictWithEmbeddings runs ONNX inference, returning both raw logits and embedding vector.
+func (c *onnxClassifier) PredictWithEmbeddings(samples []float32) (logits, embeddings []float32, err error) {
+	return c.classifier.PredictRawWithEmbeddings(samples)
+}
+
 // NumSpecies returns the number of species in the model output.
 func (c *onnxClassifier) NumSpecies() int {
 	return c.numSpecies
@@ -80,6 +85,83 @@ func (c *onnxClassifier) NumSpecies() int {
 
 // Close releases the ONNX session resources.
 func (c *onnxClassifier) Close() {
+	if c.classifier != nil {
+		_ = c.classifier.Close()
+		c.classifier = nil
+	}
+}
+
+// ONNXCustomClassifierOptions configures the ONNX custom classifier.
+type ONNXCustomClassifierOptions struct {
+	Labels     []string // Provide labels directly (takes priority over LabelsPath)
+	LabelsPath string   // Load labels from file (text, CSV, or JSON)
+	Threads    int
+}
+
+type onnxCustomClassifier struct {
+	classifier *ort.CustomClassifier
+}
+
+// NewONNXCustomClassifier creates a CustomClassifier backed by an ONNX Runtime model.
+func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions) (CustomClassifier, error) {
+	builder := ort.NewCustomClassifierBuilder().
+		ModelPath(modelPath).
+		TopK(0).
+		MinConfidence(0)
+
+	switch {
+	case len(opts.Labels) > 0:
+		builder = builder.Labels(opts.Labels)
+	case opts.LabelsPath != "":
+		builder = builder.LabelsPath(opts.LabelsPath)
+	default:
+		return nil, fmt.Errorf("ONNX custom classifier requires labels or labels path")
+	}
+
+	var configErr error
+	if opts.Threads > 0 {
+		threads := opts.Threads
+		builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
+			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
+			}
+			if err := so.SetInterOpNumThreads(threads); err != nil && configErr == nil {
+				configErr = fmt.Errorf("failed to set InterOpNumThreads to %d: %w", threads, err)
+			}
+		})
+	}
+
+	cc, err := builder.Build()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create ONNX custom classifier: %w", err)
+	}
+	if configErr != nil {
+		_ = cc.Close()
+		return nil, fmt.Errorf("failed to configure ONNX custom classifier session: %w", configErr)
+	}
+
+	return &onnxCustomClassifier{
+		classifier: cc,
+	}, nil
+}
+
+// PredictEmbedding runs inference on an embedding vector.
+func (c *onnxCustomClassifier) PredictEmbedding(embeddings []float32) ([]float32, error) {
+	return c.classifier.PredictRaw(embeddings)
+}
+
+// NumClasses returns the number of output classes.
+func (c *onnxCustomClassifier) NumClasses() int {
+	return c.classifier.NumClasses()
+}
+
+// Labels returns the classification labels.
+func (c *onnxCustomClassifier) Labels() []string {
+	return c.classifier.Labels()
+}
+
+// Close releases the ONNX custom classifier session.
+func (c *onnxCustomClassifier) Close() {
 	if c.classifier != nil {
 		_ = c.classifier.Close()
 		c.classifier = nil
