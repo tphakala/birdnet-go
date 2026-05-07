@@ -391,9 +391,8 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.
-	if settings.Realtime.Audio.FfprobePath != "" {
-		ffmpeg.SetFFprobePath(settings.Realtime.Audio.FfprobePath)
-	}
+	// Always set (even if empty) so repeated controller inits clear stale state.
+	ffmpeg.SetFFprobePath(settings.Realtime.Audio.FfprobePath)
 
 	// Initialize audio processing cache and concurrency limiter
 	cacheDir := filepath.Join(c.SFS.BaseDir(), ".processing-cache")

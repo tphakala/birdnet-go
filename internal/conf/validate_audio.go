@@ -406,6 +406,7 @@ func validateAudioSettings(settings *AudioSettings) error {
 				settings.FfprobePath = lookPath
 				GetLogger().Debug("FFprobe found in system PATH", logger.String("ffprobe_path", lookPath))
 			} else {
+				settings.FfprobePath = ""
 				GetLogger().Warn("FFprobe not found alongside FFmpeg or in PATH",
 					logger.String("expected_path", ffprobePath),
 					logger.String("impact", "Audio validation via FFprobe will be disabled"))
