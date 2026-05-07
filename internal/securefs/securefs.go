@@ -92,8 +92,14 @@ func resolveAbsPath(cache *PathCache, path string) (string, error) {
 	return filepath.Abs(path)
 }
 
-// resolveSymlinks resolves symlinks for a path, using cache if available
+// resolveSymlinks resolves symlinks for a path, using cache if available.
+// On Windows, skipped: filepath.EvalSymlinks hangs when os.Root holds the base
+// directory handle (Go 1.26, Windows 11). os.Root provides kernel-level protection.
 func resolveSymlinks(cache *PathCache, path string) string {
+	if runtime.GOOS == "windows" {
+		return path
+	}
+
 	var resolved string
 	var err error
 
@@ -117,11 +123,13 @@ func resolveParentSymlinks(cache *PathCache, absTarget string) string {
 	for dir != "/" && dir != "." && dir != "" {
 		resolvedDir := resolveSymlinks(cache, dir)
 		if resolvedDir != dir {
-			// Found a parent directory that's a symlink
-			// Reconstruct the target with the resolved parent
 			return filepath.Join(resolvedDir, filepath.Base(absTarget))
 		}
-		dir = filepath.Dir(dir)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
 	}
 	return absTarget
 }
