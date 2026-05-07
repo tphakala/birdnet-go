@@ -364,17 +364,17 @@
   // This is what gets persisted to config.yaml for OAuth callbacks
   // Returns empty string if neither is configured - backend will auto-generate from its config
   let configuredBaseUrl = $derived.by(() => {
-    if (settings?.baseUrl) {
-      return settings.baseUrl.replace(/\/$/, ''); // Remove trailing slash
+    const baseUrl = settings?.baseUrl?.trim() ?? '';
+    if (baseUrl) {
+      return baseUrl.replace(/\/+$/, '');
     }
-    if (settings?.host) {
-      const host = settings.host.replace(/\/$/, '');
-      // If host already has scheme, use as-is
-      if (host.startsWith('http://') || host.startsWith('https://')) {
-        return host;
+    const host = settings?.host?.trim() ?? '';
+    if (host) {
+      const normalizedHost = host.replace(/\/+$/, '');
+      if (normalizedHost.startsWith('http://') || normalizedHost.startsWith('https://')) {
+        return normalizedHost;
       }
-      // Otherwise assume HTTPS
-      return `https://${host}`;
+      return `https://${normalizedHost}`;
     }
     // Return empty - backend will auto-generate redirect URI from its own baseURL/host config
     // This prevents saving incorrect URLs when admin UI is accessed from local IP
@@ -1008,7 +1008,7 @@
             {#snippet children()}
               <div>
                 <p class="font-medium">{t('settings.security.oauth.hostRequiredWarning')}</p>
-                <p class="text-xs mt-1 opacity-80">{t('settings.security.oauth.hostRequiredWarningDescription')}</p>
+                <p class="text-xs mt-1">{t('settings.security.oauth.hostRequiredWarningDescription')}</p>
               </div>
             {/snippet}
           </ErrorAlert>
