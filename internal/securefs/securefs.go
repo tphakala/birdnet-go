@@ -324,6 +324,23 @@ func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
 // escapes are theoretically possible since EvalSymlinks is intentionally skipped.
 func (sfs *SecureFS) mkdirAllWindows(relPath string, perm os.FileMode) error {
 	absPath := filepath.Join(sfs.baseDir, relPath)
+	current := sfs.baseDir
+	for component := range strings.SplitSeq(relPath, string(filepath.Separator)) {
+		if component == "" {
+			continue
+		}
+		current = filepath.Join(current, component)
+		info, err := os.Lstat(current)
+		if err != nil {
+			if os.IsNotExist(err) {
+				break
+			}
+			return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "mkdirall_windows_stat").Build()
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_windows_junction").Build()
+		}
+	}
 	if err := os.MkdirAll(absPath, perm); err != nil {
 		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "mkdirall_windows").Build()
 	}
