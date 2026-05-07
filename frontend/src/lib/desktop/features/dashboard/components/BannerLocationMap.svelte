@@ -9,6 +9,9 @@
   import { Maximize2, X } from '@lucide/svelte';
   import { MAP_CONFIG, createMapStyle } from '$lib/desktop/features/settings/utils/mapConfig';
   import { t } from '$lib/i18n';
+  import { getLogger } from '$lib/utils/logger';
+
+  const logger = getLogger('BannerLocationMap');
 
   interface Props {
     latitude: number;
@@ -124,7 +127,8 @@
       if (pin) {
         expandedMarker = new mod.Marker().setLngLat([lng, lat]).addTo(expandedMap);
       }
-    } catch {
+    } catch (error) {
+      logger.error('Failed to create expanded map:', error);
       expandedMap?.remove();
       expandedMap = undefined;
       expandedMarker?.remove();

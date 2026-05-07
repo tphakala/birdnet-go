@@ -685,14 +685,6 @@
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
 
-      map.on('error', (e: import('maplibre-gl').ErrorEvent) => {
-        logger.error('Map runtime error:', e.error);
-        map?.remove();
-        map = null;
-        mapInitialized = false;
-        mapLoadError = true;
-      });
-
       // Map construction succeeded - flip the flag here, AFTER the
       // constructor returns. The previous design set this from the effect
       // before initializeMap() ran, so an abort partway through (e.g., the
