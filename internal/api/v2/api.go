@@ -24,6 +24,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
+	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -384,8 +385,14 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		metrics:              metrics,
 		ctx:                  ctx,
 		cancel:               cancel,
-		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()), // Initialize shared generator
+		spectrogramGenerator: spectrogram.NewGenerator(settings, sfs, getSpectrogramLogger()),
 		detectionRateCache:   datastore.NewDetectionRateCache(detectionRateCacheTTL),
+	}
+
+	// Propagate the derived FFprobe path from config validation to the
+	// ffmpeg package so executeFFprobe can find it without PATH lookup.
+	if settings.Realtime.Audio.FfprobePath != "" {
+		ffmpeg.SetFFprobePath(settings.Realtime.Audio.FfprobePath)
 	}
 
 	// Initialize audio processing cache and concurrency limiter

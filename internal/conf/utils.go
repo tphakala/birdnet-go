@@ -481,27 +481,27 @@ func IsFfprobeAvailable() bool {
 	return err == nil
 }
 
-// GetFfmpegVersion detects the installed ffmpeg version and returns the version string,
-// major version, and minor version. Returns empty string and 0,0 if detection fails.
-func GetFfmpegVersion() (version string, major, minor int) {
-	// Get the ffmpeg binary name
-	ffmpegBinary := GetFfmpegBinaryName()
-
-	// Look for ffmpeg in PATH
-	ffmpegPath, err := exec.LookPath(ffmpegBinary)
-	if err != nil {
-		return "", 0, 0
-	}
-
-	// Execute ffmpeg -version
-	cmd := exec.Command(ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath resolved via exec.LookPath()
+// GetFfmpegVersionFrom detects the ffmpeg version by executing the binary at
+// the given path. Returns empty string and 0,0 if detection fails.
+func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) {
+	cmd := exec.Command(ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", 0, 0
 	}
-
-	// Parse the version from output
 	return ParseFfmpegVersion(string(output))
+}
+
+// GetFfmpegVersion detects the installed ffmpeg version by searching the system PATH.
+// Returns empty string and 0,0 if detection fails.
+//
+// Deprecated: Use GetFfmpegVersionFrom with the validated path instead.
+func GetFfmpegVersion() (version string, major, minor int) {
+	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
+	if err != nil {
+		return "", 0, 0
+	}
+	return GetFfmpegVersionFrom(ffmpegPath)
 }
 
 // ParseFfmpegVersion parses ffmpeg version output and extracts version string and numbers.
@@ -623,36 +623,31 @@ func parseLibavutilVersion(output string) (major, minor int) {
 
 // IsSoxAvailable checks if SoX is available in the system PATH and returns its supported audio formats.
 // It returns a boolean indicating if SoX is available and a slice of supported audio format strings.
+//
+// Deprecated: Use ValidateToolPath + GetSoxFormats for explicit path support.
 func IsSoxAvailable() (isAvailable bool, formats []string) {
-	// Look for the SoX binary in the system PATH
 	soxPath, err := exec.LookPath(GetSoxBinaryName())
 	if err != nil {
-		return false, nil // SoX is not available
+		return false, nil
 	}
+	return true, GetSoxFormats(soxPath)
+}
 
-	// Execute SoX with the help flag to get its output
-	cmd := exec.Command(soxPath, "-h") //nolint:gosec // G204: soxPath resolved via exec.LookPath()
+// GetSoxFormats returns the audio formats supported by the SoX binary at the
+// given path. Returns nil if SoX cannot be executed or reports no formats.
+func GetSoxFormats(soxPath string) []string {
+	cmd := exec.Command(soxPath, "-h") //nolint:gosec // G204: soxPath validated by ValidateToolPath before reaching here
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return false, nil // Failed to execute SoX
+		return nil
 	}
 
-	// Convert the output to a string and split it into lines
-	outputStr := string(output)
-	lines := strings.Split(outputStr, "\n")
-
-	var audioFormats []string
-	// Iterate through the lines to find the supported audio formats
-	for _, line := range lines {
+	for line := range strings.SplitSeq(string(output), "\n") {
 		if formats, found := strings.CutPrefix(line, "AUDIO FILE FORMATS:"); found {
-			// Extract and process the list of audio formats
-			formats = strings.TrimSpace(formats)
-			audioFormats = strings.Fields(formats)
-			break
+			return strings.Fields(strings.TrimSpace(formats))
 		}
 	}
-
-	return true, audioFormats // SoX is available, return the list of supported formats
+	return nil
 }
 
 // ValidateToolPath checks if a tool is available, either at an explicit path or in the system PATH.

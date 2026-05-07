@@ -100,6 +100,7 @@ type AudioSettings struct {
 	FfmpegMinor     int                 `yaml:"-" json:"ffmpegMinor,omitempty"`                                 // ffmpeg minor version number, runtime value
 	SoxPath         string              `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                  // path to sox, runtime value
 	SoxAudioTypes   []string            `yaml:"-" json:"-"`                                                     // supported audio types of sox, runtime value
+	FfprobePath     string              `yaml:"-" json:"-"`                                                     // path to ffprobe, derived from ffmpeg path at runtime
 	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
 	SoundLevel      SoundLevelSettings  `yaml:"soundlevel" json:"soundLevel"`                                   // sound level monitoring settings

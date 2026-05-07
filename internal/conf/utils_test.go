@@ -2,6 +2,7 @@ package conf
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -277,4 +278,38 @@ func TestFindConfigFile_EmptyConfigPathFallsThrough(t *testing.T) {
 	} else {
 		assert.NotEmpty(t, result, "returned path should not be empty on success")
 	}
+}
+
+func TestGetSoxFormats_WithExplicitPath(t *testing.T) {
+	soxPath, err := exec.LookPath(GetSoxBinaryName())
+	if err != nil {
+		t.Skip("SoX not available in PATH, skipping")
+	}
+
+	formats := GetSoxFormats(soxPath)
+	require.NotEmpty(t, formats, "SoX should report supported formats")
+	assert.Contains(t, formats, "wav")
+}
+
+func TestGetSoxFormats_WithInvalidPath(t *testing.T) {
+	formats := GetSoxFormats("/nonexistent/sox")
+	assert.Empty(t, formats)
+}
+
+func TestGetFfmpegVersionFrom_WithExplicitPath(t *testing.T) {
+	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
+	if err != nil {
+		t.Skip("FFmpeg not available in PATH, skipping")
+	}
+
+	version, major, _ := GetFfmpegVersionFrom(ffmpegPath)
+	assert.NotEmpty(t, version)
+	assert.Positive(t, major)
+}
+
+func TestGetFfmpegVersionFrom_WithInvalidPath(t *testing.T) {
+	version, major, minor := GetFfmpegVersionFrom("/nonexistent/ffmpeg")
+	assert.Empty(t, version)
+	assert.Zero(t, major)
+	assert.Zero(t, minor)
 }
