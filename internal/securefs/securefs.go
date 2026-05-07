@@ -324,7 +324,10 @@ func (sfs *SecureFS) MkdirAll(path string, perm os.FileMode) error {
 // escapes are theoretically possible since EvalSymlinks is intentionally skipped.
 func (sfs *SecureFS) mkdirAllWindows(relPath string, perm os.FileMode) error {
 	absPath := filepath.Join(sfs.baseDir, relPath)
-	return os.MkdirAll(absPath, perm)
+	if err := os.MkdirAll(absPath, perm); err != nil {
+		return errors.New(err).Component(componentSecurefs).Category(errors.CategoryFileIO).Context("operation", "mkdirall_windows").Build()
+	}
+	return nil
 }
 
 // resolveRelPath converts a path to a validated relative path for use with os.Root.
@@ -334,9 +337,6 @@ func (sfs *SecureFS) mkdirAllWindows(relPath string, perm os.FileMode) error {
 func (sfs *SecureFS) resolveRelPath(path string) (string, error) {
 	cleanPath := filepath.Clean(path)
 	if filepath.IsAbs(cleanPath) {
-		if !filepath.IsLocal(filepath.Base(cleanPath)) {
-			return "", errors.New(ErrInvalidPath).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_invalid_path").Build()
-		}
 		relPath, err := filepath.Rel(sfs.baseDir, cleanPath)
 		if err != nil {
 			return "", errors.New(err).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_rel").Build()
@@ -344,6 +344,9 @@ func (sfs *SecureFS) resolveRelPath(path string) (string, error) {
 		relPath = strings.TrimPrefix(relPath, string(filepath.Separator))
 		if strings.HasPrefix(relPath, ".."+string(filepath.Separator)) || relPath == ".." {
 			return "", errors.New(ErrPathTraversal).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_traversal").Build()
+		}
+		if !filepath.IsLocal(relPath) {
+			return "", errors.New(ErrInvalidPath).Component(componentSecurefs).Category(errors.CategoryValidation).Context("operation", "mkdirall_invalid_path").Build()
 		}
 		return relPath, nil
 	}
