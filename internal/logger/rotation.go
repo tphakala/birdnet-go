@@ -93,7 +93,8 @@ func (c RotationConfig) IsEnabled() bool {
 // RotationManager handles log file rotation for a BufferedFileWriter.
 type RotationManager struct {
 	config   RotationConfig
-	filePath string // Base path (e.g., "logs/application.log")
+	basePath string // Immutable original path (for deriving rotated/temp names)
+	filePath string // Current write path (may differ from basePath after failed rotation)
 	mu       sync.Mutex
 
 	// Reference to the writer for file swapping
@@ -117,6 +118,7 @@ func NewRotationManager(filePath string, config RotationConfig, writer *Buffered
 	}
 	return &RotationManager{
 		config:   config,
+		basePath: filePath,
 		filePath: filePath,
 		writer:   writer,
 	}
@@ -191,26 +193,22 @@ func (rm *RotationManager) rotateLocked() {
 	}
 
 	// Step 4: Rename old log file to timestamped name
-	newFilePath := rm.filePath + ".new"
+	newFilePath := newFile.Name()
 	renameOldOK := true
 	if err := os.Rename(rm.filePath, rotatedPath); err != nil {
 		fmt.Fprintf(os.Stderr, "rotation: failed to rename old file: %v\n", err)
 		renameOldOK = false
 	}
 
-	// Step 5: Rename the new file to the original path and sync paths.
-	// The final path depends on whether renames succeed.
-	finalLogPath := newFilePath // Default: logging to .new path
-	if renameOldOK {
-		if err := os.Rename(newFilePath, rm.filePath); err == nil {
-			// Success: new log is at the original path
-			finalLogPath = rm.filePath
-		} else {
-			// Failure: new log remains at the .new path
-			fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
-		}
+	// Step 5: Try to move the new file to the base path.
+	// Always attempt the rename regardless of step 4 outcome; on Windows
+	// the old file lock may have been released between steps.
+	finalLogPath := newFilePath
+	if err := os.Rename(newFilePath, rm.basePath); err == nil {
+		finalLogPath = rm.basePath
+	} else if renameOldOK {
+		fmt.Fprintf(os.Stderr, "rotation: failed to rename new file: %v\n", err)
 	}
-	// Update both rotation manager and writer to the final canonical path
 	rm.filePath = finalLogPath
 	rm.writer.SetFilePath(finalLogPath)
 
@@ -226,25 +224,32 @@ func (rm *RotationManager) rotateLocked() {
 	rm.disableConsoleFallback()
 }
 
-// createNewFile creates a new log file with .new suffix for atomic swap.
+// createNewFile creates a new log file with a temp suffix for atomic swap.
+// Always derives the path from basePath to prevent .new suffix accumulation.
+// Uses an alternate suffix when the .new path is the active write target.
 func (rm *RotationManager) createNewFile() (*os.File, error) {
-	newPath := rm.filePath + ".new"
+	newPath := rm.basePath + ".new"
+	if rm.filePath == newPath {
+		newPath = rm.basePath + ".rotating"
+	}
 	return os.OpenFile(newPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, LogFilePermissions) //nolint:gosec // path derived from config
 }
 
 // rotatedFilePath generates the path for a rotated file with timestamp.
+// Uses basePath to ensure correct extension even after failed rotations.
 // Example: "logs/application.log" -> "logs/application-2025-01-15T14-30-05Z.log"
 func (rm *RotationManager) rotatedFilePath(timestamp string) string {
-	ext := filepath.Ext(rm.filePath)
-	base := strings.TrimSuffix(rm.filePath, ext)
+	ext := filepath.Ext(rm.basePath)
+	base := strings.TrimSuffix(rm.basePath, ext)
 	return fmt.Sprintf("%s-%s%s", base, timestamp, ext)
 }
 
 // rotatedFilePattern returns a glob pattern matching rotated files.
+// Uses basePath to ensure correct extension even after failed rotations.
 // Example: "logs/application-*Z.log" and "logs/application-*Z.log.gz"
 func (rm *RotationManager) rotatedFilePattern() string {
-	ext := filepath.Ext(rm.filePath)
-	base := strings.TrimSuffix(rm.filePath, ext)
+	ext := filepath.Ext(rm.basePath)
+	base := strings.TrimSuffix(rm.basePath, ext)
 	return fmt.Sprintf("%s-*Z%s", base, ext)
 }
 
@@ -414,7 +419,7 @@ func (rm *RotationManager) recoverDiskSpace() bool {
 
 // testDiskSpace checks if we can create a file (disk has space).
 func (rm *RotationManager) testDiskSpace() bool {
-	testPath := rm.filePath + ".test"
+	testPath := rm.basePath + ".test"
 	f, err := os.Create(testPath) //nolint:gosec // path derived from config
 	if err != nil {
 		return false

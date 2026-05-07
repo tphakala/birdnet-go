@@ -194,6 +194,7 @@ func TestRotationConfigFromModuleOutput(t *testing.T) {
 
 func TestRotationManager_rotatedFilePath(t *testing.T) {
 	rm := &RotationManager{
+		basePath: "/logs/application.log",
 		filePath: "/logs/application.log",
 	}
 
@@ -205,6 +206,7 @@ func TestRotationManager_rotatedFilePath(t *testing.T) {
 
 func TestRotationManager_rotatedFilePattern(t *testing.T) {
 	rm := &RotationManager{
+		basePath: "/logs/application.log",
 		filePath: "/logs/application.log",
 	}
 
@@ -561,4 +563,116 @@ func TestWithRotation_DisabledWhenMaxSizeZero(t *testing.T) {
 
 	// Rotation should not be set when disabled
 	assert.Nil(t, writer.rotation)
+}
+
+func TestRotationManager_NoNewSuffixAccumulation(t *testing.T) {
+	// Regression test for GitHub issue #2942: on Windows, when os.Rename fails
+	// during rotation (e.g., file locked by antivirus), subsequent rotations
+	// must not accumulate .new suffixes (app.log.new.new.new...).
+	tempDir := t.TempDir()
+	logPath := filepath.Join(tempDir, "test.log")
+
+	config := RotationConfig{
+		MaxSize:         testMaxSizeSmall,
+		MaxRotatedFiles: testMaxFiles,
+	}
+
+	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
+	require.NoError(t, err)
+	defer func() { _ = writer.Close() }()
+
+	rm := writer.rotation
+	require.NotNil(t, rm)
+
+	// Simulate a failed rotation by manually setting filePath to .new
+	// (as happens when os.Rename fails on Windows).
+	// Hold mutex to avoid racing with the auto-flush goroutine.
+	rm.mu.Lock()
+	rm.filePath = logPath + ".new"
+	rm.mu.Unlock()
+
+	// Create the .new file so createNewFile can work
+	require.NoError(t, os.WriteFile(logPath+".new", []byte("data"), 0o600))
+
+	// The next createNewFile must NOT create logPath + ".new.new"
+	rm.mu.Lock()
+	f, err := rm.createNewFile()
+	rm.mu.Unlock()
+	require.NoError(t, err)
+	defer func() { _ = f.Close() }()
+
+	createdPath := f.Name()
+	assert.NotContains(t, createdPath, ".new.new",
+		"createNewFile must not accumulate .new suffixes")
+}
+
+func TestRotationManager_RotatedFilePathUsesBasePath(t *testing.T) {
+	// Verify rotated file paths always use the original base path,
+	// even if filePath has diverged after a failed rotation.
+	rm := &RotationManager{
+		basePath: "/logs/application.log",
+		filePath: "/logs/application.log.new",
+	}
+
+	timestamp := "2025-01-15T14-30-05Z"
+	result := rm.rotatedFilePath(timestamp)
+
+	// Must use basePath extension (.log), not filePath extension (.new)
+	assert.Equal(t, "/logs/application-2025-01-15T14-30-05Z.log", result)
+}
+
+func TestRotationManager_RotatedFilePatternUsesBasePath(t *testing.T) {
+	rm := &RotationManager{
+		basePath: "/logs/application.log",
+		filePath: "/logs/application.log.new",
+	}
+
+	result := rm.rotatedFilePattern()
+
+	assert.Equal(t, "/logs/application-*Z.log", result)
+}
+
+func TestRotationManager_RepeatedFailedRotations(t *testing.T) {
+	// Regression test: simulate repeated rename failures (as on Windows with
+	// file locking) by forcing filePath to .new after each rotation cycle.
+	// Verifies that filePath oscillates between .new and .rotating instead
+	// of growing an unbounded .new.new.new... chain.
+	tempDir := t.TempDir()
+	logPath := filepath.Join(tempDir, "test.log")
+
+	config := RotationConfig{
+		MaxSize:         testMaxSizeSmall,
+		MaxRotatedFiles: testMaxFiles,
+	}
+
+	writer, err := NewBufferedFileWriter(logPath, WithRotation(config))
+	require.NoError(t, err)
+	defer func() { _ = writer.Close() }()
+
+	rm := writer.rotation
+	require.NotNil(t, rm)
+
+	for i := range 10 {
+		data := strings.Repeat("x", testDataSmall)
+		_, err = writer.Write([]byte(data))
+		require.NoError(t, err)
+		require.NoError(t, writer.Flush())
+
+		rm.CheckAndRotate()
+		time.Sleep(50 * time.Millisecond)
+
+		// Inject rename failure: force filePath to .new (simulating Windows
+		// behavior where os.Rename fails due to file locking).
+		rm.mu.Lock()
+		rm.filePath = logPath + ".new"
+		// Ensure the .new file exists for the next rotation cycle
+		_ = os.WriteFile(rm.filePath, []byte("data"), 0o600)
+		currentPath := rm.filePath
+		rm.mu.Unlock()
+
+		assert.NotContains(t, currentPath, ".new.new",
+			"iteration %d: filePath must not accumulate .new suffixes, got %s", i, currentPath)
+		assert.NotContains(t, currentPath, ".rotating.rotating",
+			"iteration %d: filePath must not accumulate .rotating suffixes, got %s", i, currentPath)
+	}
 }
