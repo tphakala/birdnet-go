@@ -78,15 +78,13 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 func dateOnlyBefore(a, b time.Time) bool {
 	ay, am, ad := a.Date()
 	by, bm, bd := b.Date()
-	aDate := time.Date(ay, am, ad, 0, 0, 0, 0, time.UTC)
-	bDate := time.Date(by, bm, bd, 0, 0, 0, 0, time.UTC)
-	return aDate.Before(bDate)
-}
-
-// dateOnlyAfter reports whether the calendar date of a is strictly after the
-// calendar date of b, ignoring time-of-day and timezone.
-func dateOnlyAfter(a, b time.Time) bool {
-	return dateOnlyBefore(b, a)
+	if ay != by {
+		return ay < by
+	}
+	if am != bm {
+		return am < bm
+	}
+	return ad < bd
 }
 
 // pruneLifetimeEntriesLocked removes very old lifetime entries (>10 years).

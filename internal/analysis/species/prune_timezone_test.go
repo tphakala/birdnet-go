@@ -98,6 +98,51 @@ func TestPruneYearlyTimezoneMultipleOffsets(t *testing.T) {
 	}
 }
 
+// TestPruneYearlyTimezoneEastOfUTC confirms the fix doesn't break timezones
+// east of UTC where local midnight is an earlier instant than UTC midnight.
+func TestPruneYearlyTimezoneEastOfUTC(t *testing.T) {
+	t.Parallel()
+
+	timezones := []string{
+		"Europe/Berlin",    // UTC+1 / UTC+2
+		"Asia/Tokyo",       // UTC+9
+		"Pacific/Auckland", // UTC+12 / UTC+13
+	}
+
+	for _, tzName := range timezones {
+		t.Run(tzName, func(t *testing.T) {
+			t.Parallel()
+
+			loc, err := time.LoadLocation(tzName)
+			require.NoError(t, err)
+
+			tracker := &SpeciesTracker{
+				yearlyEnabled:   true,
+				resetMonth:      1,
+				resetDay:        1,
+				currentYear:     2026,
+				speciesThisYear: make(map[string]time.Time),
+			}
+
+			jan1UTC, _ := time.Parse(time.DateOnly, "2026-01-01")
+			tracker.speciesThisYear["Corvus brachyrhynchos"] = jan1UTC
+
+			dec31UTC, _ := time.Parse(time.DateOnly, "2025-12-31")
+			tracker.speciesThisYear["Passer domesticus"] = dec31UTC
+
+			now := time.Date(2026, 5, 6, 12, 0, 0, 0, loc)
+			pruned := tracker.pruneYearlyEntriesLocked(now)
+
+			assert.Equal(t, 1, pruned,
+				"only previous-year entry should be pruned in %s", tzName)
+			assert.Contains(t, tracker.speciesThisYear, "Corvus brachyrhynchos",
+				"Jan 1 species must remain in %s", tzName)
+			assert.NotContains(t, tracker.speciesThisYear, "Passer domesticus",
+				"Dec 31 species should be pruned in %s", tzName)
+		})
+	}
+}
+
 // TestPruneYearlyStillRemovesPreviousYearEntries confirms that entries from a
 // previous tracking year ARE correctly pruned (the fix must not break this).
 func TestPruneYearlyStillRemovesPreviousYearEntries(t *testing.T) {
@@ -167,9 +212,9 @@ func TestPruneYearlyCustomResetDateTimezone(t *testing.T) {
 }
 
 // TestIsSeasonOldTimezoneWestOfUTC verifies that isSeasonOld uses date-only
-// comparison. A species detected the day AFTER the cutoff date must keep the
-// season alive, even when the UTC-midnight timestamp is before the cutoff
-// instant in local time.
+// comparison. A species detected ON the cutoff date must keep the season
+// alive, even when the UTC-midnight timestamp is before the cutoff instant
+// in local time.
 func TestIsSeasonOldTimezoneWestOfUTC(t *testing.T) {
 	t.Parallel()
 
