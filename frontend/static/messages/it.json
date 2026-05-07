@@ -3065,6 +3065,7 @@
       "baseUrlHelp": "URL esterno completo per configurazioni reverse proxy. Quando impostato, questo URL è usato così com'è per notifiche e redirect OAuth, ignorando impostazioni Host e AutoTLS.",
       "baseUrlValidation": "Per favore inserisci un URL valido iniziando con http:// o https:// e includendo un hostname",
       "hostLabel": "Indirizzo Host",
+      "hostHelp": "Il nome host pubblico o l'indirizzo IP del server (es. birdnet.example.com). Necessario per l'accesso OAuth e i certificati TLS. Se si utilizza un reverse proxy, utilizzare invece l'URL di base.",
       "allowSubnetBypassLabel": "Consenti Accesso da Sottorete per Bypassare Autenticazione",
       "allowedSubnetsLabel": "Sottoreti Consentite",
       "allowedSubnetsHelp": "Intervalli rete consentiti per bypassare login (notazione CIDR, lista separata da virgola)",
@@ -3112,6 +3113,9 @@
           "deleteButton": "Elimina fornitore",
           "deleteConfirm": "Sei sicuro di voler eliminare il fornitore OAuth {provider}?"
         },
+        "hostRequiredWarning": "L'indirizzo host o l'URL di base non è configurato",
+        "hostRequiredWarningDescription": "L'accesso OAuth richiede che un indirizzo host o un URL di base sia impostato nella scheda Configurazione server. Senza di esso, i provider OAuth non possono creare URL di callback e l'accesso non riuscirà.",
+        "redirectUriNotConfigured": "Non configurato - impostare l'indirizzo host o l'URL di base nella scheda Configurazione server",
         "noProviders": "Nessun fornitore OAuth configurato",
         "noProvidersDescription": "Aggiungi un provider per abilitare l'accesso con Google, GitHub, Microsoft, LINE, Kakao o un provider OIDC personalizzato.",
         "enableProviderLabel": "Abilita questo fornitore",

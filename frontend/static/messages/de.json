@@ -3415,6 +3415,7 @@
       "baseUrlHelp": "Vollständige externe URL für Reverse-Proxy-Setups. Wenn gesetzt, wird diese URL unverändert für Benachrichtigungen und OAuth-Weiterleitungen verwendet, wobei Host- und AutoTLS-Einstellungen ignoriert werden.",
       "baseUrlValidation": "Bitte geben Sie eine gültige URL ein, die mit http:// oder https:// beginnt und einen Hostnamen enthält",
       "hostLabel": "Host-Adresse",
+      "hostHelp": "Der öffentliche Hostname oder die IP-Adresse Ihres Servers (z.B. birdnet.example.com). Erforderlich für OAuth-Anmeldung und TLS-Zertifikate. Bei Einsatz eines Reverse-Proxy verwenden Sie stattdessen die Base URL.",
       "allowSubnetBypassLabel": "Zugriff aus Subnetz zur Umgehung der Authentifizierung erlauben",
       "allowedSubnetsLabel": "Erlaubte Subnetze",
       "allowedSubnetsHelp": "Erlaubte Netzwerkbereiche zur Umgehung der Anmeldung (CIDR-Notation, kommagetrennte Liste)",
@@ -3462,6 +3463,9 @@
           "deleteButton": "Anbieter löschen",
           "deleteConfirm": "Möchten Sie den {provider}-OAuth-Anbieter wirklich löschen?"
         },
+        "hostRequiredWarning": "Hostadresse oder Base URL ist nicht konfiguriert",
+        "hostRequiredWarningDescription": "OAuth-Anmeldung erfordert, dass eine Hostadresse oder Base URL im Tab Serverkonfiguration festgelegt ist. Ohne diese können OAuth-Anbieter keine Callback-URLs erstellen und die Anmeldung schlägt fehl.",
+        "redirectUriNotConfigured": "Nicht konfiguriert - Hostadresse oder Base URL im Tab Serverkonfiguration festlegen",
         "noProviders": "Keine OAuth-Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um die Anmeldung mit Google, GitHub, Microsoft, LINE, Kakao oder einem benutzerdefinierten OIDC-Anbieter zu ermöglichen.",
         "enableProviderLabel": "Diesen Anbieter aktivieren",

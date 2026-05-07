@@ -3065,6 +3065,7 @@
       "baseUrlHelp": "Úplná externá URL pre nastavenia reverzného proxy. Keď je nastavená, táto URL sa používa tak, ako je, pre upozornenia a OAuth presmerovania, pričom sa ignorujú nastavenia Host a AutoTLS.",
       "baseUrlValidation": "Zadajte platnú URL začínajúcu na http:// alebo https:// a obsahujúcu hostname",
       "hostLabel": "Adresa hostiteľa (Host)",
+      "hostHelp": "Verejný názov hostiteľa alebo IP adresa vášho servera (napr. birdnet.example.com). Vyžadované pre prihlásenie OAuth a certifikáty TLS. Ak používate reverzný proxy, použite namiesto toho Base URL.",
       "allowSubnetBypassLabel": "Povoliť prístup zo subnetu na obídenie autentifikácie",
       "allowedSubnetsLabel": "Povolené subnety",
       "allowedSubnetsHelp": "Povolené sieťové rozsahy na obídenie prihlásenia (notácia CIDR, zoznam oddelený čiarkami)",
@@ -3112,6 +3113,9 @@
           "deleteButton": "Odstrániť poskytovateľa",
           "deleteConfirm": "Naozaj chcete odstrániť poskytovateľa OAuth {provider}?"
         },
+        "hostRequiredWarning": "Adresa hostiteľa alebo Base URL nie je nakonfigurovaná",
+        "hostRequiredWarningDescription": "Prihlásenie OAuth vyžaduje, aby bola na karte Konfigurácia servera nastavená adresa hostiteľa alebo Base URL. Bez nej poskytovatelia OAuth nemôžu vytvoriť adresy spätného volania a prihlásenie zlyhá.",
+        "redirectUriNotConfigured": "Nie je nakonfigurované - nastavte adresu hostiteľa alebo Base URL na karte Konfigurácia servera",
         "noProviders": "Žiadni nakonfigurovaní poskytovatelia OAuth",
         "noProvidersDescription": "Pridajte poskytovateľa na povolenie prihlásenia cez Google, GitHub, Microsoft, LINE, Kakao alebo vlastného poskytovateľa OIDC.",
         "enableProviderLabel": "Povoliť tohto poskytovateľa",

@@ -3099,6 +3099,7 @@
       "baseUrlHelp": "URL externe complète pour les configurations de proxy inverse. Lorsqu'elle est définie, cette URL est utilisée telle quelle pour les notifications et les redirections OAuth, ignorant les paramètres Host et AutoTLS.",
       "baseUrlValidation": "Veuillez entrer une URL valide commençant par http:// ou https:// et incluant un nom d'hôte",
       "hostLabel": "Adresse de l'hôte",
+      "hostHelp": "Le nom d'hôte public ou l'adresse IP de votre serveur (ex. birdnet.example.com). Requis pour la connexion OAuth et les certificats TLS. Si vous utilisez un reverse proxy, utilisez plutôt l'URL de base.",
       "allowSubnetBypassLabel": "Autoriser les accès depuis le sous-réseau à contourner l'authentification",
       "allowedSubnetsLabel": "Sous-réseaux autorisés",
       "allowedSubnetsHelp": "Plages de réseau autorisées à contourner la connexion (notation CIDR, liste séparée par des virgules)",
@@ -3146,6 +3147,9 @@
           "deleteButton": "Supprimer le fournisseur",
           "deleteConfirm": "Êtes-vous sûr de vouloir supprimer le fournisseur OAuth {provider} ?"
         },
+        "hostRequiredWarning": "L'adresse hôte ou l'URL de base n'est pas configurée",
+        "hostRequiredWarningDescription": "La connexion OAuth nécessite qu'une adresse hôte ou une URL de base soit définie dans l'onglet Configuration du serveur. Sans cela, les fournisseurs OAuth ne peuvent pas créer d'URLs de callback et la connexion échouera.",
+        "redirectUriNotConfigured": "Non configuré - définissez l'adresse hôte ou l'URL de base dans l'onglet Configuration du serveur",
         "noProviders": "Aucun fournisseur OAuth configuré",
         "noProvidersDescription": "Ajoutez un fournisseur pour activer la connexion avec Google, GitHub, Microsoft, LINE, Kakao ou un fournisseur OIDC personnalisé.",
         "enableProviderLabel": "Activer ce fournisseur",

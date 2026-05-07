@@ -3105,6 +3105,7 @@
       "baseUrlHelp": "Pełny zewnętrzny URL dla konfiguracji reverse proxy. Po ustawieniu ten URL jest używany bez zmian dla powiadomień i przekierowań OAuth, ignorując ustawienia Host i AutoTLS.",
       "baseUrlValidation": "Wprowadź prawidłowy URL zaczynający się od http:// lub https:// i zawierający nazwę hosta",
       "hostLabel": "Adres Hosta",
+      "hostHelp": "Publiczna nazwa hosta lub adres IP serwera (np. birdnet.example.com). Wymagane do logowania OAuth i certyfikatów TLS. Jeśli korzystasz z odwrotnego proxy, użyj zamiast tego Base URL.",
       "allowSubnetBypassLabel": "Zezwól na Dostęp z Podsieci Omijając Uwierzytelnianie",
       "allowedSubnetsLabel": "Dozwolone Podsieci",
       "allowedSubnetsHelp": "Dozwolone zakresy sieci do ominięcia logowania (notacja CIDR, lista oddzielona przecinkami)",
@@ -3152,6 +3153,9 @@
           "deleteButton": "Usuń dostawcę",
           "deleteConfirm": "Czy na pewno chcesz usunąć dostawcę OAuth {provider}?"
         },
+        "hostRequiredWarning": "Adres hosta lub Base URL nie jest skonfigurowany",
+        "hostRequiredWarningDescription": "Logowanie OAuth wymaga ustawienia adresu hosta lub Base URL na karcie Konfiguracja serwera. Bez tego dostawcy OAuth nie mogą tworzyć adresów callback, a logowanie nie powiedzie się.",
+        "redirectUriNotConfigured": "Nie skonfigurowano - ustaw adres hosta lub Base URL na karcie Konfiguracja serwera",
         "noProviders": "Brak skonfigurowanych dostawców OAuth",
         "noProvidersDescription": "Dodaj dostawcę, aby umożliwić logowanie przez Google, GitHub, Microsoft, LINE, Kakao lub niestandardowego dostawcę OIDC.",
         "enableProviderLabel": "Włącz tego dostawcę",

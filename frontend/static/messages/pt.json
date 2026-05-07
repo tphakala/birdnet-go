@@ -3449,6 +3449,9 @@
           "deleteButton": "Excluir provedor",
           "deleteConfirm": "Tem certeza de que deseja excluir o provedor OAuth {provider}?"
         },
+        "hostRequiredWarning": "O endereço do host ou a URL base não está configurado",
+        "hostRequiredWarningDescription": "O login OAuth requer que um endereço de host ou URL base seja definido na aba Configuração do servidor. Sem isso, os provedores OAuth não podem criar URLs de callback e o login falhará.",
+        "redirectUriNotConfigured": "Não configurado - defina o endereço do host ou a URL base na aba Configuração do servidor",
         "noProviders": "Nenhum provedor OAuth configurado",
         "noProvidersDescription": "Adicione um provedor para habilitar o login com Google, GitHub, Microsoft, LINE, Kakao ou um provedor OIDC personalizado.",
         "enableProviderLabel": "Habilitar este provedor",
@@ -3554,6 +3557,7 @@
       "baseUrlHelp": "URL externa completa para configurações de proxy reverso. Quando definida, esta URL é usada como está para notificações e redirecionamentos OAuth, ignorando as configurações de Host e AutoTLS.",
       "baseUrlValidation": "Por favor, insira uma URL válida começando com http:// ou https:// e incluindo um nome de host",
       "hostLabel": "Endereço do host",
+      "hostHelp": "O nome de host público ou endereço IP do seu servidor (ex. birdnet.example.com). Necessário para login OAuth e certificados TLS. Se estiver atrás de um proxy reverso, use a URL base.",
       "allowSubnetBypassLabel": "Permitir acesso da sub-rede para contornar autenticação",
       "allowedSubnetsLabel": "Sub-redes permitidas",
       "allowedSubnetsHelp": "Intervalos de rede permitidos para contornar o login (notação CIDR, lista separada por vírgulas)",

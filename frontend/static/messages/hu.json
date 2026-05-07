@@ -3096,6 +3096,7 @@
       "baseUrlHelp": "Teljes külső URL fordított proxy beállításokhoz. Ha beállítva, ez az URL használatos az értesítésekhez és OAuth átirányításokhoz, figyelmen kívül hagyva a Host és AutoTLS beállításokat.",
       "baseUrlValidation": "Kérjük, adjon meg egy érvényes URL-t http:// vagy https:// kezdettel és hostname-t tartalmazva",
       "hostLabel": "Host cím",
+      "hostHelp": "A szerver nyilvános hosztnevei vagy IP-címe (pl. birdnet.example.com). Az OAuth bejelentkezéshez és a TLS tanúsítványokhoz szükséges. Ha fordított proxy mögött van, használja helyette a Base URL-t.",
       "allowSubnetBypassLabel": "Alhálózatból származó hozzáférés engedélyezése a hitelesítés megkerüléséhez",
       "allowedSubnetsLabel": "Engedélyezett alhálózatok",
       "allowedSubnetsHelp": "Engedélyezett hálózati tartományok a bejelentkezés megkerüléséhez (CIDR jelölés, vesszővel elválasztott lista)",
@@ -3143,6 +3144,9 @@
           "deleteButton": "Szolgáltató törlése",
           "deleteConfirm": "Biztosan törli a {provider} OAuth szolgáltatót?"
         },
+        "hostRequiredWarning": "A hosztcím vagy a Base URL nincs konfigurálva",
+        "hostRequiredWarningDescription": "Az OAuth bejelentkezéshez szükséges, hogy a hosztcím vagy a Base URL be legyen állítva a Szerverkonfiguráció fülön. Enélkül az OAuth szolgáltatók nem tudnak callback URL-eket létrehozni, és a bejelentkezés sikertelen lesz.",
+        "redirectUriNotConfigured": "Nincs konfigurálva - állítsa be a hosztcímet vagy a Base URL-t a Szerverkonfiguráció fülön",
         "noProviders": "Nincs OAuth szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a bejelentkezés engedélyezéséhez Google, GitHub, Microsoft, LINE, Kakao vagy egyedi OIDC szolgáltatóval.",
         "enableProviderLabel": "Engedélyezze ezt a szolgáltatót",

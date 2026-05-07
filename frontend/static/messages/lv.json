@@ -3095,6 +3095,7 @@
       "baseUrlHelp": "Pilns ārējais URL reversā starpniekservera iestatījumiem. Kad iestatīts, šis URL tiek izmantots tāds, kāds tas ir, paziņojumiem un OAuth pāradresācijām, ignorējot resursdatora un AutoTLS iestatījumus.",
       "baseUrlValidation": "Lūdzu, ievadiet derīgu URL, kas sākas ar http:// vai https:// un ietver resursdatora nosaukumu",
       "hostLabel": "Resursdatora adrese",
+      "hostHelp": "Jūsu servera publiskais resursdatora nosaukums vai IP adrese (piem., birdnet.example.com). Nepieciešams OAuth pieteikšanās un TLS sertifikātiem. Ja izmantojat reverso starpniekserveri, tā vietā izmantojiet Base URL.",
       "allowSubnetBypassLabel": "Atļaut piekļuvi no apakštīkla, apejot autentifikāciju",
       "allowedSubnetsLabel": "Atļautie apakštīkli",
       "allowedSubnetsHelp": "Atļautie tīkla diapazoni, lai apietu pieteikšanos (CIDR notācija, ar komatiem atdalīts saraksts)",
@@ -3142,6 +3143,9 @@
           "deleteButton": "Dzēst nodrošinātāju",
           "deleteConfirm": "Vai tiešām vēlaties dzēst {provider} OAuth nodrošinātāju?"
         },
+        "hostRequiredWarning": "Resursdatora adrese vai Base URL nav konfigurēta",
+        "hostRequiredWarningDescription": "OAuth pieteikšanās prasa, lai resursdatora adrese vai Base URL būtu iestatīta cilnē Servera konfigurācija. Bez tā OAuth pakalpojumu sniedzēji nevar izveidot callback URL, un pieteikšanās neizdosies.",
+        "redirectUriNotConfigured": "Nav konfigurēts - iestatiet resursdatora adresi vai Base URL cilnē Servera konfigurācija",
         "noProviders": "Nav konfigurētu OAuth nodrošinātāju",
         "noProvidersDescription": "Pievienojiet nodrošinātāju, lai iespējotu pieteikšanos ar Google, GitHub, Microsoft, LINE, Kakao vai pielāgotu OIDC nodrošinātāju.",
         "enableProviderLabel": "Iespējot šo nodrošinātāju",

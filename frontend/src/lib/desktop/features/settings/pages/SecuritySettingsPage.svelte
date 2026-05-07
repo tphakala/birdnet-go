@@ -360,17 +360,7 @@
 
   let exceptionsHasChanges = $derived(subnetBypassHasChanges || publicAccessHasChanges);
 
-  // PERFORMANCE OPTIMIZATION: Generate redirect URIs dynamically with $derived
-  // Use window.location.origin for display (what the user sees in browser)
-  let currentHost = $derived(
-    typeof window !== 'undefined'
-      ? window.location.origin
-      : settings?.host
-        ? `https://${settings.host}`
-        : 'https://your-domain.com'
-  );
-
-  // Canonical base URL for saving to config (uses configured host/baseUrl)
+  // Canonical base URL for redirect URIs (uses configured host/baseUrl)
   // This is what gets persisted to config.yaml for OAuth callbacks
   // Returns empty string if neither is configured - backend will auto-generate from its config
   let configuredBaseUrl = $derived.by(() => {
@@ -394,14 +384,7 @@
   // Whether we have explicit base URL configuration for redirect URIs
   let hasExplicitBaseUrl = $derived(configuredBaseUrl !== '');
 
-  // Helper function to get redirect URI for a provider (for display)
-  function getRedirectURI(providerType: OAuthProviderType): string {
-    // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
-    const provider = AUTH_PROVIDERS[providerType];
-    return `${currentHost}${provider?.settings.callbackPath || `/auth/${providerType}/callback`}`;
-  }
-
-  // Helper function to get config redirect URI for a provider (for saving)
+  // Helper function to get config redirect URI for a provider (for display and saving)
   function getConfigRedirectURI(providerType: OAuthProviderType): string {
     // eslint-disable-next-line security/detect-object-injection -- providerType is typed as OAuthProviderType enum, not user input
     const provider = AUTH_PROVIDERS[providerType];
@@ -719,6 +702,7 @@
         value={settings.host}
         label={t('settings.security.hostLabel')}
         placeholder={t('settings.security.placeholders.host')}
+        helpText={t('settings.security.hostHelp')}
         disabled={store.isLoading || store.isSaving}
         onchange={updateAutoTLSHost}
       />
@@ -1018,6 +1002,18 @@
       currentData={store.formData.security?.oauthProviders}
     >
       <div class="space-y-4">
+        <!-- Warning: Host not configured -->
+        {#if !hasExplicitBaseUrl}
+          <ErrorAlert type="warning">
+            {#snippet children()}
+              <div>
+                <p class="font-medium">{t('settings.security.oauth.hostRequiredWarning')}</p>
+                <p class="text-xs mt-1 opacity-80">{t('settings.security.oauth.hostRequiredWarningDescription')}</p>
+              </div>
+            {/snippet}
+          </ErrorAlert>
+        {/if}
+
         <!-- Provider Form (shown when adding or editing) -->
         {#if showProviderForm}
           <div class="rounded-lg overflow-hidden bg-[var(--color-base-200)] border border-[var(--color-primary)]">
@@ -1069,7 +1065,11 @@
                 <div class="bg-[var(--color-base-300)] p-3 rounded-lg">
                   <div class="text-sm">
                     <p class="font-medium mb-1">{t('settings.security.oauth.redirectUriTitle')}</p>
-                    <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getRedirectURI(selectedProvider)}</code>
+                    {#if hasExplicitBaseUrl}
+                      <code class="text-xs bg-[var(--color-base-200)] px-2 py-1 rounded-sm break-all">{getConfigRedirectURI(selectedProvider)}</code>
+                    {:else}
+                      <p class="text-xs text-[var(--color-warning)] italic">{t('settings.security.oauth.redirectUriNotConfigured')}</p>
+                    {/if}
                   </div>
                   {#if getCredentialsUrl(selectedProvider)}
                     <a
@@ -1166,7 +1166,7 @@
                   <button
                     onclick={saveProvider}
                     class="inline-flex items-center justify-center gap-2 px-3 py-1.5 text-sm font-medium rounded-md cursor-pointer transition-all bg-[var(--color-primary)] text-[var(--color-primary-content)] border border-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret || !isOidcValid}
+                    disabled={store.isLoading || store.isSaving || !providerFormData.clientId || !providerFormData.clientSecret || !isOidcValid || !hasExplicitBaseUrl}
                   >
                     {t('settings.security.oauth.form.saveButton')}
                   </button>

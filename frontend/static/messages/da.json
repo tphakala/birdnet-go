@@ -3095,6 +3095,7 @@
       "baseUrlHelp": "Komplet ekstern URL til reverse proxy-opsætninger. Når denne er indstillet, bruges denne URL direkte til notifikationer og OAuth-omdirigeringer, og Host- og AutoTLS-indstillinger ignoreres.",
       "baseUrlValidation": "Indtast venligst en gyldig URL, der starter med http:// eller https:// og inkluderer et værtsnavn",
       "hostLabel": "Værtsadresse",
+      "hostHelp": "Din servers offentlige hostname eller IP-adresse (f.eks. birdnet.example.com). Kræves til OAuth-login og TLS-certifikater. Brug Base URL i stedet, hvis du er bag en reverse proxy.",
       "allowSubnetBypassLabel": "Tillad adgang fra subnet til at omgå godkendelse",
       "allowedSubnetsLabel": "Tilladte subnets",
       "allowedSubnetsHelp": "Tilladte netværksintervaller til at omgå login (CIDR-notation, kommasepareret liste)",
@@ -3142,6 +3143,9 @@
           "deleteButton": "Slet udbyder",
           "deleteConfirm": "Er du sikker på, at du vil slette {provider} OAuth-udbyderen?"
         },
+        "hostRequiredWarning": "Hostadresse eller Base URL er ikke konfigureret",
+        "hostRequiredWarningDescription": "OAuth-login kræver, at en hostadresse eller Base URL er angivet under fanen Serverkonfiguration. Uden den kan OAuth-udbydere ikke oprette callback-URL'er, og login vil mislykkes.",
+        "redirectUriNotConfigured": "Ikke konfigureret - angiv hostadresse eller Base URL under fanen Serverkonfiguration",
         "noProviders": "Ingen OAuth-udbydere konfigureret",
         "noProvidersDescription": "Tilføj en udbyder for at aktivere login med Google, GitHub, Microsoft, LINE, Kakao eller en brugerdefineret OIDC-udbyder.",
         "enableProviderLabel": "Aktiver denne udbyder",

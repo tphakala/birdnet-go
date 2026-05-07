@@ -3415,6 +3415,7 @@
       "baseUrlHelp": "URL externa completa para configuraciones de proxy inverso. Cuando se establece, esta URL se usa tal cual para notificaciones y redirecciones OAuth, ignorando la configuración de Host y AutoTLS.",
       "baseUrlValidation": "Por favor, introduce una URL válida que comience con http:// o https:// e incluya un nombre de host",
       "hostLabel": "Dirección del host",
+      "hostHelp": "El nombre de host público o la dirección IP de su servidor (p. ej., birdnet.example.com). Necesario para el inicio de sesión OAuth y los certificados TLS. Si está detrás de un proxy inverso, use la URL base en su lugar.",
       "allowSubnetBypassLabel": "Permitir acceso desde subred para omitir autenticación",
       "allowedSubnetsLabel": "Subredes permitidas",
       "allowedSubnetsHelp": "Rangos de red permitidos para omitir el inicio de sesión (notación CIDR, lista separada por comas)",
@@ -3462,6 +3463,9 @@
           "deleteButton": "Eliminar proveedor",
           "deleteConfirm": "¿Está seguro de que desea eliminar el proveedor OAuth de {provider}?"
         },
+        "hostRequiredWarning": "La dirección del host o la URL base no está configurada",
+        "hostRequiredWarningDescription": "El inicio de sesión OAuth requiere que se establezca una dirección de host o URL base en la pestaña Configuración del servidor. Sin ella, los proveedores OAuth no pueden crear URLs de callback y el inicio de sesión fallará.",
+        "redirectUriNotConfigured": "No configurado - establezca la dirección del host o la URL base en la pestaña Configuración del servidor",
         "noProviders": "No hay proveedores OAuth configurados",
         "noProvidersDescription": "Añade un proveedor para habilitar el inicio de sesión con Google, GitHub, Microsoft, LINE, Kakao o un proveedor OIDC personalizado.",
         "enableProviderLabel": "Habilitar este proveedor",
