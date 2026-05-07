@@ -685,7 +685,7 @@
         touchZoomRotate: MAP_CONFIG.TOUCH_ZOOM_ROTATE,
       });
 
-      // Map construction succeeded — flip the flag here, AFTER the
+      // Map construction succeeded - flip the flag here, AFTER the
       // constructor returns. The previous design set this from the effect
       // before initializeMap() ran, so an abort partway through (e.g., the
       // post-import isConnected check above) would leave map=null but
@@ -1946,61 +1946,77 @@
 
       <!-- Map -->
       <div>
-        <div
-          bind:this={mapElement}
-          id="location-map"
-          class="h-[350px] rounded-xl border border-[var(--border-200)] relative overflow-hidden"
-          role="application"
-          aria-label="Map for selecting station location"
-        >
-          {#if mapLibraryLoading}
-            <div
-              class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-100)]/75 rounded-xl"
-            >
-              <div class="flex flex-col items-center gap-2">
-                <span
-                  class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
-                  aria-hidden="true"
-                ></span>
-                <span class="text-sm text-[var(--color-base-content)]"
-                  >{t('common.ui.loadingMap')}</span
-                >
-              </div>
+        {#if mapLoadError}
+          <div
+            class="h-[350px] rounded-xl border border-[var(--border-200)] flex items-center justify-center bg-[var(--color-base-200)]"
+          >
+            <div class="text-center px-6">
+              <MapPin
+                class="size-8 mx-auto mb-2 text-[var(--color-base-content)]/40"
+                aria-hidden="true"
+              />
+              <p class="text-sm text-[var(--color-base-content)]/60">
+                {t('settings.main.errors.mapUnavailable')}
+              </p>
             </div>
-          {/if}
-        </div>
-        <div class="flex gap-2 mt-3">
-          <button
-            type="button"
-            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Zoom in"
-            disabled={!map || mapLibraryLoading}
-            onclick={() => map?.zoomIn({ duration: 300 })}
+          </div>
+        {:else}
+          <div
+            bind:this={mapElement}
+            id="location-map"
+            class="h-[350px] rounded-xl border border-[var(--border-200)] relative overflow-hidden"
+            role="application"
+            aria-label="Map for selecting station location"
           >
-            +
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Zoom out"
-            disabled={!map || mapLibraryLoading}
-            onclick={() => map?.zoomOut({ duration: 300 })}
-          >
-            -
-          </button>
-          <button
-            type="button"
-            class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            aria-label="Expand map to full screen"
-            disabled={!map || mapLibraryLoading}
-            onclick={openMapModal}
-          >
-            <Maximize2 class="size-4" />
-          </button>
-        </div>
-        <p class="text-xs text-[var(--color-info)] mt-2">
-          {t('common.ui.mapZoomHelp')}
-        </p>
+            {#if mapLibraryLoading}
+              <div
+                class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-100)]/75 rounded-xl"
+              >
+                <div class="flex flex-col items-center gap-2">
+                  <span
+                    class="inline-block w-8 h-8 border-4 border-[var(--color-base-300)] border-t-[var(--color-primary)] rounded-full animate-spin"
+                    aria-hidden="true"
+                  ></span>
+                  <span class="text-sm text-[var(--color-base-content)]"
+                    >{t('common.ui.loadingMap')}</span
+                  >
+                </div>
+              </div>
+            {/if}
+          </div>
+          <div class="flex gap-2 mt-3">
+            <button
+              type="button"
+              class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom in"
+              disabled={!map || mapLibraryLoading}
+              onclick={() => map?.zoomIn({ duration: 300 })}
+            >
+              +
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Zoom out"
+              disabled={!map || mapLibraryLoading}
+              onclick={() => map?.zoomOut({ duration: 300 })}
+            >
+              -
+            </button>
+            <button
+              type="button"
+              class="inline-flex items-center justify-center w-8 h-8 text-sm font-medium rounded-full bg-[var(--color-base-300)] hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Expand map to full screen"
+              disabled={!map || mapLibraryLoading}
+              onclick={openMapModal}
+            >
+              <Maximize2 class="size-4" />
+            </button>
+          </div>
+          <p class="text-xs text-[var(--color-info)] mt-2">
+            {t('common.ui.mapZoomHelp')}
+          </p>
+        {/if}
       </div>
     </SettingsSection>
 

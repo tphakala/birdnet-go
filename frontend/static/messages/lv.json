@@ -2023,7 +2023,8 @@
         "rangeFilterCountFailed": "Neizdevās ielādēt sugu skaitu",
         "mapLibraryLoadFailed": "Neizdevās ielādēt kartes bibliotēku. Lūdzu, atsvaidziniet lapu.",
         "mapLoadFailed": "Neizdevās ielādēt karti. Lūdzu, mēģiniet atsvaidzināt lapu.",
-        "modalMapLoadFailed": "Neizdevās ielādēt modālā loga karti. Lūdzu, mēģiniet aizvērt un atkārtoti atvērt modālo logu."
+        "modalMapLoadFailed": "Neizdevās ielādēt modālā loga karti. Lūdzu, mēģiniet aizvērt un atkārtoti atvērt modālo logu.",
+        "mapUnavailable": "Karte nav pieejama: WebGL netiek atbalstīts šajā pārlūkprogrammā. Jūs joprojām varat iestatīt savu atrašanās vietu, izmantojot koordinātu laukus augstāk."
       }
     },
     "support": {

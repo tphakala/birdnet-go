@@ -2024,7 +2024,8 @@
         "rangeFilterCountFailed": "A faj szám betöltése sikertelen",
         "mapLibraryLoadFailed": "A térkép könyvtár betöltése sikertelen. Kérjük, frissítse az oldalt.",
         "mapLoadFailed": "A térkép betöltése sikertelen. Kérjük, próbálja frissíteni az oldalt.",
-        "modalMapLoadFailed": "A modal térkép betöltése sikertelen. Próbálja bezárni és újra megnyitni a modalt."
+        "modalMapLoadFailed": "A modal térkép betöltése sikertelen. Próbálja bezárni és újra megnyitni a modalt.",
+        "mapUnavailable": "A térkép nem elérhető: a WebGL nem támogatott ebben a böngészőben. A helyzetet továbbra is beállíthatja a fenti koordinátamezők segítségével."
       }
     },
     "support": {

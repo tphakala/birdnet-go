@@ -2023,7 +2023,8 @@
         "rangeFilterCountFailed": "Kunde inte ladda artantal",
         "mapLibraryLoadFailed": "Kunde inte ladda kartbibliotek. Vänligen uppdatera sidan.",
         "mapLoadFailed": "Kunde inte ladda kartan. Försök att uppdatera sidan.",
-        "modalMapLoadFailed": "Kunde inte ladda modalkartan. Försök att stänga och öppna modalen igen."
+        "modalMapLoadFailed": "Kunde inte ladda modalkartan. Försök att stänga och öppna modalen igen.",
+        "mapUnavailable": "Karta ej tillgänglig: WebGL stöds inte i den här webbläsaren. Du kan fortfarande ange din plats med koordinatfälten ovan."
       }
     },
     "support": {

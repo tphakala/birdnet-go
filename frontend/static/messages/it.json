@@ -1993,7 +1993,8 @@
         "rangeFilterCountFailed": "Impossibile caricare conteggio specie",
         "mapLibraryLoadFailed": "Caricamento della libreria mappa non riuscito. Aggiorna la pagina.",
         "mapLoadFailed": "Caricamento della mappa non riuscito. Prova ad aggiornare la pagina.",
-        "modalMapLoadFailed": "Caricamento della mappa modale non riuscito. Chiudi e riapri la finestra."
+        "modalMapLoadFailed": "Caricamento della mappa modale non riuscito. Chiudi e riapri la finestra.",
+        "mapUnavailable": "Mappa non disponibile: WebGL non è supportato in questo browser. Puoi comunque impostare la tua posizione utilizzando i campi delle coordinate sopra."
       }
     },
     "support": {

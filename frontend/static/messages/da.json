@@ -2023,7 +2023,8 @@
         "rangeFilterCountFailed": "Kunne ikke indlæse artsantal",
         "mapLibraryLoadFailed": "Kunne ikke indlæse kortbibliotek. Opdater venligst siden.",
         "mapLoadFailed": "Kunne ikke indlæse kort. Prøv venligst at opdatere siden.",
-        "modalMapLoadFailed": "Kunne ikke indlæse modalkortet. Prøv venligst at lukke og genåbne modalen."
+        "modalMapLoadFailed": "Kunne ikke indlæse modalkortet. Prøv venligst at lukke og genåbne modalen.",
+        "mapUnavailable": "Kort ikke tilgængeligt: WebGL understøttes ikke i denne browser. Du kan stadig indstille din placering ved hjælp af koordinatfelterne ovenfor."
       }
     },
     "support": {

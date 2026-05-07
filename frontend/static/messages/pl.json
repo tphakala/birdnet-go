@@ -1997,7 +1997,8 @@
         "rangeFilterCountFailed": "Nie udało się załadować liczby gatunków",
         "mapLibraryLoadFailed": "Nie udało się załadować biblioteki map. Odśwież stronę.",
         "mapLoadFailed": "Nie udało się załadować mapy. Spróbuj odświeżyć stronę.",
-        "modalMapLoadFailed": "Nie udało się załadować mapy w oknie modalnym. Zamknij i otwórz okno ponownie."
+        "modalMapLoadFailed": "Nie udało się załadować mapy w oknie modalnym. Zamknij i otwórz okno ponownie.",
+        "mapUnavailable": "Mapa niedostępna: WebGL nie jest obsługiwany w tej przeglądarce. Możesz nadal ustawić swoją lokalizację za pomocą pól współrzędnych powyżej."
       }
     },
     "support": {

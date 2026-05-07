@@ -1982,6 +1982,7 @@
         "mapLibraryLoadFailed": "Falha ao carregar a biblioteca de mapas. Atualize a página.",
         "mapLoadFailed": "Falha ao carregar o mapa. Tente atualizar a página.",
         "modalMapLoadFailed": "Falha ao carregar o mapa modal. Feche e reabra a janela.",
+        "mapUnavailable": "Mapa indisponível: WebGL não é suportado neste navegador. Você ainda pode definir sua localização usando os campos de coordenadas acima.",
         "providersLoadFailed": "Não foi possível carregar os provedores de imagem. Usando padrões.",
         "rangeFilterCountFailed": "Falha ao carregar contagem de espécies",
         "rangeFilterLoadFailed": "Falha ao carregar lista de espécies",
