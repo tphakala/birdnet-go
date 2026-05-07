@@ -98,8 +98,11 @@ func TestDetectionWindowGivesTimeForOverlaps(t *testing.T) {
 // TestFlushDeadlineNotBackdated is a regression test that simulates the exact
 // bug scenario from BG-16. This test would have caught the original bug where
 // FlushDeadline was calculated using the backdated startTime instead of time.Now().
+// NOTE: the production detection offset was changed from a hardcoded 10s to the
+// model's clip length (e.g. 3s for v2.4). This test retains the original 10s
+// value to demonstrate the historical bug at its most visible.
 func TestFlushDeadlineNotBackdated(t *testing.T) {
-	// Simulate the bug scenario exactly with default settings
+	// Simulate the original bug scenario (10s offset made the issue obvious)
 	detectionOffset := 10 * time.Second
 	preCapture := 3 * time.Second
 	backdatedStart := time.Now().Add(-(detectionOffset + preCapture))
