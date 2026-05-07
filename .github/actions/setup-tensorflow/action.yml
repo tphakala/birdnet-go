@@ -47,4 +47,4 @@ runs:
       shell: bash
       run: |
         echo "CGO_ENABLED=1" >> $GITHUB_ENV
-        echo "CGO_CFLAGS=-I ${{ github.workspace }}/.cache/tensorflow" >> $GITHUB_ENV
+        echo "CGO_CFLAGS=-I${{ github.workspace }}/.cache/tensorflow" >> $GITHUB_ENV

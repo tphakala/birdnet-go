@@ -126,18 +126,18 @@ check-tools:
 check-tensorflow:
 	@if [ ! -f "$(TENSORFLOW_HEADERS_DIR)/tensorflow/lite/c/c_api.h" ]; then \
 		echo "TensorFlow Lite C API header not found. Cloning TensorFlow source..."; \
-		mkdir -p $(dir $(TENSORFLOW_HEADERS_DIR)); \
-		git clone --branch $(TFLITE_VERSION) --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git $(TENSORFLOW_HEADERS_DIR); \
-		git -C $(TENSORFLOW_HEADERS_DIR) config core.sparseCheckout true; \
-		echo "**/*.h" >> $(TENSORFLOW_HEADERS_DIR)/.git/info/sparse-checkout; \
-		git -C $(TENSORFLOW_HEADERS_DIR) checkout; \
+		mkdir -p "$(dir $(TENSORFLOW_HEADERS_DIR))"; \
+		git clone --branch $(TFLITE_VERSION) --filter=blob:none --depth 1 --no-checkout https://github.com/tensorflow/tensorflow.git "$(TENSORFLOW_HEADERS_DIR)"; \
+		git -C "$(TENSORFLOW_HEADERS_DIR)" config core.sparseCheckout true; \
+		echo "**/*.h" >> "$(TENSORFLOW_HEADERS_DIR)/.git/info/sparse-checkout"; \
+		git -C "$(TENSORFLOW_HEADERS_DIR)" checkout; \
 	else \
 		echo "Checking TensorFlow version..."; \
-		current_version=$$(git -C $(TENSORFLOW_HEADERS_DIR) describe --tags); \
+		current_version=$$(git -C "$(TENSORFLOW_HEADERS_DIR)" describe --tags); \
 		if [ "$$current_version" != "$(TFLITE_VERSION)" ]; then \
 			echo "Switching TensorFlow source to version $(TFLITE_VERSION)..."; \
-			git -C $(TENSORFLOW_HEADERS_DIR) fetch --depth 1 origin $(TFLITE_VERSION); \
-			git -C $(TENSORFLOW_HEADERS_DIR) checkout $(TFLITE_VERSION); \
+			git -C "$(TENSORFLOW_HEADERS_DIR)" fetch --depth 1 origin $(TFLITE_VERSION); \
+			git -C "$(TENSORFLOW_HEADERS_DIR)" checkout $(TFLITE_VERSION); \
 		else \
 			echo "TensorFlow source tree is at version $(TFLITE_VERSION)"; \
 		fi; \

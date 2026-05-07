@@ -706,7 +706,15 @@ tasks:
           echo "Checking out TensorFlow source..."
           git -C "{{.TENSORFLOW_HEADERS_DIR}}" checkout
         else
-          echo "TensorFlow headers already exist at version {{.TFLITE_VERSION}}"
+          echo "Checking TensorFlow version..."
+          current_version=$(git -C "{{.TENSORFLOW_HEADERS_DIR}}" describe --tags)
+          if [ "$current_version" != "{{.TFLITE_VERSION}}" ]; then
+            echo "Switching TensorFlow source to version {{.TFLITE_VERSION}}..."
+            git -C "{{.TENSORFLOW_HEADERS_DIR}}" fetch --depth 1 origin {{.TFLITE_VERSION}}
+            git -C "{{.TENSORFLOW_HEADERS_DIR}}" checkout {{.TFLITE_VERSION}}
+          else
+            echo "TensorFlow headers already at version {{.TFLITE_VERSION}}"
+          fi
         fi
 
   check-tflite-lib:
