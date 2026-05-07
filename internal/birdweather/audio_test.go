@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -177,8 +178,7 @@ func TestContextTimeout(t *testing.T) {
 }
 
 func TestEncodeFlacUsingFFmpeg(t *testing.T) {
-	// Skip the test if FFmpeg is not available
-	if !conf.IsFfmpegAvailable() {
+	if _, err := exec.LookPath(conf.GetFfmpegBinaryName()); err != nil {
 		t.Skip("FFmpeg not available, skipping FLAC encoding test")
 	}
 

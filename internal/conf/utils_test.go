@@ -2,6 +2,7 @@ package conf
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -199,23 +200,18 @@ func TestParsePercentage(t *testing.T) {
 }
 
 func TestGetFfmpegVersion(t *testing.T) {
-	// This test will only work if ffmpeg is installed on the system
-	version, major, minor := GetFfmpegVersion()
-
-	// If ffmpeg is not available, the function should return empty values
-	if version == "" {
+	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
+	if err != nil {
 		t.Skip("ffmpeg not available on system, skipping integration test")
 	}
 
-	// If we got a version, validate it has sensible values
-	// Note: For git builds, major version is derived from libavutil, so it should be valid
+	version, major, minor := GetFfmpegVersionFrom(ffmpegPath)
+	require.NotEmpty(t, version)
+
 	assert.GreaterOrEqual(t, major, 3, "major version should be at least 3")
 	assert.LessOrEqual(t, major, 10, "major version should be at most 10")
-
 	assert.GreaterOrEqual(t, minor, 0, "minor version should be non-negative")
 	assert.LessOrEqual(t, minor, 99, "minor version should be at most 99")
-
-	// Additional validation: if major is 0, something went wrong
 	assert.NotEqual(t, 0, major, "failed to detect major version, got: version=%s, major=%d, minor=%d", version, major, minor)
 
 	t.Logf("Detected FFmpeg version: %s (major: %d, minor: %d)", version, major, minor)
@@ -277,4 +273,38 @@ func TestFindConfigFile_EmptyConfigPathFallsThrough(t *testing.T) {
 	} else {
 		assert.NotEmpty(t, result, "returned path should not be empty on success")
 	}
+}
+
+func TestGetSoxFormats_WithExplicitPath(t *testing.T) {
+	soxPath, err := exec.LookPath(GetSoxBinaryName())
+	if err != nil {
+		t.Skip("SoX not available in PATH, skipping")
+	}
+
+	formats := GetSoxFormats(soxPath)
+	require.NotEmpty(t, formats, "SoX should report supported formats")
+	assert.Contains(t, formats, "wav")
+}
+
+func TestGetSoxFormats_WithInvalidPath(t *testing.T) {
+	formats := GetSoxFormats("/nonexistent/sox")
+	assert.Empty(t, formats)
+}
+
+func TestGetFfmpegVersionFrom_WithExplicitPath(t *testing.T) {
+	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
+	if err != nil {
+		t.Skip("FFmpeg not available in PATH, skipping")
+	}
+
+	version, major, _ := GetFfmpegVersionFrom(ffmpegPath)
+	assert.NotEmpty(t, version)
+	assert.Positive(t, major)
+}
+
+func TestGetFfmpegVersionFrom_WithInvalidPath(t *testing.T) {
+	version, major, minor := GetFfmpegVersionFrom("/nonexistent/ffmpeg")
+	assert.Empty(t, version)
+	assert.Zero(t, major)
+	assert.Zero(t, minor)
 }

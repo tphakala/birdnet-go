@@ -875,7 +875,7 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	// Priority: pre-validated (from FFprobe) > cached sox/ffprobe > configured fallback.
 	duration := preValidatedDuration
 	if duration <= 0 {
-		duration = getCachedAudioDuration(ctx, audioPath)
+		duration = getCachedAudioDuration(ctx, settings.Realtime.Audio.SoxPath, audioPath)
 	}
 	if duration <= 0 {
 		// Fallback: Use configured capture length if both sox and ffprobe fail
@@ -1038,7 +1038,7 @@ func (g *Generator) waitWithTimeoutErr(cmd *exec.Cmd, timeout time.Duration) err
 // falling back to ffprobe if sox fails (e.g., for MP3/AAC files without libsox-fmt-mp3).
 // The cache is invalidated if the file has been modified (size or modTime changed).
 // Returns 0 if duration cannot be determined (caller should use configured fallback).
-func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
+func getCachedAudioDuration(ctx context.Context, soxPath, audioPath string) float64 {
 	// Get file info for cache validation
 	fileInfo, err := os.Stat(audioPath)
 	if err != nil {
@@ -1065,7 +1065,7 @@ func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
 	}
 
 	// Cache miss or invalid - try sox --info first (~30x faster than ffprobe)
-	duration, soxErr := getAudioDurationViaSox(ctx, audioPath)
+	duration, soxErr := getAudioDurationViaSox(ctx, soxPath, audioPath)
 	if soxErr != nil {
 		// Sox failed (common for MP3/AAC without libsox-fmt-mp3) — fall back to ffprobe
 		GetLogger().Debug("Sox duration query failed, falling back to ffprobe",
@@ -1126,10 +1126,12 @@ func evictOldCacheEntriesLocked() {
 
 // getAudioDurationViaSox calls sox --info -D to get audio duration.
 // This is ~30x faster than ffprobe for duration queries.
-func getAudioDurationViaSox(ctx context.Context, audioPath string) (float64, error) {
-	soxPath := conf.GetSoxBinaryName()
+func getAudioDurationViaSox(ctx context.Context, soxPath, audioPath string) (float64, error) {
+	if soxPath == "" {
+		return 0, fmt.Errorf("sox path not configured")
+	}
 
-	cmd := exec.CommandContext(ctx, soxPath, "--info", "-D", audioPath) //nolint:gosec // G204: soxPath from conf.GetSoxBinaryName(), args are fixed
+	cmd := exec.CommandContext(ctx, soxPath, "--info", "-D", audioPath) //nolint:gosec // G204: soxPath from validated settings, args are fixed
 
 	output, err := cmd.Output()
 	if err != nil {
