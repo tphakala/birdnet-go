@@ -122,13 +122,14 @@ func TestPruneOldEntries_CriticalReliability(t *testing.T) {
 			"boundary_conditions",
 			func(tracker *SpeciesTracker, now time.Time) {
 				// Test exact boundary (10 years for lifetime tracking)
-				// PruneOldEntries uses Before() which means entries at exactly 10 years ARE pruned
-				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(-10, 0, 0)  // Exactly 10 years - will be pruned
+				// Pruning uses date-only comparison: entries on the same calendar date
+				// as the cutoff are NOT pruned (they are exactly N years old, not older).
+				tracker.speciesFirstSeen["Exactly_At_Boundary"] = now.AddDate(-10, 0, 0)  // Exactly 10 years - same date, NOT pruned
 				tracker.speciesFirstSeen["Just_Before_Boundary"] = now.AddDate(-10, 0, 1) // Just under 10 years - not pruned
 				tracker.speciesFirstSeen["Just_After_Boundary"] = now.AddDate(-10, 0, -1) // Just over 10 years - will be pruned
 			},
 			time.Now(),
-			2, // Both exactly 10 years and over should be pruned (Before() includes the boundary)
+			1, // Only entries with a calendar date strictly before the cutoff are pruned
 			"Boundary conditions should be handled correctly (10 year cutoff)",
 		},
 		{

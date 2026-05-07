@@ -71,13 +71,29 @@ func (t *SpeciesTracker) SyncIfNeeded() error {
 	return nil
 }
 
+// dateOnlyBefore reports whether the calendar date of a is strictly before the
+// calendar date of b, ignoring time-of-day and timezone. This prevents
+// incorrect comparisons when one timestamp is UTC midnight (from time.Parse)
+// and the other uses a local timezone (from time.Date with Location).
+func dateOnlyBefore(a, b time.Time) bool {
+	ay, am, ad := a.Date()
+	by, bm, bd := b.Date()
+	if ay != by {
+		return ay < by
+	}
+	if am != bm {
+		return am < bm
+	}
+	return ad < bd
+}
+
 // pruneLifetimeEntriesLocked removes very old lifetime entries (>10 years).
 // Assumes lock is held.
 func (t *SpeciesTracker) pruneLifetimeEntriesLocked(now time.Time) int {
 	lifetimeCutoff := now.AddDate(-lifetimeRetentionYears, 0, 0)
 	pruned := 0
 	for scientificName, firstSeen := range t.speciesFirstSeen {
-		if firstSeen.Before(lifetimeCutoff) {
+		if dateOnlyBefore(firstSeen, lifetimeCutoff) {
 			delete(t.speciesFirstSeen, scientificName)
 			pruned++
 		}
@@ -99,7 +115,7 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 
 	pruned := 0
 	for scientificName, firstSeen := range t.speciesThisYear {
-		if firstSeen.Before(currentYearStart) {
+		if dateOnlyBefore(firstSeen, currentYearStart) {
 			delete(t.speciesThisYear, scientificName)
 			pruned++
 			getLog().Debug("Pruned old yearly entry",
@@ -112,9 +128,12 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 }
 
 // isSeasonOld checks if all entries in a season map are older than the cutoff.
+// Uses date-only comparison to avoid timezone mismatch between UTC-parsed
+// database dates and local-timezone cutoffs. An entry on the same calendar
+// date as the cutoff is considered current (not old).
 func isSeasonOld(speciesMap map[string]time.Time, cutoff time.Time) bool {
 	for _, firstSeen := range speciesMap {
-		if firstSeen.After(cutoff) {
+		if !dateOnlyBefore(firstSeen, cutoff) {
 			return false
 		}
 	}
