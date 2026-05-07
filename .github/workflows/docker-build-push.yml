@@ -409,10 +409,12 @@ jobs:
           echo "DOCKERHUB_REPO=tphakala/${REPO_NAME}" >> ${GITHUB_ENV}
 
       - name: Install Podman
-        run: |
-          sudo apt-get update
-          sudo apt-get -y install podman
-          podman --version
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: podman
+          version: 1.0
+      - name: Verify Podman
+        run: podman --version
 
       - name: Test Podman compatibility
         run: |

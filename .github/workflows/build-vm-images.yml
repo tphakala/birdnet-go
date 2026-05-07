@@ -57,15 +57,14 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "📦 Building VM images for version: $VERSION"
 
-      - name: Setup build environment
+      - name: Install build dependencies
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: qemu-kvm qemu-utils qemu-system-x86 qemu-system-arm libvirt-daemon-system libvirt-clients bridge-utils virt-manager ovmf qemu-efi-aarch64 zstd
+          version: 1.0
+      - name: Verify QEMU
         run: |
-          sudo apt-get update
-          sudo apt-get install -y qemu-kvm qemu-utils qemu-system-x86 qemu-system-arm \
-            libvirt-daemon-system libvirt-clients bridge-utils virt-manager \
-            ovmf qemu-efi-aarch64 zstd
-          
-          # Debug: Check available QEMU components
-          echo "🔍 Available QEMU components:"
+          echo "Available QEMU components:"
           echo "  AMD64: $(qemu-system-x86_64 --version | head -1)"
           echo "  ARM64: $(qemu-system-aarch64 --version | head -1)"
 
@@ -74,12 +73,15 @@ jobs:
         with:
           version: ${{ env.PACKER_VERSION }}
 
-      - name: Setup QEMU for cross-platform builds
+      - name: Install QEMU cross-platform support
         if: matrix.arch == 'arm64'
-        run: |
-          # Setup QEMU for ARM64 emulation
-          sudo apt-get install -y qemu-user-static binfmt-support
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: qemu-user-static binfmt-support
+          version: 1.0
+      - name: Setup QEMU binfmt
+        if: matrix.arch == 'arm64'
+        run: docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
       - name: Create output directory
         run: |

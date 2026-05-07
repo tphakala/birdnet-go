@@ -41,10 +41,10 @@ jobs:
         uses: ./.github/actions/setup-tensorflow
 
       - name: Install FFmpeg, SoX, and test dependencies
-        run: |
-          sudo apt-get update
-          # sox is required -- without it, audiocore/ffmpeg and spectrogram tests silently skip
-          sudo apt-get install -y ffmpeg sox procps
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg sox procps
+          version: 1.0
 
       - name: Cache Go tools
         uses: actions/cache@v5
@@ -178,9 +178,10 @@ jobs:
         uses: ./.github/actions/setup-tensorflow
 
       - name: Install FFmpeg and Sox for integration tests
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg sox
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg sox
+          version: 1.0
 
       - name: Run testcontainer integration tests
         run: |
