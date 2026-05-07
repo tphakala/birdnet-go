@@ -193,3 +193,14 @@ func TestValidateFile_Options(t *testing.T) {
 	// With 2 attempts and 50 ms initial delay it should finish well under 1 second.
 	assert.Less(t, elapsed, 2*time.Second, "validation with short retry should finish quickly")
 }
+
+func TestSetAndGetFFprobePath(t *testing.T) {
+	original := ffmpeg.GetFFprobePath()
+	t.Cleanup(func() { ffmpeg.SetFFprobePath(original) })
+
+	ffmpeg.SetFFprobePath("")
+	assert.Empty(t, ffmpeg.GetFFprobePath())
+
+	ffmpeg.SetFFprobePath("/custom/path/to/ffprobe")
+	assert.Equal(t, "/custom/path/to/ffprobe", ffmpeg.GetFFprobePath())
+}

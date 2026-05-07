@@ -10,10 +10,34 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// configuredFFprobePath stores the validated ffprobe path set during config
+// validation. Protected by a mutex for safe concurrent access.
+var (
+	ffprobePathMu         sync.RWMutex
+	configuredFFprobePath string
+)
+
+// SetFFprobePath stores the validated ffprobe binary path for use by all
+// validation calls. Called once during config validation after deriving the
+// path from the validated FFmpeg location.
+func SetFFprobePath(path string) {
+	ffprobePathMu.Lock()
+	configuredFFprobePath = path
+	ffprobePathMu.Unlock()
+}
+
+// GetFFprobePath returns the currently configured ffprobe binary path.
+func GetFFprobePath() string {
+	ffprobePathMu.RLock()
+	defer ffprobePathMu.RUnlock()
+	return configuredFFprobePath
+}
 
 // Validation constants for audio file validation.
 const (
@@ -342,14 +366,19 @@ func getFfprobeBinaryName() string {
 
 // executeFFprobe runs ffprobe and returns its CSV output.
 func executeFFprobe(ctx context.Context, path string) (string, error) {
-	ffprobeBinary := getFfprobeBinaryName()
-
-	// Ensure ffprobe is available before attempting to run it.
-	if _, err := exec.LookPath(ffprobeBinary); err != nil {
-		return "", ErrFFprobeNotAvailable
+	// Use the configured path if set (from config validation), otherwise fall
+	// back to PATH lookup for backward compatibility.
+	ffprobeBinary := GetFFprobePath()
+	if ffprobeBinary == "" {
+		name := getFfprobeBinaryName()
+		found, err := exec.LookPath(name)
+		if err != nil {
+			return "", ErrFFprobeNotAvailable
+		}
+		ffprobeBinary = found
 	}
 
-	cmd := exec.CommandContext(ctx, ffprobeBinary, //nolint:gosec // G204: ffprobeBinary is a fixed platform constant, path validated by caller
+	cmd := exec.CommandContext(ctx, ffprobeBinary, //nolint:gosec // G204: ffprobeBinary validated by config or exec.LookPath, path validated by caller
 		"-v", "error",
 		"-show_entries", "format=duration,bit_rate:stream=sample_rate,channels,codec_name",
 		"-of", "csv=p=0",
