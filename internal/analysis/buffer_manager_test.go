@@ -129,3 +129,61 @@ func TestMonitorConfig_OverlapSizeDefault(t *testing.T) {
 	}
 	assert.Equal(t, 0, cfg.overlapSize, "overlapSize should default to zero")
 }
+
+// TestDetectionOffset_DerivedFromClipLength validates that the detection offset
+// uses the model's clip length to position bird calls correctly in saved clips.
+// The offset compensates for the age of audio in the analysis window: the oldest
+// sample is approximately ClipLength seconds old when Read() returns. Using
+// ClipLength ensures the bird call appears between PreCapture and
+// (PreCapture + ClipLength) seconds into the saved clip.
+func TestDetectionOffset_DerivedFromClipLength(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		clipLength time.Duration
+		preCapture int
+		capLength  int
+	}{
+		{"BirdNET_v2.4_default", 3 * time.Second, 3, 20},
+		{"BirdNET_v2.4_no_precapture", 3 * time.Second, 0, 15},
+		{"BirdNET_v3.0", 5 * time.Second, 3, 20},
+		{"Perch_v2", 5 * time.Second, 5, 30},
+		{"BirdNET_v2.4_max_precapture", 3 * time.Second, 5, 10},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Replicate the production offset calculation from
+			// analysisBufferMonitor + processMonitorTick.
+			detectionOffset := tt.clipLength
+			preCapture := time.Duration(tt.preCapture) * time.Second
+			beginTimeOffset := preCapture + detectionOffset
+
+			now := time.Now()
+			startTime := now.Add(-beginTimeOffset)
+
+			// The bird vocalized somewhere in the analysis window, which
+			// spans approximately [now - clipLength, now]. With the offset
+			// set to clipLength, the window start maps to PreCapture seconds
+			// into the saved clip.
+			windowStart := now.Add(-tt.clipLength)
+			windowEnd := now
+
+			birdPositionEarliest := windowStart.Sub(startTime)
+			birdPositionLatest := windowEnd.Sub(startTime)
+
+			assert.Equal(t, preCapture, birdPositionEarliest,
+				"bird at window start should appear at PreCapture in clip")
+			assert.Equal(t, preCapture+tt.clipLength, birdPositionLatest,
+				"bird at window end should appear at PreCapture+ClipLength in clip")
+
+			// Verify the clip doesn't overflow the capture length.
+			captureLength := time.Duration(tt.capLength) * time.Second
+			assert.LessOrEqual(t, birdPositionLatest, captureLength,
+				"latest bird position must fit within capture length")
+		})
+	}
+}

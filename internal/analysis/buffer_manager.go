@@ -385,7 +385,12 @@ func (m *BufferManager) UpdateMonitors(sourceModels map[string][]monitorConfig) 
 // analysisBufferMonitor reads from the audiocore analysis buffer and feeds
 // audio chunks to the BirdNET analysis pipeline.
 func (m *BufferManager) analysisBufferMonitor(quitChan chan struct{}, cfg monitorConfig) {
-	const detectionOffset = 10 * time.Second
+	// The detection offset compensates for the age of audio in the analysis
+	// window at read time. Audio is written continuously; when Read() returns
+	// a full window, the oldest sample is approximately ClipLength old. Using
+	// the model's clip length keeps the offset accurate across different models
+	// (3s for BirdNET v2.4, 5s for v3.0/Perch).
+	detectionOffset := cfg.spec.ClipLength
 	const pollInterval = 100 * time.Millisecond
 
 	// Use the model-specific read size from the config instead of the
