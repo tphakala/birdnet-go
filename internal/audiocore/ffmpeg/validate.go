@@ -16,16 +16,13 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// configuredFFprobePath stores the validated ffprobe path set during config
-// validation. Protected by a mutex for safe concurrent access.
 var (
 	ffprobePathMu         sync.RWMutex
 	configuredFFprobePath string
 )
 
-// SetFFprobePath stores the validated ffprobe binary path for use by all
-// validation calls. Called once during config validation after deriving the
-// path from the validated FFmpeg location.
+// SetFFprobePath sets the validated ffprobe path, derived from the configured
+// ffmpeg location during startup. Safe for concurrent use.
 func SetFFprobePath(path string) {
 	ffprobePathMu.Lock()
 	configuredFFprobePath = path

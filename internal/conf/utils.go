@@ -469,18 +469,6 @@ func GetFfprobeBinaryName() string {
 	return "ffprobe"
 }
 
-// IsFfmpegAvailable checks if ffmpeg is available in the system PATH.
-func IsFfmpegAvailable() bool {
-	_, err := exec.LookPath(GetFfmpegBinaryName())
-	return err == nil
-}
-
-// IsFfprobeAvailable checks if ffprobe is available in the system PATH.
-func IsFfprobeAvailable() bool {
-	_, err := exec.LookPath(GetFfprobeBinaryName())
-	return err == nil
-}
-
 // GetFfmpegVersionFrom detects the ffmpeg version by executing the binary at
 // the given path. Returns empty string and 0,0 if detection fails.
 func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) {
@@ -490,18 +478,6 @@ func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) 
 		return "", 0, 0
 	}
 	return ParseFfmpegVersion(string(output))
-}
-
-// GetFfmpegVersion detects the installed ffmpeg version by searching the system PATH.
-// Returns empty string and 0,0 if detection fails.
-//
-// Deprecated: Use GetFfmpegVersionFrom with the validated path instead.
-func GetFfmpegVersion() (version string, major, minor int) {
-	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
-	if err != nil {
-		return "", 0, 0
-	}
-	return GetFfmpegVersionFrom(ffmpegPath)
 }
 
 // ParseFfmpegVersion parses ffmpeg version output and extracts version string and numbers.
@@ -619,18 +595,6 @@ func parseLibavutilVersion(output string) (major, minor int) {
 		}
 	}
 	return major, minor
-}
-
-// IsSoxAvailable checks if SoX is available in the system PATH and returns its supported audio formats.
-// It returns a boolean indicating if SoX is available and a slice of supported audio format strings.
-//
-// Deprecated: Use ValidateToolPath + GetSoxFormats for explicit path support.
-func IsSoxAvailable() (isAvailable bool, formats []string) {
-	soxPath, err := exec.LookPath(GetSoxBinaryName())
-	if err != nil {
-		return false, nil
-	}
-	return true, GetSoxFormats(soxPath)
 }
 
 // GetSoxFormats returns the audio formats supported by the SoX binary at the
