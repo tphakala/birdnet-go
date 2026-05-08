@@ -280,19 +280,14 @@ func (bn *BirdNET) getMetaModelData() ([]byte, error) {
 	if bn.Settings.BirdNET.RangeFilter.ModelPath != "" {
 		modelPath := bn.Settings.BirdNET.RangeFilter.ModelPath
 
-		// Expand environment variables first
+		// Expand environment variables and ~ prefix
 		modelPath = os.ExpandEnv(modelPath)
-
-		// Then expand ~ to home directory if needed
-		if strings.HasPrefix(modelPath, "~/") {
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return nil, errors.New(err).
-					Category(errors.CategoryFileIO).
-					Context("path", modelPath).
-					Build()
-			}
-			modelPath = filepath.Join(homeDir, modelPath[2:])
+		modelPath, err := conf.ExpandTildePath(modelPath)
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("path", bn.Settings.BirdNET.RangeFilter.ModelPath).
+				Build()
 		}
 
 		// Load model from external file
@@ -686,7 +681,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 		)
 
 		// macOS user-specific path
-		if home := os.Getenv("HOME"); home != "" {
+		if home, err := conf.GetUserHomeDir(); err == nil {
 			paths = append(paths,
 				filepath.Join(home, "Library", "Application Support", "BirdNET-Go", DefaultModelDirectory, modelName),
 			)
@@ -702,7 +697,7 @@ func getOSSpecificSystemPaths(modelName string) []string {
 		// XDG Base Directory specification for user data
 		if xdgDataHome := os.Getenv("XDG_DATA_HOME"); xdgDataHome != "" {
 			paths = append(paths, filepath.Join(xdgDataHome, "birdnet-go", DefaultModelDirectory, modelName))
-		} else if home := os.Getenv("HOME"); home != "" {
+		} else if home, err := conf.GetUserHomeDir(); err == nil {
 			paths = append(paths, filepath.Join(home, ".local", "share", "birdnet-go", DefaultModelDirectory, modelName))
 		}
 	}
@@ -763,19 +758,14 @@ func (bn *BirdNET) loadModel() ([]byte, error) {
 	// If a specific model path is configured, use it
 	if bn.Settings.BirdNET.ModelPath != "" {
 		modelPath := bn.Settings.BirdNET.ModelPath
-		// Expand environment variables first
+		// Expand environment variables and ~ prefix
 		modelPath = os.ExpandEnv(modelPath)
-
-		// Then expand ~ to home directory if needed
-		if strings.HasPrefix(modelPath, "~/") {
-			homeDir, err := os.UserHomeDir()
-			if err != nil {
-				return nil, errors.New(err).
-					Category(errors.CategoryFileIO).
-					Context("path", modelPath).
-					Build()
-			}
-			modelPath = filepath.Join(homeDir, modelPath[2:])
+		modelPath, err := conf.ExpandTildePath(modelPath)
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryFileIO).
+				Context("path", bn.Settings.BirdNET.ModelPath).
+				Build()
 		}
 
 		data, err := os.ReadFile(modelPath) //nolint:gosec // G304: modelPath is from application settings

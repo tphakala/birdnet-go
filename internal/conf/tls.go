@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -38,12 +39,18 @@ var (
 // GetTLSManager returns the global TLS manager instance
 func GetTLSManager() *TLSManager {
 	tlsManagerOnce.Do(func() {
-		configPaths, _ := GetDefaultConfigPaths()
-		if len(configPaths) > 0 {
-			globalTLSManager = NewTLSManager(configPaths[0])
+		homeDir, err := GetUserHomeDir()
+		if err == nil {
+			var configDir string
+			switch runtime.GOOS {
+			case osWindows:
+				configDir = filepath.Join(homeDir, "AppData", "Roaming", "birdnet-go")
+			default:
+				configDir = filepath.Join(homeDir, ".config", "birdnet-go")
+			}
+			globalTLSManager = NewTLSManager(configDir)
 		} else {
-			// Use a default path or panic to fail fast
-			globalTLSManager = NewTLSManager("./config")
+			globalTLSManager = NewTLSManager(filepath.Join(".", "config"))
 		}
 	})
 	return globalTLSManager

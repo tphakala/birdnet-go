@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/viper"
@@ -26,6 +27,54 @@ const (
 	osLinux   = "linux"
 	osWindows = "windows"
 )
+
+var (
+	cachedHomeDir string
+	errCachedHome error
+	homeDirOnce   sync.Once
+)
+
+// GetUserHomeDir returns the user's home directory. It tries os/user.Current()
+// first (works without $HOME, reads /etc/passwd), then os.UserHomeDir(), then
+// the HOME environment variable. The result is cached for the process lifetime.
+func GetUserHomeDir() (string, error) {
+	homeDirOnce.Do(func() {
+		cachedHomeDir, errCachedHome = resolveHomeDir()
+	})
+	return cachedHomeDir, errCachedHome
+}
+
+func resolveHomeDir() (string, error) {
+	if u, err := user.Current(); err == nil && u.HomeDir != "" {
+		return u.HomeDir, nil
+	}
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		return homeDir, nil
+	}
+	if home := os.Getenv("HOME"); home != "" {
+		return home, nil
+	}
+	return "", errors.Newf("home directory could not be determined: $HOME not set and os/user lookup failed").
+		Category(errors.CategorySystem).
+		Context("operation", "get-home-directory").
+		Build()
+}
+
+// ExpandTildePath expands a leading "~/" or bare "~" to the user's home
+// directory. Non-tilde paths are returned unchanged.
+func ExpandTildePath(path string) (string, error) {
+	if path == "~" {
+		return GetUserHomeDir()
+	}
+	if !strings.HasPrefix(path, "~/") {
+		return path, nil
+	}
+	homeDir, err := GetUserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(homeDir, path[2:]), nil
+}
 
 // getDefaultConfigPaths returns a list of default configuration paths for the current operating system.
 // It determines paths based on standard conventions for storing application configuration files.
@@ -44,7 +93,7 @@ func GetDefaultConfigPaths() ([]string, error) {
 	exeDir := filepath.Dir(exePath)
 
 	// Fetch the user's home directory.
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := GetUserHomeDir()
 	if err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategorySystem).
