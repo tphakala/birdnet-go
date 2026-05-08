@@ -92,9 +92,10 @@ const (
 	// Session ID validation
 
 	// FFmpeg HLS muxer settings
-	hlsListSize    = 6 // Number of HLS segments to keep in playlist (must exceed HLS.js liveSyncDurationCount)
-	hlsAllowCache  = 1 // Allow client-side caching of HLS segments
-	hlsStartNumber = 0 // Starting sequence number for HLS segments
+	hlsListSize        = 6          // Number of HLS segments to keep in playlist (must exceed HLS.js liveSyncDurationCount)
+	hlsAllowCache      = 1          // Allow client-side caching of HLS segments
+	hlsStartNumber     = 0          // Starting sequence number for HLS segments
+	hlsInitSegmentName = "init.mp4" // fMP4 initialization segment filename
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session
@@ -116,6 +117,7 @@ type HLSStreamInfo struct {
 	pdtOffset         atomic.Int64 // Correction (nanoseconds) to add to FFmpeg's PDT values
 	pdtOffsetComputed atomic.Bool  // True once pdtOffset has been successfully computed
 	firstDataTime     atomic.Int64 // Wall-clock time (UnixNano) when first audio data was written to FIFO
+	initSegmentCache  atomic.Value // []byte; survives FFmpeg delete_segments removing init.mp4 from disk
 }
 
 // HLSStreamStatus represents the current status of an HLS stream (API response)
@@ -841,8 +843,28 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
 
-	// Check if segment exists
-	if !secFS.ExistsNoErr(segmentPath) {
+	// For init.mp4, use in-memory cache to survive FFmpeg's delete_segments removing
+	// the file from disk while the playlist still references it via #EXT-X-MAP.
+	isInitSegment := safeRequestPath == hlsInitSegmentName
+	segmentExists := secFS.ExistsNoErr(segmentPath)
+
+	if isInitSegment {
+		cached, _ := stream.initSegmentCache.Load().([]byte)
+
+		if !segmentExists && len(cached) > 0 {
+			c.setHLSHeaders(ctx)
+			c.setHLSContentType(ctx, safeRequestPath)
+			return ctx.Blob(http.StatusOK, "video/mp4", cached)
+		}
+
+		if segmentExists && len(cached) == 0 {
+			if data, err := os.ReadFile(segmentPath); err == nil {
+				stream.initSegmentCache.Store(data)
+			}
+		}
+	}
+
+	if !segmentExists {
 		return c.HandleError(ctx, nil, "Segment file not found", http.StatusNotFound)
 	}
 
@@ -1114,10 +1136,12 @@ func (c *Controller) createHLSStream(sourceID string) (*HLSStreamInfo, error) {
 		return nil, err
 	}
 
-	// Determine reader path based on platform
+	// Determine reader path based on platform.
+	// On Windows, setupWindowsAudioFeed writes audio data to FFmpeg's stdin,
+	// so FFmpeg must read from "pipe:0" (stdin) rather than the named pipe.
 	readerPath := fifoPath
 	if runtime.GOOS == OSWindows {
-		readerPath = pipeName
+		readerPath = "pipe:0"
 	}
 
 	// Setup and start FFmpeg
@@ -1342,18 +1366,44 @@ func (c *Controller) buildFFmpegArgs(inputSource, outputDir, playlistPath string
 		"-f", "hls",
 		"-hls_time", fmt.Sprintf("%d", segmentLength),
 		"-hls_list_size", strconv.Itoa(hlsListSize),
-		"-hls_flags", "delete_segments+temp_file+program_date_time+independent_segments",
-		"-hls_segment_type", "fmp4",
-		"-hls_fmp4_init_filename", "init.mp4",
+	}
+
+	// On Windows, FFmpeg reads from stdin (pipe:0) which is non-seekable.
+	// The fMP4 segment type requires FFmpeg to write a separate init.mp4 file,
+	// but FFmpeg fails to create it when reading from a non-seekable source.
+	// Use MPEG-TS segments on Windows which are self-contained and don't need
+	// a separate initialization segment.
+	if runtime.GOOS == OSWindows {
+		args = append(args,
+			"-hls_flags", "delete_segments+program_date_time+independent_segments",
+			"-hls_segment_type", "mpegts",
+		)
+	} else {
+		args = append(args,
+			"-hls_flags", "delete_segments+temp_file+program_date_time+independent_segments",
+			"-hls_segment_type", "fmp4",
+			"-hls_fmp4_init_filename", hlsInitSegmentName,
+			"-movflags", "empty_moov+separate_moof+default_base_moof",
+		)
+	}
+
+	args = append(args,
 		"-hls_init_time", fmt.Sprintf("%d", segmentLength),
 		"-hls_allow_cache", strconv.Itoa(hlsAllowCache),
-		"-movflags", "empty_moov+separate_moof+default_base_moof",
 		"-flush_packets", "1",
 		"-start_number", strconv.Itoa(hlsStartNumber),
 		"-loglevel", logLevel,
-		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d.m4s")),
-		playlistPath,
+	)
+
+	// Segment filename extension matches the segment type
+	segExt := "m4s"
+	if runtime.GOOS == OSWindows {
+		segExt = "ts"
 	}
+	args = append(args,
+		"-hls_segment_filename", filepath.ToSlash(filepath.Join(outputDir, "segment%03d."+segExt)),
+		playlistPath,
+	)
 
 	return args
 }
