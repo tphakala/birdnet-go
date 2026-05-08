@@ -1006,15 +1006,7 @@ func (p *AudioPipelineService) buildMonitorConfigs(sourceModelMap map[string][]s
 
 		configs := make([]monitorConfig, len(infos))
 		for i := range infos {
-			spec := infos[i].Spec
-			clipLenSec := int(spec.ClipLength.Seconds())
-			readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
-			configs[i] = monitorConfig{
-				sourceID: sid,
-				modelID:  infos[i].ID,
-				spec:     spec,
-				readSize: readSize,
-			}
+			configs[i] = buildMonitorConfig(sid, &infos[i])
 		}
 		result[sid] = configs
 	}
