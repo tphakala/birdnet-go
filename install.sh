@@ -5001,11 +5001,12 @@ FRESH_INSTALL="false"
 CONFIGURED_TZ=""
 
 
+# Load telemetry configuration before cross-user check so silent-mode
+# telemetry events can fire with the user's existing preferences
+load_telemetry_config
+
 # Check for existing installations under a different user
 check_existing_installation_owner
-
-# Load telemetry configuration if it exists
-load_telemetry_config
 
 # Installation status check
 INSTALLATION_TYPE=$(check_birdnet_installation)
