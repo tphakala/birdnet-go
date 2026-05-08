@@ -702,7 +702,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 				continue
 			}
 			spec := modelInfos[i].Spec
-			clipBytes := spec.SampleRate * int(spec.ClipLength.Seconds()) * conf.NumChannels * (conf.BitDepth / 8)
+			clipBytes := spec.ClipSizeBytes()
 			overlapBytes := clipBytes / 2 // 50% overlap, matching primary model ratio
 			readSize := clipBytes - overlapBytes
 			if allocErr := bufMgr.AllocateAnalysis(sid, modelInfos[i].ID, clipBytes, overlapBytes, readSize); allocErr != nil {

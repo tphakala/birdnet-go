@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -15,6 +16,13 @@ type ModelSpec struct {
 	SampleRate    int           // Hz: 48000 (BirdNET v2.4), 32000 (v3.0, Perch)
 	ClipLength    time.Duration // 3s (BirdNET v2.4), 5s (v3.0, Perch)
 	RawSampleRate int           // Hz: when non-zero, the model expects raw audio at this rate (e.g. 256000 for bat detection)
+}
+
+// ClipSizeBytes returns the analysis window size in bytes for this model.
+// Uses SampleRate (not EffectiveSampleRate) because the model's inference
+// layer determines the window size regardless of the source capture rate.
+func (s ModelSpec) ClipSizeBytes() int {
+	return s.SampleRate * int(s.ClipLength.Seconds()) * conf.NumChannels * conf.BytesPerSample
 }
 
 // EffectiveSampleRate returns the sample rate the model expects to receive

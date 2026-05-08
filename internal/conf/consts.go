@@ -7,16 +7,17 @@ const (
 	ModelIDPerchV2 = "perch_v2"
 	ModelIDBat     = "bat"
 
-	SampleRate    = 48000 // Sample rate of the audio fed to BirdNET Analyzer
-	BitDepth      = 16    // Bit depth of the audio fed to BirdNET Analyzer
-	NumChannels   = 1     // Number of channels of the audio fed to BirdNET Analyzer
-	CaptureLength = 3     // Length of audio data fed to BirdNET Analyzer in seconds
+	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
+	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer
+	NumChannels    = 1     // Number of channels of the audio fed to BirdNET Analyzer
+	BytesPerSample = BitDepth / 8
+	CaptureLength  = 3 // Length of audio data fed to BirdNET Analyzer in seconds
 
 	SpeciesConfigCSV  = "species_config.csv"
 	SpeciesActionsCSV = "species_actions.csv"
 
 	// BufferSize is the size of the audio buffer in bytes, rounded up to the nearest 2048
-	BufferSize = ((SampleRate*NumChannels*CaptureLength*BitDepth/8 + 2047) / 2048) * 2048
+	BufferSize = ((SampleRate*NumChannels*CaptureLength*BytesPerSample + 2047) / 2048) * 2048
 
 	// DefaultCaptureBufferSeconds is the default ring buffer duration when extended capture is disabled.
 	// Audio.Export.Length must not exceed this value or audio export will be truncated.
