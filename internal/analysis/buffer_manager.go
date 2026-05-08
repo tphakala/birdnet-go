@@ -497,8 +497,7 @@ func (m *BufferManager) processMonitorTick(
 // allocation time (in audio_pipeline_service.go), not by the monitor goroutine.
 func buildMonitorConfig(sourceID string, info *classifier.ModelInfo) monitorConfig {
 	spec := info.Spec
-	clipLenSec := int(spec.ClipLength.Seconds())
-	readSize := spec.SampleRate * clipLenSec * conf.NumChannels * (conf.BitDepth / 8)
+	readSize := spec.ClipSizeBytes()
 
 	return monitorConfig{
 		sourceID: sourceID,

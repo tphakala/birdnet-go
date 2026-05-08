@@ -7,10 +7,11 @@ const (
 	ModelIDPerchV2 = "perch_v2"
 	ModelIDBat     = "bat"
 
-	SampleRate    = 48000 // Sample rate of the audio fed to BirdNET Analyzer
-	BitDepth      = 16    // Bit depth of the audio fed to BirdNET Analyzer
-	NumChannels   = 1     // Number of channels of the audio fed to BirdNET Analyzer
-	CaptureLength = 3     // Length of audio data fed to BirdNET Analyzer in seconds
+	SampleRate     = 48000 // Sample rate of the audio fed to BirdNET Analyzer
+	BitDepth       = 16    // Bit depth of the audio fed to BirdNET Analyzer
+	NumChannels    = 1     // Number of channels of the audio fed to BirdNET Analyzer
+	BytesPerSample = BitDepth / 8
+	CaptureLength  = 3 // Length of audio data fed to BirdNET Analyzer in seconds
 
 	SpeciesConfigCSV  = "species_config.csv"
 	SpeciesActionsCSV = "species_actions.csv"
