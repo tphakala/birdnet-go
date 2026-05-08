@@ -1720,16 +1720,11 @@ check_existing_installation_owner() {
 
     # Method 2: Check Docker container volume mounts
     if [ "$found_other_install" = false ]; then
-        local container_mounts
-        container_mounts=$(safe_docker inspect --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' birdnet-go)
+        local config_mount
+        config_mount=$(safe_docker inspect --format '{{range .Mounts}}{{if eq .Destination "/config"}}{{.Source}}{{end}}{{end}}' birdnet-go)
 
-        if [ -n "$container_mounts" ]; then
-            local config_mount
-            config_mount=$(echo "$container_mounts" | tr ' ' '\n' | grep ':/config$' | cut -d: -f1)
-
-            if [ -n "$config_mount" ] && [[ "$config_mount" == *"/birdnet-go-app/"* ]]; then
-                _check_install_home "${config_mount%/birdnet-go-app/*}"
-            fi
+        if [ -n "$config_mount" ] && [[ "$config_mount" == *"/birdnet-go-app/"* ]]; then
+            _check_install_home "${config_mount%/birdnet-go-app/*}"
         fi
     fi
 
@@ -1769,9 +1764,10 @@ check_existing_installation_owner() {
 
         if [ "$other_user" = "root" ]; then
             print_message "💡 To migrate your existing data to your user account:" "$GREEN"
-            print_message "  sudo cp -a /root/birdnet-go-app/ $HOME/birdnet-go-app/" "$NC"
-            print_message "  sudo chown -R \$USER:\$USER $HOME/birdnet-go-app/" "$NC"
             print_message "  sudo systemctl stop birdnet-go.service" "$NC"
+            print_message "  mkdir -p $HOME/birdnet-go-app" "$NC"
+            print_message "  sudo cp -a /root/birdnet-go-app/. $HOME/birdnet-go-app/" "$NC"
+            print_message "  sudo chown -R \$USER:\$USER $HOME/birdnet-go-app/" "$NC"
             print_message "  Then run: ./install.sh" "$NC"
         else
             print_message "💡 To use your existing installation, log in as '$other_user'" "$GREEN"
