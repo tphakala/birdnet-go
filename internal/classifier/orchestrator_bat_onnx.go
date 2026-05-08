@@ -22,7 +22,6 @@ func (o *Orchestrator) loadBat(threads int) error {
 		ClassifierLabelPath: o.Settings.Bat.LabelPath,
 		ONNXRuntimePath:     o.Settings.BirdNET.ONNXRuntimePath,
 		Threads:             threads,
-		Threshold:           o.Settings.Bat.Threshold,
 	}
 
 	bat, err := NewBat(&cfg)

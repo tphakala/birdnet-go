@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -20,7 +21,6 @@ type Bat struct {
 	embeddingExtractor inference.EmbeddingExtractor
 	batClassifier      inference.CustomClassifier
 	info               ModelInfo
-	threshold          float64
 	mu                 sync.Mutex
 }
 
@@ -32,7 +32,6 @@ type BatModelConfig struct {
 	ClassifierLabelPath string
 	ONNXRuntimePath     string
 	Threads             int
-	Threshold           float64
 }
 
 // NewBat creates a new bat detection model instance.
@@ -92,7 +91,6 @@ func NewBat(cfg *BatModelConfig) (*Bat, error) {
 		embeddingExtractor: embExtractor,
 		batClassifier:      batCC,
 		info:               info,
-		threshold:          cfg.Threshold,
 	}, nil
 }
 
@@ -143,10 +141,11 @@ func (b *Bat) Predict(ctx context.Context, samples [][]float32) ([]datastore.Res
 		return nil, err
 	}
 
-	if b.threshold > 0 {
+	threshold := conf.Setting().Bat.Threshold
+	if threshold > 0 {
 		filtered := make([]datastore.Results, 0, len(results))
 		for i := range results {
-			if float64(results[i].Confidence) >= b.threshold {
+			if float64(results[i].Confidence) >= threshold {
 				filtered = append(filtered, results[i])
 			}
 		}
