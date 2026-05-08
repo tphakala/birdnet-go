@@ -843,28 +843,29 @@ func (c *Controller) ServeHLSContent(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Invalid segment path", http.StatusBadRequest)
 	}
 
-	// For init.mp4, use in-memory cache to survive FFmpeg's delete_segments removing
-	// the file from disk while the playlist still references it via #EXT-X-MAP.
+	// For init.mp4, serve from memory once cached to avoid TOCTOU races where
+	// FFmpeg's delete_segments removes the file between the existence check and serve.
 	isInitSegment := safeRequestPath == hlsInitSegmentName
-	segmentExists := secFS.ExistsNoErr(segmentPath)
 
 	if isInitSegment {
-		cached, _ := stream.initSegmentCache.Load().([]byte)
-
-		if !segmentExists && len(cached) > 0 {
+		if cached, _ := stream.initSegmentCache.Load().([]byte); len(cached) > 0 {
 			c.setHLSHeaders(ctx)
 			c.setHLSContentType(ctx, safeRequestPath)
-			return ctx.Blob(http.StatusOK, "video/mp4", cached)
+			return ctx.Blob(http.StatusOK, ctx.Response().Header().Get(echo.HeaderContentType), cached)
 		}
 
-		if segmentExists && len(cached) == 0 {
-			if data, err := os.ReadFile(segmentPath); err == nil {
-				stream.initSegmentCache.Store(data)
-			}
+		data, err := secFS.ReadFile(segmentPath)
+		if err != nil {
+			return c.HandleError(ctx, nil, "Segment file not found", http.StatusNotFound)
 		}
+
+		stream.initSegmentCache.Store(data)
+		c.setHLSHeaders(ctx)
+		c.setHLSContentType(ctx, safeRequestPath)
+		return ctx.Blob(http.StatusOK, ctx.Response().Header().Get(echo.HeaderContentType), data)
 	}
 
-	if !segmentExists {
+	if !secFS.ExistsNoErr(segmentPath) {
 		return c.HandleError(ctx, nil, "Segment file not found", http.StatusNotFound)
 	}
 
@@ -963,7 +964,7 @@ func (c *Controller) getEffectiveSegmentLength() int {
 func (c *Controller) setHLSContentType(ctx echo.Context, path string) {
 	switch filepath.Ext(path) {
 	case ".ts":
-		ctx.Response().Header().Set("Content-Type", "audio/mp2t")
+		ctx.Response().Header().Set("Content-Type", "video/mp2t")
 		ctx.Response().Header().Set("Cache-Control", "public, max-age=60")
 	case ".m4s":
 		ctx.Response().Header().Set("Content-Type", "video/iso.segment")
