@@ -547,14 +547,25 @@
   // Modal map lifecycle
   $effect(() => {
     let cleanup: (() => void) | undefined;
+    let cancelled = false;
 
     if (mapModalOpen && modalMapElement && initialLoadComplete) {
-      initializeModalMap().then(cleanupFn => {
-        cleanup = cleanupFn;
+      const el = modalMapElement;
+
+      void tick().then(() => {
+        if (cancelled || !el.isConnected) return;
+        initializeModalMap().then(cleanupFn => {
+          if (cancelled) {
+            cleanupFn?.();
+            return;
+          }
+          cleanup = cleanupFn;
+        });
       });
     }
 
     return () => {
+      cancelled = true;
       if (cleanup) {
         cleanup();
       }
@@ -824,7 +835,7 @@
   }
 
   async function initializeModalMap() {
-    if (!modalMapElement || modalMap || !maplibregl) return;
+    if (!modalMapElement || !modalMapElement.isConnected || modalMap || !maplibregl) return;
 
     const handleModalWheel = (e: globalThis.WheelEvent) => {
       if (modalMap) {
